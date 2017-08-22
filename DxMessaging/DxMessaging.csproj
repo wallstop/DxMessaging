@@ -53,4 +53,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>copy /y $(TargetDir)* $(TargetDir)..\..\..\Unity\DxMessagingUnity\Assets\Plugins\</PostBuildEvent>
+  </PropertyGroup>
 </Project>

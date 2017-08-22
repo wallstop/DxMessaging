@@ -155,7 +155,7 @@ namespace DxMessaging.Core.MessageBus
             if (untargedHandlers.Length == 0 && debug)
             {
                 MessagingDebug.Log("Could not find a matching handler for Message: {0}", message);
-                MessagingDebug.Log(Instance._log.Dump());
+                MessagingDebug.Log(Instance._log.ToString());
             }
         }
 
@@ -180,7 +180,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 MessagingDebug.Log("Could not find a matching handler for Id: {0}, Message: {1}", target,
                     typedAndTargetedMessage);
-                MessagingDebug.Log(Instance._log.Dump());
+                MessagingDebug.Log(Instance._log.ToString());
             }
         }
 
