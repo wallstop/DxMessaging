@@ -2,12 +2,11 @@
 
 namespace DxMessaging.Core
 {
-    /**
-        <summary>
-            A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
-        </summary>
-    */
+    /// <summary>
+    /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
+    /// </summary>
     [Serializable]
+    // ReSharper disable once InheritdocConsiderUsage
     public struct InstanceId : IComparable, IEquatable<InstanceId>
     {
         public static readonly InstanceId InvalidId = new InstanceId(long.MinValue);
@@ -55,6 +54,11 @@ namespace DxMessaging.Core
         }
 
         public static implicit operator InstanceId(int id)
+        {
+            return new InstanceId(id);
+        }
+
+        public static implicit operator InstanceId(long id)
         {
             return new InstanceId(id);
         }

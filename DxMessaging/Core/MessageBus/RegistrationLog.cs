@@ -4,11 +4,9 @@ using System.Text;
 
 namespace DxMessaging.Core.MessageBus
 {
-    /**
-        <summary>
-            Logs all MessageHandler registrations from the beginning of time 
-        </summary>
-    */
+    /// <summary>
+    /// Logs all MessageHandler registrations from the beginning of time.
+    /// </summary>
     public sealed class RegistrationLog
     {
         private readonly List<MessagingRegistration> _finalizedRegistrations;
@@ -18,12 +16,21 @@ namespace DxMessaging.Core.MessageBus
             _finalizedRegistrations = new List<MessagingRegistration>();
         }
 
+        /// <summary>
+        /// Logs a MessagingRegistration.
+        /// </summary>
+        /// <param name="registration">MessagingRegistration to record.</param>
         public void Log(MessagingRegistration registration)
         {
             _finalizedRegistrations.Add(registration);
         }
 
-        public string ToString(Func<MessagingRegistration, string> serializer = null)
+        /// <summary>
+        /// Pretty-print all of the logged Messaging registrations using the provided print function.
+        /// </summary>
+        /// <param name="serializer">Serialization function to use. If null, defaults to MessagingRegistration.ToString.</param>
+        /// <returns>The string representing all logged MessagingRegistrations.</returns>
+        public string ToString(Func<MessagingRegistration, string> serializer)
         {
             if (_finalizedRegistrations.Count == 0)
             {
@@ -34,6 +41,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 serializer = registration => registration.ToString();
             }
+
             StringBuilder registrations = new StringBuilder("[");
             for (int i = 0; i < _finalizedRegistrations.Count; ++i)
             {
@@ -49,14 +57,16 @@ namespace DxMessaging.Core.MessageBus
             return registrations.ToString();
         }
 
-        /**
-            <summary>
-                Removes all MessagingRegistrations that satisfy the provided function, or all registrations if no function is provided.
-            </summary>
-            <returns>
-                Number of registrations removed.
-            </returns>
-        */
+        public override string ToString()
+        {
+            return ToString(null);
+        }
+
+        /// <summary>
+        /// Removes all MessagingRegistrations that satisfy the provided function, or all registrations if no function is provided.
+        /// </summary>
+        /// <param name="shouldRemove">Null if all MessagingRegistrations should be removed, or a custom function that returns true for any MessagingRegistration that should be removed.</param>
+        /// <returns>Number of MessagingRegistrations removed.</returns>
         public int Clear(Predicate<MessagingRegistration> shouldRemove = null)
         {
             if (shouldRemove == null)

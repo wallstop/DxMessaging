@@ -3,17 +3,13 @@ using System.Collections.Generic;
 
 namespace DxMessaging.Core
 {
-    /**
-        <summary>
-            Maintains all of the (de)registration logic for MessagingComponents.
-        </summary>
-        <note>
-            General usage should be to create one of these on awake or start (probably start), and bind all messaging functions there.
-            Then, on OnEnable(), call .Enable(), OnDisable(), call .Disable()
-            ez
-        </note>
-    */
-
+    /// <summary>
+    /// Maintains all of the [de]registration logic for MessagingComponents.
+    /// </summary>
+    /// <note>
+    /// General usage should be to create one of these on awake or start (probably start), and bind all messaging functions there.
+    /// Then, on OnEnable(), call .Enable(), OnDisable(), call .Disable()
+    /// </note>
     [Serializable]
     public sealed class MessageRegistrationToken
     {
@@ -24,6 +20,11 @@ namespace DxMessaging.Core
         private readonly List<Action> _deregistrations;
         private bool _enabled;
 
+        public bool Enabled
+        {
+            get { return _enabled; }
+        }
+
         private MessageRegistrationToken(MessageHandler messageHandler)
         {
             _messageHandler = messageHandler;
@@ -33,26 +34,51 @@ namespace DxMessaging.Core
             _enabled = false;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="messageHandler"></param>
         public void RegisterTargeted<T>(Action<T> messageHandler) where T : TargetedMessage
         {
             InternalRegister(messageHandler, () => _messageHandler.RegisterTargetedMessageHandler(messageHandler));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="messageHandler"></param>
         public void RegisterUntargeted<T>(Action<T> messageHandler) where T : UntargetedMessage
         {
             InternalRegister(messageHandler, () => _messageHandler.RegisterUntargetedMessageHandler(messageHandler));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="messageHandler"></param>
         public void RegisterTargetedWithoutTargeting<T>(Action<T> messageHandler) where T : TargetedMessage
         {
             InternalRegister(messageHandler, () => _messageHandler.RegisterTargetedWithoutTargeting(messageHandler));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="globalAcceptAll"></param>
         public void RegisterGlobalAcceptAll(Action<AbstractMessage> globalAcceptAll)
         {
             InternalRegister(globalAcceptAll, () => _messageHandler.RegisterGlobalAcceptAll(globalAcceptAll));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="handler"></param>
+        /// <param name="registerAndGetDeregistration"></param>
         private void InternalRegister<T>(Action<T> handler, Func<Action> registerAndGetDeregistration)
             where T : AbstractMessage
         {
@@ -72,6 +98,9 @@ namespace DxMessaging.Core
             _registrations.Add(registration);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         public void Enable()
         {
             if (_enabled)
@@ -80,6 +109,7 @@ namespace DxMessaging.Core
                 return;
             }
 
+            // ReSharper disable once ForCanBeConvertedToForeach
             for (int i = 0; i < _registrations.Count; ++i)
             {
                 _registrations[i]();
@@ -87,6 +117,9 @@ namespace DxMessaging.Core
             _enabled = true;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         public void Disable()
         {
             if (!_enabled)
@@ -94,6 +127,7 @@ namespace DxMessaging.Core
                 MessagingDebug.Log("Ignoring pointless disabling of Messaging for {0}", _messageHandler.Owner);
                 return;
             }
+            // ReSharper disable once ForCanBeConvertedToForeach
             for (int i = 0; i < _deregistrations.Count; ++i)
             {
                 _deregistrations[i]();
@@ -101,6 +135,11 @@ namespace DxMessaging.Core
             _enabled = false;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="messageHandler"></param>
+        /// <returns></returns>
         public static MessageRegistrationToken Create(MessageHandler messageHandler)
         {
             if (messageHandler == null)
