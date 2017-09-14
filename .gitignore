@@ -294,3 +294,6 @@ __pycache__/
 # Builds
 /Unity/DxMessagingUnity*.apk
 /Unity/DxMessagingUnity*.unitypackage
+
+# Plugins
+/Unity/DxMessagingUnity/Assets/Plugins/*
