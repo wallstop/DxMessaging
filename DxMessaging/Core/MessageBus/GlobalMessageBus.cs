@@ -44,7 +44,7 @@ namespace DxMessaging.Core.MessageBus
         /// <inheritdoc />
         public Action RegisterTargeted<T>(MessageHandler messageHandler) where T : TargetedMessage
         {
-            if (messageHandler == null)
+            if (ReferenceEquals(messageHandler, null))
             {
                 throw new ArgumentNullException(string.Format("Cannot register a null {0}", typeof(MessageHandler)));
             }
@@ -106,7 +106,7 @@ namespace DxMessaging.Core.MessageBus
         private Action InternalRegisterUntargeted<T>(MessageHandler messageHandler, RegistrationMethod registrationMethod)
             where T : AbstractMessage
         {
-            if (messageHandler == null)
+            if (ReferenceEquals(messageHandler, null))
             {
                 throw new ArgumentNullException(string.Format("Cannot register a null {0}", typeof(MessageHandler)));
             }
@@ -207,11 +207,11 @@ namespace DxMessaging.Core.MessageBus
         }
 
         /// <summary>
-        /// 
+        /// Broadcasts an UntargetedMessage to all subscribed MessageHandlers.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="message"></param>
-        /// <param name="debug"></param>
+        /// <typeparam name="T">Type of UntargetedMessage</typeparam>
+        /// <param name="message">Message to broadcast.</param>
+        /// <param name="debug">True if debug logging should be done, false otherwise.</param>
         private static void InternalUntargetedBroadcast<T>(T message, bool debug) where T : UntargetedMessage
         {
             /*
@@ -236,12 +236,12 @@ namespace DxMessaging.Core.MessageBus
         }
 
         /// <summary>
-        /// 
+        /// Broadcasts a TargetedMessage to all subscribed MessageHandlers.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
+        /// <typeparam name="T">Type of UntargetedMessage</typeparam>
         /// <param name="target"></param>
-        /// <param name="typedAndTargetedMessage"></param>
-        /// <param name="debug"></param>
+        /// <param name="typedAndTargetedMessage">Message to broadcast.</param>
+        /// <param name="debug">True if debug logging should be done, false otherwise.</param>
         private static void TargetedBroadcast<T>(InstanceId target, T typedAndTargetedMessage, bool debug) where T : TargetedMessage
         {
             MessageHandler handler;
@@ -268,7 +268,7 @@ namespace DxMessaging.Core.MessageBus
         /// <summary>
         /// Retrieves a handler that handles the given type of message for the target, if any exist.
         /// </summary>
-        /// <typeparam name="T">Type of Message.</typeparam>
+        /// <typeparam name="T">Type of TargetedMessage.</typeparam>
         /// <param name="target">Target of the Message.</param>
         /// <param name="handler">Existing handler.</param>
         /// <returns>True if a handler was found, false otherwise (handler will be null in this case).</returns>
@@ -278,11 +278,11 @@ namespace DxMessaging.Core.MessageBus
         }
 
         /// <summary>
-        /// 
+        /// Retrieves the mapping of Id -> MessageHandler, for TargetedHandlers.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        private static Dictionary<InstanceId, MessageHandler> TargetedHandlers<T>() where T : AbstractMessage
+        /// <typeparam name="T">Type of TargetedMessage.</typeparam>
+        /// <returns>Existing Id -> MessageHandler mapping.</returns>
+        private static Dictionary<InstanceId, MessageHandler> TargetedHandlers<T>() where T : TargetedMessage
         {
             return SpecializedHandler<T>.TargetedSinks;
         }

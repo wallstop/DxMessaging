@@ -16,12 +16,12 @@ namespace DxMessaging.Core
         public static Action<string> LogFunction = null;
 
         /// <summary>
-        /// Logs the 
+        /// Logs a message to the debug log function, if it's not null.
         /// </summary>
-        /// <param name="message"></param>
+        /// <param name="message">Message to log.</param>
         public static void Log(string message)
         {
-            if (LogFunction == null)
+            if (ReferenceEquals(LogFunction, null))
             {
                 return;
             }
@@ -29,23 +29,30 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
-        /// 
+        /// Logs a format string + args to the debug log function, if it's not null.
         /// </summary>
-        /// <param name="message"></param>
-        /// <param name="args"></param>
+        /// <note>
+        /// Will call string.Format(message, args)
+        /// </note>
+        /// <param name="message">Format string.</param>
+        /// <param name="args">Args to populate format string with.</param>
         public static void Log(string message, params object [] args)
         {
-            if (LogFunction == null)
+            if (ReferenceEquals(LogFunction, null))
             {
                 return;
             }
+            /*
+                We can potentially avoid an unecessary string.Format call if the LogFunction is null,
+                which is why the null check is outside the InternalLog function.
+            */
             InternalLog(string.Format(message, args));
         }
 
         /// <summary>
-        /// 
+        /// Actually handles logging.
         /// </summary>
-        /// <param name="message"></param>
+        /// <param name="message">Message to log.</param>
         private static void InternalLog(string message)
         {
             LogFunction(message);

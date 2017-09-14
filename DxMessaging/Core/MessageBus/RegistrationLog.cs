@@ -37,7 +37,7 @@ namespace DxMessaging.Core.MessageBus
                 return "[]";
             }
 
-            if (serializer == null)
+            if (ReferenceEquals(serializer, null))
             {
                 serializer = registration => registration.ToString();
             }
@@ -69,7 +69,7 @@ namespace DxMessaging.Core.MessageBus
         /// <returns>Number of MessagingRegistrations removed.</returns>
         public int Clear(Predicate<MessagingRegistration> shouldRemove = null)
         {
-            if (shouldRemove == null)
+            if (ReferenceEquals(shouldRemove, null))
             {
                 shouldRemove = _ => true;
             }
