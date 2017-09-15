@@ -1,5 +1,5 @@
 # DxMessaging
-Game engine agnostic robust, synchronous pub/sub C# messaging solution (but mostly geared towards Unity/XNA/Monogame).
+Game engine agnostic robust, synchronous pub/sub C# messaging solution geared towards Entity-Component systems (but mostly geared towards Unity/XNA/Monogame).
 
 # Overview
 Are you tired of tightly coupled components? Making calls to your achievement system from deep within your player code? Or maybe you're working with a more traidtional messaging system, but keep forgetting all the pesky message codes? Fear no more, DxMessaging is here to help.
@@ -109,5 +109,100 @@ All untargeted messages of the specific type, nothing really else to say here.
 The MessageHandler will receive every single message that ever lives. This should be used very sparingly, but is useful for debug purposes, or if you wanted something like a query-cache of previous messages.
 
 ## Baby's first Messaging Code
+In order to get started with DxMessaging, you'll need a few things:
 
+* One [MessageHandler](https://github.com/wallstop/DxMessaging/blob/master/DxMessaging/Core/MessageHandler.cs) per GameObject. For those that are using Unity, this is provided via the [MessagingComponent](https://github.com/wallstop/DxMessaging/blob/master/Unity/DxMessagingUnity/Assets/Scripts/MessagingComponent.cs). For other GameEngine users, a potentially custom class may need to be written to wrap the MessageHandler, or it could be stored at the root GameObject. Up to you.
+* Custom message types. You'll need to define your own MessageTypes that inherit off of [TargetedMessage](https://github.com/wallstop/DxMessaging/blob/master/DxMessaging/Core/TargetedMessage.cs) or [UntargetedMessage](https://github.com/wallstop/DxMessaging/blob/master/DxMessaging/Core/UntargetedMessage.cs).
+* Subscriber code. This has been hopefully simplified for components that can be enabled/disabled via the [MessagingRegistrationToken](https://github.com/wallstop/DxMessaging/blob/master/DxMessaging/Core/MessageRegistrationToken.cs), which is some light abstractions on top of MessageHandler that will properly register + deregister components when enabled/disabled.
+* For TargetingMessaging to work, each GameObject (or MessageHandler, since there's a 1:1 mapping) needs to be identified via a unique [InstanceId](https://github.com/wallstop/DxMessaging/blob/master/DxMessaging/Core/InstanceId.cs). For Unity, there are overloads that will implicitly convert a gameObject.GetInstanceId() to InstanceId. For everyone else, generating a unique long shouldn't be too much trouble.
 
+Sample code (Unity):
+```csharp
+
+public sealed class DamageMessage : TargetedMessage {
+
+    public float Amount;
+
+    public DamageMessage(InstanceId target, float amount)
+        : base(target) {
+        Amount = amount;
+    }
+}
+
+public sealed class EntityDeathMessage : UntargetedMessage {
+
+    public InstanceId DeadEntity;
+
+    public EntityDeathMessage(InstanceId deadEntity) {
+        DeadEntity = deadEntity;
+    }
+}
+
+public sealed class DamageComponent : MonoBehaviour {
+
+    public float Amount;
+
+    private void OnCollisionEnter2D(Collision2D other) {
+        new DamageMessage(other.gameObject.GetInstanceId(), Amount).EmitTargeted();
+    }
+}
+
+public sealed class HealthComponent : MessageAwareComponent {
+
+    public float Health;
+
+    protected override void RegisterMessageHandlers() {
+        MessageRegistrationToken.RegisterTargeted<DamageMessage>(HandleDamage);
+    }
+
+    private void HandleDamage(DamageMessage damageMessage) {
+        Health -= damageMessage.Amount;
+        if (Health < 0) {
+            new EntityDeathMessage(gameObject.GetInstanceId());
+        }
+        gameObject.setActive(false);
+    }
+}
+
+public sealed class AchievementService : MessageAwareComponent {
+
+    protected override void RegisterMessageHandlers() {
+        MessageRegistrationToken.RegisterUntargeted<EntityDeathMessage>(HandleEntityDeath);
+        MessageRegistrationToken.RegisterTargetedWithoutTargeting<DamageMessage>(HandleDamage);
+    }
+
+    // Because we registered this to listen for Targeted without Targeting,
+    // any entity that receives DamageMessages will have their messages routed here as well.
+    private void HandleDamage(DamageMessage damageMessage) {
+        Console.WriteLine("{0} took {1:0.00} points of damage.", damageMessage.Target, damageMessage.Amount);
+    }
+
+    private void HandleEntityDeath(EntityDeathMessage deathMessage) {
+        Console.WriteLine("{0} died, sad.", deathMessage.DeadEntity);
+    }
+}
+```
+
+# Guidelines
+
+* Message sending is sychronous. That means that as soon as the call to .Emit[Targted/Untargeted/Untyped] is called, all relevant handlers will be invoked.
+* Inheritance heirarchy should be ONE DEEP from TargetedMessage and UntargetedMessage. Generically handling parent/children messages can get kind of wonky, due to implementation details.
+* Messages should be [POD (Plain Old Data)](https://en.wikipedia.org/wiki/Passive_data_structure). Any fancy logic should be handled by senders/receivers.
+* [EmitUntyped](https://github.com/wallstop/DxMessaging/blob/master/DxMessaging/Core/MessageHandler.cs#L340) exists in the case where the exact type of the message is not known. This could be some generic sender / handler, like:
+
+```csharp
+protected AbstractMessage DetermineCommandToSendBasedOnGameState() {
+    // Fancy logic that returns 1 of N types of Messages
+}
+```
+This is *SLOW*, as it requires some reflection to work properly. Would recommend staying away from this.
+
+# Gotchas / Neato 
+
+* DxMessaging is implemented almost entirely using generics.
+* Each Message emission causes some garbage to be created, for both the message, as well as all of the listeners. This hasn't caused any perf concerns yet.
+* DxMessaging is not thread safe.
+
+# FAQs
+
+* TBD
