@@ -1,7 +1,7 @@
-﻿using System;
-
-namespace DxMessaging.Core
+﻿namespace DxMessaging.Core
 {
+    using System;
+
     /// <summary>
     /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
     /// </summary>
