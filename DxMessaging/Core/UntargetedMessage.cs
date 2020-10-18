@@ -1,7 +1,7 @@
-﻿using System;
-
-namespace DxMessaging.Core
+﻿namespace DxMessaging.Core
 {
+    using System;
+
     /// <inheritdoc />
     /// <summary>
     /// Used to specify general-purposes messages that aren't meant to be sent to specific entity.

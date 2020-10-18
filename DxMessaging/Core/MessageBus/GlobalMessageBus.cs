@@ -1,10 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-
-namespace DxMessaging.Core.MessageBus
+﻿namespace DxMessaging.Core.MessageBus
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Reflection;
+
     /// <inheritdoc />
     /// <summary>
     /// Singleton-style MessageBus for maximum efficiency.
@@ -40,33 +40,32 @@ namespace DxMessaging.Core.MessageBus
         {
             GlobalSinks = new HashSet<MessageHandler>();
         }
-        
+
         /// <inheritdoc />
         public Action RegisterTargeted<T>(MessageHandler messageHandler) where T : TargetedMessage
         {
             if (ReferenceEquals(messageHandler, null))
             {
-                throw new ArgumentNullException(string.Format("Cannot register a null {0}", typeof(MessageHandler)));
+                throw new ArgumentNullException($"Cannot register a null {typeof(MessageHandler)}");
             }
             InstanceId handlerOwnerId = messageHandler.Owner;
 
             Dictionary<InstanceId, MessageHandler> targetedHandlers = TargetedHandlers<T>();
-            MessageHandler existingHandler;
-            if (!targetedHandlers.TryGetValue(handlerOwnerId, out existingHandler))
+            if (!targetedHandlers.TryGetValue(handlerOwnerId, out var existingHandler))
             {
                 targetedHandlers.Add(handlerOwnerId, messageHandler);
                 if (Debug)
                 {
-                    _log.Log(new MessagingRegistration(handlerOwnerId, typeof (T), RegistrationType.Register,
+                    _log.Log(new MessagingRegistration(handlerOwnerId, typeof(T), RegistrationType.Register,
                         RegistrationMethod.Targeted));
                 }
             }
             else if (!ReferenceEquals(existingHandler, messageHandler) && Debug)
             {
                 /*
-                    Possible bug - on the double register, we still send a valid deregistration action. 
-                    While deregistration is idempotent, if the registration isn't "successful", in the sense 
-                    that it's probably a programming bug, should we send a no-op deregistration? Not sure.
+                    Possible bug - on the double register, we still send a valid de-registration action.
+                    While de-registration is idempotent, if the registration isn't "successful", in the sense
+                    that it's probably a programming bug, should we send a no-op de-registration? Not sure.
                 */
                 MessagingDebug.Log("Ignoring double registration of {0} with different handlers (is this intentional? Likely a bug)", handlerOwnerId);
             }
@@ -75,10 +74,10 @@ namespace DxMessaging.Core.MessageBus
             {
                 if (Debug)
                 {
-                    _log.Log(new MessagingRegistration(handlerOwnerId, typeof (T), RegistrationType.Deregister,
+                    _log.Log(new MessagingRegistration(handlerOwnerId, typeof(T), RegistrationType.Deregister,
                         RegistrationMethod.Targeted));
                 }
-                // Deregistration is simply removing ourselves from the targetedHandlers set
+                // De-registration is simply removing ourselves from the targetedHandlers set
                 targetedHandlers.Remove(handlerOwnerId);
             };
         }
@@ -102,13 +101,13 @@ namespace DxMessaging.Core.MessageBus
         /// <typeparam name="T">Type of message being signed up for.</typeparam>
         /// <param name="messageHandler">MessageHandler to register.</param>
         /// <param name="registrationMethod">Method of registration.</param>
-        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         private Action InternalRegisterUntargeted<T>(MessageHandler messageHandler, RegistrationMethod registrationMethod)
             where T : AbstractMessage
         {
             if (ReferenceEquals(messageHandler, null))
             {
-                throw new ArgumentNullException(string.Format("Cannot register a null {0}", typeof(MessageHandler)));
+                throw new ArgumentNullException($"Cannot register a null {typeof(MessageHandler)}");
             }
             InstanceId handlerOwnerId = messageHandler.Owner;
 
@@ -118,7 +117,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 if (!newRegistration)
                 {
-                    // Similar possible bug to RegisterTargeted WRT double registration deregistration action.
+                    // Similar possible bug to RegisterTargeted WRT double registration de-registration action.
                     MessagingDebug.Log("Received double registration of {0} for {1}", typeof(T), handlerOwnerId);
                 }
                 _log.Log(new MessagingRegistration(handlerOwnerId, typeof(T), RegistrationType.Register, registrationMethod));
@@ -128,10 +127,10 @@ namespace DxMessaging.Core.MessageBus
             {
                 if (Debug)
                 {
-                    _log.Log(new MessagingRegistration(handlerOwnerId, typeof (T), RegistrationType.Deregister,
+                    _log.Log(new MessagingRegistration(handlerOwnerId, typeof(T), RegistrationType.Deregister,
                         registrationMethod));
                 }
-                // Deregistration is simply removing ourselves from the handlersForType set.
+                // De-registration is simply removing ourselves from the handlersForType set.
                 handlersForType.Remove(messageHandler);
             };
         }
@@ -141,7 +140,7 @@ namespace DxMessaging.Core.MessageBus
         {
             if (Debug)
             {
-                _log.Log(new MessagingRegistration(messageHandler.Owner, typeof (AbstractMessage), RegistrationType.Register,
+                _log.Log(new MessagingRegistration(messageHandler.Owner, typeof(AbstractMessage), RegistrationType.Register,
                     RegistrationMethod.GlobalAcceptAll));
             }
             GlobalSinks.Add(messageHandler);
@@ -149,7 +148,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 if (Debug)
                 {
-                    _log.Log(new MessagingRegistration(messageHandler.Owner, typeof (AbstractMessage),
+                    _log.Log(new MessagingRegistration(messageHandler.Owner, typeof(AbstractMessage),
                         RegistrationType.Deregister, RegistrationMethod.GlobalAcceptAll));
                 }
                 GlobalSinks.Remove(messageHandler);
@@ -164,13 +163,13 @@ namespace DxMessaging.Core.MessageBus
             /*
                 Also broadcast it to any handler that registered "TargetedWithoutTargeting".
                 We take a copy to avoid invalidating our iteration - the mere act of broadcasting
-                a message may register new message handlers. We could avoid this with a 
+                a message may register new message handlers. We could avoid this with a
                 double buffering technique + dirty flag, or staging the actions, or something even
                 smarter, but this is good enough for now.
             */
-            MessageHandler[] untargetedHandlers = UntargetedHandlers<T>().ToArray();
+            List<MessageHandler> untargetedHandlers = UntargetedHandlers<T>().ToList();
             // ReSharper disable once ForCanBeConvertedToForeach
-            for(int i = 0; i < untargetedHandlers.Length; ++i) 
+            for (int i = 0; i < untargetedHandlers.Count; ++i)
             {
                 MessageHandler handler = untargetedHandlers[i];
                 handler.HandleUntargetedMessage(message);
@@ -193,13 +192,13 @@ namespace DxMessaging.Core.MessageBus
         {
             /*
                 We take a copy to avoid invalidating our iteration - the mere act of broadcasting
-                a message may register new message handlers. We could avoid this with a 
+                a message may register new message handlers. We could avoid this with a
                 double buffering technique + dirty flag, or staging the actions, or something even
                 smarter, but this is good enough for now.
             */
-            MessageHandler[] globalHandlers = GlobalSinks.ToArray();
+            List<MessageHandler> globalHandlers = GlobalSinks.ToList();
             // ReSharper disable once ForCanBeConvertedToForeach
-            for(int i = 0;i < globalHandlers.Length; ++i) 
+            for (int i = 0; i < globalHandlers.Count; ++i)
             {
                 MessageHandler handler = globalHandlers[i];
                 handler.HandleGlobalMessage(typedMessage);
@@ -216,19 +215,19 @@ namespace DxMessaging.Core.MessageBus
         {
             /*
                 We take a copy to avoid invalidating our iteration - the mere act of broadcasting
-                a message may register new message handlers. We could avoid this with a 
+                a message may register new message handlers. We could avoid this with a
                 double buffering technique + dirty flag, or staging the actions, or something even
                 smarter, but this is good enough for now.
             */
-            MessageHandler[] untargedHandlers = UntargetedHandlers<T>().ToArray();
+            List<MessageHandler> untargetedHandlers = UntargetedHandlers<T>().ToList();
             // ReSharper disable once ForCanBeConvertedToForeach
-            for(int i = 0; i < untargedHandlers.Length; ++i) 
+            for (int i = 0; i < untargetedHandlers.Count; ++i)
             {
-                MessageHandler handler = untargedHandlers[i];
+                MessageHandler handler = untargetedHandlers[i];
                 handler.HandleUntargetedMessage(message);
             }
 
-            if (untargedHandlers.Length == 0 && debug)
+            if (debug && untargetedHandlers.Count == 0)
             {
                 MessagingDebug.Log("Could not find a matching handler for Message: {0}", message);
                 MessagingDebug.Log(Instance._log.ToString());
@@ -244,8 +243,7 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="debug">True if debug logging should be done, false otherwise.</param>
         private static void TargetedBroadcast<T>(InstanceId target, T typedAndTargetedMessage, bool debug) where T : TargetedMessage
         {
-            MessageHandler handler;
-            if (TargetedHandler<T>(target, out handler))
+            if (TryGetTargetedHandler<T>(target, out var handler))
             {
                 handler.HandleTargetedMessage(typedAndTargetedMessage);
                 return;
@@ -260,8 +258,7 @@ namespace DxMessaging.Core.MessageBus
                 MessagingDebug.Log("Invalid Id as target of {0}, ignoring.", typedAndTargetedMessage);
                 return;
             }
-            MessagingDebug.Log("Could not find a matching handler for Id: {0}, Message: {1}", target,
-                typedAndTargetedMessage);
+            MessagingDebug.Log("Could not find a matching handler for Id: {0}, Message: {1}", target, typedAndTargetedMessage);
             MessagingDebug.Log(Instance._log.ToString());
         }
 
@@ -272,7 +269,7 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="target">Target of the Message.</param>
         /// <param name="handler">Existing handler.</param>
         /// <returns>True if a handler was found, false otherwise (handler will be null in this case).</returns>
-        private static bool TargetedHandler<T>(InstanceId target, out MessageHandler handler) where T : TargetedMessage
+        private static bool TryGetTargetedHandler<T>(InstanceId target, out MessageHandler handler) where T : TargetedMessage
         {
             return SpecializedHandler<T>.TargetedSinks.TryGetValue(target, out handler);
         }
@@ -301,30 +298,26 @@ namespace DxMessaging.Core.MessageBus
         public void Broadcast(AbstractMessage message)
         {
             // Since we don't know the type of the message, we need to use reflection to figure out the proper thing to do
-            // TODO: When Unity has better C# support, switch to dynamic
+
+            switch (message)
             {
-                // Maybe it's a targeted message?
-                TargetedMessage maybeTargeted = message as TargetedMessage;
-                if (!ReferenceEquals(maybeTargeted, null))
-                {
-                    MethodInfo targetedBroadcast = typeof (GlobalMessageBus).GetMethod("TargetedBroadcast")
-                        .MakeGenericMethod(maybeTargeted.GetType());
-                    targetedBroadcast.Invoke(maybeTargeted, null);
-                    return;
-                }
-                // Maybe not...
+                case TargetedMessage targetedMessage:
+                    {
+                        MethodInfo targetedBroadcast = typeof(GlobalMessageBus).GetMethod("TargetedBroadcast").MakeGenericMethod(targetedMessage.GetType());
+                        targetedBroadcast.Invoke(targetedMessage, null);
+                    }
+                    break;
+                case UntargetedMessage untargetedMessage:
+                    {
+                        MethodInfo untargetedBroadcast = typeof(GlobalMessageBus).GetMethod("UntargetedBroadcast").MakeGenericMethod(untargetedMessage.GetType());
+                        untargetedBroadcast.Invoke(untargetedMessage, null);
+                    }
+                    break;
+                default:
+                    {
+                        throw new ArgumentException($"Cannot route MessageType {message.GetType()}: {message}.");
+                    }
             }
-            {
-                UntargetedMessage maybeUntargeted = message as UntargetedMessage;
-                if (!ReferenceEquals(maybeUntargeted, null))
-                {
-                    MethodInfo untargetedBroadcast = typeof (GlobalMessageBus).GetMethod("UntargetedBroadcast")
-                        .MakeGenericMethod(maybeUntargeted.GetType());
-                    untargetedBroadcast.Invoke(maybeUntargeted, null);
-                    return;
-                }
-            }
-            throw new ArgumentException(string.Format("Cannot route MessageType {0}: {1}.", message.GetType(), message));
         }
 
         /// <summary>

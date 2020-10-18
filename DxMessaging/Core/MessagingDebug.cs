@@ -1,7 +1,7 @@
-﻿using System;
-
-namespace DxMessaging.Core
+﻿namespace DxMessaging.Core
 {
+    using System;
+
     /// <summary>
     /// Debug functionality for all of the Messaging Components.
     /// </summary>
@@ -21,11 +21,7 @@ namespace DxMessaging.Core
         /// <param name="message">Message to log.</param>
         public static void Log(string message)
         {
-            if (ReferenceEquals(LogFunction, null))
-            {
-                return;
-            }
-            InternalLog(message);
+            LogFunction?.Invoke(message);
         }
 
         /// <summary>
@@ -36,26 +32,14 @@ namespace DxMessaging.Core
         /// </note>
         /// <param name="message">Format string.</param>
         /// <param name="args">Args to populate format string with.</param>
-        public static void Log(string message, params object [] args)
+        public static void Log(string message, params object[] args)
         {
-            if (ReferenceEquals(LogFunction, null))
-            {
-                return;
-            }
+            Action<string> logFunction = LogFunction;
             /*
                 We can potentially avoid an unecessary string.Format call if the LogFunction is null,
                 which is why the null check is outside the InternalLog function.
             */
-            InternalLog(string.Format(message, args));
-        }
-
-        /// <summary>
-        /// Actually handles logging.
-        /// </summary>
-        /// <param name="message">Message to log.</param>
-        private static void InternalLog(string message)
-        {
-            LogFunction(message);
+            logFunction?.Invoke(string.Format(message, args));
         }
     }
 }

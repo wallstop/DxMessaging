@@ -6,8 +6,7 @@ namespace DxMessaging.Core
     /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
     /// </summary>
     [Serializable]
-    // ReSharper disable once InheritdocConsiderUsage
-    public struct InstanceId : IComparable, IEquatable<InstanceId>
+    public readonly struct InstanceId : IComparable, IComparable<InstanceId>, IEquatable<InstanceId>
     {
         public static readonly InstanceId InvalidId = new InstanceId(long.MinValue);
 
@@ -25,10 +24,9 @@ namespace DxMessaging.Core
 
         public int CompareTo(object rhs)
         {
-            if (rhs is InstanceId)
+            if (rhs is InstanceId other)
             {
-                InstanceId other = (InstanceId) rhs;
-                return _id.CompareTo(other._id);
+                return CompareTo(other);
             }
             return -1;
         }
@@ -40,7 +38,7 @@ namespace DxMessaging.Core
 
         public override bool Equals(object other)
         {
-            return other is InstanceId && Equals((InstanceId) other);
+            return other is InstanceId id && Equals(id);
         }
 
         public override int GetHashCode()
@@ -76,6 +74,11 @@ namespace DxMessaging.Core
         public static implicit operator bool(InstanceId id)
         {
             return id != InvalidId;
+        }
+
+        public int CompareTo(InstanceId other)
+        {
+            return _id.CompareTo(other._id);
         }
     }
 }

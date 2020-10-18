@@ -1,8 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace DxMessaging.Core
+﻿namespace DxMessaging.Core
 {
+    using System;
+    using System.Collections.Generic;
+
     /// <summary>
     /// Maintains all of the [de]registration logic for MessagingComponents. Wraps registrations up for lazy registration, which are executed on Enable() call.
     /// </summary>
@@ -20,10 +20,7 @@ namespace DxMessaging.Core
         private readonly List<Action> _deregistrations;
         private bool _enabled;
 
-        public bool Enabled
-        {
-            get { return _enabled; }
-        }
+        public bool Enabled => _enabled;
 
         private MessageRegistrationToken(MessageHandler messageHandler)
         {
@@ -35,7 +32,7 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
-        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards it. 
+        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards it.
         /// </summary>
         /// <note>
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
@@ -91,20 +88,20 @@ namespace DxMessaging.Core
         /// </summary>
         /// <typeparam name="T">Type of message being registered.</typeparam>
         /// <param name="handler">Handler being registered.</param>
-        /// <param name="registerAndGetDeregistration">Proxied registration function that returns a deregistration function.</param>
+        /// <param name="registerAndGetDeregistration">Proxied registration function that returns a de-registration function.</param>
         private void InternalRegister<T>(Action<T> handler, Func<Action> registerAndGetDeregistration)
             where T : AbstractMessage
         {
             if (ReferenceEquals(handler, null))
             {
-                throw new ArgumentNullException("handler");
+                throw new ArgumentNullException(nameof(handler));
             }
             bool newHandler = _sourceHandlersToWrappers.Add(handler);
             if (!newHandler)
             {
                 // Nothing to do
                 MessagingDebug.Log("Double registration of MessageHandler for {0} for {1} using {2}",
-                    typeof (T), _messageHandler.Owner, registerAndGetDeregistration);
+                    typeof(T), _messageHandler.Owner, registerAndGetDeregistration);
                 return;
             }
             // We don't want to actually register at this time (might not be awake/enabled) - so we wrap that shit up, to lazy register when we're enabled.
@@ -139,13 +136,13 @@ namespace DxMessaging.Core
             // ReSharper disable once ForCanBeConvertedToForeach
             for (int i = 0; i < _registrations.Count; ++i)
             {
-                _registrations[i]();
+                _registrations[i].Invoke();
             }
             _enabled = true;
         }
 
         /// <summary>
-        /// Disables the token if not already disabled. Executes all staged deregistrations.
+        /// Disables the token if not already disabled. Executes all staged de-registrations.
         /// </summary>
         /// <note>
         /// Idempotent.
@@ -160,7 +157,7 @@ namespace DxMessaging.Core
             // ReSharper disable once ForCanBeConvertedToForeach
             for (int i = 0; i < _deregistrations.Count; ++i)
             {
-                _deregistrations[i]();
+                _deregistrations[i].Invoke();
             }
             _enabled = false;
         }
@@ -174,8 +171,7 @@ namespace DxMessaging.Core
         {
             if (ReferenceEquals(messageHandler, null))
             {
-                throw new ArgumentNullException(string.Format("Cannot create a {0} with a null {1}",
-                    typeof (MessageRegistrationToken), typeof (MessageHandler)));
+                throw new ArgumentNullException($"Cannot create a {typeof(MessageRegistrationToken)} with a null {typeof(MessageHandler)}");
             }
             return new MessageRegistrationToken(messageHandler);
         }

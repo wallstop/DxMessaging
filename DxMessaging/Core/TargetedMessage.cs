@@ -1,7 +1,8 @@
-﻿using System;
-
-namespace DxMessaging.Core
+﻿namespace DxMessaging.Core
 {
+    using System;
+    using System.Runtime.Serialization;
+
     /// <inheritdoc cref="AbstractMessage" />
     /// <summary>
     /// Used to specify general-purposes messages that are meant to be sent to a specific entity.
@@ -11,6 +12,7 @@ namespace DxMessaging.Core
     /// Inheritance should be completely flat. Ie, UntargetedMessages should be the direct parent of every implementer.
     /// </note>
     [Serializable]
+    [DataContract]
     public abstract class TargetedMessage : AbstractMessage, IEquatable<TargetedMessage>
     {
         /// <summary>
@@ -19,7 +21,8 @@ namespace DxMessaging.Core
         /// <note>
         /// Should never be changed - public and non-readonly for serialization purposes.
         /// </note>
-        public InstanceId Target;
+        [DataMember]
+        public readonly InstanceId Target;
 
         /// <inheritdoc />
         /// <summary>
@@ -48,11 +51,7 @@ namespace DxMessaging.Core
             {
                 return false;
             }
-            if (ReferenceEquals(this, other))
-            {
-                return true;
-            }
-            return Target.Equals(other.Target);
+            return ReferenceEquals(this, other) || Target.Equals(other.Target);
         }
     }
 }

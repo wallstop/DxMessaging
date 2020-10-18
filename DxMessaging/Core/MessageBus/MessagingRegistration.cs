@@ -1,7 +1,8 @@
-﻿using System;
-
-namespace DxMessaging.Core.MessageBus
+﻿namespace DxMessaging.Core.MessageBus
 {
+    using System;
+    using System.Runtime.Serialization;
+
     /// <summary>
     /// How the registration was performed.
     /// </summary>
@@ -28,7 +29,8 @@ namespace DxMessaging.Core.MessageBus
     /// Holds relevant information about a MessagingRegistration event
     /// </summary>
     [Serializable]
-    public struct MessagingRegistration
+    [DataContract]
+    public readonly struct MessagingRegistration
     {
         /// <summary>
         /// Id of the MessageHandler that was registered.
@@ -39,7 +41,7 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         public readonly string Type;
         /// <summary>
-        /// New registration? Deregistration?
+        /// New registration? De-registration?
         /// </summary>
         public readonly RegistrationType RegistrationType;
         /// <summary>
@@ -57,8 +59,8 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="type">Type of Message.</param>
         /// <param name="registrationType">Register? Deregister?</param>
         /// <param name="registrationMethod">How the Message was chosen to be listened for.</param>
-        public MessagingRegistration(InstanceId id, Type type, RegistrationType registrationType,
-            RegistrationMethod registrationMethod) : this(id, type.Name, registrationType, registrationMethod)
+        public MessagingRegistration(InstanceId id, Type type, RegistrationType registrationType, RegistrationMethod registrationMethod)
+            : this(id, type.Name, registrationType, registrationMethod)
         {
         }
 
@@ -81,8 +83,7 @@ namespace DxMessaging.Core.MessageBus
         public override string ToString()
         {
             // Poor man's JSON
-            return string.Format("{{{{InstanceId}}: {0}, {{Type}}: {1}, {{RegistrationType}}: {2}, {{RegistrationMethod}}: {3}}}",
-                Id, Type, RegistrationType, RegistrationMethod);
+            return $"{{{{InstanceId}}: {Id}, {{Type}}: {Type}, {{RegistrationType}}: {RegistrationType}, {{RegistrationMethod}}: {RegistrationMethod}}}";
         }
     }
 }

@@ -1,7 +1,7 @@
-﻿using System;
-
-namespace DxMessaging.Core
+﻿namespace DxMessaging.Core
 {
+    using System;
+
     /// <summary>
     /// Common base class for all Messaging needs. A common base lets us share some implementation details with type safety.
     /// </summary>
@@ -15,14 +15,7 @@ namespace DxMessaging.Core
         /// </summary>
         public string TypeName
         {
-            get
-            {
-                if (ReferenceEquals(_simpleTypeName, null))
-                {
-                    _simpleTypeName = GetType().Name;
-                }
-                return _simpleTypeName;
-            }
+            get { return _simpleTypeName ??= GetType().Name; }
         }
 
         /// <summary>
