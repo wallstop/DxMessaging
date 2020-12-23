@@ -158,7 +158,7 @@ public sealed class HealthComponent : MessageAwareComponent {
     private void HandleDamage(DamageMessage damageMessage) {
         Health -= damageMessage.Amount;
         if (Health < 0) {
-            new EntityDeathMessage(gameObject.GetInstanceId());
+            new EntityDeathMessage(gameObject.GetInstanceId()).EmitUntargeted();
         }
         gameObject.setActive(false);
     }
