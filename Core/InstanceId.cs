@@ -2,7 +2,6 @@
 {
     using System;
     using System.Runtime.Serialization;
-    using global::Core.Extension;
     using UnityEngine;
     using Object = UnityEngine.Object;
 
@@ -84,7 +83,7 @@
             {
                 Id = _id,
                 Name = objectName,
-            }.ToJson();
+            }.ToString();
         }
 
         public static bool operator ==(InstanceId lhs, InstanceId rhs)
