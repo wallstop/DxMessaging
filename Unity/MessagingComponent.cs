@@ -4,20 +4,12 @@
     using System;
     using System.Collections.Generic;
     using UnityEngine;
-
-    [Serializable]
+    
     [DisallowMultipleComponent]
     public sealed class MessagingComponent : MonoBehaviour
     {
         private MessageHandler _messageHandler;
         private readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners = new Dictionary<MonoBehaviour, MessageRegistrationToken>();
-
-        private bool _processEnableEvents = true;
-
-        public void IgnoreEnableEvents()
-        {
-            _processEnableEvents = false;
-        }
 
         public MessageRegistrationToken Create(MonoBehaviour listener)
         {
@@ -72,7 +64,7 @@
 
         private void ToggleMessageHandler(bool newActive)
         {
-            if (_messageHandler != null && _processEnableEvents && _messageHandler.active != newActive)
+            if (_messageHandler != null && _messageHandler.active != newActive)
             {
                 _messageHandler.active = newActive;
             }

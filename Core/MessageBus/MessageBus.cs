@@ -15,13 +15,13 @@
         private readonly Dictionary<Type, Dictionary<InstanceId, Dictionary<MessageHandler, int>>> _targetedSinks = new();
         private readonly Dictionary<Type, Dictionary<InstanceId, Dictionary<MessageHandler, int>>> _broadcastSinks = new();
         private readonly Dictionary<MessageHandler, int> _globalSinks = new();
-        private readonly Dictionary<Type, List<object>> _interceptsByType = new();
+        private readonly Dictionary<Type, List<Func<object, object, object>>> _interceptsByType = new();
 
-        private readonly RegistrationLog _log = new RegistrationLog();
+        private readonly RegistrationLog _log = new();
 
         // These are used so we aren't allocating as much every time we send messages
-        private readonly Stack<List<MessageHandler>> _messageHandlers = new Stack<List<MessageHandler>>();
-        private readonly Stack<List<object>> _interceptors = new Stack<List<object>>();
+        private readonly Stack<List<MessageHandler>> _messageHandlers = new();
+        private readonly Stack<List<Func<object, object, object>>> _interceptors = new();
 
         /// <inheritdoc/>
         public Action RegisterUntargeted<T>(MessageHandler messageHandler) where T : IUntargetedMessage
@@ -70,7 +70,7 @@
                 {
                     MessagingDebug.Log(
                         "Received double targeted deregistration of {0} for {1}. Check to make sure you're not calling registration multiple times.",
-                        typeof(T), target);
+                        type, target);
                     return;
                 }
 
@@ -194,20 +194,31 @@
             };
         }
 
-        public Action RegisterIntercept<T>(Func<T, T> transformer) where T : IMessage
+        public Action RegisterInterceptor<T>(Func<T, object, T> transformer) where T : IMessage
         {
             Type type = typeof(T);
-            if (!_interceptsByType.TryGetValue(type, out List<object> interceptors))
+            if (!_interceptsByType.TryGetValue(type, out List<Func<object, object, object>> interceptors))
             {
-                interceptors = new List<object>();
+                interceptors = new List<Func<object, object, object>>();
                 _interceptsByType[type] = interceptors;
             }
-            interceptors.Add(transformer);
+
+            object UntypedTransformer(object message, object context)
+            {
+                if (message is T typedMessage)
+                {
+                    return transformer(typedMessage, context);
+                }
+
+                return default;
+            }
+
+            interceptors.Add(UntypedTransformer);
             _log.Log(new MessagingRegistration(InstanceId.EmptyId, type, RegistrationType.Register, RegistrationMethod.Interceptor));
 
             return () =>
             {
-                _ = interceptors.Remove(transformer);
+                _ = interceptors.Remove(UntypedTransformer);
                 if (interceptors.Count <= 0)
                 {
                     _ = _interceptsByType.Remove(type);
@@ -219,20 +230,15 @@
         /// <inheritdoc/>
         public void UntargetedBroadcast(IUntargetedMessage typedMessage)
         {
-            RunInterceptors(ref typedMessage);
+            Type type = typedMessage.GetType();
+            RunInterceptors(type, ref typedMessage, null);
             if (typedMessage == null)
             {
                 return;
             }
+
             BroadcastGlobalUntargeted(typedMessage);
-            bool foundAnyHandlers = false;
-
-            Type type = typedMessage.GetType();
-            if (InternalUntargetedBroadcast(typedMessage, type))
-            {
-                foundAnyHandlers = true;
-            }
-
+            bool foundAnyHandlers = InternalUntargetedBroadcast(typedMessage, type);
             if (!foundAnyHandlers)
             {
                 MessagingDebug.Log("Could not find a matching untargeted broadcast handler for Message: {0}.", typedMessage);
@@ -242,15 +248,14 @@
         /// <inheritdoc/>
         public void TargetedBroadcast(InstanceId target, ITargetedMessage typedMessage)
         {
-            RunInterceptors(ref typedMessage);
+            Type type = typedMessage.GetType();
+            RunInterceptors(type, ref typedMessage, target.Object);
             if (typedMessage == null)
             {
                 return;
             }
             BroadcastGlobalTargeted(target, typedMessage);
             bool foundAnyHandlers = false;
-
-            Type type = typedMessage.GetType();
             if (_targetedSinks.TryGetValue(type, out Dictionary<InstanceId, Dictionary<MessageHandler, int>> targetedHandlers) &&
                 targetedHandlers.TryGetValue(target, out Dictionary<MessageHandler, int> handlers))
             {
@@ -287,29 +292,33 @@
         /// <inheritdoc/>
         public void SourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage)
         {
-            RunInterceptors(ref typedMessage);
+            Type type = typedMessage.GetType();
+            RunInterceptors(type, ref typedMessage, source.Object);
             if (typedMessage == null)
             {
                 return;
             }
             BroadcastGlobalSourcedBroadcast(source, typedMessage);
             bool foundAnyHandlers = false;
-            Type type = typedMessage.GetType();
             if (_broadcastSinks.TryGetValue(type,
                     out Dictionary<InstanceId, Dictionary<MessageHandler, int>> broadcastHandlers) &&
                 broadcastHandlers.TryGetValue(source, out Dictionary<MessageHandler, int> handlers) && 0 < handlers.Count)
             {
-                List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers.Keys);
-                try
+                foundAnyHandlers = 0 < handlers.Count;
+                if (foundAnyHandlers)
                 {
-                    foreach (MessageHandler handler in messageHandlers)
+                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers.Keys);
+                    try
                     {
-                        handler.HandleSourcedBroadcast(typedMessage, this);
+                        foreach (MessageHandler handler in messageHandlers)
+                        {
+                            handler.HandleSourcedBroadcast(typedMessage, this);
+                        }
                     }
-                }
-                finally
-                {
-                    _messageHandlers.Push(messageHandlers);
+                    finally
+                    {
+                        _messageHandlers.Push(messageHandlers);
+                    }
                 }
             }
 
@@ -388,17 +397,17 @@
             }
         }
 
-        private void RunInterceptors<T>(ref T message) where T : IMessage
+        private void RunInterceptors<T>(Type type, ref T message, object target) where T : IMessage
         {
-            if (!_interceptsByType.TryGetValue(typeof(T), out List<object> interceptors) || interceptors.Count <= 0)
+            if (!_interceptsByType.TryGetValue(type, out List<Func<object, object, object>> interceptors) || interceptors.Count <= 0)
             {
                 return;
             }
 
-            List<object> interceptorsStack;
+            List<Func<object, object, object>> interceptorsStack;
             if (_interceptors.Count <= 0)
             {
-                interceptorsStack = new List<object>(interceptors.Count);
+                interceptorsStack = new List<Func<object, object, object>>(interceptors.Count);
             }
             else
             {
@@ -410,14 +419,14 @@
 
             try
             {
-                foreach (Func<T, T> transformer in interceptorsStack)
+                foreach (Func<object, object, object> transformer in interceptorsStack)
                 {
                     if (message == null)
                     {
                         return;
                     }
 
-                    message = transformer(message);
+                    message = (T) transformer(message, target);
                 }
             }
             finally

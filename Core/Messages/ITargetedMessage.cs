@@ -8,7 +8,5 @@
     /// TargetedMessages should be thought of as commands.
     /// Inheritance should be completely flat. Ie, TargetedMessages should be the direct parent of every implementer.
     /// </note>
-    public interface ITargetedMessage : IMessage
-    {
-    }
+    public interface ITargetedMessage : IMessage { }
 }

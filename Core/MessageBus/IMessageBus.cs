@@ -3,7 +3,6 @@
     using Core;
     using System;
     using Messages;
-    using UnityEngine;
 
     /// <summary>
     /// Description of a general purpose message bus that provides both registration, de-registration, and broadcast capabilities
@@ -86,8 +85,13 @@
         /// </note>
         /// <typeparam name="T">Type of message to intercept.</typeparam>
         /// <param name="transformer">Transformation function to run on messages of the chosen type.</param>
+        /// <note>
+        ///     The transform function takes:
+        ///         param1: Current message instance
+        ///         param2: 
+        /// </note>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
-        Action RegisterIntercept<T>(Func<T, T> transformer) where T : IMessage;
+        Action RegisterInterceptor<T>(Func<T, object, T> transformer) where T : IMessage;
 
         /// <summary>
         /// Broadcasts an Untargeted message to all listeners registered to this bus.

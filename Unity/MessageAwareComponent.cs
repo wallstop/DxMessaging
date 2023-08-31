@@ -1,14 +1,19 @@
 ﻿namespace DxMessaging.Unity
 {
     using Core;
-    using System;
     using UnityEngine;
-
-    [Serializable]
+    
     [RequireComponent(typeof(MessagingComponent))]
     public abstract class MessageAwareComponent : MonoBehaviour
     {
         protected MessageRegistrationToken _messageRegistrationToken;
+
+        /// <summary>
+        ///     If true, will register/un-register handles when the component is enabled or disabled.
+        /// </summary>
+        protected virtual bool MessageRegistrationTiedToEnableStatus => true;
+
+        protected bool _isQuitting;
 
         protected virtual void Awake()
         {
@@ -29,23 +34,44 @@
 
         protected virtual void RegisterMessageHandlers()
         {
-
+            // No-op, expectation is that implementations implement their own logic here
         }
 
         protected virtual void OnEnable()
         {
-            _messageRegistrationToken?.Enable();
+            if (MessageRegistrationTiedToEnableStatus)
+            {
+                _messageRegistrationToken?.Enable();
+            }
         }
 
         protected virtual void OnDisable()
         {
-            _messageRegistrationToken?.Disable();
+            if (_isQuitting)
+            {
+                return;
+            }
+
+            if (MessageRegistrationTiedToEnableStatus)
+            {
+                _messageRegistrationToken?.Disable();
+            }
         }
 
         protected virtual void OnDestroy()
         {
+            if (_isQuitting)
+            {
+                return;
+            }
+
             _messageRegistrationToken?.Disable();
             _messageRegistrationToken = null;
+        }
+
+        protected virtual void OnApplicationQuit()
+        {
+            _isQuitting = true;
         }
     }
 }

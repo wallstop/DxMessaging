@@ -5,7 +5,6 @@
     using System.Collections.Generic;
     using System.Linq;
     using Messages;
-    using UnityEngine;
 
     /// <summary>
     /// Abstraction layer for immediate-mode Message passing. An instance of this handles all
@@ -254,9 +253,9 @@
         /// <param name="transformer">Interceptor function.</param>
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
-        public Action RegisterIntercept<T>(Func<T, T> transformer, IMessageBus messageBus = null) where T : IMessage
+        public Action RegisterInterceptor<T>(Func<T, object, T> transformer, IMessageBus messageBus = null) where T : IMessage
         {
-            return (messageBus ?? MessageBus).RegisterIntercept(transformer);
+            return (messageBus ?? MessageBus).RegisterInterceptor(transformer);
         }
 
         public override string ToString()
@@ -332,33 +331,18 @@
         [Serializable]
         private sealed class TypedHandler<T> : IHandler where T: IMessage
         {
-            private readonly HashSet<Action<T>> _targetedHandlers;
-            private readonly HashSet<Action<T>> _untargetedHandlers;
-            private readonly HashSet<Action<T>> _broadcastHandlers;
-            private readonly HashSet<Action<IUntargetedMessage>> _globalUntargetedHandlers;
-            private readonly HashSet<Action<InstanceId, ITargetedMessage>> _globalTargetedHandlers;
-            private readonly HashSet<Action<InstanceId, IBroadcastMessage>> _globalBroadcastHandlers;
+            private readonly Dictionary<Action<T>, int> _targetedHandlers = new();
+            private readonly Dictionary<Action<T>, int> _untargetedHandlers = new();
+            private readonly Dictionary<Action<T>, int> _broadcastHandlers = new();
+            private readonly Dictionary<Action<IUntargetedMessage>, int> _globalUntargetedHandlers = new();
+            private readonly Dictionary<Action<InstanceId, ITargetedMessage>, int> _globalTargetedHandlers = new();
+            private readonly Dictionary<Action<InstanceId, IBroadcastMessage>, int> _globalBroadcastHandlers = new();
 
             // Buffers so we don't allocate memory as often
-            private readonly Stack<List<Action<T>>> _handlersStack;
-            private readonly Stack<List<Action<IUntargetedMessage>>> _globalUntargetedHandlersStack;
-            private readonly Stack<List<Action<InstanceId, ITargetedMessage>>> _globalTargetedHandlersStack;
-            private readonly Stack<List<Action<InstanceId, IBroadcastMessage>>> _globalBroadcastHandlersStack;
-
-            public TypedHandler()
-            {
-                _targetedHandlers = new HashSet<Action<T>>();
-                _untargetedHandlers = new HashSet<Action<T>>();
-                _broadcastHandlers = new HashSet<Action<T>>();
-                _globalUntargetedHandlers = new HashSet<Action<IUntargetedMessage>>();
-                _globalTargetedHandlers = new HashSet<Action<InstanceId, ITargetedMessage>>();
-                _globalBroadcastHandlers = new HashSet<Action<InstanceId, IBroadcastMessage>>();
-
-                _handlersStack = new Stack<List<Action<T>>>();
-                _globalUntargetedHandlersStack = new Stack<List<Action<IUntargetedMessage>>>();
-                _globalTargetedHandlersStack = new Stack<List<Action<InstanceId, ITargetedMessage>>>();
-                _globalBroadcastHandlersStack = new Stack<List<Action<InstanceId, IBroadcastMessage>>>();
-            }
+            private readonly Stack<List<Action<T>>> _handlersStack = new();
+            private readonly Stack<List<Action<IUntargetedMessage>>> _globalUntargetedHandlersStack = new();
+            private readonly Stack<List<Action<InstanceId, ITargetedMessage>>> _globalTargetedHandlersStack = new();
+            private readonly Stack<List<Action<InstanceId, IBroadcastMessage>>> _globalBroadcastHandlersStack = new();
 
             /// <summary>
             /// Emits the UntargetedMessage to all subscribed listeners.
@@ -366,7 +350,12 @@
             /// <param name="message">Message to emit.</param>
             public void HandleUntargeted(IMessage message)
             {
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(_untargetedHandlers);
+                if (_untargetedHandlers.Count <= 0)
+                {
+                    return;
+                }
+
+                List<Action<T>> handlers = GetOrAddNewHandlerStack(_untargetedHandlers.Keys);
                 try
                 {
                     foreach (Action<T> handler in handlers)
@@ -386,7 +375,12 @@
             /// <param name="message">Message to emit.</param>
             public void HandleTargeted(ITargetedMessage message)
             {
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(_targetedHandlers);
+                if (_targetedHandlers.Count <= 0)
+                {
+                    return;
+                }
+
+                List<Action<T>> handlers = GetOrAddNewHandlerStack(_targetedHandlers.Keys);
                 try
                 {
                     foreach (Action<T> handler in handlers)
@@ -406,7 +400,12 @@
             /// <param name="message">Message to emit.</param>
             public void HandleSourcedBroadcast(IBroadcastMessage message)
             {
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(_broadcastHandlers);
+                if (_broadcastHandlers.Count <= 0)
+                {
+                    return;
+                }
+
+                List<Action<T>> handlers = GetOrAddNewHandlerStack(_broadcastHandlers.Keys);
                 try
                 {
                     foreach (Action<T> handler in handlers)
@@ -426,14 +425,19 @@
             /// <param name="message">Message to emit.</param>
             public void HandleGlobalUntargeted(IUntargetedMessage message)
             {
+                if (_globalUntargetedHandlers.Count <= 0)
+                {
+                    return;
+                }
+
                 if (_globalUntargetedHandlersStack.TryPop(out List<Action<IUntargetedMessage>> handlers))
                 {
                     handlers.Clear();
-                    handlers.AddRange(_globalUntargetedHandlers);
+                    handlers.AddRange(_globalUntargetedHandlers.Keys);
                 }
                 else
                 {
-                    handlers = new List<Action<IUntargetedMessage>>(_globalUntargetedHandlers);
+                    handlers = new List<Action<IUntargetedMessage>>(_globalUntargetedHandlers.Keys);
                 }
 
                 try
@@ -456,14 +460,19 @@
             /// <param name="message">Message to emit.</param>
             public void HandleGlobalTargeted(InstanceId target, ITargetedMessage message)
             {
+                if (_globalTargetedHandlers.Count <= 0)
+                {
+                    return;
+                }
+
                 if (_globalTargetedHandlersStack.TryPop(out List<Action<InstanceId, ITargetedMessage>> handlers))
                 {
                     handlers.Clear();
-                    handlers.AddRange(_globalTargetedHandlers);
+                    handlers.AddRange(_globalTargetedHandlers.Keys);
                 }
                 else
                 {
-                    handlers = new List<Action<InstanceId, ITargetedMessage>>(_globalTargetedHandlers);
+                    handlers = new List<Action<InstanceId, ITargetedMessage>>(_globalTargetedHandlers.Keys);
                 }
 
                 try
@@ -486,14 +495,19 @@
             /// <param name="message">Message to emit.</param>
             public void HandleGlobalBroadcast(InstanceId source, IBroadcastMessage message)
             {
+                if (_globalBroadcastHandlers.Count <= 0)
+                {
+                    return;
+                }
+
                 if (_globalBroadcastHandlersStack.TryPop(out List<Action<InstanceId, IBroadcastMessage>> handlers))
                 {
                     handlers.Clear();
-                    handlers.AddRange(_globalBroadcastHandlers);
+                    handlers.AddRange(_globalBroadcastHandlers.Keys);
                 }
                 else
                 {
-                    handlers = new List<Action<InstanceId, IBroadcastMessage>>(_globalBroadcastHandlers);
+                    handlers = new List<Action<InstanceId, IBroadcastMessage>>(_globalBroadcastHandlers.Keys);
                 }
 
                 try
@@ -517,16 +531,7 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddTargetedHandler(Action<T> handler, Action deregistration)
             {
-                bool added = _targetedHandlers.Add(handler);
-                return () =>
-                {
-                    if (!added)
-                    {
-                        return;
-                    }
-                    _ = _targetedHandlers.Remove(handler);
-                    deregistration?.Invoke();
-                };
+                return AddHandler(_targetedHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -537,16 +542,7 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddUntargetedHandler(Action<T> handler, Action deregistration)
             {
-                bool added = _untargetedHandlers.Add(handler);
-                return () =>
-                {
-                    if (!added)
-                    {
-                        return;
-                    }
-                    _ = _untargetedHandlers.Remove(handler);
-                    deregistration?.Invoke();
-                };
+                return AddHandler(_untargetedHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -557,16 +553,7 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddSourcedBroadcastHandler(Action<T> handler, Action deregistration)
             {
-                bool added = _broadcastHandlers.Add(handler);
-                return () =>
-                {
-                    if (!added)
-                    {
-                        return;
-                    }
-                    _ = _broadcastHandlers.Remove(handler);
-                    deregistration?.Invoke();
-                };
+                return AddHandler(_broadcastHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -577,17 +564,7 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddGlobalUntargetedHandler(Action<IUntargetedMessage> handler, Action deregistration)
             {
-                bool added = _globalUntargetedHandlers.Add(handler);
-                return () =>
-                {
-                    if (!added)
-                    {
-                        return;
-                    }
-
-                    _ = _globalUntargetedHandlers.Remove(handler);
-                    deregistration?.Invoke();
-                };
+                return AddHandler(_globalUntargetedHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -598,17 +575,7 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddGlobalTargetedHandler(Action<InstanceId, ITargetedMessage> handler, Action deregistration)
             {
-                bool added = _globalTargetedHandlers.Add(handler);
-                return () =>
-                {
-                    if (!added)
-                    {
-                        return;
-                    }
-
-                    _ = _globalTargetedHandlers.Remove(handler);
-                    deregistration?.Invoke();
-                };
+                return AddHandler(_globalTargetedHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -619,17 +586,7 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddGlobalBroadcastHandler(Action<InstanceId, IBroadcastMessage> handler, Action deregistration)
             {
-                bool added = _globalBroadcastHandlers.Add(handler);
-                return () =>
-                {
-                    if (!added)
-                    {
-                        return;
-                    }
-
-                    _ = _globalBroadcastHandlers.Remove(handler);
-                    deregistration?.Invoke();
-                };
+                return AddHandler(_globalBroadcastHandlers, handler, deregistration);
             }
 
             private List<Action<T>> GetOrAddNewHandlerStack(IEnumerable<Action<T>> handlers)
@@ -642,6 +599,33 @@
                 }
 
                 return new List<Action<T>>(handlers);
+            }
+
+            private static Action AddHandler<U>(Dictionary<U, int> handlers, U handler, Action deregistration)
+            {
+                if (!handlers.TryGetValue(handler, out int count))
+                {
+                    count = 0;
+                }
+
+                ++count;
+                handlers[handler] = count;
+                return () =>
+                {
+                    if (!handlers.TryGetValue(handler, out count))
+                    {
+                        return;
+                    }
+
+                    --count;
+                    if (count <= 0 && handlers.Remove(handler))
+                    {
+                        deregistration?.Invoke();
+                        return;
+                    }
+
+                    handlers[handler] = count;
+                };
             }
         }
     }

@@ -250,14 +250,15 @@
         /// <typeparam name="T">Type of message that the transformer accepts.</typeparam>
         /// <param name="transformer">Actual transformer functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterIntercept<T>(Func<T, T> transformer) where T: IMessage
+        public MessageRegistrationHandle RegisterInterceptor<T>(Func<T, object, T> transformer) where T: IMessage
         {
             MessageRegistrationHandle handle = MessageRegistrationHandle.CreateMessageRegistrationHandle();
             if (_messageHandler == null) // Unity has a bug
             {
                 return handle;
             }
-            return InternalRegister<T>(() => _messageHandler.RegisterIntercept(transformer, _messageBus));
+
+            return InternalRegister<T>(() => _messageHandler.RegisterInterceptor(transformer, _messageBus));
         }
 
         /// <summary>
