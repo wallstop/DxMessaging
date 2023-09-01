@@ -1,6 +1,5 @@
 ﻿namespace DxMessaging.Core.Messages
 {
-    /// <inheritdoc />
     /// <summary>
     /// Used to specify general-purposes messages that aren't meant to be sent to specific entity.
     /// </summary>

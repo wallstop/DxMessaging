@@ -1,6 +1,5 @@
 ﻿namespace DxMessaging.Core.Messages
 {
-    /// <inheritdoc cref="IMessage" />
     /// <summary>
     /// Used to specify general-purposes messages that are meant to be sent to a specific entity.
     /// </summary>
