@@ -7,12 +7,21 @@
     "keywords": [
         "messaging",
         "event",
+        "event bus"
         "message",
         "send",
-        "receive"
+        "receive",
     ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/wallstop/DxMessaging.git"
+    },
+    "bugs": {
+        "url": "https://github.com/wallstop/DxMessaging/issues"
+    },
     "author": {
-        "name": "Eli Pinkerton",
+        "name": "wallstop studios",
         "email": "wallstop@wallstopstudios.com",
         "url": "https://wallstopstudios.com"
     }
