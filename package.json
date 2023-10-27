@@ -7,10 +7,10 @@
     "keywords": [
         "messaging",
         "event",
-        "event bus"
+        "event bus",
         "message",
         "send",
-        "receive",
+        "receive"
     ],
     "license": "MIT",
     "repository": {
