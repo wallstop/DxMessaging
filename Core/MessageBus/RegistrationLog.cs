@@ -9,13 +9,21 @@
     /// </summary>
     public sealed class RegistrationLog
     {
+        public IReadOnlyList<MessagingRegistration> Registrations => _finalizedRegistrations;
+
         private readonly List<MessagingRegistration> _finalizedRegistrations;
 
-        public bool Enabled { get; set; }
+        public bool Enabled
+        {
+            get => _enabled;
+            set => _enabled = value;
+        }
+
+        private bool _enabled;
 
         public RegistrationLog(bool enabled = false)
         {
-            Enabled = enabled;
+            _enabled = enabled;
             _finalizedRegistrations = new List<MessagingRegistration>();
         }
 
@@ -25,7 +33,7 @@
         /// <param name="registration">MessagingRegistration to record.</param>
         public void Log(MessagingRegistration registration)
         {
-            if (!Enabled)
+            if (!_enabled)
             {
                 return;
             }
@@ -36,7 +44,7 @@
         /// Retrieves all registrations for the provided InstanceId.
         /// </summary>
         /// <param name="instanceId">InstanceId to search for.</param>
-        /// <returns>All registrations for the provided InstanecId.</returns>
+        /// <returns>All registrations for the provided InstanceId.</returns>
         public IEnumerable<MessagingRegistration> GetRegistrations(InstanceId instanceId)
         {
             foreach (MessagingRegistration registration in _finalizedRegistrations)
@@ -60,12 +68,10 @@
                 return "[]";
             }
 
-            if (serializer == null)
-            {
-                serializer = registration => registration.ToString();
-            }
+            serializer ??= registration => registration.ToString();
 
-            StringBuilder registrations = new StringBuilder("[");
+            StringBuilder registrations = new();
+            _ = registrations.Append('[');
             for (int i = 0; i < _finalizedRegistrations.Count; ++i)
             {
                 if (0 < i)
@@ -76,7 +82,7 @@
                 string prettyFinalizedRegistration = serializer(finalizedRegistration);
                 _ = registrations.Append(prettyFinalizedRegistration);
             }
-            _ = registrations.Append("]");
+            _ = registrations.Append(']');
             return registrations.ToString();
         }
 

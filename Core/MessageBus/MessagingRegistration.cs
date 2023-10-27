@@ -2,7 +2,6 @@
 {
     using System;
     using System.Runtime.Serialization;
-    using UnityEngine;
 
     /// <summary>
     /// How the registration was performed.
@@ -25,6 +24,9 @@
         TargetedWithoutTargeting,
         GlobalAcceptAll,
         Interceptor,
+        UntargetedPostProcessor,
+        TargetedPostProcessor,
+        BroadcastPostProcessor,
     }
 
     /// <summary>
@@ -41,7 +43,7 @@
         /// <summary>
         /// Name of the type of Message that was registered for.
         /// </summary>
-        public readonly string type;
+        public readonly Type type;
         /// <summary>
         /// New registration? De-registration?
         /// </summary>
@@ -53,7 +55,6 @@
 
         // TODO: Time
 
-        /// <inheritdoc />
         /// <summary>
         /// Creates a MessagingRegistration with all of the relevant tidbits filled out.
         /// </summary>
@@ -62,22 +63,9 @@
         /// <param name="registrationType">Register? Deregister?</param>
         /// <param name="registrationMethod">How the Message was chosen to be listened for.</param>
         public MessagingRegistration(InstanceId id, Type type, RegistrationType registrationType, RegistrationMethod registrationMethod)
-            : this(id, type.Name, registrationType, registrationMethod)
-        {
-        }
-
-        /// <summary>
-        /// Creates a MessagingRegistration with all of the relevant tidbits filled out.
-        /// </summary>
-        /// <param name="id">Id of the MessageHandler.</param>
-        /// <param name="typeName">TypeName of Message.</param>
-        /// <param name="registrationType">Register? Deregister?</param>
-        /// <param name="registrationMethod">How the Message was chosen to be listened for.</param>
-        public MessagingRegistration(InstanceId id, string typeName, RegistrationType registrationType,
-            RegistrationMethod registrationMethod) : this()
         {
             this.id = id;
-            type = typeName;
+            this.type = type;
             this.registrationType = registrationType;
             this.registrationMethod = registrationMethod;
         }

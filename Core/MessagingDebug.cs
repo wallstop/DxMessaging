@@ -1,7 +1,6 @@
 ﻿namespace DxMessaging.Core
 {
     using System;
-    using JetBrains.Annotations;
 
     /// <summary>
     /// Debug functionality for all of the Messaging Components.
@@ -33,15 +32,23 @@
         /// </note>
         /// <param name="message">Format string.</param>
         /// <param name="args">Args to populate format string with.</param>
-        [StringFormatMethod("message")]
         public static void Log(string message, params object[] args)
         {
             Action<string> logFunction = LogFunction;
             /*
-                We can potentially avoid an unecessary string.Format call if the LogFunction is null,
+                We can potentially avoid an unnecessary string.Format call if the LogFunction is null,
                 which is why the null check is outside the InternalLog function.
             */
-            if (logFunction != null)
+            if (logFunction == null)
+            {
+                return;
+            }
+
+            if (args.Length <= 0)
+            {
+                logFunction.Invoke(message);
+            }
+            else
             {
                 logFunction.Invoke(string.Format(message, args));
             }

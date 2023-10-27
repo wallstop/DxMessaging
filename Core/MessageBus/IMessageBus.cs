@@ -9,6 +9,10 @@
     /// </summary>
     public interface IMessageBus
     {
+        public delegate bool UntargetedInterceptor<TMessage>(ref TMessage message) where TMessage : IUntargetedMessage;
+        public delegate bool TargetedInterceptor<TMessage>(ref InstanceId target, ref TMessage message) where TMessage : ITargetedMessage;
+        public delegate bool BroadcastInterceptor<TMessage>(ref InstanceId source, ref TMessage message) where TMessage : IBroadcastMessage;
+
         /// <summary>
         /// The registration log of all messaging registrations for this MessageBus.
         /// </summary>
@@ -21,15 +25,6 @@
         /// <param name="messageHandler">MessageHandler to register to accept UntargetedMessages of the specified type.</param>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterUntargeted<T>(MessageHandler messageHandler) where T : IUntargetedMessage;
-
-        /// <summary>
-        /// Registers the specified MessageHandler to receive TargetedMessages of the specified type.
-        /// The message will only be routed to the properly identified MessageHandler.
-        /// </summary>
-        /// <typeparam name="T">Specific type of TargetedMessages to register for.</typeparam>
-        /// <param name="messageHandler">MessageHandler to register to accept TargetedMessages of the specified type.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
-        Action RegisterTargeted<T>(MessageHandler messageHandler) where T : ITargetedMessage;
 
         /// <summary>
         /// Registers the specified MessageHandler to receive TargetedMessages of the specified type for the specified target.
@@ -77,40 +72,137 @@
 
         /// <summary>
         /// Registers the specified MessageHandler and transformer function as an interceptor for Messages of type T.
-        /// Whenever messages of that type are sent, interceptors will be ran in order, transforming that message into
-        /// new, mutated types. The message at the end of the transformations will be then sent to registered message handlers.
+        /// Whenever messages of that type are sent, interceptors will be ran in order by priority and then order of registration within
+        /// that priority, transforming that message into new, mutated types.
+        /// If any interceptor returns false, message handling is immediately stopped.
+        /// The message at the end of the transformations will be then sent to registered message handlers.
         /// </summary>
         /// <note>
-        /// Transformer function can return null to "cancel" the message being sent.
+        /// Transformer function can return false to "cancel" the message being sent.
         /// </note>
         /// <typeparam name="T">Type of message to intercept.</typeparam>
-        /// <param name="transformer">Transformation function to run on messages of the chosen type.</param>
+        /// <param name="interceptor">Transformation function to run on messages of the chosen type.</param>
+        /// <param name="priority">Priority of the interceptor to run at.</param>
         /// <note>
         ///     The transform function takes:
-        ///         param1: Current message instance
-        ///         param2: 
+        ///         param1: Current message instance by reference
+        ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
-        Action RegisterInterceptor<T>(Func<T, object, T> transformer) where T : IMessage;
+        Action RegisterUntargetedInterceptor<T>(UntargetedInterceptor<T> interceptor, int priority = 0) where T : IUntargetedMessage;
+
+        /// <summary>
+        /// Registers the specified MessageHandler and transformer function as an interceptor for Messages of type T.
+        /// Whenever messages of that type are sent, interceptors will be ran in order by priority and then order of registration within
+        /// that priority, transforming that message into new, mutated types.
+        /// If any interceptor returns false, message handling is immediately stopped.
+        /// The message at the end of the transformations will be then sent to registered message handlers.
+        /// </summary>
+        /// <note>
+        /// Transformer function can return false to "cancel" the message being sent.
+        /// </note>
+        /// <typeparam name="T">Type of message to intercept.</typeparam>
+        /// <param name="interceptor">Transformation function to run on messages of the chosen type.</param>
+        /// <param name="priority">Priority of the interceptor to run at.</param>
+        /// <note>
+        ///     The transform function takes:
+        ///         param1: Current message instance by reference
+        ///     And returns: true if message handling should continue, false if message handling should be stopped.
+        /// </note>
+        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
+        Action RegisterTargetedInterceptor<T>(TargetedInterceptor<T> interceptor, int priority = 0) where T : ITargetedMessage;
+
+        /// <summary>
+        /// Registers the specified MessageHandler and transformer function as an interceptor for Messages of type T.
+        /// Whenever messages of that type are sent, interceptors will be ran in order by priority and then order of registration within
+        /// that priority, transforming that message into new, mutated types.
+        /// If any interceptor returns false, message handling is immediately stopped.
+        /// The message at the end of the transformations will be then sent to registered message handlers.
+        /// </summary>
+        /// <note>
+        /// Transformer function can return false to "cancel" the message being sent.
+        /// </note>
+        /// <typeparam name="T">Type of message to intercept.</typeparam>
+        /// <param name="interceptor">Transformation function to run on messages of the chosen type.</param>
+        /// <param name="priority">Priority of the interceptor to run at.</param>
+        /// <note>
+        ///     The transform function takes:
+        ///         param1: Current message instance by reference
+        ///     And returns: true if message handling should continue, false if message handling should be stopped.
+        /// </note>
+        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
+        Action RegisterBroadcastInterceptor<T>(BroadcastInterceptor<T> interceptor, int priority = 0) where T : IBroadcastMessage;
+
+        /// <summary>
+        /// Registers the provided MessageHandler to post process Untargeted messages of the given type.
+        /// (This will run after all handlers run for the provided message).
+        /// </summary>
+        /// <typeparam name="T">Type of UntargetedMessage to post process.</typeparam>
+        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        Action RegisterUntargetedPostProcessor<T>(MessageHandler messageHandler) where T : IUntargetedMessage;
+
+        /// <summary>
+        /// Registers the provided MessageHandler to post process Targeted messages of the given type.
+        /// (This will run after all handlers run for the provided message).
+        /// </summary>
+        /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
+        /// <param name="target">Target of messages to listen for.</param>
+        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        Action RegisterTargetedPostProcessor<T>(InstanceId target, MessageHandler messageHandler) where T: ITargetedMessage;
+
+        /// <summary>
+        /// Registers the provided MessageHandler to post process Targeted messages of the given type.
+        /// (This will run after all handlers run for the provided message).
+        /// </summary>
+        /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
+        /// <param name="source">Source of messages to listen for.</param>
+        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        Action RegisterBroadcastPostProcessor<T>(InstanceId source, MessageHandler messageHandler) where T : IBroadcastMessage;
 
         /// <summary>
         /// Broadcasts an Untargeted message to all listeners registered to this bus.
         /// </summary>
         /// <param name="typedMessage">Message to broadcast.</param>
-        void UntargetedBroadcast(IUntargetedMessage typedMessage);
+        void UntypedUntargetedBroadcast(IUntargetedMessage typedMessage);
+
+        /// <summary>
+        /// Broadcasts a fast Untargeted message to all listeners registered to this bus.
+        /// </summary>
+        /// <param name="typedMessage">Message to broadcast.</param>
+
+        void UntargetedBroadcast<TMessage>(ref TMessage typedMessage) where TMessage : IUntargetedMessage;
 
         /// <summary>
         /// Broadcasts a TargetedMessage to all listeners registered to this bus.
         /// </summary>
         /// <param name="target">Target to send the message to.</param>
         /// <param name="typedMessage">Message to broadcast.</param>
-        void TargetedBroadcast(InstanceId target, ITargetedMessage typedMessage);
+        void UntypedTargetedBroadcast(InstanceId target, ITargetedMessage typedMessage);
+
+        /// <summary>
+        /// Broadcasts a fast TargetedMessage to all listeners registered to this bus.
+        /// </summary>
+        /// <param name="target">Target to send the message to.</param>
+        /// <param name="typedMessage">Message to broadcast.</param>
+
+        void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage) where TMessage : ITargetedMessage;
 
         /// <summary>
         /// Broadcasts a BroadcastMessage to all listeners registered to this bus.
         /// </summary>
         /// <param name="source">Source of the message.</param>
         /// <param name="typedMessage">Message to broadcast.</param>
-        void SourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage);
+        void UntypedSourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage);
+
+        /// <summary>
+        /// Broadcasts a fast BroadcastMessage to all listeners registered to this bus.
+        /// </summary>
+        /// <param name="source">Source of the message.</param>
+        /// <param name="typedMessage">Message to broadcast.</param>
+
+        void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage) where TMessage : IBroadcastMessage;
     }
 }
