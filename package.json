@@ -1,0 +1,19 @@
+{
+    "name": "com.wallstop-studios.dxmessaging",
+    "version": "1.0.0-rc1",
+    "displayName": "DxMessaging",
+    "description": "Synchronous Event Bus for Unity",
+    "unity": "2022.1",
+    "keywords": [
+        "messaging",
+        "event",
+        "message",
+        "send",
+        "receive"
+    ],
+    "author": {
+        "name": "Eli Pinkerton",
+        "email": "wallstop@wallstopstudios.com",
+        "url": "https://wallstopstudios.com"
+    }
+}
