@@ -10,9 +10,11 @@
     /// Abstraction layer for immediate-mode Message passing. An instance of this handles all
     /// kinds of types to trigger functions that are registered with it.
     /// </summary>
-    [Serializable]
     public sealed class MessageHandler
     {
+        public delegate void FastHandler<TMessage>(ref TMessage message) where TMessage : IMessage;
+        public delegate void FastHandlerWithContext<TMessage>(ref InstanceId context, ref TMessage message) where TMessage : IMessage;
+
         /// <summary>
         /// MessageBus for all MessageHandlers to use. Currently immutable, but may change in the future.
         /// </summary>
@@ -24,7 +26,7 @@
         /// <note>
         /// Ideally, this would be something like a Dictionary[T,Handler[T]], but that can't be done with C#s type system.
         /// </note>
-        private readonly Dictionary<IMessageBus, Dictionary<Type, IHandler>> _handlersByTypeByMessageBus;
+        private readonly Dictionary<IMessageBus, Dictionary<Type, object>> _handlersByTypeByMessageBus;
 
         /// <summary>
         /// Whether or not this MessageHandler will process messages.
@@ -39,7 +41,7 @@
         public MessageHandler(InstanceId owner)
         {
             this.owner = owner;
-            _handlersByTypeByMessageBus = new Dictionary<IMessageBus, Dictionary<Type, IHandler>>();
+            _handlersByTypeByMessageBus = new Dictionary<IMessageBus, Dictionary<Type, object>>();
         }
 
         /// <summary>
@@ -50,9 +52,38 @@
         /// </note>
         /// <param name="message">Message to handle.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
-        public void HandleUntargetedMessage(IMessage message, IMessageBus messageBus)
+        public void HandleUntargetedMessage<TMessage>(ref TMessage message, IMessageBus messageBus) where TMessage : IMessage
         {
-            ActuallyHandleMessage(message.GetType(), typedHandler => typedHandler.HandleUntargeted(message), messageBus);
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleUntargeted(ref message);
+            }
+        }
+
+        /// <summary>
+        /// Callback from the MessageBus for handling UntargetedMessages - user code should generally never use this.
+        /// </summary>
+        /// <note>
+        /// In this case, "UntargetedMessage" refers to Targeted without targeting, and UntargetedMessages, hence T : AbstractMessage.
+        /// </note>
+        /// <param name="message">Message to handle.</param>
+        /// <param name="messageBus">The specific MessageBus to use.</param>
+        public void HandleUntargetedPostProcessing<TMessage>(ref TMessage message, IMessageBus messageBus) where TMessage : IUntargetedMessage
+        {
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleUntargetedPostProcessing(ref message);
+            }
         }
 
         /// <summary>
@@ -61,11 +92,66 @@
         /// <note>
         /// TargetedMessage refers to those that are intended for the GameObject that owns this MessageHandler.
         /// </note>
+        /// <param name="target">Target Id the message is for.</param>
         /// <param name="message">Message to handle.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
-        public void HandleTargetedMessage(ITargetedMessage message, IMessageBus messageBus)
+        public void HandleTargeted<TMessage>(ref InstanceId target, ref TMessage message, IMessageBus messageBus) where TMessage : ITargetedMessage
         {
-            ActuallyHandleMessage(message.GetType(), typedHandler => typedHandler.HandleTargeted(message), messageBus);
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleTargeted(ref target, ref message);
+            }
+        }
+
+        /// <summary>
+        /// Callback from the MessageBus for handling TargetedMessages without targeting when this MessageHandler has subscribed - user code should generally never use this.
+        /// </summary>
+        /// <note>
+        /// Any TargetedMessage.
+        /// </note>
+        /// <param name="target">Target Id the message is for.</param>
+        /// <param name="message">Message to handle.</param>
+        /// <param name="messageBus">The specific MessageBus to use.</param>
+
+        public void HandleTargetedWithoutTargeting<TMessage>(ref InstanceId target, ref TMessage message, IMessageBus messageBus) where TMessage : ITargetedMessage
+        {
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleTargetedWithoutTargeting(ref target, ref message);
+            }
+        }
+
+        /// <summary>
+        /// Callback from the MessageBus for post processing TargetedMessages when this MessageHandler has subscribed - user code should generally never use this.
+        /// </summary>
+        /// <note>
+        /// TargetedMessage refers to those that are intended for the GameObject that owns this MessageHandler.
+        /// </note>
+        /// <param name="target">Target Id the message is for.</param>
+        /// <param name="message">Message to handle.</param>
+        /// <param name="messageBus">The specific MessageBus to use.</param>
+
+        public void HandleTargetedPostProcessing<TMessage>(ref InstanceId target, ref TMessage message, IMessageBus messageBus) where TMessage : ITargetedMessage
+        {
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleTargetedPostProcessing(ref target, ref message);
+            }
         }
 
         /// <summary>
@@ -74,11 +160,64 @@
         /// <note>
         /// SourcedBroadcastMessages generally refer to those that are sourced from the GameObject that owns this MessageHandler.
         /// </note>
+        /// <param name="source">Source Id the broadcast message is from.</param>
         /// <param name="message">Message to handle</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
-        public void HandleSourcedBroadcast(IBroadcastMessage message, IMessageBus messageBus)
+        public void HandleSourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage message, IMessageBus messageBus) where TMessage : IBroadcastMessage
         {
-            ActuallyHandleMessage(message.GetType(), typedHandler => typedHandler.HandleSourcedBroadcast(message), messageBus);
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleSourcedBroadcast(ref source, ref message);
+            }
+        }
+
+        /// <summary>
+        /// Callback from the MessageBus for handling SourcedBroadcastMessages without source - user code should generally never use this.
+        /// </summary>
+        /// <note>
+        /// Any SourcedBroadcastMessages.
+        /// </note>
+        /// <param name="source">Source Id the broadcast message is from.</param>
+        /// <param name="message">Message to handle</param>
+        /// <param name="messageBus">The specific MessageBus to use.</param>
+        public void HandleSourcedBroadcastWithoutSource<TMessage>(ref InstanceId source, ref TMessage message, IMessageBus messageBus) where TMessage : IBroadcastMessage
+        {
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleSourcedBroadcastWithoutSource(ref source, ref message);
+            }
+        }
+
+        /// <summary>
+        /// Callback from the MessageBus for handling SourcedBroadcastPostProcessing - user code should generally never use this.
+        /// </summary>
+        /// <note>
+        /// SourcedBroadcastMessages generally refer to those that are sourced from the GameObject that owns this MessageHandler.
+        /// </note>
+        /// <param name="source">Source Id the broadcast message is from.</param>
+        /// <param name="message">Message to handle</param>
+        /// <param name="messageBus">The specific MessageBus to use.</param>
+        public void HandleSourcedBroadcastPostProcessing<TMessage>(ref InstanceId source, ref TMessage message, IMessageBus messageBus) where TMessage :IBroadcastMessage
+        {
+            if (!active)
+            {
+                return;
+            }
+
+            if (GetHandlerForType(message.MessageType, messageBus, out TypedHandler<TMessage> handler))
+            {
+                handler.HandleSourcedBroadcastPostProcessing(ref source, ref message);
+            }
         }
 
         /// <summary>
@@ -86,10 +225,18 @@
         /// </summary>
         /// <param name="message">Message to handle.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
-        public void HandleGlobalUntargetedMessage(IUntargetedMessage message, IMessageBus messageBus)
+        public void HandleGlobalUntargetedMessage(ref IUntargetedMessage message, IMessageBus messageBus)
         {
+            if (!active)
+            {
+                return;
+            }
+
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multi-purpose a single dictionary
-            ActuallyHandleMessage(typeof(IMessage), typedHandler => typedHandler.HandleGlobalUntargeted(message), messageBus);
+            if (GetHandlerForType(typeof(IMessage), messageBus, out TypedHandler<IMessage> handler))
+            {
+                handler.HandleGlobalUntargeted(ref message);
+            }
         }
 
         /// <summary>
@@ -98,10 +245,18 @@
         /// <param name="target">Target of the message.</param>
         /// <param name="message">Message to handle.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
-        public void HandleGlobalTargetedMessage(InstanceId target, ITargetedMessage message, IMessageBus messageBus)
+        public void HandleGlobalTargetedMessage(ref InstanceId target, ref ITargetedMessage message, IMessageBus messageBus)
         {
+            if (!active)
+            {
+                return;
+            }
+
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multi-purpose a single dictionary
-            ActuallyHandleMessage(typeof(IMessage), typedHandler => typedHandler.HandleGlobalTargeted(target, message), messageBus);
+            if (GetHandlerForType(typeof(IMessage), messageBus, out TypedHandler<IMessage> handler))
+            {
+                handler.HandleGlobalTargeted(ref target, ref message);
+            }
         }
 
         /// <summary>
@@ -110,29 +265,17 @@
         /// <param name="source">Source that this message is from.</param>
         /// <param name="message">Message to handle.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
-        public void HandleGlobalSourcedBroadcastMessage(InstanceId source, IBroadcastMessage message, IMessageBus messageBus)
-        {
-            // Use the "IMessage" explicitly to indicate global messages, allowing us to multi-purpose a single dictionary
-            ActuallyHandleMessage(typeof(IMessage), typedHandler => typedHandler.HandleGlobalBroadcast(source, message), messageBus);
-        }
-
-        /// <summary>
-        /// Actual MessageHandler implementation.
-        /// </summary>
-        /// <typeparam name="T">Type of Message to handle.</typeparam>
-        /// <param name="handle">Handler function.</param>
-        /// <param name="messageBus">The specific MessageBus to use.</param>
-        private void ActuallyHandleMessage(Type type, Action<IHandler> handle, IMessageBus messageBus)
+        public void HandleGlobalSourcedBroadcastMessage(ref InstanceId source, ref IBroadcastMessage message, IMessageBus messageBus)
         {
             if (!active)
             {
                 return;
             }
 
-            IHandler handlerForType = GetHandlerForType(type, messageBus);
-            if (!ReferenceEquals(handlerForType, null))
+            // Use the "IMessage" explicitly to indicate global messages, allowing us to multi-purpose a single dictionary
+            if (GetHandlerForType(typeof(IMessage), messageBus, out TypedHandler<IMessage> handler))
             {
-                handle(handlerForType);
+                handler.HandleGlobalBroadcast(ref source, ref message);
             }
         }
 
@@ -146,7 +289,32 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterGlobalAcceptAll(Action<IUntargetedMessage> untargetedMessageHandler, Action<InstanceId, ITargetedMessage> targetedMessageHandler, Action<InstanceId, IBroadcastMessage> broadcastMessageHandler, IMessageBus messageBus = null)
         {
-            messageBus = messageBus ?? MessageBus;
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterGlobalAcceptAll(this);
+            TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
+            Action untargetedDeregistration = typedHandler.AddGlobalUntargetedHandler(untargetedMessageHandler, messageBusDeregistration);
+            Action targetedDeregistration = typedHandler.AddGlobalTargetedHandler(targetedMessageHandler, messageBusDeregistration);
+            Action broadcastDeregistration = typedHandler.AddGlobalBroadcastHandler(broadcastMessageHandler, messageBusDeregistration);
+
+            return () =>
+            {
+                untargetedDeregistration();
+                targetedDeregistration();
+                broadcastDeregistration();
+            };
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to Globally Accept All Messages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <param name="untargetedMessageHandler">MessageHandler to accept all UntargetedMessages.</param>
+        /// <param name="broadcastMessageHandler">MessageHandler to accept all TargetedMessages for all entities.</param>
+        /// <param name="targetedMessageHandler">MessageHandler to accept all BroadcastMessages for all entities.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterGlobalAcceptAll(FastHandler<IUntargetedMessage> untargetedMessageHandler, FastHandlerWithContext<ITargetedMessage> targetedMessageHandler, FastHandlerWithContext<IBroadcastMessage> broadcastMessageHandler, IMessageBus messageBus = null)
+        {
+            messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterGlobalAcceptAll(this);
             TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
             Action untargetedDeregistration = typedHandler.AddGlobalUntargetedHandler(untargetedMessageHandler, messageBusDeregistration);
@@ -165,23 +333,64 @@
         /// Registers this MessageHandler to accept TargetedMessages via the MessageBus, properly handling de-registration.
         /// </summary>
         /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="target">Target Id of TargetedMessages to listen for.</param>
         /// <param name="messageHandler">Function that actually handles the message.</param>
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
-        public Action RegisterTargetedMessageHandler<T>(Action<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
-        {
-            messageBus = messageBus ?? MessageBus;
-            Action messageBusDeregistration = messageBus.RegisterTargeted<T>(this);
-            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
-            return typedHandler.AddTargetedHandler(messageHandler, messageBusDeregistration);
-        }
-
         public Action RegisterTargetedMessageHandler<T>(InstanceId target, Action<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
         {
-            messageBus = messageBus ?? MessageBus;
+            messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterTargeted<T>(target, this);
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
-            return typedHandler.AddTargetedHandler(messageHandler, messageBusDeregistration);
+            return typedHandler.AddTargetedHandler(target, messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to accept fast TargetedMessages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="target">Target Id of TargetedMessages to listen for.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterTargetedMessageHandler<T>(InstanceId target, FastHandler<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterTargeted<T>(target, this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddTargetedHandler(target, messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to post process TargetedMessages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="target">Target Id of TargetedMessages to listen for.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterTargetedPostProcessor<T>(InstanceId target, Action<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterTargetedPostProcessor<T>(target, this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddTargetedPostProcessor(target, messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to post process fast TargetedMessages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="target">Target Id of TargetedMessages to listen for.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterTargetedPostProcessor<T>(InstanceId target, FastHandler<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterTargetedPostProcessor<T>(target, this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddTargetedPostProcessor(target, messageHandler, messageBusDeregistration);
         }
 
         /// <summary>
@@ -191,12 +400,27 @@
         /// <param name="messageHandler">Function that actually handles the message.</param>
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
-        public Action RegisterTargetedWithoutTargeting<T>(Action<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
+        public Action RegisterTargetedWithoutTargeting<T>(Action<InstanceId, T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
         {
-            messageBus = messageBus ?? MessageBus;
+            messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterTargetedWithoutTargeting<T>(this);
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
-            return typedHandler.AddUntargetedHandler(messageHandler, messageBusDeregistration);
+            return typedHandler.AddTargetedWithoutTargetingHandler(messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to accept fast TargetedMessages without Targeting via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterTargetedWithoutTargeting<T>(FastHandlerWithContext<T> messageHandler, IMessageBus messageBus = null) where T : ITargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterTargetedWithoutTargeting<T>(this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddTargetedWithoutTargetingHandler(messageHandler, messageBusDeregistration);
         }
 
         /// <summary>
@@ -208,10 +432,55 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterUntargetedMessageHandler<T>(Action<T> messageHandler, IMessageBus messageBus = null) where T : IUntargetedMessage
         {
-            messageBus = messageBus ?? MessageBus;
+            messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterUntargeted<T>(this);
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddUntargetedHandler(messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to accept fast UntargetedMessages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterUntargetedMessageHandler<T>(FastHandler<T> messageHandler, IMessageBus messageBus = null) where T : IUntargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterUntargeted<T>(this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddUntargetedHandler(messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to post process UntargetedMessages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterUntargetedPostProcessor<T>(Action<T> messageHandler, IMessageBus messageBus = null) where T : IUntargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterUntargetedPostProcessor<T>(this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddUntargetedPostProcessor(messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to post process fast UntargetedMessages via the MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterUntargetedPostProcessor<T>(FastHandler<T> messageHandler, IMessageBus messageBus = null) where T : IUntargetedMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterUntargetedPostProcessor<T>(this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddUntargetedPostProcessor(messageHandler, messageBusDeregistration);
         }
 
         /// <summary>
@@ -225,37 +494,128 @@
         public Action RegisterSourcedBroadcastMessageHandler<T>(InstanceId source, Action<T> messageHandler, IMessageBus messageBus = null)
             where T : IBroadcastMessage
         {
-            messageBus = messageBus ?? MessageBus;
+            messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterSourcedBroadcast<T>(source, this);
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);;
-            return typedHandler.AddSourcedBroadcastHandler(messageHandler, messageBusDeregistration);
+            return typedHandler.AddSourcedBroadcastHandler(source, messageHandler, messageBusDeregistration);
         }
 
         /// <summary>
-        /// Registers this MessageHandler to accept BroadcastMessage regardless of source via their Messagebus, properly handling de-registration.
+        /// Registers this MessageHandler to accept fast BroadcastMessages via their MessageBus, properly handling de-registration.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="source">Source Id of BroadcastMessages to listen for.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterSourcedBroadcastMessageHandler<T>(InstanceId source, FastHandler<T> messageHandler, IMessageBus messageBus = null)
+            where T : IBroadcastMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterSourcedBroadcast<T>(source, this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus); ;
+            return typedHandler.AddSourcedBroadcastHandler(source, messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to accept BroadcastMessage regardless of source via their MessageBus, properly handling de-registration.
         /// </summary>
         /// <typeparam name="T">Type of Message to be handled.</typeparam>
         /// <param name="messageHandler">Function that actually handles the message.</param>
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
-        public Action RegisterSourcedBroadcastWithoutSource<T>(Action<T> messageHandler, IMessageBus messageBus = null) where T : IBroadcastMessage
+        public Action RegisterSourcedBroadcastWithoutSource<T>(Action<InstanceId, T> messageHandler, IMessageBus messageBus = null) where T : IBroadcastMessage
         {
-            messageBus = messageBus ?? MessageBus;
+            messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterSourcedBroadcastWithoutSource<T>(this);
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
-            return typedHandler.AddUntargetedHandler(messageHandler, messageBusDeregistration);
+            return typedHandler.AddSourcedBroadcastWithoutSourceHandler(messageHandler, messageBusDeregistration);
         }
 
         /// <summary>
-        /// Registers this MessageHandler to intercept messages of the provided type for the provided MessageBus, properly handling de-registration
+        /// Registers this MessageHandler to accept fast BroadcastMessage regardless of source via their MessageBus, properly handling de-registration.
         /// </summary>
         /// <typeparam name="T">Type of Message to be handled.</typeparam>
-        /// <param name="transformer">Interceptor function.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
-        public Action RegisterInterceptor<T>(Func<T, object, T> transformer, IMessageBus messageBus = null) where T : IMessage
+        public Action RegisterSourcedBroadcastWithoutSource<T>(FastHandlerWithContext<T> messageHandler, IMessageBus messageBus = null) where T : IBroadcastMessage
         {
-            return (messageBus ?? MessageBus).RegisterInterceptor(transformer);
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterSourcedBroadcastWithoutSource<T>(this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddSourcedBroadcastWithoutSourceHandler(messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to post processes BroadcastMessage messages.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="source">Source object to listen for BroadcastMessages on.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterSourcedBroadcastPostProcessor<T>(InstanceId source, Action<T> messageHandler, IMessageBus messageBus = null) where T : IBroadcastMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterBroadcastPostProcessor<T>(source, this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddBroadcastPostProcessor(source, messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers this MessageHandler to post processes fast BroadcastMessage messages.
+        /// </summary>
+        /// <typeparam name="T">Type of Message to be handled.</typeparam>
+        /// <param name="source">Source object to listen for BroadcastMessages on.</param>
+        /// <param name="messageHandler">Function that actually handles the message.</param>
+        /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterSourcedBroadcastPostProcessor<T>(InstanceId source, FastHandler<T> messageHandler, IMessageBus messageBus = null) where T : IBroadcastMessage
+        {
+            messageBus ??= MessageBus;
+            Action messageBusDeregistration = messageBus.RegisterSourcedBroadcastWithoutSource<T>(this);
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.AddBroadcastPostProcessor(source, messageHandler, messageBusDeregistration);
+        }
+
+        /// <summary>
+        /// Registers an UntargetedInterceptor for messages of the provided type at the provided priority.
+        /// </summary>
+        /// <typeparam name="T">Type of the UntargetedMessage to intercept.</typeparam>
+        /// <param name="interceptor">Interceptor to register.</param>
+        /// <param name="priority">Priority to register the interceptor at (interceptors are ran from low -> high priority)</param>
+        /// <param name="messageBus">Message bus to register the interceptor on.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterUntargetedInterceptor<T>(IMessageBus.UntargetedInterceptor<T> interceptor, int priority = 0, IMessageBus messageBus = null) where T : IUntargetedMessage
+        {
+            return (messageBus ?? MessageBus).RegisterUntargetedInterceptor(interceptor, priority);
+        }
+
+        /// <summary>
+        /// Registers a BroadcastInterceptor for messages of the provided type at the provided priority.
+        /// </summary>
+        /// <typeparam name="T">Type of the BroadcastMessage to intercept.</typeparam>
+        /// <param name="interceptor">Interceptor to register.</param>
+        /// <param name="priority">Priority to register the interceptor at (interceptors are ran from low -> high priority)</param>
+        /// <param name="messageBus">Message bus to register the interceptor on.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterBroadcastInterceptor<T>(IMessageBus.BroadcastInterceptor<T> interceptor, int priority = 0, IMessageBus messageBus = null) where T : IBroadcastMessage
+        {
+            return (messageBus ?? MessageBus).RegisterBroadcastInterceptor(interceptor, priority);
+        }
+
+        /// <summary>
+        /// Registers a TargetedInterceptor for messages of the provided type at the provided priority.
+        /// </summary>
+        /// <typeparam name="T">Type of the TargetedMessage to intercept.</typeparam>
+        /// <param name="interceptor">Interceptor to register.</param>
+        /// <param name="priority">Priority to register the interceptor at (interceptors are ran from low -> high priority)</param>
+        /// <param name="messageBus">Message bus to register the interceptor on.</param>
+        /// <returns>The de-registration action.</returns>
+        public Action RegisterTargetedInterceptor<T>(IMessageBus.TargetedInterceptor<T> interceptor, int priority = 0, IMessageBus messageBus = null) where T : ITargetedMessage
+        {
+            return (messageBus ?? MessageBus).RegisterTargetedInterceptor(interceptor, priority);
         }
 
         public override string ToString()
@@ -264,7 +624,10 @@
             {
                 OwnerId = owner,
                 HandlerTypes = string.Join(",",
-                    _handlersByTypeByMessageBus.Values.SelectMany(key => key.Keys).Select(type => type.Name)
+                    _handlersByTypeByMessageBus.Values
+                        .SelectMany(handlers => handlers.Keys)
+                        .Distinct()
+                        .Select(type => type.Name)
                         .OrderBy(_ => _))
             }.ToString();
         }
@@ -278,18 +641,18 @@
         {
             Type type = typeof(T);
 
-            if (!_handlersByTypeByMessageBus.TryGetValue(messageBus, out Dictionary<Type, IHandler> handlersByType))
+            if (!_handlersByTypeByMessageBus.TryGetValue(messageBus, out Dictionary<Type, object> handlersByType))
             {
-                handlersByType = new Dictionary<Type, IHandler>();
+                handlersByType = new Dictionary<Type, object>();
                 _handlersByTypeByMessageBus[messageBus] = handlersByType;
             }
 
-            if (handlersByType.TryGetValue(type, out IHandler existingTypedHandler))
+            if (handlersByType.TryGetValue(type, out object existingTypedHandler))
             {
                 return (TypedHandler<T>) existingTypedHandler;
             }
 
-            TypedHandler<T> newTypedHandler = new TypedHandler<T>();
+            TypedHandler<T> newTypedHandler = new();
             handlersByType.Add(type, newTypedHandler);
             return newTypedHandler;
         }
@@ -299,138 +662,133 @@
         /// </summary>
         /// <param name="type">Message type to get the handler for.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
+        /// <param name="existingTypedHandler">Existing typed message handler, if one exists.</param>
         /// <returns>Existing handler for the specific type, or null if none exists..</returns>
-        private IHandler GetHandlerForType(Type type, IMessageBus messageBus)
+        private bool GetHandlerForType<T>(Type type, IMessageBus messageBus, out TypedHandler<T> existingTypedHandler) where T : IMessage
         {
-            if (_handlersByTypeByMessageBus.TryGetValue(messageBus, out Dictionary<Type, IHandler> handlersByType) && handlersByType.TryGetValue(type, out IHandler existingTypedHandler))
+            if (_handlersByTypeByMessageBus.TryGetValue(messageBus, out Dictionary<Type, object> handlersByType) && handlersByType.TryGetValue(type, out object untypedHandler))
             {
-                return existingTypedHandler;
+                existingTypedHandler = (TypedHandler<T>) untypedHandler;
+                return true;
             }
 
-            return null;
+            existingTypedHandler = default;
+            return false;
         }
 
-        /// <summary>
-        /// Needed for actually emitting messages
-        /// </summary>
-        private interface IHandler
+        private abstract class TypedHandler
         {
-            void HandleUntargeted(IMessage message);
-            void HandleTargeted(ITargetedMessage message);
-            void HandleSourcedBroadcast(IBroadcastMessage message);
-
-            void HandleGlobalUntargeted(IUntargetedMessage message);
-            void HandleGlobalTargeted(InstanceId target, ITargetedMessage message);
-            void HandleGlobalBroadcast(InstanceId source, IBroadcastMessage message);
+            protected static readonly Stack<List<Action<IUntargetedMessage>>> GlobalUntargetedHandlersStack = new();
+            protected static readonly Stack<List<Action<InstanceId, ITargetedMessage>>> GlobalTargetedHandlersStack = new();
+            protected static readonly Stack<List<Action<InstanceId, IBroadcastMessage>>> GlobalBroadcastHandlersStack = new();
+            protected static readonly Stack<List<FastHandler<IUntargetedMessage>>> GlobalUntargetedFastHandlersStack = new();
+            protected static readonly Stack<List<FastHandlerWithContext<ITargetedMessage>>> GlobalTargetedFastHandlersStack = new();
+            protected static readonly Stack<List<FastHandlerWithContext<IBroadcastMessage>>> GlobalBroadcastFastHandlersStack = new();
         }
 
         /// <summary>
         /// One-size-fits-all wrapper around all possible Messaging sinks for a particular MessageHandler & MessageType.
         /// </summary>
         /// <typeparam name="T">Message type that this Handler exists to serve.</typeparam>
-        [Serializable]
-        private sealed class TypedHandler<T> : IHandler where T: IMessage
+        private sealed class TypedHandler<T> : TypedHandler where T: IMessage
         {
-            private readonly Dictionary<Action<T>, int> _targetedHandlers = new();
-            private readonly Dictionary<Action<T>, int> _untargetedHandlers = new();
-            private readonly Dictionary<Action<T>, int> _broadcastHandlers = new();
-            private readonly Dictionary<Action<IUntargetedMessage>, int> _globalUntargetedHandlers = new();
-            private readonly Dictionary<Action<InstanceId, ITargetedMessage>, int> _globalTargetedHandlers = new();
-            private readonly Dictionary<Action<InstanceId, IBroadcastMessage>, int> _globalBroadcastHandlers = new();
-
             // Buffers so we don't allocate memory as often
-            private readonly Stack<List<Action<T>>> _handlersStack = new();
-            private readonly Stack<List<Action<IUntargetedMessage>>> _globalUntargetedHandlersStack = new();
-            private readonly Stack<List<Action<InstanceId, ITargetedMessage>>> _globalTargetedHandlersStack = new();
-            private readonly Stack<List<Action<InstanceId, IBroadcastMessage>>> _globalBroadcastHandlersStack = new();
+            private static Stack<List<Action<T>>> HandlersStack;
+            private static Stack<List<Action<InstanceId, T>>> HandlersWithoutContextStack;
+            private static Stack<List<FastHandler<T>>> FastHandlersStack;
+            private static Stack<List<FastHandlerWithContext<T>>> FastHandlersWithContextStack;
+
+            private Dictionary<InstanceId, Dictionary<Action<T>, int>> _targetedHandlers;
+            private Dictionary<Action<T>, int> _untargetedHandlers;
+            private Dictionary<InstanceId, Dictionary<Action<T>, int>> _broadcastHandlers;
+            private Dictionary<InstanceId, Dictionary<Action<T>, int>> _targetedPostProcessingHandlers;
+            private Dictionary<Action<T>, int> _untargetedPostProcessingHandlers;
+            private Dictionary<InstanceId, Dictionary<Action<T>, int>> _broadcastPostProcessingHandlers;
+            private Dictionary<InstanceId, Dictionary<FastHandler<T>, int>> _targetedFastHandlers;
+            private Dictionary<FastHandler<T>, int> _untargetedFastHandlers;
+            private Dictionary<InstanceId, Dictionary<FastHandler<T>, int>> _broadcastFastHandlers;
+            private Dictionary<InstanceId, Dictionary<FastHandler<T>, int>> _targetedPostProcessingFastHandlers;
+            private Dictionary<FastHandler<T>, int> _untargetedPostProcessingFastHandlers;
+            private Dictionary<InstanceId, Dictionary<FastHandler<T>, int>> _broadcastPostProcessingFastHandlers;
+            private Dictionary<Action<IUntargetedMessage>, int> _globalUntargetedHandlers;
+            private Dictionary<Action<InstanceId, ITargetedMessage>, int> _globalTargetedHandlers;
+            private Dictionary<Action<InstanceId, IBroadcastMessage>, int> _globalBroadcastHandlers;
+            private Dictionary<FastHandler<IUntargetedMessage>, int> _globalUntargetedFastHandlers;
+            private Dictionary<FastHandlerWithContext<ITargetedMessage>, int> _globalTargetedFastHandlers;
+            private Dictionary<FastHandlerWithContext<IBroadcastMessage>, int> _globalBroadcastFastHandlers;
+            private Dictionary<Action<InstanceId, T>, int> _targetedWithoutTargetingHandlers;
+            private Dictionary<FastHandlerWithContext<T>, int> _fastTargetedWithoutTargetingHandlers;
+            private Dictionary<Action<InstanceId, T>, int> _broadcastWithoutSourceHandlers;
+            private Dictionary<FastHandlerWithContext<T>, int> _fastBroadcastWithoutSourceHandlers;
 
             /// <summary>
             /// Emits the UntargetedMessage to all subscribed listeners.
             /// </summary>
             /// <param name="message">Message to emit.</param>
-            public void HandleUntargeted(IMessage message)
+            public void HandleUntargeted(ref T message)
             {
-                if (_untargetedHandlers.Count <= 0)
-                {
-                    return;
-                }
-
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(_untargetedHandlers.Keys);
-                try
-                {
-                    foreach (Action<T> handler in handlers)
-                    {
-                        handler((T) message);
-                    }
-                }
-                finally
-                {
-                    _handlersStack.Push(handlers);
-                }
+                RunFastHandlers(_untargetedFastHandlers, ref message);
+                RunHandlers(_untargetedHandlers, ref message);
             }
 
             /// <summary>
             /// Emits the TargetedMessage to all subscribed listeners.
             /// </summary>
+            /// <param name="target">Target the message is for.</param>
             /// <param name="message">Message to emit.</param>
-            public void HandleTargeted(ITargetedMessage message)
+            public void HandleTargeted(ref InstanceId target, ref T message)
             {
-                if (_targetedHandlers.Count <= 0)
-                {
-                    return;
-                }
+                RunFastHandlersWithContext(ref target, _targetedFastHandlers, ref message);
+                RunHandlersWithContext(ref target, _targetedHandlers, ref message);
+            }
 
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(_targetedHandlers.Keys);
-                try
-                {
-                    foreach (Action<T> handler in handlers)
-                    {
-                        handler((T) message);
-                    }
-                }
-                finally
-                {
-                    _handlersStack.Push(handlers);
-                }
+            /// <summary>
+            /// Emits the TargetedMessage without targeting to all subscribed listeners.
+            /// </summary>
+            /// <param name="target">Target the message is for.</param>
+            /// <param name="message">Message to emit.</param>
+            public void HandleTargetedWithoutTargeting(ref InstanceId target, ref T message)
+            {
+                RunFastHandlers(ref target, ref FastHandlersWithContextStack, _fastTargetedWithoutTargetingHandlers, ref message);
+                RunHandlers(ref target, _targetedWithoutTargetingHandlers, ref message);
             }
 
             /// <summary>
             /// Emits the BroadcastMessage to all subscribed listeners.
             /// </summary>
+            /// <param name="source">Source the message is from.</param>
             /// <param name="message">Message to emit.</param>
-            public void HandleSourcedBroadcast(IBroadcastMessage message)
+            public void HandleSourcedBroadcast(ref InstanceId source, ref T message)
             {
-                if (_broadcastHandlers.Count <= 0)
-                {
-                    return;
-                }
+                RunFastHandlersWithContext(ref source, _broadcastFastHandlers, ref message);
+                RunHandlersWithContext(ref source, _broadcastHandlers, ref message);
+            }
 
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(_broadcastHandlers.Keys);
-                try
-                {
-                    foreach (Action<T> handler in handlers)
-                    {
-                        handler((T) message);
-                    }
-                }
-                finally
-                {
-                    _handlersStack.Push(handlers);
-                }
+            /// <summary>
+            /// Emits the BroadcastMessage without source to all subscribed listeners.
+            /// </summary>
+            /// <param name="source">Source the message is from.</param>
+            /// <param name="message">Message to emit.</param>
+            public void HandleSourcedBroadcastWithoutSource(ref InstanceId source, ref T message)
+            {
+                RunFastHandlers(ref source, ref FastHandlersWithContextStack, _fastBroadcastWithoutSourceHandlers, ref message);
+                RunHandlers(ref source, _broadcastWithoutSourceHandlers, ref message);
             }
 
             /// <summary>
             /// Emits the UntargetedMessage to all global listeners.
             /// </summary>
             /// <param name="message">Message to emit.</param>
-            public void HandleGlobalUntargeted(IUntargetedMessage message)
+            public void HandleGlobalUntargeted(ref IUntargetedMessage message)
             {
-                if (_globalUntargetedHandlers.Count <= 0)
+                RunFastHandlers(GlobalUntargetedFastHandlersStack, _globalUntargetedFastHandlers, ref message);
+
+                if (_globalUntargetedHandlers is not { Count: > 0 })
                 {
                     return;
                 }
 
-                if (_globalUntargetedHandlersStack.TryPop(out List<Action<IUntargetedMessage>> handlers))
+                if (GlobalUntargetedHandlersStack.TryPop(out List<Action<IUntargetedMessage>> handlers))
                 {
                     handlers.Clear();
                     handlers.AddRange(_globalUntargetedHandlers.Keys);
@@ -449,7 +807,7 @@
                 }
                 finally
                 {
-                    _globalUntargetedHandlersStack.Push(handlers);
+                    GlobalUntargetedHandlersStack.Push(handlers);
                 }
             }
 
@@ -458,14 +816,16 @@
             /// </summary>
             /// <param name="target">Target that this message is intended for.</param>
             /// <param name="message">Message to emit.</param>
-            public void HandleGlobalTargeted(InstanceId target, ITargetedMessage message)
+            public void HandleGlobalTargeted(ref InstanceId target, ref ITargetedMessage message)
             {
-                if (_globalTargetedHandlers.Count <= 0)
+                RunFastHandlers(ref target, GlobalTargetedFastHandlersStack, _globalTargetedFastHandlers, ref message);
+
+                if (_globalTargetedHandlers is not { Count: > 0 })
                 {
                     return;
                 }
 
-                if (_globalTargetedHandlersStack.TryPop(out List<Action<InstanceId, ITargetedMessage>> handlers))
+                if (GlobalTargetedHandlersStack.TryPop(out List<Action<InstanceId, ITargetedMessage>> handlers))
                 {
                     handlers.Clear();
                     handlers.AddRange(_globalTargetedHandlers.Keys);
@@ -484,7 +844,7 @@
                 }
                 finally
                 {
-                    _globalTargetedHandlersStack.Push(handlers);
+                    GlobalTargetedHandlersStack.Push(handlers);
                 }
             }
 
@@ -493,14 +853,16 @@
             /// </summary>
             /// <param name="source">Source that this message is from.</param>
             /// <param name="message">Message to emit.</param>
-            public void HandleGlobalBroadcast(InstanceId source, IBroadcastMessage message)
+            public void HandleGlobalBroadcast(ref InstanceId source, ref IBroadcastMessage message)
             {
-                if (_globalBroadcastHandlers.Count <= 0)
+                RunFastHandlers(ref source, GlobalBroadcastFastHandlersStack, _globalBroadcastFastHandlers, ref message);
+
+                if (_globalBroadcastHandlers is not { Count: > 0 })
                 {
                     return;
                 }
 
-                if (_globalBroadcastHandlersStack.TryPop(out List<Action<InstanceId, IBroadcastMessage>> handlers))
+                if (GlobalBroadcastHandlersStack.TryPop(out List<Action<InstanceId, IBroadcastMessage>> handlers))
                 {
                     handlers.Clear();
                     handlers.AddRange(_globalBroadcastHandlers.Keys);
@@ -519,19 +881,72 @@
                 }
                 finally
                 {
-                    _globalBroadcastHandlersStack.Push(handlers);
+                    GlobalBroadcastHandlersStack.Push(handlers);
                 }
+            }
+
+            public void HandleUntargetedPostProcessing(ref T message)
+            {
+                RunFastHandlers(_untargetedPostProcessingFastHandlers, ref message);
+                RunHandlers(_untargetedPostProcessingHandlers, ref message);
+            }
+
+            public void HandleTargetedPostProcessing(ref InstanceId target, ref T message)
+            {
+                RunFastHandlersWithContext(ref target, _targetedPostProcessingFastHandlers, ref message);
+                RunHandlersWithContext(ref target, _targetedPostProcessingHandlers, ref message);
+            }
+
+            public void HandleSourcedBroadcastPostProcessing(ref InstanceId source, ref T message)
+            {
+                RunFastHandlersWithContext(ref source, _broadcastPostProcessingFastHandlers, ref message);
+                RunHandlersWithContext(ref source, _broadcastPostProcessingHandlers, ref message);
             }
 
             /// <summary>
             /// Adds a TargetedHandler to listen to Messages of the given type, returning a de-registration action.
             /// </summary>
+            /// <param name="target">Target the handler is for.</param>
             /// <param name="handler">Relevant MessageHandler.</param>
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to un-register the handler.</returns>
-            public Action AddTargetedHandler(Action<T> handler, Action deregistration)
+            public Action AddTargetedHandler(InstanceId target, Action<T> handler, Action deregistration)
             {
-                return AddHandler(_targetedHandlers, handler, deregistration);
+                return AddHandler(target, ref _targetedHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast TargetedHandler to listen to Messages of the given type, returning a de-registration action.
+            /// </summary>
+            /// <param name="target">Target the handler is for.</param>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddTargetedHandler(InstanceId target, FastHandler<T> handler, Action deregistration)
+            {
+                return AddHandler(target, ref _targetedFastHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a TargetedWithoutTargetingHandler to listen to Messages of the given type, returning a de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddTargetedWithoutTargetingHandler(Action<InstanceId, T> handler, Action deregistration)
+            {
+                return AddHandler(ref _targetedWithoutTargetingHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast TargetedWithoutTargetingHandler to listen to Messages of the given type, returning a de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddTargetedWithoutTargetingHandler(FastHandlerWithContext<T> handler, Action deregistration)
+            {
+                return AddHandler(ref _fastTargetedWithoutTargetingHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -542,18 +957,65 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddUntargetedHandler(Action<T> handler, Action deregistration)
             {
-                return AddHandler(_untargetedHandlers, handler, deregistration);
+                return AddHandler(ref _untargetedHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast UntargetedHandler to listen to Messages of the given type, returning a de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+
+            public Action AddUntargetedHandler(FastHandler<T> handler, Action deregistration)
+            {
+                return AddHandler(ref _untargetedFastHandlers, handler, deregistration);
             }
 
             /// <summary>
             /// Adds a SourcedBroadcastHandler to listen to Messages of the given type from an entity, returning a de-registration action.
             /// </summary>
+            /// <param name="source">Source of the handler is for.</param>
             /// <param name="handler">Relevant MessageHandler.</param>
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to un-register the handler.</returns>
-            public Action AddSourcedBroadcastHandler(Action<T> handler, Action deregistration)
+            public Action AddSourcedBroadcastHandler(InstanceId source, Action<T> handler, Action deregistration)
             {
-                return AddHandler(_broadcastHandlers, handler, deregistration);
+                return AddHandler(source, ref _broadcastHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast SourcedBroadcastHandler to listen to Messages of the given type from an entity, returning a de-registration action.
+            /// </summary>
+            /// <param name="source">Source of the handler is for.</param>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddSourcedBroadcastHandler(InstanceId source, FastHandler<T> handler, Action deregistration)
+            {
+                return AddHandler(source, ref _broadcastFastHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a SourcedBroadcastWithoutSourceHandler to listen to Messages of the given type from an entity, returning a de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddSourcedBroadcastWithoutSourceHandler(Action<InstanceId, T> handler, Action deregistration)
+            {
+                return AddHandler(ref _broadcastWithoutSourceHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast SourcedBroadcastWithoutSourceHandler to listen to Messages of the given type from an entity, returning a de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddSourcedBroadcastWithoutSourceHandler(FastHandlerWithContext<T> handler, Action deregistration)
+            {
+                return AddHandler(ref _fastBroadcastWithoutSourceHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -564,7 +1026,19 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddGlobalUntargetedHandler(Action<IUntargetedMessage> handler, Action deregistration)
             {
-                return AddHandler(_globalUntargetedHandlers, handler, deregistration);
+                return AddHandler(ref _globalUntargetedHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a Global fast UntargetedHandler to listen to all Untargeted Messages of all types, returning the de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+
+            public Action AddGlobalUntargetedHandler(FastHandler<IUntargetedMessage> handler, Action deregistration)
+            {
+                return AddHandler(ref _globalUntargetedFastHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -575,7 +1049,19 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddGlobalTargetedHandler(Action<InstanceId, ITargetedMessage> handler, Action deregistration)
             {
-                return AddHandler(_globalTargetedHandlers, handler, deregistration);
+                return AddHandler(ref _globalTargetedHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a Global fast TargetedHandler to listen to all Targeted Messages of all types for all entities (along with the target instance id), returning the de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+
+            public Action AddGlobalTargetedHandler(FastHandlerWithContext<ITargetedMessage> handler, Action deregistration)
+            {
+                return AddHandler(ref _globalTargetedFastHandlers, handler, deregistration);
             }
 
             /// <summary>
@@ -586,45 +1072,339 @@
             /// <returns>De-registration action to un-register the handler.</returns>
             public Action AddGlobalBroadcastHandler(Action<InstanceId, IBroadcastMessage> handler, Action deregistration)
             {
-                return AddHandler(_globalBroadcastHandlers, handler, deregistration);
+                return AddHandler(ref _globalBroadcastHandlers, handler, deregistration);
             }
 
-            private List<Action<T>> GetOrAddNewHandlerStack(IEnumerable<Action<T>> handlers)
+            /// <summary>
+            /// Adds a Global fast BroadcastHandler to listen to all Targeted Messages of all types for all entities (along with the source instance id), returning the de-registration action.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddGlobalBroadcastHandler(FastHandlerWithContext<IBroadcastMessage> handler, Action deregistration)
             {
-                if (_handlersStack.TryPop(out List<Action<T>> handlerStack))
+                return AddHandler(ref _globalBroadcastFastHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds an Untargeted post processor to be called after all other handlers have been called.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddUntargetedPostProcessor(Action<T> handler, Action deregistration)
+            {
+                return AddHandler(ref _untargetedPostProcessingHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast Untargeted post processor to be called after all other handlers have been called.
+            /// </summary>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddUntargetedPostProcessor(FastHandler<T> handler, Action deregistration)
+            {
+                return AddHandler(ref _untargetedPostProcessingFastHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds an Targeted post processor to be called after all other handlers have been called.
+            /// </summary>
+            /// <param name="target">Target the handler is for.</param>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddTargetedPostProcessor(InstanceId target, Action<T> handler, Action deregistration)
+            {
+                return AddHandler(target, ref _targetedPostProcessingHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a Targeted post processor to be called after all other handlers have been called.
+            /// </summary>
+            /// <param name="target">Target the handler is for.</param>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddTargetedPostProcessor(InstanceId target, FastHandler<T> handler, Action deregistration)
+            {
+                return AddHandler(target, ref _targetedPostProcessingFastHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a Broadcast post processor to be called after all other handlers have been called.
+            /// </summary>
+            /// <param name="source">Source the handler is for.</param>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddBroadcastPostProcessor(InstanceId source, Action<T> handler, Action deregistration)
+            {
+                return AddHandler(source, ref _broadcastPostProcessingHandlers, handler, deregistration);
+            }
+
+            /// <summary>
+            /// Adds a fast Broadcast post processor to be called after all other handlers have been called.
+            /// </summary>
+            /// <param name="source">Source the handler is for.</param>
+            /// <param name="handler">Relevant MessageHandler.</param>
+            /// <param name="deregistration">Deregistration action for the handler.</param>
+            /// <returns>De-registration action to un-register the handler.</returns>
+            public Action AddBroadcastPostProcessor(InstanceId source, FastHandler<T> handler, Action deregistration)
+            {
+                return AddHandler(source, ref _broadcastPostProcessingFastHandlers, handler, deregistration);
+            }
+
+            private static void RunFastHandlersWithContext<TMessage>(ref InstanceId context, Dictionary<FastHandlerWithContext<T>, int> fastHandlersByContext, ref TMessage message) where TMessage : IMessage
+            {
+                if (fastHandlersByContext is not { Count: > 0 })
                 {
-                    handlerStack.Clear();
-                    handlerStack.AddRange(handlers);
-                    return handlerStack;
+                    return;
                 }
 
-                return new List<Action<T>>(handlers);
+                RunFastHandlers(ref context, ref FastHandlersWithContextStack, fastHandlersByContext, ref message);
             }
 
-            private static Action AddHandler<U>(Dictionary<U, int> handlers, U handler, Action deregistration)
+            private static void RunFastHandlersWithContext<TMessage>(ref InstanceId context, Dictionary<InstanceId, Dictionary<FastHandler<T>, int>> fastHandlersByContext, ref TMessage message) where TMessage : IMessage
             {
+                if (fastHandlersByContext is not { Count: > 0 } || !fastHandlersByContext.TryGetValue(context, out Dictionary<FastHandler<T>, int> fastHandlers))
+                {
+                    return;
+                }
+
+                RunFastHandlers(fastHandlers, ref message);
+            }
+
+            private static void RunFastHandlers<TMessage>(Dictionary<FastHandler<T>, int> fastHandlers, ref TMessage message) where TMessage : IMessage
+            {
+                if (fastHandlers is not { Count: > 0 })
+                {
+                    return;
+                }
+
+                if (message is not T typedMessage)
+                {
+                    return;
+                }
+
+                List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(ref FastHandlersStack, fastHandlers.Keys);
+                try
+                {
+                    foreach (FastHandler<T> fastHandler in handlers)
+                    {
+                        fastHandler(ref typedMessage);
+                    }
+                }
+                finally
+                {
+                    FastHandlersStack.Push(handlers);
+                }
+            }
+
+            private static void RunFastHandlers<TMessage, U>(Stack<List<FastHandler<U>>> stack, Dictionary<FastHandler<U>, int> fastHandlers, ref TMessage message) where TMessage : IMessage where U : IMessage
+            {
+                if (fastHandlers is not { Count: > 0 })
+                {
+                    return;
+                }
+
+                if (message is not U typedMessage)
+                {
+                    return;
+                }
+
+                List<FastHandler<U>> handlers = GetOrAddNewHandlerStack(ref stack, fastHandlers.Keys);
+                try
+                {
+                    foreach (FastHandler<U> fastHandler in handlers)
+                    {
+                        fastHandler(ref typedMessage);
+                    }
+                }
+                finally
+                {
+                    stack.Push(handlers);
+                }
+            }
+
+            private static void RunFastHandlers<TMessage, U>(
+                ref InstanceId context, Stack<List<FastHandlerWithContext<U>>> stack,
+                Dictionary<FastHandlerWithContext<U>, int> fastHandlers, ref TMessage message)
+                where TMessage : IMessage where U : IMessage
+            {
+                RunFastHandlers(ref context, ref stack, fastHandlers, ref message);
+            }
+
+            private static void RunFastHandlers<TMessage, U>(ref InstanceId context, ref Stack<List<FastHandlerWithContext<U>>> stack, Dictionary<FastHandlerWithContext<U>, int> fastHandlers, ref TMessage message) where TMessage : IMessage where U : IMessage
+            {
+                if (fastHandlers is not { Count: > 0 })
+                {
+                    return;
+                }
+
+                if (message is not U typedMessage)
+                {
+                    return;
+                }
+
+                List<FastHandlerWithContext<U>> handlers = GetOrAddNewHandlerStack(ref stack, fastHandlers.Keys);
+                try
+                {
+                    foreach (FastHandlerWithContext<U> fastHandler in handlers)
+                    {
+                        fastHandler(ref context, ref typedMessage);
+                    }
+                }
+                finally
+                {
+                    stack.Push(handlers);
+                }
+            }
+            
+            private static void RunHandlersWithContext<TMessage>(ref InstanceId context, Dictionary<InstanceId, Dictionary<Action<T>, int>> handlersByContext, ref TMessage message) where TMessage : IMessage
+            {
+                if (handlersByContext is not { Count: > 0 } || !handlersByContext.TryGetValue(context, out Dictionary<Action<T>, int> handlers))
+                {
+                    return;
+                }
+
+                RunHandlers(handlers, ref message);
+            }
+
+            private static void RunHandlers<TMessage>(Dictionary<Action<T>, int> handlers, ref TMessage message) where TMessage : IMessage
+            {
+                if (handlers is not { Count: > 0 })
+                {
+                    return;
+                }
+
+                List<Action<T>> typedHandlers = GetOrAddNewHandlerStack(ref HandlersStack, handlers.Keys);
+                try
+                {
+                    if (message is not T typedMessage)
+                    {
+                        return;
+                    }
+
+                    foreach (Action<T> handler in typedHandlers)
+                    {
+                        handler(typedMessage);
+                    }
+                }
+                finally
+                {
+                    HandlersStack.Push(typedHandlers);
+                }
+            }
+
+            private static void RunHandlers<TMessage>(ref InstanceId context, Dictionary<Action<InstanceId, T>, int> handlers, ref TMessage message) where TMessage : IMessage
+            {
+                if (handlers is not { Count: > 0 })
+                {
+                    return;
+                }
+
+                List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(ref HandlersWithoutContextStack, handlers.Keys);
+                try
+                {
+                    if (message is not T typedMessage)
+                    {
+                        return;
+                    }
+
+                    foreach (Action<InstanceId, T> handler in typedHandlers)
+                    {
+                        handler(context, typedMessage);
+                    }
+                }
+                finally
+                {
+                    HandlersWithoutContextStack.Push(typedHandlers);
+                }
+            }
+
+            private static List<U> GetOrAddNewHandlerStack<U>(ref Stack<List<U>> stack, IEnumerable<U> handlers)
+            {
+                stack ??= new Stack<List<U>>();
+                if (stack.TryPop(out List<U> typedHandlerStack))
+                {
+                    typedHandlerStack.Clear();
+                    typedHandlerStack.AddRange(handlers);
+                    return typedHandlerStack;
+                }
+
+                return new List<U>(handlers);
+            }
+
+            private static Action AddHandler<U>(InstanceId context, ref Dictionary<InstanceId, Dictionary<U, int>> handlersByContext, U handler, Action deregistration)
+            {
+                handlersByContext ??= new Dictionary<InstanceId, Dictionary<U, int>>();
+                
+                if (!handlersByContext.TryGetValue(context, out Dictionary<U, int> handlers))
+                {
+                    handlers = new Dictionary<U, int>();
+                    handlersByContext[context] = handlers;
+                }
+
                 if (!handlers.TryGetValue(handler, out int count))
                 {
                     count = 0;
                 }
 
-                ++count;
-                handlers[handler] = count;
+                handlers[handler] = count + 1;
+
+                Dictionary<InstanceId, Dictionary<U, int>> localHandlersByContext = handlersByContext;
                 return () =>
                 {
-                    if (!handlers.TryGetValue(handler, out count))
+                    if (!localHandlersByContext.TryGetValue(context, out handlers))
                     {
                         return;
                     }
 
-                    --count;
-                    if (count <= 0 && handlers.Remove(handler))
+                    if (handlers.TryGetValue(handler, out count) && count <= 1 && handlers.Remove(handler))
+                    {
+                        deregistration?.Invoke();
+                    }
+
+                    if (handlers.Count <= 0)
+                    {
+                        _ = localHandlersByContext.Remove(context);
+                    }
+                };
+            }
+
+            private static Action AddHandler<U>(ref Dictionary<U, int> handlers, U handler, Action deregistration)
+            {
+                int count;
+                if (handlers == null)
+                {
+                    handlers = new Dictionary<U, int>();
+                    count = 0;
+                } 
+                else if (!handlers.TryGetValue(handler, out count))
+                {
+                    count = 0;
+                }
+
+                handlers[handler] = count + 1;
+
+                Dictionary<U, int> localHandlers = handlers;
+
+                return () =>
+                {
+                    if (!localHandlers.TryGetValue(handler, out count))
+                    {
+                        return;
+                    }
+
+                    if (count <= 1 && localHandlers.Remove(handler))
                     {
                         deregistration?.Invoke();
                         return;
                     }
 
-                    handlers[handler] = count;
+                    localHandlers[handler] = count - 1;
                 };
             }
         }

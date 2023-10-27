@@ -2,46 +2,9 @@
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using MessageBus;
     using Messages;
     using UnityEngine;
-    using Object = UnityEngine.Object;
-
-    public readonly struct MessageRegistrationHandle : IEquatable<MessageRegistrationHandle>, IComparable<MessageRegistrationHandle>
-    {
-        private readonly Guid _handle;
-
-        public static MessageRegistrationHandle CreateMessageRegistrationHandle()
-        {
-            return new MessageRegistrationHandle(Guid.NewGuid());
-        }
-
-        private MessageRegistrationHandle(Guid handle)
-        {
-            _handle = handle;
-        }
-
-        public override int GetHashCode()
-        {
-            return _handle.GetHashCode();
-        }
-
-        public override bool Equals(object other)
-        {
-            return other is MessageRegistrationHandle handle && Equals(handle);
-        }
-
-        public bool Equals(MessageRegistrationHandle other)
-        {
-            return _handle.Equals(other._handle);
-        }
-
-        public int CompareTo(MessageRegistrationHandle other)
-        {
-            return _handle.CompareTo(other._handle);
-        }
-    }
 
     /// <summary>
     /// Maintains all of the [de]registration logic for MessagingComponents. Wraps registrations up for lazy registration, which are executed on Enable() call.
@@ -50,41 +13,23 @@
     /// General usage should be to create one of these on awake or start (probably start), and bind all messaging functions there.
     /// Then, on OnEnable(), call .Enable(), OnDisable(), call .Disable()
     /// </note>
-    [Serializable]
     public sealed class MessageRegistrationToken
     {
-        public bool Enabled { get; private set; }
+        public bool Enabled => _enabled;
 
         private readonly MessageHandler _messageHandler;
 
-        private readonly Dictionary<MessageRegistrationHandle, Action> _registrations = new Dictionary<MessageRegistrationHandle, Action>();
-        private readonly Dictionary<MessageRegistrationHandle, Action> _deregistrations = new Dictionary<MessageRegistrationHandle, Action>();
+        private readonly Dictionary<MessageRegistrationHandle, Action> _registrations = new();
+        private readonly Dictionary<MessageRegistrationHandle, Action> _deregistrations = new();
 
         private readonly IMessageBus _messageBus;
+        private bool _enabled;
 
         private MessageRegistrationToken(MessageHandler messageHandler, IMessageBus messageBus)
         {
-            Enabled = false;
+            _enabled = false;
             _messageHandler = messageHandler ?? throw new ArgumentNullException(nameof(messageHandler));
             _messageBus = messageBus;
-        }
-
-        /// <summary>
-        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards it.
-        /// </summary>
-        /// <note>
-        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
-        /// </note>
-        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
-        /// <param name="targetedHandler">Actual handler functionality</param>
-        /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(Action<T> targetedHandler) where T : ITargetedMessage
-        {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(targetedHandler, _messageBus));
         }
 
         /// <summary>
@@ -117,7 +62,47 @@
         /// <param name="target">Target of the TargetedMessages to consume.</param>
         /// <param name="targetedHandler">Actual handler functionality</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(GameObject target, MessageHandler.FastHandler<T> targetedHandler)
+            where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target of the TargetedMessages to consume.</param>
+        /// <param name="targetedHandler">Actual handler functionality</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterComponentTargeted<T>(Component target, Action<T> targetedHandler)
+            where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target of the TargetedMessages to consume.</param>
+        /// <param name="targetedHandler">Actual handler functionality</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterComponentTargeted<T>(Component target, MessageHandler.FastHandler<T> targetedHandler)
             where T : ITargetedMessage
         {
             if (_messageHandler == null) // Unity has a bug
@@ -136,7 +121,25 @@
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="messageHandler">Actual handler functionality</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(Action<T> messageHandler) where T : ITargetedMessage
+        public MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(Action<InstanceId, T> messageHandler) where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(messageHandler, () => _messageHandler.RegisterTargetedWithoutTargeting(messageHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards anything (including itself).
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="messageHandler">Actual handler functionality</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(MessageHandler.FastHandlerWithContext<T> messageHandler) where T : ITargetedMessage
         {
             if (_messageHandler == null) // Unity has a bug
             {
@@ -155,6 +158,24 @@
         /// <param name="untargetedHandler">Actual handler functionality</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterUntargeted<T>(Action<T> untargetedHandler) where T : IUntargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(untargetedHandler, () => _messageHandler.RegisterUntargetedMessageHandler(untargetedHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept UntargetedMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="untargetedHandler">Actual handler functionality</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterUntargeted<T>(MessageHandler.FastHandler<T> untargetedHandler) where T : IUntargetedMessage
         {
             if (_messageHandler == null) // Unity has a bug
             {
@@ -189,6 +210,25 @@
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
         /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="source">Id of the source for BroadcastMessages to listen for.</param>
+        /// <param name="broadcastHandler">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterGameObjectBroadcast<T>(GameObject source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
         /// <param name="source">The component source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
@@ -208,9 +248,48 @@
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
         /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="source">The component source for BroadcastMessages to listen for.</param>
+        /// <param name="broadcastHandler">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterComponentBroadcast<T>(Component source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
         /// <param name="broadcastHandler">Action handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterBroadcastWithoutSource<T>(Action<T> broadcastHandler)
+        public MessageRegistrationHandle RegisterBroadcastWithoutSource<T>(Action<InstanceId, T> broadcastHandler)
+            where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastWithoutSource(broadcastHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="broadcastHandler">Action handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcastWithoutSource<T>(MessageHandler.FastHandlerWithContext<T> broadcastHandler)
             where T : IBroadcastMessage
         {
             if (_messageHandler == null) // Unity has a bug
@@ -242,23 +321,52 @@
         }
 
         /// <summary>
-        /// Stages a registration of the provided intercept transformation function for every message of the specified type that is sent.
+        /// Stages a registration of the provided MessageHandler to accept every message that is broadcast.
         /// </summary>
         /// <note>
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
-        /// <typeparam name="T">Type of message that the transformer accepts.</typeparam>
-        /// <param name="transformer">Actual transformer functionality.</param>
+        /// <param name="acceptAllUntargeted">Action handler functionality for UntargetedMessages.</param>
+        /// <param name="acceptAllTargeted">Action handler functionality for TargetedMessages.</param>
+        /// <param name="acceptAllBroadcast">Action handler functionality for BroadcastMessages.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterInterceptor<T>(Func<T, object, T> transformer) where T: IMessage
+        public MessageRegistrationHandle RegisterGlobalAcceptAll(MessageHandler.FastHandler<IUntargetedMessage> acceptAllUntargeted, MessageHandler.FastHandlerWithContext<ITargetedMessage> acceptAllTargeted, MessageHandler.FastHandlerWithContext<IBroadcastMessage> acceptAllBroadcast)
         {
-            MessageRegistrationHandle handle = MessageRegistrationHandle.CreateMessageRegistrationHandle();
             if (_messageHandler == null) // Unity has a bug
             {
-                return handle;
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister<IMessage>(() => _messageHandler.RegisterGlobalAcceptAll(acceptAllUntargeted, acceptAllTargeted, acceptAllBroadcast, _messageBus));
+        }
+
+        public MessageRegistrationHandle RegisterUntargetedInterceptor<T>(IMessageBus.UntargetedInterceptor<T> interceptor, int priority = 0) where T : IUntargetedMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
 
-            return InternalRegister<T>(() => _messageHandler.RegisterInterceptor(transformer, _messageBus));
+            return InternalRegister<T>(() => _messageHandler.RegisterUntargetedInterceptor(interceptor, priority));
+        }
+
+        public MessageRegistrationHandle RegisterBroadcastInterceptor<T>(IMessageBus.BroadcastInterceptor<T> interceptor, int priority = 0) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+
+            return InternalRegister<T>(() => _messageHandler.RegisterBroadcastInterceptor(interceptor, priority));
+        }
+
+        public MessageRegistrationHandle RegisterTargetedInterceptor<T>(IMessageBus.TargetedInterceptor<T> interceptor, int priority = 0) where T : ITargetedMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+
+            return InternalRegister<T>(() => _messageHandler.RegisterTargetedInterceptor(interceptor, priority));
         }
 
         /// <summary>
@@ -268,7 +376,65 @@
         /// <param name="handler">Handler being registered (mainly used for type info).</param>
         /// <param name="registerAndGetDeregistration">Proxied registration function that returns a de-registration function.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
         private MessageRegistrationHandle InternalRegister<T>(Action<T> handler, Func<Action> registerAndGetDeregistration)
+            where T : IMessage
+        {
+            if (handler == null)
+            {
+                throw new ArgumentNullException(nameof(handler));
+            }
+
+            return InternalRegister<T>(registerAndGetDeregistration);
+        }
+
+        /// <summary>
+        /// Handles the actual [de]registration wrapping and (potential) lazy execution.
+        /// </summary>
+        /// <typeparam name="T">Type of message being registered.</typeparam>
+        /// <param name="handler">Handler being registered (mainly used for type info).</param>
+        /// <param name="registerAndGetDeregistration">Proxied registration function that returns a de-registration function.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
+        private MessageRegistrationHandle InternalRegister<T>(Action<InstanceId, T> handler, Func<Action> registerAndGetDeregistration)
+            where T : IMessage
+        {
+            if (handler == null)
+            {
+                throw new ArgumentNullException(nameof(handler));
+            }
+
+            return InternalRegister<T>(registerAndGetDeregistration);
+        }
+
+        /// <summary>
+        /// Handles the actual [de]registration wrapping and (potential) lazy execution.
+        /// </summary>
+        /// <typeparam name="T">Type of message being registered.</typeparam>
+        /// <param name="handler">Handler being registered (mainly used for type info).</param>
+        /// <param name="registerAndGetDeregistration">Proxied registration function that returns a de-registration function.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
+        private MessageRegistrationHandle InternalRegister<T>(MessageHandler.FastHandler<T> handler, Func<Action> registerAndGetDeregistration)
+            where T : IMessage
+        {
+            if (handler == null)
+            {
+                throw new ArgumentNullException(nameof(handler));
+            }
+
+            return InternalRegister<T>(registerAndGetDeregistration);
+        }
+
+        /// <summary>
+        /// Handles the actual [de]registration wrapping and (potential) lazy execution.
+        /// </summary>
+        /// <typeparam name="T">Type of message being registered.</typeparam>
+        /// <param name="handler">Handler being registered (mainly used for type info).</param>
+        /// <param name="registerAndGetDeregistration">Proxied registration function that returns a de-registration function.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
+        private MessageRegistrationHandle InternalRegister<T>(MessageHandler.FastHandlerWithContext<T> handler, Func<Action> registerAndGetDeregistration)
             where T : IMessage
         {
             if (handler == null)
@@ -290,18 +456,18 @@
             MessageRegistrationHandle handle = MessageRegistrationHandle.CreateMessageRegistrationHandle();
 
             // We don't want to actually register at this time (might not be awake/enabled) - so we wrap that shit up, to lazy register when we're enabled.
-            Action registration = () =>
+            void Registration()
             {
                 Action actualDeregistration = registerAndGetDeregistration();
                 _deregistrations[handle] = actualDeregistration;
-            };
+            }
 
-            _registrations[handle] = registration;
+            _registrations[handle] = Registration;
 
             // Generally, registrations should take place before all calls to enable. Just in case, though...
-            if (Enabled)
+            if (_enabled)
             {
-                registration();
+                Registration();
             }
 
             return handle;
@@ -315,17 +481,20 @@
         /// </note>
         public void Enable()
         {
-            if (Enabled)
+            if (_enabled)
             {
                 return;
             }
 
-            foreach (Action registrationAction in _registrations?.Values ?? Enumerable.Empty<Action>())
+            if (_registrations is { Count: > 0 })
             {
-                registrationAction();
+                foreach (Action registrationAction in _registrations.Values)
+                {
+                    registrationAction();
+                }
             }
 
-            Enabled = true;
+            _enabled = true;
         }
 
         /// <summary>
@@ -336,18 +505,23 @@
         /// </note>
         public void Disable()
         {
-            if (!Enabled)
+            if (!_enabled)
             {
                 return;
             }
 
-            // ReSharper disable once ForCanBeConvertedToForeach
-            foreach (Action deregistrationAction in _deregistrations?.Values ?? Enumerable.Empty<Action>())
+            if (_deregistrations is { Count: > 0 })
             {
-                deregistrationAction();
+                foreach (Action deregistrationAction in _deregistrations.Values)
+                {
+                    deregistrationAction();
+                }
             }
 
-            Enabled = false;
+            // ReSharper disable once ForCanBeConvertedToForeach
+            
+
+            _enabled = false;
         }
 
         /// <summary>
@@ -355,15 +529,15 @@
         /// </summary>
         public void UnregisterAll()
         {
-            if (Enabled)
+            if (_enabled && _deregistrations is { Count: > 0 })
             {
-                foreach (Action deregistrationAction in _deregistrations?.Values ?? Enumerable.Empty<Action>())
+                foreach (Action deregistrationAction in _deregistrations.Values)
                 {
                     deregistrationAction();
                 }
             }
 
-            Enabled = false;
+            _enabled = false;
             _registrations?.Clear();
             _deregistrations?.Clear();
         }

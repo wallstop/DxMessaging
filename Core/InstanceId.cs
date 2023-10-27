@@ -15,11 +15,11 @@
         public static readonly InstanceId EmptyId = new(0);
 
         [DataMember(Name = "id")]
-        private readonly long _id;
+        private readonly int _id;
 
         public Object Object { get; }
 
-        private InstanceId(long id) : this()
+        private InstanceId(int id) : this()
         {
             _id = id;
             Object = null;
@@ -72,18 +72,14 @@
 
         public override int GetHashCode()
         {
-            return _id.GetHashCode();
+            return _id;
         }
 
         public override string ToString()
         {
             Object instance = Object;
             string objectName = instance == null ? string.Empty : instance.name;
-            return new
-            {
-                Id = _id,
-                Name = objectName,
-            }.ToString();
+            return $"{{\"Id\": {_id}, \"Name\": \"{objectName}\"}}";
         }
 
         public static bool operator ==(InstanceId lhs, InstanceId rhs)
