@@ -40,20 +40,28 @@
         /// Id of the MessageHandler that was registered.
         /// </summary>
         public readonly InstanceId id;
+
         /// <summary>
         /// Name of the type of Message that was registered for.
         /// </summary>
         public readonly Type type;
+
         /// <summary>
         /// New registration? De-registration?
         /// </summary>
         public readonly RegistrationType registrationType;
+
         /// <summary>
         /// Exact method of the registration.
         /// </summary>
         public readonly RegistrationMethod registrationMethod;
 
-        // TODO: Time
+#if UNITY_2017_1_OR_NEWER
+        /// <summary>
+        /// Unity time of the registration
+        /// </summary>
+        public readonly float time;
+#endif
 
         /// <summary>
         /// Creates a MessagingRegistration with all of the relevant tidbits filled out.
@@ -68,14 +76,21 @@
             this.type = type;
             this.registrationType = registrationType;
             this.registrationMethod = registrationMethod;
+#if UNITY_2017_1_OR_NEWER
+            time = UnityEngine.Time.time;
+#endif
         }
 
         public override string ToString()
         {
             return new
             {
+#if UNITY_2017_1_OR_NEWER
+                time,
+#endif
                 id,
-                type, registrationType,
+                type, 
+                registrationType,
                 registrationMethod
             }.ToString();
         }

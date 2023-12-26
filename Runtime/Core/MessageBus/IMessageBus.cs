@@ -5,12 +5,34 @@
     using Messages;
 
     /// <summary>
-    /// Description of a general purpose message bus that provides both registration, de-registration, and broadcast capabilities
+    /// Description of a general purpose message bus that provides both registration, de-registration, and broadcast capabilities.
     /// </summary>
     public interface IMessageBus
     {
+        /// <summary>
+        /// Given an Untargeted message, determines whether or not it should be processed or skipped
+        /// </summary>
+        /// <typeparam name="TMessage">Specific type of message.</typeparam>
+        /// <param name="message">Message to consider.</param>
+        /// <returns>True if the message should be processed, false if it should be skipped.</returns>
         public delegate bool UntargetedInterceptor<TMessage>(ref TMessage message) where TMessage : IUntargetedMessage;
+
+        /// <summary>
+        /// Given an Targeted message and its target, determines whether or not it should be processed or skipped.
+        /// </summary>
+        /// <typeparam name="TMessage">Specific type of message.</typeparam>
+        /// <param name="target">Target of the message.</param>
+        /// <param name="message">Message to consider.</param>
+        /// <returns>True if the message should be processed, false if it should be skipped.</returns>
         public delegate bool TargetedInterceptor<TMessage>(ref InstanceId target, ref TMessage message) where TMessage : ITargetedMessage;
+
+        /// <summary>
+        /// Given an Broadcast message and its source, determines whether or not it should be processed or skipped.
+        /// </summary>
+        /// <typeparam name="TMessage">Specific type of message.</typeparam>
+        /// <param name="source">Source of the message.</param>
+        /// <param name="message">Message to consider.</param>
+        /// <returns>True if the message should be processed, false if it should be skipped.</returns>
         public delegate bool BroadcastInterceptor<TMessage>(ref InstanceId source, ref TMessage message) where TMessage : IBroadcastMessage;
 
         /// <summary>

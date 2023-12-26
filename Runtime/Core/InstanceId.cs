@@ -3,7 +3,6 @@
     using System;
     using System.Runtime.Serialization;
     using UnityEngine;
-    using Object = UnityEngine.Object;
 
     /// <summary>
     /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
@@ -17,15 +16,24 @@
         [DataMember(Name = "id")]
         private readonly int _id;
 
-        public Object Object { get; }
+#if UNITY_2017_1_OR_NEWER
+        public UnityEngine.Object Object { get; }
+#endif
 
+#if UNITY_2017_1_OR_NEWER
         private InstanceId(int id) : this()
+#else
+        public InstanceId(int id) : this()
+#endif
         {
             _id = id;
+#if UNITY_2017_1_OR_NEWER
             Object = null;
+#endif
         }
 
-        private InstanceId(Object @object) : this()
+#if UNITY_2017_1_OR_NEWER
+        private InstanceId(UnityEngine.Object @object) : this()
         {
             _id = @object.GetInstanceID();
             Object = @object;
@@ -50,6 +58,7 @@
 
             return new InstanceId(component);
         }
+#endif
 
         public int CompareTo(object rhs)
         {
@@ -77,9 +86,13 @@
 
         public override string ToString()
         {
-            Object instance = Object;
+#if UNITY_2017_1_OR_NEWER
+            UnityEngine.Object instance = Object;
             string objectName = instance == null ? string.Empty : instance.name;
             return $"{{\"Id\": {_id}, \"Name\": \"{objectName}\"}}";
+#else
+            return $"{{\"Id\": {_id}}}";
+#endif
         }
 
         public static bool operator ==(InstanceId lhs, InstanceId rhs)

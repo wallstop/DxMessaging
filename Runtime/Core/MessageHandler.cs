@@ -653,7 +653,7 @@
             }
 
             TypedHandler<T> newTypedHandler = new();
-            handlersByType.Add(type, newTypedHandler);
+            handlersByType[type] = newTypedHandler;
             return newTypedHandler;
         }
 
@@ -1362,10 +1362,20 @@
                         return;
                     }
 
-                    if (handlers.TryGetValue(handler, out count) && count <= 1 && handlers.Remove(handler))
+                    if (!handlers.TryGetValue(handler, out count))
                     {
-                        deregistration?.Invoke();
+                        return;
                     }
+
+                    deregistration?.Invoke();
+
+                    if (count <= 1)
+                    {
+                        _ = handlers.Remove(handler);
+                        return;
+                    }
+
+                    handlers[handler] = count - 1;
 
                     if (handlers.Count <= 0)
                     {
@@ -1398,9 +1408,11 @@
                         return;
                     }
 
-                    if (count <= 1 && localHandlers.Remove(handler))
+                    // Always invoke deregistration action, as MessageBus dedupes this as well
+                    deregistration?.Invoke();
+                    if (count <= 1)
                     {
-                        deregistration?.Invoke();
+                        _ = localHandlers.Remove(handler);
                         return;
                     }
 

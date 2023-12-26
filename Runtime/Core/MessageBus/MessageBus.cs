@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Reflection;
     using Messages;
     using static IMessageBus;
@@ -11,6 +12,10 @@
     /// </summary>
     public sealed class MessageBus : IMessageBus
     {
+        public int RegisteredTargeted => _targetedSinks.Select(kvp => kvp.Value.Count).Sum();
+        public int RegisteredBroadcast => _broadcastSinks.Select(kvp => kvp.Value.Count).Sum();
+        public int RegisteredUntargeted => _sinks.Select(kvp => kvp.Value.Count).Sum();
+
         private static readonly Type MessageBusType = typeof(MessageBus);
         // For use with re-broadcasting to generic methods
         private static readonly object[] ReflectionMethodArgumentsCache = new object[2];
