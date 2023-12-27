@@ -2,7 +2,6 @@
 {
     using System;
     using System.Runtime.Serialization;
-    using UnityEngine;
 
     /// <summary>
     /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
@@ -39,7 +38,7 @@
             Object = @object;
         }
 
-        public static implicit operator InstanceId(GameObject gameObject)
+        public static implicit operator InstanceId(UnityEngine.GameObject gameObject)
         {
             if (gameObject == null)
             {
@@ -49,7 +48,7 @@
             return new InstanceId(gameObject);
         }
 
-        public static implicit operator InstanceId(Component component)
+        public static implicit operator InstanceId(UnityEngine.Component component)
         {
             if (component == null)
             {

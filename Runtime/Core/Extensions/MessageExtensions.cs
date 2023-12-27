@@ -3,20 +3,21 @@
     using Core;
     using MessageBus;
     using Messages;
-    using UnityEngine;
 
     /// <summary>
     /// Extensions to smartly go about emitting messages :^)
     /// </summary>
     public static class MessageExtensions
     {
+
+#if UNITY_2017_1_OR_NEWER
         /// <summary>
         /// Emits a TargetedMessage of the given type.
         /// </summary>
         /// <param name="message">TargetedMessage to emit.</param>
         /// <param name="target">Target that this message is intended for.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitGameObjectTargeted<TMessage>(this TMessage message, GameObject target, IMessageBus messageBus = null) where TMessage : class, ITargetedMessage
+        public static void EmitGameObjectTargeted<TMessage>(this TMessage message, UnityEngine.GameObject target, IMessageBus messageBus = null) where TMessage : class, ITargetedMessage
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
@@ -35,7 +36,7 @@
         /// <param name="message">TargetedMessage to emit.</param>
         /// <param name="target">Target that this message is intended for.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitGameObjectTargeted<TMessage>(this ref TMessage message, GameObject target, IMessageBus messageBus = null) where TMessage : struct, ITargetedMessage
+        public static void EmitGameObjectTargeted<TMessage>(this ref TMessage message, UnityEngine.GameObject target, IMessageBus messageBus = null) where TMessage : struct, ITargetedMessage
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
@@ -54,7 +55,7 @@
         /// <param name="message">TargetedMessage to emit.</param>
         /// <param name="target">Target that this message is intended for.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitComponentTargeted<TMessage>(this TMessage message, Component target, IMessageBus messageBus = null) where TMessage : class, ITargetedMessage
+        public static void EmitComponentTargeted<TMessage>(this TMessage message, UnityEngine.Component target, IMessageBus messageBus = null) where TMessage : class, ITargetedMessage
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
@@ -73,7 +74,7 @@
         /// <param name="message">TargetedMessage to emit.</param>
         /// <param name="target">Target that this message is intended for.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitComponentTargeted<TMessage>(this ref TMessage message, Component target, IMessageBus messageBus = null) where TMessage : struct, ITargetedMessage
+        public static void EmitComponentTargeted<TMessage>(this ref TMessage message, UnityEngine.Component target, IMessageBus messageBus = null) where TMessage : struct, ITargetedMessage
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
@@ -85,6 +86,44 @@
 
             messageBus.TargetedBroadcast(ref targetId, ref message);
         }
+#else
+
+        /// <summary>
+        /// Emits a TargetedMessage of the given type.
+        /// </summary>
+        /// <param name="message">TargetedMessage to emit.</param>
+        /// <param name="target">Target that this message is intended for.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void EmitGameObjectTargeted<TMessage>(this TMessage message, InstanceId target, IMessageBus messageBus = null) where TMessage : class, ITargetedMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) != message.MessageType)
+            {
+                messageBus.UntypedTargetedBroadcast(target, message);
+                return;
+            }
+
+            messageBus.TargetedBroadcast(ref target, ref message);
+        }
+
+        /// <summary>
+        /// Emits a TargetedMessage of the given type.
+        /// </summary>
+        /// <param name="message">TargetedMessage to emit.</param>
+        /// <param name="target">Target that this message is intended for.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void EmitGameObjectTargeted<TMessage>(this ref TMessage message, InstanceId target, IMessageBus messageBus = null) where TMessage : struct, ITargetedMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) != message.MessageType)
+            {
+                messageBus.UntypedTargetedBroadcast(target, message);
+                return;
+            }
+
+            messageBus.TargetedBroadcast(ref target, ref message);
+        }
+#endif
 
         /// <summary>
         /// Emits an UntargetedMessage of the given type.
@@ -120,13 +159,14 @@
             messageBus.UntargetedBroadcast(ref message);
         }
 
+#if UNITY_2017_1_OR_NEWER
         /// <summary>
         /// Emits a BroadcastMessage of the given type.
         /// </summary>
         /// <param name="message">BroadcastMessage to emit.</param>
         /// <param name="source">Source of this message.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitGameObjectBroadcast<TMessage>(this TMessage message, GameObject source, IMessageBus messageBus = null) where TMessage : class, IBroadcastMessage
+        public static void EmitGameObjectBroadcast<TMessage>(this TMessage message, UnityEngine.GameObject source, IMessageBus messageBus = null) where TMessage : class, IBroadcastMessage
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
@@ -145,7 +185,7 @@
         /// <param name="message">BroadcastMessage to emit.</param>
         /// <param name="source">Source of this message.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitGameObjectBroadcast<TMessage>(this ref TMessage message, GameObject source, IMessageBus messageBus = null) where TMessage : struct, IBroadcastMessage
+        public static void EmitGameObjectBroadcast<TMessage>(this ref TMessage message, UnityEngine.GameObject source, IMessageBus messageBus = null) where TMessage : struct, IBroadcastMessage
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
@@ -164,7 +204,7 @@
         /// <param name="message">BroadcastMessage to emit.</param>
         /// <param name="source">Source of this message.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitComponentBroadcast<TMessage>(this TMessage message, Component source, IMessageBus messageBus = null) where TMessage : class, IBroadcastMessage
+        public static void EmitComponentBroadcast<TMessage>(this TMessage message, UnityEngine.Component source, IMessageBus messageBus = null) where TMessage : class, IBroadcastMessage
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
@@ -183,7 +223,7 @@
         /// <param name="message">BroadcastMessage to emit.</param>
         /// <param name="source">Source of this message.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void EmitComponentBroadcast<TMessage>(this ref TMessage message, Component source, IMessageBus messageBus = null) where TMessage : struct, IBroadcastMessage
+        public static void EmitComponentBroadcast<TMessage>(this ref TMessage message, UnityEngine.Component source, IMessageBus messageBus = null) where TMessage : struct, IBroadcastMessage
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
@@ -195,5 +235,42 @@
 
             messageBus.SourcedBroadcast(ref sourceId, ref message);
         }
+#else
+        /// <summary>
+        /// Emits a BroadcastMessage of the given type from the specified component.
+        /// </summary>
+        /// <param name="message">BroadcastMessage to emit.</param>
+        /// <param name="source">Source of this message.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void EmitComponentBroadcast<TMessage>(this TMessage message, InstanceId source, IMessageBus messageBus = null) where TMessage : class, IBroadcastMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) != message.MessageType)
+            {
+                messageBus.UntypedSourcedBroadcast(source, message);
+                return;
+            }
+
+            messageBus.SourcedBroadcast(ref source, ref message);
+        }
+
+        /// <summary>
+        /// Emits a BroadcastMessage of the given type from the specified component.
+        /// </summary>
+        /// <param name="message">BroadcastMessage to emit.</param>
+        /// <param name="source">Source of this message.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void EmitComponentBroadcast<TMessage>(this ref TMessage message, InstanceId source, IMessageBus messageBus = null) where TMessage : struct, IBroadcastMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) != message.MessageType)
+            {
+                messageBus.UntypedSourcedBroadcast(source, message);
+                return;
+            }
+
+            messageBus.SourcedBroadcast(ref source, ref message);
+        }
+#endif
     }
 }

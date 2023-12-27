@@ -945,7 +945,6 @@
 
                 if (_globalTargetedHandlers is not { Count: > 0 })
                 {
-                    UnityEngine.Debug.Log("No global targeted handlers found");
                     return;
                 }
 
