@@ -847,10 +847,10 @@
             if (_deregistrations != null && _deregistrations.TryGetValue(handle, out Action deregistrationAction))
             {
                 deregistrationAction();
+                _ = _deregistrations.Remove(handle);
             }
 
             _ = _registrations?.Remove(handle);
-            _ = _deregistrations?.Remove(handle);
         }
 
         /// <summary>

@@ -370,15 +370,21 @@
             messageBus ??= MessageBus;
             Action messageBusDeregistration = messageBus.RegisterGlobalAcceptAll(this);
             TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
-            Action untargetedDeregistration = typedHandler.AddGlobalUntargetedHandler(untargetedMessageHandler, messageBusDeregistration);
-            Action targetedDeregistration = typedHandler.AddGlobalTargetedHandler(targetedMessageHandler, messageBusDeregistration);
-            Action broadcastDeregistration = typedHandler.AddGlobalBroadcastHandler(broadcastMessageHandler, messageBusDeregistration);
+
+            void NullDeregistration()
+            {
+
+            }
+            Action untargetedDeregistration = typedHandler.AddGlobalUntargetedHandler(untargetedMessageHandler, NullDeregistration);
+            Action targetedDeregistration = typedHandler.AddGlobalTargetedHandler(targetedMessageHandler, NullDeregistration);
+            Action broadcastDeregistration = typedHandler.AddGlobalBroadcastHandler(broadcastMessageHandler, NullDeregistration);
 
             return () =>
             {
                 untargetedDeregistration();
                 targetedDeregistration();
                 broadcastDeregistration();
+                messageBusDeregistration?.Invoke();
             };
         }
 

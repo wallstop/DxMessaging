@@ -358,10 +358,7 @@
                 }
             }
 
-            if (InternalTargetedWithoutTargetingBroadcast(ref target, ref typedMessage, type))
-            {
-                foundAnyHandlers = true;
-            }
+            _ = InternalTargetedWithoutTargetingBroadcast(ref target, ref typedMessage, type);
 
             if (_postProcessingTargetedSinks.TryGetValue(type, out targetedHandlers) && targetedHandlers.TryGetValue(target, out handlers) && 0 < handlers.Count)
             {
@@ -403,7 +400,6 @@
             }
         }
 
-        
         public void UntypedSourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -466,10 +462,7 @@
                 }
             }
 
-            if (InternalBroadcastWithoutSource(ref source, ref typedMessage, type))
-            {
-                foundAnyHandlers = true;
-            }
+            _ = InternalBroadcastWithoutSource(ref source, ref typedMessage, type);
 
             if (_postProcessingBroadcastSinks.TryGetValue(type, out broadcastHandlers) && broadcastHandlers.TryGetValue(source, out handlers) && 0 < handlers.Count)
             {

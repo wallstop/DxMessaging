@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using DxMessaging.Core;
 using DxMessaging.Core.Extensions;
@@ -15,9 +16,12 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
+using Random = System.Random;
 
 public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 {
+    private const int NumRegistrations = 150;
+
     private readonly List<GameObject> _spawned = new();
 
     public void Setup()
@@ -63,15 +67,19 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             int untargetedWorks = 0;
             int targetedWorks = 0;
+            int targetedWithoutTargetingWorks = 0;
             int broadcastWorks = 0;
+            int broadcastWithoutSourceWorks = 0;
             Dictionary<object, int> componentTargetedWorks = new();
             Dictionary<object, int> componentBroadcastWorks = new();
 
             void SetupComponent(SimpleMessageAwareComponent toSetup)
             {
-                toSetup.untargetedHandler = _ => untargetedWorks = ++untargetedWorks;
-                toSetup.targetedHandler = _ => targetedWorks = ++targetedWorks;
-                toSetup.broadcastHandler = _ => broadcastWorks = ++broadcastWorks;
+                toSetup.untargetedHandler = _ => ++untargetedWorks;
+                toSetup.targetedHandler = _ => ++targetedWorks;
+                toSetup.targetedWithoutTargetingHandler = (_, _) => ++targetedWithoutTargetingWorks;
+                toSetup.broadcastHandler = _ => ++broadcastWorks;
+                toSetup.broadcastWithoutSourceHandler = (_, _) => ++broadcastWithoutSourceWorks;
                 toSetup.componentTargetedHandler = _ =>
                 {
                     if (!componentTargetedWorks.TryGetValue(toSetup, out int existing))
@@ -102,6 +110,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(0, broadcastWorks);
             Assert.AreEqual(0, componentTargetedWorks.Count);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(0, targetedWithoutTargetingWorks);
+            Assert.AreEqual(0, broadcastWithoutSourceWorks);
 
             untargetedMessage.EmitUntargeted();
             Assert.AreEqual(2, untargetedWorks);
@@ -109,6 +119,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(0, broadcastWorks);
             Assert.AreEqual(0, componentTargetedWorks.Count);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(0, targetedWithoutTargetingWorks);
+            Assert.AreEqual(0, broadcastWithoutSourceWorks);
 
             SimpleTargetedMessage targetedMessage = new();
             targetedMessage.EmitGameObjectTargeted(test);
@@ -117,6 +129,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(0, broadcastWorks);
             Assert.AreEqual(0, componentTargetedWorks.Count);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(1, targetedWithoutTargetingWorks);
+            Assert.AreEqual(0, broadcastWithoutSourceWorks);
 
             SimpleBroadcastMessage broadcastMessage = new();
             broadcastMessage.EmitGameObjectBroadcast(test);
@@ -125,6 +139,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(1, broadcastWorks);
             Assert.AreEqual(0, componentTargetedWorks.Count);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(1, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             yield return null;
 
@@ -143,6 +159,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(1, broadcastWorks);
             Assert.AreEqual(0, componentTargetedWorks.Count);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(3, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             targetedMessage.EmitGameObjectTargeted(nonTest);
             Assert.AreEqual(2, untargetedWorks);
@@ -150,6 +168,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(1, broadcastWorks);
             Assert.AreEqual(0, componentTargetedWorks.Count);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(5, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             // Component Targeted
             targetedMessage.EmitComponentTargeted(firstComponent);
@@ -159,6 +179,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(1, componentTargetedWorks.Count);
             Assert.AreEqual(1, componentTargetedWorks[firstComponent]);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(7, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             targetedMessage.EmitComponentTargeted(secondComponent);
             Assert.AreEqual(2, untargetedWorks);
@@ -168,6 +190,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(1, componentTargetedWorks[firstComponent]);
             Assert.AreEqual(1, componentTargetedWorks[secondComponent]);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(9, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             targetedMessage.EmitComponentTargeted(firstComponent);
             Assert.AreEqual(2, untargetedWorks);
@@ -177,6 +201,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentTargetedWorks[firstComponent]);
             Assert.AreEqual(1, componentTargetedWorks[secondComponent]);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(11, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             targetedMessage.EmitComponentTargeted(secondComponent);
             Assert.AreEqual(2, untargetedWorks);
@@ -186,6 +212,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentTargetedWorks[firstComponent]);
             Assert.AreEqual(2, componentTargetedWorks[secondComponent]);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(1, broadcastWithoutSourceWorks);
 
             // Broadcast
             broadcastMessage.EmitGameObjectBroadcast(nonTest);
@@ -196,6 +224,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentTargetedWorks[firstComponent]);
             Assert.AreEqual(2, componentTargetedWorks[secondComponent]);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(3, broadcastWithoutSourceWorks);
 
             broadcastMessage.EmitGameObjectBroadcast(test);
             Assert.AreEqual(2, untargetedWorks);
@@ -205,6 +235,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentTargetedWorks[firstComponent]);
             Assert.AreEqual(2, componentTargetedWorks[secondComponent]);
             Assert.AreEqual(0, componentBroadcastWorks.Count);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(5, broadcastWithoutSourceWorks);
 
             // Component Broadcast
             broadcastMessage.EmitComponentBroadcast(firstComponent);
@@ -216,6 +248,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentTargetedWorks[secondComponent]);
             Assert.AreEqual(1, componentBroadcastWorks.Count);
             Assert.AreEqual(1, componentBroadcastWorks[firstComponent]);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(7, broadcastWithoutSourceWorks);
 
             broadcastMessage.EmitComponentBroadcast(secondComponent);
             Assert.AreEqual(2, untargetedWorks);
@@ -227,6 +261,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentBroadcastWorks.Count);
             Assert.AreEqual(1, componentBroadcastWorks[firstComponent]);
             Assert.AreEqual(1, componentBroadcastWorks[secondComponent]);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(9, broadcastWithoutSourceWorks);
 
             broadcastMessage.EmitComponentBroadcast(firstComponent);
             Assert.AreEqual(2, untargetedWorks);
@@ -238,6 +274,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentBroadcastWorks.Count);
             Assert.AreEqual(2, componentBroadcastWorks[firstComponent]);
             Assert.AreEqual(1, componentBroadcastWorks[secondComponent]);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(11, broadcastWithoutSourceWorks);
 
             broadcastMessage.EmitComponentBroadcast(secondComponent);
             Assert.AreEqual(2, untargetedWorks);
@@ -249,6 +287,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentBroadcastWorks.Count);
             Assert.AreEqual(2, componentBroadcastWorks[firstComponent]);
             Assert.AreEqual(2, componentBroadcastWorks[secondComponent]);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(13, broadcastWithoutSourceWorks);
 
             // Finally, re-emit the targeted message - it should be received by both components
             untargetedMessage.EmitUntargeted();
@@ -261,6 +301,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             Assert.AreEqual(2, componentBroadcastWorks.Count);
             Assert.AreEqual(2, componentBroadcastWorks[firstComponent]);
             Assert.AreEqual(2, componentBroadcastWorks[secondComponent]);
+            Assert.AreEqual(13, targetedWithoutTargetingWorks);
+            Assert.AreEqual(13, broadcastWithoutSourceWorks);
         }
         finally
         {
@@ -287,7 +329,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             SimpleMessageAwareComponent firstComponent = test.GetComponent<SimpleMessageAwareComponent>();
 
-            Assert.AreEqual(1, messageBus.RegisteredUntargeted);
+            // One for the untargeted message, one for the targeted without targeting, one for broadcast without source
+            Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             // One for the game object, one for the component = 2
             Assert.AreEqual(2, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
@@ -295,7 +338,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             yield return null;
 
             SimpleMessageAwareComponent secondComponent = test.AddComponent<SimpleMessageAwareComponent>();
-            Assert.AreEqual(1, messageBus.RegisteredUntargeted);
+            Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             // One for the game object, one for the first component, one for the second component = 3
             Assert.AreEqual(3, messageBus.RegisteredTargeted);
             Assert.AreEqual(3, messageBus.RegisteredBroadcast);
@@ -304,7 +347,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             yield return null;
 
             // 3 - one component (disabled)
-            Assert.AreEqual(1, messageBus.RegisteredUntargeted);
+            Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             Assert.AreEqual(2, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
@@ -334,7 +377,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             test.SetActive(true);
             yield return null;
 
-            Assert.AreEqual(1, messageBus.RegisteredUntargeted);
+            Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             Assert.AreEqual(2, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
@@ -348,7 +391,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             secondComponent.enabled = true;
             yield return null;
 
-            Assert.AreEqual(1, messageBus.RegisteredUntargeted);
+            Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             Assert.AreEqual(2, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
@@ -954,6 +997,9 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             int untargetedCount = 0;
             int targetedCount = 0;
             int broadcastCount = 0;
+            int fastUntargetedCount = 0;
+            int fastTargetedCount = 0;
+            int fastBroadcastCount = 0;
 
             void HandleUntargeted(IUntargetedMessage message)
             {
@@ -962,7 +1008,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             void HandleFastUntargeted(ref IUntargetedMessage message)
             {
-                ++untargetedCount;
+                ++fastUntargetedCount;
             }
 
             void HandleTargeted(InstanceId target, ITargetedMessage message)
@@ -972,7 +1018,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             void HandleFastTargeted(ref InstanceId target, ref ITargetedMessage message)
             {
-                ++targetedCount;
+                ++fastTargetedCount;
             }
 
             void HandleBroadcast(InstanceId source, IBroadcastMessage message)
@@ -982,7 +1028,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             void HandleFastBroadcast(ref InstanceId source, ref IBroadcastMessage message)
             {
-                ++broadcastCount;
+                ++fastBroadcastCount;
             }
 
             HashSet<MessageRegistrationHandle> handles = new();
@@ -997,10 +1043,16 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
                 Assert.AreEqual(1, untargetedCount);
                 Assert.AreEqual(0, targetedCount);
                 Assert.AreEqual(0, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
                 untargetedMessage.EmitUntargeted();
                 Assert.AreEqual(2, untargetedCount);
                 Assert.AreEqual(0, targetedCount);
                 Assert.AreEqual(0, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
 
                 // Targeted
                 SimpleTargetedMessage targetedMessage = new();
@@ -1008,10 +1060,16 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
                 Assert.AreEqual(2, untargetedCount);
                 Assert.AreEqual(1, targetedCount);
                 Assert.AreEqual(0, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
                 targetedMessage.EmitComponentTargeted(component);
                 Assert.AreEqual(2, untargetedCount);
                 Assert.AreEqual(2, targetedCount);
                 Assert.AreEqual(0, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
 
                 // Broadcast
                 SimpleBroadcastMessage broadcastMessage = new();
@@ -1019,20 +1077,51 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
                 Assert.AreEqual(2, untargetedCount);
                 Assert.AreEqual(2, targetedCount);
                 Assert.AreEqual(1, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
                 broadcastMessage.EmitComponentBroadcast(component);
                 Assert.AreEqual(2, untargetedCount);
                 Assert.AreEqual(2, targetedCount);
                 Assert.AreEqual(2, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
 
                 component.enabled = false;
-                untargetedMessage.EmitUntargeted();
-                targetedMessage.EmitGameObjectTargeted(test);
-                targetedMessage.EmitComponentTargeted(component);
-                broadcastMessage.EmitGameObjectBroadcast(test);
-                broadcastMessage.EmitComponentBroadcast(component);
+                int noMatchingCount = 0;
+                Action<string> previousLog = MessagingDebug.LogFunction;
+                try
+                {
+                    MessagingDebug.LogFunction = logMessage =>
+                    {
+                        if (logMessage.Contains("matching"))
+                        {
+                            ++noMatchingCount;
+                        }
+                    };
+                    untargetedMessage.EmitUntargeted();
+                    Assert.AreEqual(1, noMatchingCount);
+                    targetedMessage.EmitGameObjectTargeted(test);
+                    Assert.AreEqual(2, noMatchingCount);
+                    targetedMessage.EmitComponentTargeted(component);
+                    Assert.AreEqual(3, noMatchingCount);
+                    broadcastMessage.EmitGameObjectBroadcast(test);
+                    Assert.AreEqual(4, noMatchingCount);
+                    broadcastMessage.EmitComponentBroadcast(component);
+                    Assert.AreEqual(5, noMatchingCount);
+                }
+                finally
+                {
+                    MessagingDebug.LogFunction = previousLog;
+                }
+
                 Assert.AreEqual(2, untargetedCount);
                 Assert.AreEqual(2, targetedCount);
                 Assert.AreEqual(2, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
 
                 component.enabled = true;
                 MessageRegistrationHandle secondHandle = token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast);
@@ -1045,6 +1134,9 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
                 Assert.AreEqual(3, untargetedCount);
                 Assert.AreEqual(4, targetedCount);
                 Assert.AreEqual(4, broadcastCount);
+                Assert.AreEqual(0, fastUntargetedCount);
+                Assert.AreEqual(0, fastTargetedCount);
+                Assert.AreEqual(0, fastBroadcastCount);
 
                 MessageRegistrationHandle thirdHandle = token.RegisterGlobalAcceptAll(HandleFastUntargeted, HandleFastTargeted, HandleFastBroadcast);
                 _ = handles.Add(thirdHandle);
@@ -1053,9 +1145,12 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
                 targetedMessage.EmitComponentTargeted(component);
                 broadcastMessage.EmitGameObjectBroadcast(test);
                 broadcastMessage.EmitComponentBroadcast(component);
-                Assert.AreEqual(5, untargetedCount);
-                Assert.AreEqual(8, targetedCount);
-                Assert.AreEqual(8, broadcastCount);
+                Assert.AreEqual(4, untargetedCount);
+                Assert.AreEqual(6, targetedCount);
+                Assert.AreEqual(6, broadcastCount);
+                Assert.AreEqual(1, fastUntargetedCount);
+                Assert.AreEqual(2, fastTargetedCount);
+                Assert.AreEqual(2, fastBroadcastCount);
 
                 MessageRegistrationHandle fourthHandle = token.RegisterGlobalAcceptAll(HandleFastUntargeted, HandleFastTargeted, HandleFastBroadcast);
                 _ = handles.Add(fourthHandle);
@@ -1064,9 +1159,12 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
                 targetedMessage.EmitComponentTargeted(component);
                 broadcastMessage.EmitGameObjectBroadcast(test);
                 broadcastMessage.EmitComponentBroadcast(component);
-                Assert.AreEqual(7, untargetedCount);
-                Assert.AreEqual(12, targetedCount);
-                Assert.AreEqual(12, broadcastCount);
+                Assert.AreEqual(5, untargetedCount);
+                Assert.AreEqual(8, targetedCount);
+                Assert.AreEqual(8, broadcastCount);
+                Assert.AreEqual(2, fastUntargetedCount);
+                Assert.AreEqual(4, fastTargetedCount);
+                Assert.AreEqual(4, fastBroadcastCount);
             }
             finally
             {
@@ -1080,6 +1178,559 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
         {
             Cleanup();
         }
+    }
+
+    [UnityTest]
+    public IEnumerator InterceptorOrder()
+    {
+        try
+        {
+            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
+            while (waitUntilMessageHandlerIsFresh.MoveNext())
+            {
+                yield return waitUntilMessageHandlerIsFresh.Current;
+            }
+
+            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            _spawned.Add(test);
+
+            SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
+
+            bool seen = false;
+            component.untargetedHandler = _ =>
+            {
+                // ReSharper disable once AccessToModifiedClosure
+                Assert.IsFalse(seen);
+                seen = true;
+            };
+
+            MessageRegistrationToken token = GetToken(component);
+            HashSet<MessageRegistrationHandle> handles = new();
+            try
+            {
+                int seenCount = 0;
+                bool UntargetedInterceptorFirstPriority(ref SimpleUntargetedMessage message)
+                {
+                    return seenCount++ % 3 == 0;
+                }
+
+                bool UntargetedInterceptorSecondPriority(ref SimpleUntargetedMessage message)
+                {
+                    return seenCount++ % 3 == 1;
+                }
+
+                bool UntargetedInterceptorThirdPriority(ref SimpleUntargetedMessage message)
+                {
+                    return seenCount++ % 3 == 2;
+                }
+
+                int interceptorRunCount = 0;
+                bool UntargetedInterceptorFourthPriority(ref SimpleUntargetedMessage message)
+                {
+                    // We should be running close to first and last
+                    if (++interceptorRunCount % 2 == 0)
+                    {
+                        return seenCount % 3 == 0;
+                    }
+                    return true;
+                }
+
+                MessageRegistrationHandle secondInterceptor = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorSecondPriority, 100);
+                _ = handles.Add(secondInterceptor);
+                MessageRegistrationHandle thirdInterceptor = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorThirdPriority, 101);
+                _ = handles.Add(thirdInterceptor);
+                MessageRegistrationHandle firstInterceptor = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFirstPriority, -1);
+                _ = handles.Add(firstInterceptor);
+                MessageRegistrationHandle fourthInterceptorFirstPriority = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFourthPriority, -1);
+                _ = handles.Add(fourthInterceptorFirstPriority);
+                MessageRegistrationHandle fourthInterceptorSecondPriority = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFourthPriority, 102);
+                _ = handles.Add(fourthInterceptorSecondPriority);
+
+                SimpleUntargetedMessage message = new();
+                message.EmitUntargeted();
+                Assert.IsTrue(seen);
+                Assert.AreEqual(2, interceptorRunCount);
+                seen = false;
+
+                message.EmitUntargeted();
+                Assert.IsTrue(seen);
+                Assert.AreEqual(4, interceptorRunCount);
+                seen = false;
+
+                MessageRegistrationHandle doubleRegistrationOne = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFirstPriority, -1);
+                _ = handles.Add(doubleRegistrationOne);
+                message.EmitUntargeted();
+                Assert.IsTrue(seen);
+                Assert.AreEqual(6, interceptorRunCount);
+                seen = false;
+
+                _ = handles.Remove(firstInterceptor);
+                token.RemoveRegistration(firstInterceptor);
+                message.EmitUntargeted();
+                Assert.IsTrue(seen);
+                Assert.AreEqual(8, interceptorRunCount);
+                seen = false;
+
+                // Double remove
+                token.RemoveRegistration(firstInterceptor);
+                token.RemoveRegistration(firstInterceptor);
+                message.EmitUntargeted();
+                Assert.IsTrue(seen);
+                Assert.AreEqual(10, interceptorRunCount);
+            }
+            finally
+            {
+                foreach (MessageRegistrationHandle handle in handles)
+                {
+                    token.RemoveRegistration(handle);
+                }
+            }
+        }
+        finally
+        {
+            Cleanup();
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator UntargetedRemoveOrder()
+    {
+        try
+        {
+            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
+            while (waitUntilMessageHandlerIsFresh.MoveNext())
+            {
+                yield return waitUntilMessageHandlerIsFresh.Current;
+            }
+
+            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            _spawned.Add(test);
+
+            SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
+
+            MessageRegistrationToken token = GetToken(component);
+            HashSet<MessageRegistrationHandle> handles = new();
+            try
+            {
+                int callCount = 0;
+                int fastCallCount = 0;
+
+                void HandleUntargeted(SimpleUntargetedMessage message)
+                {
+                    ++callCount;
+                }
+
+                void HandleFastUntargeted(ref SimpleUntargetedMessage message)
+                {
+                    ++fastCallCount;
+                }
+
+                Random random = new();
+                SimpleUntargetedMessage message = new();
+                int expectedCallCount = 0;
+                Run(
+                    random,
+                    () => new []{token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted)},
+                    () => message.EmitUntargeted(),
+                    () =>
+                    {
+                        Assert.AreEqual(++expectedCallCount, callCount);
+                        Assert.AreEqual(0, fastCallCount);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(expectedCallCount, callCount);
+                        Assert.AreEqual(0, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                expectedCallCount = 0;
+                Run(
+                    random,
+                    () => new []{token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted)},
+                    () => message.EmitUntargeted(),
+                    () =>
+                    {
+                        Assert.AreEqual(++expectedCallCount, fastCallCount);
+                        Assert.AreEqual(0, callCount);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(expectedCallCount, fastCallCount);
+                        Assert.AreEqual(0, callCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new []{token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted), token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) };
+                    },
+                    () => message.EmitUntargeted(),
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+            }
+            finally
+            {
+                foreach (MessageRegistrationHandle handle in handles)
+                {
+                    token.RemoveRegistration(handle);
+                }
+            }
+        }
+        finally
+        {
+            Cleanup();
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator TargetedRemoveOrder()
+    {
+        try
+        {
+            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
+            while (waitUntilMessageHandlerIsFresh.MoveNext())
+            {
+                yield return waitUntilMessageHandlerIsFresh.Current;
+            }
+
+            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            _spawned.Add(test);
+
+            SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
+
+            MessageRegistrationToken token = GetToken(component);
+            HashSet<MessageRegistrationHandle> handles = new();
+            try
+            {
+                int callCount = 0;
+                int fastCallCount = 0;
+
+                void HandleTargeted(SimpleTargetedMessage message)
+                {
+                    ++callCount;
+                }
+
+                void HandleFastTargeted(ref SimpleTargetedMessage message)
+                {
+                    ++fastCallCount;
+                }
+
+                Random random = new();
+                SimpleTargetedMessage message = new();
+                int expectedCallCount = 0;
+                Run(
+                    random,
+                    () => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) },
+                    () =>
+                    {
+                        message.EmitComponentTargeted(component);
+                        message.EmitGameObjectTargeted(test);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(++expectedCallCount, callCount);
+                        Assert.AreEqual(0, fastCallCount);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(expectedCallCount, callCount);
+                        Assert.AreEqual(0, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                expectedCallCount = 0;
+                Run(
+                    random,
+                    () => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted) },
+                    () =>
+                    {
+                        message.EmitComponentTargeted(component);
+                        message.EmitGameObjectTargeted(test);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(++expectedCallCount, fastCallCount);
+                        Assert.AreEqual(0, callCount);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(expectedCallCount, fastCallCount);
+                        Assert.AreEqual(0, callCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) };
+                    },
+                    () =>
+                    {
+                        message.EmitComponentTargeted(component);
+                        message.EmitGameObjectTargeted(test);
+                    },
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new[] { token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) };
+                    },
+                    () =>
+                    {
+                        message.EmitComponentTargeted(component);
+                        message.EmitGameObjectTargeted(test);
+                    },
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new[] { token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted), token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleTargeted) };
+                    },
+                    () =>
+                    {
+                        message.EmitComponentTargeted(component);
+                        message.EmitGameObjectTargeted(test);
+                    },
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+            }
+            finally
+            {
+                foreach (MessageRegistrationHandle handle in handles)
+                {
+                    token.RemoveRegistration(handle);
+                }
+            }
+        }
+        finally
+        {
+            Cleanup();
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator BroadcastRemoveOrder()
+    {
+        try
+        {
+            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
+            while (waitUntilMessageHandlerIsFresh.MoveNext())
+            {
+                yield return waitUntilMessageHandlerIsFresh.Current;
+            }
+
+            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            _spawned.Add(test);
+
+            SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
+
+            MessageRegistrationToken token = GetToken(component);
+            HashSet<MessageRegistrationHandle> handles = new();
+            try
+            {
+                int callCount = 0;
+                int fastCallCount = 0;
+
+                void HandleBroadcast(SimpleBroadcastMessage message)
+                {
+                    ++callCount;
+                }
+
+                void HandleFastBroadcast(ref SimpleBroadcastMessage message)
+                {
+                    ++fastCallCount;
+                }
+
+                Random random = new();
+                SimpleBroadcastMessage message = new();
+                int expectedCallCount = 0;
+                Run(
+                    random,
+                    () => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) },
+                    () =>
+                    {
+                        message.EmitComponentBroadcast(component);
+                        message.EmitGameObjectBroadcast(test);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(++expectedCallCount, callCount);
+                        Assert.AreEqual(0, fastCallCount);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(expectedCallCount, callCount);
+                        Assert.AreEqual(0, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                expectedCallCount = 0;
+                Run(
+                    random,
+                    () => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast) },
+                    () =>
+                    {
+                        message.EmitComponentBroadcast(component);
+                        message.EmitGameObjectBroadcast(test);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(++expectedCallCount, fastCallCount);
+                        Assert.AreEqual(0, callCount);
+                    },
+                    () =>
+                    {
+                        Assert.AreEqual(expectedCallCount, fastCallCount);
+                        Assert.AreEqual(0, callCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
+                    },
+                    () =>
+                    {
+                        message.EmitComponentBroadcast(component);
+                        message.EmitGameObjectBroadcast(test);
+                    },
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
+                    },
+                    () =>
+                    {
+                        message.EmitComponentBroadcast(component);
+                        message.EmitGameObjectBroadcast(test);
+                    },
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+
+                callCount = 0;
+                fastCallCount = 0;
+                Run(
+                    random,
+                    () =>
+                    {
+                        return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
+                    },
+                    () =>
+                    {
+                        message.EmitComponentBroadcast(component);
+                        message.EmitGameObjectBroadcast(test);
+                    },
+                    () => { },
+                    () =>
+                    {
+                        Assert.AreNotEqual(callCount, fastCallCount);
+                    },
+                    token,
+                    handles);
+            }
+            finally
+            {
+                foreach (MessageRegistrationHandle handle in handles)
+                {
+                    token.RemoveRegistration(handle);
+                }
+            }
+        }
+        finally
+        {
+            Cleanup();
+        }
+    }
+
+    private void Run(Random random, Func<IEnumerable<MessageRegistrationHandle>> register, Action emit, Action assert, Action finalAssert, MessageRegistrationToken token, HashSet<MessageRegistrationHandle> handles)
+    {
+        for (int i = 0; i < NumRegistrations; ++i)
+        {
+            foreach (MessageRegistrationHandle handle in register())
+            {
+                handles.Add(handle);
+            }
+        }
+
+        foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => random.Next()).ToList())
+        {
+            emit();
+            assert();
+            handles.Remove(handle);
+            token.RemoveRegistration(handle);
+        }
+
+        emit();
+        finalAssert();
+        emit();
+        finalAssert();
     }
 
     private MessageRegistrationToken GetToken(MessageAwareComponent component)
