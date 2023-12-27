@@ -34,6 +34,8 @@
         private readonly Dictionary<Type, Dictionary<MessageHandler, int>> _postProcessingSinks = new();
         private readonly Dictionary<Type, Dictionary<InstanceId, Dictionary<MessageHandler, int>>> _postProcessingTargetedSinks = new();
         private readonly Dictionary<Type, Dictionary<InstanceId, Dictionary<MessageHandler, int>>> _postProcessingBroadcastSinks = new();
+        private readonly Dictionary<Type, Dictionary<MessageHandler, int>> _postProcessingTargetedWithoutTargetingSinks = new();
+        private readonly Dictionary<Type, Dictionary<MessageHandler, int>> _postProcessingBroadcastWithoutSourceSinks = new();
         private readonly Dictionary<MessageHandler, int> _globalSinks = new();
         private readonly Dictionary<Type, SortedDictionary<int, List<object>>> _interceptsByType = new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities = new();
@@ -47,37 +49,31 @@
         private readonly Stack<List<object>> _interceptors = new();
         private readonly Stack<List<int>> _interceptorKeys = new();
 
-        /// <inheritdoc/>
         public Action RegisterUntargeted<T>(MessageHandler messageHandler) where T : IUntargetedMessage
         {
             return InternalRegisterUntargeted<T>(messageHandler, _sinks, RegistrationMethod.Untargeted);
         }
 
-        /// <inheritdoc/>
         public Action RegisterTargeted<T>(InstanceId target, MessageHandler messageHandler) where T : ITargetedMessage
         {
             return InternalRegisterWithContext<T>(target, messageHandler, _targetedSinks, RegistrationMethod.Targeted);
         }
 
-        /// <inheritdoc/>
         public Action RegisterSourcedBroadcast<T>(InstanceId source, MessageHandler messageHandler) where T : IBroadcastMessage
         {
             return InternalRegisterWithContext<T>(source, messageHandler, _broadcastSinks, RegistrationMethod.Broadcast);
         }
 
-        /// <inheritdoc/>
         public Action RegisterSourcedBroadcastWithoutSource<T>(MessageHandler messageHandler) where T : IBroadcastMessage
         {
             return InternalRegisterUntargeted<T>(messageHandler, _sinks, RegistrationMethod.BroadcastWithoutSource);
         }
 
-        /// <inheritdoc/>
         public Action RegisterTargetedWithoutTargeting<T>(MessageHandler messageHandler) where T : ITargetedMessage
         {
             return InternalRegisterUntargeted<T>(messageHandler, _sinks, RegistrationMethod.TargetedWithoutTargeting);
         }
 
-        /// <inheritdoc/>
         public Action RegisterGlobalAcceptAll(MessageHandler messageHandler)
         {
             if (!_globalSinks.TryGetValue(messageHandler, out int count))
@@ -91,6 +87,7 @@
 
             return () =>
             {
+                _log.Log(new MessagingRegistration(messageHandler.owner, type, RegistrationType.Deregister, RegistrationMethod.GlobalAcceptAll));
                 if (!_globalSinks.TryGetValue(messageHandler, out count))
                 {
                     MessagingDebug.Log(
@@ -107,44 +104,47 @@
                 {
                     _globalSinks[messageHandler] = count - 1;
                 }
-                _log.Log(new MessagingRegistration(messageHandler.owner, type, RegistrationType.Deregister, RegistrationMethod.GlobalAcceptAll));
             };
         }
 
-        /// <inheritdoc/>
         public Action RegisterUntargetedInterceptor<T>(UntargetedInterceptor<T> interceptor, int priority = 0) where T : IUntargetedMessage
         {
             return RegisterInterceptor<T>(interceptor, priority);
         }
 
-        /// <inheritdoc/>
         public Action RegisterTargetedInterceptor<T>(TargetedInterceptor<T> interceptor, int priority = 0) where T : ITargetedMessage
         {
             return RegisterInterceptor<T>(interceptor, priority);
         }
 
-        /// <inheritdoc/>
         public Action RegisterBroadcastInterceptor<T>(BroadcastInterceptor<T> interceptor, int priority = 0) where T : IBroadcastMessage
         {
             return RegisterInterceptor<T>(interceptor, priority);
         }
-
-        /// <inheritdoc/>
+        
         public Action RegisterUntargetedPostProcessor<T>(MessageHandler messageHandler) where T : IUntargetedMessage
         {
             return InternalRegisterUntargeted<T>(messageHandler, _postProcessingSinks, RegistrationMethod.UntargetedPostProcessor);
         }
 
-        /// <inheritdoc/>
         public Action RegisterTargetedPostProcessor<T>(InstanceId target, MessageHandler messageHandler) where T : ITargetedMessage
         {
             return InternalRegisterWithContext<T>(target, messageHandler, _postProcessingTargetedSinks, RegistrationMethod.TargetedPostProcessor);
         }
 
-        /// <inheritdoc/>
+        public Action RegisterTargetedWithoutTargetingPostProcessor<T>(MessageHandler messageHandler) where T : ITargetedMessage
+        {
+            return InternalRegisterUntargeted<T>(messageHandler, _postProcessingTargetedWithoutTargetingSinks, RegistrationMethod.TargetedWithoutTargetingPostProcessor);
+        }
+
         public Action RegisterBroadcastPostProcessor<T>(InstanceId source, MessageHandler messageHandler) where T : IBroadcastMessage
         {
             return InternalRegisterWithContext<T>(source, messageHandler, _postProcessingBroadcastSinks, RegistrationMethod.BroadcastPostProcessor);
+        }
+
+        public Action RegisterBroadcastWithoutSourcePostProcessor<T>(MessageHandler messageHandler) where T : IBroadcastMessage
+        {
+            return InternalRegisterUntargeted<T>(messageHandler, _postProcessingBroadcastWithoutSourceSinks, RegistrationMethod.BroadcastWithoutSourcePostProcessor);
         }
 
         private Action RegisterInterceptor<T>(object interceptor, int priority) where T : IMessage
@@ -180,38 +180,57 @@
 
             return () =>
             {
-                if (!priorityCount.TryGetValue(priority, out count))
+                _log.Log(new MessagingRegistration(InstanceId.EmptyId, type, RegistrationType.Deregister, RegistrationMethod.Interceptor));
+                bool removed = false;
+                if (_uniqueInterceptorsAndPriorities.TryGetValue(interceptor, out priorityCount))
+                {
+                    if (priorityCount.TryGetValue(priority, out count))
+                    {
+                        if (1 < count)
+                        {
+                            priorityCount[priority] = count - 1;
+                        }
+                        else
+                        {
+                            removed = true;
+                            _ = priorityCount.Remove(priority);
+                        }
+                    } 
+                    
+                    if (priorityCount.Count <= 0)
+                    {
+                        _uniqueInterceptorsAndPriorities.Remove(interceptor);
+                    }
+                }
+                else
                 {
                     MessagingDebug.Log(
                         "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
                         interceptor);
-                    return;
                 }
 
-                if (count <= 1)
+                bool complete = false;
+                if (removed)
                 {
-                    _ = priorityCount.Remove(priority);
-                    if (priorityCount.Count <= 0)
+                    if (_interceptsByType.TryGetValue(type, out prioritizedInterceptors))
                     {
-                        _ = _uniqueInterceptorsAndPriorities.Remove(interceptor);
-                    }
-
-                    _ = interceptors.Remove(interceptor);
-                    if (interceptors.Count <= 0)
-                    {
-                        _ = prioritizedInterceptors.Remove(priority);
-                        if (priorityCount.Count <= 0)
+                        if (prioritizedInterceptors.TryGetValue(priority, out interceptors))
                         {
-                            _ = _interceptsByType.Remove(type);
+                            complete = interceptors.Remove(interceptor);
                         }
                     }
-                }
 
-                _log.Log(new MessagingRegistration(InstanceId.EmptyId, type, RegistrationType.Deregister, RegistrationMethod.Interceptor));
+                    if (!complete)
+                    {
+                        MessagingDebug.Log(
+                            "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                            interceptor);
+                    }
+                }
             };
         }
 
-        /// <inheritdoc/>
+        
         public void UntypedUntargetedBroadcast(IUntargetedMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -232,7 +251,7 @@
             broadcast.Invoke(typedMessage);
         }
 
-        /// <inheritdoc/>
+        
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage) where TMessage : IUntargetedMessage
         {
             InternalUntargetedBroadcast(ref typedMessage);
@@ -277,7 +296,7 @@
             }
         }
 
-        /// <inheritdoc/>
+        
         public void UntypedTargetedBroadcast(InstanceId target, ITargetedMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -298,7 +317,7 @@
             broadcast.Invoke(target, typedMessage);
         }
 
-        /// <inheritdoc/>
+        
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage) where TMessage : ITargetedMessage
         {
             InternalTargetedBroadcast(ref target, ref typedMessage);
@@ -313,7 +332,7 @@
                 return;
             }
 
-            if (_globalSinks.Count < 0)
+            if (0 < _globalSinks.Count)
             {
                 ITargetedMessage targetedMessage = typedMessage;
                 BroadcastGlobalTargeted(ref target, ref targetedMessage);
@@ -361,6 +380,22 @@
                 }
             }
 
+            if (_postProcessingTargetedWithoutTargetingSinks.TryGetValue(type, out handlers) && 0 < handlers.Count)
+            {
+                List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers.Keys);
+                try
+                {
+                    foreach (MessageHandler handler in messageHandlers)
+                    {
+                        handler.HandleTargetedWithoutTargetingPostProcessing(ref target, ref typedMessage, this);
+                    }
+                }
+                finally
+                {
+                    _messageHandlers.Push(messageHandlers);
+                }
+            }
+
             if (!foundAnyHandlers)
             {
                 MessagingDebug.Log("Could not find a matching targeted broadcast handler for Id: {0}, Message: {1}.", target,
@@ -368,7 +403,7 @@
             }
         }
 
-        /// <inheritdoc/>
+        
         public void UntypedSourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -390,7 +425,7 @@
             broadcast.Invoke(source, typedMessage);
         }
 
-        /// <inheritdoc/>
+        
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage) where TMessage : IBroadcastMessage
         {
             InternalSourcedBroadcast(ref source, ref typedMessage);
@@ -445,6 +480,22 @@
                     foreach (MessageHandler handler in messageHandlers)
                     {
                         handler.HandleSourcedBroadcastPostProcessing(ref source, ref typedMessage, this);
+                    }
+                }
+                finally
+                {
+                    _messageHandlers.Push(messageHandlers);
+                }
+            }
+
+            if (_postProcessingBroadcastWithoutSourceSinks.TryGetValue(type, out handlers) && 0 < handlers.Count)
+            {
+                List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers.Keys);
+                try
+                {
+                    foreach (MessageHandler handler in messageHandlers)
+                    {
+                        handler.HandleSourcedBroadcastWithoutSourcePostProcessing(ref source, ref typedMessage, this);
                     }
                 }
                 finally
@@ -793,29 +844,35 @@
 
             return () =>
             {
+                _log.Log(new MessagingRegistration(handlerOwnerId, type, RegistrationType.Deregister, registrationMethod));
                 if (!sinks.TryGetValue(type, out handlers) || !handlers.TryGetValue(messageHandler, out count))
                 {
                     MessagingDebug.Log(
                         "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
                         type, messageHandler);
-
                     return;
                 }
 
                 if (count <= 1)
                 {
-                    _ = handlers.Remove(messageHandler);
+                    bool complete = handlers.Remove(messageHandler);
+                    bool trulyComplete = true;
                     if (handlers.Count <= 0)
                     {
-                        _ = sinks.Remove(type);
+                        trulyComplete = sinks.Remove(type);
+                    }
+
+                    if (!complete || !trulyComplete)
+                    {
+                        MessagingDebug.Log(
+                            "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
+                            type, messageHandler);
                     }
                 }
                 else
                 {
                     handlers[messageHandler] = count - 1;
                 }
-
-                _log.Log(new MessagingRegistration(handlerOwnerId, type, RegistrationType.Deregister, registrationMethod));
             };
         }
 
@@ -849,6 +906,7 @@
 
             return () =>
             {
+                _log.Log(new MessagingRegistration(context, type, RegistrationType.Deregister, registrationMethod));
                 if (!sinks.TryGetValue(type, out broadcastHandlers) || !broadcastHandlers.TryGetValue(context, out handlers) || !handlers.TryGetValue(messageHandler, out count))
                 {
                     MessagingDebug.Log(
@@ -859,7 +917,7 @@
 
                 if (count <= 1)
                 {
-                    _ = handlers.Remove(messageHandler);
+                    bool complete = handlers.Remove(messageHandler);
                     if (handlers.Count <= 0)
                     {
                         _ = broadcastHandlers.Remove(context);
@@ -869,13 +927,18 @@
                     {
                         _ = sinks.Remove(type);
                     }
+
+                    if (!complete)
+                    {
+                        MessagingDebug.Log(
+                            "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
+                            type, messageHandler);
+                    }
                 }
                 else
                 {
                     handlers[messageHandler] = count - 1;
                 }
-
-                _log.Log(new MessagingRegistration(context, type, RegistrationType.Deregister, registrationMethod));
             };
         }
 

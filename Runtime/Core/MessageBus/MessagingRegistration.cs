@@ -27,6 +27,8 @@
         UntargetedPostProcessor,
         TargetedPostProcessor,
         BroadcastPostProcessor,
+        TargetedWithoutTargetingPostProcessor,
+        BroadcastWithoutSourcePostProcessor,
     }
 
     /// <summary>

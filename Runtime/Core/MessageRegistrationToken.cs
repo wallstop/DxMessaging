@@ -4,7 +4,6 @@
     using System.Collections.Generic;
     using MessageBus;
     using Messages;
-    using UnityEngine;
 
     /// <summary>
     /// Maintains all of the [de]registration logic for MessagingComponents. Wraps registrations up for lazy registration, which are executed on Enable() call.
@@ -32,6 +31,26 @@
             _messageBus = messageBus;
         }
 
+        private MessageRegistrationHandle RegisterTargetedInternal<T>(InstanceId target, Action<T> targetedHandler)
+            where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+        }
+
+        private MessageRegistrationHandle RegisterTargetedInternal<T>(InstanceId target, MessageHandler.FastHandler<T> targetedHandler) where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+        }
+
+#if UNITY_2017_1_OR_NEWER
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
         /// </summary>
@@ -40,16 +59,12 @@
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target of the TargetedMessages to consume.</param>
-        /// <param name="targetedHandler">Actual handler functionality</param>
+        /// <param name="targetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(GameObject target, Action<T> targetedHandler)
+        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(UnityEngine.GameObject target, Action<T> targetedHandler)
             where T : ITargetedMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+            return RegisterTargetedInternal(target, targetedHandler);
         }
 
         /// <summary>
@@ -60,16 +75,12 @@
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target of the TargetedMessages to consume.</param>
-        /// <param name="targetedHandler">Actual handler functionality</param>
+        /// <param name="targetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(GameObject target, MessageHandler.FastHandler<T> targetedHandler)
+        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(UnityEngine.GameObject target, MessageHandler.FastHandler<T> targetedHandler)
             where T : ITargetedMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+            return RegisterTargetedInternal(target, targetedHandler);
         }
 
         /// <summary>
@@ -80,16 +91,12 @@
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target of the TargetedMessages to consume.</param>
-        /// <param name="targetedHandler">Actual handler functionality</param>
+        /// <param name="targetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterComponentTargeted<T>(Component target, Action<T> targetedHandler)
+        public MessageRegistrationHandle RegisterComponentTargeted<T>(UnityEngine.Component target, Action<T> targetedHandler)
             where T : ITargetedMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+            return RegisterTargetedInternal(target, targetedHandler);
         }
 
         /// <summary>
@@ -100,17 +107,85 @@
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target of the TargetedMessages to consume.</param>
-        /// <param name="targetedHandler">Actual handler functionality</param>
+        /// <param name="targetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterComponentTargeted<T>(Component target, MessageHandler.FastHandler<T> targetedHandler)
+        public MessageRegistrationHandle RegisterComponentTargeted<T>(UnityEngine.Component target, MessageHandler.FastHandler<T> targetedHandler)
             where T : ITargetedMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(targetedHandler, () => _messageHandler.RegisterTargetedMessageHandler(target, targetedHandler, _messageBus));
+            return RegisterTargetedInternal(target, targetedHandler);
         }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process TargetedMessages of the given type for the provided target.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target to post process messages for.</param>
+        /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterGameObjectTargetedPostProcessor<T>(
+            UnityEngine.GameObject target, MessageHandler.FastHandler<T> targetedPostProcessor) where T : ITargetedMessage
+        {
+            return InternalRegister(targetedPostProcessor, () => _messageHandler.RegisterTargetedPostProcessor(target, targetedPostProcessor, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process TargetedMessages of the given type for the provided target.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target to post process messages for.</param>
+        /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterComponentTargetedPostProcessor<T>(
+            UnityEngine.Component target, MessageHandler.FastHandler<T> targetedPostProcessor) where T : ITargetedMessage
+        {
+            return InternalRegister(targetedPostProcessor, () => _messageHandler.RegisterTargetedPostProcessor(target, targetedPostProcessor, _messageBus));
+        }
+#else
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target of the TargetedMessages to consume.</param>
+        /// <param name="targetedHandler">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(InstanceId target, Action<T> targetedHandler)
+            where T : ITargetedMessage
+        {
+            return RegisterTargetedInternal(target, targetedHandler);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target of the TargetedMessages to consume.</param>
+        /// <param name="targetedHandler">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterTargeted<T>(InstanceId target, MessageHandler.FastHandler<T> targetedHandler)
+            where T : ITargetedMessage
+        {
+            return RegisterTargetedInternal(target, targetedHandler);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process TargetedMessages of the given type for the provided target.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target to post process messages for.</param>
+        /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterComponentTargetedPostProcessor<T>(
+            InstanceId target, MessageHandler.FastHandler<T> targetedPostProcessor) where T : ITargetedMessage
+        {
+            return InternalRegister(targetedPostProcessor, () => _messageHandler.RegisterTargetedPostProcessor(target, targetedPostProcessor, _messageBus));
+        }
+#endif
 
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards anything (including itself).
@@ -119,7 +194,7 @@
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
-        /// <param name="messageHandler">Actual handler functionality</param>
+        /// <param name="messageHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(Action<InstanceId, T> messageHandler) where T : ITargetedMessage
         {
@@ -137,7 +212,7 @@
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
-        /// <param name="messageHandler">Actual handler functionality</param>
+        /// <param name="messageHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(MessageHandler.FastHandlerWithContext<T> messageHandler) where T : ITargetedMessage
         {
@@ -149,13 +224,49 @@
         }
 
         /// <summary>
+        /// Stages a registration of the provided MessageHandler to post process TargetedMessages of the given type targeted towards anything (including itself).
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="postProcessor">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(Action<InstanceId, T> postProcessor) where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(postProcessor, () => _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(postProcessor, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to post process TargetedMessages of the given type targeted towards anything (including itself).
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="postProcessor">Actual post processor functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(MessageHandler.FastHandlerWithContext<T> postProcessor) where T : ITargetedMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(postProcessor, () => _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(postProcessor, _messageBus));
+        }
+
+        /// <summary>
         /// Stages a registration of the provided MessageHandler to accept UntargetedMessages of the given type.
         /// </summary>
         /// <note>
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
-        /// <param name="untargetedHandler">Actual handler functionality</param>
+        /// <param name="untargetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterUntargeted<T>(Action<T> untargetedHandler) where T : IUntargetedMessage
         {
@@ -173,7 +284,7 @@
         /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
-        /// <param name="untargetedHandler">Actual handler functionality</param>
+        /// <param name="untargetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterUntargeted<T>(MessageHandler.FastHandler<T> untargetedHandler) where T : IUntargetedMessage
         {
@@ -185,6 +296,60 @@
         }
 
         /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process UntargetedMessages of the given type.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="untargetedPostProcessor">Actual post processor functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterUntargetedPostProcessor<T>(MessageHandler.FastHandler<T> untargetedPostProcessor) where T : IUntargetedMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(untargetedPostProcessor, () => _messageHandler.RegisterUntargetedPostProcessor(untargetedPostProcessor, _messageBus));
+        }
+
+        private MessageRegistrationHandle RegisterBroadcastInternal<T>(InstanceId source, Action<T> broadcastHandler) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+        }
+
+        private MessageRegistrationHandle RegisterBroadcastInternal<T>(InstanceId source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+        }
+
+        private MessageRegistrationHandle RegisterBroadcastPostProcessorInternal<T>(InstanceId source, Action<T> broadcastPostProcessor)
+            where T : IBroadcastMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastPostProcessor, () => _messageHandler.RegisterSourcedBroadcastPostProcessor(source, broadcastPostProcessor, _messageBus));
+        }
+
+        private MessageRegistrationHandle RegisterBroadcastPostProcessorInternal<T>(InstanceId source, MessageHandler.FastHandler<T> broadcastPostProcessor)
+            where T : IBroadcastMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastPostProcessor, () => _messageHandler.RegisterSourcedBroadcastPostProcessor(source, broadcastPostProcessor, _messageBus));
+        }
+
+#if UNITY_2017_1_OR_NEWER
+        /// <summary>
         /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
         /// </summary>
         /// <note>
@@ -194,13 +359,9 @@
         /// <param name="source">Id of the source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterGameObjectBroadcast<T>(GameObject source, Action<T> broadcastHandler) where T : IBroadcastMessage
+        public MessageRegistrationHandle RegisterGameObjectBroadcast<T>(UnityEngine.GameObject source, Action<T> broadcastHandler) where T : IBroadcastMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+            return RegisterBroadcastInternal(source, broadcastHandler);
         }
 
         /// <summary>
@@ -213,13 +374,33 @@
         /// <param name="source">Id of the source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterGameObjectBroadcast<T>(GameObject source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
+        public MessageRegistrationHandle RegisterGameObjectBroadcast<T>(UnityEngine.GameObject source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+            return RegisterBroadcastInternal(source, broadcastHandler);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process BroadcastMessages of the given type for the given GameObject.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterGameObjectBroadcastPostProcessor<T>(UnityEngine.GameObject source, Action<T> broadcastPostProcesor) where T : IBroadcastMessage
+        {
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process BroadcastMessages of the given type for the given GameObject.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterGameObjectBroadcastPostProcessor<T>(UnityEngine.GameObject source, MessageHandler.FastHandler<T> broadcastPostProcesor) where T : IBroadcastMessage
+        {
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
         }
 
         /// <summary>
@@ -232,13 +413,9 @@
         /// <param name="source">The component source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterComponentBroadcast<T>(Component source, Action<T> broadcastHandler) where T : IBroadcastMessage
+        public MessageRegistrationHandle RegisterComponentBroadcast<T>(UnityEngine.Component source, Action<T> broadcastHandler) where T : IBroadcastMessage
         {
-            if (_messageHandler == null) // Unity has a bug
-            {
-                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
-            }
-            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+            return RegisterBroadcastInternal(source, broadcastHandler);
         }
 
         /// <summary>
@@ -251,14 +428,97 @@
         /// <param name="source">The component source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterComponentBroadcast<T>(Component source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
+        public MessageRegistrationHandle RegisterComponentBroadcast<T>(UnityEngine.Component source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
         {
-            if (_messageHandler == null) // Unity has a bug
+            return RegisterBroadcastInternal(source, broadcastHandler);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process BroadcastMessages of the given type for the given component.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterComponentBroadcastPostProcessor<T>(UnityEngine.Component source, Action<T> broadcastPostProcesor) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null)
             {
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
-            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastMessageHandler(source, broadcastHandler, _messageBus));
+            return InternalRegister(broadcastPostProcesor, () => _messageHandler.RegisterSourcedBroadcastPostProcessor(source, broadcastPostProcesor, _messageBus));
         }
+        
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process BroadcastMessages of the given type for the given component.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterComponentBroadcastPostProcessor<T>(UnityEngine.Component source, MessageHandler.FastHandler<T> broadcastPostProcesor) where T : IBroadcastMessage
+        {
+            if (_messageHandler == null)
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+            return InternalRegister(broadcastPostProcesor, () => _messageHandler.RegisterSourcedBroadcastPostProcessor(source, broadcastPostProcesor, _messageBus));
+        }
+#else
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastHandler">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcast<T>(InstanceId source, Action<T> broadcastHandler) where T : IBroadcastMessage
+        {
+            return RegisterBroadcastInternal(source, broadcastHandler);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastHandler">Actual handler functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcast<T>(InstanceId source, MessageHandler.FastHandler<T> broadcastHandler) where T : IBroadcastMessage
+        {
+            return RegisterBroadcastInternal(source, broadcastHandler);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process BroadcastMessages of the given type for the given source.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(InstanceId source, Action<T> broadcastPostProcesor) where T : IBroadcastMessage
+        {
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process BroadcastMessages of the given type for the given source.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="source">Source of the messages.</param>
+        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(InstanceId source, MessageHandler.FastHandler<T> broadcastPostProcesor) where T : IBroadcastMessage
+        {
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+        }
+#endif
 
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
@@ -298,6 +558,46 @@
             }
 
             return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastWithoutSource(broadcastHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to post process BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="broadcastHandler">Actual post process functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(Action<InstanceId, T> broadcastHandler)
+            where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(broadcastHandler, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided MessageHandler to post post process BroadcastMessages of the given type.
+        /// </summary>
+        /// <note>
+        /// DOES NOT ACTUALLY REGISTER THE HANDLER IF NOT ENABLED. To register, a call to Enable() is needed.
+        /// </note>
+        /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
+        /// <param name="broadcastHandler">Actual post process functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(MessageHandler.FastHandlerWithContext<T> broadcastHandler)
+            where T : IBroadcastMessage
+        {
+            if (_messageHandler == null) // Unity has a bug
+            {
+                return MessageRegistrationHandle.CreateMessageRegistrationHandle();
+            }
+
+            return InternalRegister(broadcastHandler, () => _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(broadcastHandler, _messageBus));
         }
 
 
