@@ -17,6 +17,7 @@ public sealed class PerformanceTests
 {
     private readonly List<GameObject> _spawned = new();
 
+    [SetUp]
     public void Setup()
     {
         MessagingDebug.LogFunction = null;
@@ -25,6 +26,7 @@ public sealed class PerformanceTests
         messageBus.Log.Enabled = false;
     }
 
+    [TearDown]
     public void Cleanup()
     {
         foreach (GameObject spawned in _spawned)
@@ -40,68 +42,60 @@ public sealed class PerformanceTests
         _spawned.Clear();
     }
 
-
     [UnityTest]
     public IEnumerator BenchmarkTargeted()
     {
-        Setup();
-        try
+        // Add some components in for good measure
+        GameObject test = new(
+            nameof(BenchmarkTargeted), typeof(SimpleMessageAwareComponent), typeof(SpriteRenderer),
+            typeof(Rigidbody2D), typeof(CircleCollider2D));
+
+        SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
+        ComplexTargetedMessage message = new(Guid.NewGuid());
+        int count = 0;
+        component.slowComplexTargetedHandler = () => ++count;
+        TimeSpan timeout = TimeSpan.FromSeconds(5);
+        Debug.Log("| Message Tech | Operations / Second |");
+        Debug.Log("| ------------ | ------------------- |");
+        void DisplayCount(string testName)
         {
-            GameObject test = new(
-                nameof(BenchmarkTargeted), typeof(SimpleMessageAwareComponent), typeof(SpriteRenderer),
-                typeof(Rigidbody2D), typeof(CircleCollider2D));
-            SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
-            ComplexTargetedMessage message = new(Guid.NewGuid());
-            int count = 0;
-            component.slowComplexTargetedHandler = () => ++count;
-            TimeSpan timeout = TimeSpan.FromSeconds(5);
-            Debug.Log("| Message Tech | Operations / Second |");
-            Debug.Log("| ------------ | ------------------- |");
-            void DisplayCount(string testName)
-            {
-                Debug.Log($"| {testName} | {(Math.Floor(count / timeout.TotalSeconds)):N0} |");
-            }
-
-            Stopwatch timer = Stopwatch.StartNew(); 
-            do
-            {
-                test.SendMessage(nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage), message);
-            }
-            while (timer.Elapsed < timeout);
-            DisplayCount("Unity");
-
-            count = 0;
-            component.slowComplexTargetedHandler = () => ++count;
-            component.SlowComplexTargetingEnabled = true;
-            component.FastComplexTargetingEnabled = false;
-            timer.Restart();
-
-            do
-            {
-                message.EmitTargeted(test);
-            }
-            while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging - Normal");
-
-            count = 0;
-            component.slowComplexTargetedHandler = null;
-            component.complexTargetedHandler = () => ++count;
-            component.SlowComplexTargetingEnabled = false;
-            component.FastComplexTargetingEnabled = true;
-            timer.Restart();
-
-            do
-            {
-                message.EmitTargeted(test);
-            }
-            while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging - No-Alloc");
-
-            yield return null;
+            Debug.Log($"| {testName} | {(Math.Floor(count / timeout.TotalSeconds)):N0} |");
         }
-        finally
+
+        Stopwatch timer = Stopwatch.StartNew();
+        do
         {
-            Cleanup();
+            test.SendMessage(nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage), message);
         }
+        while (timer.Elapsed < timeout);
+        DisplayCount("Unity");
+
+        count = 0;
+        component.slowComplexTargetedHandler = () => ++count;
+        component.SlowComplexTargetingEnabled = true;
+        component.FastComplexTargetingEnabled = false;
+        timer.Restart();
+
+        do
+        {
+            message.EmitTargeted(test);
+        }
+        while (timer.Elapsed < timeout);
+        DisplayCount("DxMessaging - Normal");
+
+        count = 0;
+        component.slowComplexTargetedHandler = null;
+        component.complexTargetedHandler = () => ++count;
+        component.SlowComplexTargetingEnabled = false;
+        component.FastComplexTargetingEnabled = true;
+        timer.Restart();
+
+        do
+        {
+            message.EmitTargeted(test);
+        }
+        while (timer.Elapsed < timeout);
+        DisplayCount("DxMessaging - No-Alloc");
+        yield break;
     }
 }
