@@ -13,18 +13,18 @@ DxMessaging is currently a bit slower (4x) than Unity's built in messaging solut
 While not as fast, DxMessaging offers *additional funcitonality* as compared to Unity's messaging solution.
 | Feature | Unity | DxMessaging |
 | ------- | ----- | ----------- |
-| Send a message to a GameObject | - [x] | - [x] |
-| Send a message to a Component | - [ ] | - [x] |
-| Require knowledge of receiver's implementaiton | - [x] | - [ ] |
-| Ignore messages dynamically at runtime | - [ ] | - [x] (multiple ways) |
-| Send messages to all receivers | - [ ] | - [x] |
-| Listen to messages for another GameObject | - [ ] | - [x] (multiple ways)|
-| Listen to messages for another Component | - [ ] | - [x] (multiple ways)|
-| Listen to messages *from* another GameObject | - [ ] | - [x] (multiple ways)|
-| Listen to messages *from* another Component | - [ ] | - [x] (multiple ways)|
-| Send a message without boxing its parameters | - [ ] | - [x] |
-| Listen to all messages | - [ ] | - [x] |
-| View a history of message registrations | N/A | - [x] |
+| Require knowledge of receiver's implementaiton | &check; | _ |
+| Send a message to a GameObject | &check; | &check; |
+| Send a message to a Component | _ | &check; |
+| Ignore messages dynamically at runtime | _ | &check; (multiple ways) |
+| Send messages to all receivers | _ | &check; |
+| Listen to messages for another GameObject | _ | &check; (multiple ways)|
+| Listen to messages for another Component | _ | &check; (multiple ways)|
+| Listen to messages *from* another GameObject | _ | &check; (multiple ways)|
+| Listen to messages *from* another Component | _ | &check; (multiple ways)|
+| Send a message without boxing its parameters | _ | &check; |
+| Listen to all messages | _ | &check; |
+| View a history of message registrations | N/A | &check; |
 
 # Concepts
 There are a few important concepts that DxMessaging provides.
@@ -63,7 +63,10 @@ public sealed class SimpleMessageAwareComponent : MessageAwareComponent
 }
 
 // In some other bit of code
+// Select a target
 SimpleMessageAwareComponent target = Object.FindObjectOfType<SimpleMessageAwareComponent>();
+// Create your message
 SimpleTargetedMessage message = new();
+// Send it - this will synchrously invoke all relevant handlers and return execution once complete
 message.EmitGameObjectTargeted(target.gameObject);
 ```
