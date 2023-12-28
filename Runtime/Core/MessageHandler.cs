@@ -3,10 +3,8 @@
     using MessageBus;
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
     using System.Linq;
     using Messages;
-    using static UnityEngine.GraphicsBuffer;
 
     /// <summary>
     /// Abstraction layer for immediate-mode Message passing. An instance of this handles all
@@ -1365,6 +1363,7 @@
 
                 if (message is not T typedMessage)
                 {
+                    MessagingDebug.Log("Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(T));
                     return;
                 }
 
@@ -1391,6 +1390,7 @@
 
                 if (message is not U typedMessage)
                 {
+                    MessagingDebug.Log("Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
                     return;
                 }
 
@@ -1425,6 +1425,7 @@
 
                 if (message is not U typedMessage)
                 {
+                    MessagingDebug.Log("Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
                     return;
                 }
 
@@ -1547,6 +1548,7 @@
                         return;
                     }
 
+                    // Always invoke deregistration action, as MessageBus dedupes this as well
                     deregistration?.Invoke();
 
                     if (count <= 1)

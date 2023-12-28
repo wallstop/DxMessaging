@@ -18,7 +18,7 @@ using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 using Random = System.Random;
 
-public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
+public sealed class NominalTests
 {
     private const int NumRegistrations = 150;
 
@@ -75,12 +75,12 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             void SetupComponent(SimpleMessageAwareComponent toSetup)
             {
-                toSetup.untargetedHandler = _ => ++untargetedWorks;
-                toSetup.targetedHandler = _ => ++targetedWorks;
-                toSetup.targetedWithoutTargetingHandler = (_, _) => ++targetedWithoutTargetingWorks;
-                toSetup.broadcastHandler = _ => ++broadcastWorks;
-                toSetup.broadcastWithoutSourceHandler = (_, _) => ++broadcastWithoutSourceWorks;
-                toSetup.componentTargetedHandler = _ =>
+                toSetup.untargetedHandler = () => ++untargetedWorks;
+                toSetup.targetedHandler = () => ++targetedWorks;
+                toSetup.targetedWithoutTargetingHandler = () => ++targetedWithoutTargetingWorks;
+                toSetup.broadcastHandler = () => ++broadcastWorks;
+                toSetup.broadcastWithoutSourceHandler = () => ++broadcastWithoutSourceWorks;
+                toSetup.componentTargetedHandler = () =>
                 {
                     if (!componentTargetedWorks.TryGetValue(toSetup, out int existing))
                     {
@@ -89,7 +89,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
                     componentTargetedWorks[toSetup] = ++existing;
                 };
-                toSetup.componentBroadcastHandler = _ =>
+                toSetup.componentBroadcastHandler = () =>
                 {
                     if (!componentBroadcastWorks.TryGetValue(toSetup, out int existing))
                     {
@@ -331,8 +331,8 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             // One for the untargeted message, one for the targeted without targeting, one for broadcast without source
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            // One for the game object, one for the component = 2
-            Assert.AreEqual(2, messageBus.RegisteredTargeted);
+            // One for the game object, one for each targeted message type (simple + complex)
+            Assert.AreEqual(3, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             yield return null;
@@ -340,7 +340,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             SimpleMessageAwareComponent secondComponent = test.AddComponent<SimpleMessageAwareComponent>();
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             // One for the game object, one for the first component, one for the second component = 3
-            Assert.AreEqual(3, messageBus.RegisteredTargeted);
+            Assert.AreEqual(4, messageBus.RegisteredTargeted);
             Assert.AreEqual(3, messageBus.RegisteredBroadcast);
 
             secondComponent.enabled = false;
@@ -348,7 +348,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
 
             // 3 - one component (disabled)
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            Assert.AreEqual(2, messageBus.RegisteredTargeted);
+            Assert.AreEqual(3, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             firstComponent.enabled = false;
@@ -378,7 +378,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             yield return null;
 
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            Assert.AreEqual(2, messageBus.RegisteredTargeted);
+            Assert.AreEqual(3, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             Object.Destroy(firstComponent);
@@ -392,7 +392,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             yield return null;
 
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            Assert.AreEqual(2, messageBus.RegisteredTargeted);
+            Assert.AreEqual(3, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             Object.Destroy(test);
@@ -463,11 +463,11 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             int broadcastCount = 0;
             int componentTargetedCount = 0;
             int componentBroadcastCount = 0;
-            component.untargetedHandler = _ => ++unTargetedCount;
-            component.targetedHandler = _ => ++targetedCount;
-            component.broadcastHandler = _ => ++broadcastCount;
-            component.componentTargetedHandler = _ => ++componentTargetedCount;
-            component.componentBroadcastHandler = _ => ++componentBroadcastCount;
+            component.untargetedHandler = () => ++unTargetedCount;
+            component.targetedHandler = () => ++targetedCount;
+            component.broadcastHandler = () => ++broadcastCount;
+            component.componentTargetedHandler = () => ++componentTargetedCount;
+            component.componentBroadcastHandler = () => ++componentBroadcastCount;
 
             MessageRegistrationToken token = GetToken(component);
             HashSet<MessageRegistrationHandle> handles = new();
@@ -598,11 +598,11 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             int broadcastCount = 0;
             int componentTargetedCount = 0;
             int componentBroadcastCount = 0;
-            component.untargetedHandler = _ => ++unTargetedCount;
-            component.targetedHandler = _ => ++targetedCount;
-            component.broadcastHandler = _ => ++broadcastCount;
-            component.componentTargetedHandler = _ => ++componentTargetedCount;
-            component.componentBroadcastHandler = _ => ++componentBroadcastCount;
+            component.untargetedHandler = () => ++unTargetedCount;
+            component.targetedHandler = () => ++targetedCount;
+            component.broadcastHandler = () => ++broadcastCount;
+            component.componentTargetedHandler = () => ++componentTargetedCount;
+            component.componentBroadcastHandler = () => ++componentBroadcastCount;
 
             MessageRegistrationToken token = GetToken(component);
             HashSet<MessageRegistrationHandle> handles = new();
@@ -710,23 +710,23 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             int? lastSeenComponentTargetedCount = null;
             int? lastSeenBroadcastCount = null;
             int? lastSeenComponentBroadcastCount = null;
-            component.untargetedHandler = _ => ++unTargetedCount;
-            component.targetedHandler = _ =>
+            component.untargetedHandler = () => ++unTargetedCount;
+            component.targetedHandler = () =>
             {
                 ++targetedCount;
                 ++expectedTargetedWithoutTargetingCount;
             };
-            component.broadcastHandler = _ =>
+            component.broadcastHandler = () =>
             {
                 ++broadcastCount;
                 ++expectedBroadcastWithoutSourceCount;
             };
-            component.componentTargetedHandler = _ =>
+            component.componentTargetedHandler = () =>
             {
                 ++componentTargetedCount;
                 ++expectedTargetedWithoutTargetingCount;
             };
-            component.componentBroadcastHandler = _ =>
+            component.componentBroadcastHandler = () =>
             {
                 ++componentBroadcastCount;
                 ++expectedBroadcastWithoutSourceCount;
@@ -1197,7 +1197,7 @@ public sealed class NominalTests : IPrebuildSetup, IPostBuildCleanup
             SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
 
             bool seen = false;
-            component.untargetedHandler = _ =>
+            component.untargetedHandler = () =>
             {
                 // ReSharper disable once AccessToModifiedClosure
                 Assert.IsFalse(seen);

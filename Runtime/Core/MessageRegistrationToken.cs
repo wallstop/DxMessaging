@@ -151,7 +151,7 @@
         /// <param name="target">Target of the TargetedMessages to consume.</param>
         /// <param name="targetedHandler">Actual handler functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterGameObjectTargeted<T>(InstanceId target, Action<T> targetedHandler)
+        public MessageRegistrationHandle RegisterTargeted<T>(InstanceId target, Action<T> targetedHandler)
             where T : ITargetedMessage
         {
             return RegisterTargetedInternal(target, targetedHandler);
@@ -180,8 +180,21 @@
         /// <param name="target">Target to post process messages for.</param>
         /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
-        public MessageRegistrationHandle RegisterComponentTargetedPostProcessor<T>(
+        public MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
             InstanceId target, MessageHandler.FastHandler<T> targetedPostProcessor) where T : ITargetedMessage
+        {
+            return InternalRegister(targetedPostProcessor, () => _messageHandler.RegisterTargetedPostProcessor(target, targetedPostProcessor, _messageBus));
+        }
+
+        /// <summary>
+        /// Stages a registration of the provided PostProcessor to post process TargetedMessages of the given type for the provided target.
+        /// </summary>
+        /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
+        /// <param name="target">Target to post process messages for.</param>
+        /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <returns>A handle that allows for registration and de-registration.</returns>
+        public MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
+            InstanceId target, Action<T> targetedPostProcessor) where T : ITargetedMessage
         {
             return InternalRegister(targetedPostProcessor, () => _messageHandler.RegisterTargetedPostProcessor(target, targetedPostProcessor, _messageBus));
         }

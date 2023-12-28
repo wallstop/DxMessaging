@@ -576,23 +576,21 @@
                 return false;
             }
 
-            if (_interceptors.Count <= 0)
+            if (!_interceptors.TryPop(out interceptorStack))
             {
                 interceptorStack = new List<object>();
             }
             else
             {
-                interceptorStack = _interceptors.Pop();
                 interceptorStack.Clear();
             }
 
-            if (_interceptorKeys.Count <= 0)
+            if (!_interceptorKeys.TryPop(out interceptorKeys))
             {
                 interceptorKeys = new List<int>();
             }
             else
             {
-                interceptorKeys = _interceptorKeys.Pop();
                 interceptorKeys.Clear();
             }
 
@@ -937,12 +935,11 @@
 
         private List<MessageHandler> GetOrAddMessageHandlerStack(IEnumerable<MessageHandler> handlers)
         {
-            if (_messageHandlers.Count <= 0)
+            if (!_messageHandlers.TryPop(out List<MessageHandler> messageHandlers))
             {
                 return new List<MessageHandler>(handlers);
             }
 
-            List<MessageHandler> messageHandlers = _messageHandlers.Pop();
             messageHandlers.Clear();
             messageHandlers.AddRange(handlers);
             return messageHandlers;
