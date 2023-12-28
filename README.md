@@ -2,7 +2,7 @@
 Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly geared towards Unity and XNA/Monogame.
 
 # Benchmarks
-DxMessaging is currently a bit slower (3x) than Unity's built in messaging solution. 
+DxMessaging is currently a bit slower (3x) than Unity's built in messaging solution. [Source](./Tests/Runtime/Core/PerformanceTests.cs).
 | Message Tech | Operations / Second |
 | ------------ | ------------------- |
 | Unity | 1,387,814 |
