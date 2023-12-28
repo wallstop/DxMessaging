@@ -24,7 +24,8 @@ While not as fast, DxMessaging offers *additional functionality* as compared to 
 | Listen to messages *from* another Component | _ | &check; (multiple ways)|
 | Send a message without boxing its parameters | _ | &check; |
 | Listen to all messages | _ | &check; |
-| View a history of message registrations | N/A | &check; |
+| View a filter-able history of message registrations | N/A | &check; |
+| "LateUpdate" style handlers | _ | &check; |
 
 # Concepts
 There are a few important concepts that DxMessaging provides.
