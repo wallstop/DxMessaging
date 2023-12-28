@@ -10,10 +10,10 @@ DxMessaging is currently a bit slower (4x) than Unity's built in messaging solut
 | DxMessaging - No-Alloc | 515,983 |
 
 # Functionality
-While not as fast, DxMessaging offers *additional funcitonality* as compared to Unity's messaging solution.
+While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
 | Feature | Unity | DxMessaging |
 | ------- | ----- | ----------- |
-| Require knowledge of receiver's implementaiton | &check; | _ |
+| Require knowledge of receiver's implementation | &check; | _ |
 | Send a message to a GameObject | &check; | &check; |
 | Send a message to a Component | _ | &check; |
 | Ignore messages dynamically at runtime | _ | &check; (multiple ways) |
