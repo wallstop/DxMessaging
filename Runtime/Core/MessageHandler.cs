@@ -18,7 +18,7 @@
         /// <summary>
         /// MessageBus for all MessageHandlers to use. Currently immutable, but may change in the future.
         /// </summary>
-        public static readonly IMessageBus MessageBus = new MessageBus.MessageBus();
+        public static readonly MessageBus.MessageBus MessageBus = new();
 
         /// <summary>
         /// Maps Types to the corresponding Handler of that type.

@@ -254,11 +254,6 @@
         
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage) where TMessage : IUntargetedMessage
         {
-            InternalUntargetedBroadcast(ref typedMessage);
-        }
-
-        private void InternalUntargetedBroadcast<TMessage>(ref TMessage typedMessage) where TMessage : IUntargetedMessage
-        {
             Type type = typedMessage.MessageType;
             if (!RunUntargetedInterceptors(type, ref typedMessage))
             {
@@ -295,7 +290,6 @@
                 MessagingDebug.Log("Could not find a matching untargeted broadcast handler for Message: {0}.", typedMessage);
             }
         }
-
         
         public void UntypedTargetedBroadcast(InstanceId target, ITargetedMessage typedMessage)
         {
@@ -320,12 +314,6 @@
         
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage) where TMessage : ITargetedMessage
         {
-            InternalTargetedBroadcast(ref target, ref typedMessage);
-        }
-
-        private void InternalTargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
-            where TMessage : ITargetedMessage
-        {
             Type type = typedMessage.MessageType;
             if (!RunTargetedInterceptors(type, ref typedMessage, ref target))
             {
@@ -339,8 +327,8 @@
             }
 
             bool foundAnyHandlers = false;
-            if (_targetedSinks.TryGetValue(type, out Dictionary<InstanceId, Dictionary<MessageHandler, int>> targetedHandlers) 
-                && targetedHandlers.TryGetValue(target, out Dictionary<MessageHandler, int> handlers) 
+            if (_targetedSinks.TryGetValue(type, out Dictionary<InstanceId, Dictionary<MessageHandler, int>> targetedHandlers)
+                && targetedHandlers.TryGetValue(target, out Dictionary<MessageHandler, int> handlers)
                 && 0 < handlers.Count)
             {
                 foundAnyHandlers = true;
@@ -420,14 +408,8 @@
             Action<InstanceId, IBroadcastMessage> broadcast = (Action<InstanceId, IBroadcastMessage>)sourcedBroadcastMethod;
             broadcast.Invoke(source, typedMessage);
         }
-
         
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage) where TMessage : IBroadcastMessage
-        {
-            InternalSourcedBroadcast(ref source, ref typedMessage);
-        }
-
-        private void InternalSourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage) where TMessage : IBroadcastMessage
         {
             Type type = typedMessage.MessageType;
             if (!RunBroadcastInterceptors(type, ref typedMessage, ref source))
@@ -435,16 +417,15 @@
                 return;
             }
 
-            bool foundAnyHandlers = false;
-
             if (0 < _globalSinks.Count)
             {
                 IBroadcastMessage broadcastMessage = typedMessage;
                 BroadcastGlobalSourcedBroadcast(ref source, ref broadcastMessage);
             }
 
-            if (_broadcastSinks.TryGetValue(type, out Dictionary<InstanceId, Dictionary<MessageHandler, int>> broadcastHandlers) 
-                && broadcastHandlers.TryGetValue(source, out Dictionary<MessageHandler, int> handlers) 
+            bool foundAnyHandlers = false;
+            if (_broadcastSinks.TryGetValue(type, out Dictionary<InstanceId, Dictionary<MessageHandler, int>> broadcastHandlers)
+                && broadcastHandlers.TryGetValue(source, out Dictionary<MessageHandler, int> handlers)
                 && 0 < handlers.Count)
             {
                 foundAnyHandlers = true;
@@ -580,18 +561,10 @@
             {
                 interceptorStack = new List<object>();
             }
-            else
-            {
-                interceptorStack.Clear();
-            }
 
             if (!_interceptorKeys.TryPop(out interceptorKeys))
             {
                 interceptorKeys = new List<int>();
-            }
-            else
-            {
-                interceptorKeys.Clear();
             }
 
             return true;
@@ -657,6 +630,7 @@
 
             try
             {
+                interceptorKeys.Clear();
                 interceptorKeys.AddRange(interceptors.Keys);
                 foreach (int priority in interceptorKeys)
                 {

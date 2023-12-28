@@ -23,13 +23,12 @@ public sealed class NominalTests
     private const int NumRegistrations = 150;
 
     private readonly List<GameObject> _spawned = new();
-    private readonly HashSet<MessageRegistrationHandle> _handles = new();
 
     [SetUp]
     public void Setup()
     {
         MessagingDebug.LogFunction = Debug.Log;
-        MessageBus messageBus = MessageHandler.MessageBus as MessageBus;
+        MessageBus messageBus = MessageHandler.MessageBus;
         Assert.IsNotNull(messageBus);
         messageBus.Log.Enabled = true;
     }
@@ -315,7 +314,7 @@ public sealed class NominalTests
             yield return waitUntilMessageHandlerIsFresh.Current;
         }
 
-        MessageBus messageBus = MessageHandler.MessageBus as MessageBus;
+        MessageBus messageBus = MessageHandler.MessageBus;
         Assert.IsNotNull(messageBus);
 
         GameObject test = new(nameof(Lifetime), typeof(SimpleMessageAwareComponent));
@@ -406,7 +405,7 @@ public sealed class NominalTests
             yield return waitUntilMessageHandlerIsFresh.Current;
         }
 
-        MessageBus messageBus = MessageHandler.MessageBus as MessageBus;
+        MessageBus messageBus = MessageHandler.MessageBus;
         Assert.IsNotNull(messageBus);
 
         GameObject test1 = new("NonMessaging1");
@@ -1666,7 +1665,7 @@ public sealed class NominalTests
     private IEnumerator WaitUntilMessageHandlerIsFresh()
     {
         Setup();
-        MessageBus messageBus = MessageHandler.MessageBus as MessageBus;
+        MessageBus messageBus = MessageHandler.MessageBus;
         Assert.IsNotNull(messageBus);
 
         Stopwatch timer = Stopwatch.StartNew();

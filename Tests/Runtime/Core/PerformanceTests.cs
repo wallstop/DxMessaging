@@ -21,7 +21,7 @@ public sealed class PerformanceTests
     public void Setup()
     {
         MessagingDebug.LogFunction = null;
-        MessageBus messageBus = MessageHandler.MessageBus as MessageBus;
+        MessageBus messageBus = MessageHandler.MessageBus;
         Assert.IsNotNull(messageBus);
         messageBus.Log.Enabled = false;
     }
@@ -51,7 +51,6 @@ public sealed class PerformanceTests
             typeof(Rigidbody2D), typeof(CircleCollider2D));
 
         SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
-        ComplexTargetedMessage message = new(Guid.NewGuid());
         int count = 0;
         component.slowComplexTargetedHandler = () => ++count;
         TimeSpan timeout = TimeSpan.FromSeconds(5);
@@ -65,6 +64,7 @@ public sealed class PerformanceTests
         Stopwatch timer = Stopwatch.StartNew();
         do
         {
+            ComplexTargetedMessage message = new(Guid.NewGuid());
             test.SendMessage(nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage), message);
         }
         while (timer.Elapsed < timeout);
@@ -78,6 +78,7 @@ public sealed class PerformanceTests
 
         do
         {
+            ComplexTargetedMessage message = new(Guid.NewGuid());
             message.EmitTargeted(test);
         }
         while (timer.Elapsed < timeout);
@@ -92,6 +93,7 @@ public sealed class PerformanceTests
 
         do
         {
+            ComplexTargetedMessage message = new(Guid.NewGuid());
             message.EmitTargeted(test);
         }
         while (timer.Elapsed < timeout);
