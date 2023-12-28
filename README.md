@@ -6,7 +6,7 @@ DxMessaging is currently a bit slower (4x) than Unity's built in messaging solut
 | Message Tech | Operations / Second |
 | ------------ | ------------------- |
 | Unity | 2,279,948 |
-| DxMessaging - Slow | 511,689 |
+| DxMessaging - Normal | 511,689 |
 | DxMessaging - No-Alloc | 515,983 |
 
 # Functionality
