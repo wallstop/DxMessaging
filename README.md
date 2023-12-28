@@ -2,7 +2,7 @@
 Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly geared towards Unity and XNA/Monogame.
 
 # Benchmarks
-DxMessaging is currently a bit slower (3x) than Unity's built in messaging solution. [Source](./Tests/Runtime/Core/PerformanceTests.cs).
+DxMessaging is currently a bit slower (3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Core/PerformanceTests.cs).
 | Message Tech | Operations / Second |
 | ------------ | ------------------- |
 | Unity | 1,387,814 |
@@ -54,7 +54,7 @@ public sealed class SimpleMessageAwareComponent : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers()
     {
-        _ = _messageRegistrationToken.RegisterTargeted<SimpleTargetedMessage>(gameObject, HandleSimpleTargetedMessage);
+        _ = _messageRegistrationToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(gameObject, HandleSimpleTargetedMessage);
     }
 
     private void HandleSimpleTargetedMessage(ref SimpleTargetedMessage message)
