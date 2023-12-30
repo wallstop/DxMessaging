@@ -10,6 +10,9 @@
         public readonly Guid secondId;
         public readonly Guid thirdId;
         public readonly Guid fourthId;
+        public readonly Guid fifthId;
+        public readonly Guid sixthId;
+        public readonly Guid seventhId;
 
         public ComplexTargetedMessage(Guid firstId)
         {
@@ -17,6 +20,9 @@
             secondId = Guid.NewGuid();
             thirdId = Guid.NewGuid();
             fourthId = Guid.NewGuid();
+            fifthId = Guid.NewGuid();
+            sixthId = Guid.NewGuid();
+            seventhId = Guid.NewGuid();
         }
     }
 }
