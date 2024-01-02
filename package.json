@@ -1,16 +1,20 @@
 {
     "name": "com.wallstop-studios.dxmessaging",
-    "version": "1.0.0-rc5",
+    "version": "1.0.0-rc6",
     "displayName": "DxMessaging",
     "description": "Synchronous Event Bus for Unity",
     "unity": "2022.1",
     "keywords": [
         "messaging",
+        "message",
+        "messages",
         "event",
         "event bus",
-        "message",
+        "eventing",
         "send",
-        "receive"
+        "receive",
+        "signal",
+        "slot"
     ],
     "license": "MIT",
     "repository": {

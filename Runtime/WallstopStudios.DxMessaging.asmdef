@@ -1,7 +1,14 @@
 {
-	"name": "WallstopStudios.DxMessaging",
-	"references": [],
-    "optionalUnityReferences": [],
+    "name": "WallstopStudios.DxMessaging",
+    "rootNamespace": "UNITY_2017_1_OR_NEWER",
+    "references": [],
     "includePlatforms": [],
-    "excludePlatforms": []
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

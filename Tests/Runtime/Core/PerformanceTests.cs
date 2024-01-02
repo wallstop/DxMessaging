@@ -12,11 +12,6 @@ using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 using Tests.Runtime.Scripts.Components;
 using Tests.Runtime.Scripts.Messages;
-using static UnityEngine.GraphicsBuffer;
-using System.Threading;
-using UnityEditor.VersionControl;
-using NUnit.Framework.Internal;
-using System.Timers;
 
 public sealed class PerformanceTests
 {
