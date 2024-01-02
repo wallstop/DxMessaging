@@ -18,12 +18,7 @@
 #if UNITY_2017_1_OR_NEWER
         public UnityEngine.Object Object { get; }
 #endif
-
-#if UNITY_2017_1_OR_NEWER
-        private InstanceId(int id) : this()
-#else
         public InstanceId(int id) : this()
-#endif
         {
             _id = id;
 #if UNITY_2017_1_OR_NEWER
