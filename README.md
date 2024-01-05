@@ -5,10 +5,11 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 DxMessaging is currently a bit slower (3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Core/PerformanceTests.cs).
 | Message Tech | Operations / Second |
 | ------------ | ------------------- |
-| Unity | 1,986,542 |
-| DxMessaging (GameObject) - Normal | 402,337 |
-| DxMessaging (GameObject) - No-Alloc | 424,701 |
-| DxMessaging (Component) - No-Alloc | 461,415 |
+| Unity | 2,000,257 |
+| DxMessaging (GameObject) - Normal | 421,820 |
+| DxMessaging (GameObject) - No-Alloc | 432,089 |
+| DxMessaging (Component) - No-Alloc | 465,568 |
+| DxMessaging (Untargeted) - No-Alloc | 892,437 |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
