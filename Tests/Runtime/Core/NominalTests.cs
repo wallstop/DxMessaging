@@ -3,63 +3,23 @@ namespace DxMessaging.Tests.Runtime.Core
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Linq;
-    using System.Reflection;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Core.Messages;
-    using Unity;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
     using UnityEngine;
     using UnityEngine.TestTools;
-    using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
     using Random = System.Random;
 
-    public sealed class NominalTests
+    public sealed class NominalTests : TestBase
     {
-        private const int NumRegistrations = 150;
-
-        private readonly List<GameObject> _spawned = new();
-
-        [SetUp]
-        public void Setup()
-        {
-            MessagingDebug.LogFunction = Debug.Log;
-            MessageBus messageBus = MessageHandler.MessageBus;
-            Assert.IsNotNull(messageBus);
-            messageBus.Log.Enabled = true;
-        }
-
-        [TearDown]
-        public void Cleanup()
-        {
-            foreach (GameObject spawned in _spawned)
-            {
-                if (spawned == null)
-                {
-                    continue;
-                }
-
-                Object.Destroy(spawned);
-            }
-
-            _spawned.Clear();
-        }
-
         [UnityTest]
         public IEnumerator Nominal()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(Nominal), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
             GameObject nonTest = new("Non-Test", typeof(SimpleMessageAwareComponent));
@@ -310,12 +270,6 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator Lifetime()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             MessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
@@ -327,7 +281,7 @@ namespace DxMessaging.Tests.Runtime.Core
             // One for the untargeted message, one for the targeted without targeting, one for broadcast without source
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             // One for the game object, one for each targeted message type (simple + complex)
-            Assert.AreEqual(3, messageBus.RegisteredTargeted);
+            Assert.AreEqual(4, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             yield return null;
@@ -335,7 +289,7 @@ namespace DxMessaging.Tests.Runtime.Core
             SimpleMessageAwareComponent secondComponent = test.AddComponent<SimpleMessageAwareComponent>();
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
             // One for the game object, one for the first component, one for the second component = 3
-            Assert.AreEqual(4, messageBus.RegisteredTargeted);
+            Assert.AreEqual(6, messageBus.RegisteredTargeted);
             Assert.AreEqual(3, messageBus.RegisteredBroadcast);
 
             secondComponent.enabled = false;
@@ -343,7 +297,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             // 3 - one component (disabled)
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            Assert.AreEqual(3, messageBus.RegisteredTargeted);
+            Assert.AreEqual(4, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             firstComponent.enabled = false;
@@ -373,7 +327,7 @@ namespace DxMessaging.Tests.Runtime.Core
             yield return null;
 
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            Assert.AreEqual(3, messageBus.RegisteredTargeted);
+            Assert.AreEqual(4, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             Object.Destroy(firstComponent);
@@ -387,7 +341,7 @@ namespace DxMessaging.Tests.Runtime.Core
             yield return null;
 
             Assert.AreEqual(3, messageBus.RegisteredUntargeted);
-            Assert.AreEqual(3, messageBus.RegisteredTargeted);
+            Assert.AreEqual(4, messageBus.RegisteredTargeted);
             Assert.AreEqual(2, messageBus.RegisteredBroadcast);
 
             Object.Destroy(test);
@@ -401,12 +355,6 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator NonMessagingObjects()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             MessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
@@ -423,17 +371,12 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(0, messageBus.RegisteredUntargeted);
             Assert.AreEqual(0, messageBus.RegisteredTargeted);
             Assert.AreEqual(0, messageBus.RegisteredBroadcast);
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator DedupedRegistration()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(DedupedRegistration), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -556,12 +499,6 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator Interceptors()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -649,17 +586,13 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
+
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator PostProcessors()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(PostProcessors), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -879,17 +812,13 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
+
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator InstanceId()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(InstanceId), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -930,17 +859,12 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             Assert.IsTrue(caught);
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator GlobalAcceptAll()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(GlobalAcceptAll), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
             SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
@@ -1126,17 +1050,13 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
+
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator InterceptorOrder()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -1231,17 +1151,13 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
+
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator UntargetedRemoveOrder()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -1264,12 +1180,9 @@ namespace DxMessaging.Tests.Runtime.Core
                     ++fastCallCount;
                 }
 
-                Random random = new();
                 SimpleUntargetedMessage message = new();
                 int expectedCallCount = 0;
-                Run(
-                    random,
-                    () => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) },
+                Run(() => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) },
                     () => message.EmitUntargeted(),
                     () =>
                     {
@@ -1286,9 +1199,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 expectedCallCount = 0;
-                Run(
-                    random,
-                    () => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted) },
+                Run(() => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted) },
                     () => message.EmitUntargeted(),
                     () =>
                     {
@@ -1305,9 +1216,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted), token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) };
                     },
@@ -1327,17 +1236,13 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
+
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator TargetedRemoveOrder()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -1360,12 +1265,9 @@ namespace DxMessaging.Tests.Runtime.Core
                     ++fastCallCount;
                 }
 
-                Random random = new();
                 SimpleTargetedMessage message = new();
                 int expectedCallCount = 0;
-                Run(
-                    random,
-                    () => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) },
+                Run(() => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) },
                     () =>
                     {
                         message.EmitComponentTargeted(component);
@@ -1386,9 +1288,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 expectedCallCount = 0;
-                Run(
-                    random,
-                    () => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted) },
+                Run(() => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted) },
                     () =>
                     {
                         message.EmitComponentTargeted(component);
@@ -1409,9 +1309,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) };
                     },
@@ -1430,9 +1328,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) };
                     },
@@ -1451,9 +1347,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted), token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleTargeted) };
                     },
@@ -1477,17 +1371,13 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
+
+            yield break;
         }
 
         [UnityTest]
         public IEnumerator BroadcastRemoveOrder()
         {
-            IEnumerator waitUntilMessageHandlerIsFresh = WaitUntilMessageHandlerIsFresh();
-            while (waitUntilMessageHandlerIsFresh.MoveNext())
-            {
-                yield return waitUntilMessageHandlerIsFresh.Current;
-            }
-
             GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
@@ -1510,12 +1400,9 @@ namespace DxMessaging.Tests.Runtime.Core
                     ++fastCallCount;
                 }
 
-                Random random = new();
                 SimpleBroadcastMessage message = new();
                 int expectedCallCount = 0;
-                Run(
-                    random,
-                    () => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) },
+                Run(() => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) },
                     () =>
                     {
                         message.EmitComponentBroadcast(component);
@@ -1536,9 +1423,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 expectedCallCount = 0;
-                Run(
-                    random,
-                    () => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast) },
+                Run(() => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast) },
                     () =>
                     {
                         message.EmitComponentBroadcast(component);
@@ -1559,9 +1444,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
                     },
@@ -1580,9 +1463,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
                     },
@@ -1601,9 +1482,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 callCount = 0;
                 fastCallCount = 0;
-                Run(
-                    random,
-                    () =>
+                Run(() =>
                     {
                         return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
                     },
@@ -1627,67 +1506,8 @@ namespace DxMessaging.Tests.Runtime.Core
                     token.RemoveRegistration(handle);
                 }
             }
-        }
 
-        private void Run(Random random, Func<IEnumerable<MessageRegistrationHandle>> register, Action emit, Action assert, Action finalAssert, MessageRegistrationToken token, HashSet<MessageRegistrationHandle> handles)
-        {
-            for (int i = 0; i < NumRegistrations; ++i)
-            {
-                foreach (MessageRegistrationHandle handle in register())
-                {
-                    handles.Add(handle);
-                }
-            }
-
-            foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => random.Next()).ToList())
-            {
-                emit();
-                assert();
-                handles.Remove(handle);
-                token.RemoveRegistration(handle);
-            }
-
-            emit();
-            finalAssert();
-            emit();
-            finalAssert();
-        }
-
-        private MessageRegistrationToken GetToken(MessageAwareComponent component)
-        {
-            // Reach inside and grab the token
-            FieldInfo field = typeof(MessageAwareComponent).GetField(
-                "_messageRegistrationToken", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.IsNotNull(field);
-            MessageRegistrationToken token = field.GetValue(component) as MessageRegistrationToken;
-            Assert.IsNotNull(token);
-            return token;
-        }
-
-        private IEnumerator WaitUntilMessageHandlerIsFresh()
-        {
-            Setup();
-            MessageBus messageBus = MessageHandler.MessageBus;
-            Assert.IsNotNull(messageBus);
-
-            Stopwatch timer = Stopwatch.StartNew();
-
-            bool IsStale()
-            {
-                return messageBus.RegisteredUntargeted != 0 || messageBus.RegisteredTargeted != 0 ||
-                       messageBus.RegisteredBroadcast != 0;
-            }
-
-            while (IsStale() && timer.Elapsed < TimeSpan.FromSeconds(2.5))
-            {
-                yield return null;
-            }
-
-            Assert.IsFalse(
-                IsStale(),
-                "MessageHandler had {0} Untargeted registrations, {1} Targeted registrations, {2} Broadcast registrations. Registration log: {3}.",
-                messageBus.RegisteredUntargeted, messageBus.RegisteredTargeted, messageBus.RegisteredBroadcast,
-                messageBus.Log);
+            yield break;
         }
     }
 }

@@ -2,7 +2,7 @@
 {
     using System;
     using DxMessaging.Core;
-    using DxMessaging.Unity;
+    using Unity;
     using Messages;
 
     public sealed class SimpleMessageAwareComponent : MessageAwareComponent
@@ -35,6 +35,7 @@
         public Action broadcastHandler;
         public Action broadcastWithoutSourceHandler;
         public Action componentTargetedHandler;
+        public Action complexComponentTargetedHandler;
         public Action componentBroadcastHandler;
 
         private bool _slowComplexTargetingEnabled = true;
@@ -55,6 +56,7 @@
             _ = _messageRegistrationToken.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(HandleSimpleBroadcastWithoutSourceMessage);
             _ = _messageRegistrationToken.RegisterComponentTargeted<SimpleTargetedMessage>(this, HandleSimpleComponentTargetedMessage);
             _ = _messageRegistrationToken.RegisterComponentBroadcast<SimpleBroadcastMessage>(this, HandleSimpleComponentBroadcastMessage);
+            _ = _messageRegistrationToken.RegisterComponentTargeted<ComplexTargetedMessage>(this, HandleComplexComponentTargetedMessage);
         }
 
         private void ToggleTargetedRegistration()
@@ -123,6 +125,11 @@
         public void HandleSimpleComponentTargetedMessage(ref SimpleTargetedMessage message)
         {
             componentTargetedHandler?.Invoke();
+        }
+
+        public void HandleComplexComponentTargetedMessage(ref ComplexTargetedMessage message)
+        {
+            complexComponentTargetedHandler?.Invoke();
         }
 
         public void HandleSimpleComponentBroadcastMessage(ref SimpleBroadcastMessage message)

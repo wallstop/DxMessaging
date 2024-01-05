@@ -2,48 +2,17 @@
 {
     using System;
     using System.Collections;
-    using System.Collections.Generic;
     using System.Diagnostics;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
-    using DxMessaging.Core.MessageBus;
-    using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
     using UnityEngine;
     using UnityEngine.TestTools;
     using Debug = UnityEngine.Debug;
-    using Object = UnityEngine.Object;
 
-    public sealed class PerformanceTests
+    public sealed class PerformanceTests : TestBase
     {
-        private readonly List<GameObject> _spawned = new();
-
-        [SetUp]
-        public void Setup()
-        {
-            MessagingDebug.LogFunction = null;
-            MessageBus messageBus = MessageHandler.MessageBus;
-            Assert.IsNotNull(messageBus);
-            messageBus.Log.Enabled = false;
-        }
-
-        [TearDown]
-        public void Cleanup()
-        {
-            foreach (GameObject spawned in _spawned)
-            {
-                if (spawned == null)
-                {
-                    continue;
-                }
-
-                Object.Destroy(spawned);
-            }
-
-            _spawned.Clear();
-        }
-
         [UnityTest]
         public IEnumerator BenchmarkTargeted()
         {
@@ -61,12 +30,14 @@
             ComplexTargetedMessage message = new(Guid.NewGuid());
             Stopwatch timer = Stopwatch.StartNew();
             Unity(timer, timeout, target, component, message);
-            Normal(timer, timeout, component, message);
-            NoAlloc(timer, timeout, component, message);
+            NormalGameObject(timer, timeout, component, message);
+            NoAllocGameObject(timer, timeout, component, message);
+
+            NoAllocComponent(timer, timeout, component, message);
             yield break;
         }
 
-        void DisplayCount(string testName, int count, TimeSpan timeout)
+        private void DisplayCount(string testName, int count, TimeSpan timeout)
         {
             Debug.Log($"| {testName} | {Math.Floor(count / timeout.TotalSeconds):N0} |");
         }
@@ -84,40 +55,56 @@
             DisplayCount("Unity", count, timeout);
         }
 
-        private void Normal(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
+        private void NormalGameObject(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
         {
             int count = 0;
             component.slowComplexTargetedHandler = () => ++count;
             component.complexTargetedHandler = null;
             component.SlowComplexTargetingEnabled = true;
             component.FastComplexTargetingEnabled = false;
-            InstanceId target = component.gameObject;
 
             timer.Restart();
             do
             {
-                message.EmitTargeted(target);
+                message.EmitGameObjectTargeted(component.gameObject);
             }
             while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging - Normal", count, timeout);
+            DisplayCount("DxMessaging (GameObject) - Normal", count, timeout);
         }
 
-        private void NoAlloc(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
+        private void NoAllocGameObject(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
         {
             int count = 0;
             component.slowComplexTargetedHandler = null;
             component.complexTargetedHandler = () => ++count;
             component.SlowComplexTargetingEnabled = false;
             component.FastComplexTargetingEnabled = true;
-            InstanceId target = component.gameObject;
 
             timer.Restart();
             do
             {
-                message.EmitTargeted(target);
+                message.EmitGameObjectTargeted(component.gameObject);
             }
             while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging - No-Alloc", count, timeout);
+            DisplayCount("DxMessaging (GameObject) - No-Alloc", count, timeout);
+        }
+
+        private void NoAllocComponent(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
+        {
+            int count = 0;
+            component.slowComplexTargetedHandler = null;
+            component.complexTargetedHandler = null;
+            component.complexComponentTargetedHandler = () => ++count;
+            component.SlowComplexTargetingEnabled = false;
+            component.FastComplexTargetingEnabled = false;
+
+            timer.Restart();
+            do
+            {
+                message.EmitComponentTargeted(component);
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (Component) - No-Alloc", count, timeout);
         }
     }
 }
