@@ -200,6 +200,90 @@
         }
 
         [UnityTest]
+        public IEnumerator GameObjectTargetedWithoutTargeting()
+        {
+            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int lastSeenCount = 0;
+            int count = 0;
+
+            int finalCount = 0;
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            Action assertion;
+
+            void PostProcessor(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
+
+            count = 1;
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+            };
+
+            SimpleTargetedMessage message = new();
+            Run(() => new[] { token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(PostProcessor) },
+                () => message.EmitGameObjectTargeted(test),
+                () =>
+                {
+                    lastSeenCount = count++;
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token);
+
+            ResetCount();
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+                lastSeenCount = count;
+            };
+            Run(() => new[] { token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(PostProcessor), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, _ => ++count) },
+                () => message.EmitGameObjectTargeted(test),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
+            assertion = () =>
+            {
+                ++count;
+            };
+            Run(() => new[] { token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(PostProcessor), token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(PostProcessor) },
+                () => message.EmitGameObjectTargeted(test),
+                () => Assert.AreEqual(++lastSeenCount, count),
+                () => { Assert.AreEqual(lastSeenCount, count); },
+                token,
+                synchronizeDeregistrations: true);
+
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator ComponentTargeted()
         {
             GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
@@ -298,6 +382,92 @@
                     Assert.AreEqual(0, lastSeenCount);
                 },
                 token);
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator ComponentTargetedWithoutTargeting()
+        {
+            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int lastSeenCount = 0;
+            int count = 0;
+
+            int finalCount = 0;
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            Action assertion;
+
+            void PostProcessor(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
+
+            count = 1;
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+            };
+
+            SimpleTargetedMessage message = new();
+            Run(() => new[] { token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(PostProcessor) },
+                () => message.EmitComponentTargeted(component),
+                () =>
+                {
+                    lastSeenCount = count++;
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token);
+
+            ResetCount();
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+                lastSeenCount = count;
+            };
+            Run(() => new[] { token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(PostProcessor), token.RegisterComponentTargeted<SimpleTargetedMessage>(component, _ => ++count) },
+                () => message.EmitComponentTargeted(component),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
+            assertion = () =>
+            {
+                ++count;
+            };
+            Run(() => new[] { token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(PostProcessor), token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(PostProcessor) },
+                () => message.EmitComponentTargeted(component),
+                () => Assert.AreEqual(++lastSeenCount, count),
+                () => { Assert.AreEqual(lastSeenCount, count); },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
 
             yield break;
         }
@@ -406,6 +576,90 @@
         }
 
         [UnityTest]
+        public IEnumerator GameObjectBroadcastWithoutSource()
+        {
+            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int lastSeenCount = 0;
+            int count = 0;
+
+            int finalCount = 0;
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            Action assertion;
+
+            void PostProcessor(ref InstanceId target, ref SimpleBroadcastMessage message)
+            {
+                assertion.Invoke();
+            }
+
+            count = 1;
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+            };
+
+            SimpleBroadcastMessage message = new();
+            Run(() => new[] { token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor) },
+                () => message.EmitGameObjectBroadcast(test),
+                () =>
+                {
+                    lastSeenCount = count++;
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token);
+
+            ResetCount();
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count, "GameObjectBroadcast was not handled!");
+                lastSeenCount = count;
+            };
+            Run(() => new[] { token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, _ => ++count) },
+                () => message.EmitGameObjectBroadcast(test),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count, "GameObjectBroadcast PostProcessor was not run!");
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
+            assertion = () =>
+            {
+                ++count;
+            };
+            Run(() => new[] { token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor), token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor) },
+                () => message.EmitGameObjectBroadcast(test),
+                () => Assert.AreEqual(++lastSeenCount, count, "GameObjectBroadcast PostProcessor was ran twice!"),
+                () => { Assert.AreEqual(lastSeenCount, count, "GameObjectPostProcessor ran without any receivers subscribed!"); },
+                token,
+                synchronizeDeregistrations: true);
+
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator ComponentBroadcast()
         {
             GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
@@ -504,6 +758,90 @@
                     Assert.AreEqual(0, lastSeenCount);
                 },
                 token);
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator ComponentBroadcastWithoutSource()
+        {
+            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int lastSeenCount = 0;
+            int count = 0;
+
+            int finalCount = 0;
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            Action assertion;
+
+            void PostProcessor(ref InstanceId source, ref SimpleBroadcastMessage message)
+            {
+                assertion.Invoke();
+            }
+
+            count = 1;
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+            };
+
+            SimpleBroadcastMessage message = new();
+            Run(() => new[] { token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor) },
+                () => message.EmitComponentBroadcast(component),
+                () =>
+                {
+                    lastSeenCount = count++;
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token);
+
+            ResetCount();
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+                lastSeenCount = count;
+            };
+            Run(() => new[] { token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor), token.RegisterComponentBroadcast<SimpleBroadcastMessage>(component, _ => ++count) },
+                () => message.EmitComponentBroadcast(component),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
+            assertion = () =>
+            {
+                ++count;
+            };
+            Run(() => new[] { token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor), token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(PostProcessor) },
+                () => message.EmitComponentBroadcast(component),
+                () => Assert.AreEqual(++lastSeenCount, count),
+                () => { Assert.AreEqual(lastSeenCount, count); },
+                token,
+                synchronizeDeregistrations: true);
 
             yield break;
         }
