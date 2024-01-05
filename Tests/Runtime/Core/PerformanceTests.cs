@@ -1,120 +1,126 @@
-﻿using System;
-using DxMessaging.Core.MessageBus;
-using DxMessaging.Core;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
-using DxMessaging.Core.Extensions;
-using NUnit.Framework;
-using UnityEngine;
-using UnityEngine.TestTools;
-using Debug = UnityEngine.Debug;
-using Object = UnityEngine.Object;
-using Tests.Runtime.Scripts.Components;
-using Tests.Runtime.Scripts.Messages;
-
-public sealed class PerformanceTests
+﻿namespace DxMessaging.Tests.Runtime.Core
 {
-    private readonly List<GameObject> _spawned = new();
+    using System;
+    using System.Collections;
+    using System.Diagnostics;
+    using DxMessaging.Core.Extensions;
+    using Scripts.Components;
+    using Scripts.Messages;
+    using UnityEngine;
+    using UnityEngine.TestTools;
+    using Debug = UnityEngine.Debug;
 
-    [SetUp]
-    public void Setup()
+    public sealed class PerformanceTests : TestBase
     {
-        MessagingDebug.LogFunction = null;
-        MessageBus messageBus = MessageHandler.MessageBus;
-        Assert.IsNotNull(messageBus);
-        messageBus.Log.Enabled = false;
-    }
-
-    [TearDown]
-    public void Cleanup()
-    {
-        foreach (GameObject spawned in _spawned)
+        [UnityTest]
+        public IEnumerator Benchmark()
         {
-            if (spawned == null)
+            // Add some components in for good measure
+            GameObject target = new(
+                nameof(Benchmark), typeof(SimpleMessageAwareComponent), typeof(SpriteRenderer),
+                typeof(Rigidbody2D), typeof(CircleCollider2D), typeof(LineRenderer));
+            _spawned.Add(target);
+
+            SimpleMessageAwareComponent component = target.GetComponent<SimpleMessageAwareComponent>();
+
+            TimeSpan timeout = TimeSpan.FromSeconds(1);
+            Debug.Log("| Message Tech | Operations / Second |");
+            Debug.Log("| ------------ | ------------------- |");
+
+            ComplexTargetedMessage message = new(Guid.NewGuid());
+            Stopwatch timer = Stopwatch.StartNew();
+            Unity(timer, timeout, target, component, message);
+            NormalGameObject(timer, timeout, component, message);
+            NoAllocGameObject(timer, timeout, component, message);
+            NoAllocComponent(timer, timeout, component, message);
+
+            SimpleUntargetedMessage untargetedMessage = new();
+            NoAllocUntargeted(timer, timeout, component, untargetedMessage);
+            yield break;
+        }
+
+        private void DisplayCount(string testName, int count, TimeSpan timeout)
+        {
+            Debug.Log($"| {testName} | {Math.Floor(count / timeout.TotalSeconds):N0} |");
+        }
+
+        private void Unity(Stopwatch timer, TimeSpan timeout, GameObject target, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
+        {
+            int count = 0;
+            component.slowComplexTargetedHandler = () => ++count;
+            timer.Restart();
+            do
             {
-                continue;
+                target.SendMessage(nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage), message);
             }
-
-            Object.Destroy(spawned);
+            while (timer.Elapsed < timeout);
+            DisplayCount("Unity", count, timeout);
         }
 
-        _spawned.Clear();
-    }
-
-    [UnityTest]
-    public IEnumerator BenchmarkTargeted()
-    {
-        // Add some components in for good measure
-        GameObject target = new(
-            nameof(BenchmarkTargeted), typeof(SimpleMessageAwareComponent), typeof(SpriteRenderer),
-            typeof(Rigidbody2D), typeof(CircleCollider2D));
-
-        SimpleMessageAwareComponent component = target.GetComponent<SimpleMessageAwareComponent>();
-
-        TimeSpan timeout = TimeSpan.FromSeconds(5);
-        Debug.Log("| Message Tech | Operations / Second |");
-        Debug.Log("| ------------ | ------------------- |");
-
-        ComplexTargetedMessage message = new(Guid.NewGuid());
-        Stopwatch timer = Stopwatch.StartNew();
-        Unity(timer, timeout, target, component, message);
-        Normal(timer, timeout, component, message);
-        NoAlloc(timer, timeout, component, message);
-        yield break;
-    }
-
-    void DisplayCount(string testName, int count, TimeSpan timeout)
-    {
-        Debug.Log($"| {testName} | {Math.Floor(count / timeout.TotalSeconds):N0} |");
-    }
-
-    private void Unity(Stopwatch timer, TimeSpan timeout, GameObject target, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
-    {
-        int count = 0;
-        component.slowComplexTargetedHandler = () => ++count;
-        timer.Restart();
-        do
+        private void NormalGameObject(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
         {
-            target.SendMessage(nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage), message);
+            int count = 0;
+            component.slowComplexTargetedHandler = () => ++count;
+            component.complexTargetedHandler = null;
+            component.SlowComplexTargetingEnabled = true;
+            component.FastComplexTargetingEnabled = false;
+
+            timer.Restart();
+            do
+            {
+                message.EmitGameObjectTargeted(component.gameObject);
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (GameObject) - Normal", count, timeout);
         }
-        while (timer.Elapsed < timeout);
-        DisplayCount("Unity", count, timeout);
-    }
 
-    private void Normal(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
-    {
-        int count = 0;
-        component.slowComplexTargetedHandler = () => ++count;
-        component.complexTargetedHandler = null;
-        component.SlowComplexTargetingEnabled = true;
-        component.FastComplexTargetingEnabled = false;
-        InstanceId target = component.gameObject;
-
-        timer.Restart();
-        do
+        private void NoAllocGameObject(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
         {
-            message.EmitTargeted(target);
+            int count = 0;
+            component.slowComplexTargetedHandler = null;
+            component.complexTargetedHandler = () => ++count;
+            component.SlowComplexTargetingEnabled = false;
+            component.FastComplexTargetingEnabled = true;
+
+            timer.Restart();
+            do
+            {
+                message.EmitGameObjectTargeted(component.gameObject);
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (GameObject) - No-Alloc", count, timeout);
         }
-        while (timer.Elapsed < timeout);
-        DisplayCount("DxMessaging - Normal", count, timeout);
-    }
 
-    private void NoAlloc(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
-    {
-        int count = 0;
-        component.slowComplexTargetedHandler = null;
-        component.complexTargetedHandler = () => ++count;
-        component.SlowComplexTargetingEnabled = false;
-        component.FastComplexTargetingEnabled = true;
-        InstanceId target = component.gameObject;
-
-        timer.Restart();
-        do
+        private void NoAllocComponent(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, ComplexTargetedMessage message)
         {
-            message.EmitTargeted(target);
+            int count = 0;
+            component.slowComplexTargetedHandler = null;
+            component.complexTargetedHandler = null;
+            component.complexComponentTargetedHandler = () => ++count;
+            component.SlowComplexTargetingEnabled = false;
+            component.FastComplexTargetingEnabled = false;
+
+            timer.Restart();
+            do
+            {
+                message.EmitComponentTargeted(component);
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (Component) - No-Alloc", count, timeout);
         }
-        while (timer.Elapsed < timeout);
-        DisplayCount("DxMessaging - No-Alloc", count, timeout);
+
+        private void NoAllocUntargeted(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, SimpleUntargetedMessage message)
+        {
+            int count = 0;
+            component.untargetedHandler = () => ++count;
+
+            timer.Restart();
+            do
+            {
+                message.EmitUntargeted();
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (Untargeted) - No-Alloc", count, timeout);
+        }
     }
 }
