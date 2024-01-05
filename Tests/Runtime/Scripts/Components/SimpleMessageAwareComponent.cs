@@ -1,4 +1,4 @@
-﻿namespace Tests.Runtime.Scripts.Components
+﻿namespace DxMessaging.Tests.Runtime.Scripts.Components
 {
     using System;
     using DxMessaging.Core;

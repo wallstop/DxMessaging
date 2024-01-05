@@ -1,4 +1,4 @@
-﻿namespace Tests.Runtime.Scripts.Messages
+﻿namespace DxMessaging.Tests.Runtime.Scripts.Messages
 {
     using System;
     using DxMessaging.Core.Messages;
