@@ -661,7 +661,7 @@
         public Action RegisterSourcedBroadcastPostProcessor<T>(InstanceId source, FastHandler<T> messageHandler, IMessageBus messageBus = null) where T : IBroadcastMessage
         {
             messageBus ??= MessageBus;
-            Action messageBusDeregistration = messageBus.RegisterSourcedBroadcastWithoutSource<T>(this);
+            Action messageBusDeregistration = messageBus.RegisterBroadcastPostProcessor<T>(source, this);
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddBroadcastPostProcessor(source, messageHandler, messageBusDeregistration);
         }

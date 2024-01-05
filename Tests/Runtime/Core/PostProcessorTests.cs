@@ -2,7 +2,6 @@
 {
     using System;
     using System.Collections;
-    using System.Collections.Generic;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using Scripts.Messages;
@@ -40,10 +39,10 @@
                 assertion.Invoke();
             }
 
+            count = 1;
             assertion = () =>
             {
-                Assert.AreEqual(lastSeenCount, count++);
-                lastSeenCount = count;
+                Assert.AreEqual(lastSeenCount + 1, count);
             };
 
             SimpleUntargetedMessage message = new();
@@ -51,12 +50,12 @@
                 () => message.EmitUntargeted(),
                 () =>
                 {
-                    Assert.AreEqual(lastSeenCount, count);
+                    lastSeenCount = count++;
                     finalCount = count;
                 },
                 () =>
                 {
-                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
                     Assert.AreEqual(finalCount, count);
                 }, 
                 token);
@@ -124,10 +123,10 @@
                 assertion.Invoke();
             }
 
+            count = 1;
             assertion = () =>
             {
-                Assert.AreEqual(lastSeenCount, count++);
-                lastSeenCount = count;
+                Assert.AreEqual(lastSeenCount + 1, count);
             };
 
             SimpleTargetedMessage message = new();
@@ -135,12 +134,12 @@
                 () => message.EmitGameObjectTargeted(test),
                 () =>
                 {
-                    Assert.AreEqual(lastSeenCount, count);
+                    lastSeenCount = count++;
                     finalCount = count;
                 },
                 () =>
                 {
-                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
                     Assert.AreEqual(finalCount, count);
                 },
                 token);
@@ -227,10 +226,10 @@
                 assertion.Invoke();
             }
 
+            count = 1;
             assertion = () =>
             {
-                Assert.AreEqual(lastSeenCount, count++);
-                lastSeenCount = count;
+                Assert.AreEqual(lastSeenCount + 1, count);
             };
 
             SimpleTargetedMessage message = new();
@@ -238,12 +237,12 @@
                 () => message.EmitComponentTargeted(component),
                 () =>
                 {
-                    Assert.AreEqual(lastSeenCount, count);
+                    lastSeenCount = count++;
                     finalCount = count;
                 },
                 () =>
                 {
-                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
                     Assert.AreEqual(finalCount, count);
                 },
                 token);
@@ -330,10 +329,10 @@
                 assertion.Invoke();
             }
 
+            count = 1;
             assertion = () =>
             {
-                Assert.AreEqual(lastSeenCount, count++);
-                lastSeenCount = count;
+                Assert.AreEqual(lastSeenCount + 1, count);
             };
 
             SimpleBroadcastMessage message = new();
@@ -341,12 +340,12 @@
                 () => message.EmitGameObjectBroadcast(test),
                 () =>
                 {
-                    Assert.AreEqual(lastSeenCount, count);
+                    lastSeenCount = count++;
                     finalCount = count;
                 },
                 () =>
                 {
-                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
                     Assert.AreEqual(finalCount, count);
                 },
                 token);
@@ -354,14 +353,14 @@
             ResetCount();
             assertion = () =>
             {
-                Assert.AreEqual(lastSeenCount + 1, count);
+                Assert.AreEqual(lastSeenCount + 1, count, "GameObjectBroadcast was not handled!");
                 lastSeenCount = count;
             };
             Run(() => new[] { token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(test, PostProcessor), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, _ => ++count) },
                 () => message.EmitGameObjectBroadcast(test),
                 () =>
                 {
-                    Assert.AreEqual(lastSeenCount, count);
+                    Assert.AreEqual(lastSeenCount, count, "GameObjectBroadcast PostProcessor was not run!");
                     finalCount = count;
                 },
                 () =>
@@ -377,10 +376,10 @@
             {
                 ++count;
             };
-            Run(() => new[] { token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(test, PostProcessor), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, PostProcessor) },
+            Run(() => new[] { token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(test, PostProcessor), token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(test, PostProcessor) },
                 () => message.EmitGameObjectBroadcast(test),
-                () => Assert.AreEqual(++lastSeenCount, count),
-                () => { Assert.AreEqual(lastSeenCount, count); },
+                () => Assert.AreEqual(++lastSeenCount, count, "GameObjectBroadcast PostProcessor was ran twice!"),
+                () => { Assert.AreEqual(lastSeenCount, count, "GameObjectPostProcessor ran without any receivers subscribed!"); },
                 token,
                 synchronizeDeregistrations: true);
 
@@ -433,10 +432,10 @@
                 assertion.Invoke();
             }
 
+            count = 1;
             assertion = () =>
             {
-                Assert.AreEqual(lastSeenCount, count++);
-                lastSeenCount = count;
+                Assert.AreEqual(lastSeenCount + 1, count);
             };
 
             SimpleBroadcastMessage message = new();
@@ -444,12 +443,12 @@
                 () => message.EmitComponentBroadcast(component),
                 () =>
                 {
-                    Assert.AreEqual(lastSeenCount, count);
+                    lastSeenCount = count++;
                     finalCount = count;
                 },
                 () =>
                 {
-                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount - 1, lastSeenCount);
                     Assert.AreEqual(finalCount, count);
                 },
                 token);
@@ -480,7 +479,7 @@
             {
                 ++count;
             };
-            Run(() => new[] { token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(component, PostProcessor), token.RegisterComponentBroadcast<SimpleBroadcastMessage>(component, PostProcessor) },
+            Run(() => new[] { token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(component, PostProcessor), token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(component, PostProcessor) },
                 () => message.EmitComponentBroadcast(component),
                 () => Assert.AreEqual(++lastSeenCount, count),
                 () => { Assert.AreEqual(lastSeenCount, count); },
@@ -492,7 +491,7 @@
             {
                 Assert.Fail("Should never be called, we're emitting the wrong thing");
             };
-            Run(() => new[] { token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(test, PostProcessor) },
+            Run(() => new[] { token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(component, PostProcessor) },
                 () => message.EmitGameObjectBroadcast(test),
                 () =>
                 {
