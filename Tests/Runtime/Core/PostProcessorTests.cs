@@ -46,7 +46,6 @@
                 lastSeenCount = count;
             };
 
-            HashSet<MessageRegistrationHandle> handles = new();
             SimpleUntargetedMessage message = new();
             Run(() => new[]{token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(PostProcessor)},
                 () => message.EmitUntargeted(),
@@ -60,8 +59,7 @@
                     Assert.AreEqual(finalCount, lastSeenCount);
                     Assert.AreEqual(finalCount, count);
                 }, 
-                token, 
-                handles);
+                token);
 
             ResetCount();
             assertion = () =>
@@ -82,7 +80,6 @@
                     Assert.AreEqual(finalCount, count);
                 },
                 token,
-                handles,
                 synchronizeDeregistrations: true);
 
             ResetCount();
@@ -95,7 +92,6 @@
                 () => Assert.AreEqual(++lastSeenCount, count),
                 () => { Assert.AreEqual(lastSeenCount, count);},
                 token,
-                handles,
                 synchronizeDeregistrations: true);
 
             yield break;

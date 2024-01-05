@@ -3,7 +3,6 @@
     using System;
     using System.Collections;
     using System.Diagnostics;
-    using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using Scripts.Components;
     using Scripts.Messages;
@@ -14,12 +13,13 @@
     public sealed class PerformanceTests : TestBase
     {
         [UnityTest]
-        public IEnumerator BenchmarkTargeted()
+        public IEnumerator Benchmark()
         {
             // Add some components in for good measure
             GameObject target = new(
-                nameof(BenchmarkTargeted), typeof(SimpleMessageAwareComponent), typeof(SpriteRenderer),
-                typeof(Rigidbody2D), typeof(CircleCollider2D));
+                nameof(Benchmark), typeof(SimpleMessageAwareComponent), typeof(SpriteRenderer),
+                typeof(Rigidbody2D), typeof(CircleCollider2D), typeof(LineRenderer));
+            _spawned.Add(target);
 
             SimpleMessageAwareComponent component = target.GetComponent<SimpleMessageAwareComponent>();
 
@@ -32,8 +32,10 @@
             Unity(timer, timeout, target, component, message);
             NormalGameObject(timer, timeout, component, message);
             NoAllocGameObject(timer, timeout, component, message);
-
             NoAllocComponent(timer, timeout, component, message);
+
+            SimpleUntargetedMessage untargetedMessage = new();
+            NoAllocUntargeted(timer, timeout, component, untargetedMessage);
             yield break;
         }
 
@@ -105,6 +107,20 @@
             }
             while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (Component) - No-Alloc", count, timeout);
+        }
+
+        private void NoAllocUntargeted(Stopwatch timer, TimeSpan timeout, SimpleMessageAwareComponent component, SimpleUntargetedMessage message)
+        {
+            int count = 0;
+            component.untargetedHandler = () => ++count;
+
+            timer.Restart();
+            do
+            {
+                message.EmitUntargeted();
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (Untargeted) - No-Alloc", count, timeout);
         }
     }
 }

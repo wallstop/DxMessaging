@@ -55,48 +55,59 @@
             return WaitUntilMessageHandlerIsFresh();
         }
 
-        protected void Run(Func<IEnumerable<MessageRegistrationHandle>> register, Action emit, Action assert, Action finalAssert, MessageRegistrationToken token, HashSet<MessageRegistrationHandle> handles, bool synchronizeDeregistrations = false)
+        protected void Run(Func<IEnumerable<MessageRegistrationHandle>> register, Action emit, Action assert, Action finalAssert, MessageRegistrationToken token, bool synchronizeDeregistrations = false)
         {
-            List<List<MessageRegistrationHandle>> indexedRegistrations = new(_numRegistrations);
-            for (int i = 0; i < _numRegistrations; ++i)
+            HashSet<MessageRegistrationHandle> handles = new();
+            try
             {
-                List<MessageRegistrationHandle> registrations = register().ToList();
-                foreach (MessageRegistrationHandle handle in registrations)
+                List<List<MessageRegistrationHandle>> indexedRegistrations = new(_numRegistrations);
+                for (int i = 0; i < _numRegistrations; ++i)
                 {
-                    handles.Add(handle);
+                    List<MessageRegistrationHandle> registrations = register().ToList();
+                    foreach (MessageRegistrationHandle handle in registrations)
+                    {
+                        handles.Add(handle);
+                    }
+
+                    indexedRegistrations.Add(registrations);
                 }
 
-                indexedRegistrations.Add(registrations);
-            }
-
-            if (synchronizeDeregistrations)
-            {
-                foreach (int index in Enumerable.Range(0, indexedRegistrations.Count).OrderBy(_ => _random.Next()))
+                if (synchronizeDeregistrations)
                 {
-                    emit();
-                    assert();
-                    foreach (MessageRegistrationHandle handle in indexedRegistrations[index])
+                    foreach (int index in Enumerable.Range(0, indexedRegistrations.Count).OrderBy(_ => _random.Next()))
                     {
+                        emit();
+                        assert();
+                        foreach (MessageRegistrationHandle handle in indexedRegistrations[index])
+                        {
+                            handles.Remove(handle);
+                            token.RemoveRegistration(handle);
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => _random.Next()).ToList())
+                    {
+                        emit();
+                        assert();
                         handles.Remove(handle);
                         token.RemoveRegistration(handle);
                     }
                 }
+
+                emit();
+                finalAssert();
+                emit();
+                finalAssert();
             }
-            else
+            finally
             {
-                foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => _random.Next()).ToList())
+                foreach (MessageRegistrationHandle handle in handles)
                 {
-                    emit();
-                    assert();
-                    handles.Remove(handle);
                     token.RemoveRegistration(handle);
                 }
             }
-
-            emit();
-            finalAssert();
-            emit();
-            finalAssert();
         }
 
         protected MessageRegistrationToken GetToken(MessageAwareComponent component)
