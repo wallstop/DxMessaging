@@ -96,5 +96,173 @@
 
             yield break;
         }
+
+        [UnityTest]
+        public IEnumerator GameObjectTargeted()
+        {
+            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int lastSeenCount = 0;
+            int count = 0;
+
+            int finalCount = 0;
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            Action assertion;
+
+            void PostProcessor(ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
+
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount, count++);
+                lastSeenCount = count;
+            };
+
+            SimpleTargetedMessage message = new();
+            Run(() => new[] { token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(test, PostProcessor) },
+                () => message.EmitGameObjectTargeted(test),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token);
+
+            ResetCount();
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+                lastSeenCount = count;
+            };
+            Run(() => new[] { token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(test, PostProcessor), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, _ => ++count) },
+                () => message.EmitGameObjectTargeted(test),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
+            assertion = () =>
+            {
+                ++count;
+            };
+            Run(() => new[] { token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(test, PostProcessor), token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(test, PostProcessor) },
+                () => message.EmitGameObjectTargeted(test),
+                () => Assert.AreEqual(++lastSeenCount, count),
+                () => { Assert.AreEqual(lastSeenCount, count); },
+                token,
+                synchronizeDeregistrations: true);
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator ComponentTargeted()
+        {
+            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int lastSeenCount = 0;
+            int count = 0;
+
+            int finalCount = 0;
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            Action assertion;
+
+            void PostProcessor(ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
+
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount, count++);
+                lastSeenCount = count;
+            };
+
+            SimpleTargetedMessage message = new();
+            Run(() => new[] { token.RegisterComponentTargetedPostProcessor<SimpleTargetedMessage>(component, PostProcessor) },
+                () => message.EmitComponentTargeted(component),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token);
+
+            ResetCount();
+            assertion = () =>
+            {
+                Assert.AreEqual(lastSeenCount + 1, count);
+                lastSeenCount = count;
+            };
+            Run(() => new[] { token.RegisterComponentTargetedPostProcessor<SimpleTargetedMessage>(component, PostProcessor), token.RegisterComponentTargeted<SimpleTargetedMessage>(component, _ => ++count) },
+                () => message.EmitComponentTargeted(component),
+                () =>
+                {
+                    Assert.AreEqual(lastSeenCount, count);
+                    finalCount = count;
+                },
+                () =>
+                {
+                    Assert.AreEqual(finalCount, lastSeenCount);
+                    Assert.AreEqual(finalCount, count);
+                },
+                token,
+                synchronizeDeregistrations: true);
+
+            ResetCount();
+            assertion = () =>
+            {
+                ++count;
+            };
+            Run(() => new[] { token.RegisterComponentTargetedPostProcessor<SimpleTargetedMessage>(component, PostProcessor), token.RegisterComponentTargetedPostProcessor<SimpleTargetedMessage>(component, PostProcessor) },
+                () => message.EmitComponentTargeted(component),
+                () => Assert.AreEqual(++lastSeenCount, count),
+                () => { Assert.AreEqual(lastSeenCount, count); },
+                token,
+                synchronizeDeregistrations: true);
+
+            yield break;
+        }
     }
 }
