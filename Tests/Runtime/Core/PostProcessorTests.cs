@@ -10,7 +10,7 @@
     using UnityEngine;
     using UnityEngine.TestTools;
 
-    public sealed class PostProcessorTests : TestBase
+    public sealed class PostProcessorTests : MessagingTestBase
     {
         [UnityTest]
         public IEnumerator Untargeted()

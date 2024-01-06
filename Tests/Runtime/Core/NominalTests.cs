@@ -14,7 +14,7 @@ namespace DxMessaging.Tests.Runtime.Core
     using UnityEngine.TestTools;
     using Object = UnityEngine.Object;
 
-    public sealed class NominalTests : TestBase
+    public sealed class NominalTests : MessagingTestBase
     {
         [UnityTest]
         public IEnumerator Nominal()
@@ -966,10 +966,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 component.enabled = false;
                 int noMatchingCount = 0;
-                Action<string> previousLog = MessagingDebug.LogFunction;
+                Action<LogLevel, string> previousLog = MessagingDebug.LogFunction;
                 try
                 {
-                    MessagingDebug.LogFunction = logMessage =>
+                    MessagingDebug.LogFunction = (level, logMessage) =>
                     {
                         if (logMessage.Contains("matching"))
                         {

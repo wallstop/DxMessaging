@@ -10,7 +10,7 @@
     using UnityEngine.TestTools;
     using Debug = UnityEngine.Debug;
 
-    public sealed class PerformanceTests : TestBase
+    public sealed class PerformanceTests : MessagingTestBase
     {
         [UnityTest]
         public IEnumerator Benchmark()

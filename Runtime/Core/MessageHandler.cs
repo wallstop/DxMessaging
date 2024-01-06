@@ -1363,7 +1363,7 @@
 
                 if (message is not T typedMessage)
                 {
-                    MessagingDebug.Log("Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(T));
+                    MessagingDebug.Log(LogLevel.Error, "Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(T));
                     return;
                 }
 
@@ -1390,7 +1390,7 @@
 
                 if (message is not U typedMessage)
                 {
-                    MessagingDebug.Log("Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
+                    MessagingDebug.Log(LogLevel.Error, "Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
                     return;
                 }
 
@@ -1425,7 +1425,7 @@
 
                 if (message is not U typedMessage)
                 {
-                    MessagingDebug.Log("Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
+                    MessagingDebug.Log(LogLevel.Error, "Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
                     return;
                 }
 

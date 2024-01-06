@@ -1,6 +1,6 @@
 ﻿namespace DxMessaging.Tests.Runtime.Core
 {
-    internal class TargetedTests
+    public sealed class TargetedTests : MessagingTestBase
     {
     }
 }

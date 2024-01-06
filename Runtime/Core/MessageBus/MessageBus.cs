@@ -90,7 +90,7 @@
                 _log.Log(new MessagingRegistration(messageHandler.owner, type, RegistrationType.Deregister, RegistrationMethod.GlobalAcceptAll));
                 if (!_globalSinks.TryGetValue(messageHandler, out count))
                 {
-                    MessagingDebug.Log(
+                    MessagingDebug.Log(LogLevel.Error,
                         "Received over-deregistration of GlobalAcceptAll for MessageHandler {0}. Check to make sure you're not calling (de)registration multiple times.",
                         messageHandler);
                     return;
@@ -204,7 +204,7 @@
                 }
                 else
                 {
-                    MessagingDebug.Log(
+                    MessagingDebug.Log(LogLevel.Error,
                         "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
                         interceptor);
                 }
@@ -222,7 +222,7 @@
 
                     if (!complete)
                     {
-                        MessagingDebug.Log(
+                        MessagingDebug.Log(LogLevel.Error,
                             "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
                             interceptor);
                     }
@@ -287,7 +287,7 @@
 
             if (!foundAnyHandlers)
             {
-                MessagingDebug.Log("Could not find a matching untargeted broadcast handler for Message: {0}.", typedMessage);
+                MessagingDebug.Log(LogLevel.Info, "Could not find a matching untargeted broadcast handler for Message: {0}.", typedMessage);
             }
         }
         
@@ -383,7 +383,7 @@
 
             if (!foundAnyHandlers)
             {
-                MessagingDebug.Log("Could not find a matching targeted broadcast handler for Id: {0}, Message: {1}.", target,
+                MessagingDebug.Log(LogLevel.Info, "Could not find a matching targeted broadcast handler for Id: {0}, Message: {1}.", target,
                     typedMessage);
             }
         }
@@ -480,7 +480,7 @@
 
             if (!foundAnyHandlers)
             {
-                MessagingDebug.Log("Could not find a matching sourced broadcast handler for Id: {0}, Message: {1}.",
+                MessagingDebug.Log(LogLevel.Info, "Could not find a matching sourced broadcast handler for Id: {0}, Message: {1}.",
                     source, typedMessage);
             }
         }
@@ -813,7 +813,7 @@
                 _log.Log(new MessagingRegistration(handlerOwnerId, type, RegistrationType.Deregister, registrationMethod));
                 if (!sinks.TryGetValue(type, out handlers) || !handlers.TryGetValue(messageHandler, out count))
                 {
-                    MessagingDebug.Log(
+                    MessagingDebug.Log(LogLevel.Error,
                         "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
                         type, messageHandler);
                     return;
@@ -830,7 +830,7 @@
 
                     if (!complete || !trulyComplete)
                     {
-                        MessagingDebug.Log(
+                        MessagingDebug.Log(LogLevel.Error,
                             "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
                             type, messageHandler);
                     }
@@ -875,7 +875,7 @@
                 _log.Log(new MessagingRegistration(context, type, RegistrationType.Deregister, registrationMethod));
                 if (!sinks.TryGetValue(type, out broadcastHandlers) || !broadcastHandlers.TryGetValue(context, out handlers) || !handlers.TryGetValue(messageHandler, out count))
                 {
-                    MessagingDebug.Log(
+                    MessagingDebug.Log(LogLevel.Error,
                         "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
                         type, messageHandler);
                     return;
@@ -896,7 +896,7 @@
 
                     if (!complete)
                     {
-                        MessagingDebug.Log(
+                        MessagingDebug.Log(LogLevel.Error,
                             "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
                             type, messageHandler);
                     }

@@ -10,7 +10,7 @@
     using UnityEngine;
     using UnityEngine.TestTools;
 
-    public sealed class BroadcastTests : TestBase
+    public sealed class BroadcastTests : MessagingTestBase
     {
         [UnityTest]
         public IEnumerator SimpleGameObjectBroadcastNormal()
