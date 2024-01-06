@@ -15,7 +15,6 @@
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
     using Random = System.Random;
-    using static UnityEngine.Rendering.VirtualTexturing.Debugging;
 
     public abstract class TestBase
     {

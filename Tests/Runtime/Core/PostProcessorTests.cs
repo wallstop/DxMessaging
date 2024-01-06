@@ -99,7 +99,7 @@
         [UnityTest]
         public IEnumerator GameObjectTargeted()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(GameObjectTargeted), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -202,7 +202,7 @@
         [UnityTest]
         public IEnumerator GameObjectTargetedWithoutTargeting()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(GameObjectTargetedWithoutTargeting), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -286,7 +286,7 @@
         [UnityTest]
         public IEnumerator ComponentTargeted()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(ComponentTargeted), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -389,7 +389,7 @@
         [UnityTest]
         public IEnumerator ComponentTargetedWithoutTargeting()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(ComponentTargetedWithoutTargeting), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -475,7 +475,7 @@
         [UnityTest]
         public IEnumerator GameObjectBroadcast()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(GameObjectBroadcast), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -578,7 +578,7 @@
         [UnityTest]
         public IEnumerator GameObjectBroadcastWithoutSource()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(GameObjectBroadcastWithoutSource), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -662,7 +662,7 @@
         [UnityTest]
         public IEnumerator ComponentBroadcast()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(ComponentBroadcast), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
@@ -765,7 +765,7 @@
         [UnityTest]
         public IEnumerator ComponentBroadcastWithoutSource()
         {
-            GameObject test = new(nameof(Untargeted), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(nameof(ComponentBroadcastWithoutSource), typeof(EmptyMessageAwareComponent));
             _spawned.Add(test);
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
