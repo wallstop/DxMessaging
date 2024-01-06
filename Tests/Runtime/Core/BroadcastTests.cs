@@ -15,9 +15,9 @@
         [UnityTest]
         public IEnumerator SimpleGameObjectBroadcastNormal()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNormal), typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNormal) + "1", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNormal), typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNormal) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
             EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
@@ -40,7 +40,7 @@
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNormal));
+            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNormal) + "3");
             _spawned.Add(test3);
             message.EmitGameObjectBroadcast(test3);
             Assert.AreEqual(1, test1ReceiveCount);
@@ -66,11 +66,11 @@
         }
 
         [UnityTest]
-        public IEnumerator SimpleGameObjectBroadcastNoAlloc()
+        public IEnumerator SimpleGameObjectBroadcastNoCopy()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoCopy) + "1", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoCopy) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
             EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
@@ -102,7 +102,7 @@
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoAlloc));
+            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoCopy) + "3");
             message.EmitGameObjectBroadcast(test3);
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
@@ -129,9 +129,9 @@
         [UnityTest]
         public IEnumerator SimpleGameObjectBroadcastDualMode()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(nameof(SimpleGameObjectBroadcastDualMode) + "1", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(nameof(SimpleGameObjectBroadcastDualMode) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
             EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
@@ -167,7 +167,7 @@
             Assert.AreEqual(2, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoAlloc));
+            GameObject test3 = new(nameof(SimpleGameObjectBroadcastDualMode) + "3");
             _spawned.Add(test3);
             message.EmitGameObjectBroadcast(test3);
             Assert.AreEqual(2, test1ReceiveCount);
@@ -194,9 +194,9 @@
         [UnityTest]
         public IEnumerator SimpleComponentBroadcastNormal()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(nameof(SimpleComponentBroadcastNormal) + "1", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(nameof(SimpleComponentBroadcastNormal) + "3", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
             EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
@@ -219,7 +219,7 @@
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoAlloc));
+            GameObject test3 = new(nameof(SimpleComponentBroadcastNormal) + "3");
             _spawned.Add(test3);
             message.EmitComponentBroadcast(test3.transform);
             Assert.AreEqual(1, test1ReceiveCount);
@@ -245,11 +245,11 @@
         }
 
         [UnityTest]
-        public IEnumerator SimpleComponentBroadcastNoAlloc()
+        public IEnumerator SimpleComponentBroadcastNoCopy()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(nameof(SimpleComponentBroadcastNoCopy) + "1", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(nameof(SimpleComponentBroadcastNoCopy) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
             EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
@@ -281,7 +281,7 @@
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoAlloc));
+            GameObject test3 = new(nameof(SimpleComponentBroadcastNoCopy) + "3");
             _spawned.Add(test3);
             message.EmitComponentBroadcast(test3.transform);
             Assert.AreEqual(1, test1ReceiveCount);
@@ -309,9 +309,9 @@
         [UnityTest]
         public IEnumerator SimpleComponentBroadcastDualMode()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(nameof(SimpleComponentBroadcastDualMode) + "1", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(nameof(SimpleComponentBroadcastDualMode) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
             EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
@@ -344,7 +344,7 @@
             Assert.AreEqual(2, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoAlloc));
+            GameObject test3 = new(nameof(SimpleComponentBroadcastDualMode) + "3");
             _spawned.Add(test3);
             message.EmitComponentBroadcast(test3.transform);
             Assert.AreEqual(2, test1ReceiveCount);
