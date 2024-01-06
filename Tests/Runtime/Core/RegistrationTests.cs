@@ -28,7 +28,7 @@
                 yield return baseEnumerator.Current;
             }
 
-            _test = new(nameof(UntargetedNormal), typeof(EmptyMessageAwareComponent));
+            _test = new(nameof(RegistrationTests), typeof(EmptyMessageAwareComponent));
             _spawned.Add(_test);
             _component = _test.GetComponent<EmptyMessageAwareComponent>();
             _token = GetToken(_component);
