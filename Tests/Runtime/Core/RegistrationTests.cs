@@ -6,6 +6,7 @@
     using System.Linq;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using DxMessaging.Core.Messages;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
@@ -864,34 +865,180 @@
             yield break;
         }
 
+        [UnityTest]
+        public IEnumerator GlobalAcceptAllNormal()
+        {
+            int targetedCount = 0;
+            int broadcastCount = 0;
+            int untargetedCount = 0;
+
+            void HandleUntargeted(IUntargetedMessage message)
+            {
+                ++untargetedCount;
+            }
+
+            void HandleTargeted(InstanceId id, ITargetedMessage message)
+            {
+                ++targetedCount;
+            }
+
+            void HandleBroadcast(InstanceId id, IBroadcastMessage message)
+            {
+                ++broadcastCount;
+            }
+
+            SimpleUntargetedMessage untargetedMessage = new();
+            SimpleTargetedMessage targetedMessage = new();
+            SimpleBroadcastMessage broadcastMessage = new();
+            RunRegistrationTest(
+                token => token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast), i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    Assert.AreEqual(i + 1, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, targetedCount);
+                    Assert.AreEqual(i + 1, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                }, () =>
+                {
+                    untargetedMessage.EmitUntargeted();
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, targetedCount);
+                    Assert.AreEqual(0, broadcastCount);
+                    Assert.AreEqual(0, untargetedCount);
+                }, () =>
+                {
+                    targetedCount = 0;
+                    broadcastCount = 0;
+                    untargetedCount = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator GlobalAcceptAllNoCopy()
+        {
+            int targetedCount = 0;
+            int broadcastCount = 0;
+            int untargetedCount = 0;
+
+            void HandleUntargeted(ref IUntargetedMessage message)
+            {
+                ++untargetedCount;
+            }
+
+            void HandleTargeted(ref InstanceId id, ref ITargetedMessage message)
+            {
+                ++targetedCount;
+            }
+
+            void HandleBroadcast(ref InstanceId id, ref IBroadcastMessage message)
+            {
+                ++broadcastCount;
+            }
+
+            SimpleUntargetedMessage untargetedMessage = new();
+            SimpleTargetedMessage targetedMessage = new();
+            SimpleBroadcastMessage broadcastMessage = new();
+            RunRegistrationTest(
+                token => token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast), i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    Assert.AreEqual(i + 1, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, targetedCount);
+                    Assert.AreEqual(i + 1, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                }, () =>
+                {
+                    untargetedMessage.EmitUntargeted();
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, targetedCount);
+                    Assert.AreEqual(0, broadcastCount);
+                    Assert.AreEqual(0, untargetedCount);
+                }, () =>
+                {
+                    targetedCount = 0;
+                    broadcastCount = 0;
+                    untargetedCount = 0;
+                });
+            yield break;
+        }
+
         private void RunRegistrationTest(Func<MessageRegistrationToken, MessageRegistrationHandle> registration, Action<int> normalAssert, Action<int> removalAssert, Action finalAssert, Action reset)
         {
             HashSet<MessageRegistrationHandle> handles = new(_numRegistrations);
-
-            for (int i = 0; i < _numRegistrations; ++i)
+            try
             {
-                MessageRegistrationHandle handle = registration(_token);
-                bool neverSeen = handles.Add(handle);
-                Assert.IsTrue(neverSeen, "Handle {0} at count {1} was a duplicate.", handle, neverSeen);
+                for (int i = 0; i < _numRegistrations; ++i)
+                {
+                    MessageRegistrationHandle handle = registration(_token);
+                    bool neverSeen = handles.Add(handle);
+                    Assert.IsTrue(neverSeen, "Handle {0} at count {1} was a duplicate.", handle, neverSeen);
+                }
+
+                for (int i = 0; i < 100; ++i)
+                {
+                    normalAssert(i);
+                }
+
+                reset();
+                int expected = 0;
+                foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => _random.Next()).ToList())
+                {
+                    removalAssert(expected++);
+                    handles.Remove(handle);
+                    _token.RemoveRegistration(handle);
+                }
+
+                reset();
+                for (int i = 0; i < 100; ++i)
+                {
+                    finalAssert();
+                }
             }
-
-            for (int i = 0; i < 100; ++i)
+            finally
             {
-                normalAssert(i);
-            }
-
-            reset();
-            int expected = 0;
-            foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => _random.Next()).ToList())
-            {
-                removalAssert(expected++);
-                _token.RemoveRegistration(handle);
-            }
-
-            reset();
-            for (int i = 0; i < 100; ++i)
-            {
-                finalAssert();
+                foreach (MessageRegistrationHandle handle in handles)
+                {
+                    _token.RemoveRegistration(handle);
+                }
             }
         }
     }
