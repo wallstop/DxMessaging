@@ -254,7 +254,6 @@
             yield break;
         }
 
-
         [UnityTest]
         public IEnumerator ComponentTargetedNormal()
         {
@@ -428,6 +427,70 @@
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitGameObjectTargeted(_test);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectTargeted(_test);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator TargetedWithoutTargetingPostProcessorNormal()
+        {
+            int count = 0;
+            void Handle(InstanceId target, SimpleTargetedMessage message)
+            {
+                ++count;
+            }
+
+            SimpleTargetedMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitGameObjectTargeted(_test);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectTargeted(_test);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator TargetedWithoutTargetingPostProcessorNoCopy()
+        {
+            int count = 0;
+            void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
+
+            SimpleTargetedMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(Handle), i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
