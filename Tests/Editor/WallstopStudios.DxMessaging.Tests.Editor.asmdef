@@ -1,6 +1,6 @@
 {
     "name": "WallstopStudios.DxMessaging.Tests.Editor",
-    "rootNamespace": "",
+    "rootNamespace": "DxMessaging.Tests.Editor",
     "references": [
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
