@@ -1,8 +1,9 @@
-﻿namespace DxMessaging.Tests.Runtime.Core
+﻿namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
     using System.Collections;
     using System.Diagnostics;
+    using Core;
     using DxMessaging.Core.Extensions;
     using Scripts.Components;
     using Scripts.Messages;
