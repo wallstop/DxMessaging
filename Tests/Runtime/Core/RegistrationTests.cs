@@ -385,6 +385,70 @@
         }
 
         [UnityTest]
+        public IEnumerator TargetedWithoutTargetingNormal()
+        {
+            int count = 0;
+            void Handle(InstanceId target, SimpleTargetedMessage message)
+            {
+                ++count;
+            }
+
+            SimpleTargetedMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitGameObjectTargeted(_test);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectTargeted(_test);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator TargetedWithoutTargetingNoCopy()
+        {
+            int count = 0;
+            void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
+
+            SimpleTargetedMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitGameObjectTargeted(_test);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectTargeted(_test);
+                    message.EmitComponentTargeted(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator GameObjectBroadcastNormal()
         {
             int count = 0;
@@ -556,6 +620,167 @@
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(_component, Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectBroadcast(_test);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastInterceptor()
+        {
+            int count = 0;
+            bool Intercept(ref InstanceId target, ref SimpleBroadcastMessage message)
+            {
+                ++count;
+                return true;
+            }
+
+            SimpleBroadcastMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(Intercept), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectBroadcast(_test);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourceNormal()
+        {
+            int count = 0;
+            void Handle(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
+
+            SimpleBroadcastMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectBroadcast(_test);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourceNoCopy()
+        {
+            int count = 0;
+            void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
+
+            SimpleBroadcastMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectBroadcast(_test);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourcePostProcessorNormal()
+        {
+            int count = 0;
+            void Handle(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
+
+            SimpleBroadcastMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(Handle), i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                }, i =>
+                {
+                    Assert.AreEqual(i, count);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, count);
+                }, () =>
+                {
+                    message.EmitGameObjectBroadcast(_test);
+                    message.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, count);
+                }, () =>
+                {
+                    count = 0;
+                });
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourcePostProcessorNoCopy()
+        {
+            int count = 0;
+            void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
+
+            SimpleBroadcastMessage message = new();
+            RunRegistrationTest(
+                token => token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(Handle), i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);

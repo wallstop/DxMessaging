@@ -679,6 +679,7 @@
 
             try
             {
+                interceptorKeys.Clear();
                 interceptorKeys.AddRange(interceptors.Keys);
                 foreach (int priority in interceptorKeys)
                 {
