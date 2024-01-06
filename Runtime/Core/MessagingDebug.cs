@@ -3,25 +3,38 @@
     using System;
 
     /// <summary>
+    /// Severity of the log message
+    /// </summary>
+    public enum LogLevel
+    {
+        Debug = 0,
+        Info = 1,
+        Warn = 2,
+        Error = 3,
+    }
+
+    /// <summary>
     /// Debug functionality for all of the Messaging Components.
     /// </summary>
     public static class MessagingDebug
     {
+
         /// <summary>
         /// Custom log function to use.
         /// </summary>
         /// <note>
         /// For Unity, you could do LogFunction = Debug.Log;
         /// </note>
-        public static Action<string> LogFunction = null;
+        public static Action<LogLevel, string> LogFunction = null;
 
         /// <summary>
         /// Logs a message to the debug log function, if it's not null.
         /// </summary>
+        /// <param name="logLevel">Severity of the message.</param>
         /// <param name="message">Message to log.</param>
-        public static void Log(string message)
+        public static void Log(LogLevel logLevel, string message)
         {
-            LogFunction?.Invoke(message);
+            LogFunction?.Invoke(logLevel, message);
         }
 
         /// <summary>
@@ -30,11 +43,12 @@
         /// <note>
         /// Will call string.Format(message, args)
         /// </note>
+        /// <param name="logLevel">Severity of the message.</param>
         /// <param name="message">Format string.</param>
         /// <param name="args">Args to populate format string with.</param>
-        public static void Log(string message, params object[] args)
+        public static void Log(LogLevel logLevel, string message, params object[] args)
         {
-            Action<string> logFunction = LogFunction;
+            Action<LogLevel, string> logFunction = LogFunction;
             /*
                 We can potentially avoid an unnecessary string.Format call if the LogFunction is null,
                 which is why the null check is outside the InternalLog function.
@@ -46,11 +60,11 @@
 
             if (args.Length <= 0)
             {
-                logFunction.Invoke(message);
+                logFunction.Invoke(logLevel, message);
             }
             else
             {
-                logFunction.Invoke(string.Format(message, args));
+                logFunction.Invoke(logLevel, string.Format(message, args));
             }
         }
     }

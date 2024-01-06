@@ -27,7 +27,7 @@
 
             if (_registeredListeners.TryGetValue(listener, out MessageRegistrationToken createdToken))
             {
-                MessagingDebug.Log("Ignoring double RegistrationToken request for {0}.", listener);
+                MessagingDebug.Log(LogLevel.Warn, "Ignoring double RegistrationToken request for {0}.", listener);
                 return createdToken;
             }
 
@@ -37,12 +37,12 @@
                 {
                     active = true
                 };
-                MessagingDebug.Log("Creating MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
+                MessagingDebug.Log(LogLevel.Debug, "Creating MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
                     listener.GetType(), listener.gameObject.name, (InstanceId) gameObject);
             }
             else
             {
-                MessagingDebug.Log(
+                MessagingDebug.Log(LogLevel.Debug,
                     "Using existing MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
                     listener.GetType(), listener.gameObject.name, (InstanceId) gameObject);
             }

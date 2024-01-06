@@ -15,9 +15,8 @@
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
     using Random = System.Random;
-    using static UnityEngine.Rendering.VirtualTexturing.Debugging;
 
-    public abstract class TestBase
+    public abstract class MessagingTestBase
     {
         protected int _numRegistrations;
         protected readonly List<GameObject> _spawned = new();
@@ -26,7 +25,22 @@
         [SetUp]
         public virtual void Setup()
         {
-            MessagingDebug.LogFunction = Debug.Log;
+            MessagingDebug.LogFunction = (level, message) =>
+            {
+                switch (level)
+                {
+                    case LogLevel.Debug:
+                    case LogLevel.Info:
+                        Debug.Log(message);
+                        return;
+                    case LogLevel.Warn:
+                        Debug.LogWarning(message);
+                        return;
+                    case LogLevel.Error:
+                        Debug.LogError(message);
+                        return;
+                }
+            };
             MessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
             messageBus.Log.Enabled = true;

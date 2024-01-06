@@ -13,9 +13,8 @@ namespace DxMessaging.Tests.Runtime.Core
     using UnityEngine;
     using UnityEngine.TestTools;
     using Object = UnityEngine.Object;
-    using Random = System.Random;
 
-    public sealed class NominalTests : TestBase
+    public sealed class NominalTests : MessagingTestBase
     {
         [UnityTest]
         public IEnumerator Nominal()
@@ -967,10 +966,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 component.enabled = false;
                 int noMatchingCount = 0;
-                Action<string> previousLog = MessagingDebug.LogFunction;
+                Action<LogLevel, string> previousLog = MessagingDebug.LogFunction;
                 try
                 {
-                    MessagingDebug.LogFunction = logMessage =>
+                    MessagingDebug.LogFunction = (level, logMessage) =>
                     {
                         if (logMessage.Contains("matching"))
                         {
@@ -1057,7 +1056,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator InterceptorOrder()
         {
-            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            GameObject test = new(nameof(InterceptorOrder), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
             SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
@@ -1158,7 +1157,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator UntargetedRemoveOrder()
         {
-            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            GameObject test = new(nameof(UntargetedRemoveOrder), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
             SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
@@ -1230,7 +1229,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator TargetedRemoveOrder()
         {
-            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            GameObject test = new(nameof(TargetedRemoveOrder), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
             SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();
@@ -1350,7 +1349,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator BroadcastRemoveOrder()
         {
-            GameObject test = new(nameof(Interceptors), typeof(SimpleMessageAwareComponent));
+            GameObject test = new(nameof(BroadcastRemoveOrder), typeof(SimpleMessageAwareComponent));
             _spawned.Add(test);
 
             SimpleMessageAwareComponent component = test.GetComponent<SimpleMessageAwareComponent>();

@@ -1,0 +1,554 @@
+﻿namespace DxMessaging.Tests.Runtime.Core
+{
+    using DxMessaging.Core;
+    using Scripts.Components;
+    using Scripts.Messages;
+    using System.Collections;
+    using DxMessaging.Core.Extensions;
+    using NUnit.Framework;
+    using UnityEngine;
+    using UnityEngine.TestTools;
+
+    public sealed class TargetedTests : MessagingTestBase
+    {
+        [UnityTest]
+        public IEnumerator SimpleGameObjectTargetedNormal()
+        {
+            GameObject test1 = new(nameof(SimpleGameObjectTargetedNormal) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleGameObjectTargetedNormal) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1TargetedCount = 0;
+            int test2TargetedCount = 0;
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterGameObjectTargeted<SimpleTargetedMessage>(test1, _ => ++test1TargetedCount);
+            _ = token2.RegisterGameObjectTargeted<SimpleTargetedMessage>(test2, _ => ++test2TargetedCount);
+
+            SimpleTargetedMessage message = new();
+            message.EmitGameObjectTargeted(test1);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(0, test2TargetedCount);
+
+            message.EmitGameObjectTargeted(test2);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(1, test2TargetedCount);
+
+            GameObject test3 = new(nameof(SimpleGameObjectTargetedNormal) + "3");
+            _spawned.Add(test3);
+            message.EmitGameObjectTargeted(test3);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(1, test2TargetedCount);
+
+            _ = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitGameObjectTargeted(test3);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(1, test2TargetedCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectTargeted(test1);
+                Assert.AreEqual(2 + i, test1TargetedCount);
+                Assert.AreEqual(1 + i, test2TargetedCount);
+
+                message.EmitGameObjectTargeted(test2);
+                Assert.AreEqual(2 + i, test1TargetedCount);
+                Assert.AreEqual(2 + i, test2TargetedCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleGameObjectTargetedNoCopy()
+        {
+            GameObject test1 = new(nameof(SimpleGameObjectTargetedNoCopy) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleGameObjectTargetedNoCopy) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1TargetedCount = 0;
+            void Test1Receive(ref SimpleTargetedMessage message)
+            {
+                ++test1TargetedCount;
+            }
+
+            int test2TargetedCount = 0;
+            void Test2Receive(ref SimpleTargetedMessage message)
+            {
+                ++test2TargetedCount;
+            }
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterGameObjectTargeted<SimpleTargetedMessage>(test1, Test1Receive);
+            _ = token2.RegisterGameObjectTargeted<SimpleTargetedMessage>(test2, Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitGameObjectTargeted(test1);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(0, test2TargetedCount);
+
+            message.EmitGameObjectTargeted(test2);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(1, test2TargetedCount);
+
+            GameObject test3 = new(nameof(SimpleGameObjectTargetedNoCopy) + "3");
+            message.EmitGameObjectTargeted(test3);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(1, test2TargetedCount);
+
+            _ = test3.AddComponent<EmptyMessageAwareComponent>();
+            _spawned.Add(test3);
+            message.EmitGameObjectTargeted(test3);
+            Assert.AreEqual(1, test1TargetedCount);
+            Assert.AreEqual(1, test2TargetedCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectTargeted(test1);
+                Assert.AreEqual(2 + i, test1TargetedCount);
+                Assert.AreEqual(1 + i, test2TargetedCount);
+
+                message.EmitGameObjectTargeted(test2);
+                Assert.AreEqual(2 + i, test1TargetedCount);
+                Assert.AreEqual(2 + i, test2TargetedCount);
+            }
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleGameObjectTargetedDualMode()
+        {
+            GameObject test1 = new(nameof(SimpleGameObjectTargetedDualMode) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleGameObjectTargetedDualMode) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            void Test1Receive(ref SimpleTargetedMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            int test2ReceiveCount = 0;
+            void Test2Receive(ref SimpleTargetedMessage message)
+            {
+                ++test2ReceiveCount;
+            }
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterGameObjectTargeted<SimpleTargetedMessage>(test1, Test1Receive);
+            _ = token1.RegisterGameObjectTargeted<SimpleTargetedMessage>(test1, _ => ++test1ReceiveCount);
+            _ = token2.RegisterGameObjectTargeted<SimpleTargetedMessage>(test2, Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitGameObjectTargeted(test1);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(0, test2ReceiveCount);
+
+            message.EmitGameObjectTargeted(test2);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleGameObjectTargetedDualMode) + "3");
+            _spawned.Add(test3);
+            message.EmitGameObjectTargeted(test3);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            _ = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitGameObjectTargeted(test3);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectTargeted(test1);
+                Assert.AreEqual(2 + (1 + i) * 2, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitGameObjectTargeted(test2);
+                Assert.AreEqual(2 + (1 + i) * 2, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleComponentTargetedNormal()
+        {
+            GameObject test1 = new(nameof(SimpleComponentTargetedNormal) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleComponentTargetedNormal) + "3", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            int test2ReceiveCount = 0;
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterComponentTargeted<SimpleTargetedMessage>(component1, _ => ++test1ReceiveCount);
+            _ = token2.RegisterComponentTargeted<SimpleTargetedMessage>(component2, _ => ++test2ReceiveCount);
+
+            SimpleTargetedMessage message = new();
+            message.EmitComponentTargeted(component1);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(0, test2ReceiveCount);
+
+            message.EmitComponentTargeted(component2);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleComponentTargetedNormal) + "3");
+            _spawned.Add(test3);
+            message.EmitComponentTargeted(test3.transform);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentTargeted(component3);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitComponentTargeted(component1);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitComponentTargeted(component2);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleComponentTargetedNoCopy()
+        {
+            GameObject test1 = new(nameof(SimpleComponentTargetedNoCopy) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleComponentTargetedNoCopy) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            void Test1Receive(ref SimpleTargetedMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            int test2ReceiveCount = 0;
+            void Test2Receive(ref SimpleTargetedMessage message)
+            {
+                ++test2ReceiveCount;
+            }
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterComponentTargeted<SimpleTargetedMessage>(component1, Test1Receive);
+            _ = token2.RegisterComponentTargeted<SimpleTargetedMessage>(component2, Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitComponentTargeted(component1);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(0, test2ReceiveCount);
+
+            message.EmitComponentTargeted(component2);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleComponentTargetedNoCopy) + "3");
+            _spawned.Add(test3);
+            message.EmitComponentTargeted(test3.transform);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentTargeted(component3);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitComponentTargeted(component1);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitComponentTargeted(component2);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleComponentTargetedDualMode()
+        {
+            GameObject test1 = new(nameof(SimpleComponentTargetedDualMode) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleComponentTargetedDualMode) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            void Test1Receive(ref SimpleTargetedMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            int test2ReceiveCount = 0;
+            void Test2Receive(ref SimpleTargetedMessage message)
+            {
+                ++test2ReceiveCount;
+            }
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterComponentTargeted<SimpleTargetedMessage>(component1, Test1Receive);
+            _ = token1.RegisterComponentTargeted<SimpleTargetedMessage>(component1, _ => ++test1ReceiveCount);
+            _ = token2.RegisterComponentTargeted<SimpleTargetedMessage>(component2, Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitComponentTargeted(component1);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(0, test2ReceiveCount);
+
+            message.EmitComponentTargeted(component2);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleComponentTargetedDualMode) + "3");
+            _spawned.Add(test3);
+            message.EmitComponentTargeted(test3.transform);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentTargeted(component3);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitComponentTargeted(component1);
+                Assert.AreEqual(2 + (i + 1) * 2, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitComponentTargeted(component2);
+                Assert.AreEqual(2 + (i + 1) * 2, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleTargetedWithoutTargetingNormal()
+        {
+            GameObject test1 = new(nameof(SimpleTargetedWithoutTargetingNormal) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleTargetedWithoutTargetingNormal) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            void Test1Receive(InstanceId id, SimpleTargetedMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            int test2ReceiveCount = 0;
+            void Test2Receive(InstanceId id, SimpleTargetedMessage message)
+            {
+                ++test2ReceiveCount;
+            }
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Test1Receive);
+            _ = token2.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitComponentTargeted(component1);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            message.EmitComponentTargeted(component2);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(2, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleTargetedWithoutTargetingNormal) + "3");
+            _spawned.Add(test3);
+            message.EmitComponentTargeted(test3.transform);
+            Assert.AreEqual(3, test1ReceiveCount);
+            Assert.AreEqual(3, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentTargeted(component3);
+            Assert.AreEqual(4, test1ReceiveCount);
+            Assert.AreEqual(4, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectTargeted(test1);
+                Assert.AreEqual(5 + (i * 2), test1ReceiveCount);
+                Assert.AreEqual(5 + (i * 2), test2ReceiveCount);
+
+                message.EmitComponentTargeted(component2);
+                Assert.AreEqual(4 + ((i + 1) * 2), test1ReceiveCount);
+                Assert.AreEqual(4 + ((i + 1) * 2), test2ReceiveCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleTargetedWithoutTargetingNoCopy()
+        {
+            GameObject test1 = new(nameof(SimpleTargetedWithoutTargetingNoCopy) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleTargetedWithoutTargetingNoCopy) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            void Test1Receive(ref InstanceId id, ref SimpleTargetedMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            int test2ReceiveCount = 0;
+            void Test2Receive(ref InstanceId id, ref SimpleTargetedMessage message)
+            {
+                ++test2ReceiveCount;
+            }
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Test1Receive);
+            _ = token2.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitComponentTargeted(component1);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            message.EmitComponentTargeted(component2);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(2, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleTargetedWithoutTargetingNoCopy) + "3");
+            _spawned.Add(test3);
+            message.EmitComponentTargeted(test3.transform);
+            Assert.AreEqual(3, test1ReceiveCount);
+            Assert.AreEqual(3, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentTargeted(component3);
+            Assert.AreEqual(4, test1ReceiveCount);
+            Assert.AreEqual(4, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectTargeted(test1);
+                Assert.AreEqual(5 + (i * 2), test1ReceiveCount);
+                Assert.AreEqual(5 + (i * 2), test2ReceiveCount);
+
+                message.EmitComponentTargeted(component2);
+                Assert.AreEqual(4 + ((i + 1) * 2), test1ReceiveCount);
+                Assert.AreEqual(4 + ((i + 1) * 2), test2ReceiveCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleTargetedWithoutTargetingDualMode()
+        {
+            GameObject test1 = new(nameof(SimpleTargetedWithoutTargetingDualMode) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleTargetedWithoutTargetingDualMode) + "2", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            void Test1Receive(ref InstanceId id, ref SimpleTargetedMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            int test2ReceiveCount = 0;
+            void Test2Receive(InstanceId id, SimpleTargetedMessage message)
+            {
+                ++test2ReceiveCount;
+            }
+
+            // Assign them to the same token for simplicity
+            MessageRegistrationToken token1 = GetToken(component1);
+
+            _ = token1.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Test1Receive);
+            _ = token1.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Test2Receive);
+
+            SimpleTargetedMessage message = new();
+            message.EmitComponentTargeted(component1);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            message.EmitComponentTargeted(component2);
+            Assert.AreEqual(2, test1ReceiveCount);
+            Assert.AreEqual(2, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleTargetedWithoutTargetingDualMode) + "3");
+            _spawned.Add(test3);
+            message.EmitComponentTargeted(test3.transform);
+            Assert.AreEqual(3, test1ReceiveCount);
+            Assert.AreEqual(3, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentTargeted(component3);
+            Assert.AreEqual(4, test1ReceiveCount);
+            Assert.AreEqual(4, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectTargeted(test1);
+                Assert.AreEqual(5 + (i * 2), test1ReceiveCount);
+                Assert.AreEqual(5 + (i * 2), test2ReceiveCount);
+
+                message.EmitComponentTargeted(component2);
+                Assert.AreEqual(4 + ((i + 1) * 2), test1ReceiveCount);
+                Assert.AreEqual(4 + ((i + 1) * 2), test2ReceiveCount);
+            }
+
+            yield break;
+        }
+    }
+}
