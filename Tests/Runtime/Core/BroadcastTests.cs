@@ -28,11 +28,8 @@
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
 
-            HashSet<MessageRegistrationHandle> handles = new();
-            var handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, _ => ++test1ReceiveCount);
-            _ = handles.Add(handle);
-            handle = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test2, _ => ++test2ReceiveCount);
-            _ = handles.Add(handle);
+            _ = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, _ => ++test1ReceiveCount);
+            _ = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test2, _ => ++test2ReceiveCount);
 
             SimpleBroadcastMessage message = new();
             message.EmitGameObjectBroadcast(test1);
@@ -53,6 +50,18 @@
             message.EmitGameObjectBroadcast(test3);
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectBroadcast(test1);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitGameObjectBroadcast(test2);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+
             yield break;
         }
 
@@ -81,11 +90,8 @@
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
 
-            HashSet<MessageRegistrationHandle> handles = new();
-            var handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, Test1Receive);
-            _ = handles.Add(handle);
-            handle = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test2, Test2Receive);
-            _ = handles.Add(handle);
+            _ = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, Test1Receive);
+            _ = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test2, Test2Receive);
 
             SimpleBroadcastMessage message = new();
             message.EmitGameObjectBroadcast(test1);
@@ -106,6 +112,17 @@
             message.EmitGameObjectBroadcast(test3);
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectBroadcast(test1);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitGameObjectBroadcast(test2);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
             yield break;
         }
 
@@ -160,6 +177,82 @@
             message.EmitGameObjectBroadcast(test3);
             Assert.AreEqual(2, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitGameObjectBroadcast(test1);
+                Assert.AreEqual(2 + (1 + i) * 2, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitGameObjectBroadcast(test2);
+                Assert.AreEqual(2 + (1 + i) * 2, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleComponentBroadcastNormal()
+        {
+            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test1);
+            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoAlloc), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test2);
+            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+
+            int test1ReceiveCount = 0;
+            int test2ReceiveCount = 0;
+
+            MessageRegistrationToken token1 = GetToken(component1);
+            MessageRegistrationToken token2 = GetToken(component2);
+
+            _ = token1.RegisterComponentBroadcast<SimpleBroadcastMessage>(component1, _ => ++test1ReceiveCount);
+            _ = token2.RegisterComponentBroadcast<SimpleBroadcastMessage>(component2, _ => ++test2ReceiveCount);
+
+            SimpleBroadcastMessage message = new();
+            message.EmitComponentBroadcast(component1);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(0, test2ReceiveCount);
+
+            message.EmitComponentBroadcast(component2);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            GameObject test3 = new(nameof(SimpleGameObjectBroadcastNoAlloc));
+            _spawned.Add(test3);
+            message.EmitComponentBroadcast(test3.transform);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            message.EmitComponentBroadcast(component3);
+            Assert.AreEqual(1, test1ReceiveCount);
+            Assert.AreEqual(1, test2ReceiveCount);
+
+            for (int i = 0; i < 100; ++i)
+            {
+                message.EmitComponentBroadcast(component1);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(1 + i, test2ReceiveCount);
+
+                message.EmitComponentBroadcast(component2);
+                Assert.AreEqual(2 + i, test1ReceiveCount);
+                Assert.AreEqual(2 + i, test2ReceiveCount);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleComponentBroadcastNoAlloc()
+        {
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleComponentBroadcastDualMode()
+        {
             yield break;
         }
     }
