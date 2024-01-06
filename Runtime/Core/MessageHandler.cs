@@ -4,6 +4,7 @@
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Runtime.CompilerServices;
     using Messages;
 
     /// <summary>
@@ -1361,11 +1362,7 @@
                     return;
                 }
 
-                if (message is not T typedMessage)
-                {
-                    MessagingDebug.Log(LogLevel.Error, "Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(T));
-                    return;
-                }
+                ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
                 List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(ref FastHandlersStack, fastHandlers.Keys);
                 try
@@ -1388,11 +1385,7 @@
                     return;
                 }
 
-                if (message is not U typedMessage)
-                {
-                    MessagingDebug.Log(LogLevel.Error, "Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
-                    return;
-                }
+                ref U typedMessage = ref Unsafe.As<TMessage, U>(ref message);
 
                 List<FastHandler<U>> handlers = GetOrAddNewHandlerStack(ref stack, fastHandlers.Keys);
                 try
@@ -1423,11 +1416,7 @@
                     return;
                 }
 
-                if (message is not U typedMessage)
-                {
-                    MessagingDebug.Log(LogLevel.Error, "Message {0} of type {1} was not of the expected type {2}.", message, message?.GetType(), typeof(U));
-                    return;
-                }
+                ref U typedMessage = ref Unsafe.As<TMessage, U>(ref message);
 
                 List<FastHandlerWithContext<U>> handlers = GetOrAddNewHandlerStack(ref stack, fastHandlers.Keys);
                 try
@@ -1463,10 +1452,7 @@
                 List<Action<T>> typedHandlers = GetOrAddNewHandlerStack(ref HandlersStack, handlers.Keys);
                 try
                 {
-                    if (message is not T typedMessage)
-                    {
-                        return;
-                    }
+                    ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
                     foreach (Action<T> handler in typedHandlers)
                     {
@@ -1489,10 +1475,7 @@
                 List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(ref HandlersWithoutContextStack, handlers.Keys);
                 try
                 {
-                    if (message is not T typedMessage)
-                    {
-                        return;
-                    }
+                    ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
                     foreach (Action<InstanceId, T> handler in typedHandlers)
                     {
