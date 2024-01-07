@@ -36,6 +36,7 @@
 
             RunTest(component => Unity(timer, timeout, component.gameObject, message));
             RunTest(component => NormalGameObject(timer, timeout, component, message));
+            RunTest(component => NormalComponent(timer, timeout, component, message));
             RunTest(component => NoCopyGameObject(timer, timeout, component, message));
             RunTest(component => NoCopyComponent(timer, timeout, component, message));
             
@@ -106,6 +107,26 @@
             }
             while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (GameObject) - Normal", count, timeout);
+        }
+
+        private void NormalComponent(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, ComplexTargetedMessage message)
+        {
+            int count = 0;
+            var token = GetToken(component);
+
+            void Handle(ComplexTargetedMessage _)
+            {
+                ++count;
+            }
+
+            token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
+            timer.Restart();
+            do
+            {
+                message.EmitComponentTargeted(component);
+            }
+            while (timer.Elapsed < timeout);
+            DisplayCount("DxMessaging (Component) - Normal", count, timeout);
         }
 
         private void NoCopyGameObject(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, ComplexTargetedMessage message)
