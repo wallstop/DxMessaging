@@ -3,6 +3,7 @@
     using System.Collections;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using DxMessaging.Core.Messages;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
@@ -112,6 +113,35 @@
                 Assert.AreEqual(i, count2);
                 message.EmitUntargeted();
             }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator UntargetedUntyped()
+        {
+            GameObject test = new(nameof(UntargetedUntyped) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            int count = 0;
+            void Receive(ref SimpleUntargetedMessage message)
+            {
+                ++count;
+            }
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            token.RegisterUntargeted<SimpleUntargetedMessage>(Receive);
+
+            IUntargetedMessage message = new SimpleUntargetedMessage();
+            message.EmitUntargeted();
+            Assert.AreEqual(1, count);
+            message.EmitUntargeted();
+            Assert.AreEqual(2, count);
+            message.EmitUntargeted();
+            Assert.AreEqual(3, count);
+            message.EmitUntargeted();
+            Assert.AreEqual(4, count);
 
             yield break;
         }

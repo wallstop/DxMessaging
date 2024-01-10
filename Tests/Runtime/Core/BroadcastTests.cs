@@ -4,6 +4,7 @@
     using System.Collections.Generic;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using DxMessaging.Core.Messages;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
@@ -551,6 +552,47 @@
                 Assert.AreEqual(4 + ((i + 1) * 2), test1ReceiveCount);
                 Assert.AreEqual(4 + ((i + 1) * 2), test2ReceiveCount);
             }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastUntyped()
+        {
+            GameObject test = new(nameof(BroadcastUntyped) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            int gameObjectCount = 0;
+            int componentCount = 0;
+
+            void ReceiveGameObject(ref SimpleBroadcastMessage message)
+            {
+                ++gameObjectCount;
+            }
+
+            void ReceiveComponent(ref SimpleBroadcastMessage message)
+            {
+                ++componentCount;
+            }
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, ReceiveGameObject);
+            token.RegisterComponentBroadcast<SimpleBroadcastMessage>(component, ReceiveComponent);
+
+            IBroadcastMessage message = new SimpleBroadcastMessage();
+            message.EmitComponentBroadcast(component);
+            Assert.AreEqual(1, componentCount);
+            Assert.AreEqual(0, gameObjectCount);
+            message.EmitGameObjectBroadcast(test);
+            Assert.AreEqual(1, componentCount);
+            Assert.AreEqual(1, gameObjectCount);
+            message.EmitComponentBroadcast(component);
+            Assert.AreEqual(2, componentCount);
+            Assert.AreEqual(1, gameObjectCount);
+            message.EmitGameObjectBroadcast(test);
+            Assert.AreEqual(2, componentCount);
+            Assert.AreEqual(2, gameObjectCount);
 
             yield break;
         }

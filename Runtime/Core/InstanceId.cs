@@ -1,6 +1,7 @@
 ﻿namespace DxMessaging.Core
 {
     using System;
+    using System.Runtime.CompilerServices;
     using System.Runtime.Serialization;
 
     /// <summary>
@@ -33,6 +34,7 @@
             Object = @object;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator InstanceId(UnityEngine.GameObject gameObject)
         {
             if (gameObject == null)
@@ -43,6 +45,7 @@
             return new InstanceId(gameObject);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator InstanceId(UnityEngine.Component component)
         {
             if (component == null)
@@ -54,6 +57,7 @@
         }
 #endif
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int CompareTo(object rhs)
         {
             if (rhs is InstanceId other)
@@ -63,16 +67,19 @@
             return -1;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(InstanceId other)
         {
             return _id == other._id;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool Equals(object other)
         {
             return other is InstanceId id && Equals(id);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override int GetHashCode()
         {
             return _id;
@@ -89,16 +96,19 @@
 #endif
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(InstanceId lhs, InstanceId rhs)
         {
             return lhs.Equals(rhs);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(InstanceId lhs, InstanceId rhs)
         {
             return !(lhs == rhs);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int CompareTo(InstanceId other)
         {
             return _id.CompareTo(other._id);

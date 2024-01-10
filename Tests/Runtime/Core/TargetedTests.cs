@@ -8,6 +8,7 @@
     using NUnit.Framework;
     using UnityEngine;
     using UnityEngine.TestTools;
+    using DxMessaging.Core.Messages;
 
     public sealed class TargetedTests : MessagingTestBase
     {
@@ -547,6 +548,47 @@
                 Assert.AreEqual(4 + ((i + 1) * 2), test1ReceiveCount);
                 Assert.AreEqual(4 + ((i + 1) * 2), test2ReceiveCount);
             }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator TargetedUntyped()
+        {
+            GameObject test = new(nameof(TargetedUntyped) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            int gameObjectCount = 0;
+            int componentCount = 0;
+
+            void ReceiveGameObject(ref SimpleTargetedMessage message)
+            {
+                ++gameObjectCount;
+            }
+
+            void ReceiveComponent(ref SimpleTargetedMessage message)
+            {
+                ++componentCount;
+            }
+
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, ReceiveGameObject);
+            token.RegisterComponentTargeted<SimpleTargetedMessage>(component, ReceiveComponent);
+
+            ITargetedMessage message = new SimpleTargetedMessage();
+            message.EmitComponentTargeted(component);
+            Assert.AreEqual(1, componentCount);
+            Assert.AreEqual(0, gameObjectCount);
+            message.EmitGameObjectTargeted(test);
+            Assert.AreEqual(1, componentCount);
+            Assert.AreEqual(1, gameObjectCount);
+            message.EmitComponentTargeted(component);
+            Assert.AreEqual(2, componentCount);
+            Assert.AreEqual(1, gameObjectCount);
+            message.EmitGameObjectTargeted(test);
+            Assert.AreEqual(2, componentCount);
+            Assert.AreEqual(2, gameObjectCount);
 
             yield break;
         }
