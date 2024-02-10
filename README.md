@@ -59,7 +59,7 @@ public sealed class SimpleMessageAwareComponent : MessageAwareComponent
     {
         _ = _messageRegistrationToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(gameObject, HandleSimpleTargetedMessage);
     }
-
+-
     private void HandleSimpleTargetedMessage(ref SimpleTargetedMessage message)
     {
         Debug.Log("Received SimpleTargetedMessage.");
