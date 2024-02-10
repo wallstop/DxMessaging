@@ -3,6 +3,9 @@
     "version": "1.0.0-rc7",
     "displayName": "DxMessaging",
     "description": "Synchronous Event Bus for Unity",
+    "dependencies": {
+        "com.unity.collections": "1.0.0"
+    },
     "unity": "2022.1",
     "keywords": [
         "messaging",
