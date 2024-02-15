@@ -1,6 +1,15 @@
 # DxMessaging
 Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly geared towards Unity and XNA/Monogame. See [this recorded talk](https://fathom.video/share/qjs8pn1MAwGb-yTAaW5WpZWdjzxcdwFR).
 
+# To Install as Unity Package
+1. Open Unity Package Manager
+2. Open the Advanced Package Settings
+3. Add an entry for a new "Scoped Registry"
+    - Name: `NPM`
+    - URL: `https://registry.npm.js.org`
+    - Scope(s): `com.wallstop-studios.dxmessaging` *and* `com.wallstop-studios.unity-helpers`
+4. Resolve the latest `DxMessaging`
+
 # Benchmarks
 DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Core/PerformanceTests.cs).
 | Message Tech | Operations / Second |
