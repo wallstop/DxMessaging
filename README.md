@@ -6,7 +6,7 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 2. Open the Advanced Package Settings
 3. Add an entry for a new "Scoped Registry"
     - Name: `NPM`
-    - URL: `https://registry.npm.js.org`
+    - URL: `https://registry.npmjs.org`
     - Scope(s): `com.wallstop-studios.dxmessaging` *and* `com.wallstop-studios.unity-helpers`
 4. Resolve the latest `DxMessaging`
 
