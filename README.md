@@ -113,9 +113,6 @@ Note: Message listeners can be one of two forms:
 2. `void Listener(SimpleTargetedMessage) {}`
 
 Form one causes a copy to happen. Form two is copy-free. This distinction matters only when your messages are value types (structs). Please note that the behavior of the system is undefined if you update what the message is pointing to while using the `ref` concept.
-
-Note: There are many *ways* to register for messages. These are covered in [MessageRegistrationToken Functions](#messageregistrationtoken-functions).
-
 ```csharp
 public sealed class MyCoolMessageReceiver : MessageAwareComponent
 {
