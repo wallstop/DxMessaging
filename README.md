@@ -277,6 +277,12 @@ DxMessaging provides hooks for listeners to register a `GlobalAcceptAll`, where 
 GlobalAcceptAll requires registration of listener functions for all three message types.
 
 Note: GlobalAcceptAll listeners are ran before the normal listener and PostProcessing loop.
+### Have a Debug insight into buggy registrations
+You can bind the `MessagingDebug.Log` function to a custom logging function (likely Debug.Log) to get any error messages from the messaging system that indicate something has gone wrong.
+### Have an insight into registrations and deregistrations
+DxMessaging provides a registration log that is turned off by default. This registration log can be turned on by referencing `MessageBus.RegistrationLog` and setting `Enabled=true`. You can then programatically dump/filter events.
+### Segment your message space
+By default, DxMessaging uses an implicit global message bus. But you can create as many MessageBuses as you like, if you want to segment your game space. Each registration and emission function is overloaded for the users to specify a message bus to send or listen for messages on. If the message bus is null, the global bus is used.
 ## Message Emission Extension Functions
 Message emission is relatively simple. Since the point of the framework is to decouple senders and receivers, the APIs are verbose to prevent bugs. Since it's possible to listen to and for messages involving either Components or GameObjects, my philosophy is that I'd rather have longer lines of code that are more descriptive ("I'm listening to this *Component* for this message) than accidentally have an incorrect coupling ("I sent this message to a Component when I meant to send it to a GameObject").
 
@@ -295,4 +301,7 @@ This is the Unity-agnostic way of emitting BroadcastMessages. Unity users can us
 Send a BroadcastMessage from a particular GameObject. Only listeners that are registered via `RegisterGameObjectBroadcast` will be called. GameObject cannot be null.
 ### `EmitComponentBroadcast`
 Send a BroadcastMessage from a particular Component. Only listeners that are registered via `RegisterComponentBroadcast` will be called. Component cannot be null.
-## MessageRegistrationToken Functions
+## MessageRegistrationToken
+The MessageRegistrationToken is used to automatically track the lifecycle of listeners as well as provide integration with the messaging system. This is the class that you will be interacting with the most in user code to register listeners. If you're using Unity, one is provided as a usable member variable named `_messageRegistrationToken` in the base class MessageAwareComponent.
+
+Each of the registration functions corresponds to one of the concepts linked above. They are heavily doc-commented and should be mostly self-explanatory.
