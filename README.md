@@ -227,6 +227,49 @@ BroadcastMessages are one of the most commonly used types of messages in the gam
 Note: BroadcastMessages can be sent from either GameObjects or Components. If sent from a GameObject, all listeners that have registered for events from that GameObject via `RegisterGameObjectBroadcast` will be invoked. If sent from a Component, only listeners that have explicitly listened to that Component will be invoked. Recommendation is to use `GameObjectBroadcast` unless you absolutely require receivers to differentiate between callers. `ComponentBroadcast` requires knowledge of the specific Component that is sending the message, requiring tighter coupling than just knowing about a GameObject.
 
 Note: BroadcastMessages can be received as if they were UntargetedMessages. To do so, register a listener with the signature `void HandleSimpleBroadcastMessageWithoutSource(ref InstanceId source, ref SimpleBroadcastMessage message) {}`. This listener will receive all messages of this type along with the source that the message is from. Unify users can get the GameObject or Component the message is from using InstanceId's `.Object` property.
+## Advanced Concepts
+The core functionality of the messaging system is for code to be sending and receiving messages of one of the three supported types. However, the messaging system provides additional functionality beyond this. With DxMessaging, you can...
+### Register Interceptors
+Sometimes, depending on certain system state, you may want to have all listeners *ignore* certain types of messages. This is where the concept of Interceptors fits in - Interceptors are message pre-processors that run in a specified order. They have the following forms:
+```csharp
+/// <summary>
+/// Given an Untargeted message, determines whether or not it should be processed or skipped
+/// </summary>
+/// <typeparam name="TMessage">Specific type of message.</typeparam>
+/// <param name="message">Message to consider.</param>
+/// <returns>True if the message should be processed, false if it should be skipped.</returns>
+public delegate bool UntargetedInterceptor<TMessage>(ref TMessage message) where TMessage : IUntargetedMessage;
+
+/// <summary>
+/// Given an Targeted message and its target, determines whether or not it should be processed or skipped.
+/// </summary>
+/// <typeparam name="TMessage">Specific type of message.</typeparam>
+/// <param name="target">Target of the message.</param>
+/// <param name="message">Message to consider.</param>
+/// <returns>True if the message should be processed, false if it should be skipped.</returns>
+public delegate bool TargetedInterceptor<TMessage>(ref InstanceId target, ref TMessage message) where TMessage : ITargetedMessage;
+
+/// <summary>
+/// Given an Broadcast message and its source, determines whether or not it should be processed or skipped.
+/// </summary>
+/// <typeparam name="TMessage">Specific type of message.</typeparam>
+/// <param name="source">Source of the message.</param>
+/// <param name="message">Message to consider.</param>
+/// <returns>True if the message should be processed, false if it should be skipped.</returns>
+public delegate bool BroadcastInterceptor<TMessage>(ref InstanceId source, ref TMessage message) where TMessage : IBroadcastMessage;
+```
+The primary use case of Interceptors is to block the actual emission of a message, by returning `false`. Unlike the message handlers, where `ref` is optional, `ref` is the only form of the Interceptor's parameters. This is because, by design, the Interceptors *can* mutate the message, allowing for very interesting runtime behavior. 
+
+Note: `ref` mutation isn't required, and will likely lead to confusing scenarios. 
+
+Note: Interceptors are ran sequentially. If any return false, the rest in line are not ran, and no message handler is ran.
+
+Note: Interceptors run before messages of that type are handled, by design.
+
+When registering an Interceptor, the system asks for a priority. Interceptors are ran from low -> high priority. Interceptors at the same priority are ran in the order registered.
+### Register PostProcessors
+Similar to a the `LateUpdate` concept that many game engines provide, 
+
 ## Message Emission Extension Functions
 Message emission is relatively simple. Since the point of the framework is to decouple senders and receivers, the APIs are verbose to prevent bugs. Since it's possible to listen to and for messages involving either Components or GameObjects, my philosophy is that I'd rather have longer lines of code that are more descriptive ("I'm listening to this *Component* for this message) than accidentally have an incorrect coupling ("I sent this message to a Component when I meant to send it to a GameObject").
 
