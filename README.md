@@ -11,7 +11,7 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 4. Resolve the latest `DxMessaging`
 
 # Benchmarks
-DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Core/PerformanceTests.cs).
+DxMessaging is currently a bit slower (2-4x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Core/PerformanceTests.cs).
 | Message Tech | Operations / Second |
 | ------------ | ------------------- |
 | Unity | 1,955,744 |
@@ -136,6 +136,9 @@ That's it! Once the call from `EmitGameObjectTargeted` completes, all message li
 
 See [Message Emission Functions](#message-emission-functions) for more information on the ways that messages can be emitted.
 ## When to use each message type
+Note: There is no limit to the number of listeners for any given message.
+Note: Message instances can be cached and re-emitted, if you think this is a good idea for your code.
+Note: Message registration automatically dedupes listeners - even if your code registers a listener more than once, it will only be called once.
 ### UntargetedMessage
 ```csharp
 public readonly struct SimpleUntargetedMessage : IUntargetedMessage<SimpleUntargetedMessage>
@@ -160,7 +163,7 @@ public sealed class SimpleUntargetedReceiver : MessageAwareComponent
 SimpleUntargetedMessage message = new("Hello, world");
 message.EmitUntargeted();
 ```
-UntargetedMessages are a great fit for when you do not care about a sender or a receiver context. That is, the only thing you care about is that the message *is sent* and, potentially, the *contents* of the message. UntargetedMessages will be received by *all* active listeners. 
+UntargetedMessages are a great fit for when you do not care about a sender or a receiver context. That is, the only thing you care about is that the message *is sent* and, potentially, the *contents* of the message. UntargetedMessages will be received by *all* active listeners, they're essentially global messages. What would normally require some global event bus or static event handlers is now completely decomposed and decoupled into the sender and receiver, each without knowledge of the other.
 ### TargetedMessage
 ```csharp
 public readonly struct SimpleTargetedMessage : ITargetedMessage<SimpleTargetedMessage>
@@ -186,9 +189,44 @@ GameObject target = null; // You need a reference to the thing you're targeting,
 SimpleTargetedMessage message = new($"I'm targeting you, {target.name}");
 message.EmitGameObjectTargeted(target);
 ```
-TargetedMessages are a great fit for when you want to send a command to something. Instead of having to reach into the object's guts and find the event handler to call, the caller can just emit the message *at* the target object, and the message framework will take care of the handling automatically.
+TargetedMessages are a great fit for when you want to send a command to something. Instead of having to reach into the object's guts and find the event handler to call, the caller can just emit the message *at* the target object, and the message framework will take care of the handling automatically. This functionality basically replace looking up specific component(s) and calling public methods on them, allowing loose coupling between senders and receivers.
 
+Note: TargetedMessages can be sent to either GameObjects or Components. If sent to a GameObject, all listeners on that object that have registered for `GameObjectTargeted` will be invoked. If sent to a Component, only the listeners on that Component will be invoked. Recommendation is to use `GameObjectTargeted` unless you absolutely require callers to differentiate between receivers. `ComponentTargeted` requires knowledge of what Component to send the message to, requiring a tighter coupling than just knowing about a GameObject. 
 
+Note: TargetedMessages can be received as if they were UntargetedMessages. To do so, register a listener with the signature `void HandleSimpleTargetedMessageWithoutTargeting(ref InstanceId target, ref SimpleTargetedMessage message) {}`. This listener will receive all messages of this type along with the target that the message is for. Unity users can get the GameObject or Component the message is from using InstanceId's `.Object` property.
+### BroadcastMessage
+```csharp
+public readonly struct SimpleBroadcastMessage : IBroadcastMessage<SimpleBroadcastMessage>
+{
+    public readonly string debugMessage;
+
+    public SimpleBroadcastMessage(string debugMessage)
+    {
+        this.debugMessage = debugMessage;
+    }
+}
+
+public sealed class SimpleBroadcastReceiver : MessageAwareComponent
+{
+    [SerializeField]
+    private GameObject _thingToListenTo;
+
+    protected override void RegisterMessageHandlers()
+    {
+        _ = _messageRegistrationToken.RegisterGameObjectBroadcast(_thingToListenTo, (ref SimpleBroadcastMessage message) => Debug.Log($"Received SimpleBroadcastMessage {message.debugMessage}."));
+    }
+}
+
+// In the code that is the source of the message
+SimpleBroadcastReceiver message = new("Something happened to me!");
+// gameObject here is the gameObject property of the source
+message.GameObjectBroadcast(gameObject);
+```
+BroadcastMessages are one of the most commonly used types of messages in the games that I build. Broadcast messages are *events* that *happen to* something. The thing that the event happens to *broadcasts* this message to anyone that is listening. Concepts like "my health changed", "I died", "I started channeling", where stuff is happening to *you*, the source code. This concept replaces a traditional event handler that has to be manually attached to, allowing for decoupling. The messaging system requires that receivers of BroadcastEvent must have some reference to the source object at registration time.
+
+Note: BroadcastMessages can be sent from either GameObjects or Components. If sent from a GameObject, all listeners that have registered for events from that GameObject via `RegisterGameObjectBroadcast` will be invoked. If sent from a Component, only listeners that have explicitly listened to that Component will be invoked. Recommendation is to use `GameObjectBroadcast` unless you absolutely require receivers to differentiate between callers. `ComponentBroadcast` requires knowledge of the specific Component that is sending the message, requiring tighter coupling than just knowing about a GameObject.
+
+Note: BroadcastMessages can be received as if they were UntargetedMessages. To do so, register a listener with the signature `void HandleSimpleBroadcastMessageWithoutSource(ref InstanceId source, ref SimpleBroadcastMessage message) {}`. This listener will receive all messages of this type along with the source that the message is from. Unify users can get the GameObject or Component the message is from using InstanceId's `.Object` property.
 ## Message Emission Functions
 
 ## MessageRegistrationToken Functions
