@@ -227,6 +227,22 @@ BroadcastMessages are one of the most commonly used types of messages in the gam
 Note: BroadcastMessages can be sent from either GameObjects or Components. If sent from a GameObject, all listeners that have registered for events from that GameObject via `RegisterGameObjectBroadcast` will be invoked. If sent from a Component, only listeners that have explicitly listened to that Component will be invoked. Recommendation is to use `GameObjectBroadcast` unless you absolutely require receivers to differentiate between callers. `ComponentBroadcast` requires knowledge of the specific Component that is sending the message, requiring tighter coupling than just knowing about a GameObject.
 
 Note: BroadcastMessages can be received as if they were UntargetedMessages. To do so, register a listener with the signature `void HandleSimpleBroadcastMessageWithoutSource(ref InstanceId source, ref SimpleBroadcastMessage message) {}`. This listener will receive all messages of this type along with the source that the message is from. Unify users can get the GameObject or Component the message is from using InstanceId's `.Object` property.
-## Message Emission Functions
+## Message Emission Extension Functions
+Message emission is relatively simple. Since the point of the framework is to decouple senders and receivers, the APIs are verbose to prevent bugs. Since it's possible to listen to and for messages involving either Components or GameObjects, my philosophy is that I'd rather have longer lines of code that are more descriptive ("I'm listening to this *Component* for this message) than accidentally have an incorrect coupling ("I sent this message to a Component when I meant to send it to a GameObject").
 
+Each of the message extension functions aims to be as clear in its intent as possible.
+### `EmitUntargeted`
+This is the only way to emit an UntargetedMessage.
+### `EmitTargeted`
+This is the Unity-agnostic way of emitting TargetedMessages. Unity users can use this by providing a GameObject or Component as the target, but it is discouraged.
+### `EmitGameObjectTargeted`
+Send a TargetedMessage to a particular GameObject. Only receivers that are registered via `RegisterGameObjectTargeted` will be called. GameObject cannot be null.
+### `EmitComponentTargeted`
+Send a TargetedMessage to a particular Component. Only receivers that are registered via `RegisterComponentTargeted` will be called. Component cannot be null.
+### `EmitBroadcast`
+This is the Unity-agnostic way of emitting BroadcastMessages. Unity users can use this by providing a GameObject or Component as the source, but it is discouraged.
+### `EmitGameObjectBroadcast`
+Send a BroadcastMessage from a particular GameObject. Only listeners that are registered via `RegisterGameObjectBroadcast` will be called. GameObject cannot be null.
+### `EmitComponentBroadcast`
+Send a BroadcastMessage from a particular Component. Only listeners that are registered via `RegisterComponentBroadcast` will be called. Component cannot be null.
 ## MessageRegistrationToken Functions
