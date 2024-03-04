@@ -55,6 +55,17 @@ Receivers can subscribe to any number of message types.
 
 For Unity, we have an easy-to-integrate [MessageAwareComponent](./Runtime/Unity/MessageAwareComponent.cs) - simply extend any component you want off of this base class. This will handle message registration lifetimes automatically for you. 
 If you have your own base classes or aren't using Unity, then you'll need to add lifetimes yourself. Please use the MessageAwareComponent as reference.
+
+### Implementation Notes (Unity)
+Please note, if you want to receive messages and inherit off of the `MessageAwareComponent`, the component implements several Unity-specific methods to manage lifetimes. Specifically,
+* `protected virtual void Awake()`
+* `protected virtual void OnEnable()`
+* `protected virtual void OnDisable()`
+* `protected virtual void OnDestroy()`
+* `protected virtual void OnApplicationQuit()`
+
+If you wish to use any of these methods in components that inherit from `MessageAwareComponent`, please make sure to have the overrides call the base methods, otherwise messaging *may break* or not work as expected.
+
 ## Integration
 See the [tests](./Tests/Runtime/Scripts/) directory for examples about how to integrate with the MessageAwareComponent. But, for some starters:
 ```csharp
