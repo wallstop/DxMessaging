@@ -11,7 +11,7 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 4. Resolve the latest `DxMessaging`
 
 # Dependencies
-This project has a dependency on my (`Unity Helpers`)[https://github.com/wallstop/unity-helpers] project, which contains the dll for System.Runtime.CompilerServices.Unsafe, which is used for some speed hacks. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the System.Runtime.CompilerServices.Unsafe dll yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project.
+This project has a dependency on my [`Unity Helpers`](https://github.com/wallstop/unity-helpers) project, which contains the dll for System.Runtime.CompilerServices.Unsafe, which is used for some speed hacks. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the System.Runtime.CompilerServices.Unsafe dll yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project.
 
 # Benchmarks
 DxMessaging is currently a bit slower (2-4x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Core/PerformanceTests.cs).
