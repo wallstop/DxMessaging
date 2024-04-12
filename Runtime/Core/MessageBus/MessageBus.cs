@@ -229,7 +229,6 @@
                 }
             };
         }
-
         
         public void UntypedUntargetedBroadcast(IUntargetedMessage typedMessage)
         {
@@ -250,11 +249,10 @@
             Action<IUntargetedMessage> broadcast = (Action<IUntargetedMessage>)untargetedMethod;
             broadcast.Invoke(typedMessage);
         }
-
         
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage) where TMessage : IUntargetedMessage
         {
-            Type type = typedMessage.MessageType;
+            Type type = typeof(TMessage);
             if (!RunUntargetedInterceptors(type, ref typedMessage))
             {
                 return;
@@ -310,11 +308,10 @@
             Action<InstanceId, ITargetedMessage> broadcast = (Action<InstanceId, ITargetedMessage>)targetedMethod;
             broadcast.Invoke(target, typedMessage);
         }
-
         
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage) where TMessage : ITargetedMessage
         {
-            Type type = typedMessage.MessageType;
+            Type type = typeof(TMessage);
             if (!RunTargetedInterceptors(type, ref typedMessage, ref target))
             {
                 return;
@@ -411,7 +408,7 @@
         
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage) where TMessage : IBroadcastMessage
         {
-            Type type = typedMessage.MessageType;
+            Type type = typeof(TMessage);
             if (!RunBroadcastInterceptors(type, ref typedMessage, ref source))
             {
                 return;
