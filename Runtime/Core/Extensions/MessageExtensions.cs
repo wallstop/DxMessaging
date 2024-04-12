@@ -21,7 +21,7 @@
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(ITargetedMessage))
             {
                 messageBus.UntypedTargetedBroadcast(targetId, message);
                 return;
@@ -40,7 +40,7 @@
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(ITargetedMessage))
             {
                 messageBus.UntypedTargetedBroadcast(targetId, message);
                 return;
@@ -59,7 +59,7 @@
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(ITargetedMessage))
             {
                 messageBus.UntypedTargetedBroadcast(targetId, message);
                 return;
@@ -78,7 +78,7 @@
         {
             InstanceId targetId = target;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(ITargetedMessage))
             {
                 messageBus.UntypedTargetedBroadcast(targetId, message);
                 return;
@@ -98,7 +98,7 @@
         public static void EmitTargeted<TMessage>(this TMessage message, InstanceId target, IMessageBus messageBus = null) where TMessage : class, ITargetedMessage
         {
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(ITargetedMessage))
             {
                 messageBus.UntypedTargetedBroadcast(target, message);
                 return;
@@ -116,7 +116,7 @@
         public static void EmitTargeted<TMessage>(this ref TMessage message, InstanceId target, IMessageBus messageBus = null) where TMessage : struct, ITargetedMessage
         {
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(ITargetedMessage))
             {
                 messageBus.UntypedTargetedBroadcast(target, message);
                 return;
@@ -133,7 +133,7 @@
         public static void EmitUntargeted<TMessage>(this TMessage message, IMessageBus messageBus = null) where TMessage : class, IUntargetedMessage
         {
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IUntargetedMessage))
             {
                 messageBus.UntypedUntargetedBroadcast(message);
                 return;
@@ -150,7 +150,7 @@
         public static void EmitUntargeted<TMessage>(this ref TMessage message, IMessageBus messageBus = null) where TMessage : struct, IUntargetedMessage
         {
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IUntargetedMessage))
             {
                 messageBus.UntypedUntargetedBroadcast(message);
                 return;
@@ -170,7 +170,7 @@
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
                 messageBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
@@ -189,7 +189,7 @@
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
                 messageBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
@@ -208,7 +208,7 @@
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
                 messageBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
@@ -227,7 +227,7 @@
         {
             InstanceId sourceId = source;
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
                 messageBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
@@ -245,7 +245,7 @@
         public static void EmitBroadcast<TMessage>(this TMessage message, InstanceId source, IMessageBus messageBus = null) where TMessage : class, IBroadcastMessage
         {
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
                 messageBus.UntypedSourcedBroadcast(source, message);
                 return;
@@ -263,7 +263,7 @@
         public static void EmitBroadcast<TMessage>(this ref TMessage message, InstanceId source, IMessageBus messageBus = null) where TMessage : struct, IBroadcastMessage
         {
             messageBus ??= MessageHandler.MessageBus;
-            if (typeof(TMessage) != message.MessageType)
+            if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
                 messageBus.UntypedSourcedBroadcast(source, message);
                 return;
