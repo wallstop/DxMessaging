@@ -4,12 +4,17 @@
     using System;
     using System.Collections.Generic;
     using UnityEngine;
-    
+
     [DisallowMultipleComponent]
     public sealed class MessagingComponent : MonoBehaviour
     {
+        [SerializeField]
+        private bool _emitMessagesWhenDisabled;
+
         private MessageHandler _messageHandler;
-        private readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners = new Dictionary<MonoBehaviour, MessageRegistrationToken>();
+
+        private readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
+            new Dictionary<MonoBehaviour, MessageRegistrationToken>();
 
         public MessageRegistrationToken Create(MonoBehaviour listener)
         {
@@ -20,9 +25,7 @@
 
             if (gameObject.GetInstanceID() != listener.gameObject.GetInstanceID())
             {
-                throw new ArgumentException(string.Format(
-                    "Cannot create a RegistrationToken without an valid owner. {0}.",
-                    listener.gameObject.GetInstanceID()));
+                throw new ArgumentException($"Cannot create a RegistrationToken without an valid owner. {listener.gameObject.GetInstanceID()}.");
             }
 
             if (_registeredListeners.TryGetValue(listener, out MessageRegistrationToken createdToken))
@@ -37,14 +40,17 @@
                 {
                     active = true
                 };
-                MessagingDebug.Log(LogLevel.Debug, "Creating MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
-                    listener.GetType(), listener.gameObject.name, (InstanceId) gameObject);
+                MessagingDebug.Log(
+                    LogLevel.Debug,
+                    "Creating MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
+                    listener.GetType(), listener.gameObject.name, (InstanceId)gameObject);
             }
             else
             {
-                MessagingDebug.Log(LogLevel.Debug,
+                MessagingDebug.Log(
+                    LogLevel.Debug,
                     "Using existing MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
-                    listener.GetType(), listener.gameObject.name, (InstanceId) gameObject);
+                    listener.GetType(), listener.gameObject.name, (InstanceId)gameObject);
             }
 
             createdToken = MessageRegistrationToken.Create(_messageHandler);
@@ -64,6 +70,11 @@
 
         private void ToggleMessageHandler(bool newActive)
         {
+            if (!newActive && _emitMessagesWhenDisabled)
+            {
+                return;
+            }
+
             if (_messageHandler != null && _messageHandler.active != newActive)
             {
                 _messageHandler.active = newActive;

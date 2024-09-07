@@ -6,9 +6,7 @@
         "UnityEditor.TestRunner",
         "WallstopStudios.DxMessaging"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,
