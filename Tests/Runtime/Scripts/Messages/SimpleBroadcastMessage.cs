@@ -4,7 +4,7 @@
     using DxMessaging.Core.Messages;
 
     [DxBroadcastMessage]
-    public partial struct SimpleBroadcastMessage : IBroadcastMessage 
+    public partial struct SimpleBroadcastMessage 
     {
     }
 }

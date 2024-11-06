@@ -5,7 +5,7 @@
     using DxMessaging.Core.Messages;
 
     [DxTargetedMessage]
-    public partial struct ComplexTargetedMessage : ITargetedMessage 
+    public partial struct ComplexTargetedMessage 
     {
         // Guids are a bit beefy structure
         public readonly Guid firstId;
