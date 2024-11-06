@@ -1,0 +1,21 @@
+{
+    "name": "WallstopStudios.DxMessaging.Editor",
+    "rootNamespace": "DxMessaging.Editor",
+    "references": [
+        "WallstopStudios.DxMessaging"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Microsoft.CodeAnalysis.dll",
+        "System.Collections.Immutable.dll",
+        "System.Runtime.CompilerServices.Unsafe.dll",
+        "System.Reflection.Metadata.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

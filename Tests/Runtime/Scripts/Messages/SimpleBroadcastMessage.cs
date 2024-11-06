@@ -1,8 +1,10 @@
 ﻿namespace DxMessaging.Tests.Runtime.Scripts.Messages
 {
+    using DxMessaging.Core.Attributes;
     using DxMessaging.Core.Messages;
 
-    public readonly struct SimpleBroadcastMessage : IBroadcastMessage<SimpleBroadcastMessage>
+    [DxBroadcastMessage]
+    public partial struct SimpleBroadcastMessage : IBroadcastMessage 
     {
     }
 }

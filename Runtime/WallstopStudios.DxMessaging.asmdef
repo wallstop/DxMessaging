@@ -10,9 +10,7 @@
         "System.Runtime.CompilerServices.Unsafe.dll"
     ],
     "autoReferenced": true,
-    "defineConstraints": [
-        "UNITY_2017_1_OR_NEWER"
-    ],
+    "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false
 }

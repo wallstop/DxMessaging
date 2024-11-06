@@ -65,7 +65,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             // Generate non-component targeted methods
             SimpleUntargetedMessage untargetedMessage = new();
-            untargetedMessage.EmitUntargeted();
+            untargetedMessage.EmitUntargeted(); 
             Assert.AreEqual(1, untargetedWorks);
             Assert.AreEqual(0, targetedWorks);
             Assert.AreEqual(0, broadcastWorks);

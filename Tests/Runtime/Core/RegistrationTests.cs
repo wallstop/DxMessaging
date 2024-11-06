@@ -35,7 +35,7 @@
         }
 
         [UnityTest]
-        public IEnumerator UntargetedNormal()
+        public IEnumerator UntargetedNormal() 
         {
             int count = 0;
             void Handle(SimpleUntargetedMessage message)

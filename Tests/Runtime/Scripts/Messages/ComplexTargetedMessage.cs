@@ -1,9 +1,11 @@
 ﻿namespace DxMessaging.Tests.Runtime.Scripts.Messages
 {
     using System;
+    using DxMessaging.Core.Attributes;
     using DxMessaging.Core.Messages;
 
-    public readonly struct ComplexTargetedMessage : ITargetedMessage<ComplexTargetedMessage>
+    [DxTargetedMessage]
+    public partial struct ComplexTargetedMessage : ITargetedMessage 
     {
         // Guids are a bit beefy structure
         public readonly Guid firstId;
@@ -17,7 +19,7 @@
         public ComplexTargetedMessage(Guid firstId)
         {
             this.firstId = firstId;
-            secondId = Guid.NewGuid();
+            secondId = Guid.NewGuid(); 
             thirdId = Guid.NewGuid();
             fourthId = Guid.NewGuid();
             fifthId = Guid.NewGuid();

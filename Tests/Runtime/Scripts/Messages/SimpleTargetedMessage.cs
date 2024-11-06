@@ -1,8 +1,10 @@
 ﻿namespace DxMessaging.Tests.Runtime.Scripts.Messages
 {
+    using DxMessaging.Core.Attributes;
     using DxMessaging.Core.Messages;
 
-    public readonly struct SimpleTargetedMessage : ITargetedMessage<SimpleTargetedMessage>
+    [DxTargetedMessage]
+    public partial struct SimpleTargetedMessage : ITargetedMessage
     {
     }
 }
