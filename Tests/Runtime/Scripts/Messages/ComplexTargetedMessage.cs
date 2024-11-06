@@ -5,7 +5,7 @@
     using DxMessaging.Core.Messages;
 
     [DxTargetedMessage]
-    public partial struct ComplexTargetedMessage 
+    public partial struct ComplexTargetedMessage
     {
         // Guids are a bit beefy structure
         public readonly Guid firstId;
@@ -19,7 +19,7 @@
         public ComplexTargetedMessage(Guid firstId)
         {
             this.firstId = firstId;
-            secondId = Guid.NewGuid(); 
+            secondId = Guid.NewGuid();
             thirdId = Guid.NewGuid();
             fourthId = Guid.NewGuid();
             fifthId = Guid.NewGuid();

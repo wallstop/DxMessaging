@@ -4,7 +4,5 @@
     using DxMessaging.Core.Messages;
 
     [DxUntargetedMessage]
-    public partial struct SimpleUntargetedMessage
-    {
-    }
+    public partial struct SimpleUntargetedMessage { }
 }
