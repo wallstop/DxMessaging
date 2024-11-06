@@ -4,17 +4,20 @@
     "references": [
         "WallstopStudios.DxMessaging"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
-    "allowUnsafeCode": true,
+    "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "Microsoft.CodeAnalysis.dll",
+        "System.Reflection.Metadata.dll",
         "System.Collections.Immutable.dll",
         "System.Runtime.CompilerServices.Unsafe.dll",
-        "System.Reflection.Metadata.dll"
+        "Microsoft.CodeAnalysis.dll",
+        "Microsoft.Bcl.AsyncInterfaces.dll"
     ],
-    "autoReferenced": false,
+    "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false

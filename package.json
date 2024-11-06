@@ -5,7 +5,7 @@
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
   "dependencies": {
-    "com.wallstop-studios.unity-helpers" : "2.0.0-rc01"
+    "com.wallstop-studios.unity-helpers" : "2.0.0-rc02"
   },
   "keywords": [
     "messaging",
