@@ -3,6 +3,7 @@
     using System;
     using System.Runtime.CompilerServices;
     using System.Runtime.Serialization;
+    using System.Text.Json.Serialization;
 
     /// <summary>
     /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
@@ -13,12 +14,16 @@
     {
         public static readonly InstanceId EmptyId = new(0);
 
+        [JsonInclude]
+        [JsonPropertyName("id")]
         [DataMember(Name = "id")]
         private readonly int _id;
 
 #if UNITY_2017_1_OR_NEWER
         public UnityEngine.Object Object { get; }
 #endif
+        
+        [JsonConstructor]
         public InstanceId(int id) : this()
         {
             _id = id;
