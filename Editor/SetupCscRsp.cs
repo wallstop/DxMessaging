@@ -85,15 +85,15 @@ namespace DxMessaging.Editor
                         {
                             Object loadedDll = AssetDatabase.LoadMainAssetAtPath(outputAsset);
                             AssetDatabase.SetLabels(loadedDll, new[] { "RoslynAnalyzer" });
-
-                            PluginImporter importer = AssetImporter.GetAtPath(outputAsset) as PluginImporter;
-                            if (importer != null)
-                            {
-                                importer.SetCompatibleWithAnyPlatform(false);
-                                importer.SetExcludeFromAnyPlatform("Editor", false);
-                                importer.SetExcludeFromAnyPlatform("Standalone", false);
-                                importer.SaveAndReimport();
-                            }
+                        }
+                        
+                        PluginImporter importer = AssetImporter.GetAtPath(outputAsset) as PluginImporter;
+                        if (importer != null)
+                        {
+                            importer.SetCompatibleWithAnyPlatform(false);
+                            importer.SetExcludeFromAnyPlatform("Editor", false);
+                            importer.SetExcludeFromAnyPlatform("Standalone", false);
+                            importer.SaveAndReimport();
                         }
 
                         break;

@@ -9,14 +9,8 @@
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": true,
-    "precompiledReferences": [
-        "System.Reflection.Metadata.dll",
-        "System.Collections.Immutable.dll",
-        "System.Runtime.CompilerServices.Unsafe.dll",
-        "Microsoft.CodeAnalysis.dll",
-        "Microsoft.Bcl.AsyncInterfaces.dll"
-    ],
+    "overrideReferences": false,
+    "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
