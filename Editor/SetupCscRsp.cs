@@ -127,13 +127,14 @@ namespace DxMessaging.Editor
                 }
 
                 string rspContent = File.ReadAllText(RspFilePath);
-                if (!rspContent.Contains(LibraryArgument))
+                if (rspContent.Contains(LibraryArgument))
                 {
-                    // Append the analyzer argument to csc.rsp
-                    File.AppendAllText(RspFilePath, $"{LibraryArgument}\n");
-                    AssetDatabase.ImportAsset("csc.rsp");
-                    Debug.Log("Updated csc.rsp.");
+                    return;
                 }
+
+                File.AppendAllText(RspFilePath, $"{LibraryArgument}\n");
+                AssetDatabase.ImportAsset("csc.rsp");
+                Debug.Log("Updated csc.rsp.");
             }
             catch (IOException ex)
             {
