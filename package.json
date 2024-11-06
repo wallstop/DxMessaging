@@ -1,11 +1,11 @@
 {
   "name": "com.wallstop-studios.dxmessaging",
-  "version": "1.0.6",
+  "version": "2.0.0-rc01",
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
-  "unity": "2021.1",
+  "unity": "2021.3",
   "dependencies": {
-    "com.wallstop-studios.unity-helpers" : "1.0.1-rc13"
+    "com.wallstop-studios.unity-helpers" : "2.0.0-rc01"
   },
   "keywords": [
     "messaging",

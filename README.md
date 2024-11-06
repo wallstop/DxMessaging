@@ -17,12 +17,12 @@ This project has a dependency on my [`Unity Helpers`](https://github.com/wallsto
 DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs).
 | Message Tech | Operations / Second |
 | ------------ | ------------------- |
-| Unity | 1,908,539 |
-| DxMessaging (GameObject) - Normal | 729,221 |
-| DxMessaging (Component) - Normal | 740,140 |
-| DxMessaging (GameObject) - No-Copy | 720,678 |
-| DxMessaging (Component) - No-Copy | 754,243 |
-| DxMessaging (Untargeted) - No-Copy | 1,176,809 |
+| Unity | 1,876,433 |
+| DxMessaging (GameObject) - Normal | 879,683 |
+| DxMessaging (Component) - Normal | 868,487 |
+| DxMessaging (GameObject) - No-Copy | 872,565 |
+| DxMessaging (Component) - No-Copy | 898,447 |
+| DxMessaging (Untargeted) - No-Copy | 1,229,450 |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
@@ -68,6 +68,43 @@ Please note, if you want to receive messages and inherit off of the `MessageAwar
 * `protected virtual void OnApplicationQuit()`
 
 If you wish to use any of these methods in components that inherit from `MessageAwareComponent`, please make sure to have the overrides call the base methods, otherwise messaging *may break* or not work as expected.
+
+## Integration - Source Generators (v2 and above)
+I'm piloting some new tech in version 2 of this library. Currently, if implementing any of the message interfaces, there will be boxing performed on the messages, if they are structs. This is due to the nature of default interface methods, which I was not aware of.
+
+To get around this, I have updated both the Unity Helpers dependent package, as well as this package, to take advantage of Roslyn Source Generators.
+
+Requirements:
+1. Use one of `DxTargetedMessage, DxBroadcastMessage, DxUntargetedMessage` depending on message requirement.
+2. Ensure that the struct or class is marked as `partial`. 
+
+To use:
+```csharp
+[DxTargetedMessage]
+public partial struct SimpleTargetedMessage // No longer needed : ITargetedMessage<SimpleTargetedMessage>
+{
+}
+
+[DxBroadcastMessage]
+public partial struct SimpleBroadcastMessage // No longer needed : IBroadcastMessage<SimpleBroadcastMessage>
+{
+}
+
+[DxUntargetedMessage]
+public partial struct SimpleUntargetedMessage // No longer needed : IUntargetedMesssage<SimpleUntargetedMessage>
+{
+}
+```
+
+Or, if you already have messages, you can leave the interface implementations as-is and get a no-boxing implementation with the `DxAutoMessageType` attribute. `partial` is still required.
+
+To use:
+```csharp
+[DxAutoMessageType]
+public partial struct SimpleTargetedMessage : ITargetedMessage<SimpleTargetedMessage>
+{
+}
+```
 
 ## Integration
 See the [tests](./Tests/Runtime/Scripts/) directory for examples about how to integrate with the MessageAwareComponent. But, for some starters:

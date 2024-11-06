@@ -296,3 +296,6 @@ __pycache__/
 
 # Plugins
 /Unity/DxMessagingUnity/Assets/Plugins/*
+
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/bin*
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/obj*

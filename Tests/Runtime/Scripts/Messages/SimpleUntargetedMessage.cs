@@ -1,8 +1,8 @@
 ﻿namespace DxMessaging.Tests.Runtime.Scripts.Messages
 {
+    using DxMessaging.Core.Attributes;
     using DxMessaging.Core.Messages;
 
-    public readonly struct SimpleUntargetedMessage : IUntargetedMessage<SimpleUntargetedMessage>
-    {
-    }
+    [DxUntargetedMessage]
+    public partial struct SimpleUntargetedMessage { }
 }

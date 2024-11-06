@@ -38,6 +38,7 @@
         public IEnumerator UntargetedNormal()
         {
             int count = 0;
+
             void Handle(SimpleUntargetedMessage message)
             {
                 ++count;
@@ -58,10 +59,7 @@
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -69,6 +67,7 @@
         public IEnumerator UntargetedNoCopy()
         {
             int count = 0;
+
             void Handle(ref SimpleUntargetedMessage message)
             {
                 ++count;
@@ -89,10 +88,7 @@
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -100,6 +96,7 @@
         public IEnumerator UntargetedPostProcessor()
         {
             int count = 0;
+
             void Handle(ref SimpleUntargetedMessage message)
             {
                 ++count;
@@ -120,10 +117,7 @@
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -131,6 +125,7 @@
         public IEnumerator UntargetedInterceptor()
         {
             int count = 0;
+
             bool Intercept(ref SimpleUntargetedMessage message)
             {
                 ++count;
@@ -152,10 +147,7 @@
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -163,6 +155,7 @@
         public IEnumerator GameObjectTargetedNormal()
         {
             int count = 0;
+
             void Handle(SimpleTargetedMessage message)
             {
                 ++count;
@@ -184,10 +177,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -195,6 +185,7 @@
         public IEnumerator GameObjectTargetedNoCopy()
         {
             int count = 0;
+
             void Handle(ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -216,10 +207,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -227,6 +215,7 @@
         public IEnumerator GameObjectTargetedPostProcessor()
         {
             int count = 0;
+
             void Handle(ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -248,10 +237,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -259,6 +245,7 @@
         public IEnumerator ComponentTargetedNormal()
         {
             int count = 0;
+
             void Handle(SimpleTargetedMessage message)
             {
                 ++count;
@@ -280,10 +267,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -291,6 +275,7 @@
         public IEnumerator ComponentTargetedNoCopy()
         {
             int count = 0;
+
             void Handle(ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -312,10 +297,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -323,6 +305,7 @@
         public IEnumerator ComponentTargetedPostProcessor()
         {
             int count = 0;
+
             void Handle(ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -344,10 +327,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -355,6 +335,7 @@
         public IEnumerator TargetedInterceptor()
         {
             int count = 0;
+
             bool Intercept(ref InstanceId target, ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -377,10 +358,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -388,6 +366,7 @@
         public IEnumerator TargetedWithoutTargetingNormal()
         {
             int count = 0;
+
             void Handle(InstanceId target, SimpleTargetedMessage message)
             {
                 ++count;
@@ -409,10 +388,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -420,6 +396,7 @@
         public IEnumerator TargetedWithoutTargetingNoCopy()
         {
             int count = 0;
+
             void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -441,10 +418,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -452,6 +426,7 @@
         public IEnumerator TargetedWithoutTargetingPostProcessorNormal()
         {
             int count = 0;
+
             void Handle(InstanceId target, SimpleTargetedMessage message)
             {
                 ++count;
@@ -473,10 +448,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -484,6 +456,7 @@
         public IEnumerator TargetedWithoutTargetingPostProcessorNoCopy()
         {
             int count = 0;
+
             void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
             {
                 ++count;
@@ -505,10 +478,7 @@
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -516,6 +486,7 @@
         public IEnumerator GameObjectBroadcastNormal()
         {
             int count = 0;
+
             void Handle(SimpleBroadcastMessage message)
             {
                 ++count;
@@ -537,10 +508,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -548,6 +516,7 @@
         public IEnumerator GameObjectBroadcastNoCopy()
         {
             int count = 0;
+
             void Handle(ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -569,10 +538,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -580,6 +546,7 @@
         public IEnumerator GameObjectBroadcastPostProcessor()
         {
             int count = 0;
+
             void Handle(ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -601,10 +568,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -612,6 +576,7 @@
         public IEnumerator ComponentBroadcastNormal()
         {
             int count = 0;
+
             void Handle(SimpleBroadcastMessage message)
             {
                 ++count;
@@ -633,10 +598,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -644,6 +606,7 @@
         public IEnumerator ComponentBroadcastNoCopy()
         {
             int count = 0;
+
             void Handle(ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -665,10 +628,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -676,6 +636,7 @@
         public IEnumerator ComponentBroadcastPostProcessor()
         {
             int count = 0;
+
             void Handle(ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -697,10 +658,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -708,6 +666,7 @@
         public IEnumerator BroadcastInterceptor()
         {
             int count = 0;
+
             bool Intercept(ref InstanceId target, ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -730,10 +689,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -741,6 +697,7 @@
         public IEnumerator BroadcastWithoutSourceNormal()
         {
             int count = 0;
+
             void Handle(InstanceId id, SimpleBroadcastMessage message)
             {
                 ++count;
@@ -762,10 +719,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -773,6 +727,7 @@
         public IEnumerator BroadcastWithoutSourceNoCopy()
         {
             int count = 0;
+
             void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -794,10 +749,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -805,6 +757,7 @@
         public IEnumerator BroadcastWithoutSourcePostProcessorNormal()
         {
             int count = 0;
+
             void Handle(InstanceId id, SimpleBroadcastMessage message)
             {
                 ++count;
@@ -826,10 +779,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -837,6 +787,7 @@
         public IEnumerator BroadcastWithoutSourcePostProcessorNoCopy()
         {
             int count = 0;
+
             void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
             {
                 ++count;
@@ -858,10 +809,7 @@
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () =>
-                {
-                    count = 0;
-                });
+                }, () => { count = 0; });
             yield break;
         }
 
@@ -1001,7 +949,9 @@
             yield break;
         }
 
-        private void RunRegistrationTest(Func<MessageRegistrationToken, MessageRegistrationHandle> registration, Action<int> normalAssert, Action<int> removalAssert, Action finalAssert, Action reset)
+        private void RunRegistrationTest(
+            Func<MessageRegistrationToken, MessageRegistrationHandle> registration, Action<int> normalAssert,
+            Action<int> removalAssert, Action finalAssert, Action reset)
         {
             HashSet<MessageRegistrationHandle> handles = new(_numRegistrations);
             try

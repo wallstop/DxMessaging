@@ -536,17 +536,23 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
 
                 // Double register to ensure no bugs
-                MessageRegistrationHandle untargetedInterceptor1 = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptor);
+                MessageRegistrationHandle untargetedInterceptor1 =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptor);
                 handles.Add(untargetedInterceptor1);
-                MessageRegistrationHandle untargetedInterceptor2 = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptor);
+                MessageRegistrationHandle untargetedInterceptor2 =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptor);
                 handles.Add(untargetedInterceptor2);
-                MessageRegistrationHandle targetedInterceptor1 = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(TargetedInterceptor);
+                MessageRegistrationHandle targetedInterceptor1 =
+                    token.RegisterTargetedInterceptor<SimpleTargetedMessage>(TargetedInterceptor);
                 handles.Add(targetedInterceptor1);
-                MessageRegistrationHandle targetedInterceptor2 = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(TargetedInterceptor);
+                MessageRegistrationHandle targetedInterceptor2 =
+                    token.RegisterTargetedInterceptor<SimpleTargetedMessage>(TargetedInterceptor);
                 handles.Add(targetedInterceptor2);
-                MessageRegistrationHandle broadcastInterceptor1 = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(BroadcastInterceptor);
+                MessageRegistrationHandle broadcastInterceptor1 =
+                    token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(BroadcastInterceptor);
                 handles.Add(broadcastInterceptor1);
-                MessageRegistrationHandle broadcastInterceptor2 = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(BroadcastInterceptor);
+                MessageRegistrationHandle broadcastInterceptor2 =
+                    token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(BroadcastInterceptor);
                 handles.Add(broadcastInterceptor2);
 
                 void RunTest(Action emitMessage, Func<int> count)
@@ -677,6 +683,7 @@ namespace DxMessaging.Tests.Runtime.Core
                             {
                                 Assert.AreEqual(lastSeenTargetedCount + 1, targetedCount);
                             }
+
                             lastSeenTargetedCount = targetedCount;
                             break;
                         }
@@ -694,6 +701,7 @@ namespace DxMessaging.Tests.Runtime.Core
                             Assert.Fail("Unexpected Object type - {0}.", target.Object?.GetType());
                             break;
                     }
+
                     Assert.AreEqual(expectedTargetedWithoutTargetingCount, targetedCount + componentTargetedCount);
                 }
 
@@ -713,6 +721,7 @@ namespace DxMessaging.Tests.Runtime.Core
                     {
                         return;
                     }
+
                     Assert.AreEqual(lastSeenComponentBroadcastCount + 1, componentBroadcastCount);
                 }
 
@@ -726,6 +735,7 @@ namespace DxMessaging.Tests.Runtime.Core
                             {
                                 Assert.AreEqual(lastSeenBroadcastCount + 1, broadcastCount);
                             }
+
                             lastSeenBroadcastCount = broadcastCount;
                             break;
                         }
@@ -743,6 +753,7 @@ namespace DxMessaging.Tests.Runtime.Core
                             Assert.Fail("Unexpected Object type - {0}.", source.Object?.GetType());
                             break;
                     }
+
                     Assert.AreEqual(expectedBroadcastWithoutSourceCount, broadcastCount + componentBroadcastCount);
                 }
 
@@ -910,7 +921,8 @@ namespace DxMessaging.Tests.Runtime.Core
             HashSet<MessageRegistrationHandle> handles = new();
             try
             {
-                MessageRegistrationHandle firstHandle = token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast);
+                MessageRegistrationHandle firstHandle = token.RegisterGlobalAcceptAll(
+                    HandleUntargeted, HandleTargeted, HandleBroadcast);
                 _ = handles.Add(firstHandle);
 
                 // Untargeted
@@ -1000,7 +1012,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 Assert.AreEqual(0, fastBroadcastCount);
 
                 component.enabled = true;
-                MessageRegistrationHandle secondHandle = token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast);
+                MessageRegistrationHandle secondHandle = token.RegisterGlobalAcceptAll(
+                    HandleUntargeted, HandleTargeted, HandleBroadcast);
                 _ = handles.Add(secondHandle);
                 untargetedMessage.EmitUntargeted();
                 targetedMessage.EmitGameObjectTargeted(test);
@@ -1014,7 +1027,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 Assert.AreEqual(0, fastTargetedCount);
                 Assert.AreEqual(0, fastBroadcastCount);
 
-                MessageRegistrationHandle thirdHandle = token.RegisterGlobalAcceptAll(HandleFastUntargeted, HandleFastTargeted, HandleFastBroadcast);
+                MessageRegistrationHandle thirdHandle = token.RegisterGlobalAcceptAll(
+                    HandleFastUntargeted, HandleFastTargeted, HandleFastBroadcast);
                 _ = handles.Add(thirdHandle);
                 untargetedMessage.EmitUntargeted();
                 targetedMessage.EmitGameObjectTargeted(test);
@@ -1028,7 +1042,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 Assert.AreEqual(2, fastTargetedCount);
                 Assert.AreEqual(2, fastBroadcastCount);
 
-                MessageRegistrationHandle fourthHandle = token.RegisterGlobalAcceptAll(HandleFastUntargeted, HandleFastTargeted, HandleFastBroadcast);
+                MessageRegistrationHandle fourthHandle = token.RegisterGlobalAcceptAll(
+                    HandleFastUntargeted, HandleFastTargeted, HandleFastBroadcast);
                 _ = handles.Add(fourthHandle);
                 untargetedMessage.EmitUntargeted();
                 targetedMessage.EmitGameObjectTargeted(test);
@@ -1074,6 +1089,7 @@ namespace DxMessaging.Tests.Runtime.Core
             try
             {
                 int seenCount = 0;
+
                 bool UntargetedInterceptorFirstPriority(ref SimpleUntargetedMessage message)
                 {
                     return seenCount++ % 3 == 0;
@@ -1090,6 +1106,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
 
                 int interceptorRunCount = 0;
+
                 bool UntargetedInterceptorFourthPriority(ref SimpleUntargetedMessage message)
                 {
                     // We should be running close to first and last
@@ -1097,18 +1114,29 @@ namespace DxMessaging.Tests.Runtime.Core
                     {
                         return seenCount % 3 == 0;
                     }
+
                     return true;
                 }
 
-                MessageRegistrationHandle secondInterceptor = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorSecondPriority, 100);
+                MessageRegistrationHandle secondInterceptor =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        UntargetedInterceptorSecondPriority, 100);
                 _ = handles.Add(secondInterceptor);
-                MessageRegistrationHandle thirdInterceptor = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorThirdPriority, 101);
+                MessageRegistrationHandle thirdInterceptor =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        UntargetedInterceptorThirdPriority, 101);
                 _ = handles.Add(thirdInterceptor);
-                MessageRegistrationHandle firstInterceptor = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFirstPriority, -1);
+                MessageRegistrationHandle firstInterceptor =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        UntargetedInterceptorFirstPriority, -1);
                 _ = handles.Add(firstInterceptor);
-                MessageRegistrationHandle fourthInterceptorFirstPriority = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFourthPriority, -1);
+                MessageRegistrationHandle fourthInterceptorFirstPriority =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        UntargetedInterceptorFourthPriority, -1);
                 _ = handles.Add(fourthInterceptorFirstPriority);
-                MessageRegistrationHandle fourthInterceptorSecondPriority = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFourthPriority, 102);
+                MessageRegistrationHandle fourthInterceptorSecondPriority =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        UntargetedInterceptorFourthPriority, 102);
                 _ = handles.Add(fourthInterceptorSecondPriority);
 
                 SimpleUntargetedMessage message = new();
@@ -1122,7 +1150,9 @@ namespace DxMessaging.Tests.Runtime.Core
                 Assert.AreEqual(4, interceptorRunCount);
                 seen = false;
 
-                MessageRegistrationHandle doubleRegistrationOne = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(UntargetedInterceptorFirstPriority, -1);
+                MessageRegistrationHandle doubleRegistrationOne =
+                    token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        UntargetedInterceptorFirstPriority, -1);
                 _ = handles.Add(doubleRegistrationOne);
                 message.EmitUntargeted();
                 Assert.IsTrue(seen);
@@ -1179,7 +1209,8 @@ namespace DxMessaging.Tests.Runtime.Core
 
             SimpleUntargetedMessage message = new();
             int expectedCallCount = 0;
-            Run(() => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) },
+            Run(
+                () => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) },
                 () => message.EmitUntargeted(),
                 () =>
                 {
@@ -1195,7 +1226,8 @@ namespace DxMessaging.Tests.Runtime.Core
 
             callCount = 0;
             expectedCallCount = 0;
-            Run(() => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted) },
+            Run(
+                () => new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted) },
                 () => message.EmitUntargeted(),
                 () =>
                 {
@@ -1211,16 +1243,18 @@ namespace DxMessaging.Tests.Runtime.Core
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
+            Run(
+                () =>
                 {
-                    return new[] { token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted), token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted) };
+                    return new[]
+                    {
+                        token.RegisterUntargeted<SimpleUntargetedMessage>(HandleFastUntargeted),
+                        token.RegisterUntargeted<SimpleUntargetedMessage>(HandleUntargeted)
+                    };
                 },
                 () => message.EmitUntargeted(),
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             yield break;
@@ -1251,7 +1285,8 @@ namespace DxMessaging.Tests.Runtime.Core
 
             SimpleTargetedMessage message = new();
             int expectedCallCount = 0;
-            Run(() => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) },
+            Run(
+                () => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) },
                 () =>
                 {
                     message.EmitComponentTargeted(component);
@@ -1271,7 +1306,8 @@ namespace DxMessaging.Tests.Runtime.Core
 
             callCount = 0;
             expectedCallCount = 0;
-            Run(() => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted) },
+            Run(
+                () => new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted) },
                 () =>
                 {
                     message.EmitComponentTargeted(component);
@@ -1291,56 +1327,62 @@ namespace DxMessaging.Tests.Runtime.Core
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
-            {
-                return new[] { token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) };
-            },
+            Run(
+                () =>
+                {
+                    return new[]
+                    {
+                        token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleFastTargeted),
+                        token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted)
+                    };
+                },
                 () =>
                 {
                     message.EmitComponentTargeted(component);
                     message.EmitGameObjectTargeted(test);
                 },
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
-            {
-                return new[] { token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted), token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted) };
-            },
+            Run(
+                () =>
+                {
+                    return new[]
+                    {
+                        token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted),
+                        token.RegisterGameObjectTargeted<SimpleTargetedMessage>(test, HandleTargeted)
+                    };
+                },
                 () =>
                 {
                     message.EmitComponentTargeted(component);
                     message.EmitGameObjectTargeted(test);
                 },
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
-            {
-                return new[] { token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted), token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleTargeted) };
-            },
+            Run(
+                () =>
+                {
+                    return new[]
+                    {
+                        token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleFastTargeted),
+                        token.RegisterComponentTargeted<SimpleTargetedMessage>(component, HandleTargeted)
+                    };
+                },
                 () =>
                 {
                     message.EmitComponentTargeted(component);
                     message.EmitGameObjectTargeted(test);
                 },
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             yield break;
@@ -1370,7 +1412,8 @@ namespace DxMessaging.Tests.Runtime.Core
 
             SimpleBroadcastMessage message = new();
             int expectedCallCount = 0;
-            Run(() => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) },
+            Run(
+                () => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) },
                 () =>
                 {
                     message.EmitComponentBroadcast(component);
@@ -1390,7 +1433,8 @@ namespace DxMessaging.Tests.Runtime.Core
 
             callCount = 0;
             expectedCallCount = 0;
-            Run(() => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast) },
+            Run(
+                () => new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast) },
                 () =>
                 {
                     message.EmitComponentBroadcast(component);
@@ -1410,56 +1454,62 @@ namespace DxMessaging.Tests.Runtime.Core
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
-            {
-                return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
-            },
+            Run(
+                () =>
+                {
+                    return new[]
+                    {
+                        token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast),
+                        token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast)
+                    };
+                },
                 () =>
                 {
                     message.EmitComponentBroadcast(component);
                     message.EmitGameObjectBroadcast(test);
                 },
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
-            {
-                return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
-            },
+            Run(
+                () =>
+                {
+                    return new[]
+                    {
+                        token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast),
+                        token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast)
+                    };
+                },
                 () =>
                 {
                     message.EmitComponentBroadcast(component);
                     message.EmitGameObjectBroadcast(test);
                 },
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             callCount = 0;
             fastCallCount = 0;
-            Run(() =>
-            {
-                return new[] { token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast), token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast) };
-            },
+            Run(
+                () =>
+                {
+                    return new[]
+                    {
+                        token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleFastBroadcast),
+                        token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test, HandleBroadcast)
+                    };
+                },
                 () =>
                 {
                     message.EmitComponentBroadcast(component);
                     message.EmitGameObjectBroadcast(test);
                 },
                 () => { },
-                () =>
-                {
-                    Assert.AreNotEqual(callCount, fastCallCount);
-                },
+                () => { Assert.AreNotEqual(callCount, fastCallCount); },
                 token);
 
             yield break;
