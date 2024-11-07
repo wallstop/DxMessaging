@@ -36,8 +36,8 @@ namespace DxMessaging.Editor
 
         static SetupCscRsp()
         {
-            EditorApplication.delayCall += EnsureCscRsp;
             EditorApplication.delayCall += EnsureDLLsExistInAssets;
+            EditorApplication.delayCall += EnsureCscRsp;
         }
 
         private static void EnsureDLLsExistInAssets()
