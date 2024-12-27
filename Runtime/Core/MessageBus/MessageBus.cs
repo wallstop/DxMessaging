@@ -33,11 +33,12 @@
 
         public RegistrationLog Log => _log;
 
-        private readonly Dictionary<Type, Dictionary<MessageHandler, int>> _sinks = new();
+        private readonly Dictionary<Type, SorteDictionary<MessageHandler, int>> _sinks = new();
         private readonly Dictionary<
             Type,
             Dictionary<InstanceId, Dictionary<MessageHandler, int>>
         > _targetedSinks = new();
+
         private readonly Dictionary<
             Type,
             Dictionary<InstanceId, Dictionary<MessageHandler, int>>
