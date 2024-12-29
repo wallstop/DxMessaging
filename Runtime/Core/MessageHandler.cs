@@ -1333,45 +1333,42 @@
 
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, Dictionary<Action<T>, int>>
             > _targetedHandlers;
-            private SortedDictionary<int, Dictionary<Action<T>, int>> _untargetedHandlers;
+            private Dictionary<int, Dictionary<Action<T>, int>> _untargetedHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, Dictionary<Action<T>, int>>
             > _broadcastHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, Dictionary<Action<T>, int>>
             > _targetedPostProcessingHandlers;
-            private SortedDictionary<
-                int,
-                Dictionary<Action<T>, int>
-            > _untargetedPostProcessingHandlers;
+            private Dictionary<int, Dictionary<Action<T>, int>> _untargetedPostProcessingHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, Dictionary<Action<T>, int>>
             > _broadcastPostProcessingHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, Dictionary<FastHandler<T>, int>>
             > _targetedFastHandlers;
-            private SortedDictionary<int, Dictionary<FastHandler<T>, int>> _untargetedFastHandlers;
+            private Dictionary<int, Dictionary<FastHandler<T>, int>> _untargetedFastHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, Dictionary<FastHandler<T>, int>>
             > _broadcastFastHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, Dictionary<FastHandler<T>, int>>
             > _targetedPostProcessingFastHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<FastHandler<T>, int>
             > _untargetedPostProcessingFastHandlers;
             private Dictionary<
                 InstanceId,
-                SortedDictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, Dictionary<FastHandler<T>, int>>
             > _broadcastPostProcessingFastHandlers;
             private Dictionary<Action<IUntargetedMessage>, int> _globalUntargetedHandlers;
             private Dictionary<Action<InstanceId, ITargetedMessage>, int> _globalTargetedHandlers;
@@ -1385,35 +1382,35 @@
                 FastHandlerWithContext<IBroadcastMessage>,
                 int
             > _globalBroadcastFastHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<Action<InstanceId, T>, int>
             > _targetedWithoutTargetingHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<FastHandlerWithContext<T>, int>
             > _fastTargetedWithoutTargetingHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<Action<InstanceId, T>, int>
             > _broadcastWithoutSourceHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<FastHandlerWithContext<T>, int>
             > _fastBroadcastWithoutSourceHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<Action<InstanceId, T>, int>
             > _targetedWithoutTargetingPostProcessingHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<FastHandlerWithContext<T>, int>
             > _fastTargetedWithoutTargetingPostProcessingHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<Action<InstanceId, T>, int>
             > _broadcastWithoutSourcePostProcessingHandlers;
-            private SortedDictionary<
+            private Dictionary<
                 int,
                 Dictionary<FastHandlerWithContext<T>, int>
             > _fastBroadcastWithoutSourcePostProcessingHandlers;
@@ -2249,10 +2246,7 @@
 
             private static void RunFastHandlersWithContext<TMessage>(
                 ref InstanceId context,
-                SortedDictionary<
-                    int,
-                    Dictionary<FastHandlerWithContext<T>, int>
-                > fastHandlersByContext,
+                Dictionary<int, Dictionary<FastHandlerWithContext<T>, int>> fastHandlersByContext,
                 ref TMessage message,
                 int priority
             )
@@ -2276,7 +2270,7 @@
                 ref InstanceId context,
                 Dictionary<
                     InstanceId,
-                    SortedDictionary<int, Dictionary<FastHandler<T>, int>>
+                    Dictionary<int, Dictionary<FastHandler<T>, int>>
                 > fastHandlersByContext,
                 ref TMessage message,
                 int priority
@@ -2287,7 +2281,7 @@
                     fastHandlersByContext is not { Count: > 0 }
                     || !fastHandlersByContext.TryGetValue(
                         context,
-                        out SortedDictionary<int, Dictionary<FastHandler<T>, int>> fastHandlers
+                        out Dictionary<int, Dictionary<FastHandler<T>, int>> fastHandlers
                     )
                 )
                 {
@@ -2298,7 +2292,7 @@
             }
 
             private static void RunFastHandlers<TMessage>(
-                SortedDictionary<int, Dictionary<FastHandler<T>, int>> fastHandlers,
+                Dictionary<int, Dictionary<FastHandler<T>, int>> fastHandlers,
                 ref TMessage message,
                 int priority
             )
@@ -2406,7 +2400,7 @@
             private static void RunFastHandlers<TMessage, U>(
                 ref InstanceId context,
                 ref Stack<List<FastHandlerWithContext<U>>> stack,
-                SortedDictionary<int, Dictionary<FastHandlerWithContext<U>, int>> fastHandlers,
+                Dictionary<int, Dictionary<FastHandlerWithContext<U>, int>> fastHandlers,
                 ref TMessage message,
                 int priority
             )
@@ -2451,7 +2445,7 @@
                 ref InstanceId context,
                 Dictionary<
                     InstanceId,
-                    SortedDictionary<int, Dictionary<Action<T>, int>>
+                    Dictionary<int, Dictionary<Action<T>, int>>
                 > handlersByContext,
                 ref TMessage message,
                 int priority
@@ -2462,7 +2456,7 @@
                     handlersByContext is not { Count: > 0 }
                     || !handlersByContext.TryGetValue(
                         context,
-                        out SortedDictionary<int, Dictionary<Action<T>, int>> handlers
+                        out Dictionary<int, Dictionary<Action<T>, int>> handlers
                     )
                 )
                 {
@@ -2473,7 +2467,7 @@
             }
 
             private static void RunHandlers<TMessage>(
-                SortedDictionary<int, Dictionary<Action<T>, int>> sortedHandlers,
+                Dictionary<int, Dictionary<Action<T>, int>> sortedHandlers,
                 ref TMessage message,
                 int priority
             )
@@ -2510,7 +2504,7 @@
 
             private static void RunHandlers<TMessage>(
                 ref InstanceId context,
-                SortedDictionary<int, Dictionary<Action<InstanceId, T>, int>> handlers,
+                Dictionary<int, Dictionary<Action<InstanceId, T>, int>> handlers,
                 ref TMessage message,
                 int priority
             )
@@ -2568,26 +2562,23 @@
 
             private static Action AddHandler<U>(
                 InstanceId context,
-                ref Dictionary<
-                    InstanceId,
-                    SortedDictionary<int, Dictionary<U, int>>
-                > handlersByContext,
+                ref Dictionary<InstanceId, Dictionary<int, Dictionary<U, int>>> handlersByContext,
                 U handler,
                 Action deregistration,
                 int priority
             )
             {
                 handlersByContext ??=
-                    new Dictionary<InstanceId, SortedDictionary<int, Dictionary<U, int>>>();
+                    new Dictionary<InstanceId, Dictionary<int, Dictionary<U, int>>>();
 
                 if (
                     !handlersByContext.TryGetValue(
                         context,
-                        out SortedDictionary<int, Dictionary<U, int>> sortedHandlers
+                        out Dictionary<int, Dictionary<U, int>> sortedHandlers
                     )
                 )
                 {
-                    sortedHandlers = new SortedDictionary<int, Dictionary<U, int>>();
+                    sortedHandlers = new Dictionary<int, Dictionary<U, int>>();
                     handlersByContext[context] = sortedHandlers;
                 }
 
@@ -2601,10 +2592,8 @@
 
                 handlers[handler] = count + 1;
 
-                Dictionary<
-                    InstanceId,
-                    SortedDictionary<int, Dictionary<U, int>>
-                > localHandlersByContext = handlersByContext;
+                Dictionary<InstanceId, Dictionary<int, Dictionary<U, int>>> localHandlersByContext =
+                    handlersByContext;
 
                 return () =>
                 {
@@ -2675,13 +2664,13 @@
             }
 
             private static Action AddHandler<U>(
-                ref SortedDictionary<int, Dictionary<U, int>> sortedHandlers,
+                ref Dictionary<int, Dictionary<U, int>> sortedHandlers,
                 U handler,
                 Action deregistration,
                 int priority
             )
             {
-                sortedHandlers ??= new SortedDictionary<int, Dictionary<U, int>>();
+                sortedHandlers ??= new Dictionary<int, Dictionary<U, int>>();
 
                 if (
                     !sortedHandlers.TryGetValue(priority, out Dictionary<U, int> handlersByPriority)
@@ -2695,7 +2684,7 @@
 
                 handlersByPriority[handler] = count + 1;
 
-                SortedDictionary<int, Dictionary<U, int>> localSortedHandlers = sortedHandlers;
+                Dictionary<int, Dictionary<U, int>> localSortedHandlers = sortedHandlers;
                 Dictionary<U, int> localHandlers = handlersByPriority;
 
                 return () =>

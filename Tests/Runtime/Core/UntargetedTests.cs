@@ -172,9 +172,13 @@
                     (ref SimpleUntargetedMessage _) =>
                     {
                         int previous = received[priority]++;
-                        if (0 < priority)
+                        for (int j = priority - 1; j >= 0; --j)
                         {
-                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
                         }
                     },
                     priority: priority
@@ -184,9 +188,13 @@
                     {
                         int previous = received[priority]++;
                         Assert.AreEqual(1, previous % 2);
-                        if (0 < priority)
+                        for (int j = priority - 1; j >= 0; --j)
                         {
-                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
                         }
                     },
                     priority: priority
@@ -209,6 +217,55 @@
             );
 
             Assert.AreEqual(numRuns * 2, received.Distinct().Single());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator Interceptor()
+        {
+            GameObject test = new(nameof(Interceptor), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            int[] received = new int[100];
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            for (int i = 0; i < received.Length; ++i)
+            {
+                int priority = i;
+                token.RegisterUntargetedInterceptor(
+                    (ref SimpleUntargetedMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        for (int j = priority - 1; j >= 0; --j)
+                        {
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
+                        }
+
+                        return true;
+                    },
+                    priority: priority
+                );
+            }
+
+            SimpleUntargetedMessage message = new();
+            const int numRuns = 100;
+            for (int i = 0; i < numRuns; ++i)
+            {
+                message.EmitUntargeted();
+            }
+
+            Assert.AreEqual(
+                1,
+                received.Distinct().Count(),
+                "Expected received to be uniform, found: [{0}].",
+                string.Join(",", received.Distinct().OrderBy(x => x))
+            );
+
+            Assert.AreEqual(numRuns, received.Distinct().Single());
             yield break;
         }
     }
