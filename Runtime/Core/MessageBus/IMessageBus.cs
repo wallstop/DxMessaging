@@ -129,7 +129,7 @@
         /// </note>
         /// <typeparam name="T">Type of message to intercept.</typeparam>
         /// <param name="interceptor">Transformation function to run on messages of the chosen type.</param>
-        /// <param name="priority">Priority of the interceptor to run at.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <note>
         ///     The transform function takes:
         ///         param1: Current message instance by reference
@@ -154,7 +154,7 @@
         /// </note>
         /// <typeparam name="T">Type of message to intercept.</typeparam>
         /// <param name="interceptor">Transformation function to run on messages of the chosen type.</param>
-        /// <param name="priority">Priority of the interceptor to run at.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <note>
         ///     The transform function takes:
         ///         param1: Current message instance by reference
@@ -176,7 +176,7 @@
         /// </note>
         /// <typeparam name="T">Type of message to intercept.</typeparam>
         /// <param name="interceptor">Transformation function to run on messages of the chosen type.</param>
-        /// <param name="priority">Priority of the interceptor to run at.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <note>
         ///     The transform function takes:
         ///         param1: Current message instance by reference
@@ -195,8 +195,9 @@
         /// </summary>
         /// <typeparam name="T">Type of UntargetedMessage to post process.</typeparam>
         /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
-        Action RegisterUntargetedPostProcessor<T>(MessageHandler messageHandler)
+        Action RegisterUntargetedPostProcessor<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage;
 
         /// <summary>
@@ -206,8 +207,13 @@
         /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
         /// <param name="target">Target of messages to listen for.</param>
         /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
-        Action RegisterTargetedPostProcessor<T>(InstanceId target, MessageHandler messageHandler)
+        Action RegisterTargetedPostProcessor<T>(
+            InstanceId target,
+            MessageHandler messageHandler,
+            int priority = 0
+        )
             where T : ITargetedMessage;
 
         /// <summary>
@@ -216,8 +222,12 @@
         /// </summary>
         /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
         /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
-        Action RegisterTargetedWithoutTargetingPostProcessor<T>(MessageHandler messageHandler)
+        Action RegisterTargetedWithoutTargetingPostProcessor<T>(
+            MessageHandler messageHandler,
+            int priority = 0
+        )
             where T : ITargetedMessage;
 
         /// <summary>
@@ -227,8 +237,13 @@
         /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
         /// <param name="source">Source of messages to listen for.</param>
         /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
-        Action RegisterBroadcastPostProcessor<T>(InstanceId source, MessageHandler messageHandler)
+        Action RegisterBroadcastPostProcessor<T>(
+            InstanceId source,
+            MessageHandler messageHandler,
+            int priority = 0
+        )
             where T : IBroadcastMessage;
 
         /// <summary>
@@ -237,8 +252,12 @@
         /// </summary>
         /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
         /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
         /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
-        Action RegisterBroadcastWithoutSourcePostProcessor<T>(MessageHandler messageHandler)
+        Action RegisterBroadcastWithoutSourcePostProcessor<T>(
+            MessageHandler messageHandler,
+            int priority = 0
+        )
             where T : IBroadcastMessage;
 
         /// <summary>

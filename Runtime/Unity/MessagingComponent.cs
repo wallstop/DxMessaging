@@ -1,20 +1,21 @@
 ﻿namespace DxMessaging.Unity
 {
-    using Core;
     using System;
     using System.Collections.Generic;
+    using Core;
     using UnityEngine;
+    using UnityEngine.Serialization;
 
     [DisallowMultipleComponent]
     public sealed class MessagingComponent : MonoBehaviour
     {
-        [SerializeField]
-        private bool _emitMessagesWhenDisabled;
+        [FormerlySerializedAs("_emitMessagesWhenDisabled")]
+        public bool emitMessagesWhenDisabled;
 
         private MessageHandler _messageHandler;
 
         private readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
-            new Dictionary<MonoBehaviour, MessageRegistrationToken>();
+            new();
 
         public MessageRegistrationToken Create(MonoBehaviour listener)
         {
@@ -25,32 +26,46 @@
 
             if (gameObject.GetInstanceID() != listener.gameObject.GetInstanceID())
             {
-                throw new ArgumentException($"Cannot create a RegistrationToken without an valid owner. {listener.gameObject.GetInstanceID()}.");
+                throw new ArgumentException(
+                    $"Cannot create a RegistrationToken without an valid owner. {listener.gameObject.GetInstanceID()}."
+                );
             }
 
-            if (_registeredListeners.TryGetValue(listener, out MessageRegistrationToken createdToken))
+            if (
+                _registeredListeners.TryGetValue(
+                    listener,
+                    out MessageRegistrationToken createdToken
+                )
+            )
             {
-                MessagingDebug.Log(LogLevel.Warn, "Ignoring double RegistrationToken request for {0}.", listener);
+                MessagingDebug.Log(
+                    LogLevel.Warn,
+                    "Ignoring double RegistrationToken request for {0}.",
+                    listener
+                );
                 return createdToken;
             }
 
             if (_messageHandler == null)
             {
-                _messageHandler = new MessageHandler(gameObject)
-                {
-                    active = true
-                };
+                _messageHandler = new MessageHandler(gameObject) { active = true };
                 MessagingDebug.Log(
                     LogLevel.Debug,
                     "Creating MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
-                    listener.GetType(), listener.gameObject.name, (InstanceId)gameObject);
+                    listener.GetType(),
+                    listener.gameObject.name,
+                    (InstanceId)gameObject
+                );
             }
             else
             {
                 MessagingDebug.Log(
                     LogLevel.Debug,
                     "Using existing MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
-                    listener.GetType(), listener.gameObject.name, (InstanceId)gameObject);
+                    listener.GetType(),
+                    listener.gameObject.name,
+                    (InstanceId)gameObject
+                );
             }
 
             createdToken = MessageRegistrationToken.Create(_messageHandler);
@@ -58,19 +73,19 @@
             return createdToken;
         }
 
-        private void OnEnable()
+        public void OnEnable()
         {
             ToggleMessageHandler(true);
         }
 
-        private void OnDisable()
+        public void OnDisable()
         {
             ToggleMessageHandler(false);
         }
 
-        private void ToggleMessageHandler(bool newActive)
+        public void ToggleMessageHandler(bool newActive)
         {
-            if (!newActive && _emitMessagesWhenDisabled)
+            if (!newActive && emitMessagesWhenDisabled)
             {
                 return;
             }

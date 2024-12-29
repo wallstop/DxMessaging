@@ -167,10 +167,12 @@
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target to post process messages for.</param>
         /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterGameObjectTargetedPostProcessor<T>(
             UnityEngine.GameObject target,
-            MessageHandler.FastHandler<T> targetedPostProcessor
+            MessageHandler.FastHandler<T> targetedPostProcessor,
+            int priority = 0
         )
             where T : ITargetedMessage
         {
@@ -179,6 +181,7 @@
                     _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -190,10 +193,12 @@
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target to post process messages for.</param>
         /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterComponentTargetedPostProcessor<T>(
             UnityEngine.Component target,
-            MessageHandler.FastHandler<T> targetedPostProcessor
+            MessageHandler.FastHandler<T> targetedPostProcessor,
+            int priority = 0
         )
             where T : ITargetedMessage
         {
@@ -202,11 +207,13 @@
                     _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
         }
 #else
+
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
         /// </summary>
@@ -255,10 +262,12 @@
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target to post process messages for.</param>
         /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
             InstanceId target,
-            MessageHandler.FastHandler<T> targetedPostProcessor
+            MessageHandler.FastHandler<T> targetedPostProcessor,
+            int priority = 0
         )
             where T : ITargetedMessage
         {
@@ -267,6 +276,7 @@
                     _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -278,10 +288,12 @@
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="target">Target to post process messages for.</param>
         /// <param name="targetedPostProcessor">Actual post processor functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
             InstanceId target,
-            Action<T> targetedPostProcessor
+            Action<T> targetedPostProcessor,
+            int priority = 0
         )
             where T : ITargetedMessage
         {
@@ -290,6 +302,7 @@
                     _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -364,9 +377,11 @@
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="postProcessor">Actual handler functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(
-            Action<InstanceId, T> postProcessor
+            Action<InstanceId, T> postProcessor,
+            int priority = 0
         )
             where T : ITargetedMessage
         {
@@ -378,6 +393,7 @@
                 () =>
                     _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
                         postProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -391,9 +407,11 @@
         /// </note>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="postProcessor">Actual post processor functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(
-            MessageHandler.FastHandlerWithContext<T> postProcessor
+            MessageHandler.FastHandlerWithContext<T> postProcessor,
+            int priority = 0
         )
             where T : ITargetedMessage
         {
@@ -405,6 +423,7 @@
                 () =>
                     _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
                         postProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -475,9 +494,11 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="untargetedPostProcessor">Actual post processor functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterUntargetedPostProcessor<T>(
-            MessageHandler.FastHandler<T> untargetedPostProcessor
+            MessageHandler.FastHandler<T> untargetedPostProcessor,
+            int priority = 0
         )
             where T : IUntargetedMessage
         {
@@ -489,6 +510,7 @@
                 () =>
                     _messageHandler.RegisterUntargetedPostProcessor(
                         untargetedPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -540,7 +562,8 @@
 
         private MessageRegistrationHandle RegisterBroadcastPostProcessorInternal<T>(
             InstanceId source,
-            Action<T> broadcastPostProcessor
+            Action<T> broadcastPostProcessor,
+            int priority
         )
             where T : IBroadcastMessage
         {
@@ -553,6 +576,7 @@
                     _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
                         broadcastPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -560,7 +584,8 @@
 
         private MessageRegistrationHandle RegisterBroadcastPostProcessorInternal<T>(
             InstanceId source,
-            MessageHandler.FastHandler<T> broadcastPostProcessor
+            MessageHandler.FastHandler<T> broadcastPostProcessor,
+            int priority
         )
             where T : IBroadcastMessage
         {
@@ -573,6 +598,7 @@
                     _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
                         broadcastPostProcessor,
+                        priority,
                         _messageBus
                     )
             );
@@ -626,15 +652,17 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="source">Source of the messages.</param>
-        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <param name="broadcastPostProcessor">Actual post processor logic.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterGameObjectBroadcastPostProcessor<T>(
             UnityEngine.GameObject source,
-            Action<T> broadcastPostProcesor
+            Action<T> broadcastPostProcessor,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
-            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcessor, priority);
         }
 
         /// <summary>
@@ -642,15 +670,17 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="source">Source of the messages.</param>
-        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <param name="broadcastPostProcessor">Actual post processor logic.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterGameObjectBroadcastPostProcessor<T>(
             UnityEngine.GameObject source,
-            MessageHandler.FastHandler<T> broadcastPostProcesor
+            MessageHandler.FastHandler<T> broadcastPostProcessor,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
-            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcessor, priority);
         }
 
         /// <summary>
@@ -662,14 +692,16 @@
         /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
         /// <param name="source">The component source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterComponentBroadcast<T>(
             UnityEngine.Component source,
-            Action<T> broadcastHandler
+            Action<T> broadcastHandler,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
-            return RegisterBroadcastInternal(source, broadcastHandler);
+            return RegisterBroadcastInternal(source, broadcastHandler, priority);
         }
 
         /// <summary>
@@ -681,14 +713,16 @@
         /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
         /// <param name="source">The component source for BroadcastMessages to listen for.</param>
         /// <param name="broadcastHandler">Actual handler functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterComponentBroadcast<T>(
             UnityEngine.Component source,
-            MessageHandler.FastHandler<T> broadcastHandler
+            MessageHandler.FastHandler<T> broadcastHandler,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
-            return RegisterBroadcastInternal(source, broadcastHandler);
+            return RegisterBroadcastInternal(source, broadcastHandler, priority);
         }
 
         /// <summary>
@@ -696,11 +730,13 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="source">Source of the messages.</param>
-        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <param name="broadcastPostProcessor">Actual post processor logic.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterComponentBroadcastPostProcessor<T>(
             UnityEngine.Component source,
-            Action<T> broadcastPostProcesor
+            Action<T> broadcastPostProcessor,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
@@ -712,7 +748,8 @@
                 () =>
                     _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
-                        broadcastPostProcesor,
+                        broadcastPostProcessor,
+                        priority: priority,
                         _messageBus
                     )
             );
@@ -723,11 +760,13 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="source">Source of the messages.</param>
-        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <param name="broadcastPostProcessor">Actual post processor logic.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterComponentBroadcastPostProcessor<T>(
             UnityEngine.Component source,
-            MessageHandler.FastHandler<T> broadcastPostProcesor
+            MessageHandler.FastHandler<T> broadcastPostProcessor,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
@@ -739,12 +778,14 @@
                 () =>
                     _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
-                        broadcastPostProcesor,
+                        broadcastPostProcessor,
+                        priority: priority,
                         _messageBus
                     )
             );
         }
 #else
+
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
         /// </summary>
@@ -792,15 +833,17 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="source">Source of the messages.</param>
-        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <param name="broadcastPostProcessor">Actual post processor logic.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(
             InstanceId source,
-            Action<T> broadcastPostProcesor
+            Action<T> broadcastPostProcessor,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
-            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcessor, priority);
         }
 
         /// <summary>
@@ -808,15 +851,17 @@
         /// </summary>
         /// <typeparam name="T">Type of message that the handler accepts.</typeparam>
         /// <param name="source">Source of the messages.</param>
-        /// <param name="broadcastPostProcesor">Actual post processor logic.</param>
+        /// <param name="broadcastPostProcessor">Actual post processor logic.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(
             InstanceId source,
-            MessageHandler.FastHandler<T> broadcastPostProcesor
+            MessageHandler.FastHandler<T> broadcastPostProcessor,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
-            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcesor);
+            return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcessor, priority);
         }
 #endif
 
@@ -890,9 +935,11 @@
         /// </note>
         /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
         /// <param name="broadcastHandler">Actual post process functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(
-            Action<InstanceId, T> broadcastHandler
+            Action<InstanceId, T> broadcastHandler,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
@@ -905,6 +952,7 @@
                 () =>
                     _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
                         broadcastHandler,
+                        priority: priority,
                         _messageBus
                     )
             );
@@ -918,9 +966,11 @@
         /// </note>
         /// <typeparam name="T">Type of the message that the handler accepts.</typeparam>
         /// <param name="broadcastHandler">Actual post process functionality.</param>
+        /// <param name="priority">Priority at which to run the handler, lower runs earlier than higher.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         public MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(
-            MessageHandler.FastHandlerWithContext<T> broadcastHandler
+            MessageHandler.FastHandlerWithContext<T> broadcastHandler,
+            int priority = 0
         )
             where T : IBroadcastMessage
         {
@@ -933,6 +983,7 @@
                 () =>
                     _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
                         broadcastHandler,
+                        priority: priority,
                         _messageBus
                     )
             );
