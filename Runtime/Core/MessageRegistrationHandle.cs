@@ -3,29 +3,88 @@
     using System;
     using System.Threading;
 
-    public readonly struct MessageRegistrationHandle : IEquatable<MessageRegistrationHandle>, IComparable<MessageRegistrationHandle>
+    public readonly struct MessageRegistrationHandle
+        : IEquatable<MessageRegistrationHandle>,
+            IComparable<MessageRegistrationHandle>,
+            IComparable
     {
         private static long StaticIdCount;
 
-        private readonly Guid _handle;
         private readonly long _id;
         private readonly int _hashCode;
 
         public static MessageRegistrationHandle CreateMessageRegistrationHandle()
         {
-            return new MessageRegistrationHandle(Guid.NewGuid(), Interlocked.Increment(ref StaticIdCount));
+            return new MessageRegistrationHandle(Interlocked.Increment(ref StaticIdCount));
         }
 
-        private MessageRegistrationHandle(Guid handle, long id)
+        private MessageRegistrationHandle(long id)
         {
-            _handle = handle;
             _id = id;
-            _hashCode = _handle.GetHashCode();
+            _hashCode = _id.GetHashCode();
         }
 
-        public override int GetHashCode()
+        public static bool operator ==(
+            MessageRegistrationHandle left,
+            MessageRegistrationHandle right
+        )
         {
-            return _hashCode;
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(
+            MessageRegistrationHandle left,
+            MessageRegistrationHandle right
+        )
+        {
+            return !left.Equals(right);
+        }
+
+        public static bool operator >(
+            MessageRegistrationHandle left,
+            MessageRegistrationHandle right
+        )
+        {
+            return left.CompareTo(right) > 0;
+        }
+
+        public static bool operator <(
+            MessageRegistrationHandle left,
+            MessageRegistrationHandle right
+        )
+        {
+            return left.CompareTo(right) < 0;
+        }
+
+        public static bool operator <=(
+            MessageRegistrationHandle left,
+            MessageRegistrationHandle right
+        )
+        {
+            return left.CompareTo(right) <= 0;
+        }
+
+        public static bool operator >=(
+            MessageRegistrationHandle left,
+            MessageRegistrationHandle right
+        )
+        {
+            return left.CompareTo(right) >= 0;
+        }
+
+        public int CompareTo(MessageRegistrationHandle other)
+        {
+            return _id.CompareTo(other._id);
+        }
+
+        public int CompareTo(object obj)
+        {
+            if (obj is MessageRegistrationHandle handle)
+            {
+                return CompareTo(handle);
+            }
+
+            return -1;
         }
 
         public override bool Equals(object other)
@@ -35,21 +94,17 @@
 
         public bool Equals(MessageRegistrationHandle other)
         {
-            return _id == other._id && _handle.Equals(other._handle);
+            return _id == other._id;
         }
 
-        public int CompareTo(MessageRegistrationHandle other)
+        public override int GetHashCode()
         {
-            return _id.CompareTo(other._id);
+            return _hashCode;
         }
 
         public override string ToString()
         {
-            return new
-            {
-                Handle = _handle.ToString(),
-                Id = _id,
-            }.ToString();
+            return new { Id = _id }.ToString();
         }
     }
 }

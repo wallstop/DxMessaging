@@ -2,6 +2,7 @@
 {
     using System.Collections;
     using System.Collections.Generic;
+    using System.Linq;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.Messages;
@@ -16,12 +17,20 @@
         [UnityTest]
         public IEnumerator SimpleGameObjectBroadcastNormal()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNormal) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleGameObjectBroadcastNormal) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNormal) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleGameObjectBroadcastNormal) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             int test2ReceiveCount = 0;
@@ -29,8 +38,14 @@
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
 
-            _ = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, _ => ++test1ReceiveCount);
-            _ = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test2, _ => ++test2ReceiveCount);
+            _ = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                test1,
+                _ => ++test1ReceiveCount
+            );
+            _ = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                test2,
+                _ => ++test2ReceiveCount
+            );
 
             SimpleBroadcastMessage message = new();
             message.EmitGameObjectBroadcast(test1);
@@ -69,12 +84,20 @@
         [UnityTest]
         public IEnumerator SimpleGameObjectBroadcastNoCopy()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastNoCopy) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleGameObjectBroadcastNoCopy) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastNoCopy) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleGameObjectBroadcastNoCopy) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(ref SimpleBroadcastMessage message)
@@ -130,12 +153,20 @@
         [UnityTest]
         public IEnumerator SimpleGameObjectBroadcastDualMode()
         {
-            GameObject test1 = new(nameof(SimpleGameObjectBroadcastDualMode) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleGameObjectBroadcastDualMode) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleGameObjectBroadcastDualMode) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleGameObjectBroadcastDualMode) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(ref SimpleBroadcastMessage message)
@@ -153,10 +184,19 @@
             MessageRegistrationToken token2 = GetToken(component2);
 
             HashSet<MessageRegistrationHandle> handles = new();
-            var handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, Test1Receive);
+            var handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                test1,
+                Test1Receive
+            );
             _ = handles.Add(handle);
-            handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, _ => ++test1ReceiveCount);
-            handle = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test2, Test2Receive);
+            handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                test1,
+                _ => ++test1ReceiveCount
+            );
+            handle = token2.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                test2,
+                Test2Receive
+            );
             _ = handles.Add(handle);
 
             SimpleBroadcastMessage message = new();
@@ -195,12 +235,20 @@
         [UnityTest]
         public IEnumerator SimpleComponentBroadcastNormal()
         {
-            GameObject test1 = new(nameof(SimpleComponentBroadcastNormal) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleComponentBroadcastNormal) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleComponentBroadcastNormal) + "3", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleComponentBroadcastNormal) + "3",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             int test2ReceiveCount = 0;
@@ -208,8 +256,14 @@
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
 
-            _ = token1.RegisterComponentBroadcast<SimpleBroadcastMessage>(component1, _ => ++test1ReceiveCount);
-            _ = token2.RegisterComponentBroadcast<SimpleBroadcastMessage>(component2, _ => ++test2ReceiveCount);
+            _ = token1.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+                component1,
+                _ => ++test1ReceiveCount
+            );
+            _ = token2.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+                component2,
+                _ => ++test2ReceiveCount
+            );
 
             SimpleBroadcastMessage message = new();
             message.EmitComponentBroadcast(component1);
@@ -226,7 +280,8 @@
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component3 =
+                test3.AddComponent<EmptyMessageAwareComponent>();
             message.EmitComponentBroadcast(component3);
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
@@ -248,12 +303,20 @@
         [UnityTest]
         public IEnumerator SimpleComponentBroadcastNoCopy()
         {
-            GameObject test1 = new(nameof(SimpleComponentBroadcastNoCopy) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleComponentBroadcastNoCopy) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleComponentBroadcastNoCopy) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleComponentBroadcastNoCopy) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(ref SimpleBroadcastMessage message)
@@ -288,7 +351,8 @@
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component3 =
+                test3.AddComponent<EmptyMessageAwareComponent>();
             message.EmitComponentBroadcast(component3);
             Assert.AreEqual(1, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
@@ -310,12 +374,20 @@
         [UnityTest]
         public IEnumerator SimpleComponentBroadcastDualMode()
         {
-            GameObject test1 = new(nameof(SimpleComponentBroadcastDualMode) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleComponentBroadcastDualMode) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleComponentBroadcastDualMode) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleComponentBroadcastDualMode) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(ref SimpleBroadcastMessage message)
@@ -333,7 +405,10 @@
             MessageRegistrationToken token2 = GetToken(component2);
 
             _ = token1.RegisterComponentBroadcast<SimpleBroadcastMessage>(component1, Test1Receive);
-            _ = token1.RegisterComponentBroadcast<SimpleBroadcastMessage>(component1, _ => ++test1ReceiveCount);
+            _ = token1.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+                component1,
+                _ => ++test1ReceiveCount
+            );
             _ = token2.RegisterComponentBroadcast<SimpleBroadcastMessage>(component2, Test2Receive);
 
             SimpleBroadcastMessage message = new();
@@ -351,7 +426,8 @@
             Assert.AreEqual(2, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
 
-            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component3 =
+                test3.AddComponent<EmptyMessageAwareComponent>();
             message.EmitComponentBroadcast(component3);
             Assert.AreEqual(2, test1ReceiveCount);
             Assert.AreEqual(1, test2ReceiveCount);
@@ -373,12 +449,20 @@
         [UnityTest]
         public IEnumerator SimpleBroadcastWithoutSourceNormal()
         {
-            GameObject test1 = new(nameof(SimpleBroadcastWithoutSourceNormal) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleBroadcastWithoutSourceNormal) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleBroadcastWithoutSourceNormal) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleBroadcastWithoutSourceNormal) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(InstanceId id, SimpleBroadcastMessage message)
@@ -413,7 +497,8 @@
             Assert.AreEqual(3, test1ReceiveCount);
             Assert.AreEqual(3, test2ReceiveCount);
 
-            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component3 =
+                test3.AddComponent<EmptyMessageAwareComponent>();
             message.EmitComponentBroadcast(component3);
             Assert.AreEqual(4, test1ReceiveCount);
             Assert.AreEqual(4, test2ReceiveCount);
@@ -435,12 +520,20 @@
         [UnityTest]
         public IEnumerator SimpleBroadcastWithoutSourceNoCopy()
         {
-            GameObject test1 = new(nameof(SimpleBroadcastWithoutSourceNoCopy) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleBroadcastWithoutSourceNoCopy) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleBroadcastWithoutSourceNoCopy) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleBroadcastWithoutSourceNoCopy) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
@@ -475,7 +568,8 @@
             Assert.AreEqual(3, test1ReceiveCount);
             Assert.AreEqual(3, test2ReceiveCount);
 
-            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component3 =
+                test3.AddComponent<EmptyMessageAwareComponent>();
             message.EmitComponentBroadcast(component3);
             Assert.AreEqual(4, test1ReceiveCount);
             Assert.AreEqual(4, test2ReceiveCount);
@@ -497,12 +591,20 @@
         [UnityTest]
         public IEnumerator SimpleBroadcastWithoutSourceDualMode()
         {
-            GameObject test1 = new(nameof(SimpleBroadcastWithoutSourceDualMode) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test1 = new(
+                nameof(SimpleBroadcastWithoutSourceDualMode) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test1);
-            GameObject test2 = new(nameof(SimpleBroadcastWithoutSourceDualMode) + "2", typeof(EmptyMessageAwareComponent));
+            GameObject test2 = new(
+                nameof(SimpleBroadcastWithoutSourceDualMode) + "2",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test2);
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
             void Test1Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
@@ -537,7 +639,8 @@
             Assert.AreEqual(3, test1ReceiveCount);
             Assert.AreEqual(3, test2ReceiveCount);
 
-            EmptyMessageAwareComponent component3 = test3.AddComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component3 =
+                test3.AddComponent<EmptyMessageAwareComponent>();
             message.EmitComponentBroadcast(component3);
             Assert.AreEqual(4, test1ReceiveCount);
             Assert.AreEqual(4, test2ReceiveCount);
@@ -559,7 +662,10 @@
         [UnityTest]
         public IEnumerator BroadcastUntyped()
         {
-            GameObject test = new(nameof(BroadcastUntyped) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test = new(
+                nameof(BroadcastUntyped) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test);
 
             int gameObjectCount = 0;
@@ -594,6 +700,132 @@
             Assert.AreEqual(2, componentCount);
             Assert.AreEqual(2, gameObjectCount);
 
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator PriorityGameObject()
+        {
+            GameObject test = new(
+                nameof(PriorityGameObject) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(test);
+
+            int[] received = new int[100];
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            for (int i = 0; i < received.Length; ++i)
+            {
+                int priority = i;
+                token.RegisterGameObjectBroadcast(
+                    test,
+                    (ref SimpleBroadcastMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        if (0 < priority)
+                        {
+                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                        }
+                    },
+                    priority: priority
+                );
+                token.RegisterGameObjectBroadcastPostProcessor(
+                    test,
+                    (ref SimpleBroadcastMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        Assert.AreEqual(1, previous % 2);
+                        if (0 < priority)
+                        {
+                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                        }
+                    },
+                    priority: priority
+                );
+            }
+
+            SimpleBroadcastMessage message = new();
+            const int numRuns = 100;
+            for (int i = 0; i < numRuns; ++i)
+            {
+                // Should do something
+                message.EmitGameObjectBroadcast(test);
+                // Should do nothing
+                message.EmitComponentBroadcast(component);
+            }
+
+            Assert.AreEqual(
+                1,
+                received.Distinct().Count(),
+                "Expected received to be uniform, found: [{0}].",
+                string.Join(",", received.Distinct().OrderBy(x => x))
+            );
+
+            Assert.AreEqual(numRuns * 2, received.Distinct().Single());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator PriorityComponent()
+        {
+            GameObject test = new(
+                nameof(PriorityComponent) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(test);
+
+            int[] received = new int[100];
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            for (int i = 0; i < received.Length; ++i)
+            {
+                int priority = i;
+                token.RegisterComponentBroadcast(
+                    component,
+                    (ref SimpleBroadcastMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        if (0 < priority)
+                        {
+                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                        }
+                    },
+                    priority: priority
+                );
+                token.RegisterComponentBroadcastPostProcessor(
+                    component,
+                    (ref SimpleBroadcastMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        Assert.AreEqual(1, previous % 2);
+                        if (0 < priority)
+                        {
+                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                        }
+                    },
+                    priority: priority
+                );
+            }
+
+            SimpleBroadcastMessage message = new();
+            const int numRuns = 100;
+            for (int i = 0; i < numRuns; ++i)
+            {
+                // Should do something
+                message.EmitComponentBroadcast(component);
+                // Should do nothing
+                message.EmitGameObjectBroadcast(test);
+            }
+
+            Assert.AreEqual(
+                1,
+                received.Distinct().Count(),
+                "Expected received to be uniform, found: [{0}].",
+                string.Join(",", received.Distinct().OrderBy(x => x))
+            );
+
+            Assert.AreEqual(numRuns * 2, received.Distinct().Single());
             yield break;
         }
     }

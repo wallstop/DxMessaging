@@ -1,6 +1,7 @@
 ﻿namespace DxMessaging.Tests.Runtime.Core
 {
     using System.Collections;
+    using System.Linq;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.Messages;
@@ -20,8 +21,10 @@
             GameObject test2 = new(nameof(SimpleNormal) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
 
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int count1 = 0;
             MessageRegistrationToken token1 = GetToken(component1);
@@ -48,8 +51,10 @@
             GameObject test2 = new(nameof(SimpleNormal) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
 
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int count1 = 0;
             void Receive1(ref SimpleUntargetedMessage message)
@@ -86,8 +91,10 @@
             GameObject test2 = new(nameof(SimpleNormal) + "2", typeof(EmptyMessageAwareComponent));
             _spawned.Add(test2);
 
-            EmptyMessageAwareComponent component1 = test1.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent component2 = test2.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component1 =
+                test1.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent component2 =
+                test2.GetComponent<EmptyMessageAwareComponent>();
 
             int count1 = 0;
             void Receive1(ref SimpleUntargetedMessage message)
@@ -120,7 +127,10 @@
         [UnityTest]
         public IEnumerator UntargetedUntyped()
         {
-            GameObject test = new(nameof(UntargetedUntyped) + "1", typeof(EmptyMessageAwareComponent));
+            GameObject test = new(
+                nameof(UntargetedUntyped) + "1",
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test);
 
             int count = 0;
@@ -143,6 +153,62 @@
             message.EmitUntargeted();
             Assert.AreEqual(4, count);
 
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator Priority()
+        {
+            GameObject test = new(nameof(Priority) + "1", typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            int[] received = new int[100];
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            for (int i = 0; i < received.Length; ++i)
+            {
+                int priority = i;
+                token.RegisterUntargeted(
+                    (ref SimpleUntargetedMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        if (0 < priority)
+                        {
+                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                        }
+                    },
+                    priority: priority
+                );
+                token.RegisterUntargetedPostProcessor(
+                    (ref SimpleUntargetedMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        Assert.AreEqual(1, previous % 2);
+                        if (0 < priority)
+                        {
+                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                        }
+                    },
+                    priority: priority
+                );
+            }
+
+            SimpleUntargetedMessage message = new();
+            const int numRuns = 100;
+            for (int i = 0; i < numRuns; ++i)
+            {
+                // Should do something
+                message.EmitUntargeted();
+            }
+
+            Assert.AreEqual(
+                1,
+                received.Distinct().Count(),
+                "Expected received to be uniform, found: [{0}].",
+                string.Join(",", received.Distinct().OrderBy(x => x))
+            );
+
+            Assert.AreEqual(numRuns * 2, received.Distinct().Single());
             yield break;
         }
     }

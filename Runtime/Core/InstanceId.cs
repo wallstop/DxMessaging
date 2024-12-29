@@ -17,14 +17,17 @@
         [JsonInclude]
         [JsonPropertyName("id")]
         [DataMember(Name = "id")]
+        public int Id => _id;
+
+        [JsonIgnore]
         private readonly int _id;
 
 #if UNITY_2017_1_OR_NEWER
         public UnityEngine.Object Object { get; }
 #endif
-        
+
         [JsonConstructor]
-        public InstanceId(int id) : this()
+        public InstanceId(int id)
         {
             _id = id;
 #if UNITY_2017_1_OR_NEWER
@@ -33,7 +36,7 @@
         }
 
 #if UNITY_2017_1_OR_NEWER
-        private InstanceId(UnityEngine.Object @object) : this()
+        private InstanceId(UnityEngine.Object @object)
         {
             _id = @object.GetInstanceID();
             Object = @object;
@@ -61,16 +64,6 @@
             return new InstanceId(component);
         }
 #endif
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int CompareTo(object rhs)
-        {
-            if (rhs is InstanceId other)
-            {
-                return CompareTo(other);
-            }
-            return -1;
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(InstanceId other)
@@ -110,13 +103,47 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(InstanceId lhs, InstanceId rhs)
         {
-            return !(lhs == rhs);
+            return !lhs.Equals(rhs);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator <(InstanceId lhs, InstanceId rhs)
+        {
+            return lhs.CompareTo(rhs) < 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator <=(InstanceId lhs, InstanceId rhs)
+        {
+            return lhs.CompareTo(rhs) <= 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator >(InstanceId lhs, InstanceId rhs)
+        {
+            return lhs.CompareTo(rhs) > 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator >=(InstanceId lhs, InstanceId rhs)
+        {
+            return lhs.CompareTo(rhs) >= 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int CompareTo(InstanceId other)
         {
             return _id.CompareTo(other._id);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int CompareTo(object rhs)
+        {
+            if (rhs is InstanceId other)
+            {
+                return CompareTo(other);
+            }
+            return -1;
         }
     }
 }
