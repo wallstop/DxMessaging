@@ -6,6 +6,7 @@
     using Core;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using global::Unity.PerformanceTesting;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
@@ -20,7 +21,7 @@
         public override void Setup()
         {
             base.Setup();
-            MessagingDebug.LogFunction = (_1, _2) => { };
+            MessagingDebug.LogFunction = (_, _) => { };
         }
 
         [UnityTest]
@@ -39,23 +40,109 @@
             RunTest(component => NormalComponent(timer, timeout, component, message));
             RunTest(component => NoCopyGameObject(timer, timeout, component, message));
             RunTest(component => NoCopyComponent(timer, timeout, component, message));
-            
+
             SimpleUntargetedMessage untargetedMessage = new();
             RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
             yield break;
         }
 
+        [UnityTest]
+        [Performance]
+        public IEnumerator BenchmarkBroadcast()
+        {
+            GameObject go = CreateGameObject();
+            MessageRegistrationToken token = GetToken(
+                go.GetComponent<EmptyMessageAwareComponent>()
+            );
+            int count = 0;
+            token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(go, Handle);
+
+            SimpleBroadcastMessage message = new();
+
+            Measure
+                .Method(() => message.EmitGameObjectBroadcast(go))
+                .WarmupCount(10)
+                .IterationsPerMeasurement(10)
+                .MeasurementCount(1_000)
+                .Run();
+            yield break;
+
+            void Handle(SimpleBroadcastMessage _)
+            {
+                ++count;
+            }
+        }
+
+        [UnityTest]
+        [Performance]
+        public IEnumerator BenchmarkTargeted()
+        {
+            GameObject go = CreateGameObject();
+            MessageRegistrationToken token = GetToken(
+                go.GetComponent<EmptyMessageAwareComponent>()
+            );
+            int count = 0;
+            token.RegisterGameObjectTargeted<SimpleTargetedMessage>(go, Handle);
+
+            SimpleTargetedMessage message = new();
+
+            Measure
+                .Method(() => message.EmitGameObjectTargeted(go))
+                .WarmupCount(10)
+                .IterationsPerMeasurement(10)
+                .MeasurementCount(1_000)
+                .Run();
+            yield break;
+
+            void Handle(SimpleTargetedMessage _)
+            {
+                ++count;
+            }
+        }
+
+        [UnityTest]
+        [Performance]
+        public IEnumerator BenchmarkUntargeted()
+        {
+            GameObject go = CreateGameObject();
+            MessageRegistrationToken token = GetToken(
+                go.GetComponent<EmptyMessageAwareComponent>()
+            );
+            int count = 0;
+            token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
+
+            SimpleUntargetedMessage message = new();
+
+            Measure
+                .Method(() => message.EmitUntargeted())
+                .WarmupCount(10)
+                .IterationsPerMeasurement(10)
+                .MeasurementCount(1_000)
+                .Run();
+            yield break;
+
+            void Handle(SimpleUntargetedMessage _)
+            {
+                ++count;
+            }
+        }
+
         private GameObject CreateGameObject()
         {
             GameObject target = new(
-                nameof(Benchmark), typeof(EmptyMessageAwareComponent), typeof(SpriteRenderer),
-                typeof(Rigidbody2D), typeof(CircleCollider2D), typeof(LineRenderer));
+                nameof(Benchmark),
+                typeof(EmptyMessageAwareComponent),
+                typeof(SpriteRenderer),
+                typeof(Rigidbody2D),
+                typeof(CircleCollider2D),
+                typeof(LineRenderer)
+            );
             _spawned.Add(target);
 
             return target;
         }
 
-        private void DisplayCount(string testName, int count, TimeSpan timeout)
+        private static void DisplayCount(string testName, int count, TimeSpan timeout)
         {
             Debug.Log($"| {testName} | {Math.Floor(count / timeout.TotalSeconds):N0} |");
         }
@@ -74,7 +161,12 @@
             }
         }
 
-        private void Unity(Stopwatch timer, TimeSpan timeout, GameObject target,  ComplexTargetedMessage message)
+        private static void Unity(
+            Stopwatch timer,
+            TimeSpan timeout,
+            GameObject target,
+            ComplexTargetedMessage message
+        )
         {
             int count = 0;
             var component = target.AddComponent<SimpleMessageAwareComponent>();
@@ -82,13 +174,20 @@
             timer.Restart();
             do
             {
-                target.SendMessage(nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage), message);
-            }
-            while (timer.Elapsed < timeout);
+                target.SendMessage(
+                    nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
+                    message
+                );
+            } while (timer.Elapsed < timeout);
             DisplayCount("Unity", count, timeout);
         }
 
-        private void NormalGameObject(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, ComplexTargetedMessage message)
+        private void NormalGameObject(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            ComplexTargetedMessage message
+        )
         {
             int count = 0;
             var token = GetToken(component);
@@ -104,12 +203,16 @@
             do
             {
                 message.EmitGameObjectTargeted(go);
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (GameObject) - Normal", count, timeout);
         }
 
-        private void NormalComponent(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, ComplexTargetedMessage message)
+        private void NormalComponent(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            ComplexTargetedMessage message
+        )
         {
             int count = 0;
             var token = GetToken(component);
@@ -124,12 +227,16 @@
             do
             {
                 message.EmitComponentTargeted(component);
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (Component) - Normal", count, timeout);
         }
 
-        private void NoCopyGameObject(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, ComplexTargetedMessage message)
+        private void NoCopyGameObject(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            ComplexTargetedMessage message
+        )
         {
             int count = 0;
             var token = GetToken(component);
@@ -146,12 +253,16 @@
             do
             {
                 message.EmitGameObjectTargeted(component.gameObject);
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (GameObject) - No-Copy", count, timeout);
         }
 
-        private void NoCopyComponent(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, ComplexTargetedMessage message)
+        private void NoCopyComponent(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            ComplexTargetedMessage message
+        )
         {
             int count = 0;
             var token = GetToken(component);
@@ -167,12 +278,16 @@
             do
             {
                 message.EmitComponentTargeted(component);
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (Component) - No-Copy", count, timeout);
         }
 
-        private void NoCopyUntargeted(Stopwatch timer, TimeSpan timeout, EmptyMessageAwareComponent component, SimpleUntargetedMessage message)
+        private void NoCopyUntargeted(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            SimpleUntargetedMessage message
+        )
         {
             int count = 0;
             var token = GetToken(component);
@@ -188,8 +303,7 @@
             do
             {
                 message.EmitUntargeted();
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
             DisplayCount("DxMessaging (Untargeted) - No-Copy", count, timeout);
         }
     }

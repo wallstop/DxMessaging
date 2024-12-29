@@ -81,8 +81,8 @@
         private readonly Stack<
             List<KeyValuePair<int, Dictionary<MessageHandler, int>>>
         > _sortedHandlers = new();
-        private readonly Stack<List<object>> _interceptors = new();
-        private readonly Stack<List<int>> _interceptorKeys = new();
+        private readonly Stack<List<List<object>>> _interceptors = new();
+        private readonly Stack<List<object>> _innerInterceptorsStack = new();
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
@@ -969,26 +969,36 @@
 
         private bool TryGetInterceptorCaches(
             Type type,
-            out SortedDictionary<int, List<object>> interceptors,
-            out List<int> interceptorKeys,
-            out List<object> interceptorStack
+            out List<List<object>> interceptorStack,
+            out List<object> interceptorObjects
         )
         {
-            if (!_interceptsByType.TryGetValue(type, out interceptors) || interceptors.Count <= 0)
+            if (
+                !_interceptsByType.TryGetValue(
+                    type,
+                    out SortedDictionary<int, List<object>> interceptors
+                )
+                || interceptors.Count <= 0
+            )
             {
-                interceptorKeys = default;
                 interceptorStack = default;
+                interceptorObjects = default;
                 return false;
             }
 
             if (!_interceptors.TryPop(out interceptorStack))
             {
-                interceptorStack = new List<object>();
+                interceptorStack = new List<List<object>>(interceptors.Values);
+            }
+            else
+            {
+                interceptorStack.Clear();
+                interceptorStack.AddRange(interceptors.Values);
             }
 
-            if (!_interceptorKeys.TryPop(out interceptorKeys))
+            if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
             {
-                interceptorKeys = new List<int>();
+                interceptorObjects = new List<object>();
             }
 
             return true;
@@ -1000,9 +1010,8 @@
             if (
                 !TryGetInterceptorCaches(
                     type,
-                    out SortedDictionary<int, List<object>> interceptors,
-                    out List<int> interceptorKeys,
-                    out List<object> interceptorStack
+                    out List<List<object>> interceptorStack,
+                    out List<object> interceptorObjects
                 )
             )
             {
@@ -1011,22 +1020,12 @@
 
             try
             {
-                interceptorKeys.Clear();
-                interceptorKeys.AddRange(interceptors.Keys);
-                foreach (int priority in interceptorKeys)
+                foreach (List<object> stack in interceptorStack)
                 {
-                    if (
-                        !interceptors.TryGetValue(priority, out List<object> untypedInterceptors)
-                        || untypedInterceptors.Count <= 0
-                    )
-                    {
-                        continue;
-                    }
+                    interceptorObjects.Clear();
+                    interceptorObjects.AddRange(stack);
 
-                    interceptorStack.Clear();
-                    interceptorStack.AddRange(untypedInterceptors);
-
-                    foreach (object transformer in interceptorStack)
+                    foreach (object transformer in interceptorObjects)
                     {
                         if (transformer is not UntargetedInterceptor<T> typedTransformer)
                         {
@@ -1043,7 +1042,7 @@
             finally
             {
                 _interceptors.Push(interceptorStack);
-                _interceptorKeys.Push(interceptorKeys);
+                _innerInterceptorsStack.Push(interceptorObjects);
             }
 
             return true;
@@ -1055,9 +1054,8 @@
             if (
                 !TryGetInterceptorCaches(
                     type,
-                    out SortedDictionary<int, List<object>> interceptors,
-                    out List<int> interceptorKeys,
-                    out List<object> interceptorStack
+                    out List<List<object>> interceptorStack,
+                    out List<object> interceptorObjects
                 )
             )
             {
@@ -1066,22 +1064,12 @@
 
             try
             {
-                interceptorKeys.Clear();
-                interceptorKeys.AddRange(interceptors.Keys);
-                foreach (int priority in interceptorKeys)
+                foreach (List<object> stack in interceptorStack)
                 {
-                    if (
-                        !interceptors.TryGetValue(priority, out List<object> untypedInterceptors)
-                        || untypedInterceptors.Count <= 0
-                    )
-                    {
-                        continue;
-                    }
+                    interceptorObjects.Clear();
+                    interceptorObjects.AddRange(stack);
 
-                    interceptorStack.Clear();
-                    interceptorStack.AddRange(untypedInterceptors);
-
-                    foreach (object transformer in interceptorStack)
+                    foreach (object transformer in interceptorObjects)
                     {
                         if (transformer is not TargetedInterceptor<T> typedTransformer)
                         {
@@ -1098,7 +1086,7 @@
             finally
             {
                 _interceptors.Push(interceptorStack);
-                _interceptorKeys.Push(interceptorKeys);
+                _innerInterceptorsStack.Push(interceptorObjects);
             }
 
             return true;
@@ -1110,9 +1098,8 @@
             if (
                 !TryGetInterceptorCaches(
                     type,
-                    out SortedDictionary<int, List<object>> interceptors,
-                    out List<int> interceptorKeys,
-                    out List<object> interceptorStack
+                    out List<List<object>> interceptorStack,
+                    out List<object> interceptorObjects
                 )
             )
             {
@@ -1121,22 +1108,12 @@
 
             try
             {
-                interceptorKeys.Clear();
-                interceptorKeys.AddRange(interceptors.Keys);
-                foreach (int priority in interceptorKeys)
+                foreach (List<object> stack in interceptorStack)
                 {
-                    if (
-                        !interceptors.TryGetValue(priority, out List<object> untypedInterceptors)
-                        || untypedInterceptors.Count <= 0
-                    )
-                    {
-                        continue;
-                    }
+                    interceptorObjects.Clear();
+                    interceptorObjects.AddRange(stack);
 
-                    interceptorStack.Clear();
-                    interceptorStack.AddRange(untypedInterceptors);
-
-                    foreach (object transformer in interceptorStack)
+                    foreach (object transformer in interceptorObjects)
                     {
                         if (transformer is not BroadcastInterceptor<T> typedTransformer)
                         {
@@ -1153,7 +1130,7 @@
             finally
             {
                 _interceptors.Push(interceptorStack);
-                _interceptorKeys.Push(interceptorKeys);
+                _innerInterceptorsStack.Push(interceptorObjects);
             }
 
             return true;

@@ -713,9 +713,13 @@
                     (ref SimpleTargetedMessage _) =>
                     {
                         int previous = received[priority]++;
-                        if (0 < priority)
+                        for (int j = priority - 1; j >= 0; --j)
                         {
-                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
                         }
                     },
                     priority: priority
@@ -726,9 +730,13 @@
                     {
                         int previous = received[priority]++;
                         Assert.AreEqual(1, previous % 2);
-                        if (0 < priority)
+                        for (int j = priority - 1; j >= 0; --j)
                         {
-                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
                         }
                     },
                     priority: priority
@@ -776,9 +784,13 @@
                     (ref SimpleTargetedMessage _) =>
                     {
                         int previous = received[priority]++;
-                        if (0 < priority)
+                        for (int j = priority - 1; j >= 0; --j)
                         {
-                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
                         }
                     },
                     priority: priority
@@ -789,9 +801,13 @@
                     {
                         int previous = received[priority]++;
                         Assert.AreEqual(1, previous % 2);
-                        if (0 < priority)
+                        for (int j = priority - 1; j >= 0; --j)
                         {
-                            Assert.AreEqual(previous + 1, received[priority - 1]);
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
                         }
                     },
                     priority: priority
@@ -805,6 +821,56 @@
                 // Should do something
                 message.EmitComponentTargeted(component);
                 // Should do nothing
+                message.EmitGameObjectTargeted(test);
+            }
+
+            Assert.AreEqual(
+                1,
+                received.Distinct().Count(),
+                "Expected received to be uniform, found: [{0}].",
+                string.Join(",", received.Distinct().OrderBy(x => x))
+            );
+
+            Assert.AreEqual(numRuns * 2, received.Distinct().Single());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator Interceptor()
+        {
+            GameObject test = new(nameof(Interceptor), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+
+            int[] received = new int[100];
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            for (int i = 0; i < received.Length; ++i)
+            {
+                int priority = i;
+                token.RegisterTargetedInterceptor(
+                    (ref InstanceId source, ref SimpleTargetedMessage _) =>
+                    {
+                        int previous = received[priority]++;
+                        for (int j = priority - 1; j >= 0; --j)
+                        {
+                            Assert.AreEqual(previous + 1, received[j]);
+                        }
+                        for (int j = priority + 1; j < received.Length; ++j)
+                        {
+                            Assert.AreEqual(previous, received[j]);
+                        }
+
+                        return true;
+                    },
+                    priority: priority
+                );
+            }
+
+            SimpleTargetedMessage message = new();
+            const int numRuns = 100;
+            for (int i = 0; i < numRuns; ++i)
+            {
+                message.EmitComponentTargeted(component);
                 message.EmitGameObjectTargeted(test);
             }
 
