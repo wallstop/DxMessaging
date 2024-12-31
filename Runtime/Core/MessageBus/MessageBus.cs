@@ -518,8 +518,8 @@
                 }
                 case 1:
                 {
-                    KeyValuePair<MessageHandler, int> entry = handlers.First();
-                    entry.Key.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    MessageHandler handler = handlers.Keys.First();
+                    handler.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
                     return;
                 }
                 default:
