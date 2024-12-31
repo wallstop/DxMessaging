@@ -33,42 +33,39 @@
 
         public RegistrationLog Log => _log;
 
+        private readonly Dictionary<Type, SortedList<int, Dictionary<MessageHandler, int>>> _sinks =
+            new();
         private readonly Dictionary<
             Type,
-            SortedDictionary<int, Dictionary<MessageHandler, int>>
-        > _sinks = new();
-        private readonly Dictionary<
-            Type,
-            Dictionary<InstanceId, SortedDictionary<int, Dictionary<MessageHandler, int>>>
+            Dictionary<InstanceId, SortedList<int, Dictionary<MessageHandler, int>>>
         > _targetedSinks = new();
 
         private readonly Dictionary<
             Type,
-            Dictionary<InstanceId, SortedDictionary<int, Dictionary<MessageHandler, int>>>
+            Dictionary<InstanceId, SortedList<int, Dictionary<MessageHandler, int>>>
         > _broadcastSinks = new();
         private readonly Dictionary<
             Type,
-            SortedDictionary<int, Dictionary<MessageHandler, int>>
+            SortedList<int, Dictionary<MessageHandler, int>>
         > _postProcessingSinks = new();
         private readonly Dictionary<
             Type,
-            Dictionary<InstanceId, SortedDictionary<int, Dictionary<MessageHandler, int>>>
+            Dictionary<InstanceId, SortedList<int, Dictionary<MessageHandler, int>>>
         > _postProcessingTargetedSinks = new();
         private readonly Dictionary<
             Type,
-            Dictionary<InstanceId, SortedDictionary<int, Dictionary<MessageHandler, int>>>
+            Dictionary<InstanceId, SortedList<int, Dictionary<MessageHandler, int>>>
         > _postProcessingBroadcastSinks = new();
         private readonly Dictionary<
             Type,
-            SortedDictionary<int, Dictionary<MessageHandler, int>>
+            SortedList<int, Dictionary<MessageHandler, int>>
         > _postProcessingTargetedWithoutTargetingSinks = new();
         private readonly Dictionary<
             Type,
-            SortedDictionary<int, Dictionary<MessageHandler, int>>
+            SortedList<int, Dictionary<MessageHandler, int>>
         > _postProcessingBroadcastWithoutSourceSinks = new();
         private readonly Dictionary<MessageHandler, int> _globalSinks = new();
-        private readonly Dictionary<Type, SortedDictionary<int, List<object>>> _interceptsByType =
-            new();
+        private readonly Dictionary<Type, SortedList<int, List<object>>> _interceptsByType = new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
@@ -309,11 +306,11 @@
             if (
                 !_interceptsByType.TryGetValue(
                     type,
-                    out SortedDictionary<int, List<object>> prioritizedInterceptors
+                    out SortedList<int, List<object>> prioritizedInterceptors
                 )
             )
             {
-                prioritizedInterceptors = new SortedDictionary<int, List<object>>();
+                prioritizedInterceptors = new SortedList<int, List<object>>();
                 _interceptsByType[type] = prioritizedInterceptors;
             }
 
@@ -461,7 +458,7 @@
             if (
                 _postProcessingSinks.TryGetValue(
                     type,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> sortedHandlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> sortedHandlers
                 )
                 && 0 < sortedHandlers.Count
             )
@@ -597,12 +594,12 @@
                     type,
                     out Dictionary<
                         InstanceId,
-                        SortedDictionary<int, Dictionary<MessageHandler, int>>
+                        SortedList<int, Dictionary<MessageHandler, int>>
                     > targetedHandlers
                 )
                 && targetedHandlers.TryGetValue(
                     target,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> sortedHandlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> sortedHandlers
                 )
                 && 0 < sortedHandlers.Count
             )
@@ -929,12 +926,12 @@
                     type,
                     out Dictionary<
                         InstanceId,
-                        SortedDictionary<int, Dictionary<MessageHandler, int>>
+                        SortedList<int, Dictionary<MessageHandler, int>>
                     > broadcastHandlers
                 )
                 && broadcastHandlers.TryGetValue(
                     source,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> sortedHandlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> sortedHandlers
                 )
                 && 0 < sortedHandlers.Count
             )
@@ -1336,10 +1333,7 @@
         )
         {
             if (
-                !_interceptsByType.TryGetValue(
-                    type,
-                    out SortedDictionary<int, List<object>> interceptors
-                )
+                !_interceptsByType.TryGetValue(type, out SortedList<int, List<object>> interceptors)
                 || interceptors.Count <= 0
             )
             {
@@ -1504,7 +1498,7 @@
             if (
                 !_sinks.TryGetValue(
                     type,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> sortedHandlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> sortedHandlers
                 )
                 || sortedHandlers.Count <= 0
             )
@@ -1587,7 +1581,7 @@
             if (
                 !_sinks.TryGetValue(
                     type,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> sortedHandlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> sortedHandlers
                 )
                 || sortedHandlers.Count <= 0
             )
@@ -1676,7 +1670,7 @@
             if (
                 !_sinks.TryGetValue(
                     type,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> sortedHandlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> sortedHandlers
                 )
                 || sortedHandlers.Count <= 0
             )
@@ -1762,7 +1756,7 @@
 
         private Action InternalRegisterUntargeted<T>(
             MessageHandler messageHandler,
-            Dictionary<Type, SortedDictionary<int, Dictionary<MessageHandler, int>>> sinks,
+            Dictionary<Type, SortedList<int, Dictionary<MessageHandler, int>>> sinks,
             RegistrationMethod registrationMethod,
             int priority
         )
@@ -1779,11 +1773,11 @@
             if (
                 !sinks.TryGetValue(
                     type,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> handlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> handlers
                 )
             )
             {
-                handlers = new SortedDictionary<int, Dictionary<MessageHandler, int>>();
+                handlers = new SortedList<int, Dictionary<MessageHandler, int>>();
                 sinks[type] = handlers;
             }
 
@@ -1866,7 +1860,7 @@
             MessageHandler messageHandler,
             Dictionary<
                 Type,
-                Dictionary<InstanceId, SortedDictionary<int, Dictionary<MessageHandler, int>>>
+                Dictionary<InstanceId, SortedList<int, Dictionary<MessageHandler, int>>>
             > sinks,
             RegistrationMethod registrationMethod,
             int priority
@@ -1883,27 +1877,24 @@
                     type,
                     out Dictionary<
                         InstanceId,
-                        SortedDictionary<int, Dictionary<MessageHandler, int>>
+                        SortedList<int, Dictionary<MessageHandler, int>>
                     > broadcastHandlers
                 )
             )
             {
                 broadcastHandlers =
-                    new Dictionary<
-                        InstanceId,
-                        SortedDictionary<int, Dictionary<MessageHandler, int>>
-                    >();
+                    new Dictionary<InstanceId, SortedList<int, Dictionary<MessageHandler, int>>>();
                 sinks[type] = broadcastHandlers;
             }
 
             if (
                 !broadcastHandlers.TryGetValue(
                     context,
-                    out SortedDictionary<int, Dictionary<MessageHandler, int>> handlers
+                    out SortedList<int, Dictionary<MessageHandler, int>> handlers
                 )
             )
             {
-                handlers = new SortedDictionary<int, Dictionary<MessageHandler, int>>();
+                handlers = new SortedList<int, Dictionary<MessageHandler, int>>();
                 broadcastHandlers[context] = handlers;
             }
 
