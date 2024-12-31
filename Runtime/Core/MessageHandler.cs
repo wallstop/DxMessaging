@@ -12,6 +12,9 @@
     /// kinds of types to trigger functions that are registered with it.
     /// </summary>
     public sealed class MessageHandler
+        : IEquatable<MessageHandler>,
+            IComparable,
+            IComparable<MessageHandler>
     {
         public delegate void FastHandler<TMessage>(ref TMessage message)
             where TMessage : IMessage;
@@ -1220,6 +1223,46 @@
             return (messageBus ?? MessageBus).RegisterTargetedInterceptor(interceptor, priority);
         }
 
+        public override bool Equals(object obj)
+        {
+            return Equals(obj as MessageHandler);
+        }
+
+        public bool Equals(MessageHandler other)
+        {
+            if (other == null)
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(other, this))
+            {
+                return true;
+            }
+
+            return owner.Equals(other.owner);
+        }
+
+        public override int GetHashCode()
+        {
+            return owner.GetHashCode();
+        }
+
+        public int CompareTo(MessageHandler other)
+        {
+            if (other == null)
+            {
+                return -1;
+            }
+
+            return owner.CompareTo(other.owner);
+        }
+
+        public int CompareTo(object obj)
+        {
+            return CompareTo(obj as MessageHandler);
+        }
+
         public override string ToString()
         {
             return new
@@ -1231,7 +1274,7 @@
                         .Values.SelectMany(handlers => handlers.Keys)
                         .Distinct()
                         .Select(type => type.Name)
-                        .OrderBy(_ => _)
+                        .OrderBy(x => x)
                 ),
             }.ToString();
         }
