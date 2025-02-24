@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.Text;
 [Generator]
 public sealed class DxUntargetedMessageGenerator : ISourceGenerator
 {
-        public void Initialize(GeneratorInitializationContext context)
+    public void Initialize(GeneratorInitializationContext context)
     {
         context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
     }
@@ -23,36 +23,49 @@ public sealed class DxUntargetedMessageGenerator : ISourceGenerator
             return;
         }
 
-        INamedTypeSymbol attributeSymbol = context.Compilation.GetTypeByMetadataName("DxMessaging.Core.Attributes.DxUntargetedMessageAttribute");
+        INamedTypeSymbol attributeSymbol = context.Compilation.GetTypeByMetadataName(
+            "DxMessaging.Core.Attributes.DxUntargetedMessageAttribute"
+        );
 
         foreach (TypeDeclarationSyntax classDeclaration in receiver.CandidateClasses)
         {
             SemanticModel model = context.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
             ISymbol classSymbol = ModelExtensions.GetDeclaredSymbol(model, classDeclaration);
 
-            if (classSymbol.GetAttributes().Any(
-                    attributeData => attributeData.AttributeClass.Equals(
-                        attributeSymbol, SymbolEqualityComparer.Default)))
+            if (
+                classSymbol
+                    .GetAttributes()
+                    .Any(attributeData =>
+                        attributeData.AttributeClass.Equals(
+                            attributeSymbol,
+                            SymbolEqualityComparer.Default
+                        )
+                    )
+            )
             {
                 string namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
                 string className = classSymbol.Name;
-                string typeKind = classDeclaration.Kind() == SyntaxKind.ClassDeclaration ? "class" : "struct";
+                string typeKind =
+                    classDeclaration.Kind() == SyntaxKind.ClassDeclaration ? "class" : "struct";
 
                 string source = $$"""
 
-                                  namespace {{namespaceName}}
-                                  {
-                                      using DxMessaging.Core.Messages;
-                                  
-                                      public partial {{typeKind}} {{className}} : IUntargetedMessage
-                                      {
-                                          public System.Type MessageType => typeof({{className}});
-                                      }
-                                  }
+                    namespace {{namespaceName}}
+                    {
+                        using DxMessaging.Core.Messages;
 
-                                  """;
+                        public partial {{typeKind}} {{className}} : IUntargetedMessage
+                        {
+                            public System.Type MessageType => typeof({{className}});
+                        }
+                    }
+                    
+                    """;
 
-                context.AddSource($"{className}_DxUntargetedMessage.g.cs", SourceText.From(source, Encoding.UTF8));
+                context.AddSource(
+                    $"{className}_DxUntargetedMessage.g.cs",
+                    SourceText.From(source, Encoding.UTF8)
+                );
             }
         }
     }
@@ -65,14 +78,17 @@ public sealed class DxUntargetedMessageGenerator : ISourceGenerator
         {
             if (syntaxNode is TypeDeclarationSyntax typeDeclarationSyntax)
             {
-                if (typeDeclarationSyntax.AttributeLists.Count > 0 &&
-                    (typeDeclarationSyntax.Kind() == SyntaxKind.ClassDeclaration ||
-                     typeDeclarationSyntax.Kind() == SyntaxKind.StructDeclaration))
+                if (
+                    typeDeclarationSyntax.AttributeLists.Count > 0
+                    && (
+                        typeDeclarationSyntax.Kind() == SyntaxKind.ClassDeclaration
+                        || typeDeclarationSyntax.Kind() == SyntaxKind.StructDeclaration
+                    )
+                )
                 {
                     CandidateClasses.Add(typeDeclarationSyntax);
                 }
             }
         }
     }
-
 }

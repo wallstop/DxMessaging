@@ -3,7 +3,5 @@
     using System;
 
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
-    public sealed class DxAutoMessageTypeAttribute : Attribute
-    {
-    }
+    public sealed class DxAutoMessageTypeAttribute : Attribute { }
 }

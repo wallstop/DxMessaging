@@ -19,7 +19,8 @@
     /// </code>
     /// </summary>
     /// <typeparam name="T">Concrete type of the derived. Should be the derived type and nothing else.</typeparam>
-    public interface IUntargetedMessage<T> : IUntargetedMessage where T : IUntargetedMessage
+    public interface IUntargetedMessage<T> : IUntargetedMessage
+        where T : IUntargetedMessage
     {
         Type IMessage.MessageType => typeof(T);
     }

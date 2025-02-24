@@ -19,9 +19,9 @@
     /// </code>
     /// </summary>
     /// <typeparam name="T">Concrete type of the derived. Should be the derived type and nothing else.</typeparam>
-    public interface IBroadcastMessage<T> : IBroadcastMessage where T: IBroadcastMessage
+    public interface IBroadcastMessage<T> : IBroadcastMessage
+        where T : IBroadcastMessage
     {
         Type IMessage.MessageType => typeof(T);
     }
-
 }

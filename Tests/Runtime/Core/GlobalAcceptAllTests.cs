@@ -1,12 +1,12 @@
 ﻿namespace DxMessaging.Tests.Runtime.Core
 {
-    using DxMessaging.Core;
-    using Scripts.Components;
     using System;
     using System.Collections;
+    using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.Messages;
     using NUnit.Framework;
+    using Scripts.Components;
     using Scripts.Messages;
     using UnityEngine;
     using UnityEngine.TestTools;
@@ -54,13 +54,19 @@
             SimpleTargetedMessage targetedMessage = new();
             SimpleBroadcastMessage broadcastMessage = new();
             RunGlobalAcceptAllTest(
-                token => token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast),
+                token =>
+                    token.RegisterGlobalAcceptAll(
+                        HandleUntargeted,
+                        HandleTargeted,
+                        HandleBroadcast
+                    ),
                 i =>
                 {
                     Assert.AreEqual(i, untargetedCount);
                     untargetedMessage.EmitUntargeted();
                     Assert.AreEqual(i + 1, untargetedCount);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, targetedCount);
                     if (_random.Next() % 2 == 0)
@@ -73,7 +79,8 @@
                     }
 
                     Assert.AreEqual(i + 1, targetedCount);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, broadcastCount);
                     if (_random.Next() % 2 == 0)
@@ -86,7 +93,8 @@
                     }
 
                     Assert.AreEqual(i + 1, broadcastCount);
-                });
+                }
+            );
             yield break;
         }
 
@@ -116,13 +124,19 @@
             SimpleTargetedMessage targetedMessage = new();
             SimpleBroadcastMessage broadcastMessage = new();
             RunGlobalAcceptAllTest(
-                token => token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast),
+                token =>
+                    token.RegisterGlobalAcceptAll(
+                        HandleUntargeted,
+                        HandleTargeted,
+                        HandleBroadcast
+                    ),
                 i =>
                 {
                     Assert.AreEqual(i, untargetedCount);
                     untargetedMessage.EmitUntargeted();
                     Assert.AreEqual(i + 1, untargetedCount);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, targetedCount);
                     if (_random.Next() % 2 == 0)
@@ -135,7 +149,8 @@
                     }
 
                     Assert.AreEqual(i + 1, targetedCount);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, broadcastCount);
                     if (_random.Next() % 2 == 0)
@@ -148,11 +163,17 @@
                     }
 
                     Assert.AreEqual(i + 1, broadcastCount);
-                });
+                }
+            );
             yield break;
         }
 
-        private void RunGlobalAcceptAllTest(Action<MessageRegistrationToken> register, Action<int> untargeted, Action<int> targeted, Action<int> broadcast)
+        private void RunGlobalAcceptAllTest(
+            Action<MessageRegistrationToken> register,
+            Action<int> untargeted,
+            Action<int> targeted,
+            Action<int> broadcast
+        )
         {
             EmptyMessageAwareComponent component = _test.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);

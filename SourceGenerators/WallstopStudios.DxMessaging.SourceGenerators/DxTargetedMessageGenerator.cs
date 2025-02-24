@@ -23,36 +23,49 @@ public sealed class DxTargetedMessageGenerator : ISourceGenerator
             return;
         }
 
-        INamedTypeSymbol attributeSymbol = context.Compilation.GetTypeByMetadataName("DxMessaging.Core.Attributes.DxTargetedMessageAttribute");
+        INamedTypeSymbol attributeSymbol = context.Compilation.GetTypeByMetadataName(
+            "DxMessaging.Core.Attributes.DxTargetedMessageAttribute"
+        );
 
         foreach (TypeDeclarationSyntax classDeclaration in receiver.CandidateClasses)
         {
             SemanticModel model = context.Compilation.GetSemanticModel(classDeclaration.SyntaxTree);
             ISymbol classSymbol = ModelExtensions.GetDeclaredSymbol(model, classDeclaration);
 
-            if (classSymbol.GetAttributes().Any(
-                    attributeData => attributeData.AttributeClass.Equals(
-                        attributeSymbol, SymbolEqualityComparer.Default)))
+            if (
+                classSymbol
+                    .GetAttributes()
+                    .Any(attributeData =>
+                        attributeData.AttributeClass.Equals(
+                            attributeSymbol,
+                            SymbolEqualityComparer.Default
+                        )
+                    )
+            )
             {
                 string namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
                 string className = classSymbol.Name;
-                string typeKind = classDeclaration.Kind() == SyntaxKind.ClassDeclaration ? "class" : "struct";
+                string typeKind =
+                    classDeclaration.Kind() == SyntaxKind.ClassDeclaration ? "class" : "struct";
 
                 string source = $$"""
 
-                                  namespace {{namespaceName}}
-                                  {
-                                      using DxMessaging.Core.Messages;
-                                  
-                                      public partial {{typeKind}} {{className}} : ITargetedMessage
-                                      {
-                                          public System.Type MessageType => typeof({{className}});
-                                      }
-                                  }
+                    namespace {{namespaceName}}
+                    {
+                        using DxMessaging.Core.Messages;
 
-                                  """;
+                        public partial {{typeKind}} {{className}} : ITargetedMessage
+                        {
+                            public System.Type MessageType => typeof({{className}});
+                        }
+                    }
+                    
+                    """;
 
-                context.AddSource($"{className}_DxTargetedMessage.g.cs", SourceText.From(source, Encoding.UTF8));
+                context.AddSource(
+                    $"{className}_DxTargetedMessage.g.cs",
+                    SourceText.From(source, Encoding.UTF8)
+                );
             }
         }
     }
@@ -65,9 +78,13 @@ public sealed class DxTargetedMessageGenerator : ISourceGenerator
         {
             if (syntaxNode is TypeDeclarationSyntax typeDeclarationSyntax)
             {
-                if (typeDeclarationSyntax.AttributeLists.Count > 0 &&
-                    (typeDeclarationSyntax.Kind() == SyntaxKind.ClassDeclaration ||
-                     typeDeclarationSyntax.Kind() == SyntaxKind.StructDeclaration))
+                if (
+                    typeDeclarationSyntax.AttributeLists.Count > 0
+                    && (
+                        typeDeclarationSyntax.Kind() == SyntaxKind.ClassDeclaration
+                        || typeDeclarationSyntax.Kind() == SyntaxKind.StructDeclaration
+                    )
+                )
                 {
                     CandidateClasses.Add(typeDeclarationSyntax);
                 }

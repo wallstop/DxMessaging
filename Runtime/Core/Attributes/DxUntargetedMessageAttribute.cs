@@ -3,8 +3,5 @@
     using System;
 
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
-    public sealed class DxUntargetedMessageAttribute : Attribute
-    {
-        
-    }
+    public sealed class DxUntargetedMessageAttribute : Attribute { }
 }

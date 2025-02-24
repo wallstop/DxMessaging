@@ -2,8 +2,8 @@
 {
     using System;
     using DxMessaging.Core;
-    using Unity;
     using Messages;
+    using Unity;
 
     public sealed class SimpleMessageAwareComponent : MessageAwareComponent
     {
@@ -46,24 +46,60 @@
 
         protected override void RegisterMessageHandlers()
         {
-            _ = _messageRegistrationToken.RegisterUntargeted<SimpleUntargetedMessage>(HandleSimpleUntargetedMessage);
-            _ = _messageRegistrationToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(gameObject, HandleSimpleTargetedMessage);
-            _ = _messageRegistrationToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(gameObject, HandleSlowSimpleTargetedMessage);
-            _ = _messageRegistrationToken.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(HandleSimpleTargetedWithoutTargetingMessage);
-            _fastComplexTargetingHandle = _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(gameObject, HandleComplexTargetedMessage);
-            _slowComplexTargetingHandle = _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(gameObject, HandleSlowComplexTargetedMessage);
-            _ = _messageRegistrationToken.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(gameObject, HandleSimpleBroadcastMessage);
-            _ = _messageRegistrationToken.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(HandleSimpleBroadcastWithoutSourceMessage);
-            _ = _messageRegistrationToken.RegisterComponentTargeted<SimpleTargetedMessage>(this, HandleSimpleComponentTargetedMessage);
-            _ = _messageRegistrationToken.RegisterComponentBroadcast<SimpleBroadcastMessage>(this, HandleSimpleComponentBroadcastMessage);
-            _ = _messageRegistrationToken.RegisterComponentTargeted<ComplexTargetedMessage>(this, HandleComplexComponentTargetedMessage);
+            _ = _messageRegistrationToken.RegisterUntargeted<SimpleUntargetedMessage>(
+                HandleSimpleUntargetedMessage
+            );
+            _ = _messageRegistrationToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+                gameObject,
+                HandleSimpleTargetedMessage
+            );
+            _ = _messageRegistrationToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+                gameObject,
+                HandleSlowSimpleTargetedMessage
+            );
+            _ = _messageRegistrationToken.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                HandleSimpleTargetedWithoutTargetingMessage
+            );
+            _fastComplexTargetingHandle =
+                _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(
+                    gameObject,
+                    HandleComplexTargetedMessage
+                );
+            _slowComplexTargetingHandle =
+                _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(
+                    gameObject,
+                    HandleSlowComplexTargetedMessage
+                );
+            _ = _messageRegistrationToken.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                gameObject,
+                HandleSimpleBroadcastMessage
+            );
+            _ = _messageRegistrationToken.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                HandleSimpleBroadcastWithoutSourceMessage
+            );
+            _ = _messageRegistrationToken.RegisterComponentTargeted<SimpleTargetedMessage>(
+                this,
+                HandleSimpleComponentTargetedMessage
+            );
+            _ = _messageRegistrationToken.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+                this,
+                HandleSimpleComponentBroadcastMessage
+            );
+            _ = _messageRegistrationToken.RegisterComponentTargeted<ComplexTargetedMessage>(
+                this,
+                HandleComplexComponentTargetedMessage
+            );
         }
 
         private void ToggleTargetedRegistration()
         {
             if (SlowComplexTargetingEnabled)
             {
-                _slowComplexTargetingHandle ??= _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(gameObject, HandleSlowComplexTargetedMessage);
+                _slowComplexTargetingHandle ??=
+                    _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(
+                        gameObject,
+                        HandleSlowComplexTargetedMessage
+                    );
             }
             else if (_slowComplexTargetingHandle != null)
             {
@@ -73,7 +109,11 @@
 
             if (FastComplexTargetingEnabled)
             {
-                _fastComplexTargetingHandle ??= _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(gameObject, HandleComplexTargetedMessage);
+                _fastComplexTargetingHandle ??=
+                    _messageRegistrationToken.RegisterGameObjectTargeted<ComplexTargetedMessage>(
+                        gameObject,
+                        HandleComplexTargetedMessage
+                    );
             }
             else if (_fastComplexTargetingHandle != null)
             {
@@ -107,7 +147,10 @@
             targetedHandler?.Invoke();
         }
 
-        public void HandleSimpleTargetedWithoutTargetingMessage(ref InstanceId target, ref SimpleTargetedMessage message)
+        public void HandleSimpleTargetedWithoutTargetingMessage(
+            ref InstanceId target,
+            ref SimpleTargetedMessage message
+        )
         {
             targetedWithoutTargetingHandler?.Invoke();
         }
@@ -117,7 +160,10 @@
             broadcastHandler?.Invoke();
         }
 
-        public void HandleSimpleBroadcastWithoutSourceMessage(ref InstanceId source, ref SimpleBroadcastMessage message)
+        public void HandleSimpleBroadcastWithoutSourceMessage(
+            ref InstanceId source,
+            ref SimpleBroadcastMessage message
+        )
         {
             broadcastWithoutSourceHandler?.Invoke();
         }

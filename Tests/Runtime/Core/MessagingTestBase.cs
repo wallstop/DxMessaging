@@ -1,16 +1,16 @@
 ﻿namespace DxMessaging.Tests.Runtime.Core
 {
-    using DxMessaging.Core.MessageBus;
-    using DxMessaging.Core;
-    using NUnit.Framework;
-    using System.Collections.Generic;
-    using UnityEngine;
-    using Unity;
+    using System;
     using System.Collections;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
     using System.Reflection;
-    using System;
+    using DxMessaging.Core;
+    using DxMessaging.Core.MessageBus;
+    using NUnit.Framework;
+    using Unity;
+    using UnityEngine;
     using UnityEngine.TestTools;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
@@ -69,7 +69,14 @@
             return WaitUntilMessageHandlerIsFresh();
         }
 
-        protected void Run(Func<IEnumerable<MessageRegistrationHandle>> register, Action emit, Action assert, Action finalAssert, MessageRegistrationToken token, bool synchronizeDeregistrations = false)
+        protected void Run(
+            Func<IEnumerable<MessageRegistrationHandle>> register,
+            Action emit,
+            Action assert,
+            Action finalAssert,
+            MessageRegistrationToken token,
+            bool synchronizeDeregistrations = false
+        )
         {
             HashSet<MessageRegistrationHandle> handles = new();
             try
@@ -88,7 +95,11 @@
 
                 if (synchronizeDeregistrations)
                 {
-                    foreach (int index in Enumerable.Range(0, indexedRegistrations.Count).OrderBy(_ => _random.Next()))
+                    foreach (
+                        int index in Enumerable
+                            .Range(0, indexedRegistrations.Count)
+                            .OrderBy(_ => _random.Next())
+                    )
                     {
                         emit();
                         assert();
@@ -101,7 +112,11 @@
                 }
                 else
                 {
-                    foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => _random.Next()).ToList())
+                    foreach (
+                        MessageRegistrationHandle handle in handles
+                            .OrderBy(_ => _random.Next())
+                            .ToList()
+                    )
                     {
                         emit();
                         assert();
@@ -128,7 +143,9 @@
         {
             // Reach inside and grab the token
             FieldInfo field = typeof(MessageAwareComponent).GetField(
-                "_messageRegistrationToken", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                "_messageRegistrationToken",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
             Assert.IsNotNull(field);
             MessageRegistrationToken token = field.GetValue(component) as MessageRegistrationToken;
             Assert.IsNotNull(token);
@@ -145,8 +162,9 @@
 
             bool IsStale()
             {
-                return messageBus.RegisteredUntargeted != 0 || messageBus.RegisteredTargeted != 0 ||
-                       messageBus.RegisteredBroadcast != 0;
+                return messageBus.RegisteredUntargeted != 0
+                    || messageBus.RegisteredTargeted != 0
+                    || messageBus.RegisteredBroadcast != 0;
             }
 
             while (IsStale() && timer.Elapsed < TimeSpan.FromSeconds(2.5))
@@ -157,8 +175,11 @@
             Assert.IsFalse(
                 IsStale(),
                 "MessageHandler had {0} Untargeted registrations, {1} Targeted registrations, {2} Broadcast registrations. Registration log: {3}.",
-                messageBus.RegisteredUntargeted, messageBus.RegisteredTargeted, messageBus.RegisteredBroadcast,
-                messageBus.Log);
+                messageBus.RegisteredUntargeted,
+                messageBus.RegisteredTargeted,
+                messageBus.RegisteredBroadcast,
+                messageBus.Log
+            );
         }
     }
 }

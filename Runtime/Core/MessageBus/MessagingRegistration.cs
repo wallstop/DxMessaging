@@ -9,7 +9,7 @@
     public enum RegistrationType
     {
         Register,
-        Deregister
+        Deregister,
     }
 
     /// <summary>
@@ -72,7 +72,12 @@
         /// <param name="type">Type of Message.</param>
         /// <param name="registrationType">Register? Deregister?</param>
         /// <param name="registrationMethod">How the Message was chosen to be listened for.</param>
-        public MessagingRegistration(InstanceId id, Type type, RegistrationType registrationType, RegistrationMethod registrationMethod)
+        public MessagingRegistration(
+            InstanceId id,
+            Type type,
+            RegistrationType registrationType,
+            RegistrationMethod registrationMethod
+        )
         {
             this.id = id;
             this.type = type;
@@ -91,9 +96,9 @@
                 time,
 #endif
                 id,
-                type, 
+                type,
                 registrationType,
-                registrationMethod
+                registrationMethod,
             }.ToString();
         }
     }

@@ -3,12 +3,13 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 
 # To Install as Unity Package
 1. Open Unity Package Manager
-2. Open the Advanced Package Settings
-3. Add an entry for a new "Scoped Registry"
+2. (Optional) Enable Pre-release packages to get the latest, cutting-edge builds
+3. Open the Advanced Package Settings
+4. Add an entry for a new "Scoped Registry"
     - Name: `NPM`
     - URL: `https://registry.npmjs.org`
     - Scope(s): `com.wallstop-studios.dxmessaging` *and* `com.wallstop-studios.unity-helpers`
-4. Resolve the latest `DxMessaging`
+5. Resolve the latest `DxMessaging`
 
 # Dependencies
 This project has a dependency on my [`Unity Helpers`](https://github.com/wallstop/unity-helpers) project, which contains the `System.Runtime.CompilerServices.Unsafe.dll`, which is used for some speed hacks in DxMessaging directly. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the `System.Runtime.CompilerServices.Unsafe.dll` yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project. Or, manually download this project without UnityHelpers. The choice is yours.

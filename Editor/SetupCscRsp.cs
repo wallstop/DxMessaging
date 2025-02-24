@@ -13,8 +13,12 @@ namespace DxMessaging.Editor
     [InitializeOnLoad]
     public static class SetupCscRsp
     {
-        private static readonly string RspFilePath =
-            Path.Combine(Application.dataPath, "..", "csc.rsp").Replace("\\", "/");
+        private static readonly string RspFilePath = Path.Combine(
+                Application.dataPath,
+                "..",
+                "csc.rsp"
+            )
+            .Replace("\\", "/");
 
         private static readonly string AnalyzerPathRelative =
             "Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/";
@@ -22,14 +26,15 @@ namespace DxMessaging.Editor
         private static readonly string LibraryPathRelative =
             "Library/PackageCache/com.wallstop-studios.dxmessaging/Editor/Analyzers/";
 
-        private static readonly string SourceGeneratorDllName = "WallstopStudios.DxMessaging.SourceGenerators.dll";
+        private static readonly string SourceGeneratorDllName =
+            "WallstopStudios.DxMessaging.SourceGenerators.dll";
 
         private static readonly string[] RequiredDllNames =
         {
             SourceGeneratorDllName,
             "Microsoft.CodeAnalysis.dll",
             "Microsoft.CodeAnalysis.CSharp.dll",
-            "System.Reflection.Metadata.dll"
+            "System.Reflection.Metadata.dll",
         };
 
         private static readonly string LibraryArgument = $"-a:\"{LibraryPathRelative}\"";
@@ -43,7 +48,9 @@ namespace DxMessaging.Editor
         private static void EnsureDLLsExistInAssets()
         {
             HashSet<string> dllNames = new();
-            foreach (string dllGuid in AssetDatabase.FindAssets("t:DefaultAsset", new[] { "Assets" }))
+            foreach (
+                string dllGuid in AssetDatabase.FindAssets("t:DefaultAsset", new[] { "Assets" })
+            )
             {
                 string dllPath = AssetDatabase.GUIDToAssetPath(dllGuid);
                 if (!dllPath.EndsWith(".dll"))
@@ -58,7 +65,11 @@ namespace DxMessaging.Editor
             string[] dllRelativeDirectories = { LibraryPathRelative, AnalyzerPathRelative };
 
             bool anyFound = false;
-            foreach (string requiredDllName in RequiredDllNames.Where(dllName => !dllNames.Contains(dllName)))
+            foreach (
+                string requiredDllName in RequiredDllNames.Where(dllName =>
+                    !dllNames.Contains(dllName)
+                )
+            )
             {
                 bool found = false;
                 foreach (string relativeDirectory in dllRelativeDirectories)
@@ -71,7 +82,8 @@ namespace DxMessaging.Editor
                             continue;
                         }
 
-                        const string pluginsDirectory = "Assets/Plugins/WallstopStudios.DxMessaging/";
+                        const string pluginsDirectory =
+                            "Assets/Plugins/WallstopStudios.DxMessaging/";
                         string outputAsset = $"{pluginsDirectory}{requiredDllName}";
                         Directory.CreateDirectory(pluginsDirectory);
                         if (!File.Exists(outputAsset))
@@ -86,8 +98,9 @@ namespace DxMessaging.Editor
                             Object loadedDll = AssetDatabase.LoadMainAssetAtPath(outputAsset);
                             AssetDatabase.SetLabels(loadedDll, new[] { "RoslynAnalyzer" });
                         }
-                        
-                        PluginImporter importer = AssetImporter.GetAtPath(outputAsset) as PluginImporter;
+
+                        PluginImporter importer =
+                            AssetImporter.GetAtPath(outputAsset) as PluginImporter;
                         if (importer != null)
                         {
                             importer.SetCompatibleWithAnyPlatform(false);
@@ -100,14 +113,17 @@ namespace DxMessaging.Editor
                     }
                     catch (Exception e)
                     {
-                        Debug.LogError($"Failed to copy {requiredDllName} to Assets, failed with {e}.");
+                        Debug.LogError(
+                            $"Failed to copy {requiredDllName} to Assets, failed with {e}."
+                        );
                     }
                 }
 
                 anyFound |= found;
                 Debug.Log(
-                    $"Missing required dll '{requiredDllName}', " +
-                    $"{(found ? "creation successful." : "WARNING! Manual creation required.")}");
+                    $"Missing required dll '{requiredDllName}', "
+                        + $"{(found ? "creation successful." : "WARNING! Manual creation required.")}"
+                );
             }
 
             if (anyFound)

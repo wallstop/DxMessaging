@@ -46,20 +46,28 @@
 
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterUntargeted<SimpleUntargetedMessage>(Handle), i =>
+                token => token.RegisterUntargeted<SimpleUntargetedMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -75,20 +83,28 @@
 
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterUntargeted<SimpleUntargetedMessage>(Handle), i =>
+                token => token.RegisterUntargeted<SimpleUntargetedMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -104,20 +120,28 @@
 
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(Handle), i =>
+                token => token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -134,20 +158,28 @@
 
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(Intercept), i =>
+                token => token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(Intercept),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitUntargeted();
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitUntargeted();
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -163,21 +195,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterGameObjectTargeted<SimpleTargetedMessage>(_test, Handle), i =>
+                token => token.RegisterGameObjectTargeted<SimpleTargetedMessage>(_test, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -193,21 +233,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterGameObjectTargeted<SimpleTargetedMessage>(_test, Handle), i =>
+                token => token.RegisterGameObjectTargeted<SimpleTargetedMessage>(_test, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -223,21 +271,33 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(_test, Handle), i =>
+                token =>
+                    token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+                        _test,
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -253,21 +313,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterComponentTargeted<SimpleTargetedMessage>(_component, Handle), i =>
+                token => token.RegisterComponentTargeted<SimpleTargetedMessage>(_component, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -283,21 +351,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterComponentTargeted<SimpleTargetedMessage>(_component, Handle), i =>
+                token => token.RegisterComponentTargeted<SimpleTargetedMessage>(_component, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -313,21 +389,33 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterComponentTargetedPostProcessor<SimpleTargetedMessage>(_component, Handle), i =>
+                token =>
+                    token.RegisterComponentTargetedPostProcessor<SimpleTargetedMessage>(
+                        _component,
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -344,21 +432,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterTargetedInterceptor<SimpleTargetedMessage>(Intercept), i =>
+                token => token.RegisterTargetedInterceptor<SimpleTargetedMessage>(Intercept),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -374,21 +470,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle), i =>
+                token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -404,21 +508,29 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle), i =>
+                token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -434,21 +546,32 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(Handle), i =>
+                token =>
+                    token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -464,21 +587,32 @@
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(Handle), i =>
+                token =>
+                    token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectTargeted(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectTargeted(_test);
                     message.EmitComponentTargeted(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -494,21 +628,29 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(_test, Handle), i =>
+                token => token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(_test, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectBroadcast(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectBroadcast(_test);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -524,21 +666,29 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(_test, Handle), i =>
+                token => token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(_test, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectBroadcast(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectBroadcast(_test);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -554,21 +704,33 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(_test, Handle), i =>
+                token =>
+                    token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
+                        _test,
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectBroadcast(_test);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitGameObjectBroadcast(_test);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -584,21 +746,30 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterComponentBroadcast<SimpleBroadcastMessage>(_component, Handle), i =>
+                token =>
+                    token.RegisterComponentBroadcast<SimpleBroadcastMessage>(_component, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -614,21 +785,30 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterComponentBroadcast<SimpleBroadcastMessage>(_component, Handle), i =>
+                token =>
+                    token.RegisterComponentBroadcast<SimpleBroadcastMessage>(_component, Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -644,21 +824,33 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(_component, Handle), i =>
+                token =>
+                    token.RegisterComponentBroadcastPostProcessor<SimpleBroadcastMessage>(
+                        _component,
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -675,21 +867,29 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(Intercept), i =>
+                token => token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(Intercept),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -705,21 +905,29 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle), i =>
+                token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -735,21 +943,29 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle), i =>
+                token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -765,21 +981,32 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(Handle), i =>
+                token =>
+                    token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -795,21 +1022,32 @@
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
-                token => token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(Handle), i =>
+                token =>
+                    token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
+                        Handle
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, count);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(i + 1, count);
-                }, () =>
+                },
+                () =>
                 {
                     message.EmitGameObjectBroadcast(_test);
                     message.EmitComponentBroadcast(_component);
                     Assert.AreEqual(0, count);
-                }, () => { count = 0; });
+                },
+                () =>
+                {
+                    count = 0;
+                }
+            );
             yield break;
         }
 
@@ -839,7 +1077,13 @@
             SimpleTargetedMessage targetedMessage = new();
             SimpleBroadcastMessage broadcastMessage = new();
             RunRegistrationTest(
-                token => token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast), i =>
+                token =>
+                    token.RegisterGlobalAcceptAll(
+                        HandleUntargeted,
+                        HandleTargeted,
+                        HandleBroadcast
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, targetedCount);
                     Assert.AreEqual(i, broadcastCount);
@@ -847,7 +1091,8 @@
                     untargetedMessage.EmitUntargeted();
                     targetedMessage.EmitGameObjectTargeted(_test);
                     broadcastMessage.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, targetedCount);
                     Assert.AreEqual(i, broadcastCount);
@@ -864,7 +1109,8 @@
                     Assert.AreEqual(i + 1, targetedCount);
                     Assert.AreEqual(i + 1, broadcastCount);
                     Assert.AreEqual(i + 1, untargetedCount);
-                }, () =>
+                },
+                () =>
                 {
                     untargetedMessage.EmitUntargeted();
                     targetedMessage.EmitGameObjectTargeted(_test);
@@ -872,12 +1118,14 @@
                     Assert.AreEqual(0, targetedCount);
                     Assert.AreEqual(0, broadcastCount);
                     Assert.AreEqual(0, untargetedCount);
-                }, () =>
+                },
+                () =>
                 {
                     targetedCount = 0;
                     broadcastCount = 0;
                     untargetedCount = 0;
-                });
+                }
+            );
             yield break;
         }
 
@@ -907,7 +1155,13 @@
             SimpleTargetedMessage targetedMessage = new();
             SimpleBroadcastMessage broadcastMessage = new();
             RunRegistrationTest(
-                token => token.RegisterGlobalAcceptAll(HandleUntargeted, HandleTargeted, HandleBroadcast), i =>
+                token =>
+                    token.RegisterGlobalAcceptAll(
+                        HandleUntargeted,
+                        HandleTargeted,
+                        HandleBroadcast
+                    ),
+                i =>
                 {
                     Assert.AreEqual(i, targetedCount);
                     Assert.AreEqual(i, broadcastCount);
@@ -915,7 +1169,8 @@
                     untargetedMessage.EmitUntargeted();
                     targetedMessage.EmitGameObjectTargeted(_test);
                     broadcastMessage.EmitComponentBroadcast(_component);
-                }, i =>
+                },
+                i =>
                 {
                     Assert.AreEqual(i, targetedCount);
                     Assert.AreEqual(i, broadcastCount);
@@ -932,7 +1187,8 @@
                     Assert.AreEqual(i + 1, targetedCount);
                     Assert.AreEqual(i + 1, broadcastCount);
                     Assert.AreEqual(i + 1, untargetedCount);
-                }, () =>
+                },
+                () =>
                 {
                     untargetedMessage.EmitUntargeted();
                     targetedMessage.EmitGameObjectTargeted(_test);
@@ -940,18 +1196,24 @@
                     Assert.AreEqual(0, targetedCount);
                     Assert.AreEqual(0, broadcastCount);
                     Assert.AreEqual(0, untargetedCount);
-                }, () =>
+                },
+                () =>
                 {
                     targetedCount = 0;
                     broadcastCount = 0;
                     untargetedCount = 0;
-                });
+                }
+            );
             yield break;
         }
 
         private void RunRegistrationTest(
-            Func<MessageRegistrationToken, MessageRegistrationHandle> registration, Action<int> normalAssert,
-            Action<int> removalAssert, Action finalAssert, Action reset)
+            Func<MessageRegistrationToken, MessageRegistrationHandle> registration,
+            Action<int> normalAssert,
+            Action<int> removalAssert,
+            Action finalAssert,
+            Action reset
+        )
         {
             HashSet<MessageRegistrationHandle> handles = new(_numRegistrations);
             try
@@ -960,7 +1222,12 @@
                 {
                     MessageRegistrationHandle handle = registration(_token);
                     bool neverSeen = handles.Add(handle);
-                    Assert.IsTrue(neverSeen, "Handle {0} at count {1} was a duplicate.", handle, neverSeen);
+                    Assert.IsTrue(
+                        neverSeen,
+                        "Handle {0} at count {1} was a duplicate.",
+                        handle,
+                        neverSeen
+                    );
                 }
 
                 for (int i = 0; i < 100; ++i)
@@ -970,7 +1237,11 @@
 
                 reset();
                 int expected = 0;
-                foreach (MessageRegistrationHandle handle in handles.OrderBy(_ => _random.Next()).ToList())
+                foreach (
+                    MessageRegistrationHandle handle in handles
+                        .OrderBy(_ => _random.Next())
+                        .ToList()
+                )
                 {
                     removalAssert(expected++);
                     handles.Remove(handle);

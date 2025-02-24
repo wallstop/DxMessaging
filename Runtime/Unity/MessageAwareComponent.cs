@@ -2,7 +2,7 @@
 {
     using Core;
     using UnityEngine;
-    
+
     [RequireComponent(typeof(MessagingComponent))]
     public abstract class MessageAwareComponent : MonoBehaviour
     {

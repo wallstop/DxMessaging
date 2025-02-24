@@ -18,7 +18,6 @@
     /// </summary>
     public static class MessagingDebug
     {
-
         /// <summary>
         /// Custom log function to use.
         /// </summary>
