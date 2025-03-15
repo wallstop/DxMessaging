@@ -13,7 +13,7 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 
 # Installation
 
-# To Install as Unity Package
+## To Install as Unity Package
 1. Open Unity Package Manager
 2. (Optional) Enable Pre-release packages to get the latest, cutting-edge builds
 3. Open the Advanced Package Settings
