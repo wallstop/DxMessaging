@@ -1,6 +1,18 @@
 # DxMessaging
 Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly geared towards Unity and XNA/Monogame. See [this recorded talk](https://fathom.video/share/qjs8pn1MAwGb-yTAaW5WpZWdjzxcdwFR).
 
+# Compatibility
+| Platform | Compatible |
+| --- | --- |
+| Unity 2021 | Likely, but untested |
+| Unity 2022 | &check; |
+| Unity 2023 | &check; |
+| Unity 6 | &check; |
+| URP | &check; |
+| HDRP | &check; |
+
+# Installation
+
 # To Install as Unity Package
 1. Open Unity Package Manager
 2. (Optional) Enable Pre-release packages to get the latest, cutting-edge builds
@@ -10,6 +22,12 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
     - URL: `https://registry.npmjs.org`
     - Scope(s): `com.wallstop-studios.dxmessaging` *and* `com.wallstop-studios.unity-helpers`
 5. Resolve the latest `DxMessaging`
+
+## From Source
+Grab a copy of this repo (either `git clone` or [download a zip of the source](https://github.com/wallstop/DxMessaging/archive/refs/heads/master.zip)) and copy the contents to your project's `Assets` folder
+
+## From Releases
+Check out the latest [Releases](https://github.com/wallstop/DxMessaging/releases) to grab the Unity Package and import to your project.
 
 # Dependencies
 This project has a dependency on my [`Unity Helpers`](https://github.com/wallstop/unity-helpers) project, which contains the `System.Runtime.CompilerServices.Unsafe.dll`, which is used for some speed hacks in DxMessaging directly. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the `System.Runtime.CompilerServices.Unsafe.dll` yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project. Or, manually download this project without UnityHelpers. The choice is yours.
