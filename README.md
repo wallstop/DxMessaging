@@ -24,7 +24,7 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 5. Resolve the latest `DxMessaging`
 
 ## From Source
-Grab a copy of this repo (either `git clone` or [download a zip of the source](https://github.com/wallstop/DxMessaging/archive/refs/heads/master.zip)) and copy the contents to your project's `Assets` folder.
+Grab a copy of this repo (either `git clone` both [this repo](https://github.com/wallstop/DxMessaging) *and* [Unity Helpers](https://github.com/wallstop/unity-helpers) or [download a zip of the source](https://github.com/wallstop/DxMessaging/archive/refs/heads/master.zip) and [Unity Helper's source](https://github.com/wallstop/unity-helpers/archive/refs/heads/main.zip)) and copy the contents to your project's `Assets` folder.
 
 ## From Releases
 Check out the latest [Releases](https://github.com/wallstop/DxMessaging/releases) to grab the Unity Package and import to your project.
