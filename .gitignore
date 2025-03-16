@@ -252,6 +252,7 @@ paket-files/
 .idea/
 *.sln.iml
 *.sln
+*.sln.meta
 
 # CodeRush
 .cr/

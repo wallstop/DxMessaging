@@ -1,6 +1,9 @@
 # DxMessaging
 Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly geared towards Unity and XNA/Monogame. See [this recorded talk](https://fathom.video/share/qjs8pn1MAwGb-yTAaW5WpZWdjzxcdwFR).
 
+# CI/CD Status
+![Npm Publish](https://github.com/wallstop/DxMessaging/actions/workflows/npm-publish.yml/badge.svg)
+
 # Compatibility
 | Platform | Compatible |
 | --- | --- |
