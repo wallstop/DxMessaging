@@ -3,7 +3,7 @@ name: Publish to NPM
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'package.json'
   workflow_dispatch:
