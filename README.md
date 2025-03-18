@@ -63,6 +63,7 @@ While not as fast, DxMessaging offers *additional functionality* as compared to 
 | Listen to all messages | _ | &check; |
 | View a filter-able history of message registrations | N/A | &check; |
 | "LateUpdate" style handlers | _ | &check; |
+| Explicit message ordering | _ | &check; |
 
 # Concepts
 There are a few important concepts that DxMessaging provides.
