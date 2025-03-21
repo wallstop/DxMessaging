@@ -25,6 +25,7 @@
         [SetUp]
         public virtual void Setup()
         {
+            MessagingDebug.enabled = true;
             MessagingDebug.LogFunction = (level, message) =>
             {
                 switch (level)
