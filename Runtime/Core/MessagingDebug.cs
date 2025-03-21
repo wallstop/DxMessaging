@@ -18,6 +18,8 @@
     /// </summary>
     public static class MessagingDebug
     {
+        public static bool enabled = false;
+
         /// <summary>
         /// Custom log function to use.
         /// </summary>
@@ -47,6 +49,11 @@
         /// <param name="args">Args to populate format string with.</param>
         public static void Log(LogLevel logLevel, string message, params object[] args)
         {
+            if (!enabled)
+            {
+                return;
+            }
+
             Action<LogLevel, string> logFunction = LogFunction;
             /*
                 We can potentially avoid an unnecessary string.Format call if the LogFunction is null,

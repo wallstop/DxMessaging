@@ -221,11 +221,15 @@
                 );
                 if (!_globalSinks.TryGetValue(messageHandler, out count))
                 {
-                    MessagingDebug.Log(
-                        LogLevel.Error,
-                        "Received over-deregistration of GlobalAcceptAll for MessageHandler {0}. Check to make sure you're not calling (de)registration multiple times.",
-                        messageHandler
-                    );
+                    if (MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Error,
+                            "Received over-deregistration of GlobalAcceptAll for MessageHandler {0}. Check to make sure you're not calling (de)registration multiple times.",
+                            messageHandler
+                        );
+                    }
+
                     return;
                 }
 
@@ -421,7 +425,7 @@
                         _uniqueInterceptorsAndPriorities.Remove(interceptor);
                     }
                 }
-                else
+                else if (MessagingDebug.enabled)
                 {
                     MessagingDebug.Log(
                         LogLevel.Error,
@@ -441,7 +445,7 @@
                         complete = interceptors.Remove(interceptor);
                     }
 
-                    if (!complete)
+                    if (!complete && MessagingDebug.enabled)
                     {
                         MessagingDebug.Log(
                             LogLevel.Error,
@@ -534,7 +538,7 @@
                 }
             }
 
-            if (!foundAnyHandlers)
+            if (!foundAnyHandlers && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
                     LogLevel.Info,
@@ -765,7 +769,7 @@
                 }
             }
 
-            if (!foundAnyHandlers)
+            if (!foundAnyHandlers && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
                     LogLevel.Info,
@@ -1096,7 +1100,7 @@
                 }
             }
 
-            if (!foundAnyHandlers)
+            if (!foundAnyHandlers && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
                     LogLevel.Info,
@@ -1914,12 +1918,16 @@
                     || !handler.TryGetValue(messageHandler, out count)
                 )
                 {
-                    MessagingDebug.Log(
-                        LogLevel.Error,
-                        "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
-                        type,
-                        messageHandler
-                    );
+                    if (MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Error,
+                            "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
+                            type,
+                            messageHandler
+                        );
+                    }
+
                     return;
                 }
 
@@ -1937,7 +1945,7 @@
                         _ = sinks.Remove(type);
                     }
 
-                    if (!complete)
+                    if (!complete && MessagingDebug.enabled)
                     {
                         MessagingDebug.Log(
                             LogLevel.Error,
@@ -2032,12 +2040,16 @@
                     || !handler.TryGetValue(messageHandler, out count)
                 )
                 {
-                    MessagingDebug.Log(
-                        LogLevel.Error,
-                        "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
-                        type,
-                        messageHandler
-                    );
+                    if (MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Error,
+                            "Received over-deregistration of {0} for {1}. Check to make sure you're not calling (de)registration multiple times.",
+                            type,
+                            messageHandler
+                        );
+                    }
+
                     return;
                 }
 
@@ -2059,7 +2071,7 @@
                         _ = sinks.Remove(type);
                     }
 
-                    if (!complete)
+                    if (!complete && MessagingDebug.enabled)
                     {
                         MessagingDebug.Log(
                             LogLevel.Error,
