@@ -1,22 +1,42 @@
 ﻿namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
-    using System.Collections;
     using System.Diagnostics;
     using Core;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using global::Unity.PerformanceTesting;
+    using global::Unity.Profiling;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
     using UnityEngine;
-    using UnityEngine.TestTools;
+    using UnityEngine.Profiling;
     using Debug = UnityEngine.Debug;
     using Object = UnityEngine.Object;
 
     public sealed class PerformanceTests : MessagingTestBase
     {
+        internal static string FormatBytes(long bytes)
+        {
+            if (bytes < 1024)
+            {
+                return $"{bytes} B";
+            }
+
+            string[] sizes = { "KB", "MB", "GB", "TB", "PB", "EB" };
+            double len = bytes;
+            int order = 0;
+
+            while (1024 <= len && order < sizes.Length - 1)
+            {
+                len /= 1024;
+                order++;
+            }
+
+            return $"{len:0.##} {sizes[order]}";
+        }
+
         [SetUp]
         public override void Setup()
         {
@@ -24,17 +44,21 @@
             MessagingDebug.LogFunction = (_, _) => { };
         }
 
-        [UnityTest]
-        public IEnumerator Benchmark()
+        [Test]
+        public void Benchmark()
         {
-            TimeSpan timeout = TimeSpan.FromSeconds(1);
+            TimeSpan timeout = TimeSpan.FromSeconds(2);
 
-            Debug.Log("| Message Tech | Operations / Second |");
-            Debug.Log("| ------------ | ------------------- |");
+            Debug.Log("| Message Tech | Operations / Second | Memory Allocated |");
+            Debug.Log("| ------------ | ------------------- | --------------- |");
 
             ComplexTargetedMessage message = new(Guid.NewGuid());
             Stopwatch timer = Stopwatch.StartNew();
-
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
+            recorder.Stop();
             RunTest(component => Unity(timer, timeout, component.gameObject, message));
             RunTest(component => NormalGameObject(timer, timeout, component, message));
             RunTest(component => NormalComponent(timer, timeout, component, message));
@@ -43,12 +67,11 @@
 
             SimpleUntargetedMessage untargetedMessage = new();
             RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
-            yield break;
         }
 
-        [UnityTest]
+        [Test]
         [Performance]
-        public IEnumerator BenchmarkBroadcast()
+        public void BenchmarkBroadcast()
         {
             GameObject go = CreateGameObject();
             MessageRegistrationToken token = GetToken(
@@ -65,7 +88,7 @@
                 .IterationsPerMeasurement(10)
                 .MeasurementCount(1_000)
                 .Run();
-            yield break;
+            return;
 
             void Handle(SimpleBroadcastMessage _)
             {
@@ -73,9 +96,9 @@
             }
         }
 
-        [UnityTest]
+        [Test]
         [Performance]
-        public IEnumerator BenchmarkTargeted()
+        public void BenchmarkTargeted()
         {
             GameObject go = CreateGameObject();
             MessageRegistrationToken token = GetToken(
@@ -92,7 +115,7 @@
                 .IterationsPerMeasurement(10)
                 .MeasurementCount(1_000)
                 .Run();
-            yield break;
+            return;
 
             void Handle(SimpleTargetedMessage _)
             {
@@ -100,9 +123,9 @@
             }
         }
 
-        [UnityTest]
+        [Test]
         [Performance]
-        public IEnumerator BenchmarkUntargeted()
+        public void BenchmarkUntargeted()
         {
             GameObject go = CreateGameObject();
             MessageRegistrationToken token = GetToken(
@@ -119,7 +142,7 @@
                 .IterationsPerMeasurement(10)
                 .MeasurementCount(1_000)
                 .Run();
-            yield break;
+            return;
 
             void Handle(SimpleUntargetedMessage _)
             {
@@ -142,9 +165,16 @@
             return target;
         }
 
-        private static void DisplayCount(string testName, int count, TimeSpan timeout)
+        private static void DisplayCount(
+            string testName,
+            int count,
+            TimeSpan timeout,
+            long memoryUsed
+        )
         {
-            Debug.Log($"| {testName} | {Math.Floor(count / timeout.TotalSeconds):N0} |");
+            Debug.Log(
+                $"| {testName} | {Math.Floor(count / timeout.TotalSeconds):N0} | {FormatBytes(Math.Max(memoryUsed, 0))} |"
+            );
         }
 
         private void RunTest(Action<EmptyMessageAwareComponent> test)
@@ -171,6 +201,10 @@
             int count = 0;
             var component = target.AddComponent<SimpleMessageAwareComponent>();
             component.slowComplexTargetedHandler = () => ++count;
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
             timer.Restart();
             do
             {
@@ -179,7 +213,8 @@
                     message
                 );
             } while (timer.Elapsed < timeout);
-            DisplayCount("Unity", count, timeout);
+            recorder.Stop();
+            DisplayCount("Unity", count, timeout, recorder.LastValue);
         }
 
         private void NormalGameObject(
@@ -192,19 +227,26 @@
             int count = 0;
             var token = GetToken(component);
 
-            void Handle(ComplexTargetedMessage _)
-            {
-                ++count;
-            }
-
             GameObject go = component.gameObject;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
             timer.Restart();
             do
             {
                 message.EmitGameObjectTargeted(go);
             } while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging (GameObject) - Normal", count, timeout);
+
+            recorder.Stop();
+            DisplayCount("DxMessaging (GameObject) - Normal", count, timeout, recorder.LastValue);
+            return;
+
+            void Handle(ComplexTargetedMessage _)
+            {
+                ++count;
+            }
         }
 
         private void NormalComponent(
@@ -217,18 +259,24 @@
             int count = 0;
             var token = GetToken(component);
 
-            void Handle(ComplexTargetedMessage _)
-            {
-                ++count;
-            }
-
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
             timer.Restart();
             do
             {
                 message.EmitComponentTargeted(component);
             } while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging (Component) - Normal", count, timeout);
+            recorder.Stop();
+            DisplayCount("DxMessaging (Component) - Normal", count, timeout, recorder.LastValue);
+            return;
+
+            void Handle(ComplexTargetedMessage _)
+            {
+                ++count;
+            }
         }
 
         private void NoCopyGameObject(
@@ -241,20 +289,25 @@
             int count = 0;
             var token = GetToken(component);
 
-            void Handle(ref ComplexTargetedMessage _)
-            {
-                ++count;
-            }
-
             GameObject go = component.gameObject;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
-
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
             timer.Restart();
             do
             {
                 message.EmitGameObjectTargeted(component.gameObject);
             } while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging (GameObject) - No-Copy", count, timeout);
+            recorder.Stop();
+            DisplayCount("DxMessaging (GameObject) - No-Copy", count, timeout, recorder.LastValue);
+            return;
+
+            void Handle(ref ComplexTargetedMessage _)
+            {
+                ++count;
+            }
         }
 
         private void NoCopyComponent(
@@ -267,19 +320,24 @@
             int count = 0;
             var token = GetToken(component);
 
-            void Handle(ref ComplexTargetedMessage _)
-            {
-                ++count;
-            }
-
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
-
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
             timer.Restart();
             do
             {
                 message.EmitComponentTargeted(component);
             } while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging (Component) - No-Copy", count, timeout);
+            recorder.Stop();
+            DisplayCount("DxMessaging (Component) - No-Copy", count, timeout, recorder.LastValue);
+            return;
+
+            void Handle(ref ComplexTargetedMessage _)
+            {
+                ++count;
+            }
         }
 
         private void NoCopyUntargeted(
@@ -292,19 +350,24 @@
             int count = 0;
             var token = GetToken(component);
 
-            void Handle(ref SimpleUntargetedMessage _)
-            {
-                ++count;
-            }
-
             token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
-
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory,
+                "GC.Alloc"
+            );
             timer.Restart();
             do
             {
                 message.EmitUntargeted();
             } while (timer.Elapsed < timeout);
-            DisplayCount("DxMessaging (Untargeted) - No-Copy", count, timeout);
+            recorder.Stop();
+            DisplayCount("DxMessaging (Untargeted) - No-Copy", count, timeout, recorder.LastValue);
+            return;
+
+            void Handle(ref SimpleUntargetedMessage _)
+            {
+                ++count;
+            }
         }
     }
 }

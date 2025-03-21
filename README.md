@@ -37,14 +37,15 @@ This project has a dependency on my [`Unity Helpers`](https://github.com/wallsto
 
 # Benchmarks
 DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs).
-| Message Tech | Operations / Second |
-| ------------ | ------------------- |
-| Unity | 2,509,901 |
-| DxMessaging (GameObject) - Normal | 1,031,034 |
-| DxMessaging (Component) - Normal | 1,066,371 |
-| DxMessaging (GameObject) - No-Copy | 1,001,639 |
-| DxMessaging (Component) - No-Copy | 1,080,738 |
-| DxMessaging (Untargeted) - No-Copy | 1,389,542 |
+
+| Message Tech | Operations / Second | Memory Allocated |
+| ------------ | ------------------- | --------------- |
+| Unity | 2,302,247 | 76.83 GB |
+| DxMessaging (GameObject) - Normal | 1,223,941 | 3.52 MB |
+| DxMessaging (Component) - Normal | 1,229,897 | 2.83 MB |
+| DxMessaging (GameObject) - No-Copy | 1,172,148 | 2.83 MB |
+| DxMessaging (Component) - No-Copy | 1,258,505 | 3.03 MB |
+| DxMessaging (Untargeted) - No-Copy | 1,737,476 | 4.2 MB |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
@@ -53,6 +54,7 @@ While not as fast, DxMessaging offers *additional functionality* as compared to 
 | Require knowledge of receiver's implementation | &check; | _ |
 | Send a message to a GameObject | &check; | &check; |
 | Send a message to a Component | _ | &check; |
+| (Optional) Explicit message ordering | _ | &check; |
 | Ignore messages dynamically at runtime | _ | &check; (multiple ways) |
 | Send messages to all receivers | _ | &check; |
 | Listen to messages for another GameObject | _ | &check; (multiple ways)|
@@ -63,7 +65,6 @@ While not as fast, DxMessaging offers *additional functionality* as compared to 
 | Listen to all messages | _ | &check; |
 | View a filter-able history of message registrations | N/A | &check; |
 | "LateUpdate" style handlers | _ | &check; |
-| Explicit message ordering | _ | &check; |
 
 # Concepts
 There are a few important concepts that DxMessaging provides.

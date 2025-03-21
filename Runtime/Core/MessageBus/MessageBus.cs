@@ -2,7 +2,6 @@
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Reflection;
     using Messages;
     using static IMessageBus;
@@ -12,9 +11,52 @@
     /// </summary>
     public sealed class MessageBus : IMessageBus
     {
-        public int RegisteredTargeted => _targetedSinks.Select(kvp => kvp.Value.Count).Sum();
-        public int RegisteredBroadcast => _broadcastSinks.Select(kvp => kvp.Value.Count).Sum();
-        public int RegisteredUntargeted => _sinks.Select(kvp => kvp.Value.Count).Sum();
+        public int RegisteredTargeted
+        {
+            get
+            {
+                int count = 0;
+                foreach (
+                    KeyValuePair<
+                        Type,
+                        Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
+                    > entry in _targetedSinks
+                )
+                {
+                    count += entry.Value.Count;
+                }
+
+                return count;
+            }
+        }
+
+        public int RegisteredBroadcast
+        {
+            get
+            {
+                int count = 0;
+                foreach (var entry in _broadcastSinks)
+                {
+                    count += entry.Value.Count;
+                }
+
+                return count;
+            }
+        }
+
+        public int RegisteredUntargeted
+        {
+            get
+            {
+                int count = 0;
+                foreach (var entry in _sinks)
+                {
+                    count += entry.Value.Count;
+                }
+
+                return count;
+            }
+        }
 
         private static readonly Type MessageBusType = typeof(MessageBus);
 
@@ -1354,7 +1396,39 @@
             else
             {
                 interceptorStack.Clear();
-                interceptorStack.AddRange(interceptors.Values);
+                switch (interceptors.Values)
+                {
+                    case List<List<object>> list:
+                    {
+                        foreach (List<object> interceptor in list)
+                        {
+                            interceptorStack.Add(interceptor);
+                        }
+
+                        break;
+                    }
+                    case List<object>[] array:
+                    {
+                        foreach (List<object> interceptor in array)
+                        {
+                            interceptorStack.Add(interceptor);
+                        }
+
+                        break;
+                    }
+                    default:
+                    {
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (int i = 0; i < interceptors.Values.Count; i++)
+                        {
+                            List<object> interceptor = interceptors.Values[i];
+                            interceptorStack.Add(interceptor);
+                        }
+
+                        break;
+                    }
+                }
             }
 
             if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
@@ -1384,7 +1458,10 @@
                 foreach (List<object> stack in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    interceptorObjects.AddRange(stack);
+                    foreach (object interceptor in stack)
+                    {
+                        interceptorObjects.Add(interceptor);
+                    }
 
                     foreach (object transformer in interceptorObjects)
                     {
@@ -1428,7 +1505,10 @@
                 foreach (List<object> stack in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    interceptorObjects.AddRange(stack);
+                    foreach (object interceptor in stack)
+                    {
+                        interceptorObjects.Add(interceptor);
+                    }
 
                     foreach (object transformer in interceptorObjects)
                     {
@@ -1472,7 +1552,10 @@
                 foreach (List<object> stack in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    interceptorObjects.AddRange(stack);
+                    foreach (object interceptor in stack)
+                    {
+                        interceptorObjects.Add(interceptor);
+                    }
 
                     foreach (object transformer in interceptorObjects)
                     {
