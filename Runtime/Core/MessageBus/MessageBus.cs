@@ -2,7 +2,6 @@
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Reflection;
     using Messages;
     using static IMessageBus;
@@ -12,9 +11,52 @@
     /// </summary>
     public sealed class MessageBus : IMessageBus
     {
-        public int RegisteredTargeted => _targetedSinks.Select(kvp => kvp.Value.Count).Sum();
-        public int RegisteredBroadcast => _broadcastSinks.Select(kvp => kvp.Value.Count).Sum();
-        public int RegisteredUntargeted => _sinks.Select(kvp => kvp.Value.Count).Sum();
+        public int RegisteredTargeted
+        {
+            get
+            {
+                int count = 0;
+                foreach (
+                    KeyValuePair<
+                        Type,
+                        Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
+                    > entry in _targetedSinks
+                )
+                {
+                    count += entry.Value.Count;
+                }
+
+                return count;
+            }
+        }
+
+        public int RegisteredBroadcast
+        {
+            get
+            {
+                int count = 0;
+                foreach (var entry in _broadcastSinks)
+                {
+                    count += entry.Value.Count;
+                }
+
+                return count;
+            }
+        }
+
+        public int RegisteredUntargeted
+        {
+            get
+            {
+                int count = 0;
+                foreach (var entry in _sinks)
+                {
+                    count += entry.Value.Count;
+                }
+
+                return count;
+            }
+        }
 
         private static readonly Type MessageBusType = typeof(MessageBus);
 
@@ -466,9 +508,11 @@
                 foundAnyHandlers = true;
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
-                    RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                    RunUntargetedPostProcessing(
+                        ref typedMessage,
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
+                    );
                 }
                 else
                 {
@@ -515,7 +559,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
                     return;
                 }
@@ -607,9 +651,12 @@
                 foundAnyHandlers = true;
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
-                    RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                    RunTargetedBroadcast(
+                        ref target,
+                        ref typedMessage,
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
+                    );
                 }
                 else
                 {
@@ -647,9 +694,12 @@
                 foundAnyHandlers = true;
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
-                    RunTargetedPostProcessing(ref target, ref typedMessage, entry.Key, entry.Value);
+                    RunTargetedPostProcessing(
+                        ref target,
+                        ref typedMessage,
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
+                    );
                 }
                 else
                 {
@@ -683,13 +733,11 @@
             {
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
                     RunTargetedWithoutTargetingPostProcessing(
                         ref target,
                         ref typedMessage,
-                        entry.Key,
-                        entry.Value
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
                     );
                 }
                 else
@@ -744,7 +792,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleTargetedWithoutTargetingPostProcessing(
                         ref target,
                         ref typedMessage,
@@ -796,7 +844,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleTargetedPostProcessing(
                         ref target,
                         ref typedMessage,
@@ -848,7 +896,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleTargeted(ref target, ref typedMessage, this, priority);
                     return;
                 }
@@ -939,9 +987,12 @@
                 foundAnyHandlers = true;
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
-                    RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                    RunBroadcast(
+                        ref source,
+                        ref typedMessage,
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
+                    );
                 }
                 else
                 {
@@ -974,13 +1025,11 @@
                 foundAnyHandlers = true;
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
                     RunBroadcastPostProcessing(
                         ref source,
                         ref typedMessage,
-                        entry.Key,
-                        entry.Value
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
                     );
                 }
                 else
@@ -1015,13 +1064,11 @@
             {
                 if (sortedHandlers.Count == 1)
                 {
-                    KeyValuePair<int, SortedList<MessageHandler, int>> entry =
-                        sortedHandlers.First();
                     RunBroadcastWithoutSourcePostProcessing(
                         ref source,
                         ref typedMessage,
-                        entry.Key,
-                        entry.Value
+                        sortedHandlers.Keys[0],
+                        sortedHandlers.Values[0]
                     );
                 }
                 else
@@ -1076,7 +1123,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
                         ref source,
                         ref typedMessage,
@@ -1128,7 +1175,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleSourcedBroadcastPostProcessing(
                         ref source,
                         ref typedMessage,
@@ -1180,7 +1227,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
                     return;
                 }
@@ -1221,7 +1268,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = _globalSinks.Keys.First();
+                    MessageHandler handler = _globalSinks.Keys[0];
                     handler.HandleGlobalUntargetedMessage(ref message, this);
                     return;
                 }
@@ -1257,7 +1304,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = _globalSinks.Keys.First();
+                    MessageHandler handler = _globalSinks.Keys[0];
                     handler.HandleGlobalTargetedMessage(ref target, ref message, this);
                     return;
                 }
@@ -1296,7 +1343,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = _globalSinks.Keys.First();
+                    MessageHandler handler = _globalSinks.Keys[0];
                     handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
                     return;
                 }
@@ -1349,7 +1396,39 @@
             else
             {
                 interceptorStack.Clear();
-                interceptorStack.AddRange(interceptors.Values);
+                switch (interceptors.Values)
+                {
+                    case List<List<object>> list:
+                    {
+                        foreach (List<object> interceptor in list)
+                        {
+                            interceptorStack.Add(interceptor);
+                        }
+
+                        break;
+                    }
+                    case List<object>[] array:
+                    {
+                        foreach (List<object> interceptor in array)
+                        {
+                            interceptorStack.Add(interceptor);
+                        }
+
+                        break;
+                    }
+                    default:
+                    {
+                        // ReSharper disable once ForCanBeConvertedToForeach
+                        // ReSharper disable once LoopCanBeConvertedToQuery
+                        for (int i = 0; i < interceptors.Values.Count; i++)
+                        {
+                            List<object> interceptor = interceptors.Values[i];
+                            interceptorStack.Add(interceptor);
+                        }
+
+                        break;
+                    }
+                }
             }
 
             if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
@@ -1379,7 +1458,10 @@
                 foreach (List<object> stack in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    interceptorObjects.AddRange(stack);
+                    foreach (object interceptor in stack)
+                    {
+                        interceptorObjects.Add(interceptor);
+                    }
 
                     foreach (object transformer in interceptorObjects)
                     {
@@ -1423,7 +1505,10 @@
                 foreach (List<object> stack in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    interceptorObjects.AddRange(stack);
+                    foreach (object interceptor in stack)
+                    {
+                        interceptorObjects.Add(interceptor);
+                    }
 
                     foreach (object transformer in interceptorObjects)
                     {
@@ -1467,7 +1552,10 @@
                 foreach (List<object> stack in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    interceptorObjects.AddRange(stack);
+                    foreach (object interceptor in stack)
+                    {
+                        interceptorObjects.Add(interceptor);
+                    }
 
                     foreach (object transformer in interceptorObjects)
                     {
@@ -1508,8 +1596,11 @@
 
             if (sortedHandlers.Count == 1)
             {
-                KeyValuePair<int, SortedList<MessageHandler, int>> entry = sortedHandlers.First();
-                RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                RunUntargetedBroadcast(
+                    ref message,
+                    sortedHandlers.Keys[0],
+                    sortedHandlers.Values[0]
+                );
                 return true;
             }
 
@@ -1545,7 +1636,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleUntargetedMessage(ref message, this, priority);
                     return;
                 }
@@ -1591,8 +1682,12 @@
 
             if (sortedHandlers.Count == 1)
             {
-                KeyValuePair<int, SortedList<MessageHandler, int>> entry = sortedHandlers.First();
-                RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                RunTargetedWithoutTargeting(
+                    ref target,
+                    ref message,
+                    sortedHandlers.Keys[0],
+                    sortedHandlers.Values[0]
+                );
                 return true;
             }
 
@@ -1629,7 +1724,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
                     return;
                 }
@@ -1680,8 +1775,12 @@
 
             if (sortedHandlers.Count == 1)
             {
-                KeyValuePair<int, SortedList<MessageHandler, int>> entry = sortedHandlers.First();
-                RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                RunBroadcastWithoutSource(
+                    ref source,
+                    ref message,
+                    sortedHandlers.Keys[0],
+                    sortedHandlers.Values[0]
+                );
                 return true;
             }
 
@@ -1718,7 +1817,7 @@
                 }
                 case 1:
                 {
-                    MessageHandler handler = handlers.Keys.First();
+                    MessageHandler handler = handlers.Keys[0];
                     handler.HandleSourcedBroadcastWithoutSource(
                         ref source,
                         ref message,
@@ -1993,7 +2092,22 @@
             }
 
             messageHandlers.Clear();
-            messageHandlers.AddRange(handlers);
+            if (handlers is SortedList<int, SortedList<MessageHandler, int>> sortedList)
+            {
+                for (int i = 0; i < sortedList.Count; ++i)
+                {
+                    messageHandlers.Add(
+                        new KeyValuePair<int, SortedList<MessageHandler, int>>(
+                            sortedList.Keys[i],
+                            sortedList.Values[i]
+                        )
+                    );
+                }
+            }
+            else
+            {
+                messageHandlers.AddRange(handlers);
+            }
             return messageHandlers;
         }
 
@@ -2007,7 +2121,52 @@
             }
 
             messageHandlers.Clear();
-            messageHandlers.AddRange(handlers);
+            // Try to avoid allocations if at all possible
+            switch (handlers)
+            {
+                case List<MessageHandler> list:
+                {
+                    foreach (MessageHandler handler in list)
+                    {
+                        messageHandlers.Add(handler);
+                    }
+
+                    break;
+                }
+                case MessageHandler[] array:
+                {
+                    foreach (MessageHandler handler in array)
+                    {
+                        messageHandlers.Add(handler);
+                    }
+
+                    break;
+                }
+                case IList<MessageHandler> interfaceList:
+                {
+                    for (int i = 0; i < interfaceList.Count; ++i)
+                    {
+                        messageHandlers.Add(interfaceList[i]);
+                    }
+
+                    break;
+                }
+                case HashSet<MessageHandler> set:
+                {
+                    foreach (MessageHandler handler in set)
+                    {
+                        messageHandlers.Add(handler);
+                    }
+
+                    break;
+                }
+                default:
+                {
+                    messageHandlers.AddRange(handlers);
+                    break;
+                }
+            }
+
             return messageHandlers;
         }
 

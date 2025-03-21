@@ -1571,7 +1571,10 @@
                 )
                 {
                     handlers.Clear();
-                    handlers.AddRange(_globalUntargetedHandlers.Keys);
+                    foreach (Action<IUntargetedMessage> handler in _globalUntargetedHandlers.Keys)
+                    {
+                        handlers.Add(handler);
+                    }
                 }
                 else
                 {
@@ -1617,7 +1620,12 @@
                 )
                 {
                     handlers.Clear();
-                    handlers.AddRange(_globalTargetedHandlers.Keys);
+                    foreach (
+                        Action<InstanceId, ITargetedMessage> handler in _globalTargetedHandlers.Keys
+                    )
+                    {
+                        handlers.Add(handler);
+                    }
                 }
                 else
                 {
@@ -1665,7 +1673,15 @@
                 )
                 {
                     handlers.Clear();
-                    handlers.AddRange(_globalBroadcastHandlers.Keys);
+                    foreach (
+                        Action<
+                            InstanceId,
+                            IBroadcastMessage
+                        > handler in _globalBroadcastHandlers.Keys
+                    )
+                    {
+                        handlers.Add(handler);
+                    }
                 }
                 else
                 {
@@ -2589,7 +2605,7 @@
 
             private static List<U> GetOrAddNewHandlerStack<U>(
                 ref Stack<List<U>> stack,
-                IEnumerable<U> handlers
+                Dictionary<U, int>.KeyCollection handlers
             )
             {
                 stack ??= new Stack<List<U>>();
@@ -2599,7 +2615,10 @@
                 }
 
                 typedHandlerStack.Clear();
-                typedHandlerStack.AddRange(handlers);
+                foreach (U handler in handlers)
+                {
+                    typedHandlerStack.Add(handler);
+                }
                 return typedHandlerStack;
             }
 
