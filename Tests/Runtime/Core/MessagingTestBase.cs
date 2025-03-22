@@ -22,10 +22,12 @@
         protected readonly List<GameObject> _spawned = new();
         protected readonly Random _random = new();
 
+        protected virtual bool MessagingDebugEnabled => true;
+
         [SetUp]
         public virtual void Setup()
         {
-            MessagingDebug.enabled = true;
+            MessagingDebug.enabled = MessagingDebugEnabled;
             MessagingDebug.LogFunction = (level, message) =>
             {
                 switch (level)
@@ -46,6 +48,18 @@
             Assert.IsNotNull(messageBus);
             messageBus.Log.Enabled = true;
             _numRegistrations = 150;
+
+            LogMessageBusStatus();
+        }
+
+        protected void LogMessageBusStatus()
+        {
+            MessageBus messageBus = MessageHandler.MessageBus;
+            Debug.Log(
+                $"Untargeted registrations: {messageBus.RegisteredUntargeted}, "
+                    + $"targeted registrations: {messageBus.RegisteredTargeted}, "
+                    + $"broadcast registrations: {messageBus.RegisteredBroadcast}."
+            );
         }
 
         [TearDown]
@@ -155,20 +169,12 @@
 
         protected IEnumerator WaitUntilMessageHandlerIsFresh()
         {
-            Setup();
             MessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
             Stopwatch timer = Stopwatch.StartNew();
 
-            bool IsStale()
-            {
-                return messageBus.RegisteredUntargeted != 0
-                    || messageBus.RegisteredTargeted != 0
-                    || messageBus.RegisteredBroadcast != 0;
-            }
-
-            while (IsStale() && timer.Elapsed < TimeSpan.FromSeconds(2.5))
+            while (IsStale() && timer.Elapsed < TimeSpan.FromSeconds(1.25))
             {
                 yield return null;
             }
@@ -181,6 +187,14 @@
                 messageBus.RegisteredBroadcast,
                 messageBus.Log
             );
+            yield break;
+
+            bool IsStale()
+            {
+                return messageBus.RegisteredUntargeted != 0
+                    || messageBus.RegisteredTargeted != 0
+                    || messageBus.RegisteredBroadcast != 0;
+            }
         }
     }
 }

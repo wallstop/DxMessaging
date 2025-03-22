@@ -2118,7 +2118,10 @@
             }
             else
             {
-                messageHandlers.AddRange(handlers);
+                foreach (KeyValuePair<int, SortedList<MessageHandler, int>> handler in handlers)
+                {
+                    messageHandlers.Add(handler);
+                }
             }
             return messageHandlers;
         }
@@ -2174,7 +2177,10 @@
                 }
                 default:
                 {
-                    messageHandlers.AddRange(handlers);
+                    foreach (MessageHandler handler in handlers)
+                    {
+                        messageHandlers.Add(handler);
+                    }
                     break;
                 }
             }

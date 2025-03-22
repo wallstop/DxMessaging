@@ -5,10 +5,16 @@
     using Messages;
 
     /// <summary>
-    /// Description of a general purpose message bus that provides both registration, de-registration, and broadcast capabilities.
+    /// Description of a general purpose message bus that provides both registration, deregistration, and broadcast capabilities.
     /// </summary>
     public interface IMessageBus
     {
+        public int RegisteredBroadcast { get; }
+
+        public int RegisteredTargeted { get; }
+
+        public int RegisteredUntargeted { get; }
+
         /// <summary>
         /// Given an Untargeted message, determines whether or not it should be processed or skipped
         /// </summary>
@@ -54,7 +60,7 @@
         /// </summary>
         /// <typeparam name="T">Specific type of UntargetedMessages to register for.</typeparam>
         /// <param name="messageHandler">MessageHandler to register to accept UntargetedMessages of the specified type.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage;
 
@@ -64,7 +70,7 @@
         /// <typeparam name="T">Specific type of TargetedMessages to register for.</typeparam>
         /// <param name="target">Target of messages to listen for.</param>
         /// <param name="messageHandler">MessageHandler to register the TargetedMessages of the specified type.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive the messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive the messages.</returns>
         Action RegisterTargeted<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -78,7 +84,7 @@
         /// </summary>
         /// <typeparam name="T">Specific type of TargetedMessages to register for.</typeparam>
         /// <param name="messageHandler">MessageHandler to register to accept all TargetedMessages of the specified type.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterTargetedWithoutTargeting<T>(MessageHandler messageHandler, int priority = 0)
             where T : ITargetedMessage;
 
@@ -88,7 +94,7 @@
         /// <typeparam name="T">Type of the BroadcastMessage to register.</typeparam>
         /// <param name="source">InstanceId of the source for BroadcastMessages to listen to.</param>
         /// <param name="messageHandler">MessageHandler to register to accept BroadcastMessages.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterSourcedBroadcast<T>(
             InstanceId source,
             MessageHandler messageHandler,
@@ -102,7 +108,7 @@
         /// </summary>
         /// <typeparam name="T">Type of the BroadcastMessage to register.</typeparam>
         /// <param name="messageHandler">MessageHandler to register to accept BroadcastMessages.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterSourcedBroadcastWithoutSource<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -114,7 +120,7 @@
         /// It doesn't matter if the message is Targeted or Untargeted, this MessageHandler will be invoked for it.
         /// </summary>
         /// <param name="messageHandler">MessageHandler to register to accept all messages.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterGlobalAcceptAll(MessageHandler messageHandler);
 
         /// <summary>
@@ -135,7 +141,7 @@
         ///         param1: Current message instance by reference
         ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
         Action RegisterUntargetedInterceptor<T>(
             UntargetedInterceptor<T> interceptor,
             int priority = 0
@@ -160,7 +166,7 @@
         ///         param1: Current message instance by reference
         ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
         Action RegisterTargetedInterceptor<T>(TargetedInterceptor<T> interceptor, int priority = 0)
             where T : ITargetedMessage;
 
@@ -182,7 +188,7 @@
         ///         param1: Current message instance by reference
         ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
         Action RegisterBroadcastInterceptor<T>(
             BroadcastInterceptor<T> interceptor,
             int priority = 0
@@ -190,25 +196,25 @@
             where T : IBroadcastMessage;
 
         /// <summary>
-        /// Registers the provided MessageHandler to post process Untargeted messages of the given type.
+        /// Registers the provided MessageHandler to post-process Untargeted messages of the given type.
         /// (This will run after all handlers run for the provided message).
         /// </summary>
-        /// <typeparam name="T">Type of UntargetedMessage to post process.</typeparam>
-        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <typeparam name="T">Type of UntargetedMessage to post-process.</typeparam>
+        /// <param name="messageHandler">MessageHandler to post-process messages for.</param>
         /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to post-process messages.</returns>
         Action RegisterUntargetedPostProcessor<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage;
 
         /// <summary>
-        /// Registers the provided MessageHandler to post process Targeted messages of the given type.
+        /// Registers the provided MessageHandler to post-process Targeted messages of the given type.
         /// (This will run after all handlers run for the provided message).
         /// </summary>
-        /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
+        /// <typeparam name="T">Type of TargetedMessage to post-process.</typeparam>
         /// <param name="target">Target of messages to listen for.</param>
-        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="messageHandler">MessageHandler to post-process messages for.</param>
         /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to post-process messages.</returns>
         Action RegisterTargetedPostProcessor<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -217,13 +223,13 @@
             where T : ITargetedMessage;
 
         /// <summary>
-        /// Registers the provided MessageHandler to post process Targeted messages of the given type for all targets.
+        /// Registers the provided MessageHandler to post-process Targeted messages of the given type for all targets.
         /// (This will run after all handlers run for the provided message).
         /// </summary>
-        /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
-        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <typeparam name="T">Type of TargetedMessage to post-process.</typeparam>
+        /// <param name="messageHandler">MessageHandler to post-process messages for.</param>
         /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to post-process messages.</returns>
         Action RegisterTargetedWithoutTargetingPostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -231,14 +237,14 @@
             where T : ITargetedMessage;
 
         /// <summary>
-        /// Registers the provided MessageHandler to post process Targeted messages of the given type.
+        /// Registers the provided MessageHandler to post-process Targeted messages of the given type.
         /// (This will run after all handlers run for the provided message).
         /// </summary>
-        /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
+        /// <typeparam name="T">Type of TargetedMessage to post-process.</typeparam>
         /// <param name="source">Source of messages to listen for.</param>
-        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <param name="messageHandler">MessageHandler to post-process messages for.</param>
         /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to post-process messages.</returns>
         Action RegisterBroadcastPostProcessor<T>(
             InstanceId source,
             MessageHandler messageHandler,
@@ -247,13 +253,13 @@
             where T : IBroadcastMessage;
 
         /// <summary>
-        /// Registers the provided MessageHandler to post process Targeted messages of the given type for all sources.
+        /// Registers the provided MessageHandler to post-process Targeted messages of the given type for all sources.
         /// (This will run after all handlers run for the provided message).
         /// </summary>
-        /// <typeparam name="T">Type of TargetedMessage to post process.</typeparam>
-        /// <param name="messageHandler">MessageHandler to post process messages for.</param>
+        /// <typeparam name="T">Type of TargetedMessage to post-process.</typeparam>
+        /// <param name="messageHandler">MessageHandler to post-process messages for.</param>
         /// <param name="priority">Priority of the interceptor to run at. Handlers run in order of priority from low -> high.</param>
-        /// <returns>The de-registration action. Should be invoked when the handler no longer wants to post process messages.</returns>
+        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to post-process messages.</returns>
         Action RegisterBroadcastWithoutSourcePostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0

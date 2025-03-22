@@ -14,7 +14,7 @@
     }
 
     /// <summary>
-    /// Debug functionality for all of the Messaging Components.
+    /// Debug functionality for all the Messaging Components.
     /// </summary>
     public static class MessagingDebug
     {
@@ -29,7 +29,7 @@
         public static Action<LogLevel, string> LogFunction = null;
 
         /// <summary>
-        /// Logs a message to the debug log function, if it's not null.
+        /// Logs a message to the debug log function if it's not null.
         /// </summary>
         /// <param name="logLevel">Severity of the message.</param>
         /// <param name="message">Message to log.</param>

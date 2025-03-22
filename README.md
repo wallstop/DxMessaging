@@ -16,6 +16,9 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 
 # Installation
 
+## From Releases
+Check out the latest [Releases](https://github.com/wallstop/DxMessaging/releases) to grab the Unity Package and import to your project.
+
 ## To Install as Unity Package
 1. Open Unity Package Manager
 2. (Optional) Enable Pre-release packages to get the latest, cutting-edge builds
@@ -29,23 +32,20 @@ Game engine agnostic robust, synchronous pub/sub C# messaging solution, mostly g
 ## From Source
 Grab a copy of this repo (either `git clone` both [this repo](https://github.com/wallstop/DxMessaging) *and* [Unity Helpers](https://github.com/wallstop/unity-helpers) or [download a zip of the source](https://github.com/wallstop/DxMessaging/archive/refs/heads/master.zip) and [Unity Helper's source](https://github.com/wallstop/unity-helpers/archive/refs/heads/main.zip)) and copy the contents to your project's `Assets` folder.
 
-## From Releases
-Check out the latest [Releases](https://github.com/wallstop/DxMessaging/releases) to grab the Unity Package and import to your project.
-
 # Dependencies
 This project has a dependency on my [`Unity Helpers`](https://github.com/wallstop/unity-helpers) project, which contains the `System.Runtime.CompilerServices.Unsafe.dll`, which is used for some speed hacks in DxMessaging directly. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the `System.Runtime.CompilerServices.Unsafe.dll` yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project. Or, manually download this project without UnityHelpers. The choice is yours.
 
 # Benchmarks
 DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs).
 
-| Message Tech | Operations / Second | Memory Allocated |
-| ------------ | ------------------- | --------------- |
-| Unity | 2,302,247 | 76.83 GB |
-| DxMessaging (GameObject) - Normal | 1,223,941 | 3.52 MB |
-| DxMessaging (Component) - Normal | 1,229,897 | 2.83 MB |
-| DxMessaging (GameObject) - No-Copy | 1,172,148 | 2.83 MB |
-| DxMessaging (Component) - No-Copy | 1,258,505 | 3.03 MB |
-| DxMessaging (Untargeted) - No-Copy | 1,737,476 | 4.2 MB |
+| Message Tech | Operations / Second | Allocations? |
+| ------------ | ------------------- | ------------ | 
+| Unity | 2,287,562 | Yes |
+| DxMessaging (GameObject) - Normal | 1,198,797 | No |
+| DxMessaging (Component) - Normal | 1,198,796 | No |
+| DxMessaging (GameObject) - No-Copy | 1,137,634 | No |
+| DxMessaging (Component) - No-Copy | 1,225,105 | No |
+| DxMessaging (Untargeted) - No-Copy | 1,681,407 | No |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
@@ -64,6 +64,7 @@ While not as fast, DxMessaging offers *additional functionality* as compared to 
 | Send a message without boxing its parameters | _ | &check; |
 | Listen to all messages | _ | &check; |
 | View a filter-able history of message registrations | N/A | &check; |
+| "PreUpdate" style handlers | _ | &check; |
 | "LateUpdate" style handlers | _ | &check; |
 
 # Concepts

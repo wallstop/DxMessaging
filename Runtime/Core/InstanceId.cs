@@ -23,7 +23,8 @@
         private readonly int _id;
 
 #if UNITY_2017_1_OR_NEWER
-        public UnityEngine.Object Object { get; }
+        // ReSharper disable once InconsistentNaming
+        public readonly UnityEngine.Object Object;
 #endif
 
         [JsonConstructor]
@@ -36,10 +37,10 @@
         }
 
 #if UNITY_2017_1_OR_NEWER
-        private InstanceId(UnityEngine.Object @object)
+        private InstanceId(UnityEngine.Object unityObject)
         {
-            _id = @object.GetInstanceID();
-            Object = @object;
+            _id = unityObject.GetInstanceID();
+            Object = unityObject;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,9 +89,9 @@
 #if UNITY_2017_1_OR_NEWER
             UnityEngine.Object instance = Object;
             string objectName = instance == null ? string.Empty : instance.name;
-            return $"{{\"Id\": {_id}, \"Name\": \"{objectName}\"}}";
+            return new { Id = _id, Name = objectName }.ToString();
 #else
-            return $"{{\"Id\": {_id}}}";
+            return new { Id = _id }.ToString();
 #endif
         }
 
