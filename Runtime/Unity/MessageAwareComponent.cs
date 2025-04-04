@@ -29,7 +29,6 @@
             }
 
             RegisterMessageHandlers();
-            _messageRegistrationToken.Enable();
         }
 
         protected virtual void RegisterMessageHandlers()
