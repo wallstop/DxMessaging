@@ -40,13 +40,6 @@
             RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
         }
 
-        public void RunUntargeted(TimeSpan timeout)
-        {
-            Stopwatch timer = Stopwatch.StartNew();
-            SimpleUntargetedMessage untargetedMessage = new();
-            RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
-        }
-
         [Test]
         [Performance]
         public void BenchmarkBroadcast()
@@ -323,15 +316,12 @@
             timer.Restart();
             do
             {
-                message.EmitGameObjectTargeted(component.gameObject);
+                message.EmitGameObjectTargeted(go);
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
             {
-                Assert.That(
-                    () => message.EmitGameObjectTargeted(component.gameObject),
-                    Is.Not.AllocatingGCMemory()
-                );
+                Assert.That(() => message.EmitGameObjectTargeted(go), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -392,7 +382,8 @@
         private void NoCopyUntargeted(
             Stopwatch timer,
             TimeSpan timeout,
-            EmptyMessageAwareComponent component,            SimpleUntargetedMessage message
+            EmptyMessageAwareComponent component,
+            SimpleUntargetedMessage message
         )
         {
             int count = 0;

@@ -40,12 +40,12 @@ DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging sol
 
 | Message Tech | Operations / Second | Allocations? |
 | ------------ | ------------------- | ------------ | 
-| Unity | 2,287,562 | Yes |
-| DxMessaging (GameObject) - Normal | 1,198,797 | No |
-| DxMessaging (Component) - Normal | 1,198,796 | No |
-| DxMessaging (GameObject) - No-Copy | 1,137,634 | No |
-| DxMessaging (Component) - No-Copy | 1,225,105 | No |
-| DxMessaging (Untargeted) - No-Copy | 1,681,407 | No |
+| Unity | 2,501,671 | Yes |
+| DxMessaging (GameObject) - Normal | 1,372,951 | No |
+| DxMessaging (Component) - Normal | 1,375,995 | No |
+| DxMessaging (GameObject) - No-Copy | 1,407,478 | No |
+| DxMessaging (Component) - No-Copy | 1,407,412 | No |
+| DxMessaging (Untargeted) - No-Copy | 1,947,111 | No |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
