@@ -392,8 +392,7 @@
         private void NoCopyUntargeted(
             Stopwatch timer,
             TimeSpan timeout,
-            EmptyMessageAwareComponent component,
-            SimpleUntargetedMessage message
+            EmptyMessageAwareComponent component,            SimpleUntargetedMessage message
         )
         {
             int count = 0;

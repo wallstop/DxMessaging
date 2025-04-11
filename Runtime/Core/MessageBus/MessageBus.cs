@@ -87,35 +87,68 @@
         public RegistrationLog Log => _log;
 
         private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _sinks = new();
+        private readonly Dictionary<int, HandlerCache<int, HandlerCache>> _optimizedSinks = new();
         private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _targetedSinks = new();
         private readonly Dictionary<
+            int,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > _optimizedTargetedSinks = new();
+        private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _broadcastSinks = new();
+        private readonly Dictionary<
+            int,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > _optimizedBroadcastSinks = new();
         private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _postProcessingSinks =
             new();
+        private readonly Dictionary<
+            int,
+            HandlerCache<int, HandlerCache>
+        > _optimizedPostProcessingSinks = new();
         private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingTargetedSinks = new();
         private readonly Dictionary<
+            int,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > _optimizedPostProcessingTargetedSinks = new();
+        private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingBroadcastSinks = new();
+        private readonly Dictionary<
+            int,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > _optimizedPostProcessingBroadcastSinks = new();
         private readonly Dictionary<
             Type,
             HandlerCache<int, HandlerCache>
         > _postProcessingTargetedWithoutTargetingSinks = new();
         private readonly Dictionary<
+            int,
+            HandlerCache<int, HandlerCache>
+        > _optimizedPostProcessingTargetedWithoutTargetingSinks = new();
+        private readonly Dictionary<
             Type,
             HandlerCache<int, HandlerCache>
         > _postProcessingBroadcastWithoutSourceSinks = new();
+        private readonly Dictionary<
+            int,
+            HandlerCache<int, HandlerCache>
+        > _optimizedPostProcessingBroadcastWithoutSourceSinks = new();
         private readonly HandlerCache _globalSinks = new();
         private readonly Dictionary<Type, HandlerCache<int, List<object>>> _interceptsByType =
             new();
+        private readonly Dictionary<
+            int,
+            HandlerCache<int, List<object>>
+        > _optimizedInterceptsByType = new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
