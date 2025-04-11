@@ -58,8 +58,11 @@ namespace DxMessaging.Editor
                     continue;
                 }
 
-                string dllName = Path.GetFileName(dllPath);
-                dllNames.Add(dllName);
+                if (!dllPath.Contains("Assets/Plugins/WallstopStudios.DxMessaging/"))
+                {
+                    string dllName = Path.GetFileName(dllPath);
+                    dllNames.Add(dllName);
+                }
             }
 
             string[] dllRelativeDirectories = { LibraryPathRelative, AnalyzerPathRelative };
@@ -85,12 +88,30 @@ namespace DxMessaging.Editor
                         const string pluginsDirectory =
                             "Assets/Plugins/WallstopStudios.DxMessaging/";
                         string outputAsset = $"{pluginsDirectory}{requiredDllName}";
+                        string sourceAsset = $"{relativeDirectory}{requiredDllName}";
                         Directory.CreateDirectory(pluginsDirectory);
                         if (!File.Exists(outputAsset))
                         {
-                            File.Copy($"{relativeDirectory}{requiredDllName}", outputAsset);
+                            File.Copy(sourceAsset, outputAsset);
                             AssetDatabase.ImportAsset(outputAsset);
                             found = true;
+                        }
+                        else
+                        {
+                            FileInfo sourceInfo = new(sourceAsset);
+                            FileInfo destInfo = new(outputAsset);
+
+                            if (destInfo.LastWriteTime < sourceInfo.LastWriteTime)
+                            {
+                                // Source file is newer, so copy the file (overwrite destination)
+                                File.Copy(sourceAsset, outputAsset, true);
+                                AssetDatabase.ImportAsset(outputAsset);
+                                found = true;
+                            }
+                            else
+                            {
+                                continue;
+                            }
                         }
 
                         if (requiredDllName == SourceGeneratorDllName)
@@ -120,10 +141,6 @@ namespace DxMessaging.Editor
                 }
 
                 anyFound |= found;
-                Debug.Log(
-                    $"Missing required dll '{requiredDllName}', "
-                        + $"{(found ? "creation successful." : "WARNING! Manual creation required.")}"
-                );
             }
 
             if (anyFound)
