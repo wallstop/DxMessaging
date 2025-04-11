@@ -72,6 +72,15 @@ public sealed class DxMessageIdGenerator : IIncrementalGenerator
         int GeneratedId
     );
 
+    // Helper record for final assignment stage
+    private record struct FinalMessageInfo(
+        INamedTypeSymbol TypeSymbol,
+        TypeDeclarationSyntax DeclarationSyntax,
+        string TargetInterfaceFullName,
+        int FinalId, // The ID actually assigned (hash or fallback)
+        bool WasCollision
+    ); // Flag indicating if it was part of a collision
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // --- Step 1: Find all classes/structs with attribute lists (Potential Candidates) ---
@@ -212,6 +221,7 @@ public sealed class DxMessageIdGenerator : IIncrementalGenerator
 
         var validTypes = new List<MessageInfo>(typesToGenerate.Length);
         var typesWithMultipleAttributes = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+        var generatedIds = new HashSet<int>();
 
         // --- Step 1: Check for Multiple Attributes on the same type ---
         var groupedByType = typesToGenerate.GroupBy(
@@ -246,56 +256,117 @@ public sealed class DxMessageIdGenerator : IIncrementalGenerator
             return;
         }
 
-        // --- Step 2: Detect Collisions Among Valid Types ---
-        var collisionGroups = validTypes
-            .GroupBy(m => m.GeneratedId)
-            .Where(g => g.Count() > 1)
-            .ToList(); // Evaluate the query
+        // --- Step 2: Assign Final IDs (Handling Collisions) ---
+        var finalAssignments = new List<FinalMessageInfo>(validTypes.Count);
+        var collisionWarnings = new List<Diagnostic>(); // Collect warnings
+        int fallbackIdCounter = -1; // Start fallback IDs from -1 and go down
 
-        // --- Step 3: Identify all types involved in any collision & Report Warnings ---
-        var collidingSymbols = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
-        if (collisionGroups.Count > 0)
+        // Group by the initial hash ID to find collisions
+        var groupedByHash = validTypes.GroupBy(m => m.GeneratedId);
+
+        foreach (var group in groupedByHash)
         {
-            foreach (var group in collisionGroups)
+            if (group.Count() == 1)
             {
-                // Report WARNING diagnostic for each collision group
-                string collidingTypeNames = string.Join(
-                    ", ",
-                    group.Select(m => $"'{m.TypeSymbol.ToDisplayString()}'")
+                // No collision for this hash ID
+                var info = group.First();
+                generatedIds.Add(info.GeneratedId);
+                finalAssignments.Add(
+                    new FinalMessageInfo(
+                        info.TypeSymbol,
+                        info.DeclarationSyntax,
+                        info.TargetInterfaceFullName,
+                        info.GeneratedId,
+                        false
+                    )
                 );
-                // Report warning attached to the first type in the group
-                Location location = group.First().DeclarationSyntax.Identifier.GetLocation();
-                context.ReportDiagnostic(
-                    Diagnostic.Create(CollisionWarning, location, group.Key, collidingTypeNames)
+            }
+            else
+            {
+                // Collision detected for this hash ID!
+                // Sort colliding types deterministically (e.g., by fully qualified name)
+                var sortedCollidingTypes = group
+                    .OrderBy(
+                        m => m.TypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        StringComparer.Ordinal
+                    )
+                    .ToList();
+
+                // The first type keeps the original hash ID (arbitrary but deterministic choice)
+                var firstInfo = sortedCollidingTypes[0];
+                generatedIds.Add(firstInfo.GeneratedId);
+                finalAssignments.Add(
+                    new FinalMessageInfo(
+                        firstInfo.TypeSymbol,
+                        firstInfo.DeclarationSyntax,
+                        firstInfo.TargetInterfaceFullName,
+                        firstInfo.GeneratedId,
+                        true
+                    )
+                ); // Mark as part of collision
+                // Prepare warning for this type (kept original ID but was part of collision)
+                collisionWarnings.Add(
+                    Diagnostic.Create(
+                        CollisionWarning,
+                        firstInfo.DeclarationSyntax.Identifier.GetLocation(),
+                        firstInfo.TypeSymbol.ToDisplayString(),
+                        firstInfo.GeneratedId,
+                        group.Key
+                    )
                 );
 
-                // Add all symbols from this collision group to the set for later checking
-                foreach (var collidingInfo in group)
+                // Assign sequential fallback IDs (negative numbers) to the rest
+                for (int i = 1; i < sortedCollidingTypes.Count; i++)
                 {
-                    collidingSymbols.Add(collidingInfo.TypeSymbol);
+                    var fallbackInfo = sortedCollidingTypes[i];
+                    int assignedFallbackId = fallbackIdCounter--; // Assign next negative ID
+                    while (!generatedIds.Add(assignedFallbackId))
+                    {
+                        assignedFallbackId--;
+                    }
+                    finalAssignments.Add(
+                        new FinalMessageInfo(
+                            fallbackInfo.TypeSymbol,
+                            fallbackInfo.DeclarationSyntax,
+                            fallbackInfo.TargetInterfaceFullName,
+                            assignedFallbackId,
+                            true
+                        )
+                    ); // Mark as part of collision, use new ID
+                    // Prepare warning for this type (received fallback ID)
+                    collisionWarnings.Add(
+                        Diagnostic.Create(
+                            CollisionWarning,
+                            fallbackInfo.DeclarationSyntax.Identifier.GetLocation(),
+                            fallbackInfo.TypeSymbol.ToDisplayString(),
+                            assignedFallbackId,
+                            group.Key
+                        )
+                    );
                 }
             }
         }
 
-        // --- Step 4: Generate Source for ALL valid types ---
-        // Iterate through the list of types that had only one valid attribute
-        foreach (var info in validTypes)
+        // --- Step 3: Report all collected warnings ---
+        foreach (var warning in collisionWarnings)
+        {
+            context.ReportDiagnostic(warning);
+        }
+
+        // --- Step 4: Generate Source using the final assigned IDs ---
+        foreach (var finalInfo in finalAssignments)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
 
-            // Decide whether to use the optimized ID based on collision participation
-            bool useOptimized = !collidingSymbols.Contains(info.TypeSymbol);
-
-            // Generate source, passing the flag indicating optimized or fallback
-            string source = GenerateSource(
-                info.TargetInterfaceFullName,
-                info.TypeSymbol,
-                info.GeneratedId, // Pass the ID, GenerateSource uses it conditionally
-                useOptimized
-            ); // Pass the optimization flag
+            // Generate source using the final ID (hash or fallback)
+            string source = GenerateSource( // Call simplified GenerateSource
+                finalInfo.TargetInterfaceFullName,
+                finalInfo.TypeSymbol,
+                finalInfo.FinalId
+            ); // Pass the FINAL ID
 
             context.AddSource(
-                $"{info.TypeSymbol.Name}_{info.TargetInterfaceFullName.Split('.').Last()}.g.cs",
+                $"{finalInfo.TypeSymbol.Name}_{finalInfo.TargetInterfaceFullName.Split('.').Last()}.g.cs",
                 SourceText.From(source, Encoding.UTF8)
             );
         }
@@ -319,15 +390,13 @@ public sealed class DxMessageIdGenerator : IIncrementalGenerator
     private static string GenerateSource(
         string targetInterfaceFullName,
         INamedTypeSymbol typeSymbol,
-        int generatedId, // Still needed for the optimized case
-        bool useOptimizedId
-    ) // New parameter to control output
+        int finalAssignedId
+    ) // Now takes the final assigned ID
     {
         string namespaceName = typeSymbol.ContainingNamespace.IsGlobalNamespace
             ? string.Empty
             : typeSymbol.ContainingNamespace.ToDisplayString();
 
-        string className = typeSymbol.Name;
         string typeNameWithGenerics = typeSymbol.ToDisplayString(
             SymbolDisplayFormat.MinimallyQualifiedFormat
         );
@@ -353,12 +422,6 @@ public sealed class DxMessageIdGenerator : IIncrementalGenerator
             ? ""
             : $": {targetInterfaceFullName}";
 
-        // --- Conditional generation logic ---
-        string hasOptimizedIdValue = useOptimizedId ? "true" : "false";
-        // Use the actual generated ID if optimized, otherwise 'default' (which is 0 for int)
-        string optimizedIdValue = useOptimizedId ? generatedId.ToString() : "default";
-        // ---
-
         return $$"""
             // <auto-generated by DxMessageIdGenerator/>
             #pragma warning disable
@@ -368,14 +431,13 @@ public sealed class DxMessageIdGenerator : IIncrementalGenerator
             {
                 partial {{typeKind}} {{typeNameWithGenerics}} {{interfaceDeclaration}}
                 {
-                    /// <inheritdoc cref="{{BaseInterfaceFullName}}.MessageType"/>
+                    // Explicitly implement IMessage members using the base interface name
+
+                    /// <inheritdoc/>
                     System.Type {{BaseInterfaceFullName}}.MessageType => typeof({{fullyQualifiedName}});
 
-                    /// <inheritdoc cref="{{BaseInterfaceFullName}}.HasOptimizedId"/>
-                    bool {{BaseInterfaceFullName}}.HasOptimizedId => {{hasOptimizedIdValue}}; // Use conditional value
-
-                    /// <inheritdoc cref="{{BaseInterfaceFullName}}.OptimizedMessageId"/>
-                    int {{BaseInterfaceFullName}}.OptimizedMessageId => {{optimizedIdValue}}; // Use conditional value
+                    /// <inheritdoc/>
+                    int? {{BaseInterfaceFullName}}.OptimizedMessageId => {{finalAssignedId}};
                 }
             }
             """;
