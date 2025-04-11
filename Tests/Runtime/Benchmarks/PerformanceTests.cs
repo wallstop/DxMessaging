@@ -22,7 +22,7 @@
         [Test]
         public void Benchmark()
         {
-            TimeSpan timeout = TimeSpan.FromSeconds(2);
+            TimeSpan timeout = TimeSpan.FromSeconds(5);
 
             Debug.Log("| Message Tech | Operations / Second | Allocations? |");
             Debug.Log("| ------------ | ------------------- | ------------ | ");
@@ -36,6 +36,13 @@
             RunTest(component => NoCopyGameObject(timer, timeout, component, message));
             RunTest(component => NoCopyComponent(timer, timeout, component, message));
 
+            SimpleUntargetedMessage untargetedMessage = new();
+            RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
+        }
+
+        public void RunUntargeted(TimeSpan timeout)
+        {
+            Stopwatch timer = Stopwatch.StartNew();
             SimpleUntargetedMessage untargetedMessage = new();
             RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
         }
