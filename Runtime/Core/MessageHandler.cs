@@ -2621,7 +2621,7 @@
                     if (count <= 1)
                     {
                         _ = cache.handlers.Remove(handler);
-                        if (cache.handlers.Count <= 0)
+                        if (cache.handlers.Count == 0)
                         {
                             _ = localSortedHandlers.Remove(priority);
                         }

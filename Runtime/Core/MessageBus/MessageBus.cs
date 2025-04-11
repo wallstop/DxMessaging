@@ -11,17 +11,28 @@
     /// </summary>
     public sealed class MessageBus : IMessageBus
     {
+        private sealed class HandlerCache<TKey, TValue>
+        {
+            public readonly SortedList<TKey, TValue> handlers = new();
+            public readonly List<KeyValuePair<TKey, TValue>> cache = new();
+            public long version;
+            public long lastSeenVersion = -1;
+        }
+
+        private sealed class HandlerCache
+        {
+            public readonly Dictionary<MessageHandler, int> handlers = new();
+            public readonly List<MessageHandler> cache = new();
+            public long version;
+            public long lastSeenVersion = -1;
+        }
+
         public int RegisteredTargeted
         {
             get
             {
                 int count = 0;
-                foreach (
-                    KeyValuePair<
-                        Type,
-                        Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
-                    > entry in _targetedSinks
-                )
+                foreach (var entry in _targetedSinks)
                 {
                     count += entry.Value.Count;
                 }
@@ -51,7 +62,7 @@
                 int count = 0;
                 foreach (var entry in _sinks)
                 {
-                    count += entry.Value.Count;
+                    count += entry.Value.handlers.Count;
                 }
 
                 return count;
@@ -75,53 +86,43 @@
 
         public RegistrationLog Log => _log;
 
-        private readonly Dictionary<Type, SortedList<int, SortedList<MessageHandler, int>>> _sinks =
+        private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _sinks = new();
+        private readonly Dictionary<
+            Type,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > _targetedSinks = new();
+        private readonly Dictionary<
+            Type,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > _broadcastSinks = new();
+        private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _postProcessingSinks =
             new();
         private readonly Dictionary<
             Type,
-            Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
-        > _targetedSinks = new();
-
-        private readonly Dictionary<
-            Type,
-            Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
-        > _broadcastSinks = new();
-        private readonly Dictionary<
-            Type,
-            SortedList<int, SortedList<MessageHandler, int>>
-        > _postProcessingSinks = new();
-        private readonly Dictionary<
-            Type,
-            Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingTargetedSinks = new();
         private readonly Dictionary<
             Type,
-            Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingBroadcastSinks = new();
         private readonly Dictionary<
             Type,
-            SortedList<int, SortedList<MessageHandler, int>>
+            HandlerCache<int, HandlerCache>
         > _postProcessingTargetedWithoutTargetingSinks = new();
         private readonly Dictionary<
             Type,
-            SortedList<int, SortedList<MessageHandler, int>>
+            HandlerCache<int, HandlerCache>
         > _postProcessingBroadcastWithoutSourceSinks = new();
-        private readonly SortedList<MessageHandler, int> _globalSinks = new();
-        private readonly Dictionary<Type, SortedList<int, List<object>>> _interceptsByType = new();
+        private readonly HandlerCache _globalSinks = new();
+        private readonly Dictionary<Type, HandlerCache<int, List<object>>> _interceptsByType =
+            new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
         private readonly Dictionary<Type, object> _broadcastMethodsByType = new();
+        private readonly Stack<List<object>> _innerInterceptorsStack = new();
 
         private readonly RegistrationLog _log = new();
-
-        // These are used so we aren't allocating as much every time we send messages
-        private readonly Stack<List<MessageHandler>> _messageHandlers = new();
-        private readonly Stack<
-            List<KeyValuePair<int, SortedList<MessageHandler, int>>>
-        > _sortedHandlers = new();
-        private readonly Stack<List<List<object>>> _interceptors = new();
-        private readonly Stack<List<object>> _innerInterceptorsStack = new();
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
@@ -196,10 +197,11 @@
 
         public Action RegisterGlobalAcceptAll(MessageHandler messageHandler)
         {
-            int count = _globalSinks.GetValueOrDefault(messageHandler, 0);
+            _globalSinks.version++;
+            int count = _globalSinks.handlers.GetValueOrDefault(messageHandler, 0);
 
             Type type = typeof(IMessage);
-            _globalSinks[messageHandler] = count + 1;
+            _globalSinks.handlers[messageHandler] = count + 1;
             _log.Log(
                 new MessagingRegistration(
                     messageHandler.owner,
@@ -211,6 +213,7 @@
 
             return () =>
             {
+                _globalSinks.version++;
                 _log.Log(
                     new MessagingRegistration(
                         messageHandler.owner,
@@ -219,7 +222,7 @@
                         RegistrationMethod.GlobalAcceptAll
                     )
                 );
-                if (!_globalSinks.TryGetValue(messageHandler, out count))
+                if (!_globalSinks.handlers.TryGetValue(messageHandler, out count))
                 {
                     if (MessagingDebug.enabled)
                     {
@@ -233,13 +236,13 @@
                     return;
                 }
 
-                if (count <= 1)
+                if (count == 1)
                 {
-                    _ = _globalSinks.Remove(messageHandler);
+                    _ = _globalSinks.handlers.Remove(messageHandler);
                 }
                 else
                 {
-                    _globalSinks[messageHandler] = count - 1;
+                    _globalSinks.handlers[messageHandler] = count - 1;
                 }
             };
         }
@@ -352,18 +355,24 @@
             if (
                 !_interceptsByType.TryGetValue(
                     type,
-                    out SortedList<int, List<object>> prioritizedInterceptors
+                    out HandlerCache<int, List<object>> prioritizedInterceptors
                 )
             )
             {
-                prioritizedInterceptors = new SortedList<int, List<object>>();
+                prioritizedInterceptors = new HandlerCache<int, List<object>>();
                 _interceptsByType[type] = prioritizedInterceptors;
             }
 
-            if (!prioritizedInterceptors.TryGetValue(priority, out List<object> interceptors))
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
             {
+                prioritizedInterceptors.version++;
                 interceptors = new List<object>();
-                prioritizedInterceptors[priority] = interceptors;
+                prioritizedInterceptors.handlers[priority] = interceptors;
             }
 
             if (
@@ -420,7 +429,7 @@
                         }
                     }
 
-                    if (priorityCount.Count <= 0)
+                    if (priorityCount.Count == 0)
                     {
                         _uniqueInterceptorsAndPriorities.Remove(interceptor);
                     }
@@ -437,12 +446,15 @@
                 bool complete = false;
                 if (removed)
                 {
-                    if (
-                        _interceptsByType.TryGetValue(type, out prioritizedInterceptors)
-                        && prioritizedInterceptors.TryGetValue(priority, out interceptors)
-                    )
+                    if (_interceptsByType.TryGetValue(type, out prioritizedInterceptors))
                     {
-                        complete = interceptors.Remove(interceptor);
+                        prioritizedInterceptors.version++;
+                        if (
+                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                        )
+                        {
+                            complete = interceptors.Remove(interceptor);
+                        }
                     }
 
                     if (!complete && MessagingDebug.enabled)
@@ -493,7 +505,7 @@
                 return;
             }
 
-            if (0 < _globalSinks.Count)
+            if (0 < _globalSinks.handlers.Count)
             {
                 IUntargetedMessage untargetedMessage = typedMessage;
                 BroadcastGlobalUntargeted(ref untargetedMessage);
@@ -504,37 +516,17 @@
             if (
                 _postProcessingSinks.TryGetValue(
                     type,
-                    out SortedList<int, SortedList<MessageHandler, int>> sortedHandlers
+                    out HandlerCache<int, HandlerCache> sortedHandlers
                 )
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
-                foundAnyHandlers = true;
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
-                    RunUntargetedPostProcessing(
-                        ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
-                    );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
+                    RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
                 }
             }
 
@@ -551,45 +543,25 @@
         private void RunUntargetedPostProcessing<TMessage>(
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : IUntargetedMessage
         {
-            switch (handlers.Count)
+            if (cache.version != cache.lastSeenVersion)
             {
-                case <= 0:
+                List<MessageHandler> list = cache.cache;
+                list.Clear();
+                Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
+                foreach (MessageHandler handler in keys)
                 {
-                    return;
+                    list.Add(handler);
                 }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleUntargetedPostProcessing(
-                                ref typedMessage,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
+                cache.lastSeenVersion = cache.version;
+            }
 
-                    break;
-                }
+            foreach (MessageHandler handler in cache.cache)
+            {
+                handler.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
             }
         }
 
@@ -630,7 +602,7 @@
                 return;
             }
 
-            if (0 < _globalSinks.Count)
+            if (0 < _globalSinks.handlers.Count)
             {
                 ITargetedMessage targetedMessage = typedMessage;
                 BroadcastGlobalTargeted(ref target, ref targetedMessage);
@@ -640,50 +612,22 @@
             if (
                 _targetedSinks.TryGetValue(
                     type,
-                    out Dictionary<
-                        InstanceId,
-                        SortedList<int, SortedList<MessageHandler, int>>
-                    > targetedHandlers
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers
                 )
                 && targetedHandlers.TryGetValue(
                     target,
-                    out SortedList<int, SortedList<MessageHandler, int>> sortedHandlers
+                    out HandlerCache<int, HandlerCache> sortedHandlers
                 )
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
                 foundAnyHandlers = true;
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
-                    RunTargetedBroadcast(
-                        ref target,
-                        ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
-                    );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunTargetedBroadcast(
-                                ref target,
-                                ref typedMessage,
-                                entry.Key,
-                                entry.Value
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
+                    RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
                 }
             }
 
@@ -692,80 +636,35 @@
             if (
                 _postProcessingTargetedSinks.TryGetValue(type, out targetedHandlers)
                 && targetedHandlers.TryGetValue(target, out sortedHandlers)
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
                 foundAnyHandlers = true;
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
-                    RunTargetedPostProcessing(
-                        ref target,
-                        ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
-                    );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunTargetedPostProcessing(
-                                ref target,
-                                ref typedMessage,
-                                entry.Key,
-                                entry.Value
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
+                    RunTargetedPostProcessing(ref target, ref typedMessage, entry.Key, entry.Value);
                 }
             }
 
             if (
                 _postProcessingTargetedWithoutTargetingSinks.TryGetValue(type, out sortedHandlers)
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
                     RunTargetedWithoutTargetingPostProcessing(
                         ref target,
                         ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
+                        entry.Key,
+                        entry.Value
                     );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunTargetedWithoutTargetingPostProcessing(
-                                ref target,
-                                ref typedMessage,
-                                entry.Key,
-                                entry.Value
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
                 }
             }
 
@@ -784,51 +683,19 @@
             ref InstanceId target,
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : ITargetedMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleTargetedWithoutTargetingPostProcessing(
-                        ref target,
-                        ref typedMessage,
-                        this,
-                        priority
-                    );
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleTargetedWithoutTargetingPostProcessing(
-                                ref target,
-                                ref typedMessage,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleTargetedWithoutTargetingPostProcessing(
+                    ref target,
+                    ref typedMessage,
+                    this,
+                    priority
+                );
             }
         }
 
@@ -836,51 +703,14 @@
             ref InstanceId target,
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : ITargetedMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleTargetedPostProcessing(
-                        ref target,
-                        ref typedMessage,
-                        this,
-                        priority
-                    );
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleTargetedPostProcessing(
-                                ref target,
-                                ref typedMessage,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
             }
         }
 
@@ -888,41 +718,14 @@
             ref InstanceId target,
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache handlers
         )
             where TMessage : ITargetedMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleTargeted(ref target, ref typedMessage, this, priority);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleTargeted(ref target, ref typedMessage, this, priority);
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleTargeted(ref target, ref typedMessage, this, priority);
             }
         }
 
@@ -966,7 +769,7 @@
                 return;
             }
 
-            if (0 < _globalSinks.Count)
+            if (0 < _globalSinks.handlers.Count)
             {
                 IBroadcastMessage broadcastMessage = typedMessage;
                 BroadcastGlobalSourcedBroadcast(ref source, ref broadcastMessage);
@@ -976,45 +779,22 @@
             if (
                 _broadcastSinks.TryGetValue(
                     type,
-                    out Dictionary<
-                        InstanceId,
-                        SortedList<int, SortedList<MessageHandler, int>>
-                    > broadcastHandlers
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers
                 )
                 && broadcastHandlers.TryGetValue(
                     source,
-                    out SortedList<int, SortedList<MessageHandler, int>> sortedHandlers
+                    out HandlerCache<int, HandlerCache> sortedHandlers
                 )
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
                 foundAnyHandlers = true;
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
-                    RunBroadcast(
-                        ref source,
-                        ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
-                    );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
+                    RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
                 }
             }
 
@@ -1023,80 +803,40 @@
             if (
                 _postProcessingBroadcastSinks.TryGetValue(type, out broadcastHandlers)
                 && broadcastHandlers.TryGetValue(source, out sortedHandlers)
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
                 foundAnyHandlers = true;
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
                     RunBroadcastPostProcessing(
                         ref source,
                         ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
+                        entry.Key,
+                        entry.Value
                     );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunBroadcastPostProcessing(
-                                ref source,
-                                ref typedMessage,
-                                entry.Key,
-                                entry.Value
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
                 }
             }
 
             if (
                 _postProcessingBroadcastWithoutSourceSinks.TryGetValue(type, out sortedHandlers)
-                && 0 < sortedHandlers.Count
+                && 0 < sortedHandlers.handlers.Count
             )
             {
-                if (sortedHandlers.Count == 1)
+                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                    sortedHandlers
+                );
+                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
                 {
                     RunBroadcastWithoutSourcePostProcessing(
                         ref source,
                         ref typedMessage,
-                        sortedHandlers.Keys[0],
-                        sortedHandlers.Values[0]
+                        entry.Key,
+                        entry.Value
                     );
-                }
-                else
-                {
-                    List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                        GetOrAddMessageHandlerStack(sortedHandlers);
-                    try
-                    {
-                        foreach (
-                            KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList
-                        )
-                        {
-                            RunBroadcastWithoutSourcePostProcessing(
-                                ref source,
-                                ref typedMessage,
-                                entry.Key,
-                                entry.Value
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _sortedHandlers.Push(handlerList);
-                    }
                 }
             }
 
@@ -1115,51 +855,19 @@
             ref InstanceId source,
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : IBroadcastMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
-                        ref source,
-                        ref typedMessage,
-                        this,
-                        priority
-                    );
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
-                                ref source,
-                                ref typedMessage,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
+                    ref source,
+                    ref typedMessage,
+                    this,
+                    priority
+                );
             }
         }
 
@@ -1167,51 +875,19 @@
             ref InstanceId source,
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : IBroadcastMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleSourcedBroadcastPostProcessing(
-                        ref source,
-                        ref typedMessage,
-                        this,
-                        priority
-                    );
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleSourcedBroadcastPostProcessing(
-                                ref source,
-                                ref typedMessage,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleSourcedBroadcastPostProcessing(
+                    ref source,
+                    ref typedMessage,
+                    this,
+                    priority
+                );
             }
         }
 
@@ -1219,118 +895,42 @@
             ref InstanceId source,
             ref TMessage typedMessage,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : IBroadcastMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleSourcedBroadcast(
-                                ref source,
-                                ref typedMessage,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
             }
         }
 
         private void BroadcastGlobalUntargeted(ref IUntargetedMessage message)
         {
-            switch (_globalSinks.Count)
+            if (_globalSinks.handlers.Count == 0)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = _globalSinks.Keys[0];
-                    handler.HandleGlobalUntargetedMessage(ref message, this);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        _globalSinks.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleGlobalUntargetedMessage(ref message, this);
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
+                return;
+            }
 
-                    break;
-                }
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
+            foreach (MessageHandler handler in messageHandlers)
+            {
+                handler.HandleGlobalUntargetedMessage(ref message, this);
             }
         }
 
         private void BroadcastGlobalTargeted(ref InstanceId target, ref ITargetedMessage message)
         {
-            switch (_globalSinks.Count)
+            if (_globalSinks.handlers.Count == 0)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = _globalSinks.Keys[0];
-                    handler.HandleGlobalTargetedMessage(ref target, ref message, this);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        _globalSinks.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleGlobalTargetedMessage(ref target, ref message, this);
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
+                return;
+            }
 
-                    break;
-                }
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
+            foreach (MessageHandler handler in messageHandlers)
+            {
+                handler.HandleGlobalTargetedMessage(ref target, ref message, this);
             }
         }
 
@@ -1339,53 +939,30 @@
             ref IBroadcastMessage message
         )
         {
-            switch (_globalSinks.Count)
+            if (_globalSinks.handlers.Count == 0)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = _globalSinks.Keys[0];
-                    handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        _globalSinks.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleGlobalSourcedBroadcastMessage(
-                                ref source,
-                                ref message,
-                                this
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
+                return;
+            }
 
-                    break;
-                }
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
+            foreach (MessageHandler handler in messageHandlers)
+            {
+                handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
             }
         }
 
         private bool TryGetInterceptorCaches(
             Type type,
-            out List<List<object>> interceptorStack,
+            out List<KeyValuePair<int, List<object>>> interceptorStack,
             out List<object> interceptorObjects
         )
         {
             if (
-                !_interceptsByType.TryGetValue(type, out SortedList<int, List<object>> interceptors)
-                || interceptors.Count <= 0
+                !_interceptsByType.TryGetValue(
+                    type,
+                    out HandlerCache<int, List<object>> interceptors
+                )
+                || interceptors.handlers.Count == 0
             )
             {
                 interceptorStack = default;
@@ -1393,46 +970,18 @@
                 return false;
             }
 
-            if (!_interceptors.TryPop(out interceptorStack))
-            {
-                interceptorStack = new List<List<object>>(interceptors.Values);
-            }
-            else
+            interceptorStack = interceptors.cache;
+            if (interceptors.version != interceptors.lastSeenVersion)
             {
                 interceptorStack.Clear();
-                switch (interceptors.Values)
+                IList<int> keys = interceptors.handlers.Keys;
+                IList<List<object>> values = interceptors.handlers.Values;
+                for (int i = 0; i < interceptors.handlers.Count; ++i)
                 {
-                    case List<List<object>> list:
-                    {
-                        foreach (List<object> interceptor in list)
-                        {
-                            interceptorStack.Add(interceptor);
-                        }
-
-                        break;
-                    }
-                    case List<object>[] array:
-                    {
-                        foreach (List<object> interceptor in array)
-                        {
-                            interceptorStack.Add(interceptor);
-                        }
-
-                        break;
-                    }
-                    default:
-                    {
-                        // ReSharper disable once ForCanBeConvertedToForeach
-                        // ReSharper disable once LoopCanBeConvertedToQuery
-                        for (int i = 0; i < interceptors.Values.Count; i++)
-                        {
-                            List<object> interceptor = interceptors.Values[i];
-                            interceptorStack.Add(interceptor);
-                        }
-
-                        break;
-                    }
+                    interceptorStack.Add(new KeyValuePair<int, List<object>>(keys[i], values[i]));
                 }
+
+                interceptors.lastSeenVersion = interceptors.version;
             }
 
             if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
@@ -1449,7 +998,7 @@
             if (
                 !TryGetInterceptorCaches(
                     type,
-                    out List<List<object>> interceptorStack,
+                    out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
             )
@@ -1459,10 +1008,10 @@
 
             try
             {
-                foreach (List<object> stack in interceptorStack)
+                foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    foreach (object interceptor in stack)
+                    foreach (object interceptor in entry.Value)
                     {
                         interceptorObjects.Add(interceptor);
                     }
@@ -1483,7 +1032,6 @@
             }
             finally
             {
-                _interceptors.Push(interceptorStack);
                 _innerInterceptorsStack.Push(interceptorObjects);
             }
 
@@ -1496,7 +1044,7 @@
             if (
                 !TryGetInterceptorCaches(
                     type,
-                    out List<List<object>> interceptorStack,
+                    out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
             )
@@ -1506,10 +1054,10 @@
 
             try
             {
-                foreach (List<object> stack in interceptorStack)
+                foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    foreach (object interceptor in stack)
+                    foreach (object interceptor in entry.Value)
                     {
                         interceptorObjects.Add(interceptor);
                     }
@@ -1530,7 +1078,6 @@
             }
             finally
             {
-                _interceptors.Push(interceptorStack);
                 _innerInterceptorsStack.Push(interceptorObjects);
             }
 
@@ -1543,7 +1090,7 @@
             if (
                 !TryGetInterceptorCaches(
                     type,
-                    out List<List<object>> interceptorStack,
+                    out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
             )
@@ -1553,10 +1100,10 @@
 
             try
             {
-                foreach (List<object> stack in interceptorStack)
+                foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    foreach (object interceptor in stack)
+                    foreach (object interceptor in entry.Value)
                     {
                         interceptorObjects.Add(interceptor);
                     }
@@ -1577,7 +1124,6 @@
             }
             finally
             {
-                _interceptors.Push(interceptorStack);
                 _innerInterceptorsStack.Push(interceptorObjects);
             }
 
@@ -1588,81 +1134,34 @@
             where TMessage : IMessage
         {
             if (
-                !_sinks.TryGetValue(
-                    type,
-                    out SortedList<int, SortedList<MessageHandler, int>> sortedHandlers
-                )
-                || sortedHandlers.Count <= 0
+                !_sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> sortedHandlers)
+                || sortedHandlers.handlers.Count == 0
             )
             {
                 return false;
             }
 
-            if (sortedHandlers.Count == 1)
+            List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                sortedHandlers
+            );
+            foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
-                RunUntargetedBroadcast(
-                    ref message,
-                    sortedHandlers.Keys[0],
-                    sortedHandlers.Values[0]
-                );
-                return true;
+                RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
             }
-
-            List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                GetOrAddMessageHandlerStack(sortedHandlers);
-            try
-            {
-                foreach (KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList)
-                {
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                }
-            }
-            finally
-            {
-                _sortedHandlers.Push(handlerList);
-            }
-
             return true;
         }
 
         private void RunUntargetedBroadcast<TMessage>(
             ref TMessage message,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : IMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleUntargetedMessage(ref message, this, priority);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleUntargetedMessage(ref message, this, priority);
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleUntargetedMessage(ref message, this, priority);
             }
         }
 
@@ -1674,39 +1173,19 @@
             where TMessage : ITargetedMessage
         {
             if (
-                !_sinks.TryGetValue(
-                    type,
-                    out SortedList<int, SortedList<MessageHandler, int>> sortedHandlers
-                )
-                || sortedHandlers.Count <= 0
+                !_sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> sortedHandlers)
+                || sortedHandlers.handlers.Count == 0
             )
             {
                 return false;
             }
 
-            if (sortedHandlers.Count == 1)
+            List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                sortedHandlers
+            );
+            foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
-                RunTargetedWithoutTargeting(
-                    ref target,
-                    ref message,
-                    sortedHandlers.Keys[0],
-                    sortedHandlers.Values[0]
-                );
-                return true;
-            }
-
-            List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                GetOrAddMessageHandlerStack(sortedHandlers);
-            try
-            {
-                foreach (KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList)
-                {
-                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
-                }
-            }
-            finally
-            {
-                _sortedHandlers.Push(handlerList);
+                RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
             }
 
             return true;
@@ -1716,46 +1195,14 @@
             ref InstanceId target,
             ref TMessage message,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : ITargetedMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleTargetedWithoutTargeting(
-                                ref target,
-                                ref message,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
             }
         }
 
@@ -1767,39 +1214,19 @@
             where TMessage : IBroadcastMessage
         {
             if (
-                !_sinks.TryGetValue(
-                    type,
-                    out SortedList<int, SortedList<MessageHandler, int>> sortedHandlers
-                )
-                || sortedHandlers.Count <= 0
+                !_sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> sortedHandlers)
+                || sortedHandlers.handlers.Count == 0
             )
             {
                 return false;
             }
 
-            if (sortedHandlers.Count == 1)
+            List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                sortedHandlers
+            );
+            foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
-                RunBroadcastWithoutSource(
-                    ref source,
-                    ref message,
-                    sortedHandlers.Keys[0],
-                    sortedHandlers.Values[0]
-                );
-                return true;
-            }
-
-            List<KeyValuePair<int, SortedList<MessageHandler, int>>> handlerList =
-                GetOrAddMessageHandlerStack(sortedHandlers);
-            try
-            {
-                foreach (KeyValuePair<int, SortedList<MessageHandler, int>> entry in handlerList)
-                {
-                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
-                }
-            }
-            finally
-            {
-                _sortedHandlers.Push(handlerList);
+                RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
             }
 
             return true;
@@ -1809,57 +1236,25 @@
             ref InstanceId source,
             ref TMessage message,
             int priority,
-            SortedList<MessageHandler, int> handlers
+            HandlerCache cache
         )
             where TMessage : IBroadcastMessage
         {
-            switch (handlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            foreach (MessageHandler handler in messageHandlers)
             {
-                case <= 0:
-                {
-                    return;
-                }
-                case 1:
-                {
-                    MessageHandler handler = handlers.Keys[0];
-                    handler.HandleSourcedBroadcastWithoutSource(
-                        ref source,
-                        ref message,
-                        this,
-                        priority
-                    );
-                    return;
-                }
-                default:
-                {
-                    List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                        handlers.Keys
-                    );
-                    try
-                    {
-                        foreach (MessageHandler handler in messageHandlers)
-                        {
-                            handler.HandleSourcedBroadcastWithoutSource(
-                                ref source,
-                                ref message,
-                                this,
-                                priority
-                            );
-                        }
-                    }
-                    finally
-                    {
-                        _messageHandlers.Push(messageHandlers);
-                    }
-
-                    break;
-                }
+                handler.HandleSourcedBroadcastWithoutSource(
+                    ref source,
+                    ref message,
+                    this,
+                    priority
+                );
             }
         }
 
         private Action InternalRegisterUntargeted<T>(
             MessageHandler messageHandler,
-            Dictionary<Type, SortedList<int, SortedList<MessageHandler, int>>> sinks,
+            Dictionary<Type, HandlerCache<int, HandlerCache>> sinks,
             RegistrationMethod registrationMethod,
             int priority
         )
@@ -1873,23 +1268,21 @@
             InstanceId handlerOwnerId = messageHandler.owner;
             Type type = typeof(T);
 
-            if (
-                !sinks.TryGetValue(
-                    type,
-                    out SortedList<int, SortedList<MessageHandler, int>> handlers
-                )
-            )
+            if (!sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> handlers))
             {
-                handlers = new SortedList<int, SortedList<MessageHandler, int>>();
+                handlers = new HandlerCache<int, HandlerCache>();
                 sinks[type] = handlers;
             }
 
-            if (!handlers.TryGetValue(priority, out SortedList<MessageHandler, int> handler))
+            if (!handlers.handlers.TryGetValue(priority, out HandlerCache cache))
             {
-                handler = new SortedList<MessageHandler, int>();
-                handlers[priority] = handler;
+                handlers.version++;
+                cache = new HandlerCache();
+                handlers.handlers[priority] = cache;
             }
 
+            Dictionary<MessageHandler, int> handler = cache.handlers;
+            cache.version++;
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
@@ -1904,6 +1297,7 @@
 
             return () =>
             {
+                cache.version++;
                 _log.Log(
                     new MessagingRegistration(
                         handlerOwnerId,
@@ -1914,8 +1308,8 @@
                 );
                 if (
                     !sinks.TryGetValue(type, out handlers)
-                    || !handlers.TryGetValue(priority, out handler)
-                    || !handler.TryGetValue(messageHandler, out count)
+                    || !handlers.handlers.TryGetValue(priority, out cache)
+                    || !cache.handlers.TryGetValue(messageHandler, out count)
                 )
                 {
                     if (MessagingDebug.enabled)
@@ -1931,16 +1325,18 @@
                     return;
                 }
 
-                if (count <= 1)
+                handlers.version++;
+                handler = cache.handlers;
+                if (count == 1)
                 {
                     bool complete = handler.Remove(messageHandler);
 
-                    if (handler.Count <= 0)
+                    if (handler.Count == 0)
                     {
-                        _ = handlers.Remove(priority);
+                        _ = handlers.handlers.Remove(priority);
                     }
 
-                    if (handlers.Count <= 0)
+                    if (handlers.handlers.Count == 0)
                     {
                         _ = sinks.Remove(type);
                     }
@@ -1965,10 +1361,7 @@
         private Action InternalRegisterWithContext<T>(
             InstanceId context,
             MessageHandler messageHandler,
-            Dictionary<
-                Type,
-                Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>
-            > sinks,
+            Dictionary<Type, Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> sinks,
             RegistrationMethod registrationMethod,
             int priority
         )
@@ -1982,35 +1375,34 @@
             if (
                 !sinks.TryGetValue(
                     type,
-                    out Dictionary<
-                        InstanceId,
-                        SortedList<int, SortedList<MessageHandler, int>>
-                    > broadcastHandlers
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers
                 )
             )
             {
-                broadcastHandlers =
-                    new Dictionary<InstanceId, SortedList<int, SortedList<MessageHandler, int>>>();
+                broadcastHandlers = new Dictionary<InstanceId, HandlerCache<int, HandlerCache>>();
                 sinks[type] = broadcastHandlers;
             }
 
             if (
                 !broadcastHandlers.TryGetValue(
                     context,
-                    out SortedList<int, SortedList<MessageHandler, int>> handlers
+                    out HandlerCache<int, HandlerCache> handlers
                 )
             )
             {
-                handlers = new SortedList<int, SortedList<MessageHandler, int>>();
+                handlers = new HandlerCache<int, HandlerCache>();
                 broadcastHandlers[context] = handlers;
             }
 
-            if (!handlers.TryGetValue(priority, out SortedList<MessageHandler, int> handler))
+            if (!handlers.handlers.TryGetValue(priority, out HandlerCache cache))
             {
-                handler = new SortedList<MessageHandler, int>();
-                handlers[priority] = handler;
+                handlers.version++;
+                cache = new HandlerCache();
+                handlers.handlers[priority] = cache;
             }
 
+            cache.version++;
+            Dictionary<MessageHandler, int> handler = cache.handlers;
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
@@ -2025,6 +1417,7 @@
 
             return () =>
             {
+                cache.version++;
                 _log.Log(
                     new MessagingRegistration(
                         context,
@@ -2036,8 +1429,8 @@
                 if (
                     !sinks.TryGetValue(type, out broadcastHandlers)
                     || !broadcastHandlers.TryGetValue(context, out handlers)
-                    || !handlers.TryGetValue(priority, out handler)
-                    || !handler.TryGetValue(messageHandler, out count)
+                    || !handlers.handlers.TryGetValue(priority, out cache)
+                    || !cache.handlers.TryGetValue(messageHandler, out count)
                 )
                 {
                     if (MessagingDebug.enabled)
@@ -2053,20 +1446,22 @@
                     return;
                 }
 
-                if (count <= 1)
+                handler = cache.handlers;
+                if (count == 1)
                 {
                     bool complete = handler.Remove(messageHandler);
-                    if (handler.Count <= 0)
+                    if (handler.Count == 0)
                     {
-                        _ = handlers.Remove(priority);
+                        handlers.version++;
+                        _ = handlers.handlers.Remove(priority);
                     }
 
-                    if (handlers.Count <= 0)
+                    if (handlers.handlers.Count == 0)
                     {
                         _ = broadcastHandlers.Remove(context);
                     }
 
-                    if (broadcastHandlers.Count <= 0)
+                    if (broadcastHandlers.Count == 0)
                     {
                         _ = sinks.Remove(type);
                     }
@@ -2088,104 +1483,45 @@
             };
         }
 
-        private List<
-            KeyValuePair<int, SortedList<MessageHandler, int>>
-        > GetOrAddMessageHandlerStack(
-            IEnumerable<KeyValuePair<int, SortedList<MessageHandler, int>>> handlers
+        private static List<KeyValuePair<int, HandlerCache>> GetOrAddMessageHandlerStack(
+            HandlerCache<int, HandlerCache> cache
         )
         {
-            if (
-                !_sortedHandlers.TryPop(
-                    out List<KeyValuePair<int, SortedList<MessageHandler, int>>> messageHandlers
-                )
-            )
+            if (cache.version == cache.lastSeenVersion)
             {
-                return new List<KeyValuePair<int, SortedList<MessageHandler, int>>>(handlers);
+                return cache.cache;
             }
 
-            messageHandlers.Clear();
-            if (handlers is SortedList<int, SortedList<MessageHandler, int>> sortedList)
+            List<KeyValuePair<int, HandlerCache>> list = cache.cache;
+            list.Clear();
+            SortedList<int, HandlerCache> handlers = cache.handlers;
+            IList<int> keys = handlers.Keys;
+            IList<HandlerCache> values = handlers.Values;
+            for (int i = 0; i < handlers.Count; i++)
             {
-                for (int i = 0; i < sortedList.Count; ++i)
-                {
-                    messageHandlers.Add(
-                        new KeyValuePair<int, SortedList<MessageHandler, int>>(
-                            sortedList.Keys[i],
-                            sortedList.Values[i]
-                        )
-                    );
-                }
+                list.Add(new KeyValuePair<int, HandlerCache>(keys[i], values[i]));
             }
-            else
-            {
-                foreach (KeyValuePair<int, SortedList<MessageHandler, int>> handler in handlers)
-                {
-                    messageHandlers.Add(handler);
-                }
-            }
-            return messageHandlers;
+
+            cache.lastSeenVersion = cache.version;
+            return list;
         }
 
-        private List<MessageHandler> GetOrAddMessageHandlerStack(
-            IEnumerable<MessageHandler> handlers
-        )
+        private static List<MessageHandler> GetOrAddMessageHandlerStack(HandlerCache cache)
         {
-            if (!_messageHandlers.TryPop(out List<MessageHandler> messageHandlers))
+            if (cache.version == cache.lastSeenVersion)
             {
-                return new List<MessageHandler>(handlers);
+                return cache.cache;
             }
 
-            messageHandlers.Clear();
-            // Try to avoid allocations if at all possible
-            switch (handlers)
+            List<MessageHandler> list = cache.cache;
+            list.Clear();
+            Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
+            foreach (MessageHandler key in keys)
             {
-                case List<MessageHandler> list:
-                {
-                    foreach (MessageHandler handler in list)
-                    {
-                        messageHandlers.Add(handler);
-                    }
-
-                    break;
-                }
-                case MessageHandler[] array:
-                {
-                    foreach (MessageHandler handler in array)
-                    {
-                        messageHandlers.Add(handler);
-                    }
-
-                    break;
-                }
-                case IList<MessageHandler> interfaceList:
-                {
-                    for (int i = 0; i < interfaceList.Count; ++i)
-                    {
-                        messageHandlers.Add(interfaceList[i]);
-                    }
-
-                    break;
-                }
-                case HashSet<MessageHandler> set:
-                {
-                    foreach (MessageHandler handler in set)
-                    {
-                        messageHandlers.Add(handler);
-                    }
-
-                    break;
-                }
-                default:
-                {
-                    foreach (MessageHandler handler in handlers)
-                    {
-                        messageHandlers.Add(handler);
-                    }
-                    break;
-                }
+                list.Add(key);
             }
-
-            return messageHandlers;
+            cache.lastSeenVersion = cache.version;
+            return list;
         }
 
         // https://blogs.msmvps.com/jonskeet/2008/08/09/making-reflection-fly-and-exploring-delegates/
