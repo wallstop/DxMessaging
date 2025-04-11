@@ -3,11 +3,9 @@
     using System;
     using System.Collections.Generic;
     using System.Linq;
-    using System.Reflection.Metadata;
     using System.Runtime.CompilerServices;
     using MessageBus;
     using Messages;
-    using UnityEngine.XR;
 
     /// <summary>
     /// Abstraction layer for immediate-mode Message passing. An instance of this handles all

@@ -1,4 +1,4 @@
-﻿namespace SourceGenerators.WallstopStudios.DxMessaging.SourceGenerators;
+﻿namespace WallstopStudios.DxMessaging.SourceGenerators;
 
 using System;
 using System.Collections.Generic;
