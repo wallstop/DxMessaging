@@ -2274,6 +2274,46 @@
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
                 List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(cache);
+
+                switch (handlers.Count)
+                {
+                    case 1:
+                    {
+                        handlers[0](ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        handlers[4](ref typedMessage);
+                        return;
+                    }
+                }
+
                 foreach (FastHandler<T> fastHandler in handlers)
                 {
                     fastHandler(ref typedMessage);
@@ -2295,6 +2335,45 @@
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
 
                 List<FastHandler<TU>> handlers = GetOrAddNewHandlerStack(cache);
+                switch (handlers.Count)
+                {
+                    case 1:
+                    {
+                        handlers[0](ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        handlers[4](ref typedMessage);
+                        return;
+                    }
+                }
+
                 foreach (FastHandler<TU> fastHandler in handlers)
                 {
                     fastHandler(ref typedMessage);
@@ -2317,6 +2396,45 @@
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
 
                 List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(cache);
+                switch (handlers.Count)
+                {
+                    case 1:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        handlers[4](ref context, ref typedMessage);
+                        return;
+                    }
+                }
+
                 foreach (FastHandlerWithContext<TU> fastHandler in handlers)
                 {
                     fastHandler(ref context, ref typedMessage);
@@ -2350,6 +2468,45 @@
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
 
                 List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(cache);
+                switch (handlers.Count)
+                {
+                    case 1:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        handlers[4](ref context, ref typedMessage);
+                        return;
+                    }
+                }
+
                 foreach (FastHandlerWithContext<TU> fastHandler in handlers)
                 {
                     fastHandler(ref context, ref typedMessage);
@@ -2398,10 +2555,49 @@
                     return;
                 }
 
-                List<Action<T>> typedHandlers = GetOrAddNewHandlerStack(cache);
+                List<Action<T>> handlers = GetOrAddNewHandlerStack(cache);
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
-                foreach (Action<T> handler in typedHandlers)
+                switch (handlers.Count)
+                {
+                    case 1:
+                    {
+                        handlers[0](typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        handlers[2](typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        handlers[2](typedMessage);
+                        handlers[3](typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        handlers[2](typedMessage);
+                        handlers[3](typedMessage);
+                        handlers[4](typedMessage);
+                        return;
+                    }
+                }
+
+                foreach (Action<T> handler in handlers)
                 {
                     handler(typedMessage);
                 }
@@ -2432,6 +2628,45 @@
 
                 List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(cache);
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
+
+                switch (typedHandlers.Count)
+                {
+                    case 1:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        typedHandlers[2](context, typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        typedHandlers[2](context, typedMessage);
+                        typedHandlers[3](context, typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        typedHandlers[2](context, typedMessage);
+                        typedHandlers[3](context, typedMessage);
+                        typedHandlers[4](context, typedMessage);
+                        return;
+                    }
+                }
 
                 foreach (Action<InstanceId, T> handler in typedHandlers)
                 {

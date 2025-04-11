@@ -87,68 +87,35 @@
         public RegistrationLog Log => _log;
 
         private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _sinks = new();
-        private readonly Dictionary<int, HandlerCache<int, HandlerCache>> _optimizedSinks = new();
         private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _targetedSinks = new();
         private readonly Dictionary<
-            int,
-            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-        > _optimizedTargetedSinks = new();
-        private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _broadcastSinks = new();
-        private readonly Dictionary<
-            int,
-            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-        > _optimizedBroadcastSinks = new();
         private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _postProcessingSinks =
             new();
-        private readonly Dictionary<
-            int,
-            HandlerCache<int, HandlerCache>
-        > _optimizedPostProcessingSinks = new();
         private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingTargetedSinks = new();
         private readonly Dictionary<
-            int,
-            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-        > _optimizedPostProcessingTargetedSinks = new();
-        private readonly Dictionary<
             Type,
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingBroadcastSinks = new();
-        private readonly Dictionary<
-            int,
-            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-        > _optimizedPostProcessingBroadcastSinks = new();
         private readonly Dictionary<
             Type,
             HandlerCache<int, HandlerCache>
         > _postProcessingTargetedWithoutTargetingSinks = new();
         private readonly Dictionary<
-            int,
-            HandlerCache<int, HandlerCache>
-        > _optimizedPostProcessingTargetedWithoutTargetingSinks = new();
-        private readonly Dictionary<
             Type,
             HandlerCache<int, HandlerCache>
         > _postProcessingBroadcastWithoutSourceSinks = new();
-        private readonly Dictionary<
-            int,
-            HandlerCache<int, HandlerCache>
-        > _optimizedPostProcessingBroadcastWithoutSourceSinks = new();
         private readonly HandlerCache _globalSinks = new();
         private readonly Dictionary<Type, HandlerCache<int, List<object>>> _interceptsByType =
             new();
-        private readonly Dictionary<
-            int,
-            HandlerCache<int, List<object>>
-        > _optimizedInterceptsByType = new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
@@ -557,9 +524,66 @@
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                switch (handlerList.Count)
                 {
-                    RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                    case 1:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 2:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 3:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 4:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[3];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 5:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[3];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[4];
+                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    default:
+                    {
+                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        {
+                            RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                        }
+                        break;
+                    }
                 }
             }
 
@@ -580,9 +604,9 @@
         )
             where TMessage : IUntargetedMessage
         {
+            List<MessageHandler> list = cache.cache;
             if (cache.version != cache.lastSeenVersion)
             {
-                List<MessageHandler> list = cache.cache;
                 list.Clear();
                 Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
                 foreach (MessageHandler handler in keys)
@@ -590,6 +614,45 @@
                     list.Add(handler);
                 }
                 cache.lastSeenVersion = cache.version;
+            }
+
+            switch (list.Count)
+            {
+                case 1:
+                {
+                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    return;
+                }
+                case 2:
+                {
+                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    return;
+                }
+                case 3:
+                {
+                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[2].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    return;
+                }
+                case 4:
+                {
+                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[2].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[3].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    return;
+                }
+                case 5:
+                {
+                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[2].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[3].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    list[4].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
+                    return;
+                }
             }
 
             foreach (MessageHandler handler in cache.cache)
@@ -658,9 +721,72 @@
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                switch (handlerList.Count)
                 {
-                    RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                    case 1:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 2:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 3:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 4:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[3];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 5:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[3];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[4];
+                        RunTargetedBroadcast(ref target, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    default:
+                    {
+                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        {
+                            RunTargetedBroadcast(
+                                ref target,
+                                ref typedMessage,
+                                entry.Key,
+                                entry.Value
+                            );
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -676,9 +802,147 @@
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                switch (handlerList.Count)
                 {
-                    RunTargetedPostProcessing(ref target, ref typedMessage, entry.Key, entry.Value);
+                    case 1:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 2:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 3:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 4:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[3];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 5:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[3];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[4];
+                        RunTargetedPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    default:
+                    {
+                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        {
+                            RunTargetedPostProcessing(
+                                ref target,
+                                ref typedMessage,
+                                entry.Key,
+                                entry.Value
+                            );
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -690,14 +954,147 @@
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                switch (handlerList.Count)
                 {
-                    RunTargetedWithoutTargetingPostProcessing(
-                        ref target,
-                        ref typedMessage,
-                        entry.Key,
-                        entry.Value
-                    );
+                    case 1:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 2:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 3:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 4:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[3];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 5:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[3];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[4];
+                        RunTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    default:
+                    {
+                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        {
+                            RunTargetedWithoutTargetingPostProcessing(
+                                ref target,
+                                ref typedMessage,
+                                entry.Key,
+                                entry.Value
+                            );
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -721,6 +1118,138 @@
             where TMessage : ITargetedMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[3]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[3]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[4]
+                        .HandleTargetedWithoutTargetingPostProcessing(
+                            ref target,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+            }
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleTargetedWithoutTargetingPostProcessing(
@@ -741,6 +1270,63 @@
             where TMessage : ITargetedMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[2]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[2]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[3]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[2]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[3]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    messageHandlers[4]
+                        .HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+            }
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
@@ -756,6 +1342,49 @@
             where TMessage : ITargetedMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[2].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[2].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[3].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[1].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[2].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[3].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    messageHandlers[4].HandleTargeted(ref target, ref typedMessage, this, priority);
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleTargeted(ref target, ref typedMessage, this, priority);
@@ -825,9 +1454,67 @@
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                switch (handlerList.Count)
                 {
-                    RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                    case 1:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 2:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 3:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 4:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[3];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    case 5:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[1];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[2];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[3];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        entry = handlerList[4];
+                        RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        break;
+                    }
+                    default:
+                    {
+                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        {
+                            RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -933,6 +1620,63 @@
             where TMessage : IBroadcastMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[2]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[2]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[3]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[1]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[2]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[3]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    messageHandlers[4]
+                        .HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
+                    return;
+                }
+            }
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
@@ -961,6 +1705,45 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
+            switch (messageHandlers.Count)
+            {
+                case 1:
+                {
+                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[2].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[2].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[3].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[2].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[3].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    messageHandlers[4].HandleGlobalTargetedMessage(ref target, ref message, this);
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleGlobalTargetedMessage(ref target, ref message, this);
@@ -1177,6 +1960,61 @@
             List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                 sortedHandlers
             );
+
+            switch (handlerList.Count)
+            {
+                case 1:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 2:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 3:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 4:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[3];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 5:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[3];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    entry = handlerList[4];
+                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
+                    return true;
+                }
+            }
+
             foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
                 RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
@@ -1192,6 +2030,49 @@
             where TMessage : IMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0].HandleUntargetedMessage(ref message, this, priority);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[1].HandleUntargetedMessage(ref message, this, priority);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[1].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[2].HandleUntargetedMessage(ref message, this, priority);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[1].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[2].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[3].HandleUntargetedMessage(ref message, this, priority);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[1].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[2].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[3].HandleUntargetedMessage(ref message, this, priority);
+                    messageHandlers[4].HandleUntargetedMessage(ref message, this, priority);
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleUntargetedMessage(ref message, this, priority);
@@ -1216,6 +2097,61 @@
             List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                 sortedHandlers
             );
+
+            switch (handlerList.Count)
+            {
+                case 1:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 2:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 3:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 4:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[3];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 5:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[3];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    entry = handlerList[4];
+                    RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+            }
+
             foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
                 RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
@@ -1233,6 +2169,64 @@
             where TMessage : ITargetedMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[2]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[2]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[3]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[1]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[2]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[3]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    messageHandlers[4]
+                        .HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
@@ -1257,6 +2251,59 @@
             List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                 sortedHandlers
             );
+            switch (handlerList.Count)
+            {
+                case 1:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 2:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 3:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 4:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[3];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+                case 5:
+                {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[1];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[2];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[3];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    entry = handlerList[4];
+                    RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
+                    return true;
+                }
+            }
             foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
                 RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
@@ -1274,6 +2321,139 @@
             where TMessage : IBroadcastMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 0:
+                {
+                    return;
+                }
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[3]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[3]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    messageHandlers[4]
+                        .HandleSourcedBroadcastWithoutSource(
+                            ref source,
+                            ref message,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleSourcedBroadcastWithoutSource(

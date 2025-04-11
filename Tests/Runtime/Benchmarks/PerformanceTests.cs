@@ -227,6 +227,7 @@
             var token = GetToken(component);
 
             GameObject go = component.gameObject;
+            InstanceId target = go;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
             // Pre-warm
             message.EmitGameObjectTargeted(go);
@@ -234,12 +235,12 @@
             timer.Restart();
             do
             {
-                message.EmitGameObjectTargeted(go);
+                message.EmitTargeted(target);
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
             {
-                Assert.That(() => message.EmitGameObjectTargeted(go), Is.Not.AllocatingGCMemory());
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -265,6 +266,7 @@
         {
             int count = 0;
             var token = GetToken(component);
+            InstanceId target = component;
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
             // Pre-warm
@@ -273,16 +275,13 @@
             timer.Restart();
             do
             {
-                message.EmitComponentTargeted(component);
+                message.EmitTargeted(target);
             } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
             {
-                Assert.That(
-                    () => message.EmitComponentTargeted(component),
-                    Is.Not.AllocatingGCMemory()
-                );
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -309,6 +308,7 @@
             var token = GetToken(component);
 
             GameObject go = component.gameObject;
+            InstanceId target = go;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
             // Pre-warm
             message.EmitGameObjectTargeted(component.gameObject);
@@ -316,12 +316,12 @@
             timer.Restart();
             do
             {
-                message.EmitGameObjectTargeted(go);
+                message.EmitTargeted(target);
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
             {
-                Assert.That(() => message.EmitGameObjectTargeted(go), Is.Not.AllocatingGCMemory());
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -346,6 +346,7 @@
         {
             int count = 0;
             var token = GetToken(component);
+            InstanceId target = component;
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
             // Pre-warm
@@ -354,16 +355,13 @@
             timer.Restart();
             do
             {
-                message.EmitComponentTargeted(component);
+                message.EmitTargeted(target);
             } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
             {
-                Assert.That(
-                    () => message.EmitComponentTargeted(component),
-                    Is.Not.AllocatingGCMemory()
-                );
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
