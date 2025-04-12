@@ -35,9 +35,12 @@ namespace DxMessaging.Editor
             "Microsoft.CodeAnalysis.dll",
             "Microsoft.CodeAnalysis.CSharp.dll",
             "System.Reflection.Metadata.dll",
+            "System.Runtime.CompilerServices.Unsafe.dll",
         };
 
         private static readonly string LibraryArgument = $"-a:\"{LibraryPathRelative}\"";
+
+        private static readonly HashSet<string> DllNames = new(StringComparer.OrdinalIgnoreCase);
 
         static SetupCscRsp()
         {
@@ -47,21 +50,26 @@ namespace DxMessaging.Editor
 
         private static void EnsureDLLsExistInAssets()
         {
-            HashSet<string> dllNames = new();
+            DllNames.Clear();
             foreach (
                 string dllGuid in AssetDatabase.FindAssets("t:DefaultAsset", new[] { "Assets" })
             )
             {
                 string dllPath = AssetDatabase.GUIDToAssetPath(dllGuid);
-                if (!dllPath.EndsWith(".dll"))
+                if (!dllPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (!dllPath.Contains("Assets/Plugins/WallstopStudios.DxMessaging"))
+                if (
+                    !dllPath.Contains(
+                        "Assets/Plugins/WallstopStudios.DxMessaging",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 {
                     string dllName = Path.GetFileName(dllPath);
-                    dllNames.Add(dllName);
+                    DllNames.Add(dllName);
                 }
             }
 
@@ -70,7 +78,7 @@ namespace DxMessaging.Editor
             bool anyFound = false;
             foreach (
                 string requiredDllName in RequiredDllNames.Where(dllName =>
-                    !dllNames.Contains(dllName)
+                    !DllNames.Contains(dllName)
                 )
             )
             {
@@ -160,12 +168,12 @@ namespace DxMessaging.Editor
                 }
 
                 string rspContent = File.ReadAllText(RspFilePath);
-                if (rspContent.Contains(LibraryArgument))
+                if (rspContent.Contains(LibraryArgument, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
-                File.AppendAllText(RspFilePath, $"{LibraryArgument}\n");
+                File.AppendAllText(RspFilePath, $"{LibraryArgument}{Environment.NewLine}");
                 AssetDatabase.ImportAsset("csc.rsp");
                 Debug.Log("Updated csc.rsp.");
             }

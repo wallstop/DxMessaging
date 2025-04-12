@@ -17,7 +17,7 @@
 
     public sealed class PerformanceTests : MessagingTestBase
     {
-        private const int NumInvocationsPerIteration = 250;
+        private const int NumInvocationsPerIteration = 1_000;
 
         protected override bool MessagingDebugEnabled => false;
 
