@@ -88,37 +88,37 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.Equals(rhs);
+            return lhs._id == rhs._id;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(InstanceId lhs, InstanceId rhs)
         {
-            return !lhs.Equals(rhs);
+            return lhs._id != rhs._id;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator <(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) < 0;
+            return lhs._id.CompareTo(rhs._id) < 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator <=(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) <= 0;
+            return lhs._id.CompareTo(rhs._id) <= 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator >(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) > 0;
+            return lhs._id.CompareTo(rhs._id) > 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator >=(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) >= 0;
+            return lhs._id.CompareTo(rhs._id) >= 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
