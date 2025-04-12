@@ -4,6 +4,7 @@
     using DxMessaging.Core;
     using Messages;
     using Unity;
+    using UnityEngine;
 
     public sealed class SimpleMessageAwareComponent : MessageAwareComponent
     {
@@ -88,6 +89,10 @@
             _ = _messageRegistrationToken.RegisterComponentTargeted<ComplexTargetedMessage>(
                 this,
                 HandleComplexComponentTargetedMessage
+            );
+            _ = _messageRegistrationToken.RegisterUntargeted(
+                (ref GenericUntargetedMessage<int> message) =>
+                    Debug.Log("Received generic int message.")
             );
         }
 

@@ -604,6 +604,11 @@
         )
             where TMessage : IUntargetedMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
             List<MessageHandler> list = cache.cache;
             if (cache.version != cache.lastSeenVersion)
             {
@@ -1117,13 +1122,14 @@
         )
             where TMessage : ITargetedMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0]
@@ -1250,6 +1256,7 @@
                     return;
                 }
             }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleTargetedWithoutTargetingPostProcessing(
@@ -1269,13 +1276,14 @@
         )
             where TMessage : ITargetedMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0]
@@ -1327,6 +1335,7 @@
                     return;
                 }
             }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
@@ -1337,17 +1346,18 @@
             ref InstanceId target,
             ref TMessage typedMessage,
             int priority,
-            HandlerCache handlers
+            HandlerCache cache
         )
             where TMessage : ITargetedMessage
         {
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(handlers);
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0].HandleTargeted(ref target, ref typedMessage, this, priority);
@@ -1530,14 +1540,147 @@
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                switch (handlerList.Count)
                 {
-                    RunBroadcastPostProcessing(
-                        ref source,
-                        ref typedMessage,
-                        entry.Key,
-                        entry.Value
-                    );
+                    case 1:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 2:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 3:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 4:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[3];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    case 5:
+                    {
+                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[1];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[2];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[3];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        entry = handlerList[4];
+                        RunBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            entry.Key,
+                            entry.Value
+                        );
+                        break;
+                    }
+                    default:
+                    {
+                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        {
+                            RunBroadcastPostProcessing(
+                                ref source,
+                                ref typedMessage,
+                                entry.Key,
+                                entry.Value
+                            );
+                        }
+
+                        break;
+                    }
                 }
             }
 
@@ -1599,7 +1742,140 @@
         )
             where TMessage : IBroadcastMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            switch (messageHandlers.Count)
+            {
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[3]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[1]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[2]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[3]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    messageHandlers[4]
+                        .HandleSourcedBroadcastPostProcessing(
+                            ref source,
+                            ref typedMessage,
+                            this,
+                            priority
+                        );
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleSourcedBroadcastPostProcessing(
@@ -1619,13 +1895,14 @@
         )
             where TMessage : IBroadcastMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0]
@@ -1677,6 +1954,7 @@
                     return;
                 }
             }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
@@ -1691,6 +1969,45 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
+            switch (messageHandlers.Count)
+            {
+                case 1:
+                {
+                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[2].HandleGlobalUntargetedMessage(ref message, this);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[2].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[3].HandleGlobalUntargetedMessage(ref message, this);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[2].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[3].HandleGlobalUntargetedMessage(ref message, this);
+                    messageHandlers[4].HandleGlobalUntargetedMessage(ref message, this);
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleGlobalUntargetedMessage(ref message, this);
@@ -1761,6 +2078,60 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
+            switch (messageHandlers.Count)
+            {
+                case 1:
+                {
+                    messageHandlers[0]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    return;
+                }
+                case 2:
+                {
+                    messageHandlers[0]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[1]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    return;
+                }
+                case 3:
+                {
+                    messageHandlers[0]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[1]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[2]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    return;
+                }
+                case 4:
+                {
+                    messageHandlers[0]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[1]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[2]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[3]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    return;
+                }
+                case 5:
+                {
+                    messageHandlers[0]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[1]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[2]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[3]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    messageHandlers[4]
+                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                    return;
+                }
+            }
+
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
@@ -2029,13 +2400,13 @@
         )
             where TMessage : IMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0].HandleUntargetedMessage(ref message, this, priority);
@@ -2168,13 +2539,14 @@
         )
             where TMessage : ITargetedMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0]
@@ -2304,6 +2676,7 @@
                     return true;
                 }
             }
+
             foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
             {
                 RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
@@ -2320,13 +2693,14 @@
         )
             where TMessage : IBroadcastMessage
         {
+            if (cache.handlers.Count == 0)
+            {
+                return;
+            }
+
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
             switch (messageHandlers.Count)
             {
-                case 0:
-                {
-                    return;
-                }
                 case 1:
                 {
                     messageHandlers[0]

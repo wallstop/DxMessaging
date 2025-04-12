@@ -1599,6 +1599,45 @@
                 List<Action<InstanceId, IBroadcastMessage>> handlers = GetOrAddNewHandlerStack(
                     _globalBroadcastHandlers
                 );
+                switch (handlers.Count)
+                {
+                    case 1:
+                    {
+                        handlers[0](source, message);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        handlers[2](source, message);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        handlers[2](source, message);
+                        handlers[3](source, message);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        handlers[2](source, message);
+                        handlers[3](source, message);
+                        handlers[4](source, message);
+                        return;
+                    }
+                }
+
                 foreach (Action<InstanceId, IBroadcastMessage> handler in handlers)
                 {
                     handler(source, message);
