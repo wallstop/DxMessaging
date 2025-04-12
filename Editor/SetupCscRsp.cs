@@ -36,6 +36,7 @@ namespace DxMessaging.Editor
             "Microsoft.CodeAnalysis.CSharp.dll",
             "System.Reflection.Metadata.dll",
             "System.Runtime.CompilerServices.Unsafe.dll",
+            "System.Collections.Immutable.dll",
         };
 
         private static readonly string LibraryArgument = $"-a:\"{LibraryPathRelative}\"";
