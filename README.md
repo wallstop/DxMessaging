@@ -26,26 +26,23 @@ Check out the latest [Releases](https://github.com/wallstop/DxMessaging/releases
 4. Add an entry for a new "Scoped Registry"
     - Name: `NPM`
     - URL: `https://registry.npmjs.org`
-    - Scope(s): `com.wallstop-studios.dxmessaging` *and* `com.wallstop-studios.unity-helpers`
+    - Scope(s): `com.wallstop-studios.dxmessaging`
 5. Resolve the latest `DxMessaging`
 
 ## From Source
 Grab a copy of this repo (either `git clone` both [this repo](https://github.com/wallstop/DxMessaging) *and* [Unity Helpers](https://github.com/wallstop/unity-helpers) or [download a zip of the source](https://github.com/wallstop/DxMessaging/archive/refs/heads/master.zip) and [Unity Helper's source](https://github.com/wallstop/unity-helpers/archive/refs/heads/main.zip)) and copy the contents to your project's `Assets` folder.
-
-# Dependencies
-This project has a dependency on my [`Unity Helpers`](https://github.com/wallstop/unity-helpers) project, which contains the `System.Runtime.CompilerServices.Unsafe.dll`, which is used for some speed hacks in DxMessaging directly. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the `System.Runtime.CompilerServices.Unsafe.dll` yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project. Or, manually download this project without UnityHelpers. The choice is yours.
 
 # Benchmarks
 DxMessaging is currently roughly on-par with than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs). However, it is allocation-free and can be used in hot paths.
 
 | Message Tech | Operations / Second | Allocations? |
 | ------------ | ------------------- | ------------ | 
-| Unity | 2,493,950 | Yes |
-| DxMessaging (GameObject) - Normal | 2,075,850 | No |
-| DxMessaging (Component) - Normal | 2,072,550 | No |
-| DxMessaging (GameObject) - No-Copy | 2,159,400 | No |
-| DxMessaging (Component) - No-Copy | 2,163,800 | No |
-| DxMessaging (Untargeted) - No-Copy | 3,086,450 | No |
+| Unity | 2,621,200 | Yes |
+| DxMessaging (GameObject) - Normal | 2,048,600 | No |
+| DxMessaging (Component) - Normal | 2,054,600 | No |
+| DxMessaging (GameObject) - No-Copy | 2,137,800 | No |
+| DxMessaging (Component) - No-Copy | 2,136,400 | No |
+| DxMessaging (Untargeted) - No-Copy | 3,028,400 | No |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
