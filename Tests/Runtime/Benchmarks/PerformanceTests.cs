@@ -17,6 +17,8 @@
 
     public sealed class PerformanceTests : MessagingTestBase
     {
+        private const int NumInvocationsPerIteration = 250;
+
         protected override bool MessagingDebugEnabled => false;
 
         [Test]
@@ -190,10 +192,13 @@
             timer.Restart();
             do
             {
-                target.SendMessage(
-                    nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
-                    message
-                );
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    target.SendMessage(
+                        nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
+                        message
+                    );
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;
@@ -230,12 +235,15 @@
             InstanceId target = go;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
             // Pre-warm
-            message.EmitGameObjectTargeted(go);
+            message.EmitTargeted(target);
 
             timer.Restart();
             do
             {
-                message.EmitTargeted(target);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
@@ -270,12 +278,15 @@
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
             // Pre-warm
-            message.EmitComponentTargeted(component);
+            message.EmitTargeted(target);
 
             timer.Restart();
             do
             {
-                message.EmitTargeted(target);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;
@@ -311,12 +322,15 @@
             InstanceId target = go;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
             // Pre-warm
-            message.EmitGameObjectTargeted(component.gameObject);
+            message.EmitTargeted(target);
 
             timer.Restart();
             do
             {
-                message.EmitTargeted(target);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
@@ -355,7 +369,10 @@
             timer.Restart();
             do
             {
-                message.EmitTargeted(target);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;
@@ -394,7 +411,10 @@
             timer.Restart();
             do
             {
-                message.EmitUntargeted();
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitUntargeted();
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;

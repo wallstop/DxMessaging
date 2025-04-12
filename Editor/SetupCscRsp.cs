@@ -58,7 +58,7 @@ namespace DxMessaging.Editor
                     continue;
                 }
 
-                if (!dllPath.Contains("Assets/Plugins/WallstopStudios.DxMessaging/"))
+                if (!dllPath.Contains("Assets/Plugins/WallstopStudios.DxMessaging"))
                 {
                     string dllName = Path.GetFileName(dllPath);
                     dllNames.Add(dllName);
