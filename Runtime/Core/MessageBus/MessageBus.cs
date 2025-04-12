@@ -236,7 +236,7 @@
                     return;
                 }
 
-                if (count == 1)
+                if (count <= 1)
                 {
                     _ = _globalSinks.handlers.Remove(messageHandler);
                 }
@@ -2914,7 +2914,7 @@
 
                 handlers.version++;
                 handler = cache.handlers;
-                if (count == 1)
+                if (count <= 1)
                 {
                     bool complete = handler.Remove(messageHandler);
 
@@ -3034,7 +3034,7 @@
                 }
 
                 handler = cache.handlers;
-                if (count == 1)
+                if (count <= 1)
                 {
                     bool complete = handler.Remove(messageHandler);
                     if (handler.Count == 0)

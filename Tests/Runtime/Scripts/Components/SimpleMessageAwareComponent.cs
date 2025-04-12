@@ -90,10 +90,6 @@
                 this,
                 HandleComplexComponentTargetedMessage
             );
-            _ = _messageRegistrationToken.RegisterUntargeted(
-                (ref GenericUntargetedMessage<int> message) =>
-                    Debug.Log("Received generic int message.")
-            );
         }
 
         private void ToggleTargetedRegistration()
