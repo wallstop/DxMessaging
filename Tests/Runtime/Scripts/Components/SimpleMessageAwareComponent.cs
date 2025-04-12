@@ -4,7 +4,6 @@
     using DxMessaging.Core;
     using Messages;
     using Unity;
-    using UnityEngine;
 
     public sealed class SimpleMessageAwareComponent : MessageAwareComponent
     {
