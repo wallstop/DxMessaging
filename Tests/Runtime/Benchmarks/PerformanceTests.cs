@@ -17,12 +17,14 @@
 
     public sealed class PerformanceTests : MessagingTestBase
     {
+        private const int NumInvocationsPerIteration = 250;
+
         protected override bool MessagingDebugEnabled => false;
 
         [Test]
         public void Benchmark()
         {
-            TimeSpan timeout = TimeSpan.FromSeconds(2);
+            TimeSpan timeout = TimeSpan.FromSeconds(5);
 
             Debug.Log("| Message Tech | Operations / Second | Allocations? |");
             Debug.Log("| ------------ | ------------------- | ------------ | ");
@@ -190,10 +192,13 @@
             timer.Restart();
             do
             {
-                target.SendMessage(
-                    nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
-                    message
-                );
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    target.SendMessage(
+                        nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
+                        message
+                    );
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;
@@ -227,19 +232,23 @@
             var token = GetToken(component);
 
             GameObject go = component.gameObject;
+            InstanceId target = go;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
             // Pre-warm
-            message.EmitGameObjectTargeted(go);
+            message.EmitTargeted(target);
 
             timer.Restart();
             do
             {
-                message.EmitGameObjectTargeted(go);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
             {
-                Assert.That(() => message.EmitGameObjectTargeted(go), Is.Not.AllocatingGCMemory());
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -265,24 +274,25 @@
         {
             int count = 0;
             var token = GetToken(component);
+            InstanceId target = component;
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
             // Pre-warm
-            message.EmitComponentTargeted(component);
+            message.EmitTargeted(target);
 
             timer.Restart();
             do
             {
-                message.EmitComponentTargeted(component);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
             {
-                Assert.That(
-                    () => message.EmitComponentTargeted(component),
-                    Is.Not.AllocatingGCMemory()
-                );
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -309,22 +319,23 @@
             var token = GetToken(component);
 
             GameObject go = component.gameObject;
+            InstanceId target = go;
             token.RegisterGameObjectTargeted<ComplexTargetedMessage>(go, Handle);
             // Pre-warm
-            message.EmitGameObjectTargeted(component.gameObject);
+            message.EmitTargeted(target);
 
             timer.Restart();
             do
             {
-                message.EmitGameObjectTargeted(component.gameObject);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
             bool allocating;
             try
             {
-                Assert.That(
-                    () => message.EmitGameObjectTargeted(component.gameObject),
-                    Is.Not.AllocatingGCMemory()
-                );
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -349,6 +360,7 @@
         {
             int count = 0;
             var token = GetToken(component);
+            InstanceId target = component;
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
             // Pre-warm
@@ -357,16 +369,16 @@
             timer.Restart();
             do
             {
-                message.EmitComponentTargeted(component);
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
             {
-                Assert.That(
-                    () => message.EmitComponentTargeted(component),
-                    Is.Not.AllocatingGCMemory()
-                );
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
                 allocating = false;
             }
             catch
@@ -399,7 +411,10 @@
             timer.Restart();
             do
             {
-                message.EmitUntargeted();
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitUntargeted();
+                }
             } while (timer.Elapsed < timeout);
 
             bool allocating;

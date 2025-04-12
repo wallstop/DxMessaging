@@ -36,16 +36,16 @@ Grab a copy of this repo (either `git clone` both [this repo](https://github.com
 This project has a dependency on my [`Unity Helpers`](https://github.com/wallstop/unity-helpers) project, which contains the `System.Runtime.CompilerServices.Unsafe.dll`, which is used for some speed hacks in DxMessaging directly. Unity Helpers bundles a few (small) dependencies, including protobuf. If you don't want these dependencies, or if they conflict in some way, you can either include a copy of the `System.Runtime.CompilerServices.Unsafe.dll` yourself without relying on UnityHelpers, or manually download and include the Unity Helpers project and delete anything that conflicts with your project. Or, manually download this project without UnityHelpers. The choice is yours.
 
 # Benchmarks
-DxMessaging is currently a bit slower (2-3x) than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs).
+DxMessaging is currently roughly on-par with than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs). However, it is allocation-free and can be used in hot paths.
 
 | Message Tech | Operations / Second | Allocations? |
 | ------------ | ------------------- | ------------ | 
-| Unity | 2,287,562 | Yes |
-| DxMessaging (GameObject) - Normal | 1,198,797 | No |
-| DxMessaging (Component) - Normal | 1,198,796 | No |
-| DxMessaging (GameObject) - No-Copy | 1,137,634 | No |
-| DxMessaging (Component) - No-Copy | 1,225,105 | No |
-| DxMessaging (Untargeted) - No-Copy | 1,681,407 | No |
+| Unity | 2,493,950 | Yes |
+| DxMessaging (GameObject) - Normal | 2,075,850 | No |
+| DxMessaging (Component) - Normal | 2,072,550 | No |
+| DxMessaging (GameObject) - No-Copy | 2,159,400 | No |
+| DxMessaging (Component) - No-Copy | 2,163,800 | No |
+| DxMessaging (Untargeted) - No-Copy | 3,086,450 | No |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.
@@ -117,16 +117,6 @@ public partial struct SimpleBroadcastMessage // No longer needed : IBroadcastMes
 
 [DxUntargetedMessage]
 public partial struct SimpleUntargetedMessage // No longer needed : IUntargetedMesssage<SimpleUntargetedMessage>
-{
-}
-```
-
-Or, if you already have messages, you can leave the interface implementations as-is and get a no-boxing implementation with the `DxAutoMessageType` attribute. `partial` is still required.
-
-To use:
-```csharp
-[DxAutoMessageType]
-public partial struct SimpleTargetedMessage : ITargetedMessage<SimpleTargetedMessage>
 {
 }
 ```

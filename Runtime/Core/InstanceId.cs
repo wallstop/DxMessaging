@@ -46,22 +46,12 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator InstanceId(UnityEngine.GameObject gameObject)
         {
-            if (gameObject == null)
-            {
-                throw new ArgumentNullException(nameof(gameObject));
-            }
-
             return new InstanceId(gameObject);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator InstanceId(UnityEngine.Component component)
         {
-            if (component == null)
-            {
-                throw new ArgumentNullException(nameof(component));
-            }
-
             return new InstanceId(component);
         }
 #endif
@@ -98,37 +88,37 @@
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.Equals(rhs);
+            return lhs._id == rhs._id;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(InstanceId lhs, InstanceId rhs)
         {
-            return !lhs.Equals(rhs);
+            return lhs._id != rhs._id;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator <(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) < 0;
+            return lhs._id.CompareTo(rhs._id) < 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator <=(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) <= 0;
+            return lhs._id.CompareTo(rhs._id) <= 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator >(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) > 0;
+            return lhs._id.CompareTo(rhs._id) > 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator >=(InstanceId lhs, InstanceId rhs)
         {
-            return lhs.CompareTo(rhs) >= 0;
+            return lhs._id.CompareTo(rhs._id) >= 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

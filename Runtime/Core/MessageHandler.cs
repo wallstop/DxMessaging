@@ -1339,123 +1339,116 @@
             return false;
         }
 
-        private abstract class TypedHandler
+        private sealed class HandlerActionCache<T>
         {
-            protected static readonly Stack<
-                List<Action<IUntargetedMessage>>
-            > GlobalUntargetedHandlersStack = new();
-            protected static readonly Stack<
-                List<Action<InstanceId, ITargetedMessage>>
-            > GlobalTargetedHandlersStack = new();
-            protected static readonly Stack<
-                List<Action<InstanceId, IBroadcastMessage>>
-            > GlobalBroadcastHandlersStack = new();
-            protected static readonly Stack<
-                List<FastHandler<IUntargetedMessage>>
-            > GlobalUntargetedFastHandlersStack = new();
-            protected static Stack<
-                List<FastHandlerWithContext<ITargetedMessage>>
-            > GlobalTargetedFastHandlersStack = new();
-            protected static Stack<
-                List<FastHandlerWithContext<IBroadcastMessage>>
-            > GlobalBroadcastFastHandlersStack = new();
+            public readonly Dictionary<T, int> handlers = new();
+            public readonly List<T> cache = new();
+            public long version;
+            public long lastSeenVersion = -1;
         }
 
         /// <summary>
         /// One-size-fits-all wrapper around all possible Messaging sinks for a particular MessageHandler & MessageType.
         /// </summary>
         /// <typeparam name="T">Message type that this Handler exists to serve.</typeparam>
-        private sealed class TypedHandler<T> : TypedHandler
+        private sealed class TypedHandler<T>
             where T : IMessage
         {
-            // Buffers so we don't allocate memory as often
-            private static Stack<List<Action<T>>> HandlersStack;
-            private static Stack<List<Action<InstanceId, T>>> HandlersWithoutContextStack;
-            private static Stack<List<FastHandler<T>>> FastHandlersStack;
-            private static Stack<List<FastHandlerWithContext<T>>> FastHandlersWithContextStack;
-
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, HandlerActionCache<Action<T>>>
             > _targetedHandlers;
-            private Dictionary<int, Dictionary<Action<T>, int>> _untargetedHandlers;
+            private Dictionary<int, HandlerActionCache<Action<T>>> _untargetedHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, HandlerActionCache<Action<T>>>
             > _broadcastHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, HandlerActionCache<Action<T>>>
             > _targetedPostProcessingHandlers;
-            private Dictionary<int, Dictionary<Action<T>, int>> _untargetedPostProcessingHandlers;
+            private Dictionary<
+                int,
+                HandlerActionCache<Action<T>>
+            > _untargetedPostProcessingHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<Action<T>, int>>
+                Dictionary<int, HandlerActionCache<Action<T>>>
             > _broadcastPostProcessingHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _targetedFastHandlers;
-            private Dictionary<int, Dictionary<FastHandler<T>, int>> _untargetedFastHandlers;
+            private Dictionary<int, HandlerActionCache<FastHandler<T>>> _untargetedFastHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _broadcastFastHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _targetedPostProcessingFastHandlers;
             private Dictionary<
                 int,
-                Dictionary<FastHandler<T>, int>
+                HandlerActionCache<FastHandler<T>>
             > _untargetedPostProcessingFastHandlers;
             private Dictionary<
                 InstanceId,
-                Dictionary<int, Dictionary<FastHandler<T>, int>>
+                Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _broadcastPostProcessingFastHandlers;
-            private Dictionary<Action<IUntargetedMessage>, int> _globalUntargetedHandlers;
-            private Dictionary<Action<InstanceId, ITargetedMessage>, int> _globalTargetedHandlers;
-            private Dictionary<Action<InstanceId, IBroadcastMessage>, int> _globalBroadcastHandlers;
-            private Dictionary<FastHandler<IUntargetedMessage>, int> _globalUntargetedFastHandlers;
-            private Dictionary<
-                FastHandlerWithContext<ITargetedMessage>,
-                int
+
+            private HandlerActionCache<Action<IUntargetedMessage>> _globalUntargetedHandlers;
+
+            private HandlerActionCache<
+                Action<InstanceId, ITargetedMessage>
+            > _globalTargetedHandlers;
+
+            private HandlerActionCache<
+                Action<InstanceId, IBroadcastMessage>
+            > _globalBroadcastHandlers;
+
+            private HandlerActionCache<
+                FastHandler<IUntargetedMessage>
+            > _globalUntargetedFastHandlers;
+
+            private HandlerActionCache<
+                FastHandlerWithContext<ITargetedMessage>
             > _globalTargetedFastHandlers;
-            private Dictionary<
-                FastHandlerWithContext<IBroadcastMessage>,
-                int
+
+            private HandlerActionCache<
+                FastHandlerWithContext<IBroadcastMessage>
             > _globalBroadcastFastHandlers;
             private Dictionary<
                 int,
-                Dictionary<Action<InstanceId, T>, int>
+                HandlerActionCache<Action<InstanceId, T>>
             > _targetedWithoutTargetingHandlers;
             private Dictionary<
                 int,
-                Dictionary<FastHandlerWithContext<T>, int>
+                HandlerActionCache<FastHandlerWithContext<T>>
             > _fastTargetedWithoutTargetingHandlers;
             private Dictionary<
                 int,
-                Dictionary<Action<InstanceId, T>, int>
+                HandlerActionCache<Action<InstanceId, T>>
             > _broadcastWithoutSourceHandlers;
             private Dictionary<
                 int,
-                Dictionary<FastHandlerWithContext<T>, int>
+                HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourceHandlers;
             private Dictionary<
                 int,
-                Dictionary<Action<InstanceId, T>, int>
+                HandlerActionCache<Action<InstanceId, T>>
             > _targetedWithoutTargetingPostProcessingHandlers;
             private Dictionary<
                 int,
-                Dictionary<FastHandlerWithContext<T>, int>
+                HandlerActionCache<FastHandlerWithContext<T>>
             > _fastTargetedWithoutTargetingPostProcessingHandlers;
             private Dictionary<
                 int,
-                Dictionary<Action<InstanceId, T>, int>
+                HandlerActionCache<Action<InstanceId, T>>
             > _broadcastWithoutSourcePostProcessingHandlers;
             private Dictionary<
                 int,
-                Dictionary<FastHandlerWithContext<T>, int>
+                HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourcePostProcessingHandlers;
 
             /// <summary>
@@ -1500,7 +1493,6 @@
             {
                 RunFastHandlers(
                     ref target,
-                    ref FastHandlersWithContextStack,
                     _fastTargetedWithoutTargetingHandlers,
                     ref message,
                     priority
@@ -1539,7 +1531,6 @@
             {
                 RunFastHandlers(
                     ref source,
-                    ref FastHandlersWithContextStack,
                     _fastBroadcastWithoutSourceHandlers,
                     ref message,
                     priority
@@ -1553,44 +1544,18 @@
             /// <param name="message">Message to emit.</param>
             public void HandleGlobalUntargeted(ref IUntargetedMessage message)
             {
-                RunFastHandlers(
-                    GlobalUntargetedFastHandlersStack,
-                    _globalUntargetedFastHandlers,
-                    ref message
-                );
-
-                if (_globalUntargetedHandlers is not { Count: > 0 })
+                RunFastHandlers(_globalUntargetedFastHandlers, ref message);
+                if (_globalUntargetedHandlers?.handlers is not { Count: > 0 })
                 {
                     return;
                 }
 
-                if (
-                    GlobalUntargetedHandlersStack.TryPop(
-                        out List<Action<IUntargetedMessage>> handlers
-                    )
-                )
+                List<Action<IUntargetedMessage>> handlers = GetOrAddNewHandlerStack(
+                    _globalUntargetedHandlers
+                );
+                foreach (Action<IUntargetedMessage> handler in handlers)
                 {
-                    handlers.Clear();
-                    foreach (Action<IUntargetedMessage> handler in _globalUntargetedHandlers.Keys)
-                    {
-                        handlers.Add(handler);
-                    }
-                }
-                else
-                {
-                    handlers = new List<Action<IUntargetedMessage>>(_globalUntargetedHandlers.Keys);
-                }
-
-                try
-                {
-                    foreach (Action<IUntargetedMessage> handler in handlers)
-                    {
-                        handler(message);
-                    }
-                }
-                finally
-                {
-                    GlobalUntargetedHandlersStack.Push(handlers);
+                    handler(message);
                 }
             }
 
@@ -1601,49 +1566,19 @@
             /// <param name="message">Message to emit.</param>
             public void HandleGlobalTargeted(ref InstanceId target, ref ITargetedMessage message)
             {
-                RunFastHandlers(
-                    ref target,
-                    ref GlobalTargetedFastHandlersStack,
-                    _globalTargetedFastHandlers,
-                    ref message
-                );
+                RunFastHandlers(ref target, _globalTargetedFastHandlers, ref message);
 
-                if (_globalTargetedHandlers is not { Count: > 0 })
+                if (_globalTargetedHandlers?.handlers is not { Count: > 0 })
                 {
                     return;
                 }
 
-                if (
-                    GlobalTargetedHandlersStack.TryPop(
-                        out List<Action<InstanceId, ITargetedMessage>> handlers
-                    )
-                )
+                List<Action<InstanceId, ITargetedMessage>> handlers = GetOrAddNewHandlerStack(
+                    _globalTargetedHandlers
+                );
+                foreach (Action<InstanceId, ITargetedMessage> handler in handlers)
                 {
-                    handlers.Clear();
-                    foreach (
-                        Action<InstanceId, ITargetedMessage> handler in _globalTargetedHandlers.Keys
-                    )
-                    {
-                        handlers.Add(handler);
-                    }
-                }
-                else
-                {
-                    handlers = new List<Action<InstanceId, ITargetedMessage>>(
-                        _globalTargetedHandlers.Keys
-                    );
-                }
-
-                try
-                {
-                    foreach (Action<InstanceId, ITargetedMessage> handler in handlers)
-                    {
-                        handler(target, message);
-                    }
-                }
-                finally
-                {
-                    GlobalTargetedHandlersStack.Push(handlers);
+                    handler(target, message);
                 }
             }
 
@@ -1654,52 +1589,58 @@
             /// <param name="message">Message to emit.</param>
             public void HandleGlobalBroadcast(ref InstanceId source, ref IBroadcastMessage message)
             {
-                RunFastHandlers(
-                    ref source,
-                    ref GlobalBroadcastFastHandlersStack,
-                    _globalBroadcastFastHandlers,
-                    ref message
-                );
+                RunFastHandlers(ref source, _globalBroadcastFastHandlers, ref message);
 
-                if (_globalBroadcastHandlers is not { Count: > 0 })
+                if (_globalBroadcastHandlers?.handlers is not { Count: > 0 })
                 {
                     return;
                 }
 
-                if (
-                    GlobalBroadcastHandlersStack.TryPop(
-                        out List<Action<InstanceId, IBroadcastMessage>> handlers
-                    )
-                )
+                List<Action<InstanceId, IBroadcastMessage>> handlers = GetOrAddNewHandlerStack(
+                    _globalBroadcastHandlers
+                );
+                switch (handlers.Count)
                 {
-                    handlers.Clear();
-                    foreach (
-                        Action<
-                            InstanceId,
-                            IBroadcastMessage
-                        > handler in _globalBroadcastHandlers.Keys
-                    )
+                    case 1:
                     {
-                        handlers.Add(handler);
+                        handlers[0](source, message);
+                        return;
                     }
-                }
-                else
-                {
-                    handlers = new List<Action<InstanceId, IBroadcastMessage>>(
-                        _globalBroadcastHandlers.Keys
-                    );
+                    case 2:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        handlers[2](source, message);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        handlers[2](source, message);
+                        handlers[3](source, message);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](source, message);
+                        handlers[1](source, message);
+                        handlers[2](source, message);
+                        handlers[3](source, message);
+                        handlers[4](source, message);
+                        return;
+                    }
                 }
 
-                try
+                foreach (Action<InstanceId, IBroadcastMessage> handler in handlers)
                 {
-                    foreach (Action<InstanceId, IBroadcastMessage> handler in handlers)
-                    {
-                        handler(source, message);
-                    }
-                }
-                finally
-                {
-                    GlobalBroadcastHandlersStack.Push(handlers);
+                    handler(source, message);
                 }
             }
 
@@ -2305,7 +2246,10 @@
 
             private static void RunFastHandlersWithContext<TMessage>(
                 ref InstanceId context,
-                Dictionary<int, Dictionary<FastHandlerWithContext<T>, int>> fastHandlersByContext,
+                Dictionary<
+                    int,
+                    HandlerActionCache<FastHandlerWithContext<T>>
+                > fastHandlersByContext,
                 ref TMessage message,
                 int priority
             )
@@ -2316,20 +2260,14 @@
                     return;
                 }
 
-                RunFastHandlers(
-                    ref context,
-                    ref FastHandlersWithContextStack,
-                    fastHandlersByContext,
-                    ref message,
-                    priority
-                );
+                RunFastHandlers(ref context, fastHandlersByContext, ref message, priority);
             }
 
             private static void RunFastHandlersWithContext<TMessage>(
                 ref InstanceId context,
                 Dictionary<
                     InstanceId,
-                    Dictionary<int, Dictionary<FastHandler<T>, int>>
+                    Dictionary<int, HandlerActionCache<FastHandler<T>>>
                 > fastHandlersByContext,
                 ref TMessage message,
                 int priority
@@ -2340,18 +2278,18 @@
                     fastHandlersByContext is not { Count: > 0 }
                     || !fastHandlersByContext.TryGetValue(
                         context,
-                        out Dictionary<int, Dictionary<FastHandler<T>, int>> fastHandlers
+                        out Dictionary<int, HandlerActionCache<FastHandler<T>>> cache
                     )
                 )
                 {
                     return;
                 }
 
-                RunFastHandlers(fastHandlers, ref message, priority);
+                RunFastHandlers(cache, ref message, priority);
             }
 
             private static void RunFastHandlers<TMessage>(
-                Dictionary<int, Dictionary<FastHandler<T>, int>> fastHandlers,
+                Dictionary<int, HandlerActionCache<FastHandler<T>>> fastHandlers,
                 ref TMessage message,
                 int priority
             )
@@ -2365,7 +2303,7 @@
                 if (
                     !fastHandlers.TryGetValue(
                         priority,
-                        out Dictionary<FastHandler<T>, int> fastHandlersByPriority
+                        out HandlerActionCache<FastHandler<T>> cache
                     )
                 )
                 {
@@ -2374,92 +2312,177 @@
 
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
-                List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(
-                    ref FastHandlersStack,
-                    fastHandlersByPriority.Keys
-                );
-                try
+                List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(cache);
+
+                switch (handlers.Count)
                 {
-                    foreach (FastHandler<T> fastHandler in handlers)
+                    case 1:
                     {
-                        fastHandler(ref typedMessage);
+                        handlers[0](ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        handlers[4](ref typedMessage);
+                        return;
                     }
                 }
-                finally
+
+                foreach (FastHandler<T> fastHandler in handlers)
                 {
-                    FastHandlersStack.Push(handlers);
+                    fastHandler(ref typedMessage);
                 }
             }
 
             private static void RunFastHandlers<TMessage, TU>(
-                Stack<List<FastHandler<TU>>> stack,
-                Dictionary<FastHandler<TU>, int> fastHandlers,
+                HandlerActionCache<FastHandler<TU>> cache,
                 ref TMessage message
             )
                 where TMessage : IMessage
                 where TU : IMessage
             {
-                if (fastHandlers is not { Count: > 0 })
+                if (cache?.handlers is not { Count: > 0 })
                 {
                     return;
                 }
 
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
 
-                List<FastHandler<TU>> handlers = GetOrAddNewHandlerStack(
-                    ref stack,
-                    fastHandlers.Keys
-                );
-                try
+                List<FastHandler<TU>> handlers = GetOrAddNewHandlerStack(cache);
+                switch (handlers.Count)
                 {
-                    foreach (FastHandler<TU> fastHandler in handlers)
+                    case 1:
                     {
-                        fastHandler(ref typedMessage);
+                        handlers[0](ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref typedMessage);
+                        handlers[1](ref typedMessage);
+                        handlers[2](ref typedMessage);
+                        handlers[3](ref typedMessage);
+                        handlers[4](ref typedMessage);
+                        return;
                     }
                 }
-                finally
+
+                foreach (FastHandler<TU> fastHandler in handlers)
                 {
-                    stack.Push(handlers);
+                    fastHandler(ref typedMessage);
                 }
             }
 
             private static void RunFastHandlers<TMessage, TU>(
                 ref InstanceId context,
-                ref Stack<List<FastHandlerWithContext<TU>>> stack,
-                Dictionary<FastHandlerWithContext<TU>, int> priorityHandlers,
+                HandlerActionCache<FastHandlerWithContext<TU>> cache,
                 ref TMessage message
             )
                 where TMessage : IMessage
                 where TU : IMessage
             {
-                if (priorityHandlers is not { Count: > 0 })
+                if (cache?.handlers is not { Count: > 0 })
                 {
                     return;
                 }
 
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
 
-                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(
-                    ref stack,
-                    priorityHandlers.Keys
-                );
-                try
+                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(cache);
+                switch (handlers.Count)
                 {
-                    foreach (FastHandlerWithContext<TU> fastHandler in handlers)
+                    case 1:
                     {
-                        fastHandler(ref context, ref typedMessage);
+                        handlers[0](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        handlers[4](ref context, ref typedMessage);
+                        return;
                     }
                 }
-                finally
+
+                foreach (FastHandlerWithContext<TU> fastHandler in handlers)
                 {
-                    stack.Push(handlers);
+                    fastHandler(ref context, ref typedMessage);
                 }
             }
 
             private static void RunFastHandlers<TMessage, TU>(
                 ref InstanceId context,
-                ref Stack<List<FastHandlerWithContext<TU>>> stack,
-                Dictionary<int, Dictionary<FastHandlerWithContext<TU>, int>> fastHandlers,
+                Dictionary<int, HandlerActionCache<FastHandlerWithContext<TU>>> fastHandlers,
                 ref TMessage message,
                 int priority
             )
@@ -2474,7 +2497,7 @@
                 if (
                     !fastHandlers.TryGetValue(
                         priority,
-                        out Dictionary<FastHandlerWithContext<TU>, int> priorityHandlers
+                        out HandlerActionCache<FastHandlerWithContext<TU>> cache
                     )
                 )
                 {
@@ -2483,20 +2506,49 @@
 
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
 
-                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(
-                    ref stack,
-                    priorityHandlers.Keys
-                );
-                try
+                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(cache);
+                switch (handlers.Count)
                 {
-                    foreach (FastHandlerWithContext<TU> fastHandler in handlers)
+                    case 1:
                     {
-                        fastHandler(ref context, ref typedMessage);
+                        handlers[0](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](ref context, ref typedMessage);
+                        handlers[1](ref context, ref typedMessage);
+                        handlers[2](ref context, ref typedMessage);
+                        handlers[3](ref context, ref typedMessage);
+                        handlers[4](ref context, ref typedMessage);
+                        return;
                     }
                 }
-                finally
+
+                foreach (FastHandlerWithContext<TU> fastHandler in handlers)
                 {
-                    stack.Push(handlers);
+                    fastHandler(ref context, ref typedMessage);
                 }
             }
 
@@ -2504,7 +2556,7 @@
                 ref InstanceId context,
                 Dictionary<
                     InstanceId,
-                    Dictionary<int, Dictionary<Action<T>, int>>
+                    Dictionary<int, HandlerActionCache<Action<T>>>
                 > handlersByContext,
                 ref TMessage message,
                 int priority
@@ -2515,18 +2567,18 @@
                     handlersByContext is not { Count: > 0 }
                     || !handlersByContext.TryGetValue(
                         context,
-                        out Dictionary<int, Dictionary<Action<T>, int>> handlers
+                        out Dictionary<int, HandlerActionCache<Action<T>>> cache
                     )
                 )
                 {
                     return;
                 }
 
-                RunHandlers(handlers, ref message, priority);
+                RunHandlers(cache, ref message, priority);
             }
 
             private static void RunHandlers<TMessage>(
-                Dictionary<int, Dictionary<Action<T>, int>> sortedHandlers,
+                Dictionary<int, HandlerActionCache<Action<T>>> sortedHandlers,
                 ref TMessage message,
                 int priority
             )
@@ -2537,33 +2589,62 @@
                     return;
                 }
 
-                if (!sortedHandlers.TryGetValue(priority, out Dictionary<Action<T>, int> handlers))
+                if (!sortedHandlers.TryGetValue(priority, out HandlerActionCache<Action<T>> cache))
                 {
                     return;
                 }
 
-                List<Action<T>> typedHandlers = GetOrAddNewHandlerStack(
-                    ref HandlersStack,
-                    handlers.Keys
-                );
-                try
-                {
-                    ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
+                List<Action<T>> handlers = GetOrAddNewHandlerStack(cache);
+                ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
-                    foreach (Action<T> handler in typedHandlers)
+                switch (handlers.Count)
+                {
+                    case 1:
                     {
-                        handler(typedMessage);
+                        handlers[0](typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        handlers[2](typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        handlers[2](typedMessage);
+                        handlers[3](typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        handlers[0](typedMessage);
+                        handlers[1](typedMessage);
+                        handlers[2](typedMessage);
+                        handlers[3](typedMessage);
+                        handlers[4](typedMessage);
+                        return;
                     }
                 }
-                finally
+
+                foreach (Action<T> handler in handlers)
                 {
-                    HandlersStack.Push(typedHandlers);
+                    handler(typedMessage);
                 }
             }
 
             private static void RunHandlers<TMessage>(
                 ref InstanceId context,
-                Dictionary<int, Dictionary<Action<InstanceId, T>, int>> handlers,
+                Dictionary<int, HandlerActionCache<Action<InstanceId, T>>> handlers,
                 ref TMessage message,
                 int priority
             )
@@ -2577,99 +2658,134 @@
                 if (
                     !handlers.TryGetValue(
                         priority,
-                        out Dictionary<Action<InstanceId, T>, int> handlersByPriority
+                        out HandlerActionCache<Action<InstanceId, T>> cache
                     )
                 )
                 {
                     return;
                 }
 
-                List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(
-                    ref HandlersWithoutContextStack,
-                    handlersByPriority.Keys
-                );
-                try
-                {
-                    ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
+                List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(cache);
+                ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
 
-                    foreach (Action<InstanceId, T> handler in typedHandlers)
+                switch (typedHandlers.Count)
+                {
+                    case 1:
                     {
-                        handler(context, typedMessage);
+                        typedHandlers[0](context, typedMessage);
+                        return;
+                    }
+                    case 2:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        return;
+                    }
+                    case 3:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        typedHandlers[2](context, typedMessage);
+                        return;
+                    }
+                    case 4:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        typedHandlers[2](context, typedMessage);
+                        typedHandlers[3](context, typedMessage);
+                        return;
+                    }
+                    case 5:
+                    {
+                        typedHandlers[0](context, typedMessage);
+                        typedHandlers[1](context, typedMessage);
+                        typedHandlers[2](context, typedMessage);
+                        typedHandlers[3](context, typedMessage);
+                        typedHandlers[4](context, typedMessage);
+                        return;
                     }
                 }
-                finally
+
+                foreach (Action<InstanceId, T> handler in typedHandlers)
                 {
-                    HandlersWithoutContextStack.Push(typedHandlers);
+                    handler(context, typedMessage);
                 }
             }
 
-            private static List<TU> GetOrAddNewHandlerStack<TU>(
-                ref Stack<List<TU>> stack,
-                Dictionary<TU, int>.KeyCollection handlers
-            )
+            private static List<TU> GetOrAddNewHandlerStack<TU>(HandlerActionCache<TU> actionCache)
             {
-                stack ??= new Stack<List<TU>>();
-                if (!stack.TryPop(out List<TU> typedHandlerStack))
+                if (actionCache.version == actionCache.lastSeenVersion)
                 {
-                    return new List<TU>(handlers);
+                    return actionCache.cache;
                 }
 
-                typedHandlerStack.Clear();
-                foreach (TU handler in handlers)
+                List<TU> cache = actionCache.cache;
+                cache.Clear();
+                foreach (TU handler in actionCache.handlers.Keys)
                 {
-                    typedHandlerStack.Add(handler);
+                    cache.Add(handler);
                 }
-                return typedHandlerStack;
+                actionCache.lastSeenVersion = actionCache.version;
+                return cache;
             }
 
             private static Action AddHandler<TU>(
                 InstanceId context,
-                ref Dictionary<InstanceId, Dictionary<int, Dictionary<TU, int>>> handlersByContext,
+                ref Dictionary<
+                    InstanceId,
+                    Dictionary<int, HandlerActionCache<TU>>
+                > handlersByContext,
                 TU handler,
                 Action deregistration,
                 int priority
             )
             {
                 handlersByContext ??=
-                    new Dictionary<InstanceId, Dictionary<int, Dictionary<TU, int>>>();
+                    new Dictionary<InstanceId, Dictionary<int, HandlerActionCache<TU>>>();
 
                 if (
                     !handlersByContext.TryGetValue(
                         context,
-                        out Dictionary<int, Dictionary<TU, int>> sortedHandlers
+                        out Dictionary<int, HandlerActionCache<TU>> sortedHandlers
                     )
                 )
                 {
-                    sortedHandlers = new Dictionary<int, Dictionary<TU, int>>();
+                    sortedHandlers = new Dictionary<int, HandlerActionCache<TU>>();
                     handlersByContext[context] = sortedHandlers;
                 }
 
-                if (!sortedHandlers.TryGetValue(priority, out Dictionary<TU, int> handlers))
+                if (!sortedHandlers.TryGetValue(priority, out HandlerActionCache<TU> cache))
                 {
-                    handlers = new Dictionary<TU, int>();
-                    sortedHandlers[priority] = handlers;
+                    cache = new HandlerActionCache<TU>();
+                    sortedHandlers[priority] = cache;
                 }
 
+                Dictionary<TU, int> handlers = cache.handlers;
                 int count = handlers.GetValueOrDefault(handler, 0);
 
                 handlers[handler] = count + 1;
 
                 Dictionary<
                     InstanceId,
-                    Dictionary<int, Dictionary<TU, int>>
+                    Dictionary<int, HandlerActionCache<TU>>
                 > localHandlersByContext = handlersByContext;
 
+                cache.version++;
                 return () =>
                 {
+                    cache.version++;
                     if (!localHandlersByContext.TryGetValue(context, out sortedHandlers))
                     {
                         return;
                     }
 
-                    if (!sortedHandlers.TryGetValue(priority, out handlers))
+                    if (!sortedHandlers.TryGetValue(priority, out cache))
                     {
                         return;
                     }
+
+                    handlers = cache.handlers;
 
                     if (!handlers.TryGetValue(handler, out count))
                     {
@@ -2701,22 +2817,25 @@
                 };
             }
 
-            private static Action AddHandler<TU>(
-                ref Dictionary<TU, int> handlersByPriority,
+            private Action AddHandler<TU>(
+                ref HandlerActionCache<TU> cache,
                 TU handler,
                 Action deregistration
             )
             {
-                handlersByPriority ??= new Dictionary<TU, int>();
-
+                cache ??= new HandlerActionCache<TU>();
+                Dictionary<TU, int> handlersByPriority = cache.handlers;
                 int count = handlersByPriority.GetValueOrDefault(handler, 0);
 
                 handlersByPriority[handler] = count + 1;
 
                 Dictionary<TU, int> localHandlers = handlersByPriority;
 
+                HandlerActionCache<TU> localCache = cache;
+                localCache.version++;
                 return () =>
                 {
+                    localCache.version++;
                     if (!localHandlers.TryGetValue(handler, out count))
                     {
                         return;
@@ -2734,40 +2853,37 @@
                 };
             }
 
-            private static Action AddHandler<TU>(
-                ref Dictionary<int, Dictionary<TU, int>> sortedHandlers,
+            private Action AddHandler<TU>(
+                ref Dictionary<int, HandlerActionCache<TU>> sortedHandlers,
                 TU handler,
                 Action deregistration,
                 int priority
             )
             {
-                sortedHandlers ??= new Dictionary<int, Dictionary<TU, int>>();
+                sortedHandlers ??= new Dictionary<int, HandlerActionCache<TU>>();
 
-                if (
-                    !sortedHandlers.TryGetValue(
-                        priority,
-                        out Dictionary<TU, int> handlersByPriority
-                    )
-                )
+                if (!sortedHandlers.TryGetValue(priority, out HandlerActionCache<TU> cache))
                 {
-                    handlersByPriority = new Dictionary<TU, int>();
-                    sortedHandlers[priority] = handlersByPriority;
+                    cache = new HandlerActionCache<TU>();
+                    sortedHandlers[priority] = cache;
                 }
 
-                int count = handlersByPriority.GetValueOrDefault(handler, 0);
+                int count = cache.handlers.GetValueOrDefault(handler, 0);
 
-                handlersByPriority[handler] = count + 1;
+                cache.handlers[handler] = count + 1;
 
-                Dictionary<int, Dictionary<TU, int>> localSortedHandlers = sortedHandlers;
+                Dictionary<int, HandlerActionCache<TU>> localSortedHandlers = sortedHandlers;
+                cache.version++;
 
                 return () =>
                 {
-                    if (!localSortedHandlers.TryGetValue(priority, out handlersByPriority))
+                    cache.version++;
+                    if (!localSortedHandlers.TryGetValue(priority, out cache))
                     {
                         return;
                     }
 
-                    if (!handlersByPriority.TryGetValue(handler, out count))
+                    if (!cache.handlers.TryGetValue(handler, out count))
                     {
                         return;
                     }
@@ -2776,15 +2892,15 @@
                     deregistration?.Invoke();
                     if (count <= 1)
                     {
-                        _ = handlersByPriority.Remove(handler);
-                        if (handlersByPriority.Count <= 0)
+                        _ = cache.handlers.Remove(handler);
+                        if (cache.handlers.Count == 0)
                         {
                             _ = localSortedHandlers.Remove(priority);
                         }
                         return;
                     }
 
-                    handlersByPriority[handler] = count - 1;
+                    cache.handlers[handler] = count - 1;
                 };
             }
         }
