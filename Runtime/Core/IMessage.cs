@@ -18,9 +18,6 @@
         /// This provides extremely fast runtime access to the type's ID
         /// without dictionary lookups.
         /// </remarks>
-        [global::System.Runtime.CompilerServices.MethodImpl(
-            global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
-        )]
         int GetSequentialId() => -1;
     }
 }

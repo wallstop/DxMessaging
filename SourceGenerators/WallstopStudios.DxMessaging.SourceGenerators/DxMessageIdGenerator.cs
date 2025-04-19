@@ -3,6 +3,7 @@
     using System;
     using System.Collections.Generic;
     using System.Collections.Immutable;
+    using System.Diagnostics;
     using System.Linq;
     using System.Text;
     using System.Threading;
@@ -232,6 +233,7 @@
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
 
+                //Debugger.Launch();
                 // Generate the Metadata class source
                 string metadataSource = GenerateMetadataSource(messageInfo.TypeSymbol);
                 string metadataHintName =
@@ -266,12 +268,12 @@
                 ? string.Empty
                 : typeSymbol.ContainingNamespace.ToDisplayString();
             string namespaceBlockOpen = string.IsNullOrEmpty(namespaceName)
-                ? ""
+                ? "namespace\n{"
                 : $"namespace {namespaceName}\n{{";
             const string bracketOpen = "{";
             const string bracketClosed = "}";
-            string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? "" : "}";
-            string indent = string.IsNullOrEmpty(namespaceName) ? "" : "    ";
+            const string namespaceBlockClose = "}";
+            const string indent = "    ";
 
             string typeNameMinimal = typeSymbol.ToDisplayString(
                 SymbolDisplayFormat.MinimallyQualifiedFormat
@@ -343,14 +345,14 @@
                 #nullable enable annotations
 
                 {{namespaceBlockOpen}}
-                {{indent}}}/// <summary>
-                {{indent}}}/// Internal metadata storage for message type <see cref="{{typeNameMinimal}}"/>. Populated by runtime initialization.
-                {{indent}}}/// </summary>
-                {{indent}}}internal static class {{metadataClassName}}{{genericParameters}}{{genericConstraints}}
-                {{indent}}}{{bracketOpen}}
-                {{indent}}}    public static int SequentialId = -1;
-                {{indent}}}    public static readonly string TypeKey = "{{typeKey}}";
-                {{indent}}}{{bracketClosed}}
+                {{indent}}/// <summary>
+                {{indent}}/// Internal metadata storage for message type <see cref="{{typeNameMinimal}}"/>. Populated by runtime initialization.
+                {{indent}}/// </summary>
+                {{indent}}internal static class {{metadataClassName}}{{genericParameters}}{{genericConstraints}}
+                {{indent}}{{bracketOpen}}
+                {{indent}}    public static int SequentialId = -1;
+                {{indent}}    public static readonly string TypeKey = "{{typeKey}}";
+                {{indent}}{{bracketClosed}}
                 {{namespaceBlockClose}}
                 """;
         }
@@ -365,10 +367,10 @@
                 ? string.Empty
                 : typeSymbol.ContainingNamespace.ToDisplayString();
             string namespaceBlockOpen = string.IsNullOrEmpty(namespaceName)
-                ? ""
+                ? "namespace\n{"
                 : $"namespace {namespaceName}\n{{";
-            string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? "" : "}";
-            string indent = string.IsNullOrEmpty(namespaceName) ? "" : "    ";
+            const string namespaceBlockClose = "}";
+            const string indent = "    ";
 
             string typeNameWithGenerics = typeSymbol.ToDisplayString(
                 SymbolDisplayFormat.MinimallyQualifiedFormat
@@ -393,12 +395,26 @@
             };
 
             // Construct the name of the corresponding metadata class
-            string metadataClassName = $"DxMsgMeta_{typeSymbol.Name}"; // Must match GenerateMetadataSource
+            string metadataClassName = $"DxMsgMeta_{typeSymbol.Name.Split('`')[0]}"; // Use base name
 
             // Fully qualified name needed if in a namespace
             string metadataClassFullName = string.IsNullOrEmpty(namespaceName)
                 ? metadataClassName
                 : $"{namespaceName}.{metadataClassName}";
+
+            string metadataTypeAccessString;
+            if (typeSymbol.Arity > 0)
+            {
+                // Append generic type arguments ONLY if the type is generic
+                string genericArguments =
+                    "<" + string.Join(", ", typeSymbol.TypeParameters.Select(p => p.Name)) + ">";
+                metadataTypeAccessString = $"{metadataClassFullName}{genericArguments}"; // e.g., Namespace.DxMsgMeta_MyGeneric<T>
+            }
+            else
+            {
+                // Use the plain name if the type is not generic
+                metadataTypeAccessString = metadataClassFullName; // e.g., Namespace.DxMsgMeta_MyNonGeneric
+            }
 
             string interfaceDeclaration = $", global::{targetInterfaceFullName}";
 
@@ -408,16 +424,16 @@
                 #nullable enable annotations
 
                 {{namespaceBlockOpen}}
-                {{indent}}}// Partial implementation for {{typeNameWithGenerics}} to implement {{BaseInterfaceFullName}}
-                {{indent}}}{{accessibility}}partial {{typeKind}} {{typeNameWithGenerics}} : global::{{BaseInterfaceFullName}} {{interfaceDeclaration}}
-                {{indent}}}{
-                {{indent}}}    /// <inheritdoc/>
-                {{indent}}}    global::System.Type global::{{BaseInterfaceFullName}}.MessageType => typeof({{fullyQualifiedName}});
+                {{indent}}// Partial implementation for {{typeNameWithGenerics}} to implement {{BaseInterfaceFullName}}
+                {{indent}}{{accessibility}}partial {{typeKind}} {{typeNameWithGenerics}} : global::{{BaseInterfaceFullName}} {{interfaceDeclaration}}
+                {{indent}}{
+                {{indent}}    /// <inheritdoc/>
+                {{indent}}    public global::System.Type MessageType => typeof({{fullyQualifiedName}});
 
-                {{indent}}}    /// <inheritdoc/>
-                {{indent}}}    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-                {{indent}}}    public int GetSequentialId() => {{metadataClassFullName}}<{{typeNameWithGenerics}}>.SequentialId;
-                {{indent}}} }
+                {{indent}}    /// <inheritdoc/>
+                {{indent}}    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+                {{indent}}    public int GetSequentialId() => {{metadataTypeAccessString}}.SequentialId;
+                {{indent}}}
                 {{namespaceBlockClose}}
                 """;
         }
