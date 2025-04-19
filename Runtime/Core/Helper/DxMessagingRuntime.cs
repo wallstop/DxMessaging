@@ -4,12 +4,24 @@
     using System.Collections.Generic;
     using System.Reflection;
     using Core;
-#if UNITY_EDITOR
+    using Messages;
+#if UNITY_2017_1_OR_NEWER
     using UnityEngine;
 #endif
     public static class DxMessagingRuntime
     {
         public static int TotalMessageTypes { get; private set; }
+
+        public static bool Initialized
+        {
+            get
+            {
+                lock (InitializationLock)
+                {
+                    return _isInitialized;
+                }
+            }
+        }
 
         private static bool _isInitialized;
         private static readonly object InitializationLock = new();
@@ -19,7 +31,7 @@
             Initialize();
         }
 
-#if UNITY_EDITOR
+#if UNITY_2017_1_OR_NEWER
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
 #endif
         public static void Initialize()
@@ -55,25 +67,54 @@
 
                     foreach (Type type in types)
                     {
-                        if (type == null)
+                        try
                         {
-                            continue;
-                        }
+                            if (type == null)
+                            {
+                                continue;
+                            }
 
-                        if (
-                            !typeof(IMessage).IsAssignableFrom(type)
-                            || type.IsInterface
-                            || type.IsAbstract
-                        )
-                        {
-                            continue;
-                        }
+                            if (!typeof(IMessage).IsAssignableFrom(type))
+                            {
+                                continue;
+                            }
 
-                        if (uniqueTypes.Add(type))
+                            if (type.IsGenericTypeDefinition)
+                            {
+                                continue;
+                            }
+
+                            if (uniqueTypes.Add(type))
+                            {
+                                messageTypes.Add(type);
+                            }
+                        }
+                        catch (Exception e)
                         {
-                            messageTypes.Add(type);
+                            Log(
+                                () =>
+                                    $"Error checking if {type?.FullName} is assignable from IMessage: {e}",
+                                isError: true
+                            );
                         }
                     }
+                }
+
+                if (uniqueTypes.Add(typeof(IMessage)))
+                {
+                    messageTypes.Add(typeof(IMessage));
+                }
+                if (uniqueTypes.Add(typeof(ITargetedMessage)))
+                {
+                    messageTypes.Add(typeof(ITargetedMessage));
+                }
+                if (uniqueTypes.Add(typeof(IBroadcastMessage)))
+                {
+                    messageTypes.Add(typeof(IBroadcastMessage));
+                }
+                if (uniqueTypes.Add(typeof(IUntargetedMessage)))
+                {
+                    messageTypes.Add(typeof(IUntargetedMessage));
                 }
 
                 messageTypes.Sort(
@@ -105,7 +146,7 @@
                         {
                             Log(
                                 () =>
-                                    $"Error: Could not find field for SequentialId on MessageHelperIndexer<{messageType.Name}>.",
+                                    $"Error: Could not find field for SequentialId on MessageHelperIndexer<{messageType.FullName}>.",
                                 isError: true
                             );
                         }
@@ -133,8 +174,7 @@
             try
             {
                 string message = messageProducer();
-#if UNITY_EDITOR
-
+#if UNITY_2017_1_OR_NEWER
                 if (isError)
                 {
                     Debug.LogError(message);
@@ -147,9 +187,14 @@
                 Console.WriteLine(message);
 #endif
             }
-            catch
+            catch (Exception e)
             {
-                // Swallow
+                string errorMessage = $"Error logging message: {e}";
+#if UNITY_2017_1_OR_NEWER
+                Debug.LogError(errorMessage);
+#else
+                Console.WriteLine(errorMessage);
+#endif
             }
         }
     }

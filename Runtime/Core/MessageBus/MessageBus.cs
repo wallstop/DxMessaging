@@ -3,6 +3,8 @@
     using System;
     using System.Collections.Generic;
     using System.Reflection;
+    using System.Threading;
+    using Helper;
     using Messages;
     using static IMessageBus;
 
@@ -34,12 +36,14 @@
                 int count = 0;
                 foreach (var entry in _targetedSinks)
                 {
-                    count += entry.Value.Count;
+                    count += entry.Count;
                 }
 
                 return count;
             }
         }
+
+        public int RegisteredGlobalSequentialIndex { get; private set; }
 
         public int RegisteredBroadcast
         {
@@ -48,7 +52,7 @@
                 int count = 0;
                 foreach (var entry in _broadcastSinks)
                 {
-                    count += entry.Value.Count;
+                    count += entry.Count;
                 }
 
                 return count;
@@ -62,7 +66,7 @@
                 int count = 0;
                 foreach (var entry in _sinks)
                 {
-                    count += entry.Value.handlers.Count;
+                    count += entry.handlers.Count;
                 }
 
                 return count;
@@ -86,36 +90,28 @@
 
         public RegistrationLog Log => _log;
 
-        private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _sinks = new();
-        private readonly Dictionary<
-            Type,
+        private readonly MessageCache<HandlerCache<int, HandlerCache>> _sinks = new();
+        private readonly MessageCache<
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _targetedSinks = new();
-        private readonly Dictionary<
-            Type,
+        private readonly MessageCache<
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _broadcastSinks = new();
-        private readonly Dictionary<Type, HandlerCache<int, HandlerCache>> _postProcessingSinks =
-            new();
-        private readonly Dictionary<
-            Type,
+        private readonly MessageCache<HandlerCache<int, HandlerCache>> _postProcessingSinks = new();
+        private readonly MessageCache<
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingTargetedSinks = new();
-        private readonly Dictionary<
-            Type,
+        private readonly MessageCache<
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
         > _postProcessingBroadcastSinks = new();
-        private readonly Dictionary<
-            Type,
+        private readonly MessageCache<
             HandlerCache<int, HandlerCache>
         > _postProcessingTargetedWithoutTargetingSinks = new();
-        private readonly Dictionary<
-            Type,
+        private readonly MessageCache<
             HandlerCache<int, HandlerCache>
         > _postProcessingBroadcastWithoutSourceSinks = new();
         private readonly HandlerCache _globalSinks = new();
-        private readonly Dictionary<Type, HandlerCache<int, List<object>>> _interceptsByType =
-            new();
+        private readonly MessageCache<HandlerCache<int, List<object>>> _interceptsByType = new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
@@ -123,6 +119,19 @@
         private readonly Stack<List<object>> _innerInterceptorsStack = new();
 
         private readonly RegistrationLog _log = new();
+
+        static MessageBus()
+        {
+            if (!DxMessagingRuntime.Initialized)
+            {
+                DxMessagingRuntime.Initialize();
+            }
+        }
+
+        public MessageBus()
+        {
+            RegisteredGlobalSequentialIndex = Interlocked.Increment(ref GlobalSequentialIndex);
+        }
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
@@ -352,16 +361,8 @@
             where T : IMessage
         {
             Type type = typeof(T);
-            if (
-                !_interceptsByType.TryGetValue(
-                    type,
-                    out HandlerCache<int, List<object>> prioritizedInterceptors
-                )
-            )
-            {
-                prioritizedInterceptors = new HandlerCache<int, List<object>>();
-                _interceptsByType[type] = prioritizedInterceptors;
-            }
+            HandlerCache<int, List<object>> prioritizedInterceptors =
+                _interceptsByType.GetOrAdd<T>();
 
             if (
                 !prioritizedInterceptors.handlers.TryGetValue(
@@ -446,7 +447,7 @@
                 bool complete = false;
                 if (removed)
                 {
-                    if (_interceptsByType.TryGetValue(type, out prioritizedInterceptors))
+                    if (_interceptsByType.TryGetValue<T>(out prioritizedInterceptors))
                     {
                         prioritizedInterceptors.version++;
                         if (
@@ -499,8 +500,7 @@
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage
         {
-            Type type = typeof(TMessage);
-            if (!RunUntargetedInterceptors(type, ref typedMessage))
+            if (!RunUntargetedInterceptors(ref typedMessage))
             {
                 return;
             }
@@ -511,11 +511,10 @@
                 BroadcastGlobalUntargeted(ref untargetedMessage);
             }
 
-            bool foundAnyHandlers = InternalUntargetedBroadcast(ref typedMessage, type);
+            bool foundAnyHandlers = InternalUntargetedBroadcast(ref typedMessage);
 
             if (
-                _postProcessingSinks.TryGetValue(
-                    type,
+                _postProcessingSinks.TryGetValue<TMessage>(
                     out HandlerCache<int, HandlerCache> sortedHandlers
                 )
                 && 0 < sortedHandlers.handlers.Count
@@ -697,8 +696,7 @@
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
             where TMessage : ITargetedMessage
         {
-            Type type = typeof(TMessage);
-            if (!RunTargetedInterceptors(type, ref typedMessage, ref target))
+            if (!RunTargetedInterceptors(ref typedMessage, ref target))
             {
                 return;
             }
@@ -711,8 +709,7 @@
 
             bool foundAnyHandlers = false;
             if (
-                _targetedSinks.TryGetValue(
-                    type,
+                _targetedSinks.TryGetValue<TMessage>(
                     out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers
                 )
                 && targetedHandlers.TryGetValue(
@@ -795,10 +792,10 @@
                 }
             }
 
-            _ = InternalTargetedWithoutTargetingBroadcast(ref target, ref typedMessage, type);
+            _ = InternalTargetedWithoutTargetingBroadcast(ref target, ref typedMessage);
 
             if (
-                _postProcessingTargetedSinks.TryGetValue(type, out targetedHandlers)
+                _postProcessingTargetedSinks.TryGetValue<TMessage>(out targetedHandlers)
                 && targetedHandlers.TryGetValue(target, out sortedHandlers)
                 && 0 < sortedHandlers.handlers.Count
             )
@@ -952,7 +949,9 @@
             }
 
             if (
-                _postProcessingTargetedWithoutTargetingSinks.TryGetValue(type, out sortedHandlers)
+                _postProcessingTargetedWithoutTargetingSinks.TryGetValue<TMessage>(
+                    out sortedHandlers
+                )
                 && 0 < sortedHandlers.handlers.Count
             )
             {
@@ -1435,8 +1434,7 @@
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
             where TMessage : IBroadcastMessage
         {
-            Type type = typeof(TMessage);
-            if (!RunBroadcastInterceptors(type, ref typedMessage, ref source))
+            if (!RunBroadcastInterceptors(ref typedMessage, ref source))
             {
                 return;
             }
@@ -1449,8 +1447,7 @@
 
             bool foundAnyHandlers = false;
             if (
-                _broadcastSinks.TryGetValue(
-                    type,
+                _broadcastSinks.TryGetValue<TMessage>(
                     out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers
                 )
                 && broadcastHandlers.TryGetValue(
@@ -1528,10 +1525,10 @@
                 }
             }
 
-            _ = InternalBroadcastWithoutSource(ref source, ref typedMessage, type);
+            _ = InternalBroadcastWithoutSource(ref source, ref typedMessage);
 
             if (
-                _postProcessingBroadcastSinks.TryGetValue(type, out broadcastHandlers)
+                _postProcessingBroadcastSinks.TryGetValue<TMessage>(out broadcastHandlers)
                 && broadcastHandlers.TryGetValue(source, out sortedHandlers)
                 && 0 < sortedHandlers.handlers.Count
             )
@@ -1685,7 +1682,7 @@
             }
 
             if (
-                _postProcessingBroadcastWithoutSourceSinks.TryGetValue(type, out sortedHandlers)
+                _postProcessingBroadcastWithoutSourceSinks.TryGetValue<TMessage>(out sortedHandlers)
                 && 0 < sortedHandlers.handlers.Count
             )
             {
@@ -2138,15 +2135,14 @@
             }
         }
 
-        private bool TryGetInterceptorCaches(
-            Type type,
+        private bool TryGetInterceptorCaches<TMessage>(
             out List<KeyValuePair<int, List<object>>> interceptorStack,
             out List<object> interceptorObjects
         )
+            where TMessage : IMessage
         {
             if (
-                !_interceptsByType.TryGetValue(
-                    type,
+                !_interceptsByType.TryGetValue<TMessage>(
                     out HandlerCache<int, List<object>> interceptors
                 )
                 || interceptors.handlers.Count == 0
@@ -2179,12 +2175,11 @@
             return true;
         }
 
-        private bool RunUntargetedInterceptors<T>(Type type, ref T message)
+        private bool RunUntargetedInterceptors<T>(ref T message)
             where T : IUntargetedMessage
         {
             if (
-                !TryGetInterceptorCaches(
-                    type,
+                !TryGetInterceptorCaches<T>(
                     out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
@@ -2225,12 +2220,11 @@
             return true;
         }
 
-        private bool RunTargetedInterceptors<T>(Type type, ref T message, ref InstanceId target)
+        private bool RunTargetedInterceptors<T>(ref T message, ref InstanceId target)
             where T : ITargetedMessage
         {
             if (
-                !TryGetInterceptorCaches(
-                    type,
+                !TryGetInterceptorCaches<T>(
                     out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
@@ -2271,12 +2265,11 @@
             return true;
         }
 
-        private bool RunBroadcastInterceptors<T>(Type type, ref T message, ref InstanceId source)
+        private bool RunBroadcastInterceptors<T>(ref T message, ref InstanceId source)
             where T : IBroadcastMessage
         {
             if (
-                !TryGetInterceptorCaches(
-                    type,
+                !TryGetInterceptorCaches<T>(
                     out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
@@ -2317,11 +2310,11 @@
             return true;
         }
 
-        private bool InternalUntargetedBroadcast<TMessage>(ref TMessage message, Type type)
+        private bool InternalUntargetedBroadcast<TMessage>(ref TMessage message)
             where TMessage : IMessage
         {
             if (
-                !_sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> sortedHandlers)
+                !_sinks.TryGetValue<TMessage>(out HandlerCache<int, HandlerCache> sortedHandlers)
                 || sortedHandlers.handlers.Count == 0
             )
             {
@@ -2452,13 +2445,12 @@
 
         private bool InternalTargetedWithoutTargetingBroadcast<TMessage>(
             ref InstanceId target,
-            ref TMessage message,
-            Type type
+            ref TMessage message
         )
             where TMessage : ITargetedMessage
         {
             if (
-                !_sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> sortedHandlers)
+                !_sinks.TryGetValue<TMessage>(out HandlerCache<int, HandlerCache> sortedHandlers)
                 || sortedHandlers.handlers.Count == 0
             )
             {
@@ -2607,13 +2599,12 @@
 
         private bool InternalBroadcastWithoutSource<TMessage>(
             ref InstanceId source,
-            ref TMessage message,
-            Type type
+            ref TMessage message
         )
             where TMessage : IBroadcastMessage
         {
             if (
-                !_sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> sortedHandlers)
+                !_sinks.TryGetValue<TMessage>(out HandlerCache<int, HandlerCache> sortedHandlers)
                 || sortedHandlers.handlers.Count == 0
             )
             {
@@ -2841,7 +2832,7 @@
 
         private Action InternalRegisterUntargeted<T>(
             MessageHandler messageHandler,
-            Dictionary<Type, HandlerCache<int, HandlerCache>> sinks,
+            MessageCache<HandlerCache<int, HandlerCache>> sinks,
             RegistrationMethod registrationMethod,
             int priority
         )
@@ -2855,11 +2846,7 @@
             InstanceId handlerOwnerId = messageHandler.owner;
             Type type = typeof(T);
 
-            if (!sinks.TryGetValue(type, out HandlerCache<int, HandlerCache> handlers))
-            {
-                handlers = new HandlerCache<int, HandlerCache>();
-                sinks[type] = handlers;
-            }
+            HandlerCache<int, HandlerCache> handlers = sinks.GetOrAdd<T>();
 
             if (!handlers.handlers.TryGetValue(priority, out HandlerCache cache))
             {
@@ -2894,7 +2881,7 @@
                     )
                 );
                 if (
-                    !sinks.TryGetValue(type, out handlers)
+                    !sinks.TryGetValue<T>(out handlers)
                     || !handlers.handlers.TryGetValue(priority, out cache)
                     || !cache.handlers.TryGetValue(messageHandler, out count)
                 )
@@ -2925,7 +2912,7 @@
 
                     if (handlers.handlers.Count == 0)
                     {
-                        _ = sinks.Remove(type);
+                        sinks.Remove<T>();
                     }
 
                     if (!complete && MessagingDebug.enabled)
@@ -2948,10 +2935,11 @@
         private Action InternalRegisterWithContext<T>(
             InstanceId context,
             MessageHandler messageHandler,
-            Dictionary<Type, Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> sinks,
+            MessageCache<Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> sinks,
             RegistrationMethod registrationMethod,
             int priority
         )
+            where T : IMessage
         {
             if (messageHandler == null)
             {
@@ -2959,16 +2947,8 @@
             }
 
             Type type = typeof(T);
-            if (
-                !sinks.TryGetValue(
-                    type,
-                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers
-                )
-            )
-            {
-                broadcastHandlers = new Dictionary<InstanceId, HandlerCache<int, HandlerCache>>();
-                sinks[type] = broadcastHandlers;
-            }
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers =
+                sinks.GetOrAdd<T>();
 
             if (
                 !broadcastHandlers.TryGetValue(
@@ -3014,7 +2994,7 @@
                     )
                 );
                 if (
-                    !sinks.TryGetValue(type, out broadcastHandlers)
+                    !sinks.TryGetValue<T>(out broadcastHandlers)
                     || !broadcastHandlers.TryGetValue(context, out handlers)
                     || !handlers.handlers.TryGetValue(priority, out cache)
                     || !cache.handlers.TryGetValue(messageHandler, out count)
@@ -3050,7 +3030,7 @@
 
                     if (broadcastHandlers.Count == 0)
                     {
-                        _ = sinks.Remove(type);
+                        sinks.Remove<T>();
                     }
 
                     if (!complete && MessagingDebug.enabled)

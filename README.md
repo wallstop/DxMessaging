@@ -33,16 +33,18 @@ Check out the latest [Releases](https://github.com/wallstop/DxMessaging/releases
 Grab a copy of this repo (either `git clone` both [this repo](https://github.com/wallstop/DxMessaging) *and* [Unity Helpers](https://github.com/wallstop/unity-helpers) or [download a zip of the source](https://github.com/wallstop/DxMessaging/archive/refs/heads/master.zip) and [Unity Helper's source](https://github.com/wallstop/unity-helpers/archive/refs/heads/main.zip)) and copy the contents to your project's `Assets` folder.
 
 # Benchmarks
-DxMessaging is currently roughly on-par with than Unity's built in messaging solution (when running in Unity). [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs). However, it is allocation-free and can be used in hot paths.
+In addition to providing a richer feature set, DxMessaging is *faster* than Unity's built in messaging solution. [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs). It is allocation-free and can be used in hot paths. 
+
+For Untargetedmessages, it is significantly faster (roughly 2x)
 
 | Message Tech | Operations / Second | Allocations? |
 | ------------ | ------------------- | ------------ | 
-| Unity | 2,621,200 | Yes |
-| DxMessaging (GameObject) - Normal | 2,048,600 | No |
-| DxMessaging (Component) - Normal | 2,054,600 | No |
-| DxMessaging (GameObject) - No-Copy | 2,137,800 | No |
-| DxMessaging (Component) - No-Copy | 2,136,400 | No |
-| DxMessaging (Untargeted) - No-Copy | 3,028,400 | No |
+| Unity | 2,684,400 | Yes |
+| DxMessaging (GameObject) - Normal | 2,740,600 | No |
+| DxMessaging (Component) - Normal | 2,746,600 | No |
+| DxMessaging (GameObject) - No-Copy | 2,889,800 | No |
+| DxMessaging (Component) - No-Copy | 2,864,200 | No |
+| DxMessaging (Untargeted) - No-Copy | 4,430,800 | No |
 
 # Functionality
 While not as fast, DxMessaging offers *additional functionality* as compared to Unity's messaging solution.

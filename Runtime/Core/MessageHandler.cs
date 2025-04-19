@@ -2,8 +2,8 @@
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Runtime.CompilerServices;
+    using Helper;
     using MessageBus;
     using Messages;
 
@@ -18,6 +18,7 @@
     {
         public delegate void FastHandler<TMessage>(ref TMessage message)
             where TMessage : IMessage;
+
         public delegate void FastHandlerWithContext<TMessage>(
             ref InstanceId context,
             ref TMessage message
@@ -30,17 +31,6 @@
         public static readonly MessageBus.MessageBus MessageBus = new();
 
         /// <summary>
-        /// Maps Types to the corresponding Handler of that type.
-        /// </summary>
-        /// <note>
-        /// Ideally, this would be something like a Dictionary[T, Handler[T]], but that can't be done with C#s type system.
-        /// </note>
-        private readonly Dictionary<
-            IMessageBus,
-            Dictionary<Type, object>
-        > _handlersByTypeByMessageBus;
-
-        /// <summary>
         /// Whether this MessageHandler will process messages.
         /// </summary>
         public bool active;
@@ -50,10 +40,26 @@
         /// </summary>
         public readonly InstanceId owner;
 
+        /// <summary>
+        /// Maps Types to the corresponding Handler of that type.
+        /// </summary>
+        /// <note>
+        /// Ideally, this would be something like a Dictionary[T, Handler[T]], but that can't be done with C#s type system.
+        /// </note>
+        private readonly List<MessageCache<object>> _handlersByTypeByMessageBus;
+
+        static MessageHandler()
+        {
+            if (!DxMessagingRuntime.Initialized)
+            {
+                DxMessagingRuntime.Initialize();
+            }
+        }
+
         public MessageHandler(InstanceId owner)
         {
             this.owner = owner;
-            _handlersByTypeByMessageBus = new Dictionary<IMessageBus, Dictionary<Type, object>>();
+            _handlersByTypeByMessageBus = new List<MessageCache<object>>();
         }
 
         /// <summary>
@@ -77,13 +83,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleUntargeted(ref message, priority);
             }
@@ -110,13 +110,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleUntargetedPostProcessing(ref message, priority);
             }
@@ -145,13 +139,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleTargeted(ref target, ref message, priority);
             }
@@ -180,13 +168,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleTargetedWithoutTargeting(ref target, ref message, priority);
             }
@@ -215,13 +197,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleTargetedPostProcessing(ref target, ref message, priority);
             }
@@ -250,13 +226,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleTargetedWithoutTargetingPostProcessing(
                     ref target,
@@ -289,13 +259,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleSourcedBroadcast(ref source, ref message, priority);
             }
@@ -324,13 +288,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleSourcedBroadcastWithoutSource(ref source, ref message, priority);
             }
@@ -359,13 +317,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleSourcedBroadcastPostProcessing(ref source, ref message, priority);
             }
@@ -394,13 +346,7 @@
                 return;
             }
 
-            if (
-                GetHandlerForType(
-                    message.MessageType,
-                    messageBus,
-                    out TypedHandler<TMessage> handler
-                )
-            )
+            if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
                 handler.HandleBroadcastWithoutSourcePostProcessing(
                     ref source,
@@ -426,7 +372,7 @@
             }
 
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
-            if (GetHandlerForType(typeof(IMessage), messageBus, out TypedHandler<IMessage> handler))
+            if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
                 handler.HandleGlobalUntargeted(ref message);
             }
@@ -450,7 +396,7 @@
             }
 
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
-            if (GetHandlerForType(typeof(IMessage), messageBus, out TypedHandler<IMessage> handler))
+            if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
                 handler.HandleGlobalTargeted(ref target, ref message);
             }
@@ -474,7 +420,7 @@
             }
 
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
-            if (GetHandlerForType(typeof(IMessage), messageBus, out TypedHandler<IMessage> handler))
+            if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
                 handler.HandleGlobalBroadcast(ref source, ref message);
             }
@@ -1265,18 +1211,7 @@
 
         public override string ToString()
         {
-            return new
-            {
-                OwnerId = owner,
-                HandlerTypes = string.Join(
-                    ",",
-                    _handlersByTypeByMessageBus
-                        .Values.SelectMany(handlers => handlers.Keys)
-                        .Distinct()
-                        .Select(type => type.Name)
-                        .OrderBy(x => x)
-                ),
-            }.ToString();
+            return new { OwnerId = owner }.ToString();
         }
 
         /// <summary>
@@ -1287,48 +1222,45 @@
         private TypedHandler<T> GetOrCreateHandlerForType<T>(IMessageBus messageBus)
             where T : IMessage
         {
-            Type type = typeof(T);
-
-            if (
-                !_handlersByTypeByMessageBus.TryGetValue(
-                    messageBus,
-                    out Dictionary<Type, object> handlersByType
-                )
-            )
+            int messageBusIndex = messageBus.RegisteredGlobalSequentialIndex;
+            while (_handlersByTypeByMessageBus.Count <= messageBus.RegisteredGlobalSequentialIndex)
             {
-                handlersByType = new Dictionary<Type, object>();
-                _handlersByTypeByMessageBus[messageBus] = handlersByType;
+                _handlersByTypeByMessageBus.Add(new MessageCache<object>());
             }
 
-            if (handlersByType.TryGetValue(type, out object existingTypedHandler))
+            MessageCache<object> handlersByType = _handlersByTypeByMessageBus[messageBusIndex];
+            if (handlersByType.TryGetValue<T>(out object untypedHandler))
             {
-                return (TypedHandler<T>)existingTypedHandler;
+                return (TypedHandler<T>)untypedHandler;
             }
 
-            TypedHandler<T> newTypedHandler = new();
-            handlersByType[type] = newTypedHandler;
-            return newTypedHandler;
+            TypedHandler<T> typedHandler = new();
+            handlersByType.Set<T>(typedHandler);
+            return typedHandler;
         }
 
         /// <summary>
         /// Gets an existing Handler for the specific type if it exists.
         /// </summary>
-        /// <param name="type">Message type to get the handler for.</param>
         /// <param name="messageBus">The specific MessageBus to use.</param>
         /// <param name="existingTypedHandler">Existing typed message handler, if one exists.</param>
         /// <returns>Existing handler for the specific type, or null if none exists.</returns>
         private bool GetHandlerForType<T>(
-            Type type,
             IMessageBus messageBus,
             out TypedHandler<T> existingTypedHandler
         )
             where T : IMessage
         {
+            int messageBusIndex = messageBus.RegisteredGlobalSequentialIndex;
+            if (_handlersByTypeByMessageBus.Count <= messageBusIndex)
+            {
+                existingTypedHandler = default;
+                return false;
+            }
+
             if (
-                _handlersByTypeByMessageBus.TryGetValue(
-                    messageBus,
-                    out Dictionary<Type, object> handlersByType
-                ) && handlersByType.TryGetValue(type, out object untypedHandler)
+                _handlersByTypeByMessageBus[messageBusIndex]
+                    .TryGetValue<T>(out object untypedHandler)
             )
             {
                 existingTypedHandler = (TypedHandler<T>)untypedHandler;
