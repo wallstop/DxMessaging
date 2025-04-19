@@ -9,6 +9,9 @@
     /// </summary>
     public interface IMessageBus
     {
+        public static int GlobalSequentialIndex = -1;
+
+        public int RegisteredGlobalSequentialIndex { get; }
         public int RegisteredBroadcast { get; }
 
         public int RegisteredTargeted { get; }
@@ -25,7 +28,7 @@
             where TMessage : IUntargetedMessage;
 
         /// <summary>
-        /// Given an Targeted message and its target, determines whether or not it should be processed or skipped.
+        /// Given a Targeted message and its target, determines whether or not it should be processed or skipped.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="target">Target of the message.</param>
@@ -38,7 +41,7 @@
             where TMessage : ITargetedMessage;
 
         /// <summary>
-        /// Given an Broadcast message and its source, determines whether or not it should be processed or skipped.
+        /// Given a Broadcast message and its source, determines whether or not it should be processed or skipped.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="source">Source of the message.</param>
