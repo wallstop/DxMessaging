@@ -1223,7 +1223,7 @@
             where T : IMessage
         {
             int messageBusIndex = messageBus.RegisteredGlobalSequentialIndex;
-            while (_handlersByTypeByMessageBus.Count <= messageBus.RegisteredGlobalSequentialIndex)
+            while (_handlersByTypeByMessageBus.Count <= messageBusIndex)
             {
                 _handlersByTypeByMessageBus.Add(new MessageCache<object>());
             }
