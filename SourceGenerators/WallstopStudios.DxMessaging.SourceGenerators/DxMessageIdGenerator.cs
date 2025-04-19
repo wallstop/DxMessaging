@@ -3,7 +3,6 @@
     using System;
     using System.Collections.Generic;
     using System.Collections.Immutable;
-    using System.Diagnostics;
     using System.Linq;
     using System.Text;
     using System.Threading;
@@ -233,18 +232,6 @@
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
 
-                //Debugger.Launch();
-                // Generate the Metadata class source
-                string metadataSource = GenerateMetadataSource(messageInfo.TypeSymbol);
-                string metadataHintName =
-                    $"{messageInfo.TypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.Metadata.g.cs"
-                        .Replace("global::", "")
-                        .Replace("<", "_")
-                        .Replace(">", "_")
-                        .Replace(",", "_"); // Clean hint name
-
-                context.AddSource(metadataHintName, SourceText.From(metadataSource, Encoding.UTF8));
-
                 // Generate the partial IMessage implementation source
                 string implSource = GenerateImplementationSource(
                     messageInfo.TargetInterfaceFullName,
@@ -259,102 +246,6 @@
 
                 context.AddSource(implHintName, SourceText.From(implSource, Encoding.UTF8));
             }
-        }
-
-        // Generates the MessageMetadata<T> class
-        private static string GenerateMetadataSource(INamedTypeSymbol typeSymbol)
-        {
-            string namespaceName = typeSymbol.ContainingNamespace.IsGlobalNamespace
-                ? string.Empty
-                : typeSymbol.ContainingNamespace.ToDisplayString();
-            string namespaceBlockOpen = string.IsNullOrEmpty(namespaceName)
-                ? "namespace\n{"
-                : $"namespace {namespaceName}\n{{";
-            const string bracketOpen = "{";
-            const string bracketClosed = "}";
-            const string namespaceBlockClose = "}";
-            const string indent = "    ";
-
-            string typeNameMinimal = typeSymbol.ToDisplayString(
-                SymbolDisplayFormat.MinimallyQualifiedFormat
-            );
-            string fullyQualifiedName = typeSymbol.ToDisplayString(
-                SymbolDisplayFormat.FullyQualifiedFormat
-            );
-            string typeKey = fullyQualifiedName.StartsWith("global::")
-                ? fullyQualifiedName.Substring("global::".Length)
-                : fullyQualifiedName;
-            typeKey = typeKey.Replace("\"", "\\\"");
-
-            // --- SIMPLIFIED METADATA CLASS NAME ---
-            // Use only the base name, rely on namespace and generic parameter for uniqueness.
-            // Remove Arity (`1) and nesting prefixes.
-            string metadataClassName = $"DxMsgMeta_{typeSymbol.Name}"; // Prefix ensures less likely to clash
-
-            // Prepare generic parameters string IF the type is generic
-            string genericParameters = "";
-            string genericConstraints = "";
-            if (typeSymbol.Arity > 0)
-            {
-                // Build "<T1, T2, ...>"
-                genericParameters =
-                    "<" + string.Join(", ", typeSymbol.TypeParameters.Select(p => p.Name)) + ">";
-
-                // Build "where T1 : constraints... where T2 : constraints..."
-                // Important: We need to copy existing constraints from the original type!
-                var constraintsBuilder = new StringBuilder();
-                foreach (var typeParam in typeSymbol.TypeParameters)
-                {
-                    var constraints = new List<string>();
-                    if (typeParam.HasReferenceTypeConstraint)
-                        constraints.Add("class");
-                    if (typeParam.HasValueTypeConstraint)
-                        constraints.Add("struct"); // Cannot have both class and struct
-                    if (typeParam.HasUnmanagedTypeConstraint)
-                        constraints.Add("unmanaged");
-                    if (typeParam.HasNotNullConstraint)
-                        constraints.Add("notnull"); // C# 8+
-                    // Add type constraints (interfaces, base classes)
-                    constraints.AddRange(
-                        typeParam.ConstraintTypes.Select(ct =>
-                            ct.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                        )
-                    );
-                    // Add constructor constraint
-                    if (typeParam.HasConstructorConstraint)
-                        constraints.Add("new()");
-
-                    if (constraints.Count > 0)
-                    {
-                        // Always add the IMessage constraint for safety, IF the type parameter doesn't already imply it strongly.
-                        // However, the runtime check relies on the actual message type implementing IMessage.
-                        // Let's just copy existing constraints for now. It's cleaner.
-                        // The `where TMessage : IMessage` isn't strictly needed on the metadata class itself.
-
-                        constraintsBuilder.Append(
-                            $" where {typeParam.Name} : {string.Join(", ", constraints)}"
-                        );
-                    }
-                }
-                genericConstraints = constraintsBuilder.ToString();
-            }
-
-            return $$"""
-                // <auto-generated by DxMessageIdGenerator/>
-                #pragma warning disable
-                #nullable enable annotations
-
-                {{namespaceBlockOpen}}
-                {{indent}}/// <summary>
-                {{indent}}/// Internal metadata storage for message type <see cref="{{typeNameMinimal}}"/>. Populated by runtime initialization.
-                {{indent}}/// </summary>
-                {{indent}}internal static class {{metadataClassName}}{{genericParameters}}{{genericConstraints}}
-                {{indent}}{{bracketOpen}}
-                {{indent}}    public static int SequentialId = -1;
-                {{indent}}    public static readonly string TypeKey = "{{typeKey}}";
-                {{indent}}{{bracketClosed}}
-                {{namespaceBlockClose}}
-                """;
         }
 
         // Generates the partial class/struct implementing IMessage
@@ -394,28 +285,6 @@
                 _ => "internal ",
             };
 
-            // Construct the name of the corresponding metadata class
-            string metadataClassName = $"DxMsgMeta_{typeSymbol.Name.Split('`')[0]}"; // Use base name
-
-            // Fully qualified name needed if in a namespace
-            string metadataClassFullName = string.IsNullOrEmpty(namespaceName)
-                ? metadataClassName
-                : $"{namespaceName}.{metadataClassName}";
-
-            string metadataTypeAccessString;
-            if (typeSymbol.Arity > 0)
-            {
-                // Append generic type arguments ONLY if the type is generic
-                string genericArguments =
-                    "<" + string.Join(", ", typeSymbol.TypeParameters.Select(p => p.Name)) + ">";
-                metadataTypeAccessString = $"{metadataClassFullName}{genericArguments}"; // e.g., Namespace.DxMsgMeta_MyGeneric<T>
-            }
-            else
-            {
-                // Use the plain name if the type is not generic
-                metadataTypeAccessString = metadataClassFullName; // e.g., Namespace.DxMsgMeta_MyNonGeneric
-            }
-
             string interfaceDeclaration = $", global::{targetInterfaceFullName}";
 
             return $$"""
@@ -429,10 +298,6 @@
                 {{indent}}{
                 {{indent}}    /// <inheritdoc/>
                 {{indent}}    public global::System.Type MessageType => typeof({{fullyQualifiedName}});
-
-                {{indent}}    /// <inheritdoc/>
-                {{indent}}    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-                {{indent}}    public int GetSequentialId() => {{metadataTypeAccessString}}.SequentialId;
                 {{indent}}}
                 {{namespaceBlockClose}}
                 """;
