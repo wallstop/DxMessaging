@@ -732,25 +732,29 @@
                     DxReflexiveMessage
                 >(ref typedMessage);
 
-                GameObject go = null;
-                bool found = false;
+                GameObject go;
+                bool found;
                 UnityEngine.Object targetObject = target.Object;
                 switch (targetObject)
                 {
                     case GameObject gameObject:
                     {
-                        if (gameObject != null)
-                        {
-                            found = true;
-                            go = gameObject;
-                        }
-
+                        found = true;
+                        go = gameObject;
                         break;
                     }
-                    case Component component when component != null:
+                    case Component component:
+                    {
                         found = true;
                         go = component.gameObject;
                         break;
+                    }
+                    default:
+                    {
+                        go = null;
+                        found = false;
+                        break;
+                    }
                 }
 
                 if (found)
@@ -857,8 +861,7 @@
                             }
                         }
                     }
-
-                    if (
+                    else if (
                         !sentInADirection
                         && reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
                     )
@@ -886,7 +889,6 @@
                                 {
                                     SendMessage(parentComponent, ref reflexiveMessage);
                                 }
-
                                 break;
                             }
                         }
@@ -899,7 +901,8 @@
                 );
 #endif
             }
-            else if (
+
+            if (
                 _targetedSinks.TryGetValue<TMessage>(out targetedHandlers)
                 && targetedHandlers.TryGetValue(target, out sortedHandlers)
                 && 0 < sortedHandlers.handlers.Count
@@ -3457,18 +3460,8 @@
                 if (methodInfo != null)
                 {
                     method = CompileMethodAction(methodInfo);
-                    methodCache[lookupKey] = method;
                 }
-                else if (MessagingDebug.enabled)
-                {
-                    methodCache[lookupKey] = null;
-                    MessagingDebug.Log(
-                        LogLevel.Error,
-                        "Could not find matching method {0} on {1} for ReflexiveMessage.",
-                        message.method,
-                        componentType
-                    );
-                }
+                methodCache[lookupKey] = method;
             }
 
             method?.Invoke(recipient, message.parameters);

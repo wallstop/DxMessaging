@@ -52,6 +52,7 @@
                 ReflexiveOneArgument(timer, timeout, component.gameObject, reflexiveMessage)
             );
             RunTest(component => ReflexiveTwoArguments(timer, timeout, component.gameObject));
+            RunTest(component => ReflexiveThreeArguments(timer, timeout, component.gameObject));
         }
 
         [Test]
@@ -236,6 +237,51 @@
             DisplayCount("Unity", count, timeout, allocating);
         }
 
+        private static void ReflexiveThreeArguments(
+            Stopwatch timer,
+            TimeSpan timeout,
+            GameObject go
+        )
+        {
+            int count = 0;
+            if (!go.TryGetComponent(out SimpleMessageAwareComponent component))
+            {
+                component = go.AddComponent<SimpleMessageAwareComponent>();
+            }
+            component.reflexiveThreeArgumentHandler = () => ++count;
+            DxReflexiveMessage message = new(
+                nameof(SimpleMessageAwareComponent.HandleReflexiveMessageThreeArguments),
+                ReflexiveSendMode.Flat,
+                1,
+                2,
+                3
+            );
+            InstanceId target = go;
+            // Pre-warm
+            message.EmitTargeted(target);
+
+            timer.Restart();
+            do
+            {
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
+            } while (timer.Elapsed < timeout);
+            bool allocating;
+            try
+            {
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
+                allocating = false;
+            }
+            catch
+            {
+                allocating = true;
+            }
+
+            DisplayCount("Reflexive (Three Arguments)", count, timeout, allocating);
+        }
+
         private static void ReflexiveTwoArguments(Stopwatch timer, TimeSpan timeout, GameObject go)
         {
             int count = 0;
@@ -273,7 +319,7 @@
                 allocating = true;
             }
 
-            DisplayCount("Reflexive (Two Argument)", count, timeout, allocating);
+            DisplayCount("Reflexive (Two Arguments)", count, timeout, allocating);
         }
 
         private static void ReflexiveOneArgument(

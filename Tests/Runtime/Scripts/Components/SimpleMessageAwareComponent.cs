@@ -38,6 +38,7 @@
         public Action complexComponentTargetedHandler;
         public Action componentBroadcastHandler;
         public Action reflexiveTwoArgumentHandler;
+        public Action reflexiveThreeArgumentHandler;
 
         private bool _slowComplexTargetingEnabled = true;
         private bool _fastComplexTargetingEnabled = true;
@@ -126,6 +127,11 @@
         public void HandleReflexiveMessageTwoArguments(int a, int b)
         {
             reflexiveTwoArgumentHandler?.Invoke();
+        }
+
+        public void HandleReflexiveMessageThreeArguments(int a, int b, int c)
+        {
+            reflexiveThreeArgumentHandler?.Invoke();
         }
 
         public void HandleSlowComplexTargetedMessage(ComplexTargetedMessage message)
