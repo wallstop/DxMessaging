@@ -5,6 +5,7 @@
     using Core;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using DxMessaging.Core.Messages;
     using global::Unity.PerformanceTesting;
     using NUnit.Framework;
     using Scripts.Components;
@@ -30,9 +31,16 @@
             Debug.Log("| ------------ | ------------------- | ------------ | ");
 
             ComplexTargetedMessage message = new(Guid.NewGuid());
+            DxReflexiveMessage reflexiveMessage = new(
+                nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
+                ReflexiveSendMode.Flat,
+                message
+            );
+
             Stopwatch timer = Stopwatch.StartNew();
 
             RunTest(component => Unity(timer, timeout, component.gameObject, message));
+
             RunTest(component => NormalGameObject(timer, timeout, component, message));
             RunTest(component => NormalComponent(timer, timeout, component, message));
             RunTest(component => NoCopyGameObject(timer, timeout, component, message));
@@ -40,6 +48,10 @@
 
             SimpleUntargetedMessage untargetedMessage = new();
             RunTest(component => NoCopyUntargeted(timer, timeout, component, untargetedMessage));
+            RunTest(component =>
+                ReflexiveOneArgument(timer, timeout, component.gameObject, reflexiveMessage)
+            );
+            RunTest(component => ReflexiveTwoArguments(timer, timeout, component.gameObject));
         }
 
         [Test]
@@ -181,7 +193,10 @@
         )
         {
             int count = 0;
-            var component = target.AddComponent<SimpleMessageAwareComponent>();
+            if (!target.TryGetComponent(out SimpleMessageAwareComponent component))
+            {
+                component = target.AddComponent<SimpleMessageAwareComponent>();
+            }
             component.slowComplexTargetedHandler = () => ++count;
             // Pre-warm
             target.SendMessage(
@@ -219,6 +234,85 @@
                 allocating = true;
             }
             DisplayCount("Unity", count, timeout, allocating);
+        }
+
+        private static void ReflexiveTwoArguments(Stopwatch timer, TimeSpan timeout, GameObject go)
+        {
+            int count = 0;
+            if (!go.TryGetComponent(out SimpleMessageAwareComponent component))
+            {
+                component = go.AddComponent<SimpleMessageAwareComponent>();
+            }
+            component.reflexiveTwoArgumentHandler = () => ++count;
+            DxReflexiveMessage message = new(
+                nameof(SimpleMessageAwareComponent.HandleReflexiveMessageTwoArguments),
+                ReflexiveSendMode.Flat,
+                1,
+                2
+            );
+            InstanceId target = go;
+            // Pre-warm
+            message.EmitTargeted(target);
+
+            timer.Restart();
+            do
+            {
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
+            } while (timer.Elapsed < timeout);
+            bool allocating;
+            try
+            {
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
+                allocating = false;
+            }
+            catch
+            {
+                allocating = true;
+            }
+
+            DisplayCount("Reflexive (Two Argument)", count, timeout, allocating);
+        }
+
+        private static void ReflexiveOneArgument(
+            Stopwatch timer,
+            TimeSpan timeout,
+            GameObject go,
+            DxReflexiveMessage message
+        )
+        {
+            int count = 0;
+            if (!go.TryGetComponent(out SimpleMessageAwareComponent component))
+            {
+                component = go.AddComponent<SimpleMessageAwareComponent>();
+            }
+            component.slowComplexTargetedHandler = () => ++count;
+            InstanceId target = go;
+            // Pre-warm
+            message.EmitTargeted(target);
+
+            timer.Restart();
+            do
+            {
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitTargeted(target);
+                }
+            } while (timer.Elapsed < timeout);
+            bool allocating;
+            try
+            {
+                Assert.That(() => message.EmitTargeted(target), Is.Not.AllocatingGCMemory());
+                allocating = false;
+            }
+            catch
+            {
+                allocating = true;
+            }
+
+            DisplayCount("Reflexive (One Argument)", count, timeout, allocating);
         }
 
         private void NormalGameObject(

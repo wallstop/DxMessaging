@@ -29,16 +29,16 @@
 
         protected virtual void RegisterMessageHandlers()
         {
-            _ = _messageRegistrationToken.RegisterGameObjectTargeted<GenericTargetedMessage>(
+            _ = _messageRegistrationToken.RegisterGameObjectTargeted<StringMessage>(
                 gameObject,
-                HandleGenericGameObjectMessage
+                HandleStringGameObjectMessage
             );
-            _ = _messageRegistrationToken.RegisterComponentTargeted<GenericTargetedMessage>(
+            _ = _messageRegistrationToken.RegisterComponentTargeted<StringMessage>(
                 this,
-                HandleGenericComponentMessage
+                HandleStringComponentMessage
             );
-            _ = _messageRegistrationToken.RegisterUntargeted<GenericUntargetedMessage>(
-                HandleGenericUntargetedMessage
+            _ = _messageRegistrationToken.RegisterUntargeted<GlobalStringMessage>(
+                HandleGlobalStringMessage
             );
         }
 
@@ -79,17 +79,17 @@
             _isQuitting = true;
         }
 
-        protected virtual void HandleGenericGameObjectMessage(ref GenericTargetedMessage message)
+        protected virtual void HandleStringGameObjectMessage(ref StringMessage message)
         {
             // No-op by default
         }
 
-        protected virtual void HandleGenericComponentMessage(ref GenericTargetedMessage message)
+        protected virtual void HandleStringComponentMessage(ref StringMessage message)
         {
             // No-op by default
         }
 
-        protected virtual void HandleGenericUntargetedMessage(ref GenericUntargetedMessage message)
+        protected virtual void HandleGlobalStringMessage(ref GlobalStringMessage message)
         {
             // No-op by default
         }

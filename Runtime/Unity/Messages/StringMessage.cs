@@ -2,12 +2,12 @@
 {
     using Core.Attributes;
 
-    [DxUntargetedMessage]
-    public readonly partial struct GenericUntargetedMessage
+    [DxTargetedMessage]
+    public readonly partial struct StringMessage
     {
         public readonly string message;
 
-        public GenericUntargetedMessage(string message)
+        public StringMessage(string message)
         {
             this.message = message;
         }

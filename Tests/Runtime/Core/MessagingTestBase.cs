@@ -154,20 +154,12 @@
             }
         }
 
-        protected MessageRegistrationToken GetToken(MessageAwareComponent component)
+        protected static MessageRegistrationToken GetToken(MessageAwareComponent component)
         {
-            // Reach inside and grab the token
-            FieldInfo field = typeof(MessageAwareComponent).GetField(
-                "_messageRegistrationToken",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-            );
-            Assert.IsNotNull(field);
-            MessageRegistrationToken token = field.GetValue(component) as MessageRegistrationToken;
-            Assert.IsNotNull(token);
-            return token;
+            return component.Token;
         }
 
-        protected IEnumerator WaitUntilMessageHandlerIsFresh()
+        protected static IEnumerator WaitUntilMessageHandlerIsFresh()
         {
             MessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);

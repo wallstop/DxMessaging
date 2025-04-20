@@ -37,6 +37,7 @@
         public Action componentTargetedHandler;
         public Action complexComponentTargetedHandler;
         public Action componentBroadcastHandler;
+        public Action reflexiveTwoArgumentHandler;
 
         private bool _slowComplexTargetingEnabled = true;
         private bool _fastComplexTargetingEnabled = true;
@@ -120,6 +121,11 @@
                 _messageRegistrationToken.RemoveRegistration(_fastComplexTargetingHandle.Value);
                 _fastComplexTargetingHandle = null;
             }
+        }
+
+        public void HandleReflexiveMessageTwoArguments(int a, int b)
+        {
+            reflexiveTwoArgumentHandler?.Invoke();
         }
 
         public void HandleSlowComplexTargetedMessage(ComplexTargetedMessage message)
