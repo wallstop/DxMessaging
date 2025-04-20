@@ -26,9 +26,7 @@
         public InstanceId(int id)
         {
             _id = id;
-#if UNITY_2017_1_OR_NEWER
             Object = null;
-#endif
         }
 
 #if UNITY_2017_1_OR_NEWER

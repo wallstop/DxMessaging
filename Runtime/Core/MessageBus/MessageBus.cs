@@ -2,11 +2,16 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq.Expressions;
     using System.Reflection;
-    using System.Threading;
+    using System.Runtime.CompilerServices;
+    using Extensions;
     using Helper;
     using Messages;
     using static IMessageBus;
+#if UNITY_2017_1_OR_NEWER
+    using UnityEngine;
+#endif
 
     /// <summary>
     /// Instanced MessageBus for use cases where you want distinct islands of MessageBuses.
@@ -43,7 +48,7 @@
             }
         }
 
-        public int RegisteredGlobalSequentialIndex { get; private set; }
+        public int RegisteredGlobalSequentialIndex { get; } = GenerateNewGlobalSequentialIndex();
 
         public int RegisteredBroadcast
         {
@@ -77,9 +82,12 @@
 
         // For use with re-broadcasting to generic methods
         private static readonly object[] ReflectionMethodArgumentsCache = new object[2];
+        private static readonly List<Expression> ArgumentExpressionsCache = new();
 
         private const BindingFlags ReflectionHelperBindingFlags =
             BindingFlags.Static | BindingFlags.NonPublic;
+        private const BindingFlags ReflexiveMethodBindingFlags =
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         private delegate void FastUntargetedBroadcast<T>(ref T message)
             where T : IUntargetedMessage;
@@ -118,6 +126,16 @@
         private readonly Dictionary<Type, object> _broadcastMethodsByType = new();
         private readonly Stack<List<object>> _innerInterceptorsStack = new();
 
+        private readonly Dictionary<
+            Type,
+            Dictionary<MethodSignatureKey, Action<MonoBehaviour, object[]>>
+        > _methodCache = new();
+
+#if UNITY_2017_1_OR_NEWER
+        private readonly HashSet<MonoBehaviour> _recipientCache = new();
+        private readonly List<MonoBehaviour> _componentCache = new();
+#endif
+
         private readonly RegistrationLog _log = new();
 
         static MessageBus()
@@ -126,11 +144,6 @@
             {
                 DxMessagingRuntime.Initialize();
             }
-        }
-
-        public MessageBus()
-        {
-            RegisteredGlobalSequentialIndex = Interlocked.Increment(ref GlobalSequentialIndex);
         }
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
@@ -708,14 +721,191 @@
             }
 
             bool foundAnyHandlers = false;
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers;
+            HandlerCache<int, HandlerCache> sortedHandlers;
+
+            if (typeof(TMessage) == typeof(DxReflexiveMessage))
+            {
+#if UNITY_2017_1_OR_NEWER
+                ref DxReflexiveMessage reflexiveMessage = ref Unsafe.As<
+                    TMessage,
+                    DxReflexiveMessage
+                >(ref typedMessage);
+
+                GameObject go;
+                bool found;
+                UnityEngine.Object targetObject = target.Object;
+                switch (targetObject)
+                {
+                    case GameObject gameObject:
+                    {
+                        found = true;
+                        go = gameObject;
+                        break;
+                    }
+                    case Component component:
+                    {
+                        found = true;
+                        go = component.gameObject;
+                        break;
+                    }
+                    default:
+                    {
+                        go = null;
+                        found = false;
+                        break;
+                    }
+                }
+
+                if (found)
+                {
+                    _recipientCache.Clear();
+                    bool sentInADirection = false;
+                    if (reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Upwards))
+                    {
+                        sentInADirection = true;
+                        if (
+                            !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Downwards)
+                            && !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                        )
+                        {
+                            switch (reflexiveMessage.parameters.Length)
+                            {
+                                case 0:
+                                {
+                                    go.SendMessageUpwards(reflexiveMessage.method);
+                                    break;
+                                }
+                                case 1:
+                                {
+                                    go.SendMessageUpwards(
+                                        reflexiveMessage.method,
+                                        reflexiveMessage.parameters[0]
+                                    );
+                                    break;
+                                }
+                                default:
+                                {
+                                    Component[] parentComponents = go.GetComponentsInParent(
+                                        typeof(MonoBehaviour),
+                                        true
+                                    );
+                                    foreach (Component component in parentComponents)
+                                    {
+                                        if (component is MonoBehaviour script)
+                                        {
+                                            SendMessage(script, ref reflexiveMessage);
+                                        }
+                                    }
+
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Component[] parentComponents = go.GetComponentsInParent(
+                                typeof(MonoBehaviour)
+                            );
+                            foreach (Component component in parentComponents)
+                            {
+                                if (component is MonoBehaviour script)
+                                {
+                                    SendMessage(script, ref reflexiveMessage);
+                                }
+                            }
+                        }
+                    }
+                    if (reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Downwards))
+                    {
+                        sentInADirection = true;
+                        if (
+                            !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Upwards)
+                            && !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                        )
+                        {
+                            switch (reflexiveMessage.parameters.Length)
+                            {
+                                case 0:
+                                {
+                                    go.BroadcastMessage(reflexiveMessage.method);
+                                    break;
+                                }
+                                case 1:
+                                {
+                                    go.BroadcastMessage(
+                                        reflexiveMessage.method,
+                                        reflexiveMessage.parameters[0]
+                                    );
+                                    break;
+                                }
+                                default:
+                                {
+                                    _componentCache.Clear();
+                                    go.GetComponentsInChildren(true, _componentCache);
+                                    foreach (MonoBehaviour parentComponent in _componentCache)
+                                    {
+                                        SendMessage(parentComponent, ref reflexiveMessage);
+                                    }
+
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _componentCache.Clear();
+                            go.GetComponentsInChildren(_componentCache);
+                            foreach (MonoBehaviour parentComponent in _componentCache)
+                            {
+                                SendMessage(parentComponent, ref reflexiveMessage);
+                            }
+                        }
+                    }
+                    else if (
+                        !sentInADirection
+                        && reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                    )
+                    {
+                        switch (reflexiveMessage.parameters.Length)
+                        {
+                            case 0:
+                            {
+                                go.SendMessage(reflexiveMessage.method);
+                                break;
+                            }
+                            case 1:
+                            {
+                                go.SendMessage(
+                                    reflexiveMessage.method,
+                                    reflexiveMessage.parameters[0]
+                                );
+                                break;
+                            }
+                            default:
+                            {
+                                _componentCache.Clear();
+                                go.GetComponents(_componentCache);
+                                foreach (MonoBehaviour component in _componentCache)
+                                {
+                                    SendMessage(component, ref reflexiveMessage);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+#else
+                MessagingDebug.Log(
+                    LogLevel.Error,
+                    "Reflexive messages are not supported in this build."
+                );
+#endif
+            }
+
             if (
-                _targetedSinks.TryGetValue<TMessage>(
-                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers
-                )
-                && targetedHandlers.TryGetValue(
-                    target,
-                    out HandlerCache<int, HandlerCache> sortedHandlers
-                )
+                _targetedSinks.TryGetValue<TMessage>(out targetedHandlers)
+                && targetedHandlers.TryGetValue(target, out sortedHandlers)
                 && 0 < sortedHandlers.handlers.Count
             )
             {
@@ -3159,6 +3349,138 @@
                 T typedMessage = (T)message;
                 sourcedBroadcast(ref target, ref typedMessage);
             }
+        }
+
+#if UNITY_2017_1_OR_NEWER
+        private static Action<MonoBehaviour, object[]> CompileMethodAction(MethodInfo methodInfo)
+        {
+            ParameterExpression componentParameter = Expression.Parameter(
+                typeof(MonoBehaviour),
+                "targetComponent"
+            );
+            ParameterExpression argsParameter = Expression.Parameter(typeof(object[]), "args");
+            ParameterInfo[] methodParams = methodInfo.GetParameters();
+
+            ArgumentExpressionsCache.Clear();
+            for (int i = 0; i < methodParams.Length; ++i)
+            {
+                Expression indexAccess = Expression.ArrayIndex(
+                    argsParameter,
+                    Expression.Constant(i)
+                );
+                Expression convertedArg = Expression.Convert(
+                    indexAccess,
+                    methodParams[i].ParameterType
+                );
+                ArgumentExpressionsCache.Add(convertedArg);
+            }
+
+            // ReSharper disable once AssignNullToNotNullAttribute
+            Expression instanceExpression = methodInfo.IsStatic
+                ? null
+                : Expression.Convert(componentParameter, methodInfo.DeclaringType);
+            MethodCallExpression callExpression = Expression.Call(
+                instanceExpression,
+                methodInfo,
+                ArgumentExpressionsCache
+            );
+            Expression<Action<MonoBehaviour, object[]>> lambda = Expression.Lambda<
+                Action<MonoBehaviour, object[]>
+            >(callExpression, componentParameter, argsParameter);
+
+            return lambda.Compile();
+        }
+#endif
+
+        private void SendMessage(MonoBehaviour recipient, ref DxReflexiveMessage message)
+        {
+            if (!_recipientCache.Add(recipient))
+            {
+                return;
+            }
+
+            Type componentType = recipient.GetType();
+            if (
+                !_methodCache.TryGetValue(
+                    componentType,
+                    out Dictionary<MethodSignatureKey, Action<MonoBehaviour, object[]>> methodCache
+                )
+            )
+            {
+                _methodCache[componentType] = methodCache =
+                    new Dictionary<MethodSignatureKey, Action<MonoBehaviour, object[]>>();
+            }
+
+            MethodSignatureKey lookupKey = message.signatureKey;
+            if (!methodCache.TryGetValue(lookupKey, out Action<MonoBehaviour, object[]> method))
+            {
+                MethodInfo methodInfo = null;
+                try
+                {
+                    methodInfo = componentType.GetMethod(
+                        message.method,
+                        ReflexiveMethodBindingFlags,
+                        null,
+                        message.parameterTypes,
+                        null
+                    );
+                }
+                catch (AmbiguousMatchException)
+                {
+                    MethodInfo[] matchingMethods = componentType.GetMethods(
+                        ReflexiveMethodBindingFlags
+                    );
+                    foreach (MethodInfo matchingMethod in matchingMethods)
+                    {
+                        if (
+                            !string.Equals(
+                                matchingMethod.Name,
+                                message.method,
+                                StringComparison.Ordinal
+                            )
+                            || !ParameterTypesMatch(
+                                matchingMethod.GetParameters(),
+                                message.parameterTypes
+                            )
+                        )
+                        {
+                            continue;
+                        }
+
+                        methodInfo = matchingMethod;
+                        break;
+                    }
+                }
+                catch
+                {
+                    methodInfo = null;
+                }
+
+                if (methodInfo != null)
+                {
+                    method = CompileMethodAction(methodInfo);
+                }
+                methodCache[lookupKey] = method;
+            }
+
+            method?.Invoke(recipient, message.parameters);
+        }
+
+        private static bool ParameterTypesMatch(ParameterInfo[] methodParams, Type[] expectedTypes)
+        {
+            if (methodParams.Length != expectedTypes.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < methodParams.Length; ++i)
+            {
+                if (methodParams[i].ParameterType != expectedTypes[i])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

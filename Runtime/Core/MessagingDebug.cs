@@ -46,7 +46,7 @@
         /// </note>
         /// <param name="logLevel">Severity of the message.</param>
         /// <param name="message">Format string.</param>
-        /// <param name="args">Args to populate format string with.</param>
+        /// <param name="args">Args to populate the format string with.</param>
         public static void Log(LogLevel logLevel, string message, params object[] args)
         {
             if (!enabled)
