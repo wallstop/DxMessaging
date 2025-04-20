@@ -1,7 +1,6 @@
 ﻿namespace DxMessaging.Core.Messages
 {
     using System;
-    using Attributes;
 
     [Flags]
     public enum ReflexiveSendMode
@@ -85,9 +84,10 @@
         }
     }
 
-    [DxTargetedMessage]
-    public readonly partial struct DxReflexiveMessage
+    public readonly struct DxReflexiveMessage : ITargetedMessage<DxReflexiveMessage>
     {
+        public Type MessageType => typeof(DxReflexiveMessage);
+
         public readonly string method;
         public readonly ReflexiveSendMode sendMode;
         public readonly object[] parameters;

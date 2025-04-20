@@ -1,10 +1,12 @@
 ﻿namespace DxMessaging.Unity.Messages
 {
-    using Core.Attributes;
+    using System;
+    using Core.Messages;
 
-    [DxTargetedMessage]
-    public readonly partial struct StringMessage
+    public readonly struct StringMessage : ITargetedMessage<StringMessage>
     {
+        public Type MessageType => typeof(StringMessage);
+
         public readonly string message;
 
         public StringMessage(string message)
