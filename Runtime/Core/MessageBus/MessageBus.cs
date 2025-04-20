@@ -787,7 +787,8 @@
                                 default:
                                 {
                                     Component[] parentComponents = go.GetComponentsInParent(
-                                        typeof(MonoBehaviour)
+                                        typeof(MonoBehaviour),
+                                        true
                                     );
                                     foreach (Component component in parentComponents)
                                     {
@@ -841,7 +842,7 @@
                                 default:
                                 {
                                     _componentCache.Clear();
-                                    go.GetComponentsInChildren(_componentCache);
+                                    go.GetComponentsInChildren(true, _componentCache);
                                     foreach (MonoBehaviour parentComponent in _componentCache)
                                     {
                                         SendMessage(parentComponent, ref reflexiveMessage);
@@ -885,9 +886,9 @@
                             {
                                 _componentCache.Clear();
                                 go.GetComponents(_componentCache);
-                                foreach (MonoBehaviour parentComponent in _componentCache)
+                                foreach (MonoBehaviour component in _componentCache)
                                 {
-                                    SendMessage(parentComponent, ref reflexiveMessage);
+                                    SendMessage(component, ref reflexiveMessage);
                                 }
                                 break;
                             }
@@ -3358,7 +3359,6 @@
                 "targetComponent"
             );
             ParameterExpression argsParameter = Expression.Parameter(typeof(object[]), "args");
-
             ParameterInfo[] methodParams = methodInfo.GetParameters();
 
             ArgumentExpressionsCache.Clear();
@@ -3374,17 +3374,16 @@
                 );
                 ArgumentExpressionsCache.Add(convertedArg);
             }
+
             // ReSharper disable once AssignNullToNotNullAttribute
             Expression instanceExpression = methodInfo.IsStatic
                 ? null
                 : Expression.Convert(componentParameter, methodInfo.DeclaringType);
-
             MethodCallExpression callExpression = Expression.Call(
                 instanceExpression,
                 methodInfo,
                 ArgumentExpressionsCache
             );
-
             Expression<Action<MonoBehaviour, object[]>> lambda = Expression.Lambda<
                 Action<MonoBehaviour, object[]>
             >(callExpression, componentParameter, argsParameter);
@@ -3474,7 +3473,7 @@
                 return false;
             }
 
-            for (int i = 0; i < methodParams.Length; i++)
+            for (int i = 0; i < methodParams.Length; ++i)
             {
                 if (methodParams[i].ParameterType != expectedTypes[i])
                 {

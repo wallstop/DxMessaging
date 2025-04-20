@@ -89,9 +89,11 @@
     public readonly partial struct DxReflexiveMessage
     {
         public readonly string method;
-        public readonly object[] parameters;
-        public readonly Type[] parameterTypes;
         public readonly ReflexiveSendMode sendMode;
+        public readonly object[] parameters;
+
+        public readonly Type[] parameterTypes;
+
         public readonly MethodSignatureKey signatureKey;
 
         public DxReflexiveMessage(

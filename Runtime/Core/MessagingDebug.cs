@@ -1,7 +1,6 @@
 ﻿namespace DxMessaging.Core
 {
     using System;
-    using JetBrains.Annotations;
 
     /// <summary>
     /// Severity of the log message
@@ -48,7 +47,6 @@
         /// <param name="logLevel">Severity of the message.</param>
         /// <param name="message">Format string.</param>
         /// <param name="args">Args to populate the format string with.</param>
-        [StringFormatMethod("message")]
         public static void Log(LogLevel logLevel, string message, params object[] args)
         {
             if (!enabled)

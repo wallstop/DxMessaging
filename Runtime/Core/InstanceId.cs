@@ -18,14 +18,10 @@
 
         private readonly int _id;
 
-        public readonly
 #if UNITY_2017_1_OR_NEWER
-        UnityEngine.Object
-#else
-        object
-#endif
         // ReSharper disable once InconsistentNaming
-        Object;
+        public readonly UnityEngine.Object Object;
+#endif
 
         public InstanceId(int id)
         {
@@ -50,18 +46,6 @@
         public static implicit operator InstanceId(UnityEngine.Component component)
         {
             return new InstanceId(component);
-        }
-#else
-        private InstanceId(object target)
-        {
-            _id = target.GetHashCode();
-            Object = target;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static implicit operator InstanceId(object target)
-        {
-            return new InstanceId(target);
         }
 #endif
 
