@@ -1,6 +1,7 @@
 ﻿namespace DxMessaging.Core.MessageBus
 {
     using System;
+    using System.Threading;
     using Core;
     using Messages;
 
@@ -9,7 +10,10 @@
     /// </summary>
     public interface IMessageBus
     {
-        public static int GlobalSequentialIndex = -1;
+        internal static int GlobalSequentialIndex = -1;
+
+        protected static int GenerateNewGlobalSequentialIndex() =>
+            Interlocked.Increment(ref GlobalSequentialIndex);
 
         public int RegisteredGlobalSequentialIndex { get; }
         public int RegisteredBroadcast { get; }
@@ -19,7 +23,7 @@
         public int RegisteredUntargeted { get; }
 
         /// <summary>
-        /// Given an Untargeted message, determines whether or not it should be processed or skipped
+        /// Given an Untargeted message, determines whether it should be processed or skipped
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="message">Message to consider.</param>
@@ -28,7 +32,7 @@
             where TMessage : IUntargetedMessage;
 
         /// <summary>
-        /// Given a Targeted message and its target, determines whether or not it should be processed or skipped.
+        /// Given a Targeted message and its target, determines whether it should be processed or skipped.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="target">Target of the message.</param>
@@ -41,7 +45,7 @@
             where TMessage : ITargetedMessage;
 
         /// <summary>
-        /// Given a Broadcast message and its source, determines whether or not it should be processed or skipped.
+        /// Given a Broadcast message and its source, determines whether it should be processed or skipped.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="source">Source of the message.</param>

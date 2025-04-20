@@ -3,7 +3,6 @@
     using System;
     using System.Collections.Generic;
     using System.Reflection;
-    using System.Threading;
     using Helper;
     using Messages;
     using static IMessageBus;
@@ -43,7 +42,7 @@
             }
         }
 
-        public int RegisteredGlobalSequentialIndex { get; private set; }
+        public int RegisteredGlobalSequentialIndex { get; } = GenerateNewGlobalSequentialIndex();
 
         public int RegisteredBroadcast
         {
@@ -126,11 +125,6 @@
             {
                 DxMessagingRuntime.Initialize();
             }
-        }
-
-        public MessageBus()
-        {
-            RegisteredGlobalSequentialIndex = Interlocked.Increment(ref GlobalSequentialIndex);
         }
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
