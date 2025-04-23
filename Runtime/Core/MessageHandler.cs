@@ -48,14 +48,6 @@
         /// </note>
         private readonly List<MessageCache<object>> _handlersByTypeByMessageBus;
 
-        static MessageHandler()
-        {
-            if (!DxMessagingRuntime.Initialized)
-            {
-                DxMessagingRuntime.Initialize();
-            }
-        }
-
         public MessageHandler(InstanceId owner)
         {
             this.owner = owner;

@@ -138,14 +138,6 @@
 
         private readonly RegistrationLog _log = new();
 
-        static MessageBus()
-        {
-            if (!DxMessagingRuntime.Initialized)
-            {
-                DxMessagingRuntime.Initialize();
-            }
-        }
-
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
         {
@@ -724,13 +716,12 @@
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers;
             HandlerCache<int, HandlerCache> sortedHandlers;
 
-            if (typeof(TMessage) == typeof(DxReflexiveMessage))
+            if (typeof(TMessage) == typeof(ReflexiveMessage))
             {
 #if UNITY_2017_1_OR_NEWER
-                ref DxReflexiveMessage reflexiveMessage = ref Unsafe.As<
-                    TMessage,
-                    DxReflexiveMessage
-                >(ref typedMessage);
+                ref ReflexiveMessage reflexiveMessage = ref Unsafe.As<TMessage, ReflexiveMessage>(
+                    ref typedMessage
+                );
 
                 GameObject go;
                 bool found;
@@ -761,12 +752,14 @@
                 {
                     _recipientCache.Clear();
                     bool sentInADirection = false;
-                    if (reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Upwards))
+                    ReflexiveSendMode sendMode = reflexiveMessage.sendMode;
+                    if (sendMode.HasFlagNoAlloc(ReflexiveSendMode.Upwards))
                     {
                         sentInADirection = true;
                         if (
-                            !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Downwards)
-                            && !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                            !sendMode.HasFlagNoAlloc(ReflexiveSendMode.Downwards)
+                            && !sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                            && !sendMode.HasFlagNoAlloc(ReflexiveSendMode.OnlyIncludeActive)
                         )
                         {
                             switch (reflexiveMessage.parameters.Length)
@@ -786,17 +779,17 @@
                                 }
                                 default:
                                 {
-                                    Component[] parentComponents = go.GetComponentsInParent(
-                                        typeof(MonoBehaviour),
-                                        true
-                                    );
-                                    foreach (Component component in parentComponents)
+                                    Transform current = go.transform;
+                                    do
                                     {
-                                        if (component is MonoBehaviour script)
+                                        _componentCache.Clear();
+                                        current.GetComponents(_componentCache);
+                                        foreach (MonoBehaviour script in _componentCache)
                                         {
-                                            SendMessage(script, ref reflexiveMessage);
+                                            SendMessage(script, ref reflexiveMessage, false);
                                         }
-                                    }
+                                        current = current.parent;
+                                    } while (current != null);
 
                                     break;
                                 }
@@ -804,24 +797,25 @@
                         }
                         else
                         {
-                            Component[] parentComponents = go.GetComponentsInParent(
-                                typeof(MonoBehaviour)
-                            );
-                            foreach (Component component in parentComponents)
+                            Transform current = go.transform;
+                            do
                             {
-                                if (component is MonoBehaviour script)
+                                _componentCache.Clear();
+                                current.GetComponents(_componentCache);
+                                foreach (MonoBehaviour script in _componentCache)
                                 {
-                                    SendMessage(script, ref reflexiveMessage);
+                                    SendMessage(script, ref reflexiveMessage, true);
                                 }
-                            }
+                                current = current.parent;
+                            } while (current != null);
                         }
                     }
-                    if (reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Downwards))
+                    if (sendMode.HasFlagNoAlloc(ReflexiveSendMode.Downwards))
                     {
-                        sentInADirection = true;
                         if (
-                            !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Upwards)
-                            && !reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                            !sendMode.HasFlagNoAlloc(ReflexiveSendMode.Upwards)
+                            && !sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
+                            && !sendMode.HasFlagNoAlloc(ReflexiveSendMode.OnlyIncludeActive)
                         )
                         {
                             switch (reflexiveMessage.parameters.Length)
@@ -845,7 +839,7 @@
                                     go.GetComponentsInChildren(true, _componentCache);
                                     foreach (MonoBehaviour parentComponent in _componentCache)
                                     {
-                                        SendMessage(parentComponent, ref reflexiveMessage);
+                                        SendMessage(parentComponent, ref reflexiveMessage, false);
                                     }
 
                                     break;
@@ -858,39 +852,49 @@
                             go.GetComponentsInChildren(_componentCache);
                             foreach (MonoBehaviour parentComponent in _componentCache)
                             {
-                                SendMessage(parentComponent, ref reflexiveMessage);
+                                SendMessage(parentComponent, ref reflexiveMessage, true);
                             }
                         }
                     }
-                    else if (
-                        !sentInADirection
-                        && reflexiveMessage.sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat)
-                    )
+                    else if (!sentInADirection && sendMode.HasFlagNoAlloc(ReflexiveSendMode.Flat))
                     {
-                        switch (reflexiveMessage.parameters.Length)
+                        if (!sendMode.HasFlagNoAlloc(ReflexiveSendMode.OnlyIncludeActive))
                         {
-                            case 0:
+                            switch (reflexiveMessage.parameters.Length)
                             {
-                                go.SendMessage(reflexiveMessage.method);
-                                break;
-                            }
-                            case 1:
-                            {
-                                go.SendMessage(
-                                    reflexiveMessage.method,
-                                    reflexiveMessage.parameters[0]
-                                );
-                                break;
-                            }
-                            default:
-                            {
-                                _componentCache.Clear();
-                                go.GetComponents(_componentCache);
-                                foreach (MonoBehaviour component in _componentCache)
+                                case 0:
                                 {
-                                    SendMessage(component, ref reflexiveMessage);
+                                    go.SendMessage(reflexiveMessage.method);
+                                    break;
                                 }
-                                break;
+                                case 1:
+                                {
+                                    go.SendMessage(
+                                        reflexiveMessage.method,
+                                        reflexiveMessage.parameters[0]
+                                    );
+                                    break;
+                                }
+                                default:
+                                {
+                                    _componentCache.Clear();
+                                    go.GetComponents(_componentCache);
+                                    foreach (MonoBehaviour component in _componentCache)
+                                    {
+                                        SendMessage(component, ref reflexiveMessage, false);
+                                    }
+
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _componentCache.Clear();
+                            go.GetComponents(_componentCache);
+                            foreach (MonoBehaviour component in _componentCache)
+                            {
+                                SendMessage(component, ref reflexiveMessage, true);
                             }
                         }
                     }
@@ -3392,8 +3396,17 @@
         }
 #endif
 
-        private void SendMessage(MonoBehaviour recipient, ref DxReflexiveMessage message)
+        private void SendMessage(
+            MonoBehaviour recipient,
+            ref ReflexiveMessage message,
+            bool onlyActive
+        )
         {
+            if (onlyActive && !recipient.enabled)
+            {
+                return;
+            }
+
             if (!_recipientCache.Add(recipient))
             {
                 return;

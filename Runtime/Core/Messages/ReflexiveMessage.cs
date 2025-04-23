@@ -10,6 +10,7 @@
         Flat = 1 << 0,
         Downwards = 1 << 1,
         Upwards = 1 << 2,
+        OnlyIncludeActive = 1 << 3,
     }
 
     public readonly struct MethodSignatureKey : IEquatable<MethodSignatureKey>
@@ -84,9 +85,9 @@
         }
     }
 
-    public readonly struct DxReflexiveMessage : ITargetedMessage<DxReflexiveMessage>
+    public readonly struct ReflexiveMessage : ITargetedMessage<ReflexiveMessage>
     {
-        public Type MessageType => typeof(DxReflexiveMessage);
+        public Type MessageType => typeof(ReflexiveMessage);
 
         public readonly string method;
         public readonly ReflexiveSendMode sendMode;
@@ -96,7 +97,7 @@
 
         public readonly MethodSignatureKey signatureKey;
 
-        public DxReflexiveMessage(
+        public ReflexiveMessage(
             string method,
             ReflexiveSendMode sendMode,
             params object[] parameters

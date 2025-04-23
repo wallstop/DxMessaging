@@ -5,7 +5,6 @@
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Linq;
-    using System.Reflection;
     using DxMessaging.Core;
     using DxMessaging.Core.MessageBus;
     using NUnit.Framework;

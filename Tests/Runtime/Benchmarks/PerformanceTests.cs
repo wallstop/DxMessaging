@@ -31,7 +31,7 @@
             Debug.Log("| ------------ | ------------------- | ------------ | ");
 
             ComplexTargetedMessage message = new(Guid.NewGuid());
-            DxReflexiveMessage reflexiveMessage = new(
+            ReflexiveMessage reflexiveMessage = new(
                 nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
                 ReflexiveSendMode.Flat,
                 message
@@ -249,7 +249,7 @@
                 component = go.AddComponent<SimpleMessageAwareComponent>();
             }
             component.reflexiveThreeArgumentHandler = () => ++count;
-            DxReflexiveMessage message = new(
+            ReflexiveMessage message = new(
                 nameof(SimpleMessageAwareComponent.HandleReflexiveMessageThreeArguments),
                 ReflexiveSendMode.Flat,
                 1,
@@ -290,7 +290,7 @@
                 component = go.AddComponent<SimpleMessageAwareComponent>();
             }
             component.reflexiveTwoArgumentHandler = () => ++count;
-            DxReflexiveMessage message = new(
+            ReflexiveMessage message = new(
                 nameof(SimpleMessageAwareComponent.HandleReflexiveMessageTwoArguments),
                 ReflexiveSendMode.Flat,
                 1,
@@ -326,7 +326,7 @@
             Stopwatch timer,
             TimeSpan timeout,
             GameObject go,
-            DxReflexiveMessage message
+            ReflexiveMessage message
         )
         {
             int count = 0;

@@ -22,7 +22,7 @@
 
             public bool MoveNext()
             {
-                while (++_index < _cache._values.Length)
+                while (++_index < _cache._values.Count)
                 {
                     _current = _cache._values[_index];
                     if (_current != null)
@@ -48,20 +48,40 @@
             public void Dispose() { }
         }
 
-        private readonly TValue[] _values = new TValue[DxMessagingRuntime.TotalMessageTypes];
+        private readonly List<TValue> _values = new();
 
         public TValue GetOrAdd<TMessage>()
             where TMessage : IMessage
         {
+            TValue value;
             int index = MessageHelperIndexer<TMessage>.SequentialId;
-            TValue value = _values[index];
-            if (value != null)
+            if (0 <= index)
             {
-                return value;
+                while (_values.Count <= index)
+                {
+                    _values.Add(null);
+                }
+                value = _values[index];
+                if (value != null)
+                {
+                    return value;
+                }
+
+                value = new TValue();
+                _values[index] = value;
+            }
+            else
+            {
+                index = MessageHelperIndexer.TotalMessages++;
+                MessageHelperIndexer<TMessage>.SequentialId = index;
+                while (_values.Count < index)
+                {
+                    _values.Add(null);
+                }
+                value = new TValue();
+                _values.Add(value);
             }
 
-            value = new TValue();
-            _values[index] = value;
             return value;
         }
 
@@ -69,22 +89,47 @@
             where TMessage : IMessage
         {
             int index = MessageHelperIndexer<TMessage>.SequentialId;
-            _values[index] = value;
+            if (0 <= index)
+            {
+                while (_values.Count <= index)
+                {
+                    _values.Add(null);
+                }
+                _values[index] = value;
+                return;
+            }
+
+            index = MessageHelperIndexer.TotalMessages++;
+            MessageHelperIndexer<TMessage>.SequentialId = index;
+            while (_values.Count < index)
+            {
+                _values.Add(null);
+            }
+            _values.Add(value);
         }
 
         public bool TryGetValue<TMessage>(out TValue value)
             where TMessage : IMessage
         {
             int index = MessageHelperIndexer<TMessage>.SequentialId;
-            value = _values[index];
-            return value != null;
+            if (0 <= index && index < _values.Count)
+            {
+                value = _values[index];
+                return value != null;
+            }
+
+            value = default;
+            return false;
         }
 
         public void Remove<TMessage>()
             where TMessage : IMessage
         {
             int index = MessageHelperIndexer<TMessage>.SequentialId;
-            _values[index] = null;
+            if (0 <= index && index < _values.Count)
+            {
+                _values[index] = null;
+            }
         }
 
         public MessageCacheEnumerator GetEnumerator()
