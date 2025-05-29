@@ -1,7 +1,7 @@
 ﻿namespace DxMessaging.Unity
 {
     using Core;
-    using Messages;
+    using Core.Messages;
     using UnityEngine;
 
     [RequireComponent(typeof(MessagingComponent))]

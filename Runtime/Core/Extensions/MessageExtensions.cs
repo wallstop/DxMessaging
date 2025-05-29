@@ -179,10 +179,46 @@
         /// </summary>
         /// <param name="message">UntargetedMessage to emit.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void Emit<TMessage>(this TMessage message, IMessageBus messageBus = null)
+            where TMessage : class, IUntargetedMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) == typeof(IUntargetedMessage))
+            {
+                messageBus.UntypedUntargetedBroadcast(message);
+                return;
+            }
+
+            messageBus.UntargetedBroadcast(ref message);
+        }
+
+        /// <summary>
+        /// Emits an UntargetedMessage of the given type.
+        /// </summary>
+        /// <param name="message">UntargetedMessage to emit.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
         public static void EmitUntargeted<TMessage>(
             this ref TMessage message,
             IMessageBus messageBus = null
         )
+            where TMessage : struct, IUntargetedMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) == typeof(IUntargetedMessage))
+            {
+                messageBus.UntypedUntargetedBroadcast(message);
+                return;
+            }
+
+            messageBus.UntargetedBroadcast(ref message);
+        }
+
+        /// <summary>
+        /// Emits an UntargetedMessage of the given type.
+        /// </summary>
+        /// <param name="message">UntargetedMessage to emit.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void Emit<TMessage>(this ref TMessage message, IMessageBus messageBus = null)
             where TMessage : struct, IUntargetedMessage
         {
             messageBus ??= MessageHandler.MessageBus;
@@ -337,6 +373,36 @@
             }
 
             messageBus.SourcedBroadcast(ref source, ref message);
+        }
+
+        /// <summary>
+        /// Emits a StringMessage at the target containing the provided string.
+        /// </summary>
+        /// <param name="message">Message to send to the target.</param>
+        /// <param name="target">Target to send the message to.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void Emit(
+            this string message,
+            InstanceId target,
+            IMessageBus messageBus = null
+        )
+        {
+            StringMessage stringMessage = new(message);
+            (messageBus ?? MessageHandler.MessageBus).TargetedBroadcast(
+                ref target,
+                ref stringMessage
+            );
+        }
+
+        /// <summary>
+        /// Emits a GlobalStringMessage containing the provided string.
+        /// </summary>
+        /// <param name="message">Message to send globally.</param>
+        /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
+        public static void Emit(this string message, IMessageBus messageBus = null)
+        {
+            GlobalStringMessage stringMessage = new(message);
+            (messageBus ?? MessageHandler.MessageBus).UntargetedBroadcast(ref stringMessage);
         }
     }
 }

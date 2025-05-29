@@ -62,12 +62,7 @@ namespace DxMessaging.Editor
                     continue;
                 }
 
-                if (
-                    !dllPath.Contains(
-                        "Assets/Plugins/WallstopStudios.DxMessaging",
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
+                if (!dllPath.Contains("Assets/Plugins", StringComparison.OrdinalIgnoreCase))
                 {
                     string dllName = Path.GetFileName(dllPath);
                     DllNames.Add(dllName);
@@ -95,10 +90,14 @@ namespace DxMessaging.Editor
                         }
 
                         const string pluginsDirectory =
-                            "Assets/Plugins/WallstopStudios.DxMessaging/";
+                            "Assets/Plugins/Editor/WallstopStudios.DxMessaging/";
                         string outputAsset = $"{pluginsDirectory}{requiredDllName}";
                         string sourceAsset = $"{relativeDirectory}{requiredDllName}";
-                        Directory.CreateDirectory(pluginsDirectory);
+                        if (!Directory.Exists(pluginsDirectory))
+                        {
+                            Directory.CreateDirectory(pluginsDirectory);
+                            AssetDatabase.Refresh();
+                        }
                         if (!File.Exists(outputAsset))
                         {
                             File.Copy(sourceAsset, outputAsset);

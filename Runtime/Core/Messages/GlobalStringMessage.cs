@@ -1,7 +1,6 @@
-﻿namespace DxMessaging.Unity.Messages
+﻿namespace DxMessaging.Core.Messages
 {
     using System;
-    using Core.Messages;
 
     public readonly struct GlobalStringMessage : IUntargetedMessage<GlobalStringMessage>
     {

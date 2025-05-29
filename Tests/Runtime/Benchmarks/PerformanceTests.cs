@@ -6,7 +6,6 @@
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.Messages;
-    using global::Unity.PerformanceTesting;
     using NUnit.Framework;
     using Scripts.Components;
     using Scripts.Messages;
@@ -53,96 +52,6 @@
             );
             RunTest(component => ReflexiveTwoArguments(timer, timeout, component.gameObject));
             RunTest(component => ReflexiveThreeArguments(timer, timeout, component.gameObject));
-        }
-
-        [Test]
-        [Performance]
-        public void BenchmarkBroadcast()
-        {
-            GameObject go = CreateGameObject();
-            MessageRegistrationToken token = GetToken(
-                go.GetComponent<EmptyMessageAwareComponent>()
-            );
-            // ReSharper disable once NotAccessedVariable
-            int count = 0;
-            token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(go, Handle);
-
-            SimpleBroadcastMessage message = new();
-            SampleGroup time = new("Time", SampleUnit.Nanosecond);
-
-            Measure
-                .Method(() => message.EmitGameObjectBroadcast(go))
-                .SampleGroup(time)
-                .WarmupCount(10)
-                .IterationsPerMeasurement(1)
-                .MeasurementCount(10_000)
-                .Run();
-            return;
-
-            void Handle(SimpleBroadcastMessage _)
-            {
-                ++count;
-            }
-        }
-
-        [Test]
-        [Performance]
-        public void BenchmarkTargeted()
-        {
-            GameObject go = CreateGameObject();
-            MessageRegistrationToken token = GetToken(
-                go.GetComponent<EmptyMessageAwareComponent>()
-            );
-            // ReSharper disable once NotAccessedVariable
-            int count = 0;
-            token.RegisterGameObjectTargeted<SimpleTargetedMessage>(go, Handle);
-
-            SimpleTargetedMessage message = new();
-            SampleGroup time = new("Time", SampleUnit.Nanosecond);
-
-            Measure
-                .Method(() => message.EmitGameObjectTargeted(go))
-                .SampleGroup(time)
-                .WarmupCount(10)
-                .IterationsPerMeasurement(1)
-                .MeasurementCount(10_000)
-                .Run();
-            return;
-
-            void Handle(SimpleTargetedMessage _)
-            {
-                ++count;
-            }
-        }
-
-        [Test]
-        [Performance]
-        public void BenchmarkUntargeted()
-        {
-            GameObject go = CreateGameObject();
-            MessageRegistrationToken token = GetToken(
-                go.GetComponent<EmptyMessageAwareComponent>()
-            );
-            // ReSharper disable once NotAccessedVariable
-            int count = 0;
-            token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
-
-            SimpleUntargetedMessage message = new();
-            SampleGroup time = new("Time", SampleUnit.Nanosecond);
-
-            Measure
-                .Method(() => message.EmitUntargeted())
-                .SampleGroup(time)
-                .WarmupCount(10)
-                .IterationsPerMeasurement(1)
-                .MeasurementCount(10_000)
-                .Run();
-            return;
-
-            void Handle(SimpleUntargetedMessage _)
-            {
-                ++count;
-            }
         }
 
         private GameObject CreateGameObject()
