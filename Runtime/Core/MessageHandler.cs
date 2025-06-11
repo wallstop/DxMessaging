@@ -521,6 +521,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedMessageHandler<T>(
             InstanceId target,
+            Action<T> originalHandler,
             Action<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -1880,7 +1881,6 @@
             /// <param name="handler">Relevant MessageHandler.</param>
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
-
             public Action AddGlobalUntargetedHandler(
                 FastHandler<IUntargetedMessage> handler,
                 Action deregistration
@@ -1909,7 +1909,6 @@
             /// <param name="handler">Relevant MessageHandler.</param>
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
-
             public Action AddGlobalTargetedHandler(
                 FastHandlerWithContext<ITargetedMessage> handler,
                 Action deregistration
@@ -2741,7 +2740,7 @@
                 };
             }
 
-            private Action AddHandler<TU>(
+            private static Action AddHandler<TU>(
                 ref HandlerActionCache<TU> cache,
                 TU handler,
                 Action deregistration
@@ -2777,7 +2776,7 @@
                 };
             }
 
-            private Action AddHandler<TU>(
+            private static Action AddHandler<TU>(
                 ref Dictionary<int, HandlerActionCache<TU>> sortedHandlers,
                 TU handler,
                 Action deregistration,

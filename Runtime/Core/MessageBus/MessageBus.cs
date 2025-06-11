@@ -5,6 +5,8 @@
     using System.Linq.Expressions;
     using System.Reflection;
     using System.Runtime.CompilerServices;
+    using DataStructure;
+    using Diagnostics;
     using Extensions;
     using Helper;
     using Messages;
@@ -78,6 +80,12 @@
             }
         }
 
+        public bool DiagnosticsMode
+        {
+            get => _diagnosticsMode;
+            set => _diagnosticsMode = value;
+        }
+
         private static readonly Type MessageBusType = typeof(MessageBus);
 
         // For use with re-broadcasting to generic methods
@@ -137,6 +145,11 @@
 #endif
 
         private readonly RegistrationLog _log = new();
+        internal readonly CyclicBuffer<MessageEmissionData> _emissionBuffer = new(
+            GlobalMessageBufferSize
+        );
+
+        private bool _diagnosticsMode = GlobalDiagnosticsMode;
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
@@ -505,6 +518,11 @@
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage
         {
+            if (_diagnosticsMode)
+            {
+                _emissionBuffer.Add(new MessageEmissionData(typedMessage));
+            }
+
             if (!RunUntargetedInterceptors(ref typedMessage))
             {
                 return;
@@ -701,6 +719,11 @@
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
             where TMessage : ITargetedMessage
         {
+            if (_diagnosticsMode)
+            {
+                _emissionBuffer.Add(new MessageEmissionData(typedMessage, target));
+            }
+
             if (!RunTargetedInterceptors(ref typedMessage, ref target))
             {
                 return;
@@ -1628,6 +1651,11 @@
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
             where TMessage : IBroadcastMessage
         {
+            if (_diagnosticsMode)
+            {
+                _emissionBuffer.Add(new MessageEmissionData(typedMessage, source));
+            }
+
             if (!RunBroadcastInterceptors(ref typedMessage, ref source))
             {
                 return;
