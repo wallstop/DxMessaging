@@ -66,7 +66,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterTargetedMessageHandler(
                         target,
-                        (Action<T>)AugmentedHandler,
+                        targetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -108,7 +109,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterTargetedMessageHandler(
                         target,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        targetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -238,7 +240,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterTargetedPostProcessor(
                         target,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -283,7 +286,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterTargetedPostProcessor(
                         target,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -371,7 +375,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterTargetedPostProcessor(
                         target,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -416,7 +421,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterTargetedPostProcessor(
                         target,
-                        (Action<T>)AugmentedHandler,
+                        targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -467,7 +473,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterTargetedWithoutTargeting(
-                        (Action<InstanceId, T>)AugmentedHandler,
+                        messageHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -516,7 +523,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterTargetedWithoutTargeting(
-                        (MessageHandler.FastHandlerWithContext<T>)AugmentedHandler,
+                        messageHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -565,7 +573,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
-                        (Action<InstanceId, T>)AugmentedHandler,
+                        postProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -614,7 +623,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
-                        (MessageHandler.FastHandlerWithContext<T>)AugmentedHandler,
+                        postProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -663,7 +673,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterUntargetedMessageHandler(
-                        (Action<T>)AugmentedHandler,
+                        untargetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -712,7 +723,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterUntargetedMessageHandler(
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        untargetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -758,7 +770,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterUntargetedPostProcessor(
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        untargetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -799,7 +812,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterSourcedBroadcastMessageHandler(
                         source,
-                        (Action<T>)AugmentedHandler,
+                        broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -840,7 +854,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterSourcedBroadcastMessageHandler(
                         source,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -882,7 +897,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
-                        (Action<T>)AugmentedHandler,
+                        broadcastPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -923,7 +939,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        broadcastPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
                     );
@@ -1093,7 +1110,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
-                        (Action<T>)AugmentedHandler,
+                        broadcastPostProcessor,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
                     );
@@ -1142,7 +1160,8 @@ namespace DxMessaging.Core
                 {
                     return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
-                        (MessageHandler.FastHandler<T>)AugmentedHandler,
+                        broadcastPostProcessor,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
                     );
@@ -1272,7 +1291,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterSourcedBroadcastWithoutSource(
-                        (Action<InstanceId, T>)AugmentedHandler,
+                        broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -1322,7 +1342,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterSourcedBroadcastWithoutSource(
-                        (MessageHandler.FastHandlerWithContext<T>)AugmentedHandler,
+                        broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
                     );
@@ -1372,7 +1393,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
-                        (Action<InstanceId, T>)AugmentedHandler,
+                        broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
                     );
@@ -1422,7 +1444,8 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
-                        (MessageHandler.FastHandlerWithContext<T>)AugmentedHandler,
+                        broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
                     );
@@ -1471,8 +1494,11 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterGlobalAcceptAll(
+                        acceptAllUntargeted,
                         AugmentedUntargeted,
+                        acceptAllTargeted,
                         AugmentedTargeted,
+                        acceptAllBroadcast,
                         AugmentedBroadcast,
                         _messageBus
                     );
@@ -1541,8 +1567,11 @@ namespace DxMessaging.Core
                 handle =>
                 {
                     return _messageHandler.RegisterGlobalAcceptAll(
+                        acceptAllUntargeted,
                         AugmentedUntargeted,
+                        acceptAllTargeted,
                         AugmentedTargeted,
+                        acceptAllBroadcast,
                         AugmentedBroadcast,
                         _messageBus
                     );
@@ -1599,25 +1628,7 @@ namespace DxMessaging.Core
             }
 
             return InternalRegister(
-                handle =>
-                {
-                    return _messageHandler.RegisterUntargetedInterceptor(
-                        (IMessageBus.UntargetedInterceptor<T>)AugmentedHandler,
-                        priority
-                    );
-
-                    bool AugmentedHandler(ref T message)
-                    {
-                        bool result = interceptor(ref message);
-                        if (_diagnosticMode)
-                        {
-                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message));
-                        }
-
-                        return result;
-                    }
-                },
+                _ => _messageHandler.RegisterUntargetedInterceptor(interceptor, priority),
                 () =>
                     new MessageRegistrationMetadata(
                         null,
@@ -1640,25 +1651,7 @@ namespace DxMessaging.Core
             }
 
             return InternalRegister(
-                handle =>
-                {
-                    return _messageHandler.RegisterBroadcastInterceptor(
-                        (IMessageBus.BroadcastInterceptor<T>)AugmentedHandler,
-                        priority
-                    );
-
-                    bool AugmentedHandler(ref InstanceId source, ref T message)
-                    {
-                        bool result = interceptor(ref source, ref message);
-                        if (_diagnosticMode)
-                        {
-                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, source));
-                        }
-
-                        return result;
-                    }
-                },
+                _ => _messageHandler.RegisterBroadcastInterceptor(interceptor, priority),
                 () =>
                     new MessageRegistrationMetadata(
                         null,
@@ -1681,25 +1674,7 @@ namespace DxMessaging.Core
             }
 
             return InternalRegister(
-                handle =>
-                {
-                    return _messageHandler.RegisterTargetedInterceptor(
-                        (IMessageBus.TargetedInterceptor<T>)AugmentedHandler,
-                        priority
-                    );
-
-                    bool AugmentedHandler(ref InstanceId target, ref T message)
-                    {
-                        bool result = interceptor(ref target, ref message);
-                        if (_diagnosticMode)
-                        {
-                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
-                        }
-
-                        return result;
-                    }
-                },
+                _ => _messageHandler.RegisterTargetedInterceptor(interceptor, priority),
                 () =>
                     new MessageRegistrationMetadata(
                         null,

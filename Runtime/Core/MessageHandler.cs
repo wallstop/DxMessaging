@@ -427,8 +427,11 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterGlobalAcceptAll(
+            Action<IUntargetedMessage> originalUntargetedMessageHandler,
             Action<IUntargetedMessage> untargetedMessageHandler,
+            Action<InstanceId, ITargetedMessage> originalTargetedMessageHandler,
             Action<InstanceId, ITargetedMessage> targetedMessageHandler,
+            Action<InstanceId, IBroadcastMessage> originalBroadcastMessageHandler,
             Action<InstanceId, IBroadcastMessage> broadcastMessageHandler,
             IMessageBus messageBus = null
         )
@@ -438,14 +441,17 @@
             TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
 
             Action untargetedDeregistration = typedHandler.AddGlobalUntargetedHandler(
+                originalUntargetedMessageHandler,
                 untargetedMessageHandler,
                 NullDeregistration
             );
             Action targetedDeregistration = typedHandler.AddGlobalTargetedHandler(
+                originalTargetedMessageHandler,
                 targetedMessageHandler,
                 NullDeregistration
             );
             Action broadcastDeregistration = typedHandler.AddGlobalBroadcastHandler(
+                originalBroadcastMessageHandler,
                 broadcastMessageHandler,
                 NullDeregistration
             );
@@ -473,8 +479,11 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterGlobalAcceptAll(
+            FastHandler<IUntargetedMessage> originalUntargetedMessageHandler,
             FastHandler<IUntargetedMessage> untargetedMessageHandler,
+            FastHandlerWithContext<ITargetedMessage> originalTargetedMessageHandler,
             FastHandlerWithContext<ITargetedMessage> targetedMessageHandler,
+            FastHandlerWithContext<IBroadcastMessage> originalBroadcastMessageHandler,
             FastHandlerWithContext<IBroadcastMessage> broadcastMessageHandler,
             IMessageBus messageBus = null
         )
@@ -484,14 +493,17 @@
             TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
 
             Action untargetedDeregistration = typedHandler.AddGlobalUntargetedHandler(
+                originalUntargetedMessageHandler,
                 untargetedMessageHandler,
                 NullDeregistration
             );
             Action targetedDeregistration = typedHandler.AddGlobalTargetedHandler(
+                originalTargetedMessageHandler,
                 targetedMessageHandler,
                 NullDeregistration
             );
             Action broadcastDeregistration = typedHandler.AddGlobalBroadcastHandler(
+                originalBroadcastMessageHandler,
                 broadcastMessageHandler,
                 NullDeregistration
             );
@@ -537,6 +549,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedHandler(
                 target,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -554,6 +567,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedMessageHandler<T>(
             InstanceId target,
+            FastHandler<T> originalHandler,
             FastHandler<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -569,6 +583,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedHandler(
                 target,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -586,6 +601,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedPostProcessor<T>(
             InstanceId target,
+            Action<T> originalHandler,
             Action<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -601,6 +617,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedPostProcessor(
                 target,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -618,6 +635,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedPostProcessor<T>(
             InstanceId target,
+            FastHandler<T> originalHandler,
             FastHandler<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -633,6 +651,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedPostProcessor(
                 target,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -648,6 +667,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedWithoutTargetingPostProcessor<T>(
+            Action<InstanceId, T> originalHandler,
             Action<InstanceId, T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -662,6 +682,7 @@
                 );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedWithoutTargetingPostProcessor(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -677,6 +698,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedWithoutTargetingPostProcessor<T>(
+            FastHandlerWithContext<T> originalHandler,
             FastHandlerWithContext<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -691,6 +713,7 @@
                 );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedWithoutTargetingPostProcessor(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -706,6 +729,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedWithoutTargeting<T>(
+            Action<InstanceId, T> originalHandler,
             Action<InstanceId, T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -719,6 +743,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedWithoutTargetingHandler(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -734,6 +759,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterTargetedWithoutTargeting<T>(
+            FastHandlerWithContext<T> originalHandler,
             FastHandlerWithContext<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -747,6 +773,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddTargetedWithoutTargetingHandler(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -762,6 +789,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterUntargetedMessageHandler<T>(
+            Action<T> originalHandler,
             Action<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -775,6 +803,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddUntargetedHandler(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -790,6 +819,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterUntargetedMessageHandler<T>(
+            FastHandler<T> originalHandler,
             FastHandler<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -803,6 +833,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddUntargetedHandler(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -818,6 +849,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterUntargetedPostProcessor<T>(
+            Action<T> originalHandler,
             Action<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -831,6 +863,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddUntargetedPostProcessor(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -846,6 +879,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterUntargetedPostProcessor<T>(
+            FastHandler<T> originalHandler,
             FastHandler<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -859,6 +893,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddUntargetedPostProcessor(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -876,6 +911,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastMessageHandler<T>(
             InstanceId source,
+            Action<T> originalHandler,
             Action<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -892,6 +928,7 @@
 
             return typedHandler.AddSourcedBroadcastHandler(
                 source,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -909,6 +946,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastMessageHandler<T>(
             InstanceId source,
+            FastHandler<T> originalHandler,
             FastHandler<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -924,6 +962,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddSourcedBroadcastHandler(
                 source,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -939,6 +978,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastWithoutSource<T>(
+            Action<InstanceId, T> originalHandler,
             Action<InstanceId, T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -952,6 +992,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddSourcedBroadcastWithoutSourceHandler(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -967,6 +1008,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastWithoutSource<T>(
+            FastHandlerWithContext<T> originalHandler,
             FastHandlerWithContext<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -980,6 +1022,7 @@
             );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddSourcedBroadcastWithoutSourceHandler(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -997,6 +1040,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastPostProcessor<T>(
             InstanceId source,
+            Action<T> originalHandler,
             Action<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -1012,6 +1056,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddBroadcastPostProcessor(
                 source,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -1029,6 +1074,7 @@
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastPostProcessor<T>(
             InstanceId source,
+            FastHandler<T> originalHandler,
             FastHandler<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -1044,6 +1090,7 @@
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddBroadcastPostProcessor(
                 source,
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -1059,6 +1106,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastWithoutSourcePostProcessor<T>(
+            Action<InstanceId, T> originalHandler,
             Action<InstanceId, T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -1073,6 +1121,7 @@
                 );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddBroadcastWithoutSourcePostProcessor(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -1088,6 +1137,7 @@
         /// <param name="messageBus">IMessageBus override to register with, if any. Null/not provided defaults to the GlobalMessageBus.</param>
         /// <returns>The de-registration action.</returns>
         public Action RegisterSourcedBroadcastWithoutSourcePostProcessor<T>(
+            FastHandlerWithContext<T> originalHandler,
             FastHandlerWithContext<T> messageHandler,
             int priority = 0,
             IMessageBus messageBus = null
@@ -1102,6 +1152,7 @@
                 );
             TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
             return typedHandler.AddBroadcastWithoutSourcePostProcessor(
+                originalHandler,
                 messageHandler,
                 messageBusDeregistration,
                 priority
@@ -1267,6 +1318,7 @@
         private sealed class HandlerActionCache<T>
         {
             public readonly Dictionary<T, int> handlers = new();
+            public readonly Dictionary<T, T> originalToAugmented = new();
             public readonly List<T> cache = new();
             public long version;
             public long lastSeenVersion = -1;
@@ -1665,12 +1717,20 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedHandler(
                 InstanceId target,
+                Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
                 int priority
             )
             {
-                return AddHandler(target, ref _targetedHandlers, handler, deregistration, priority);
+                return AddHandler(
+                    target,
+                    ref _targetedHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration,
+                    priority
+                );
             }
 
             /// <summary>
@@ -1683,6 +1743,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedHandler(
                 InstanceId target,
+                FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
                 int priority
@@ -1691,6 +1752,7 @@
                 return AddHandler(
                     target,
                     ref _targetedFastHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1705,6 +1767,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedWithoutTargetingHandler(
+                Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
                 int priority
@@ -1712,6 +1775,7 @@
             {
                 return AddHandler(
                     ref _targetedWithoutTargetingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1726,6 +1790,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedWithoutTargetingHandler(
+                FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
                 int priority
@@ -1733,6 +1798,7 @@
             {
                 return AddHandler(
                     ref _fastTargetedWithoutTargetingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1747,12 +1813,19 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddUntargetedHandler(
+                Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
                 int priority
             )
             {
-                return AddHandler(ref _untargetedHandlers, handler, deregistration, priority);
+                return AddHandler(
+                    ref _untargetedHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration,
+                    priority
+                );
             }
 
             /// <summary>
@@ -1763,12 +1836,19 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddUntargetedHandler(
+                FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
                 int priority
             )
             {
-                return AddHandler(ref _untargetedFastHandlers, handler, deregistration, priority);
+                return AddHandler(
+                    ref _untargetedFastHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration,
+                    priority
+                );
             }
 
             /// <summary>
@@ -1781,6 +1861,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddSourcedBroadcastHandler(
                 InstanceId source,
+                Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
                 int priority
@@ -1789,6 +1870,7 @@
                 return AddHandler(
                     source,
                     ref _broadcastHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1805,6 +1887,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddSourcedBroadcastHandler(
                 InstanceId source,
+                FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
                 int priority
@@ -1813,6 +1896,7 @@
                 return AddHandler(
                     source,
                     ref _broadcastFastHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1827,6 +1911,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddSourcedBroadcastWithoutSourceHandler(
+                Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
                 int priority
@@ -1834,6 +1919,7 @@
             {
                 return AddHandler(
                     ref _broadcastWithoutSourceHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1848,6 +1934,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddSourcedBroadcastWithoutSourceHandler(
+                FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
                 int priority
@@ -1855,6 +1942,7 @@
             {
                 return AddHandler(
                     ref _fastBroadcastWithoutSourceHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1868,11 +1956,17 @@
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddGlobalUntargetedHandler(
+                Action<IUntargetedMessage> originalHandler,
                 Action<IUntargetedMessage> handler,
                 Action deregistration
             )
             {
-                return AddHandler(ref _globalUntargetedHandlers, handler, deregistration);
+                return AddHandler(
+                    ref _globalUntargetedHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration
+                );
             }
 
             /// <summary>
@@ -1882,11 +1976,17 @@
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddGlobalUntargetedHandler(
+                FastHandler<IUntargetedMessage> originalHandler,
                 FastHandler<IUntargetedMessage> handler,
                 Action deregistration
             )
             {
-                return AddHandler(ref _globalUntargetedFastHandlers, handler, deregistration);
+                return AddHandler(
+                    ref _globalUntargetedFastHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration
+                );
             }
 
             /// <summary>
@@ -1896,11 +1996,17 @@
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddGlobalTargetedHandler(
+                Action<InstanceId, ITargetedMessage> originalHandler,
                 Action<InstanceId, ITargetedMessage> handler,
                 Action deregistration
             )
             {
-                return AddHandler(ref _globalTargetedHandlers, handler, deregistration);
+                return AddHandler(
+                    ref _globalTargetedHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration
+                );
             }
 
             /// <summary>
@@ -1910,11 +2016,17 @@
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddGlobalTargetedHandler(
+                FastHandlerWithContext<ITargetedMessage> originalHandler,
                 FastHandlerWithContext<ITargetedMessage> handler,
                 Action deregistration
             )
             {
-                return AddHandler(ref _globalTargetedFastHandlers, handler, deregistration);
+                return AddHandler(
+                    ref _globalTargetedFastHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration
+                );
             }
 
             /// <summary>
@@ -1924,11 +2036,17 @@
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddGlobalBroadcastHandler(
+                Action<InstanceId, IBroadcastMessage> originalHandler,
                 Action<InstanceId, IBroadcastMessage> handler,
                 Action deregistration
             )
             {
-                return AddHandler(ref _globalBroadcastHandlers, handler, deregistration);
+                return AddHandler(
+                    ref _globalBroadcastHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration
+                );
             }
 
             /// <summary>
@@ -1938,11 +2056,17 @@
             /// <param name="deregistration">Deregistration action for the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddGlobalBroadcastHandler(
+                FastHandlerWithContext<IBroadcastMessage> originalHandler,
                 FastHandlerWithContext<IBroadcastMessage> handler,
                 Action deregistration
             )
             {
-                return AddHandler(ref _globalBroadcastFastHandlers, handler, deregistration);
+                return AddHandler(
+                    ref _globalBroadcastFastHandlers,
+                    originalHandler,
+                    handler,
+                    deregistration
+                );
             }
 
             /// <summary>
@@ -1953,6 +2077,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddUntargetedPostProcessor(
+                Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
                 int priority
@@ -1960,6 +2085,7 @@
             {
                 return AddHandler(
                     ref _untargetedPostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1974,6 +2100,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddUntargetedPostProcessor(
+                FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
                 int priority
@@ -1981,6 +2108,7 @@
             {
                 return AddHandler(
                     ref _untargetedPostProcessingFastHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -1997,6 +2125,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedPostProcessor(
                 InstanceId target,
+                Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
                 int priority
@@ -2005,6 +2134,7 @@
                 return AddHandler(
                     target,
                     ref _targetedPostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2021,6 +2151,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedPostProcessor(
                 InstanceId target,
+                FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
                 int priority
@@ -2029,6 +2160,7 @@
                 return AddHandler(
                     target,
                     ref _targetedPostProcessingFastHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2043,6 +2175,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedWithoutTargetingPostProcessor(
+                Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
                 int priority
@@ -2050,6 +2183,7 @@
             {
                 return AddHandler(
                     ref _targetedWithoutTargetingPostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2064,6 +2198,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddTargetedWithoutTargetingPostProcessor(
+                FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
                 int priority
@@ -2071,6 +2206,7 @@
             {
                 return AddHandler(
                     ref _fastTargetedWithoutTargetingPostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2087,6 +2223,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddBroadcastPostProcessor(
                 InstanceId source,
+                Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
                 int priority
@@ -2095,6 +2232,7 @@
                 return AddHandler(
                     source,
                     ref _broadcastPostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2111,6 +2249,7 @@
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddBroadcastPostProcessor(
                 InstanceId source,
+                FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
                 int priority
@@ -2119,6 +2258,7 @@
                 return AddHandler(
                     source,
                     ref _broadcastPostProcessingFastHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2133,6 +2273,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddBroadcastWithoutSourcePostProcessor(
+                Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
                 int priority
@@ -2140,6 +2281,7 @@
             {
                 return AddHandler(
                     ref _broadcastWithoutSourcePostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2154,6 +2296,7 @@
             /// <param name="priority">Priority at which to add the handler.</param>
             /// <returns>De-registration action to unregister the handler.</returns>
             public Action AddBroadcastWithoutSourcePostProcessor(
+                FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
                 int priority
@@ -2161,6 +2304,7 @@
             {
                 return AddHandler(
                     ref _fastBroadcastWithoutSourcePostProcessingHandlers,
+                    originalHandler,
                     handler,
                     deregistration,
                     priority
@@ -2645,7 +2789,7 @@
 
                 List<TU> cache = actionCache.cache;
                 cache.Clear();
-                foreach (TU handler in actionCache.handlers.Keys)
+                foreach (TU handler in actionCache.originalToAugmented.Values)
                 {
                     cache.Add(handler);
                 }
@@ -2659,6 +2803,7 @@
                     InstanceId,
                     Dictionary<int, HandlerActionCache<TU>>
                 > handlersByContext,
+                TU originalHandler,
                 TU handler,
                 Action deregistration,
                 int priority
@@ -2685,9 +2830,12 @@
                 }
 
                 Dictionary<TU, int> handlers = cache.handlers;
-                int count = handlers.GetValueOrDefault(handler, 0);
-
-                handlers[handler] = count + 1;
+                int count = handlers.GetValueOrDefault(originalHandler, 0);
+                if (count == 0)
+                {
+                    cache.originalToAugmented[originalHandler] = handler;
+                }
+                handlers[originalHandler] = count + 1;
 
                 Dictionary<
                     InstanceId,
@@ -2710,7 +2858,7 @@
 
                     handlers = cache.handlers;
 
-                    if (!handlers.TryGetValue(handler, out count))
+                    if (!handlers.TryGetValue(originalHandler, out count))
                     {
                         return;
                     }
@@ -2720,7 +2868,7 @@
 
                     if (count <= 1)
                     {
-                        _ = handlers.Remove(handler);
+                        _ = handlers.Remove(originalHandler);
                         if (0 < handlers.Count)
                         {
                             return;
@@ -2733,15 +2881,17 @@
                         }
 
                         localHandlersByContext.Remove(context);
+                        cache.originalToAugmented.Remove(originalHandler);
                         return;
                     }
 
-                    handlers[handler] = count - 1;
+                    handlers[originalHandler] = count - 1;
                 };
             }
 
             private static Action AddHandler<TU>(
                 ref HandlerActionCache<TU> cache,
+                TU originalHandler,
                 TU handler,
                 Action deregistration
             )
@@ -2749,6 +2899,10 @@
                 cache ??= new HandlerActionCache<TU>();
                 Dictionary<TU, int> handlersByPriority = cache.handlers;
                 int count = handlersByPriority.GetValueOrDefault(handler, 0);
+                if (count == 0)
+                {
+                    cache.originalToAugmented[originalHandler] = handler;
+                }
 
                 handlersByPriority[handler] = count + 1;
 
@@ -2769,6 +2923,7 @@
                     if (count <= 1)
                     {
                         _ = localHandlers.Remove(handler);
+                        _ = localHandlers.Remove(originalHandler);
                         return;
                     }
 
@@ -2777,36 +2932,41 @@
             }
 
             private static Action AddHandler<TU>(
-                ref Dictionary<int, HandlerActionCache<TU>> sortedHandlers,
+                ref Dictionary<int, HandlerActionCache<TU>> handlers,
+                TU originalHandler,
                 TU handler,
                 Action deregistration,
                 int priority
             )
             {
-                sortedHandlers ??= new Dictionary<int, HandlerActionCache<TU>>();
+                handlers ??= new Dictionary<int, HandlerActionCache<TU>>();
 
-                if (!sortedHandlers.TryGetValue(priority, out HandlerActionCache<TU> cache))
+                if (!handlers.TryGetValue(priority, out HandlerActionCache<TU> cache))
                 {
                     cache = new HandlerActionCache<TU>();
-                    sortedHandlers[priority] = cache;
+                    handlers[priority] = cache;
                 }
 
-                int count = cache.handlers.GetValueOrDefault(handler, 0);
+                int count = cache.handlers.GetValueOrDefault(originalHandler, 0);
+                if (count == 0)
+                {
+                    cache.originalToAugmented[originalHandler] = handler;
+                }
 
-                cache.handlers[handler] = count + 1;
+                cache.handlers[originalHandler] = count + 1;
 
-                Dictionary<int, HandlerActionCache<TU>> localSortedHandlers = sortedHandlers;
+                Dictionary<int, HandlerActionCache<TU>> localHandlers = handlers;
                 cache.version++;
 
                 return () =>
                 {
                     cache.version++;
-                    if (!localSortedHandlers.TryGetValue(priority, out cache))
+                    if (!localHandlers.TryGetValue(priority, out cache))
                     {
                         return;
                     }
 
-                    if (!cache.handlers.TryGetValue(handler, out count))
+                    if (!cache.handlers.TryGetValue(originalHandler, out count))
                     {
                         return;
                     }
@@ -2815,15 +2975,16 @@
                     deregistration?.Invoke();
                     if (count <= 1)
                     {
-                        _ = cache.handlers.Remove(handler);
+                        _ = cache.handlers.Remove(originalHandler);
+                        _ = cache.originalToAugmented.Remove(originalHandler);
                         if (cache.handlers.Count == 0)
                         {
-                            _ = localSortedHandlers.Remove(priority);
+                            _ = localHandlers.Remove(priority);
                         }
                         return;
                     }
 
-                    cache.handlers[handler] = count - 1;
+                    cache.handlers[originalHandler] = count - 1;
                 };
             }
         }

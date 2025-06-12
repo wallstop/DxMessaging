@@ -23,8 +23,12 @@
 
         private static string GetAccurateStackTrace()
         {
+            string fullStackTrace;
 #if UNITY_2017_1_OR_NEWER
-            string fullStackTrace = StackTraceUtility.ExtractStackTrace();
+            fullStackTrace = StackTraceUtility.ExtractStackTrace();
+#else
+            fullStackTrace = new StackTrace(true).ToString();
+#endif
             if (string.IsNullOrWhiteSpace(fullStackTrace))
             {
                 return fullStackTrace;
@@ -44,9 +48,6 @@
             return lines.Length <= startIndex
                 ? string.Empty
                 : string.Join(JoinSeparator, lines, startIndex, lines.Length - startIndex);
-#else
-            return new StackTrace(true).ToString();
-#endif
         }
     }
 }
