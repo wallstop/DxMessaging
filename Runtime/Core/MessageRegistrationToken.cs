@@ -1536,7 +1536,7 @@ namespace DxMessaging.Core
                 () =>
                     new MessageRegistrationMetadata(
                         null,
-                        null,
+                        typeof(IMessage),
                         MessageRegistrationType.GlobalAcceptAll,
                         0
                     )
@@ -1609,7 +1609,7 @@ namespace DxMessaging.Core
                 () =>
                     new MessageRegistrationMetadata(
                         null,
-                        null,
+                        typeof(IMessage),
                         MessageRegistrationType.GlobalAcceptAll,
                         0
                     )

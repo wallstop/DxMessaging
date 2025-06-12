@@ -2869,6 +2869,7 @@
                     if (count <= 1)
                     {
                         _ = handlers.Remove(originalHandler);
+                        _ = cache.originalToAugmented.Remove(originalHandler);
                         if (0 < handlers.Count)
                         {
                             return;
@@ -2881,7 +2882,6 @@
                         }
 
                         localHandlersByContext.Remove(context);
-                        cache.originalToAugmented.Remove(originalHandler);
                         return;
                     }
 
@@ -2898,13 +2898,13 @@
             {
                 cache ??= new HandlerActionCache<TU>();
                 Dictionary<TU, int> handlersByPriority = cache.handlers;
-                int count = handlersByPriority.GetValueOrDefault(handler, 0);
+                int count = handlersByPriority.GetValueOrDefault(originalHandler, 0);
                 if (count == 0)
                 {
                     cache.originalToAugmented[originalHandler] = handler;
                 }
 
-                handlersByPriority[handler] = count + 1;
+                handlersByPriority[originalHandler] = count + 1;
 
                 Dictionary<TU, int> localHandlers = handlersByPriority;
 
@@ -2913,7 +2913,7 @@
                 return () =>
                 {
                     localCache.version++;
-                    if (!localHandlers.TryGetValue(handler, out count))
+                    if (!localHandlers.TryGetValue(originalHandler, out count))
                     {
                         return;
                     }
@@ -2922,12 +2922,12 @@
                     deregistration?.Invoke();
                     if (count <= 1)
                     {
-                        _ = localHandlers.Remove(handler);
                         _ = localHandlers.Remove(originalHandler);
+                        _ = localCache.originalToAugmented.Remove(originalHandler);
                         return;
                     }
 
-                    localHandlers[handler] = count - 1;
+                    localHandlers[originalHandler] = count - 1;
                 };
             }
 
