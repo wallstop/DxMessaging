@@ -5,20 +5,49 @@
     using System.Linq;
     using Core;
     using Core.Diagnostics;
+    using Core.Messages;
     using Unity;
     using UnityEditor;
     using UnityEngine;
+    using Object = UnityEngine.Object;
 
     [CustomEditor(typeof(MessagingComponent))]
     public sealed class MessagingComponentEditor : Editor
     {
-        private readonly Dictionary<MonoBehaviour, bool> _listenerFoldouts = new();
-        private readonly Dictionary<MonoBehaviour, int> _listenerPaging = new();
         private const int PageSize = 5;
+
+        private readonly Dictionary<MonoBehaviour, bool> _listenerFoldouts = new();
+        private readonly Dictionary<MonoBehaviour, int> _listenerRegistrationPaging = new();
+        private readonly Dictionary<MonoBehaviour, bool> _listenerBufferFoldouts = new();
+        private readonly Dictionary<MonoBehaviour, int> _listenerBufferPaging = new();
+
+        private bool _globalBufferExpanded;
+        private int _globalBufferPaging;
+
+        private GUIStyle _matchingStyle;
+        private GUIStyle _potentialMatchStyle;
+        private GUIStyle _defaultStyle;
+
+        private void OnEnable()
+        {
+            _listenerFoldouts.Clear();
+        }
 
         public override void OnInspectorGUI()
         {
             base.OnInspectorGUI();
+
+            _matchingStyle ??= new GUIStyle(EditorStyles.label)
+            {
+                normal = { textColor = Color.green },
+                fontStyle = FontStyle.Bold,
+            };
+            _potentialMatchStyle ??= new GUIStyle(EditorStyles.label)
+            {
+                normal = { textColor = Color.yellow },
+                fontStyle = FontStyle.Bold,
+            };
+            _defaultStyle ??= new GUIStyle(EditorStyles.label);
 
             MessagingComponent component = target as MessagingComponent;
             if (component == null)
@@ -38,7 +67,8 @@
             using (new GUILayout.HorizontalScope())
             {
                 if (
-                    GUILayout.Button(
+                    component._registeredListeners.Values.Any(token => !token.DiagnosticMode)
+                    && GUILayout.Button(
                         $"Enable Diagnostics for All ({component._registeredListeners.Count})"
                     )
                 )
@@ -52,7 +82,8 @@
                 }
 
                 if (
-                    GUILayout.Button(
+                    component._registeredListeners.Values.Any(token => token.DiagnosticMode)
+                    && GUILayout.Button(
                         $"Disable Diagnostics for All ({component._registeredListeners.Count})"
                     )
                 )
@@ -66,10 +97,240 @@
                 }
             }
 
+            if (!MessageHandler.MessageBus.DiagnosticsMode)
+            {
+                if (GUILayout.Button("Enable Global Diagnostics"))
+                {
+                    MessageHandler.MessageBus.DiagnosticsMode = true;
+                }
+            }
+            else
+            {
+                if (GUILayout.Button("Disable Global Diagnostics"))
+                {
+                    MessageHandler.MessageBus.DiagnosticsMode = false;
+                }
+                else
+                {
+                    EditorGUILayout.Space();
+                    EditorGUILayout.LabelField("Global Buffer", EditorStyles.boldLabel);
+
+                    _globalBufferExpanded = EditorGUILayout.Foldout(
+                        _globalBufferExpanded,
+                        "Global Messages",
+                        true
+                    );
+                    int totalGlobalMessages = MessageHandler.MessageBus._emissionBuffer.Count;
+                    if (_globalBufferExpanded && totalGlobalMessages > 0)
+                    {
+                        int page = _globalBufferPaging;
+                        int totalPages = (totalGlobalMessages + PageSize - 1) / PageSize;
+                        page = Mathf.Clamp(page, 0, totalPages - 1);
+                        EditorGUI.indentLevel++;
+                        if (totalPages > 1)
+                        {
+                            using (new EditorGUILayout.HorizontalScope())
+                            {
+                                GUI.enabled = page > 0;
+                                if (GUILayout.Button("<< Previous"))
+                                {
+                                    _globalBufferPaging--;
+                                }
+
+                                GUI.enabled = true;
+
+                                GUILayout.FlexibleSpace();
+                                EditorGUILayout.LabelField($"Page {page + 1} of {totalPages}");
+                                GUILayout.FlexibleSpace();
+
+                                GUI.enabled = page < totalPages - 1;
+                                if (GUILayout.Button("Next >>"))
+                                {
+                                    _globalBufferPaging++;
+                                }
+
+                                GUI.enabled = true;
+                            }
+                        }
+
+                        MessageEmissionData[] pagedGlobalMessages = MessageHandler
+                            .MessageBus._emissionBuffer.Reverse()
+                            .Skip(page * PageSize)
+                            .Take(PageSize)
+                            .ToArray();
+                        foreach (MessageEmissionData globalEmissionData in pagedGlobalMessages)
+                        {
+                            using (new EditorGUILayout.VerticalScope("box"))
+                            {
+                                GUIStyle style;
+                                InstanceId? context = globalEmissionData.context;
+                                if (context?.Object != null)
+                                {
+                                    Object unityObject = context.Value.Object;
+                                    if (
+                                        (
+                                            typeof(ITargetedMessage).IsAssignableFrom(
+                                                globalEmissionData.message.MessageType
+                                            )
+                                            && (
+                                                unityObject == component.gameObject
+                                                || component
+                                                    .GetComponents<MonoBehaviour>()
+                                                    .Any(script => script == unityObject)
+                                            )
+                                        )
+                                        || (
+                                            typeof(IBroadcastMessage).IsAssignableFrom(
+                                                globalEmissionData.message.MessageType
+                                            )
+                                            && (
+                                                component._registeredListeners.Keys.Any(script =>
+                                                    script.gameObject == unityObject
+                                                    || script
+                                                        .GetComponents<MonoBehaviour>()
+                                                        .Any(matchedScript =>
+                                                            matchedScript == unityObject
+                                                        )
+                                                )
+                                            )
+                                        )
+                                    )
+                                    {
+                                        style = component._registeredListeners.Values.Any(
+                                            listener =>
+                                                listener._emissionBuffer.Contains(
+                                                    globalEmissionData
+                                                )
+                                        )
+                                            ? _matchingStyle
+                                            : _potentialMatchStyle;
+                                    }
+                                    else
+                                    {
+                                        style = _defaultStyle;
+                                    }
+                                    EditorGUILayout.LabelField(
+                                        "Context",
+                                        $"{unityObject.name} - {unityObject.GetType().Name}",
+                                        style
+                                    );
+                                }
+                                else
+                                {
+                                    style = component._registeredListeners.Values.Any(listener =>
+                                        listener._emissionBuffer.Contains(globalEmissionData)
+                                    )
+                                        ? _matchingStyle
+                                        : _defaultStyle;
+                                }
+
+                                GUIContent labelContent = new("Message Type");
+                                GUIContent valueContent = new(
+                                    globalEmissionData.message.MessageType.Name,
+                                    globalEmissionData.stackTrace
+                                );
+
+                                EditorGUILayout.LabelField(labelContent, valueContent, style);
+                            }
+                        }
+                    }
+                }
+            }
+            List<MonoBehaviour> listeners = new(component._registeredListeners.Keys);
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Local Buffer", EditorStyles.boldLabel);
+            foreach (MonoBehaviour listener in listeners)
+            {
+                if (!component._registeredListeners[listener].DiagnosticMode)
+                {
+                    EditorGUILayout.Space();
+                    EditorGUILayout.HelpBox(
+                        $"Diagnostics are disabled for {listener.GetType().Name}. Enable diagnostics to view diagnostics data.",
+                        MessageType.Info
+                    );
+                }
+                else
+                {
+                    _listenerBufferFoldouts.TryAdd(listener, false);
+                    _listenerBufferFoldouts[listener] = EditorGUILayout.Foldout(
+                        _listenerBufferFoldouts[listener],
+                        listener.GetType().Name,
+                        true
+                    );
+
+                    int totalMessages = component
+                        ._registeredListeners[listener]
+                        ._emissionBuffer
+                        .Count;
+                    if (_listenerBufferFoldouts[listener] && totalMessages > 0)
+                    {
+                        int page = _listenerBufferPaging.GetValueOrDefault(listener, 0);
+                        int totalPages = (totalMessages + PageSize - 1) / PageSize;
+                        page = Mathf.Clamp(page, 0, totalPages - 1);
+                        _listenerBufferPaging[listener] = page;
+                        EditorGUI.indentLevel++;
+                        if (totalPages > 1)
+                        {
+                            using (new EditorGUILayout.HorizontalScope())
+                            {
+                                GUI.enabled = page > 0;
+                                if (GUILayout.Button("<< Previous"))
+                                {
+                                    _listenerBufferPaging[listener]--;
+                                }
+
+                                GUI.enabled = true;
+
+                                GUILayout.FlexibleSpace();
+                                EditorGUILayout.LabelField($"Page {page + 1} of {totalPages}");
+                                GUILayout.FlexibleSpace();
+
+                                GUI.enabled = page < totalPages - 1;
+                                if (GUILayout.Button("Next >>"))
+                                {
+                                    _listenerBufferPaging[listener]++;
+                                }
+
+                                GUI.enabled = true;
+                            }
+                        }
+
+                        MessageEmissionData[] pagedLocalMessages = component
+                            ._registeredListeners[listener]
+                            ._emissionBuffer.Reverse()
+                            .Skip(page * PageSize)
+                            .Take(PageSize)
+                            .ToArray();
+                        foreach (MessageEmissionData globalEmissionData in pagedLocalMessages)
+                        {
+                            using (new EditorGUILayout.VerticalScope("box"))
+                            {
+                                InstanceId? context = globalEmissionData.context;
+                                if (context?.Object != null)
+                                {
+                                    Object unityObject = context.Value.Object;
+                                    EditorGUILayout.LabelField(
+                                        "Context",
+                                        $"{unityObject.name} - {unityObject.GetType().Name}"
+                                    );
+                                }
+
+                                GUIContent labelContent = new("Message Type");
+                                GUIContent valueContent = new(
+                                    globalEmissionData.message.MessageType.Name,
+                                    globalEmissionData.stackTrace
+                                );
+
+                                EditorGUILayout.LabelField(labelContent, valueContent);
+                            }
+                        }
+                    }
+                }
+            }
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Listeners", EditorStyles.boldLabel);
-
-            List<MonoBehaviour> listeners = new(component._registeredListeners.Keys);
 
             foreach (MonoBehaviour listener in listeners)
             {
@@ -131,8 +392,8 @@
             MessageRegistrationToken token
         )
         {
-            _listenerPaging.TryAdd(listener, 0);
-            int page = _listenerPaging[listener];
+            _listenerRegistrationPaging.TryAdd(listener, 0);
+            int page = _listenerRegistrationPaging[listener];
             int totalRegistrations = token._metadata.Count;
             int totalPages = (totalRegistrations + PageSize - 1) / PageSize;
             page = Mathf.Clamp(page, 0, totalPages - 1);
@@ -147,7 +408,7 @@
                     GUI.enabled = page > 0;
                     if (GUILayout.Button("<< Previous"))
                     {
-                        _listenerPaging[listener]--;
+                        _listenerRegistrationPaging[listener]--;
                     }
                     GUI.enabled = true;
 
@@ -158,18 +419,20 @@
                     GUI.enabled = page < totalPages - 1;
                     if (GUILayout.Button("Next >>"))
                     {
-                        _listenerPaging[listener]++;
+                        _listenerRegistrationPaging[listener]++;
                     }
                     GUI.enabled = true;
                 }
             }
 
-            IEnumerable<
-                KeyValuePair<MessageRegistrationHandle, MessageRegistrationMetadata>
-            > pagedRegistrations = token
+            KeyValuePair<
+                MessageRegistrationHandle,
+                MessageRegistrationMetadata
+            >[] pagedRegistrations = token
                 ._metadata.OrderBy(kvp => kvp.Key)
                 .Skip(page * PageSize)
-                .Take(PageSize);
+                .Take(PageSize)
+                .ToArray();
 
             foreach (
                 (

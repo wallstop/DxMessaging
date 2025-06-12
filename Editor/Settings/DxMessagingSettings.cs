@@ -1,18 +1,21 @@
 ﻿namespace DxMessaging.Editor.Settings
 {
 #if UNITY_EDITOR
+    using System.Linq;
     using UnityEditor;
     using UnityEngine;
 
     public sealed class DxMessagingSettings : ScriptableObject
     {
+        private const int DefaultBufferSize = 100;
+
         public const string SettingsPath = "Assets/Editor/DxMessagingSettings.asset";
 
         [SerializeField]
         internal bool _enableDiagnosticsInEditor;
 
         [SerializeField]
-        internal int _messageBufferSize = 10;
+        internal int _messageBufferSize = DefaultBufferSize;
 
         public bool EnableDiagnosticsInEditor
         {
@@ -28,12 +31,28 @@
 
         internal static DxMessagingSettings GetOrCreateSettings()
         {
-            var settings = AssetDatabase.LoadAssetAtPath<DxMessagingSettings>(SettingsPath);
+            DxMessagingSettings settings = AssetDatabase.LoadAssetAtPath<DxMessagingSettings>(
+                SettingsPath
+            );
+
+            if (settings == null)
+            {
+                settings = AssetDatabase
+                    .FindAssets($"t:{nameof(DxMessagingSettings)}")
+                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .Select(AssetDatabase.LoadAssetAtPath<DxMessagingSettings>)
+                    .FirstOrDefault(asset => asset != null);
+            }
+
             if (settings == null)
             {
                 settings = CreateInstance<DxMessagingSettings>();
                 settings._enableDiagnosticsInEditor = false;
-                settings._messageBufferSize = 10;
+                settings._messageBufferSize = DefaultBufferSize;
+                if (!AssetDatabase.IsValidFolder("Assets/Editor"))
+                {
+                    AssetDatabase.CreateFolder("Assets", "Editor");
+                }
                 AssetDatabase.CreateAsset(settings, SettingsPath);
                 AssetDatabase.SaveAssets();
             }

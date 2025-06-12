@@ -2804,7 +2804,7 @@
                     Dictionary<int, HandlerActionCache<TU>>
                 > handlersByContext,
                 TU originalHandler,
-                TU handler,
+                TU augmentedHandler,
                 Action deregistration,
                 int priority
             )
@@ -2833,7 +2833,7 @@
                 int count = handlers.GetValueOrDefault(originalHandler, 0);
                 if (count == 0)
                 {
-                    cache.originalToAugmented[originalHandler] = handler;
+                    cache.originalToAugmented[originalHandler] = augmentedHandler;
                 }
                 handlers[originalHandler] = count + 1;
 
@@ -2892,7 +2892,7 @@
             private static Action AddHandler<TU>(
                 ref HandlerActionCache<TU> cache,
                 TU originalHandler,
-                TU handler,
+                TU augmentedHandler,
                 Action deregistration
             )
             {
@@ -2901,7 +2901,7 @@
                 int count = handlersByPriority.GetValueOrDefault(originalHandler, 0);
                 if (count == 0)
                 {
-                    cache.originalToAugmented[originalHandler] = handler;
+                    cache.originalToAugmented[originalHandler] = augmentedHandler;
                 }
 
                 handlersByPriority[originalHandler] = count + 1;
@@ -2934,7 +2934,7 @@
             private static Action AddHandler<TU>(
                 ref Dictionary<int, HandlerActionCache<TU>> handlers,
                 TU originalHandler,
-                TU handler,
+                TU augmentedHandler,
                 Action deregistration,
                 int priority
             )
@@ -2950,7 +2950,7 @@
                 int count = cache.handlers.GetValueOrDefault(originalHandler, 0);
                 if (count == 0)
                 {
-                    cache.originalToAugmented[originalHandler] = handler;
+                    cache.originalToAugmented[originalHandler] = augmentedHandler;
                 }
 
                 cache.handlers[originalHandler] = count + 1;
