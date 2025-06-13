@@ -1,7 +1,6 @@
 ﻿namespace DxMessaging.Core.Messages
 {
     using System;
-    using UnityEngine;
 
     [Flags]
     public enum ReflexiveSendMode
@@ -137,7 +136,12 @@
             Type[] parameterTypes
         )
         {
-            Debug.Assert(parameters.Length == parameterTypes.Length, "Parameter count mismatch!");
+            if (parameters.Length != parameterTypes.Length)
+            {
+                throw new ArgumentException(
+                    $"Parameter length {parameters.Length} does not match parameter length {parameterTypes.Length}"
+                );
+            }
             this.method = method;
             this.sendMode = sendMode;
             this.parameters = parameters;
