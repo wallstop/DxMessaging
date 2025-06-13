@@ -44,19 +44,13 @@ namespace DxMessaging.Tests.Runtime.Core
                 toSetup.broadcastWithoutSourceHandler = () => ++broadcastWithoutSourceWorks;
                 toSetup.componentTargetedHandler = () =>
                 {
-                    if (!componentTargetedWorks.TryGetValue(toSetup, out int existing))
-                    {
-                        existing = 0;
-                    }
+                    int existing = componentTargetedWorks.GetValueOrDefault(toSetup, 0);
 
                     componentTargetedWorks[toSetup] = ++existing;
                 };
                 toSetup.componentBroadcastHandler = () =>
                 {
-                    if (!componentBroadcastWorks.TryGetValue(toSetup, out int existing))
-                    {
-                        existing = 0;
-                    }
+                    int existing = componentBroadcastWorks.GetValueOrDefault(toSetup, 0);
 
                     componentBroadcastWorks[toSetup] = ++existing;
                 };

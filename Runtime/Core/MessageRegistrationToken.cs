@@ -1,7 +1,11 @@
-﻿namespace DxMessaging.Core
+﻿[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("WallstopStudios.Dxmessaging.Editor")]
+
+namespace DxMessaging.Core
 {
     using System;
     using System.Collections.Generic;
+    using DataStructure;
+    using Diagnostics;
     using MessageBus;
     using Messages;
 
@@ -15,14 +19,28 @@
     public sealed class MessageRegistrationToken
     {
         public bool Enabled => _enabled;
+        public bool DiagnosticMode
+        {
+            get => _diagnosticMode;
+            set => _diagnosticMode = value;
+        }
 
         private readonly MessageHandler _messageHandler;
 
         private readonly Dictionary<MessageRegistrationHandle, Action> _registrations = new();
         private readonly Dictionary<MessageRegistrationHandle, Action> _deregistrations = new();
+        internal readonly Dictionary<
+            MessageRegistrationHandle,
+            MessageRegistrationMetadata
+        > _metadata = new();
+        internal readonly Dictionary<MessageRegistrationHandle, int> _callCounts = new();
+        internal readonly CyclicBuffer<MessageEmissionData> _emissionBuffer = new(
+            IMessageBus.GlobalMessageBufferSize
+        );
 
         private readonly IMessageBus _messageBus;
         private bool _enabled;
+        private bool _diagnosticMode = IMessageBus.GlobalDiagnosticsMode;
 
         private MessageRegistrationToken(MessageHandler messageHandler, IMessageBus messageBus)
         {
@@ -44,12 +62,32 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedMessageHandler(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedMessageHandler(
                         target,
                         targetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(T message)
+                    {
+                        targetedHandler(message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        target,
+                        typeof(T),
+                        MessageRegistrationType.Targeted,
+                        priority
                     )
             );
         }
@@ -65,13 +103,34 @@
             {
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
+
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedMessageHandler(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedMessageHandler(
                         target,
                         targetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        targetedHandler(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        target,
+                        typeof(T),
+                        MessageRegistrationType.Targeted,
+                        priority
                     )
             );
         }
@@ -177,12 +236,32 @@
             where T : ITargetedMessage
         {
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        targetedPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        target,
+                        typeof(T),
+                        MessageRegistrationType.TargetedPostProcessor,
+                        priority
                     )
             );
         }
@@ -203,12 +282,32 @@
             where T : ITargetedMessage
         {
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        targetedPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        target,
+                        typeof(T),
+                        MessageRegistrationType.TargetedPostProcessor,
+                        priority
                     )
             );
         }
@@ -272,12 +371,32 @@
             where T : ITargetedMessage
         {
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        targetedPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        target,
+                        typeof(T),
+                        MessageRegistrationType.TargetedPostProcessor,
+                        priority
                     )
             );
         }
@@ -298,14 +417,35 @@
             where T : ITargetedMessage
         {
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedPostProcessor(
                         target,
                         targetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        targetedPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        target,
+                        typeof(T),
+                        MessageRegistrationType.TargetedPostProcessor,
+                        priority
                     )
             );
+            ;
         }
 #endif
 
@@ -330,11 +470,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedWithoutTargeting(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedWithoutTargeting(
                         messageHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(InstanceId target, T message)
+                    {
+                        messageHandler(target, message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.TargetedWithoutTargeting,
+                        priority
                     )
             );
         }
@@ -360,11 +520,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedWithoutTargeting(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedWithoutTargeting(
                         messageHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(ref InstanceId target, ref T message)
+                    {
+                        messageHandler(ref target, ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.TargetedWithoutTargeting,
+                        priority
                     )
             );
         }
@@ -390,11 +570,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
                         postProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(InstanceId target, T message)
+                    {
+                        postProcessor(target, message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.TargetedWithoutTargetingPostProcessor,
+                        priority
                     )
             );
         }
@@ -420,11 +620,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterTargetedWithoutTargetingPostProcessor(
                         postProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref InstanceId target, ref T message)
+                    {
+                        postProcessor(ref target, ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.TargetedWithoutTargetingPostProcessor,
+                        priority
                     )
             );
         }
@@ -450,11 +670,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterUntargetedMessageHandler(
+                handle =>
+                {
+                    return _messageHandler.RegisterUntargetedMessageHandler(
                         untargetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(T message)
+                    {
+                        untargetedHandler(message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.Untargeted,
+                        priority
                     )
             );
         }
@@ -480,11 +720,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterUntargetedMessageHandler(
+                handle =>
+                {
+                    return _messageHandler.RegisterUntargetedMessageHandler(
                         untargetedHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        untargetedHandler(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.Untargeted,
+                        priority
                     )
             );
         }
@@ -507,11 +767,31 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterUntargetedPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterUntargetedPostProcessor(
                         untargetedPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        untargetedPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.UntargetedPostProcessor,
+                        priority
                     )
             );
         }
@@ -528,12 +808,32 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastMessageHandler(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastMessageHandler(
                         source,
                         broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(T message)
+                    {
+                        broadcastHandler(message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        source,
+                        typeof(T),
+                        MessageRegistrationType.Broadcast,
+                        priority
                     )
             );
         }
@@ -550,12 +850,32 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastMessageHandler(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastMessageHandler(
                         source,
                         broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        broadcastHandler(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        source,
+                        typeof(T),
+                        MessageRegistrationType.Broadcast,
+                        priority
                     )
             );
         }
@@ -571,13 +891,34 @@
             {
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
+
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
                         broadcastPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(T message)
+                    {
+                        broadcastPostProcessor(message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        source,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastPostProcessor,
+                        priority
                     )
             );
         }
@@ -594,12 +935,32 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
                         broadcastPostProcessor,
+                        AugmentedHandler,
                         priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        broadcastPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        source,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastPostProcessor,
+                        priority
                     )
             );
         }
@@ -745,12 +1106,32 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
                         broadcastPostProcessor,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(T message)
+                    {
+                        broadcastPostProcessor(message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        source,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastPostProcessor,
+                        priority
                     )
             );
         }
@@ -775,12 +1156,32 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastPostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastPostProcessor(
                         source,
                         broadcastPostProcessor,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref T message)
+                    {
+                        broadcastPostProcessor(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        source,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastPostProcessor,
+                        priority
                     )
             );
         }
@@ -887,11 +1288,31 @@
             }
 
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastWithoutSource(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastWithoutSource(
                         broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(InstanceId source, T message)
+                    {
+                        broadcastHandler(source, message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastWithoutSource,
+                        priority
                     )
             );
         }
@@ -918,11 +1339,31 @@
             }
 
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastWithoutSource(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastWithoutSource(
                         broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         messageBus: _messageBus
+                    );
+
+                    void AugmentedHandler(ref InstanceId source, ref T message)
+                    {
+                        broadcastHandler(ref source, ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastWithoutSource,
+                        priority
                     )
             );
         }
@@ -949,11 +1390,31 @@
             }
 
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
                         broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(InstanceId source, T message)
+                    {
+                        broadcastHandler(source, message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastWithoutSourcePostProcessor,
+                        priority
                     )
             );
         }
@@ -980,11 +1441,31 @@
             }
 
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
+                handle =>
+                {
+                    return _messageHandler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
                         broadcastHandler,
+                        AugmentedHandler,
                         priority: priority,
                         _messageBus
+                    );
+
+                    void AugmentedHandler(ref InstanceId source, ref T message)
+                    {
+                        broadcastHandler(ref source, ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastWithoutSourcePostProcessor,
+                        priority
                     )
             );
         }
@@ -1010,12 +1491,54 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterGlobalAcceptAll(
+                handle =>
+                {
+                    return _messageHandler.RegisterGlobalAcceptAll(
                         acceptAllUntargeted,
+                        AugmentedUntargeted,
                         acceptAllTargeted,
+                        AugmentedTargeted,
                         acceptAllBroadcast,
+                        AugmentedBroadcast,
                         _messageBus
+                    );
+
+                    void AugmentedUntargeted(IUntargetedMessage message)
+                    {
+                        acceptAllUntargeted(message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message));
+                        }
+                    }
+
+                    void AugmentedTargeted(InstanceId target, ITargetedMessage message)
+                    {
+                        acceptAllTargeted(target, message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+
+                    void AugmentedBroadcast(InstanceId source, IBroadcastMessage message)
+                    {
+                        acceptAllBroadcast(source, message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(IMessage),
+                        MessageRegistrationType.GlobalAcceptAll,
+                        0
                     )
             );
         }
@@ -1041,12 +1564,54 @@
                 return MessageRegistrationHandle.CreateMessageRegistrationHandle();
             }
             return InternalRegister(
-                () =>
-                    _messageHandler.RegisterGlobalAcceptAll(
+                handle =>
+                {
+                    return _messageHandler.RegisterGlobalAcceptAll(
                         acceptAllUntargeted,
+                        AugmentedUntargeted,
                         acceptAllTargeted,
+                        AugmentedTargeted,
                         acceptAllBroadcast,
+                        AugmentedBroadcast,
                         _messageBus
+                    );
+
+                    void AugmentedUntargeted(ref IUntargetedMessage message)
+                    {
+                        acceptAllUntargeted(ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message));
+                        }
+                    }
+
+                    void AugmentedTargeted(ref InstanceId target, ref ITargetedMessage message)
+                    {
+                        acceptAllTargeted(ref target, ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                        }
+                    }
+
+                    void AugmentedBroadcast(ref InstanceId source, ref IBroadcastMessage message)
+                    {
+                        acceptAllBroadcast(ref source, ref message);
+                        if (_diagnosticMode)
+                        {
+                            _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
+                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                        }
+                    }
+                },
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(IMessage),
+                        MessageRegistrationType.GlobalAcceptAll,
+                        0
                     )
             );
         }
@@ -1063,7 +1628,14 @@
             }
 
             return InternalRegister(
-                () => _messageHandler.RegisterUntargetedInterceptor(interceptor, priority)
+                _ => _messageHandler.RegisterUntargetedInterceptor(interceptor, priority),
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.UntargetedInterceptor,
+                        priority
+                    )
             );
         }
 
@@ -1079,7 +1651,14 @@
             }
 
             return InternalRegister(
-                () => _messageHandler.RegisterBroadcastInterceptor(interceptor, priority)
+                _ => _messageHandler.RegisterBroadcastInterceptor(interceptor, priority),
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.BroadcastInterceptor,
+                        priority
+                    )
             );
         }
 
@@ -1095,7 +1674,14 @@
             }
 
             return InternalRegister(
-                () => _messageHandler.RegisterTargetedInterceptor(interceptor, priority)
+                _ => _messageHandler.RegisterTargetedInterceptor(interceptor, priority),
+                () =>
+                    new MessageRegistrationMetadata(
+                        null,
+                        typeof(T),
+                        MessageRegistrationType.TargetedInterceptor,
+                        priority
+                    )
             );
         }
 
@@ -1103,15 +1689,18 @@
         /// Handles the actual [de]registration wrapping and (potential) lazy execution.
         /// </summary>
         /// <param name="registerAndGetDeregistration">Proxied registration function that returns a de-registration function.</param>
+        /// <param name="metadataProducer">Opaque metadata producer function.</param>
         /// <returns>A handle that allows for registration and de-registration.</returns>
         private MessageRegistrationHandle InternalRegister(
-            Func<Action> registerAndGetDeregistration
+            Func<MessageRegistrationHandle, Action> registerAndGetDeregistration,
+            Func<MessageRegistrationMetadata> metadataProducer
         )
         {
             MessageRegistrationHandle handle =
                 MessageRegistrationHandle.CreateMessageRegistrationHandle();
 
             _registrations[handle] = Registration;
+            _metadata[handle] = metadataProducer();
 
             // Generally, registrations should take place before all calls to enable. Just in case, though...
             if (_enabled)
@@ -1124,7 +1713,7 @@
             // We don't want to actually register at this time (might not be awake/enabled) - so we wrap that shit up, to lazy register when we're enabled.
             void Registration()
             {
-                Action actualDeregistration = registerAndGetDeregistration();
+                Action actualDeregistration = registerAndGetDeregistration(handle);
                 _deregistrations[handle] = actualDeregistration;
             }
         }
@@ -1175,7 +1764,6 @@
             }
 
             // ReSharper disable once ForCanBeConvertedToForeach
-
 
             _enabled = false;
         }

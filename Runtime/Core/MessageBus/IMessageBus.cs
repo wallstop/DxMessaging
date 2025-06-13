@@ -10,10 +10,15 @@
     /// </summary>
     public interface IMessageBus
     {
+        public static bool GlobalDiagnosticsMode { get; set; }
+        public static int GlobalMessageBufferSize { get; set; }
+
         internal static int GlobalSequentialIndex = -1;
 
         protected static int GenerateNewGlobalSequentialIndex() =>
             Interlocked.Increment(ref GlobalSequentialIndex);
+
+        public bool DiagnosticsMode { get; }
 
         public int RegisteredGlobalSequentialIndex { get; }
         public int RegisteredBroadcast { get; }
@@ -283,7 +288,6 @@
         /// Broadcasts a fast Untargeted message to all listeners registered to this bus.
         /// </summary>
         /// <param name="typedMessage">Message to broadcast.</param>
-
         void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage;
 
@@ -299,7 +303,6 @@
         /// </summary>
         /// <param name="target">Target to send the message to.</param>
         /// <param name="typedMessage">Message to broadcast.</param>
-
         void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
             where TMessage : ITargetedMessage;
 
@@ -315,7 +318,6 @@
         /// </summary>
         /// <param name="source">Source of the message.</param>
         /// <param name="typedMessage">Message to broadcast.</param>
-
         void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
             where TMessage : IBroadcastMessage;
     }

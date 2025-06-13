@@ -92,7 +92,6 @@
         public readonly string method;
         public readonly ReflexiveSendMode sendMode;
         public readonly object[] parameters;
-
         public readonly Type[] parameterTypes;
 
         public readonly MethodSignatureKey signatureKey;
@@ -127,6 +126,26 @@
             {
                 parameterTypes = Array.Empty<Type>();
             }
+            signatureKey = new MethodSignatureKey(method, parameterTypes);
+        }
+
+        public ReflexiveMessage(
+            string method,
+            ReflexiveSendMode sendMode,
+            object[] parameters,
+            Type[] parameterTypes
+        )
+        {
+            if (parameters.Length != parameterTypes.Length)
+            {
+                throw new ArgumentException(
+                    $"Parameter length {parameters.Length} does not match parameter length {parameterTypes.Length}"
+                );
+            }
+            this.method = method;
+            this.sendMode = sendMode;
+            this.parameters = parameters;
+            this.parameterTypes = parameterTypes;
             signatureKey = new MethodSignatureKey(method, parameterTypes);
         }
     }

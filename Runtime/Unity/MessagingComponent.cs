@@ -14,7 +14,7 @@
 
         private MessageHandler _messageHandler;
 
-        private readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
+        internal readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
             new();
 
         public MessageRegistrationToken Create(MonoBehaviour listener)
