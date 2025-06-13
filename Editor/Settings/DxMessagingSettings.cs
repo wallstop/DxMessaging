@@ -8,8 +8,7 @@
     public sealed class DxMessagingSettings : ScriptableObject
     {
         private const int DefaultBufferSize = 100;
-
-        public const string SettingsPath = "Assets/Editor/DxMessagingSettings.asset";
+        private const string SettingsPath = "Assets/Editor/DxMessagingSettings.asset";
 
         [SerializeField]
         internal bool _enableDiagnosticsInEditor;

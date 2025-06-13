@@ -31,6 +31,11 @@
                 ),
                 new GUIContent("Global Diagnostics Mode")
             );
+            EditorGUILayout.PropertyField(
+                _messagingSettings.FindProperty(nameof(DxMessagingSettings._messageBufferSize)),
+                new GUIContent("Message Buffer Size")
+            );
+
             _messagingSettings.ApplyModifiedProperties();
         }
 
