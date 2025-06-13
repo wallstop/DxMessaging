@@ -258,9 +258,9 @@
                 ? string.Empty
                 : typeSymbol.ContainingNamespace.ToDisplayString();
             string namespaceBlockOpen = string.IsNullOrEmpty(namespaceName)
-                ? "namespace\n{"
+                ? string.Empty
                 : $"namespace {namespaceName}\n{{";
-            const string namespaceBlockClose = "}";
+            string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
             const string indent = "    ";
 
             string typeNameWithGenerics = typeSymbol.ToDisplayString(
@@ -279,10 +279,12 @@
 
             string accessibility = typeSymbol.DeclaredAccessibility switch
             {
-                Accessibility.Public => "public ",
-                Accessibility.Internal => "internal ",
+                Accessibility.Public => "public",
+                Accessibility.Protected => "protected",
+                Accessibility.Private => "private",
+                Accessibility.Internal => "internal",
                 // Add others if necessary, default to internal if restrictive
-                _ => "internal ",
+                _ => "internal",
             };
 
             string interfaceDeclaration = $", global::{targetInterfaceFullName}";
@@ -294,7 +296,7 @@
 
                 {{namespaceBlockOpen}}
                 {{indent}}// Partial implementation for {{typeNameWithGenerics}} to implement {{BaseInterfaceFullName}}
-                {{indent}}{{accessibility}}partial {{typeKind}} {{typeNameWithGenerics}} : global::{{BaseInterfaceFullName}} {{interfaceDeclaration}}
+                {{indent}}{{accessibility}} partial {{typeKind}} {{typeNameWithGenerics}} : global::{{BaseInterfaceFullName}} {{interfaceDeclaration}}
                 {{indent}}{
                 {{indent}}    /// <inheritdoc/>
                 {{indent}}    public global::System.Type MessageType => typeof({{fullyQualifiedName}});

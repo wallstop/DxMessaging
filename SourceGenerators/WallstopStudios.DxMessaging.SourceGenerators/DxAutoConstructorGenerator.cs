@@ -143,7 +143,7 @@
 
             foreach (TypeToGenerateInfo typeInfo in typesToGenerate)
             {
-                if (!processedTypes.Add(typeInfo.TypeSymbol))
+                if (!processedTypes.Add(typeInfo.TypeSymbol) || typeInfo.FieldsToInject.Length == 0)
                 {
                     continue; // Already processed this type (e.g., from another partial definition)
                 }
@@ -171,13 +171,14 @@
             ImmutableArray<IFieldSymbol> fieldsToInject
         )
         {
+
             string namespaceName = typeSymbol.ContainingNamespace.IsGlobalNamespace
                 ? string.Empty
                 : typeSymbol.ContainingNamespace.ToDisplayString();
             string namespaceBlockOpen = string.IsNullOrEmpty(namespaceName)
-                ? "namespace\n{"
+                ? string.Empty
                 : $"namespace {namespaceName}\n{{";
-            const string namespaceBlockClose = "}";
+            string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
             const string indent = "    ";
 
             string typeName = typeSymbol.ToDisplayString(
