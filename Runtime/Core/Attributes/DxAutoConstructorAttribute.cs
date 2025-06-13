@@ -7,8 +7,8 @@
         Inherited = false,
         AllowMultiple = false
     )]
-    public sealed class DxAutoGenConstructorAttribute : Attribute
+    public sealed class DxAutoConstructorAttribute : Attribute
     {
-        public DxAutoGenConstructorAttribute() { }
+        public DxAutoConstructorAttribute() { }
     }
 }
