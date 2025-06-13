@@ -18,6 +18,9 @@
         private const string AutoGenConstructorAttrFullName =
             "DxMessaging.Core.Attributes.DxAutoConstructorAttribute";
 
+        private const string OptionalParameterAttrFullName =
+            "DxMessaging.Core.Attributes.DxOptionalParameterAttribute";
+
         // Info needed during generation for a valid type
         private record struct TypeToGenerateInfo(
             INamedTypeSymbol TypeSymbol,
@@ -171,7 +174,6 @@
             ImmutableArray<IFieldSymbol> fieldsToInject
         )
         {
-
             string namespaceName = typeSymbol.ContainingNamespace.IsGlobalNamespace
                 ? string.Empty
                 : typeSymbol.ContainingNamespace.ToDisplayString();
@@ -213,18 +215,39 @@
                     SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
                 );
 
-            for (int i = 0; i < fieldsToInject.Length; i++)
+            List<(string Type, string Name, bool IsOptional)> parameterDetails = [];
+
+            foreach (IFieldSymbol field in fieldsToInject)
             {
-                IFieldSymbol field = fieldsToInject[i];
                 string fieldType = field.Type.ToDisplayString(fieldTypeFormat);
                 string fieldName = field.Name;
+                bool isOptional = field
+                    .GetAttributes()
+                    .Any(attr =>
+                        string.Equals(
+                            attr.AttributeClass?.ToDisplayString(),
+                            OptionalParameterAttrFullName,
+                            StringComparison.Ordinal
+                        )
+                    );
 
-                constructorParams.Append($"{fieldType} {fieldName}");
-                if (i < fieldsToInject.Length - 1)
+                parameterDetails.Add((fieldType, fieldName, isOptional));
+                constructorBody.AppendLine($"{indent}{indent}    this.{fieldName} = {fieldName};");
+            }
+
+            for (int i = 0; i < parameterDetails.Count; i++)
+            {
+                (string Type, string Name, bool IsOptional) p = parameterDetails[i];
+                constructorParams.Append($"{p.Type} {p.Name}");
+                if (p.IsOptional)
+                {
+                    constructorParams.Append(" = default");
+                }
+
+                if (i < parameterDetails.Count - 1)
                 {
                     constructorParams.Append(", ");
                 }
-                constructorBody.AppendLine($"{indent}{indent}    this.{fieldName} = {fieldName};");
             }
 
             return $$"""
