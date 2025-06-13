@@ -27,6 +27,8 @@
         private GUIStyle _matchingStyle;
         private GUIStyle _potentialMatchStyle;
         private GUIStyle _defaultStyle;
+        private GUIStyle _leftAlignedStyle;
+        private GUIStyle _rightAlignedStyle;
 
         private void OnEnable()
         {
@@ -48,6 +50,14 @@
                 fontStyle = FontStyle.Bold,
             };
             _defaultStyle ??= new GUIStyle(EditorStyles.label);
+            _leftAlignedStyle ??= new GUIStyle(EditorStyles.label)
+            {
+                alignment = TextAnchor.MiddleLeft,
+            };
+            _rightAlignedStyle ??= new GUIStyle(EditorStyles.label)
+            {
+                alignment = TextAnchor.MiddleRight,
+            };
 
             MessagingComponent component = target as MessagingComponent;
             if (component == null)
@@ -209,11 +219,6 @@
                                     {
                                         style = _defaultStyle;
                                     }
-                                    EditorGUILayout.LabelField(
-                                        "Context",
-                                        $"{unityObject.name} - {unityObject.GetType().Name}",
-                                        style
-                                    );
                                 }
                                 else
                                 {
@@ -231,6 +236,33 @@
                                 );
 
                                 EditorGUILayout.LabelField(labelContent, valueContent, style);
+                                if (context?.Object != null)
+                                {
+                                    Object unityObject = context.Value.Object;
+                                    string label = "Context";
+                                    if (
+                                        typeof(ITargetedMessage).IsAssignableFrom(
+                                            globalEmissionData.message.MessageType
+                                        )
+                                    )
+                                    {
+                                        label = "Target";
+                                    }
+                                    else if (
+                                        typeof(IBroadcastMessage).IsAssignableFrom(
+                                            globalEmissionData.message.MessageType
+                                        )
+                                    )
+                                    {
+                                        label = "Source";
+                                    }
+                                    EditorGUILayout.ObjectField(
+                                        label,
+                                        unityObject,
+                                        typeof(Object),
+                                        true
+                                    );
+                                }
                             }
                         }
                     }
@@ -306,16 +338,6 @@
                         {
                             using (new EditorGUILayout.VerticalScope("box"))
                             {
-                                InstanceId? context = globalEmissionData.context;
-                                if (context?.Object != null)
-                                {
-                                    Object unityObject = context.Value.Object;
-                                    EditorGUILayout.LabelField(
-                                        "Context",
-                                        $"{unityObject.name} - {unityObject.GetType().Name}"
-                                    );
-                                }
-
                                 GUIContent labelContent = new("Message Type");
                                 GUIContent valueContent = new(
                                     globalEmissionData.message.MessageType.Name,
@@ -323,6 +345,35 @@
                                 );
 
                                 EditorGUILayout.LabelField(labelContent, valueContent);
+
+                                InstanceId? context = globalEmissionData.context;
+                                if (context?.Object != null)
+                                {
+                                    Object unityObject = context.Value.Object;
+                                    string label = "Context";
+                                    if (
+                                        typeof(ITargetedMessage).IsAssignableFrom(
+                                            globalEmissionData.message.MessageType
+                                        )
+                                    )
+                                    {
+                                        label = "Target";
+                                    }
+                                    else if (
+                                        typeof(IBroadcastMessage).IsAssignableFrom(
+                                            globalEmissionData.message.MessageType
+                                        )
+                                    )
+                                    {
+                                        label = "Source";
+                                    }
+                                    EditorGUILayout.ObjectField(
+                                        label,
+                                        unityObject,
+                                        typeof(Object),
+                                        true
+                                    );
+                                }
                             }
                         }
                     }
@@ -441,27 +492,36 @@
                 ) in pagedRegistrations
             )
             {
-                int callCount = token._callCounts.GetValueOrDefault(handle, 0);
-
-                string messageName = metadata.type?.Name ?? string.Empty;
-                EditorGUILayout.LabelField(messageName, EditorStyles.boldLabel);
-
-                EditorGUI.indentLevel++;
-
-                EditorGUILayout.LabelField("Type", metadata.registrationType.ToString());
-                EditorGUILayout.LabelField("Priority", metadata.priority.ToString());
-                EditorGUILayout.LabelField("Call Count", callCount.ToString());
-                if (metadata.context?.Object != null)
+                using (new EditorGUILayout.VerticalScope("box"))
                 {
-                    Object unityObject = metadata.context.Value.Object;
-                    EditorGUILayout.LabelField(
-                        "Context",
-                        $"{unityObject.name} - {unityObject.GetType().Name}"
-                    );
-                }
+                    int callCount = token._callCounts.GetValueOrDefault(handle, 0);
 
-                EditorGUI.indentLevel--;
-                EditorGUILayout.Space();
+                    string messageName = metadata.type?.Name ?? string.Empty;
+                    GUIContent labelContent = new(messageName, $"Priority: {metadata.priority}");
+                    GUIContent valueContent = new(
+                        metadata.registrationType.ToString(),
+                        $"Priority: {metadata.priority}"
+                    );
+
+                    EditorGUILayout.LabelField(labelContent, valueContent);
+                    if (metadata.context?.Object != null)
+                    {
+                        Object unityObject = metadata.context.Value.Object;
+                        string label = "Context";
+                        if (typeof(ITargetedMessage).IsAssignableFrom(metadata.type))
+                        {
+                            label = "Target";
+                        }
+                        else if (typeof(IBroadcastMessage).IsAssignableFrom(metadata.type))
+                        {
+                            label = "Source";
+                        }
+                        EditorGUILayout.ObjectField(label, unityObject, typeof(Object), true);
+                    }
+
+                    EditorGUILayout.LabelField("Call Count", callCount.ToString());
+                    EditorGUILayout.Space();
+                }
             }
             EditorGUI.indentLevel--;
         }
