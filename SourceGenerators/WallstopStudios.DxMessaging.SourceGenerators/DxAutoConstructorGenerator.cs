@@ -1,8 +1,9 @@
-namespace WallstopStudios.DxMessaging.SourceGenerators
+﻿namespace WallstopStudios.DxMessaging.SourceGenerators
 {
     using System;
     using System.Collections.Generic;
     using System.Collections.Immutable;
+    using System.Diagnostics;
     using System.Linq;
     using System.Text;
     using System.Threading;
@@ -12,10 +13,10 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
     using Microsoft.CodeAnalysis.Text;
 
     [Generator(LanguageNames.CSharp)]
-    public sealed class DxAutoGenConstructorGenerator : IIncrementalGenerator
+    public sealed class DxAutoConstructorGenerator : IIncrementalGenerator
     {
         private const string AutoGenConstructorAttrFullName =
-            "DxMessaging.Core.Attributes.DxAutoGenConstructorAttribute";
+            "DxMessaging.Core.Attributes.DxAutoConstructorAttribute";
 
         // Info needed during generation for a valid type
         private record struct TypeToGenerateInfo(
@@ -83,7 +84,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             );
             if (
                 semanticModel.GetDeclaredSymbol(typeDeclarationSyntax, cancellationToken)
-                is not INamedTypeSymbol typeSymbol
+                is not { } typeSymbol
             )
             {
                 return null;
@@ -113,9 +114,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             ImmutableArray<IFieldSymbol> fieldsToInject = typeSymbol
                 .GetMembers()
                 .OfType<IFieldSymbol>()
-                .Where(f =>
-                    f.DeclaredAccessibility == Accessibility.Public && f.IsReadOnly && !f.IsStatic
-                )
+                .Where(f => f.DeclaredAccessibility == Accessibility.Public && !f.IsStatic)
                 .OrderBy(f => f.DeclaringSyntaxReferences.FirstOrDefault()?.Span.Start ?? 0) // Order by declaration in source
                 .ToImmutableArray();
 
@@ -195,25 +194,31 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
             string typeAccessibility = typeSymbol.DeclaredAccessibility switch
             {
-                Accessibility.Public => "public ",
-                Accessibility.Internal => "internal ",
-                _ => "internal ", // Default to internal if not public or protected
+                Accessibility.Public => "public",
+                Accessibility.Protected => "protected",
+                Accessibility.Private => "private",
+                Accessibility.Internal => "internal",
+                _ => "internal", // Default to internal if not public or protected
             };
 
-            string constructorAccessibility = "public "; // Always public as requested
+            string constructorAccessibility = "public"; // Always public as requested
 
             // Generate constructor parameters and body assignments
             StringBuilder constructorParams = new();
             StringBuilder constructorBody = new();
+
+            SymbolDisplayFormat fieldTypeFormat =
+                SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
+                    SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
+                );
+
             for (int i = 0; i < fieldsToInject.Length; i++)
             {
                 IFieldSymbol field = fieldsToInject[i];
-                string fieldType = field.Type.ToDisplayString(
-                    SymbolDisplayFormat.FullyQualifiedFormat
-                );
+                string fieldType = field.Type.ToDisplayString(fieldTypeFormat);
                 string fieldName = field.Name;
 
-                constructorParams.Append($"global::{fieldType} {fieldName}");
+                constructorParams.Append($"{fieldType} {fieldName}");
                 if (i < fieldsToInject.Length - 1)
                 {
                     constructorParams.Append(", ");
@@ -227,12 +232,12 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 #nullable enable annotations
 
                 {{namespaceBlockOpen}}
-                {{indent}}{{typeAccessibility}}partial {{typeKind}} {{typeName}}
+                {{indent}}{{typeAccessibility}} partial {{typeKind}} {{typeName}}
                 {{indent}}{
                 {{indent}}    /// <summary>
                 {{indent}}    /// Auto-generated constructor by DxAutoGenConstructorGenerator.
                 {{indent}}    /// </summary>
-                {{indent}}    {{constructorAccessibility}}{{typeSymbol.Name}}({{constructorParams}})
+                {{indent}}    {{constructorAccessibility}} {{typeSymbol.Name}}({{constructorParams}})
                 {{indent}}    {
                 {{constructorBody}}
                 {{indent}}    }
