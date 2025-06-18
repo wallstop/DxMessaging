@@ -38,6 +38,8 @@ namespace DxMessaging.Core
             IMessageBus.GlobalMessageBufferSize
         );
 
+        private readonly List<InstanceId> _relevantReceivers = new(0);
+
         private readonly IMessageBus _messageBus;
         private bool _enabled;
         private bool _diagnosticMode = IMessageBus.GlobalDiagnosticsMode;
@@ -78,7 +80,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -121,7 +125,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -252,7 +258,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -298,7 +306,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -387,7 +397,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -433,7 +445,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -485,7 +499,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -535,7 +551,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -585,7 +603,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -635,7 +655,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, target));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, target)
+                            );
                         }
                     }
                 },
@@ -685,7 +707,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers)
+                            );
                         }
                     }
                 },
@@ -735,7 +759,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers)
+                            );
                         }
                     }
                 },
@@ -782,7 +808,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers)
+                            );
                         }
                     }
                 },
@@ -824,7 +852,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, source)
+                            );
                         }
                     }
                 },
@@ -866,7 +896,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, source)
+                            );
                         }
                     }
                 },
@@ -909,7 +941,9 @@ namespace DxMessaging.Core
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
-                            _emissionBuffer.Add(new MessageEmissionData(message, source));
+                            _emissionBuffer.Add(
+                                new MessageEmissionData(message, _relevantReceivers, source)
+                            );
                         }
                     }
                 },

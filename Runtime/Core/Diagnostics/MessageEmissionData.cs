@@ -1,6 +1,8 @@
 ﻿namespace DxMessaging.Core.Diagnostics
 {
     using System;
+    using System.Collections.Generic;
+    using System.Collections.Immutable;
 #if UNITY_2017_1_OR_NEWER
     using UnityEngine;
 #endif
@@ -12,11 +14,17 @@
 
         public readonly IMessage message;
         public readonly InstanceId? context;
+        public readonly ImmutableArray<InstanceId> relevantReceivers;
         public readonly string stackTrace;
 
-        public MessageEmissionData(IMessage message, InstanceId? context = null)
+        public MessageEmissionData(
+            IMessage message,
+            List<InstanceId> relevantReceivers,
+            InstanceId? context = null
+        )
         {
             this.message = message;
+            this.relevantReceivers = relevantReceivers.ToImmutableArray();
             this.context = context;
             stackTrace = GetAccurateStackTrace();
         }

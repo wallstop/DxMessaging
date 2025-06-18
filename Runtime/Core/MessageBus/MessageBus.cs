@@ -149,6 +149,8 @@
             GlobalMessageBufferSize
         );
 
+        private readonly List<InstanceId> _relevantReceivers = new();
+
         private bool _diagnosticsMode = GlobalDiagnosticsMode;
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
@@ -518,11 +520,7 @@
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage
         {
-            if (_diagnosticsMode)
-            {
-                _emissionBuffer.Add(new MessageEmissionData(typedMessage));
-            }
-
+            _relevantReceivers.Clear();
             if (!RunUntargetedInterceptors(ref typedMessage))
             {
                 return;
@@ -609,6 +607,11 @@
                 }
             }
 
+            if (_diagnosticsMode)
+            {
+                _emissionBuffer.Add(new MessageEmissionData(typedMessage, _relevantReceivers));
+            }
+
             if (!foundAnyHandlers && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
@@ -641,6 +644,14 @@
                     list.Add(handler);
                 }
                 cache.lastSeenVersion = cache.version;
+            }
+
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in list)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
             }
 
             switch (list.Count)
@@ -721,7 +732,7 @@
         {
             if (_diagnosticsMode)
             {
-                _emissionBuffer.Add(new MessageEmissionData(typedMessage, target));
+                _relevantReceivers.Clear();
             }
 
             if (!RunTargetedInterceptors(ref typedMessage, ref target))
@@ -1319,6 +1330,13 @@
                 }
             }
 
+            if (_diagnosticsMode)
+            {
+                _emissionBuffer.Add(
+                    new MessageEmissionData(typedMessage, _relevantReceivers, target)
+                );
+            }
+
             if (!foundAnyHandlers && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
@@ -1344,6 +1362,13 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -1498,6 +1523,13 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -1572,6 +1604,14 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
+
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -1653,7 +1693,7 @@
         {
             if (_diagnosticsMode)
             {
-                _emissionBuffer.Add(new MessageEmissionData(typedMessage, source));
+                _relevantReceivers.Clear();
             }
 
             if (!RunBroadcastInterceptors(ref typedMessage, ref source))
@@ -1922,6 +1962,13 @@
                 }
             }
 
+            if (_diagnosticsMode)
+            {
+                _emissionBuffer.Add(
+                    new MessageEmissionData(typedMessage, _relevantReceivers, source)
+                );
+            }
+
             if (!foundAnyHandlers && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
@@ -1942,6 +1989,15 @@
             where TMessage : IBroadcastMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
+
+            // TODO: loop unrolling here
             foreach (MessageHandler handler in messageHandlers)
             {
                 handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
@@ -1965,7 +2021,16 @@
             {
                 return;
             }
+
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
+
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -2120,6 +2185,14 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
+
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -2620,6 +2693,13 @@
                 return;
             }
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -2759,6 +2839,13 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
             switch (messageHandlers.Count)
             {
                 case 1:
@@ -2912,6 +2999,13 @@
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
+            if (_diagnosticsMode)
+            {
+                foreach (MessageHandler handler in messageHandlers)
+                {
+                    _relevantReceivers.Add(handler.owner);
+                }
+            }
             switch (messageHandlers.Count)
             {
                 case 1:
