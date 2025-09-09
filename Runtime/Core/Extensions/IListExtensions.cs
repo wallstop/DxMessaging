@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.Extensions
+namespace DxMessaging.Core.Extensions
 {
     using System;
     using System.Collections.Generic;

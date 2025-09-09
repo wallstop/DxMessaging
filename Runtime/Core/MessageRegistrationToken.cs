@@ -1,4 +1,4 @@
-﻿[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("WallstopStudios.Dxmessaging.Editor")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("WallstopStudios.Dxmessaging.Editor")]
 
 namespace DxMessaging.Core
 {

@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Unity
+namespace DxMessaging.Unity
 {
     using System;
     using System.Collections.Generic;

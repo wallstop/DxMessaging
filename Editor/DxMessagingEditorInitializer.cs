@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Editor
+namespace DxMessaging.Editor
 {
 #if UNITY_EDITOR
     using Core.MessageBus;

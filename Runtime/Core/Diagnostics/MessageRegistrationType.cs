@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.Diagnostics
+namespace DxMessaging.Core.Diagnostics
 {
     public enum MessageRegistrationType
     {

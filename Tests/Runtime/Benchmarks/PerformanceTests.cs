@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Tests.Runtime.Benchmarks
+namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
     using System.Diagnostics;

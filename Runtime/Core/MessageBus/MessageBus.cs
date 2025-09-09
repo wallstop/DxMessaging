@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.MessageBus
+namespace DxMessaging.Core.MessageBus
 {
     using System;
     using System.Collections.Generic;

@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Tests.Runtime.Scripts.Components
+namespace DxMessaging.Tests.Runtime.Scripts.Components
 {
     using Messages;
     using Unity;

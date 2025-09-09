@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Editor.CustomEditors
+namespace DxMessaging.Editor.CustomEditors
 {
 #if UNITY_EDITOR
     using System.Collections.Generic;

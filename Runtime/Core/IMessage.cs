@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core
+namespace DxMessaging.Core
 {
     using System;
 

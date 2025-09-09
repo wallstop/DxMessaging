@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.Helper
+namespace DxMessaging.Core.Helper
 {
     public static class MessageHelperIndexer
     {

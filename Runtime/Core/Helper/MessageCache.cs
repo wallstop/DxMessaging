@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.Helper
+namespace DxMessaging.Core.Helper
 {
     using System.Collections;
     using System.Collections.Generic;

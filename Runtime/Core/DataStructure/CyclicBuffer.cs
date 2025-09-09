@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.DataStructure
+namespace DxMessaging.Core.DataStructure
 {
     using System;
     using System.Collections;

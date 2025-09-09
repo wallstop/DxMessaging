@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Editor.Settings
+namespace DxMessaging.Editor.Settings
 {
 #if UNITY_EDITOR
     using System.Linq;

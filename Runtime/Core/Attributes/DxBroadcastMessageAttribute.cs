@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Core.Attributes
+namespace DxMessaging.Core.Attributes
 {
     using System;
 

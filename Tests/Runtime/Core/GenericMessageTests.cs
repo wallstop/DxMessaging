@@ -1,4 +1,4 @@
-﻿namespace DxMessaging.Tests.Runtime.Core
+namespace DxMessaging.Tests.Runtime.Core
 {
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
