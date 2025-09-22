@@ -46,31 +46,15 @@ namespace DxMessaging.Unity
                 return createdToken;
             }
 
-            if (_messageHandler == null)
-            {
-                _messageHandler = new MessageHandler(gameObject) { active = true };
-                MessagingDebug.Log(
-                    LogLevel.Debug,
-                    "Creating MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
-                    listener.GetType(),
-                    listener.gameObject.name,
-                    (InstanceId)gameObject
-                );
-            }
-            else
-            {
-                MessagingDebug.Log(
-                    LogLevel.Debug,
-                    "Using existing MessageHandler for componentType {0}, GameObject name: {1}, InstanceId: {2}.",
-                    listener.GetType(),
-                    listener.gameObject.name,
-                    (InstanceId)gameObject
-                );
-            }
-
+            _messageHandler ??= CreateMessageHandler();
             createdToken = MessageRegistrationToken.Create(_messageHandler);
             _registeredListeners[listener] = createdToken;
             return createdToken;
+        }
+
+        private void Awake()
+        {
+            _messageHandler ??= CreateMessageHandler();
         }
 
         public void OnEnable()
@@ -94,6 +78,11 @@ namespace DxMessaging.Unity
             {
                 _messageHandler.active = newActive;
             }
+        }
+
+        private MessageHandler CreateMessageHandler()
+        {
+            return new MessageHandler(gameObject) { active = true };
         }
     }
 }
