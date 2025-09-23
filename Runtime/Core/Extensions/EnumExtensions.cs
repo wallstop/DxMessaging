@@ -9,29 +9,36 @@ namespace DxMessaging.Core.Extensions
         internal static bool HasFlagNoAlloc<T>(this T value, T flag)
             where T : unmanaged, Enum
         {
-            ulong valueUnderlying = GetUInt64(value);
-            ulong flagUnderlying = GetUInt64(flag);
-            return (valueUnderlying & flagUnderlying) == flagUnderlying;
+            ulong? valueUnderlying = GetUInt64(value);
+            ulong? flagUnderlying = GetUInt64(flag);
+            if (valueUnderlying == null || flagUnderlying == null)
+            {
+                // Fallback for unsupported enum sizes
+                return value.HasFlag(flag);
+            }
+
+            return (valueUnderlying.Value & flagUnderlying.Value) == flagUnderlying.Value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe ulong GetUInt64<T>(T value)
+        private static ulong? GetUInt64<T>(T value)
             where T : unmanaged
         {
-            /*
-                Works because T is constrained to unmanaged, so it's safe to reinterpret
-                All enums are value types and have a fixed size
-             */
-            return sizeof(T) switch
+            try
             {
-                1 => *(byte*)&value,
-                2 => *(ushort*)&value,
-                4 => *(uint*)&value,
-                8 => *(ulong*)&value,
-                _ => throw new ArgumentException(
-                    $"Unsupported enum size: {sizeof(T)} for type {typeof(T)}"
-                ),
-            };
+                return Unsafe.SizeOf<T>() switch
+                {
+                    1 => Unsafe.As<T, byte>(ref value),
+                    2 => Unsafe.As<T, ushort>(ref value),
+                    4 => Unsafe.As<T, uint>(ref value),
+                    8 => Unsafe.As<T, ulong>(ref value),
+                    _ => null,
+                };
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

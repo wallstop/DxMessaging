@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.dxmessaging",
-  "version": "2.0.0-rc26.7",
+  "version": "2.0.0-rc26.8",
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
@@ -32,6 +32,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   }
 }
+
 
 
 
