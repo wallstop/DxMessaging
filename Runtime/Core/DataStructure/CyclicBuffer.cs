@@ -166,37 +166,28 @@ namespace DxMessaging.Core.DataStructure
             return true;
         }
 
-        public int RemoveAll(Func<T, bool> predicate)
+        public int RemoveAll(Predicate<T> predicate)
         {
             if (Count == 0)
             {
                 return 0;
             }
 
-            int write = 0;
-            int removedCount = 0;
-
+            _cache.Clear();
             for (int i = 0; i < Count; ++i)
             {
-                int readIdx = AdjustedIndexFor(i);
-                T item = _buffer[readIdx];
-                if (predicate(item))
-                {
-                    removedCount++;
-                }
-                else
-                {
-                    _buffer[write++] = item;
-                }
+                _cache.Add(_buffer[AdjustedIndexFor(i)]);
             }
 
+            int removedCount = _cache.RemoveAll(predicate);
             if (removedCount == 0)
             {
                 return 0;
             }
 
-            _buffer.RemoveRange(write, _buffer.Count - write);
-            Count -= removedCount;
+            _buffer.Clear();
+            _buffer.AddRange(_cache);
+            Count = _cache.Count;
             _position = Count < Capacity ? Count : 0;
             return removedCount;
         }
