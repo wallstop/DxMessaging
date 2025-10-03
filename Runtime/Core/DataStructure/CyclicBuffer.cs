@@ -51,6 +51,7 @@ namespace DxMessaging.Core.DataStructure
         public int Count { get; private set; }
 
         private readonly List<T> _buffer;
+        private readonly List<T> _cache = new();
         private int _position;
 
         public T this[int index]
@@ -132,21 +133,24 @@ namespace DxMessaging.Core.DataStructure
                 return false;
             }
 
-            int write = 0;
-            bool removed = false;
             comparer ??= EqualityComparer<T>.Default;
+
+            _cache.Clear();
             for (int i = 0; i < Count; ++i)
             {
-                int readIdx = AdjustedIndexFor(i);
-                T item = _buffer[readIdx];
+                _cache.Add(_buffer[AdjustedIndexFor(i)]);
+            }
 
-                if (!removed && comparer.Equals(item, element))
+            // Find and remove the element
+            bool removed = false;
+            for (int i = 0; i < _cache.Count; ++i)
+            {
+                if (comparer.Equals(_cache[i], element))
                 {
+                    _cache.RemoveAt(i);
                     removed = true;
-                    continue;
+                    break;
                 }
-
-                _buffer[write++] = item;
             }
 
             if (!removed)
@@ -154,9 +158,10 @@ namespace DxMessaging.Core.DataStructure
                 return false;
             }
 
-            _buffer.RemoveRange(write, _buffer.Count - write);
-
-            Count--;
+            // Rebuild the buffer with linearized data
+            _buffer.Clear();
+            _buffer.AddRange(_cache);
+            Count = _cache.Count;
             _position = Count < Capacity ? Count : 0;
             return true;
         }
