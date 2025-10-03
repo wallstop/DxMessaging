@@ -77,6 +77,23 @@ namespace DxMessaging.Tests.Runtime.Core
             _spawned.Clear();
         }
 
+        [UnityTearDown]
+        public IEnumerator UnityCleanup()
+        {
+            foreach (GameObject spawned in _spawned)
+            {
+                if (spawned == null)
+                {
+                    continue;
+                }
+
+                Object.Destroy(spawned);
+                yield return null;
+            }
+
+            _spawned.Clear();
+        }
+
         [UnitySetUp]
         public virtual IEnumerator UnitySetup()
         {

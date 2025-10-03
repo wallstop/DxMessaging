@@ -472,5 +472,94 @@ namespace DxMessaging.Tests.Runtime.Core
             }
             yield break;
         }
+        [UnityTest]
+        public IEnumerator AddRegistrationDuringTargetedWithoutTargetingEmission()
+        {
+            GameObject test = new(nameof(AddRegistrationDuringTargetedWithoutTargetingEmission), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int primaryCount = 0;
+            int secondaryCount = 0;
+            MessageRegistrationHandle? secondaryHandle = null;
+
+            MessageRegistrationHandle primaryHandle = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                (target, _) =>
+                {
+                    ++primaryCount;
+                    if (secondaryHandle == null)
+                    {
+                        secondaryHandle = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>((_, _) => ++secondaryCount);
+                    }
+                }
+            );
+
+            SimpleTargetedMessage message = new();
+            message.EmitGameObjectTargeted(test);
+            Assert.AreEqual(1, primaryCount);
+            Assert.AreEqual(0, secondaryCount);
+
+            message.EmitGameObjectTargeted(test);
+            Assert.AreEqual(2, primaryCount);
+            Assert.AreEqual(1, secondaryCount);
+
+            message.EmitGameObjectTargeted(test);
+            Assert.AreEqual(3, primaryCount);
+            Assert.AreEqual(2, secondaryCount);
+
+            token.RemoveRegistration(primaryHandle);
+            if (secondaryHandle.HasValue)
+            {
+                token.RemoveRegistration(secondaryHandle.Value);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator AddRegistrationDuringBroadcastWithoutSourceEmission()
+        {
+            GameObject test = new(nameof(AddRegistrationDuringBroadcastWithoutSourceEmission), typeof(EmptyMessageAwareComponent));
+            _spawned.Add(test);
+            EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int primaryCount = 0;
+            int secondaryCount = 0;
+            MessageRegistrationHandle? secondaryHandle = null;
+
+            MessageRegistrationHandle primaryHandle = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                (source, _) =>
+                {
+                    ++primaryCount;
+                    if (secondaryHandle == null)
+                    {
+                        secondaryHandle = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>((_, _) => ++secondaryCount);
+                    }
+                }
+            );
+
+            SimpleBroadcastMessage message = new();
+            message.EmitComponentBroadcast(component);
+            Assert.AreEqual(1, primaryCount);
+            Assert.AreEqual(0, secondaryCount);
+
+            message.EmitComponentBroadcast(component);
+            Assert.AreEqual(2, primaryCount);
+            Assert.AreEqual(1, secondaryCount);
+
+            message.EmitComponentBroadcast(component);
+            Assert.AreEqual(3, primaryCount);
+            Assert.AreEqual(2, secondaryCount);
+
+            token.RemoveRegistration(primaryHandle);
+            if (secondaryHandle.HasValue)
+            {
+                token.RemoveRegistration(secondaryHandle.Value);
+            }
+            yield break;
+        }
     }
 }
+

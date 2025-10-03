@@ -60,11 +60,6 @@ namespace DxMessaging.Unity
 
         protected virtual void OnDisable()
         {
-            if (_isQuitting)
-            {
-                return;
-            }
-
             if (MessageRegistrationTiedToEnableStatus)
             {
                 _messageRegistrationToken?.Disable();
@@ -73,11 +68,6 @@ namespace DxMessaging.Unity
 
         protected virtual void OnDestroy()
         {
-            if (_isQuitting)
-            {
-                return;
-            }
-
             _messageRegistrationToken?.Disable();
             _messageRegistrationToken = null;
         }

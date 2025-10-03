@@ -278,7 +278,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         )
         {
             int count = 0;
-            var token = GetToken(component);
+            MessageRegistrationToken token = GetToken(component);
 
             GameObject go = component.gameObject;
             InstanceId target = go;
@@ -322,7 +322,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         )
         {
             int count = 0;
-            var token = GetToken(component);
+            MessageRegistrationToken token = GetToken(component);
             InstanceId target = component;
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
@@ -365,7 +365,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         )
         {
             int count = 0;
-            var token = GetToken(component);
+            MessageRegistrationToken token = GetToken(component);
 
             GameObject go = component.gameObject;
             InstanceId target = go;
@@ -408,7 +408,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         )
         {
             int count = 0;
-            var token = GetToken(component);
+            MessageRegistrationToken token = GetToken(component);
             InstanceId target = component;
 
             token.RegisterComponentTargeted<ComplexTargetedMessage>(component, Handle);
@@ -451,7 +451,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         )
         {
             int count = 0;
-            var token = GetToken(component);
+            MessageRegistrationToken token = GetToken(component);
 
             token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
             // Pre-warm
