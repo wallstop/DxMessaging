@@ -41,15 +41,15 @@ For UntargetedMessages, DxMessaging is significantly faster (roughly 2x) than Un
 
 | Message Tech | Operations / Second | Allocations? |
 | ------------ | ------------------- | ------------ |
-| Unity | 2,636,000 | Yes |
-| DxMessaging (GameObject) - Normal | 2,556,400 | No |
-| DxMessaging (Component) - Normal | 2,516,400 | No |
-| DxMessaging (GameObject) - No-Copy | 2,757,200 | No |
-| DxMessaging (Component) - No-Copy | 2,749,200 | No |
-| DxMessaging (Untargeted) - No-Copy | 4,159,600 | No |
-| Reflexive (One Argument) | 1,995,000 | No |
-| Reflexive (Two Arguments) | 941,600 | No |
-| Reflexive (Three Arguments) | 933,200 | No |
+| Unity | 2,496,800 | Yes |
+| DxMessaging (GameObject) - Normal | 2,574,400 | No |
+| DxMessaging (Component) - Normal | 2,539,800 | No |
+| DxMessaging (GameObject) - No-Copy | 2,745,000 | No |
+| DxMessaging (Component) - No-Copy | 2,747,000 | No |
+| DxMessaging (Untargeted) - No-Copy | 4,138,600 | No |
+| Reflexive (One Argument) | 1,954,600 | No |
+| Reflexive (Two Arguments) | 928,800 | No |
+| Reflexive (Three Arguments) | 916,400 | No |
 
 ## Linux
 
