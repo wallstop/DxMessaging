@@ -2420,10 +2420,6 @@ namespace DxMessaging.Core.MessageBus
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
                     int count = interceptors.Count;
-                    if (interceptorObjects.Capacity < count)
-                    {
-                        interceptorObjects.Capacity = count;
-                    }
 
                     for (int i = 0; i < count; ++i)
                     {
@@ -2472,11 +2468,6 @@ namespace DxMessaging.Core.MessageBus
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
                     int count = interceptors.Count;
-                    if (interceptorObjects.Capacity < count)
-                    {
-                        interceptorObjects.Capacity = count;
-                    }
-
                     for (int i = 0; i < count; ++i)
                     {
                         interceptorObjects.Add(interceptors[i]);
@@ -2524,10 +2515,6 @@ namespace DxMessaging.Core.MessageBus
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
                     int count = interceptors.Count;
-                    if (interceptorObjects.Capacity < count)
-                    {
-                        interceptorObjects.Capacity = count;
-                    }
 
                     for (int i = 0; i < count; ++i)
                     {
