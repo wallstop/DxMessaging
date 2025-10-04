@@ -16,6 +16,11 @@ namespace DxMessaging.Unity
         /// </summary>
         protected virtual bool MessageRegistrationTiedToEnableStatus => true;
 
+        /// <summary>
+        ///     If true, will register/unregister handles for StringMessages.
+        /// </summary>
+        protected virtual bool RegisterForStringMessages => true;
+
         protected bool _isQuitting;
 
         protected MessagingComponent _messagingComponent;
@@ -29,17 +34,20 @@ namespace DxMessaging.Unity
 
         protected virtual void RegisterMessageHandlers()
         {
-            _ = _messageRegistrationToken.RegisterGameObjectTargeted<StringMessage>(
-                gameObject,
-                HandleStringGameObjectMessage
-            );
-            _ = _messageRegistrationToken.RegisterComponentTargeted<StringMessage>(
-                this,
-                HandleStringComponentMessage
-            );
-            _ = _messageRegistrationToken.RegisterUntargeted<GlobalStringMessage>(
-                HandleGlobalStringMessage
-            );
+            if (RegisterForStringMessages)
+            {
+                _ = _messageRegistrationToken.RegisterGameObjectTargeted<StringMessage>(
+                    gameObject,
+                    HandleStringGameObjectMessage
+                );
+                _ = _messageRegistrationToken.RegisterComponentTargeted<StringMessage>(
+                    this,
+                    HandleStringComponentMessage
+                );
+                _ = _messageRegistrationToken.RegisterUntargeted<GlobalStringMessage>(
+                    HandleGlobalStringMessage
+                );
+            }
         }
 
         protected virtual void OnEnable()
@@ -52,11 +60,6 @@ namespace DxMessaging.Unity
 
         protected virtual void OnDisable()
         {
-            if (_isQuitting)
-            {
-                return;
-            }
-
             if (MessageRegistrationTiedToEnableStatus)
             {
                 _messageRegistrationToken?.Disable();
@@ -65,11 +68,6 @@ namespace DxMessaging.Unity
 
         protected virtual void OnDestroy()
         {
-            if (_isQuitting)
-            {
-                return;
-            }
-
             _messageRegistrationToken?.Disable();
             _messageRegistrationToken = null;
         }

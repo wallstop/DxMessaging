@@ -184,10 +184,8 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageRegistrationToken token2 = GetToken(component2);
 
             HashSet<MessageRegistrationHandle> handles = new();
-            var handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                test1,
-                Test1Receive
-            );
+            MessageRegistrationHandle handle =
+                token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(test1, Test1Receive);
             _ = handles.Add(handle);
             handle = token1.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
                 test1,
