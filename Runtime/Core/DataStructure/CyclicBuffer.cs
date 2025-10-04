@@ -51,7 +51,7 @@ namespace DxMessaging.Core.DataStructure
         public int Count { get; private set; }
 
         private readonly List<T> _buffer;
-        private readonly List<T> _cache = new();
+        private readonly List<T> _cache;
         private int _position;
 
         public T this[int index]
@@ -79,6 +79,7 @@ namespace DxMessaging.Core.DataStructure
             _position = 0;
             Count = 0;
             _buffer = new List<T>();
+            _cache = new List<T>();
             if (initialContents != null)
             {
                 foreach (T item in initialContents)
@@ -158,11 +159,7 @@ namespace DxMessaging.Core.DataStructure
                 return false;
             }
 
-            // Rebuild the buffer with linearized data
-            _buffer.Clear();
-            _buffer.AddRange(_cache);
-            Count = _cache.Count;
-            _position = Count < Capacity ? Count : 0;
+            RebuildFromCache();
             return true;
         }
 
@@ -185,11 +182,16 @@ namespace DxMessaging.Core.DataStructure
                 return 0;
             }
 
+            RebuildFromCache();
+            return removedCount;
+        }
+
+        private void RebuildFromCache()
+        {
             _buffer.Clear();
             _buffer.AddRange(_cache);
             Count = _cache.Count;
             _position = Count < Capacity ? Count : 0;
-            return removedCount;
         }
 
         public void Clear()
