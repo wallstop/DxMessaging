@@ -9,7 +9,63 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    name: Run Unity Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v3
+        with:
+          path: Library
+          key: Library-${{ hashFiles('package.json') }}
+          restore-keys: |
+            Library-
+
+      - name: Run Unity Tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2021.3.33f1
+          testMode: playmode
+          checkName: Unity Test Results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          customParameters: -nographics -testPlatform StandaloneWindows64
+          coverageOptions: 'generateAdditionalMetrics;generateHtmlReport;generateBadgeReport;assemblyFilters:+DxMessaging*'
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: Test results
+          path: artifacts
+
+      - name: Upload Coverage Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: Coverage results
+          path: CodeCoverage
+
+      - name: Publish Coverage Report
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: CodeCoverage/workspace-opencov/PlayMode/TestCoverageResults_*.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
   publish_npm:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:

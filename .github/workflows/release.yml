@@ -1,0 +1,243 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Unity Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v3
+        with:
+          path: Library
+          key: Library-${{ hashFiles('package.json') }}
+          restore-keys: |
+            Library-
+
+      - name: Run Unity Tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2021.3.33f1
+          testMode: playmode
+          checkName: Unity Test Results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          customParameters: -nographics -testPlatform StandaloneWindows64
+          coverageOptions: 'generateAdditionalMetrics;generateHtmlReport;generateBadgeReport;assemblyFilters:+DxMessaging*'
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: Test results
+          path: artifacts
+
+      - name: Upload Coverage Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: Coverage results
+          path: CodeCoverage
+
+  create_release:
+    name: Create GitHub Release
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Package Version
+        id: get_version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Determine if this is a pre-release
+          if [[ "$VERSION" == *"rc"* ]] || [[ "$VERSION" == *"alpha"* ]] || [[ "$VERSION" == *"beta"* ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if version changed
+        id: version_check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual trigger detected. Proceeding with release."
+            echo "should_release=true" >> $GITHUB_ENV
+          else
+            PREV_VERSION=$(git show HEAD~1:package.json 2>/dev/null | jq -r '.version' || echo "0.0.0")
+            NEW_VERSION="${{ env.VERSION }}"
+            echo "Previous version: $PREV_VERSION"
+            echo "New version: $NEW_VERSION"
+
+            if [ "$PREV_VERSION" != "$NEW_VERSION" ]; then
+              echo "Version changed, proceeding with release..."
+              echo "should_release=true" >> $GITHUB_ENV
+            else
+              echo "Version did not change, skipping release..."
+              echo "should_release=false" >> $GITHUB_ENV
+            fi
+          fi
+
+      - name: Check if tag exists
+        id: check_tag
+        if: env.should_release == 'true'
+        run: |
+          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
+            echo "Tag v${{ env.VERSION }} already exists, skipping release."
+            echo "tag_exists=true" >> $GITHUB_ENV
+          else
+            echo "Tag v${{ env.VERSION }} does not exist, proceeding."
+            echo "tag_exists=false" >> $GITHUB_ENV
+          fi
+
+      - name: Generate Release Notes
+        id: release_notes
+        if: env.should_release == 'true' && env.tag_exists == 'false'
+        run: |
+          # Try to get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using initial commit"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Previous tag: $PREV_TAG"
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Create release notes
+          cat << EOF > release_notes.md
+          ## Changes in v${{ env.VERSION }}
+
+          ${COMMITS}
+
+          ### Installation
+
+          Install via Unity Package Manager:
+          \`\`\`
+          https://github.com/wallstop/DxMessaging.git#v${{ env.VERSION }}
+          \`\`\`
+
+          Or via NPM:
+          \`\`\`
+          npm install com.wallstop-studios.dxmessaging@${{ env.VERSION }}
+          \`\`\`
+          EOF
+
+          echo "release_notes_file=release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create Unity Package
+        if: env.should_release == 'true' && env.tag_exists == 'false'
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2021.3.33f1
+          targetPlatform: StandaloneLinux64
+          buildMethod: DxMessaging.Editor.PackageExporter.Export
+          customParameters: -packageName DxMessaging-v${{ env.VERSION }}.unitypackage -exportPath ./
+
+      - name: Verify and Create Package Archives
+        if: env.should_release == 'true' && env.tag_exists == 'false'
+        run: |
+          # Check if .unitypackage was created
+          if [ -f "DxMessaging-v${{ env.VERSION }}.unitypackage" ]; then
+            echo "Unity package created successfully"
+            ls -lh DxMessaging-v${{ env.VERSION }}.unitypackage
+          else
+            echo "Warning: Unity package file not found"
+          fi
+
+          # Always create a tar.gz archive as an alternative
+          echo "Creating tar.gz archive for alternative installation method"
+          tar -czf DxMessaging-v${{ env.VERSION }}.tar.gz \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.vs' \
+            --exclude='*.sln' \
+            --exclude='*.sln.meta' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='.pre-commit-config.yaml' \
+            --exclude='.config' \
+            Runtime/ Editor/ Tests/ SourceGenerators/ \
+            package.json README.md LICENSE.md CHANGELOG.md "Third Party Notices.md" \
+            *.meta 2>/dev/null || true
+
+          echo "Created archive"
+          ls -lh DxMessaging-v${{ env.VERSION }}.tar.gz
+
+          # Create a zip archive as well for Windows users
+          zip -r DxMessaging-v${{ env.VERSION }}.zip \
+            Runtime/ Editor/ Tests/ SourceGenerators/ \
+            package.json README.md LICENSE.md CHANGELOG.md "Third Party Notices.md" \
+            *.meta \
+            -x "*.git*" "*.sln*" "*/.vs/*" "*/.config/*" 2>/dev/null || true
+
+          echo "Created zip archive"
+          ls -lh DxMessaging-v${{ env.VERSION }}.zip || true
+
+      - name: Create Release
+        if: env.should_release == 'true' && env.tag_exists == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ env.IS_PRERELEASE }}
+          generate_release_notes: true
+          files: |
+            DxMessaging-v${{ env.VERSION }}.unitypackage
+            DxMessaging-v${{ env.VERSION }}.tar.gz
+            DxMessaging-v${{ env.VERSION }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create UPM Branch
+        if: env.should_release == 'true' && env.tag_exists == 'false' && env.IS_PRERELEASE == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create or update upm branch
+          git checkout -B upm
+
+          # Remove files that shouldn't be in the UPM package
+          git rm -rf .github .config .vs *.sln* .gitattributes .gitignore .pre-commit-config.yaml 2>/dev/null || true
+
+          # Commit and push
+          git add .
+          git commit -m "UPM Release v${{ env.VERSION }}" || true
+          git push -f origin upm
+
+          # Tag the UPM branch
+          git tag -f upm/v${{ env.VERSION }}
+          git push -f origin upm/v${{ env.VERSION }}
