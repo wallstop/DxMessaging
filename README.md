@@ -35,7 +35,7 @@ Grab a copy of this repo (either `git clone` both [this repo](https://github.com
 # Benchmarks
 In addition to providing a richer feature set, DxMessaging is *faster* than Unity's built in messaging solution. [Source](./Tests/Runtime/Benchmarks/PerformanceTests.cs). It is allocation-free and can be used in hot paths. 
 
-For UntargetedMessages, DxMessaging is significantly faster (roughly 2x) than Unity.
+For UntargetedMessages, DxMessaging is significantly faster (roughly 7x) than Unity.
 
 ## Windows
 
