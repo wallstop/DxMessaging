@@ -736,8 +736,6 @@ namespace DxMessaging.Core.MessageBus
             }
 
             bool foundAnyHandlers = false;
-            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers;
-            HandlerCache<int, HandlerCache> sortedHandlers;
 
             if (typeof(TMessage) == typeof(ReflexiveMessage))
             {
@@ -931,8 +929,13 @@ namespace DxMessaging.Core.MessageBus
             }
 
             if (
-                _targetedSinks.TryGetValue<TMessage>(out targetedHandlers)
-                && targetedHandlers.TryGetValue(target, out sortedHandlers)
+                _targetedSinks.TryGetValue<TMessage>(
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedHandlers
+                )
+                && targetedHandlers.TryGetValue(
+                    target,
+                    out HandlerCache<int, HandlerCache> sortedHandlers
+                )
                 && 0 < sortedHandlers.handlers.Count
             )
             {
@@ -2415,14 +2418,21 @@ namespace DxMessaging.Core.MessageBus
                 foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    foreach (object interceptor in entry.Value)
+                    List<object> interceptors = entry.Value;
+                    int count = interceptors.Count;
+                    if (interceptorObjects.Capacity < count)
                     {
-                        interceptorObjects.Add(interceptor);
+                        interceptorObjects.Capacity = count;
                     }
 
-                    foreach (object transformer in interceptorObjects)
+                    for (int i = 0; i < count; ++i)
                     {
-                        if (transformer is not UntargetedInterceptor<T> typedTransformer)
+                        interceptorObjects.Add(interceptors[i]);
+                    }
+
+                    for (int i = 0; i < interceptorObjects.Count; ++i)
+                    {
+                        if (interceptorObjects[i] is not UntargetedInterceptor<T> typedTransformer)
                         {
                             continue;
                         }
@@ -2460,14 +2470,21 @@ namespace DxMessaging.Core.MessageBus
                 foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    foreach (object interceptor in entry.Value)
+                    List<object> interceptors = entry.Value;
+                    int count = interceptors.Count;
+                    if (interceptorObjects.Capacity < count)
                     {
-                        interceptorObjects.Add(interceptor);
+                        interceptorObjects.Capacity = count;
                     }
 
-                    foreach (object transformer in interceptorObjects)
+                    for (int i = 0; i < count; ++i)
                     {
-                        if (transformer is not TargetedInterceptor<T> typedTransformer)
+                        interceptorObjects.Add(interceptors[i]);
+                    }
+
+                    for (int i = 0; i < interceptorObjects.Count; ++i)
+                    {
+                        if (interceptorObjects[i] is not TargetedInterceptor<T> typedTransformer)
                         {
                             continue;
                         }
@@ -2505,14 +2522,21 @@ namespace DxMessaging.Core.MessageBus
                 foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
                 {
                     interceptorObjects.Clear();
-                    foreach (object interceptor in entry.Value)
+                    List<object> interceptors = entry.Value;
+                    int count = interceptors.Count;
+                    if (interceptorObjects.Capacity < count)
                     {
-                        interceptorObjects.Add(interceptor);
+                        interceptorObjects.Capacity = count;
                     }
 
-                    foreach (object transformer in interceptorObjects)
+                    for (int i = 0; i < count; ++i)
                     {
-                        if (transformer is not BroadcastInterceptor<T> typedTransformer)
+                        interceptorObjects.Add(interceptors[i]);
+                    }
+
+                    for (int i = 0; i < interceptorObjects.Count; ++i)
+                    {
+                        if (interceptorObjects[i] is not BroadcastInterceptor<T> typedTransformer)
                         {
                             continue;
                         }

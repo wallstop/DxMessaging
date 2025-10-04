@@ -1317,8 +1317,19 @@ namespace DxMessaging.Core
 
         private sealed class HandlerActionCache<T>
         {
-            public readonly Dictionary<T, int> handlers = new();
-            public readonly Dictionary<T, T> originalToAugmented = new();
+            internal readonly struct Entry
+            {
+                public Entry(T handler, int count)
+                {
+                    this.handler = handler;
+                    this.count = count;
+                }
+
+                public readonly T handler;
+                public readonly int count;
+            }
+
+            public readonly Dictionary<T, Entry> entries = new();
             public readonly List<T> cache = new();
             public long version;
             public long lastSeenVersion = -1;
@@ -1522,7 +1533,7 @@ namespace DxMessaging.Core
             public void HandleGlobalUntargeted(ref IUntargetedMessage message)
             {
                 RunFastHandlers(_globalUntargetedFastHandlers, ref message);
-                if (_globalUntargetedHandlers?.handlers is not { Count: > 0 })
+                if (_globalUntargetedHandlers?.entries is not { Count: > 0 })
                 {
                     return;
                 }
@@ -1545,7 +1556,7 @@ namespace DxMessaging.Core
             {
                 RunFastHandlers(ref target, _globalTargetedFastHandlers, ref message);
 
-                if (_globalTargetedHandlers?.handlers is not { Count: > 0 })
+                if (_globalTargetedHandlers?.entries is not { Count: > 0 })
                 {
                     return;
                 }
@@ -1568,7 +1579,7 @@ namespace DxMessaging.Core
             {
                 RunFastHandlers(ref source, _globalBroadcastFastHandlers, ref message);
 
-                if (_globalBroadcastHandlers?.handlers is not { Count: > 0 })
+                if (_globalBroadcastHandlers?.entries is not { Count: > 0 })
                 {
                     return;
                 }
@@ -2433,7 +2444,7 @@ namespace DxMessaging.Core
                 where TMessage : IMessage
                 where TU : IMessage
             {
-                if (cache?.handlers is not { Count: > 0 })
+                if (cache?.entries is not { Count: > 0 })
                 {
                     return;
                 }
@@ -2494,7 +2505,7 @@ namespace DxMessaging.Core
                 where TMessage : IMessage
                 where TU : IMessage
             {
-                if (cache?.handlers is not { Count: > 0 })
+                if (cache?.entries is not { Count: > 0 })
                 {
                     return;
                 }
@@ -2789,10 +2800,15 @@ namespace DxMessaging.Core
 
                 List<TU> cache = actionCache.cache;
                 cache.Clear();
-                foreach (TU handler in actionCache.originalToAugmented.Values)
+
+                if (actionCache.entries.Count > 0)
                 {
-                    cache.Add(handler);
+                    foreach (HandlerActionCache<TU>.Entry entry in actionCache.entries.Values)
+                    {
+                        cache.Add(entry.handler);
+                    }
                 }
+
                 actionCache.lastSeenVersion = actionCache.version;
                 return cache;
             }
@@ -2829,63 +2845,78 @@ namespace DxMessaging.Core
                     sortedHandlers[priority] = cache;
                 }
 
-                Dictionary<TU, int> handlers = cache.handlers;
-                int count = handlers.GetValueOrDefault(originalHandler, 0);
-                if (count == 0)
+                if (
+                    !cache.entries.TryGetValue(
+                        originalHandler,
+                        out HandlerActionCache<TU>.Entry entry
+                    )
+                )
                 {
-                    cache.originalToAugmented[originalHandler] = augmentedHandler;
+                    entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
                 }
-                handlers[originalHandler] = count + 1;
+
+                entry =
+                    entry.count == 0
+                        ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                        : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+
+                cache.entries[originalHandler] = entry;
+                cache.version++;
 
                 Dictionary<
                     InstanceId,
                     Dictionary<int, HandlerActionCache<TU>>
                 > localHandlersByContext = handlersByContext;
 
-                cache.version++;
                 return () =>
                 {
-                    cache.version++;
                     if (!localHandlersByContext.TryGetValue(context, out sortedHandlers))
                     {
                         return;
                     }
 
-                    if (!sortedHandlers.TryGetValue(priority, out cache))
+                    if (
+                        !sortedHandlers.TryGetValue(priority, out HandlerActionCache<TU> localCache)
+                    )
                     {
                         return;
                     }
 
-                    handlers = cache.handlers;
-
-                    if (!handlers.TryGetValue(originalHandler, out count))
+                    if (
+                        !localCache.entries.TryGetValue(
+                            originalHandler,
+                            out HandlerActionCache<TU>.Entry localEntry
+                        )
+                    )
                     {
                         return;
                     }
 
-                    // Always invoke deregistration action, as MessageBus dedupes this as well
+                    localCache.version++;
+
                     deregistration?.Invoke();
 
-                    if (count <= 1)
+                    if (localEntry.count <= 1)
                     {
-                        _ = handlers.Remove(originalHandler);
-                        _ = cache.originalToAugmented.Remove(originalHandler);
-                        if (0 < handlers.Count)
+                        _ = localCache.entries.Remove(originalHandler);
+                        if (localCache.entries.Count == 0)
                         {
-                            return;
+                            _ = sortedHandlers.Remove(priority);
+                            if (sortedHandlers.Count == 0)
+                            {
+                                localHandlersByContext.Remove(context);
+                            }
                         }
 
-                        _ = sortedHandlers.Remove(priority);
-                        if (0 < sortedHandlers.Count)
-                        {
-                            return;
-                        }
-
-                        localHandlersByContext.Remove(context);
                         return;
                     }
 
-                    handlers[originalHandler] = count - 1;
+                    localEntry = new HandlerActionCache<TU>.Entry(
+                        localEntry.handler,
+                        localEntry.count - 1
+                    );
+
+                    localCache.entries[originalHandler] = localEntry;
                 };
             }
 
@@ -2897,37 +2928,54 @@ namespace DxMessaging.Core
             )
             {
                 cache ??= new HandlerActionCache<TU>();
-                Dictionary<TU, int> handlersByPriority = cache.handlers;
-                int count = handlersByPriority.GetValueOrDefault(originalHandler, 0);
-                if (count == 0)
+
+                if (
+                    !cache.entries.TryGetValue(
+                        originalHandler,
+                        out HandlerActionCache<TU>.Entry entry
+                    )
+                )
                 {
-                    cache.originalToAugmented[originalHandler] = augmentedHandler;
+                    entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
                 }
 
-                handlersByPriority[originalHandler] = count + 1;
+                entry =
+                    entry.count == 0
+                        ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                        : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
 
-                Dictionary<TU, int> localHandlers = handlersByPriority;
+                cache.entries[originalHandler] = entry;
+                cache.version++;
 
                 HandlerActionCache<TU> localCache = cache;
-                localCache.version++;
+
                 return () =>
                 {
+                    if (
+                        !localCache.entries.TryGetValue(
+                            originalHandler,
+                            out HandlerActionCache<TU>.Entry localEntry
+                        )
+                    )
+                    {
+                        return;
+                    }
+
                     localCache.version++;
-                    if (!localHandlers.TryGetValue(originalHandler, out count))
-                    {
-                        return;
-                    }
 
-                    // Always invoke deregistration action, as MessageBus dedupes this as well
                     deregistration?.Invoke();
-                    if (count <= 1)
+
+                    if (localEntry.count <= 1)
                     {
-                        _ = localHandlers.Remove(originalHandler);
-                        _ = localCache.originalToAugmented.Remove(originalHandler);
+                        _ = localCache.entries.Remove(originalHandler);
                         return;
                     }
 
-                    localHandlers[originalHandler] = count - 1;
+                    localEntry = new HandlerActionCache<TU>.Entry(
+                        localEntry.handler,
+                        localEntry.count - 1
+                    );
+                    localCache.entries[originalHandler] = localEntry;
                 };
             }
 
@@ -2947,44 +2995,64 @@ namespace DxMessaging.Core
                     handlers[priority] = cache;
                 }
 
-                int count = cache.handlers.GetValueOrDefault(originalHandler, 0);
-                if (count == 0)
+                if (
+                    !cache.entries.TryGetValue(
+                        originalHandler,
+                        out HandlerActionCache<TU>.Entry entry
+                    )
+                )
                 {
-                    cache.originalToAugmented[originalHandler] = augmentedHandler;
+                    entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
                 }
 
-                cache.handlers[originalHandler] = count + 1;
+                entry =
+                    entry.count == 0
+                        ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                        : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+
+                cache.entries[originalHandler] = entry;
+                cache.version++;
 
                 Dictionary<int, HandlerActionCache<TU>> localHandlers = handlers;
-                cache.version++;
 
                 return () =>
                 {
-                    cache.version++;
-                    if (!localHandlers.TryGetValue(priority, out cache))
+                    if (!localHandlers.TryGetValue(priority, out HandlerActionCache<TU> localCache))
                     {
                         return;
                     }
 
-                    if (!cache.handlers.TryGetValue(originalHandler, out count))
+                    if (
+                        !localCache.entries.TryGetValue(
+                            originalHandler,
+                            out HandlerActionCache<TU>.Entry localEntry
+                        )
+                    )
                     {
                         return;
                     }
 
-                    // Always invoke deregistration action, as MessageBus dedupes this as well
+                    localCache.version++;
+
                     deregistration?.Invoke();
-                    if (count <= 1)
+
+                    if (localEntry.count <= 1)
                     {
-                        _ = cache.handlers.Remove(originalHandler);
-                        _ = cache.originalToAugmented.Remove(originalHandler);
-                        if (cache.handlers.Count == 0)
+                        _ = localCache.entries.Remove(originalHandler);
+                        if (localCache.entries.Count == 0)
                         {
                             _ = localHandlers.Remove(priority);
                         }
+
                         return;
                     }
 
-                    cache.handlers[originalHandler] = count - 1;
+                    localEntry = new HandlerActionCache<TU>.Entry(
+                        localEntry.handler,
+                        localEntry.count - 1
+                    );
+
+                    localCache.entries[originalHandler] = localEntry;
                 };
             }
         }
