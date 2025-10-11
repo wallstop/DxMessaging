@@ -41,7 +41,9 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                foreach (var entry in _targetedSinks)
+                foreach (
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _targetedSinks
+                )
                 {
                     count += entry.Count;
                 }
@@ -57,7 +59,9 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                foreach (var entry in _broadcastSinks)
+                foreach (
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _broadcastSinks
+                )
                 {
                     count += entry.Count;
                 }
@@ -71,7 +75,7 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                foreach (var entry in _sinks)
+                foreach (HandlerCache<int, HandlerCache> entry in _sinks)
                 {
                     count += entry.handlers.Count;
                 }
