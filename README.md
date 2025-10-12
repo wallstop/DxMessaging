@@ -22,6 +22,49 @@ Think of it as **the event system Unity should have built-in** — one that actu
 
 **One line:** It's like C# events, but with superpowers and no footguns. 🚀
 
+## Is DxMessaging Right for You?
+
+### ✅ Use DxMessaging When:
+
+- **You have cross-system communication** - UI needs to react to gameplay, achievements track events, analytics observe everything
+- **You're building for scale** - 10+ systems that need to communicate, or growing from prototype to production
+- **Memory leaks are a concern** - You've been bitten by forgotten event unsubscribes before
+- **You value observability** - Need to debug "what fired when?" or track message flow
+- **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
+- **You want decoupling** - Hate when UI classes need references to 15 different game systems
+
+### ❌ Don't Use DxMessaging When:
+
+- **Tiny prototypes/game jams** - If your game is <1000 lines and will be done in a week, C# events are fine
+- **Simple, local communication** - A single button calling a single method? Just use UnityEvents or direct references
+- **Performance is THE constraint** - Building a physics engine or ECS with millions of events/frame? Raw delegates are faster
+- **Team is unfamiliar** - Learning curve exists; if the team isn't on board, it won't be used correctly
+- **You need synchronous return values** - DxMessaging is fire-and-forget; if you need bidirectional request/response, consider other patterns
+
+### ⚠️ Maybe Use DxMessaging (Start Small):
+
+- **Existing large codebase** - Migrate incrementally: start with new features, refactor old code gradually (see [Migration Guide](Docs/MigrationGuide.md))
+- **Small team learning** - Try it for one system (e.g., achievements) before going all-in
+- **Mid-size projects (5-20k lines)** - Evaluate after trying it for one complex interaction (e.g., combat or scene transitions)
+
+### Decision Flow:
+
+```
+Does your project have 3+ systems that need to talk to each other?
+  NO → Stick with C# events or direct references
+  YES ↓
+
+Are you okay with a small upfront learning investment?
+  NO → Stick with what you know
+  YES ↓
+
+Do you need observable, decoupled, lifecycle-safe messaging?
+  YES → ✅ Use DxMessaging
+  NO → ❌ Keep it simple
+```
+
+**Rule of thumb:** If you're reading this README and thinking "wow, this would solve SO many problems," then DxMessaging is for you. If you're thinking "this seems complicated," start with the [Visual Guide](Docs/VisualGuide.md) or stick with simpler patterns.
+
 **New to messaging?** Start with the [Visual Guide](Docs/VisualGuide.md) (5 min) for a beginner-friendly introduction!
 
 Looking for hard numbers? See OS-specific [Performance Benchmarks](Docs/Performance.md).
