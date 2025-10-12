@@ -16,7 +16,7 @@ If you're brand new to messaging systems, this visual guide will help you unders
 └─────────────┘       │
                       │    ┌─────────┐
 ┌─────────────┐       └───→│  Audio  │
-│ Inventory   │────────────→└─────────┘
+│ Inventory   │───────────→└─────────┘
 └─────────────┘
 
 Problems:
@@ -61,7 +61,8 @@ Like a megaphone announcement in a stadium - everyone hears it.
 public readonly partial struct GamePaused { }
 
 // Anyone can announce
-new GamePaused().Emit();
+var msg = new GamePaused();
+msg.Emit();
 
 // Anyone can listen
 _ = token.RegisterUntargeted<GamePaused>(OnPause);
