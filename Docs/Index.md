@@ -108,6 +108,7 @@
 ### Tools & Utilities
 
 - **[Helpers](Helpers.md)** — Source generators, attributes, extensions
+- **[Emit Shorthands](EmitShorthands.md)** — `Emit`/`EmitAt`/`EmitFrom` usage and pitfalls
 - **[String Messages](StringMessages.md)** — Prototyping and debugging
 - **[Compatibility](Compatibility.md)** — Unity versions and render pipelines
 - **[Install](Install.md)** — Installation guide

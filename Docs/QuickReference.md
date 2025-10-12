@@ -44,6 +44,11 @@ using DxMessaging.Core.Extensions;
 var scene = new SceneLoaded(1); scene.Emit();
 var heal  = new Heal(10);       heal.EmitGameObjectTargeted(gameObject);
 var hit   = new TookDamage(5);  hit.EmitComponentBroadcast(this);
+
+// String shorthands
+"Saved".Emit();                   // GlobalStringMessage
+"Hello".EmitAt(gameObject);       // StringMessage to GO (or .Emit(instanceId))
+"Hit".EmitFrom(gameObject);       // SourcedStringMessage from GO
 ```
 
 Register (Unity, via token)
@@ -108,6 +113,11 @@ Targeting notes (Component vs GameObject)
 - Registering for a Component target listens for messages targeted at that specific Component.
 - Registering for a GameObject target listens for messages targeted at that GameObject.
 - Emitting to a GameObject will not reach Component‑targeted listeners (and vice‑versa). Use the matching helper.
+- Shorthands exist for strings too; be explicit about using a GameObject vs Component with `EmitAt`/`EmitFrom`.
+
+See also
+
+- [Emit Shorthands](EmitShorthands.md)
 
 See also
 

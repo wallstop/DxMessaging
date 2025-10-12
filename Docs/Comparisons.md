@@ -115,7 +115,7 @@ DxMessaging
 using DxMessaging.Core;
 using DxMessaging.Core.Messages;
 
-var target = (InstanceId)gameObject;
+InstanceId target = gameObject;
 var msg = new ReflexiveMessage("OnHit", ReflexiveSendMode.Upwards, 10);
 MessageHandler.MessageBus.TargetedBroadcast(ref target, ref msg);
 ```

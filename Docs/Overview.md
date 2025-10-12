@@ -33,13 +33,13 @@ Core ideas
 
 Killer features
 
-- Priority ordering and explicit pipeline stages (interceptors, handlers, post‑processors).
-- Listen to “all targets” or “all sources” for a type (perfect for analytics/tools).
-- Global accept‑all for building inspectors and profilers.
-- Local bus islands for test isolation and modular subsystems.
-- Struct‑friendly, by‑ref handlers to avoid boxing and copies.
-- Attributes + source generation (`DxAutoConstructor`) reduce boilerplate while keeping strong typing.
-- Unity‑first helpers (GameObject/Component emit) and a powerful MessagingComponent inspector.
+- **🚀 Global Observers: Listen to ALL messages** — Subscribe to all targeted/broadcast messages of a type without knowing specific targets/sources. **Unlike traditional event buses** where you need separate subscriptions per entity type (PlayerDamaged, EnemyDamaged, etc.), DxMessaging lets you subscribe ONCE to ALL damage events and get the source/target as a parameter. Perfect for analytics, debugging, achievements, and combat logs.
+- **Priority ordering** and explicit pipeline stages (interceptors, handlers, post‑processors).
+- **Local bus islands** for test isolation and modular subsystems.
+- **Struct‑friendly, by‑ref handlers** to avoid boxing and copies.
+- **Attributes + source generation** (`DxAutoConstructor`) reduce boilerplate while keeping strong typing.
+- **Unity‑first helpers** (GameObject/Component emit) and a powerful MessagingComponent inspector.
+- **Global accept‑all** for building inspectors and profilers.
 
 ---
 
