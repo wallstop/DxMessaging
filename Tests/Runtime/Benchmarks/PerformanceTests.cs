@@ -550,7 +550,9 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             // Prefer writing to Docs/Performance.md; fall back to README.md if not found.
             string performancePath = FindPerformanceDocPath();
             string readmePath = FindReadmePath();
-            string targetPath = !string.IsNullOrEmpty(performancePath) ? performancePath : readmePath;
+            string targetPath = !string.IsNullOrEmpty(performancePath)
+                ? performancePath
+                : readmePath;
             if (string.IsNullOrEmpty(targetPath))
             {
                 Debug.LogWarning(
