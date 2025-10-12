@@ -24,7 +24,7 @@ Think of it as **the event system Unity should have built-in** — one that actu
 
 **New to messaging?** Start with the [Visual Guide](Docs/VisualGuide.md) (5 min) for a beginner-friendly introduction!
 
-Looking for hard numbers? See OS-specific performance results in [Docs/Performance.md](Docs/Performance.md).
+Looking for hard numbers? See OS-specific [Performance Benchmarks](Docs/Performance.md).
 
 ## Why DxMessaging?
 
@@ -333,11 +333,11 @@ See [Compatibility](Docs/Compatibility.md) for details.
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions welcome! See [Contributing](CONTRIBUTING.md).
 
 ## License
 
-MIT License - see [LICENSE.md](LICENSE.md)
+MIT License - see [License](LICENSE.md)
 
 ## Credits
 

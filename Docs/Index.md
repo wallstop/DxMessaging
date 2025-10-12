@@ -83,7 +83,7 @@
 
 ### Real-World Patterns
 
-From [Patterns.md](Patterns.md):
+From [Common Patterns](Patterns.md):
 - Scene-wide events (Untargeted)
 - Directed commands (Targeted)
 - Observability (Broadcast)
@@ -141,7 +141,7 @@ flowchart LR
 
 ### DxMessaging vs Alternatives
 
-From [Comparisons.md](Comparisons.md):
+From [Comparisons](Comparisons.md):
 
 | Feature | DxMessaging | C# Events | UnityEvents | Static Bus |
 |---------|-------------|-----------|-------------|------------|

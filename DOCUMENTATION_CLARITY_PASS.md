@@ -104,12 +104,12 @@ Absolute Beginner:
 3. **[Quick Start](Docs/QuickStart.md)** — First working code (5 min)
 
 #### Used Events, Want Better
-1. **[README.md](README.md)** — 30-second pitch + comparison table
-2. **[Comparisons.md](Docs/Comparisons.md)** — vs C# Events, UnityEvents, etc.
+1. **[README](README.md)** — 30-second pitch + comparison table
+2. **[Comparisons](Docs/Comparisons.md)** — vs C# Events, UnityEvents, etc.
 3. **[Getting Started](Docs/GettingStarted.md)** — Deep dive
 
 #### Experienced, Want to Master
-1. **[Patterns.md](Docs/Patterns.md)** — Real-world patterns
+1. **[Common Patterns](Docs/Patterns.md)** — Real-world patterns
 2. **[Interceptors & Ordering](Docs/InterceptorsAndOrdering.md)** — Advanced control
 3. **[Design & Architecture](Docs/DesignAndArchitecture.md)** — Internals
 

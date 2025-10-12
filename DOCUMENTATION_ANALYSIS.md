@@ -137,7 +137,7 @@ MessageAwareComponent (Unity base class)
 
 ### New Documents Created
 
-1. **[GettingStarted.md](Docs/GettingStarted.md)** (10-min comprehensive guide)
+1. **[Getting Started](Docs/GettingStarted.md)** (10-min comprehensive guide)
    - Mental models and "aha!" moments
    - Problem/solution examples
    - Three message types explained clearly
@@ -146,7 +146,7 @@ MessageAwareComponent (Unity base class)
    - Do's and Don'ts
    - Quick reference card
 
-2. **[DesignAndArchitecture.md](Docs/DesignAndArchitecture.md)** (deep technical dive)
+2. **[Design & Architecture](Docs/DesignAndArchitecture.md)** (deep technical dive)
    - Core design principles
    - Architecture diagrams
    - Performance optimizations explained
@@ -158,7 +158,7 @@ MessageAwareComponent (Unity base class)
 
 ### Enhanced Documents
 
-3. **[README.md](README.md)** (modernized entry point)
+3. **[README](README.md)** (modernized entry point)
    - Problem/solution framing
    - Visual feature showcase
    - Comparison table
@@ -166,7 +166,7 @@ MessageAwareComponent (Unity base class)
    - Clear learning path
    - Professional badges and formatting
 
-4. **[Index.md](Docs/Index.md)** (improved documentation hub)
+4. **[Documentation Hub](Docs/Index.md)** (improved documentation hub)
    - Learning paths (beginner/advanced)
    - Use-case navigation ("I want to...")
    - Topic-based search
@@ -382,7 +382,7 @@ Based on analysis, potential improvements:
 **DxMessaging is production-ready and architecturally superior** to common alternatives. Key takeaways:
 
 ### For New Users
-- Start with `[GettingStarted.md](Docs/GettingStarted.md)`
+- Start with [Getting Started](Docs/GettingStarted.md)
 - Use `MessageAwareComponent` for Unity
 - Stick to the three message types (Untargeted/Targeted/Broadcast)
 - Don't overthink - it's simpler than it looks
@@ -394,7 +394,7 @@ Based on analysis, potential improvements:
 - Leverage GlobalAcceptAll for tooling
 
 ### For Contributors
-- Study `[DesignAndArchitecture.md](Docs/DesignAndArchitecture.md)`
+- Study [Design & Architecture](Docs/DesignAndArchitecture.md)
 - Understand the type-indexed caching system
 - Maintain zero-allocation principle
 - Add tests for any new features

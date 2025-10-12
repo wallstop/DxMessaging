@@ -582,7 +582,7 @@ using DxMessaging.Core.Extensions;  // ← Add this!
 
 **Cause:** IL2CPP stripping or AOT compilation issues.
 
-**Fix:** Add link.xml to preserve types (see [Troubleshooting.md](Troubleshooting.md))
+**Fix:** Add link.xml to preserve types (see [Troubleshooting](Troubleshooting.md))
 
 ### "Performance is slower than expected"
 
@@ -604,10 +604,10 @@ IMessageBus.GlobalDiagnosticsMode = false;
 Now that you understand the basics:
 
 1. **Try the samples** - Open the Mini Combat sample from the Package Manager
-2. **Read the patterns guide** - [Patterns.md](Patterns.md) for real-world solutions
-3. **Understand message types deeply** - [MessageTypes.md](MessageTypes.md)
-4. **Learn about interceptors** - [InterceptorsAndOrdering.md](InterceptorsAndOrdering.md)
-5. **Master the inspector** - [Diagnostics.md](Diagnostics.md)
+2. **Read the patterns guide** - [Common Patterns](Patterns.md) for real-world solutions
+3. **Understand message types deeply** - [Message Types](MessageTypes.md)
+4. **Learn about interceptors** - [Interceptors & Ordering](InterceptorsAndOrdering.md)
+5. **Master the inspector** - [Diagnostics](Diagnostics.md)
 
 **Still confused?** Check out the [Visual Guide](VisualGuide.md) for pictures and analogies!
 

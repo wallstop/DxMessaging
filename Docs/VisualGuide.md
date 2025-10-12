@@ -167,10 +167,21 @@ public readonly partial struct Heal {
 }
 ```
 
-That's it! The `[DxAutoConstructor]` creates this for you:
+**What are those `[DxSomething]` tags?**
+
+They're called **attributes** — magic markers that tell the computer to write code for you! It's like having a robot assistant:
+
+- **`[DxTargetedMessage]`** → "Hey robot, make this a targeted message"
+- **`[DxAutoConstructor]`** → "Hey robot, create a constructor for me"
+
+The `[DxAutoConstructor]` automatically creates this:
 ```csharp
 public Heal(int amount) { this.amount = amount; }
 ```
+
+**Why `partial`?** So the robot can add code to your type in a separate file. Think of it as giving permission to extend your struct.
+
+**Want to learn more?** See [Helpers & Source Generation](Helpers.md) for the full explanation!
 
 ### Step 2️⃣: Listen for It
 
