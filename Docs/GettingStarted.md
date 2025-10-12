@@ -185,7 +185,7 @@ dmg.EmitGameObjectBroadcast(this.gameObject);
 
 ## The Message Pipeline
 
-Every message flows through 3 stages:
+Every message flows through 3 stages (see full details in [Interceptors & Ordering](InterceptorsAndOrdering.md)):
 
 ```
 Producer → [Interceptors] → [Handlers] → [Post-Processors]

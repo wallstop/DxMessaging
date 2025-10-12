@@ -1,0 +1,41 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+- `Runtime/` — core library (`DxMessaging.Core`) and Unity components (`DxMessaging.Unity`).
+- `Editor/` — editor utilities, analyzers, and setup (`DxMessaging.Editor`).
+- `SourceGenerators/` — Roslyn source generators (`netstandard2.0`).
+- `Tests/Runtime/` — NUnit/Unity Test Framework tests (e.g., `Core/NominalTests.cs`).
+- `Docs/` — usage patterns and examples.
+- Package manifest: `package.json` (published to NPM/UPM).
+
+## Build, Test, and Development Commands
+- Format: `dotnet tool restore` then `dotnet tool run csharpier format`.
+- Build generators: `dotnet build SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.csproj`.
+- Unity tests: open a Unity 2021.3+ project that references this package, then Window > Test Runner > PlayMode. CLI example: `Unity -batchmode -nographics -quit -projectPath <your_project> -runTests -testPlatform PlayMode -testResults ./TestResults.xml`.
+
+## Coding Style & Naming Conventions
+- Indent with 4 spaces for `.cs` (JSON/YAML: 2). CRLF, UTF‑8 BOM (see `.editorconfig`).
+- Prefer explicit types over `var`. Braces required. `using` directives inside the namespace.
+- Naming: `PascalCase` for types/methods/properties; interfaces `I*`; type parameters `T*`; events prefixed `On*`; public fields lowerCamelCase (matches examples in `README.md`).
+- Place code under `DxMessaging.Core`, `DxMessaging.Unity`, or `DxMessaging.Editor` as appropriate.
+- Do not use underscores in function names, especially test function names.
+- Do not use regions, anywhere, ever.
+
+## Testing Guidelines
+- Frameworks: NUnit + Unity Test Framework. Use `[Test]`/`[UnityTest]` as needed.
+- Location: add files under `Tests/Runtime/<Area>/` named `*Tests.cs` with classes `*Tests`.
+- Keep tests independent: prefer a local `MessageBus` and explicit `MessageRegistrationToken` lifecycles.
+- Do not use underscores in test function names.
+- Prefer expressive assertions and failure messages so it is clear what exactly is failing when a test fails.
+- Do not use regions.
+- Try to use minimal comments and instead rely on expressive naming conventions and assertions.
+- Do not use Description annotations for tests.
+
+## Commit & Pull Request Guidelines
+- Commits: short, imperative subject; group related changes; reference issues/PRs (e.g., “Fix registration dedupe (#123)”).
+- PRs: include a clear description, linked issues, before/after notes for performance changes (see `Tests/Runtime/Benchmarks`), and tests for bug fixes/features.
+- Releasing: changes to `package.json` on `master` may trigger the NPM publish workflow.
+
+## Security & Configuration Tips
+- Editor analyzer DLLs are copied into the Unity project by `Editor/SetupCscRsp.cs`; do not commit generated DLLs into this repo.
+- Keep public APIs minimal and consistent; avoid breaking changes without a major version bump.

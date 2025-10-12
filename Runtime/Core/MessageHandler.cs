@@ -2817,30 +2817,9 @@ namespace DxMessaging.Core
 
             private static List<TU> GetOrAddNewHandlerStack<TU>(HandlerActionCache<TU> actionCache)
             {
-                if (actionCache.version == actionCache.lastSeenVersion)
-                {
-                    return actionCache.cache;
-                }
-
-                List<TU> cache = actionCache.cache;
-                cache.Clear();
-
-                if (actionCache.entries.Count > 0)
-                {
-                    Dictionary<TU, HandlerActionCache<TU>.Entry>.ValueCollection values =
-                        actionCache.entries.Values;
-                    Dictionary<
-                        TU,
-                        HandlerActionCache<TU>.Entry
-                    >.ValueCollection.Enumerator enumerator = values.GetEnumerator();
-                    while (enumerator.MoveNext())
-                    {
-                        cache.Add(enumerator.Current.handler);
-                    }
-                }
-
+                // Invocation list is maintained incrementally on add/remove
                 actionCache.lastSeenVersion = actionCache.version;
-                return cache;
+                return actionCache.cache;
             }
 
             private static Action AddHandler<TU>(
@@ -2885,13 +2864,18 @@ namespace DxMessaging.Core
                     entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
                 }
 
-                entry =
-                    entry.count == 0
-                        ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
-                        : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+                bool firstRegistration = entry.count == 0;
+                entry = firstRegistration
+                    ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                    : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
 
                 cache.entries[originalHandler] = entry;
                 cache.version++;
+                if (firstRegistration)
+                {
+                    cache.cache.Add(entry.handler);
+                    cache.lastSeenVersion = cache.version;
+                }
 
                 Dictionary<
                     InstanceId,
@@ -2929,6 +2913,8 @@ namespace DxMessaging.Core
                     if (localEntry.count <= 1)
                     {
                         _ = localCache.entries.Remove(originalHandler);
+                        _ = localCache.cache.Remove(localEntry.handler);
+                        localCache.lastSeenVersion = localCache.version;
                         if (localCache.entries.Count == 0)
                         {
                             _ = sortedHandlers.Remove(priority);
@@ -2969,13 +2955,18 @@ namespace DxMessaging.Core
                     entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
                 }
 
-                entry =
-                    entry.count == 0
-                        ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
-                        : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+                bool firstRegistration = entry.count == 0;
+                entry = firstRegistration
+                    ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                    : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
 
                 cache.entries[originalHandler] = entry;
                 cache.version++;
+                if (firstRegistration)
+                {
+                    cache.cache.Add(entry.handler);
+                    cache.lastSeenVersion = cache.version;
+                }
 
                 HandlerActionCache<TU> localCache = cache;
 
@@ -2998,6 +2989,8 @@ namespace DxMessaging.Core
                     if (localEntry.count <= 1)
                     {
                         _ = localCache.entries.Remove(originalHandler);
+                        _ = localCache.cache.Remove(localEntry.handler);
+                        localCache.lastSeenVersion = localCache.version;
                         return;
                     }
 
@@ -3035,13 +3028,18 @@ namespace DxMessaging.Core
                     entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
                 }
 
-                entry =
-                    entry.count == 0
-                        ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
-                        : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+                bool firstRegistration = entry.count == 0;
+                entry = firstRegistration
+                    ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                    : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
 
                 cache.entries[originalHandler] = entry;
                 cache.version++;
+                if (firstRegistration)
+                {
+                    cache.cache.Add(entry.handler);
+                    cache.lastSeenVersion = cache.version;
+                }
 
                 Dictionary<int, HandlerActionCache<TU>> localHandlers = handlers;
 
@@ -3069,6 +3067,8 @@ namespace DxMessaging.Core
                     if (localEntry.count <= 1)
                     {
                         _ = localCache.entries.Remove(originalHandler);
+                        _ = localCache.cache.Remove(localEntry.handler);
+                        localCache.lastSeenVersion = localCache.version;
                         if (localCache.entries.Count == 0)
                         {
                             _ = localHandlers.Remove(priority);

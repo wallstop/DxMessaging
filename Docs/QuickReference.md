@@ -113,6 +113,15 @@ See also
 
 - [Advanced](Advanced.md)
 - [Targeting & Context](TargetingAndContext.md)
+ - [Interceptors & Ordering](InterceptorsAndOrdering.md)
+
+Execution order (short)
+
+- Untargeted: Interceptors → Global Accept‑All → Handlers<T> → Post‑Processors<T>
+- Targeted: Interceptors → Global Accept‑All → Handlers<T> @ target → Handlers<T> (All Targets) → Post‑Processors<T> @ target → Post‑Processors<T> (All Targets)
+- Broadcast: Interceptors → Global Accept‑All → Handlers<T> @ source → Handlers<T> (All Sources) → Post‑Processors<T> @ source → Post‑Processors<T> (All Sources)
+
+Notes: Lower priority runs earlier. Same priority preserves registration order. Within a priority, fast (by‑ref) handlers run before action handlers.
 
 API quick ref
 

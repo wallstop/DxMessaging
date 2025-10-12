@@ -1947,6 +1947,42 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
+        /// Wraps a registration handle in an <see cref="IDisposable"/> that removes it on dispose.
+        /// </summary>
+        /// <param name="handle">The registration handle to remove when disposed.</param>
+        /// <returns>An <see cref="IDisposable"/> that calls <see cref="RemoveRegistration"/> once.</returns>
+        public IDisposable AsDisposable(MessageRegistrationHandle handle)
+        {
+            return new RegistrationDisposable(this, handle);
+        }
+
+        private readonly struct RegistrationDisposable : IDisposable
+        {
+            private readonly MessageRegistrationToken _token;
+            private readonly MessageRegistrationHandle _handle;
+            private readonly int _disposed; // 0 = false, 1 = true (immutability-friendly pattern)
+
+            public RegistrationDisposable(
+                MessageRegistrationToken token,
+                MessageRegistrationHandle handle
+            )
+            {
+                _token = token;
+                _handle = handle;
+                _disposed = 0;
+            }
+
+            public void Dispose()
+            {
+                // Best-effort idempotence; AsDisposable instances are short-lived and immutable
+                if (_disposed == 0)
+                {
+                    _token.RemoveRegistration(_handle);
+                }
+            }
+        }
+
+        /// <summary>
         /// Creates a MessagingRegistrationToken that operates on the given handler.
         /// </summary>
         /// <param name="messageHandler">Message handler to register handlers to.</param>
