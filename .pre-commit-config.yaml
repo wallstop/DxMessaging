@@ -28,3 +28,11 @@ repos:
         types:
           - markdown
         description: Ensure markdown-to-markdown links do not use raw file names or paths as link text.
+      - id: markdown-link-validity
+        name: Validate internal markdown links
+        entry: python .github/scripts/validate_markdown_links.py
+        language: python
+        pass_filenames: true
+        types:
+          - markdown
+        description: Detect broken internal markdown links and dangling anchors.

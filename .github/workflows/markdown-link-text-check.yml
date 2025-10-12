@@ -2,8 +2,9 @@ name: Markdown Link Text Check
 
 on:
   pull_request:
-    paths:
-      - '**/*.md'
+  push:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
