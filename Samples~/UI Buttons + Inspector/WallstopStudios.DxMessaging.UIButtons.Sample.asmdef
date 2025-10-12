@@ -1,14 +1,13 @@
 {
-  "name": "WallstopStudios.DxMessaging.Editor",
-  "rootNamespace": "DxMessaging.Editor",
+  "name": "WallstopStudios.DxMessaging.UIButtons.Sample",
+  "rootNamespace": "WallstopStudios.DxMessaging.UIButtons.Sample",
   "references": ["WallstopStudios.DxMessaging"],
-  "includePlatforms": ["Editor"],
+  "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": true,
   "defineConstraints": [],
-  "versionDefines": [],
   "noEngineReferences": false
 }

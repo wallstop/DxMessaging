@@ -11,22 +11,99 @@
 
 Think of it as **the event system Unity should have built-in** — one that actually scales.
 
+## Table of Contents
+
+- [30-Second Elevator Pitch](#30-second-elevator-pitch)
+- [Quick Start (5 Minutes)](#quick-start-5-minutes)
+- [Is DxMessaging Right for You?](#is-dxmessaging-right-for-you)
+- [Why DxMessaging?](#why-dxmessaging)
+- [Killer Features](#killer-features)
+- [The DxMessaging Solution](#the-dxmessaging-solution)
+- [Real-World Examples](#real-world-examples)
+- [Performance](#performance)
+- [Comparison Table](#comparison-table)
+- [Samples](#samples)
+- [Documentation](#documentation)
+- [Requirements](#requirements)
+- [Contributing](#contributing)
+- [Links](#links)
+
+---
+
 ## 30-Second Elevator Pitch
 
 **Problem:** In Unity, you're stuck with manual event management (memory leaks!), tight coupling (everything knows everything!), or messy global event buses (no context, no control!).
 
 **Solution:** DxMessaging gives you three simple message types:
+
 1. **Untargeted** - "Hey everyone!" (global events)
-2. **Targeted** - "Hey YOU!" (commands to specific objects)
-3. **Broadcast** - "I did something!" (events from sources)
+1. **Targeted** - "Hey YOU!" (commands to specific objects)
+1. **Broadcast** - "I did something!" (events from sources)
 
 **Result:** Zero memory leaks (automatic lifecycle), zero coupling (no references needed), full observability (see everything in Inspector), and predictable execution (priority-based ordering).
 
 **One line:** It's like C# events, but with superpowers and no footguns. 🚀
 
-## Is DxMessaging Right for You?
+---
 
-### ✅ Use DxMessaging When:
+## Quick Start (5 Minutes)
+
+**New to messaging?** Start with the [Visual Guide](Docs/VisualGuide.md) (5 min) for a beginner-friendly introduction!
+
+### 1. Install
+
+Via Unity Package Manager → Add package from git URL:
+
+```text
+https://github.com/wallstop/DxMessaging.git
+```
+
+### 2. Define Your First Message
+
+```csharp
+using DxMessaging.Core.Attributes;
+
+[DxTargetedMessage]
+[DxAutoConstructor]  // Auto-generates constructor
+public readonly partial struct OpenChest {
+    public readonly int chestId;
+}
+```
+
+### 3. Listen for It
+
+```csharp
+using DxMessaging.Unity;
+
+public class ChestController : MessageAwareComponent {
+    protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
+        _ = Token.RegisterComponentTargeted<OpenChest>(this, OnOpen);
+    }
+
+    void OnOpen(ref OpenChest msg) {
+        Debug.Log($"Opening chest {msg.chestId}");
+    }
+}
+```
+
+### 4. Send It
+
+```csharp
+// From anywhere:
+var msg = new OpenChest(chestId: 42);
+msg.EmitComponentTargeted(chestComponent);
+```
+
+**Done!** No manual unsubscribe, no leaks, full type safety.
+
+**Stuck?** See [Troubleshooting](Docs/Troubleshooting.md) or [FAQ](Docs/FAQ.md)
+
+---
+
+## Is DxMessaging Right for You
+
+### ✅ Use DxMessaging When
 
 - **You have cross-system communication** - UI needs to react to gameplay, achievements track events, analytics observe everything
 - **You're building for scale** - 10+ systems that need to communicate, or growing from prototype to production
@@ -35,7 +112,7 @@ Think of it as **the event system Unity should have built-in** — one that actu
 - **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
 - **You want decoupling** - Hate when UI classes need references to 15 different game systems
 
-### ❌ Don't Use DxMessaging When:
+### ❌ Don't Use DxMessaging When
 
 - **Tiny prototypes/game jams** - If your game is <1000 lines and will be done in a week, C# events are fine
 - **Simple, local communication** - A single button calling a single method? Just use UnityEvents or direct references
@@ -43,15 +120,15 @@ Think of it as **the event system Unity should have built-in** — one that actu
 - **Team is unfamiliar** - Learning curve exists; if the team isn't on board, it won't be used correctly
 - **You need synchronous return values** - DxMessaging is fire-and-forget; if you need bidirectional request/response, consider other patterns
 
-### ⚠️ Maybe Use DxMessaging (Start Small):
+### ⚠️ Maybe Use DxMessaging (Start Small)
 
 - **Existing large codebase** - Migrate incrementally: start with new features, refactor old code gradually (see [Migration Guide](Docs/MigrationGuide.md))
 - **Small team learning** - Try it for one system (e.g., achievements) before going all-in
 - **Mid-size projects (5-20k lines)** - Evaluate after trying it for one complex interaction (e.g., combat or scene transitions)
 
-### Decision Flow:
+### Decision Flow
 
-```
+```text
 Does your project have 3+ systems that need to talk to each other?
   NO → Stick with C# events or direct references
   YES ↓
@@ -71,7 +148,7 @@ Do you need observable, decoupled, lifecycle-safe messaging?
 
 Looking for hard numbers? See OS-specific [Performance Benchmarks](Docs/Performance.md).
 
-## Why DxMessaging?
+## Why DxMessaging
 
 ### The Problem You Know
 
@@ -95,6 +172,7 @@ public class GameUI : MonoBehaviour {
 ```
 
 Problems:
+
 - ❌ Manual subscribe/unsubscribe (memory leaks waiting to happen)
 - ❌ Tight coupling (UI needs references to every system)
 - ❌ No execution order control
@@ -128,6 +206,7 @@ heal.EmitGameObjectTargeted(gameObject);
 ```
 
 Benefits:
+
 - ✅ **Zero memory leaks** - automatic lifecycle via tokens
 - ✅ **Full decoupling** - no direct references needed
 - ✅ **Predictable order** - priority-based execution
@@ -138,6 +217,7 @@ Benefits:
 ## Killer Features
 
 ### 🚀 Performance: Zero-Allocation Design
+
 Messages are `readonly struct` types passed by `ref` — no boxing, no GC pressure.
 
 ```csharp
@@ -160,6 +240,7 @@ void OnDamage(ref TookDamage msg) {  // No allocations!
 ```
 
 ### 🔄 The Message Pipeline
+
 Every message flows through 3 stages with priority control:
 
 ```mermaid
@@ -212,54 +293,6 @@ var token = MessageRegistrationToken.Create(handler, testBus);
 // Messages here don't affect the global bus!
 ```
 
-## Quick Start (5 Minutes)
-
-### 1. Install
-
-Via Unity Package Manager → Add package from git URL:
-```
-https://github.com/wallstop/DxMessaging.git
-```
-
-### 2. Define Your First Message
-
-```csharp
-using DxMessaging.Core.Attributes;
-
-[DxTargetedMessage]
-[DxAutoConstructor]  // Auto-generates constructor
-public readonly partial struct OpenChest {
-    public readonly int chestId;
-}
-```
-
-### 3. Listen for It
-
-```csharp
-using DxMessaging.Unity;
-
-public class ChestController : MessageAwareComponent {
-    protected override void RegisterMessageHandlers() {
-        base.RegisterMessageHandlers();
-        _ = Token.RegisterComponentTargeted<OpenChest>(this, OnOpen);
-    }
-
-    void OnOpen(ref OpenChest msg) {
-        Debug.Log($"Opening chest {msg.chestId}");
-    }
-}
-```
-
-### 4. Send It
-
-```csharp
-// From anywhere:
-var msg = new OpenChest(chestId: 42);
-msg.EmitComponentTargeted(chestComponent);
-```
-
-Done! No manual unsubscribe, no leaks, full type safety.
-
 ## Documentation
 
 ### 🎓 Learn
@@ -296,8 +329,9 @@ Important: Inheritance with MessageAwareComponent
 
 ### 📖 Reference
 
-- [API Reference](Docs/Reference.md) — Complete API
+- [Glossary](Docs/Glossary.md) — All terms explained in plain English
 - [Quick Reference](Docs/QuickReference.md) — Cheat sheet
+- [API Reference](Docs/Reference.md) — Complete API
 - [Helpers](Docs/Helpers.md) — Source generators and utilities
 - [FAQ](Docs/FAQ.md) — Common questions
 - [Troubleshooting](Docs/Troubleshooting.md)
@@ -309,6 +343,7 @@ Browse all docs: [Documentation Hub](Docs/Index.md)
 ## Real-World Examples
 
 ### Scene Transitions
+
 ```csharp
 [DxUntargetedMessage]
 [DxAutoConstructor]
@@ -335,6 +370,7 @@ public class SaveSystem : MessageAwareComponent {
 ```
 
 ### Achievement System
+
 ```csharp
 // Listen to ALL events for achievement tracking
 public class AchievementTracker : MessageAwareComponent {
@@ -376,6 +412,7 @@ For OS-specific benchmark tables generated by PlayMode tests, see [Performance B
 ## Samples
 
 Import samples from Package Manager:
+
 - **[Mini Combat](Samples~/Mini%20Combat/README.md)** — Simple combat with Heal/Damage messages
 - **[UI Buttons + Inspector](Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** — Interactive diagnostics demo
 

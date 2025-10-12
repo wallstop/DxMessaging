@@ -1,6 +1,10 @@
-# Troubleshooting
+# Troubleshooting — Common Issues & Solutions
 
-Not receiving messages
+[← Back to Index](Index.md) | [FAQ](FAQ.md) | [Getting Started](GettingStarted.md) | [Glossary](Glossary.md)
+
+---
+
+## Not receiving messages
 
 - Ensure your `MessageRegistrationToken` is enabled (Enable in `OnEnable`, Disable in `OnDisable`).
 - Verify the category matches the emission (Untargeted vs Targeted vs Broadcast).
@@ -42,7 +46,23 @@ Diagnostics overhead
 
 - Disable diagnostics in release builds (`IMessageBus.GlobalDiagnosticsMode = false`).
 
-See also
+---
 
-- [Diagnostics](Diagnostics.md)
-- [Listening Patterns](ListeningPatterns.md)
+## Related Documentation
+
+**Get Unstuck:**
+
+- → [FAQ](FAQ.md) — Common questions answered
+- → [Getting Started](GettingStarted.md) — Learn the basics
+- → [Glossary](Glossary.md) — Understand the terminology
+
+**Debug & Inspect:**
+
+- → [Diagnostics](Diagnostics.md) — Inspector tools and debugging
+- → [Listening Patterns](ListeningPatterns.md) — Verify you're listening correctly
+- → [Message Types](MessageTypes.md) — Ensure you're using the right type
+
+**Examples:**
+
+- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — See working code
+- → [Common Patterns](Patterns.md) — Real-world solutions

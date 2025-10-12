@@ -186,6 +186,8 @@ _pkginfo.txt
 ClientBin/
 ~$*
 *~
+!Samples~/
+!Samples~/**
 *.dbmdl
 *.dbproj.schemaview
 *.jfm
@@ -301,3 +303,7 @@ __pycache__/
 
 SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/bin*
 SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/obj*
+
+node_modules/*
+node_modules.meta
+package-lock.json

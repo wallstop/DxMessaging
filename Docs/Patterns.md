@@ -1,8 +1,45 @@
 # DxMessaging Patterns
 
+[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Message Types](MessageTypes.md) | [Samples~](../Samples~/)
+
+---
+
 This document captures practical patterns for building systems with DxMessaging. It complements the README by focusing on composition, structure, and problem-solving techniques.
 
-Important: Inheritance with MessageAwareComponent
+## Table of Contents
+
+### Basic Patterns
+
+- [Scene-wide Events (Untargeted)](#1-scene-wide-events-untargeted)
+- [Directed Commands (Targeted)](#2-directed-commands-targeted)
+- [Observability (Broadcast)](#3-observability-broadcast)
+- [Validation and Normalization (Interceptors)](#4-validation-and-normalization-interceptors)
+- [Analytics/Logging (Post-Processors)](#5-analyticslogging-post-processors)
+- [Local Bus Islands](#6-local-bus-islands)
+- [Lifecycle Pattern in Unity](#7-lifecycle-pattern-in-unity)
+- [Cross-Scene Messaging](#8-cross-scene-messaging)
+
+### Advanced Patterns
+
+- [Bridging Legacy Unity Messaging](#9-bridging-legacy-unity-messaging)
+- [Global Accept-All Handlers](#10-global-accept-all-handlers)
+- [Diagnostics and Tuning](#11-diagnostics-and-tuning)
+- [Testing](#12-testing)
+
+### Real-World Scale Patterns
+
+- [Managing 100+ Combat Entities](#pattern-managing-100-combat-entities)
+- [Cross-Scene Persistent Systems](#pattern-cross-scene-persistent-systems)
+- [Large-Scale UI System (20+ Panels)](#pattern-large-scale-ui-system-20-panels)
+- [Priority-Ordered Execution](#pattern-priority-ordered-execution-for-complex-systems)
+- [Efficient Interception at Scale](#pattern-efficient-interception-at-scale)
+- [Post-Processing for Analytics at Scale](#pattern-post-processing-for-analytics-at-scale)
+- [Performance Optimization Patterns](#performance-optimization-patterns-at-scale)
+- [Production Example: Battle Royale Game](#real-world-production-example-battle-royale-game)
+
+---
+
+### Important: Inheritance with MessageAwareComponent
 
 - Many examples derive from `MessageAwareComponent`. **When overriding hooks, you MUST call the base method.**
 - **Always call `base.RegisterMessageHandlers()` FIRST** in your override to preserve default string‑message registrations and parent class registrations.
@@ -262,12 +299,14 @@ public class CombatAnalytics : MessageAwareComponent {
 ```
 
 **Scale characteristics:**
+
 - ✅ Each entity broadcasts ~10-50 messages/second → No GC allocations (struct messages)
 - ✅ Targeted listeners (health bars) only receive relevant messages → O(1) lookup
 - ✅ Global listeners (analytics) receive all messages → Single handler, not N handlers
 - ✅ Adding/removing entities doesn't break registrations (no manual wiring)
 
 **Performance notes:**
+
 - Disable diagnostics in production (`IMessageBus.GlobalDiagnosticsMode = false`)
 - Use `RegisterBroadcastWithoutSource` sparingly (it's called for every emit)
 - Profile with Unity Profiler to find hotspots
@@ -382,11 +421,13 @@ public class PlayerStats : MonoBehaviour {
 ```
 
 **Benefits at scale:**
+
 - ✅ Add/remove panels without touching game logic
 - ✅ Panels can be enabled/disabled freely (tokens handle lifecycle)
 - ✅ Easy to add "observer panels" (e.g., debug overlays) without modifying existing code
 
 **Anti-pattern to avoid:**
+
 ```csharp
 // ❌ DON'T: Separate message per UI element (too granular)
 [DxUntargetedMessage] public struct HealthChanged { public int health; }
@@ -452,6 +493,7 @@ msg.Emit();
 **Key insight:** Lower priority numbers run first. Use priority to eliminate race conditions and ensure deterministic ordering.
 
 **Recommended priority ranges:**
+
 - **-100 to -50:** Critical systems (save, validation)
 - **-10 to 0:** Core gameplay logic
 - **0 to 10:** UI updates
@@ -600,6 +642,7 @@ void LateUpdate() {
 ### Real-World Production Example: Battle Royale Game
 
 **Scenario:** 100 players, each with health/armor/weapons. UI needs to show:
+
 - Your health/armor
 - Teammate health (4 players)
 - Kill feed (all 100 players)
@@ -672,6 +715,7 @@ public class MatchStats : MessageAwareComponent {
 ```
 
 **Key insights:**
+
 - Self health UI: 1 registration, receives ~10 messages/sec
 - Team health UI: 4 registrations, receives ~40 messages/sec
 - Kill feed UI: 1 registration, receives ALL kills (~5 messages/sec)
@@ -682,3 +726,30 @@ public class MatchStats : MessageAwareComponent {
 ---
 
 **Summary:** DxMessaging scales from small prototypes to large production games. Use targeted observation for specific entities, global observation for analytics, and post-processors for metrics. Disable diagnostics in production and batch emissions for optimal performance.
+
+---
+
+## Related Documentation
+
+**Learn the Basics First?**
+
+- → [Getting Started](GettingStarted.md) (10 min) — Complete introduction
+- → [Message Types](MessageTypes.md) (10 min) — When to use what
+- → [Visual Guide](VisualGuide.md) (5 min) — Beginner-friendly pictures
+
+### Try Real Examples
+
+- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — Working combat example
+- → [Samples~/UI Buttons + Inspector](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — Interactive diagnostics
+- → [End-to-End Example](EndToEnd.md) — Complete feature walkthrough
+
+### Deep Dives
+
+- → [Interceptors & Ordering](InterceptorsAndOrdering.md) — Control execution flow
+- → [Design & Architecture](DesignAndArchitecture.md) — Internals and optimizations
+- → [Performance](Performance.md) — Benchmarks and tuning
+
+### Reference
+
+- → [Quick Reference](QuickReference.md) — Cheat sheet
+- → [API Reference](Reference.md) — Complete API

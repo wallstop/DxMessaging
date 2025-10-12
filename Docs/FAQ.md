@@ -1,6 +1,10 @@
-# FAQ
+# FAQ — Frequently Asked Questions
 
-Do I need to use attributes or source generators?
+[← Back to Index](Index.md) | [Troubleshooting](Troubleshooting.md) | [Getting Started](GettingStarted.md) | [Glossary](Glossary.md)
+
+---
+
+## Do I need to use attributes or source generators
 
 - No. You can implement `IUntargetedMessage<T>`, `ITargetedMessage<T>`, or `IBroadcastMessage<T>` directly (recommended for structs). Attributes are optional and help tooling/source‑gen.
 
@@ -26,6 +30,26 @@ Do I need a global bus?
 
 - A global bus is provided (`MessageHandler.MessageBus`). You can also create and pass your own `MessageBus` instance to isolate subsystems and tests.
 
-Is this compatible with Unity’s SendMessage/UnityEvents?
+## Is this compatible with Unity's SendMessage/UnityEvents
 
 - Yes. You can integrate with legacy patterns via `ReflexiveMessage`. Prefer DxMessaging for new code.
+
+---
+
+## Related Documentation
+
+**New to DxMessaging?**
+
+- → [Visual Guide](VisualGuide.md) — Beginner-friendly introduction
+- → [Getting Started](GettingStarted.md) — Complete guide
+- → [Glossary](Glossary.md) — All terms explained
+
+**Common Issues:**
+
+- → [Troubleshooting](Troubleshooting.md) — Solutions to common problems
+- → [Common Patterns](Patterns.md) — See how to use it correctly
+
+**Reference:**
+
+- → [Quick Reference](QuickReference.md) — API cheat sheet
+- → [Message Types](MessageTypes.md) — Which type to use when

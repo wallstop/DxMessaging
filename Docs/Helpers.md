@@ -1,16 +1,18 @@
 # Helpers and Source Generation
 
-## What Are Source Generators?
+## What Are Source Generators
 
 **Source generators** are a C# feature (introduced in C# 9.0) that **automatically write code for you at compile time**. Think of them as smart code wizards that look at your code, see what you need, and generate the boilerplate automatically.
 
 **In plain English:**
+
 - You write: `[DxAutoConstructor]` on a struct
 - Source generator sees: "Oh, they want a constructor!"
 - Source generator creates: A constructor with all the fields as parameters
 - You get: Less typing, fewer bugs, cleaner code
 
 **Learn more about source generators:**
+
 - [Microsoft Docs: Source Generators](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/source-generators-overview)
 - [Introduction to C# Source Generators](https://devblogs.microsoft.com/dotnet/introducing-c-source-generators/)
 
@@ -30,6 +32,7 @@ public readonly partial struct GamePaused { }
 ```
 
 **What it generates:**
+
 - Implements `IUntargetedMessage<GamePaused>`
 - Adds required plumbing for the message system
 - Makes it work with `.Emit()` extension methods
@@ -44,6 +47,7 @@ public readonly partial struct Heal {
 ```
 
 **What it generates:**
+
 - Implements `ITargetedMessage<Heal>`
 - Adds required plumbing for targeted emissions
 - Makes it work with `.EmitGameObjectTargeted()` / `.EmitComponentTargeted()`
@@ -58,6 +62,7 @@ public readonly partial struct TookDamage {
 ```
 
 **What it generates:**
+
 - Implements `IBroadcastMessage<TookDamage>`
 - Adds required plumbing for broadcast emissions
 - Makes it work with `.EmitGameObjectBroadcast()` / `.EmitComponentBroadcast()`
@@ -79,6 +84,7 @@ public readonly partial struct VideoSettingsChanged
 ```
 
 **What you get (auto-generated):**
+
 ```csharp
 // You don't write this - it's generated for you!
 public VideoSettingsChanged(int width, int height)
@@ -89,6 +95,7 @@ public VideoSettingsChanged(int width, int height)
 ```
 
 **Rules:**
+
 - Creates constructor parameters in **field declaration order**
 - Only includes `public` fields
 - Ignores `static` fields
@@ -111,6 +118,7 @@ public readonly partial struct SettingsChanged
 ```
 
 **Generated constructor:**
+
 ```csharp
 public SettingsChanged(float volume, int quality, bool fullscreen = default)
 {
@@ -121,13 +129,14 @@ public SettingsChanged(float volume, int quality, bool fullscreen = default)
 ```
 
 **Usage:**
+
 ```csharp
 // Both work!
 var settings1 = new SettingsChanged(0.8f, 2, true);
 var settings2 = new SettingsChanged(0.8f, 2);  // fullscreen defaults to false
 ```
 
-## Why Use Attributes Instead of Manual Implementation?
+## Why Use Attributes Instead of Manual Implementation
 
 ### ❌ Manual Way (Verbose, Error-Prone)
 
@@ -160,6 +169,7 @@ public readonly partial struct Heal
 ```
 
 **Benefits:**
+
 - ✅ **Less code** - 50% fewer lines
 - ✅ **Fewer bugs** - Can't forget fields in constructor
 - ✅ **Cleaner** - Focus on data, not boilerplate
@@ -232,16 +242,19 @@ public readonly struct Heal : ITargetedMessage<Heal>
 ```
 
 **Why use generics?**
+
 - Avoids boxing structs (important for performance)
 - Provides stable `MessageType` without `GetType()` calls
 - Same performance as attribute-based approach
 
 **When to use:**
+
 - Hot path messages (sent/received every frame)
 - Very large structs where boxing matters
 - When you want explicit control
 
 **When to use attributes:**
+
 - 99% of cases (they generate the same code!)
 - Cleaner, less boilerplate
 - Easier to maintain
@@ -279,6 +292,7 @@ dmg.EmitComponentBroadcast(enemyComponent);
 **Located in:** `DxMessaging.Core.Extensions.MessageExtensions`
 
 **Automatic overload selection:**
+
 - Extension methods pick the right overload based on type
 - Defaults to global `MessageHandler.MessageBus`
 - Pass custom bus with optional parameter
@@ -305,6 +319,7 @@ msg.Emit(testBus);
 ```
 
 **Use cases:**
+
 - Unit tests (no global side effects!)
 - Subsystem isolation (UI has own bus)
 - Sandboxing (mod systems, untrusted code)
@@ -414,9 +429,10 @@ public readonly partial struct MyMessage : IUntargetedMessage<MyMessage>
 ### "Can I see the generated code?"
 
 **Yes!** In Visual Studio/Rider:
+
 1. Right-click on the message type
-2. Select "Go to Implementation" or "Go to Definition"
-3. You'll see the auto-generated file
+$11. Select "Go to Implementation" or "Go to Definition"
+$11. You'll see the auto-generated file
 
 **Or** check your `obj/` folder for `.g.cs` files.
 
@@ -446,6 +462,7 @@ public readonly struct ComplexMessage : IUntargetedMessage<ComplexMessage>
 ### "Can I mix attributes and manual implementation?"
 
 **Not on the same type**, but you can have:
+
 - Some messages using attributes
 - Other messages using manual implementation
 - Mix and match across your codebase
@@ -472,12 +489,14 @@ public readonly struct MessageB : IUntargetedMessage<MessageB>
 ### "Attributes not working / code not generated"
 
 **Checklist:**
+
 1. ✅ Is type marked `partial`?
-2. ✅ Did you rebuild the project?
-3. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
-4. ✅ Check `obj/` folder for `.g.cs` files
+1. ✅ Did you rebuild the project?
+1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
+1. ✅ Check `obj/` folder for `.g.cs` files
 
 **Fix:**
+
 ```csharp
 // ❌ Missing partial
 [DxAutoConstructor]
@@ -507,10 +526,11 @@ public readonly partial struct WithData {
 ### "Unity can't find generated code"
 
 **Solution:**
+
 1. Close Unity
-2. Delete `Library/` folder
-3. Reopen Unity
-4. Let it reimport everything
+1. Delete `Library/` folder
+1. Reopen Unity
+1. Let it reimport everything
 
 ## Related Documentation
 
@@ -521,15 +541,17 @@ public readonly partial struct WithData {
 
 ## Summary
 
-**Source generators = Code wizards that write boilerplate for you**
+### Source generators = Code wizards that write boilerplate for you
 
 **Use attributes for:**
+
 - ✅ Clean, maintainable code
 - ✅ Automatic constructor generation
 - ✅ Zero boilerplate
 - ✅ Refactor safety
 
 **Use manual implementation for:**
+
 - ✅ Custom constructor logic
 - ✅ Explicit control
 - ✅ Understanding exactly what happens

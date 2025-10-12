@@ -1,16 +1,14 @@
 {
-    "name": "WallstopStudios.DxMessaging",
-    "rootNamespace": "DxMessaging",
-    "references": [],
-    "includePlatforms": [],
-    "excludePlatforms": [],
-    "allowUnsafeCode": true,
-    "overrideReferences": false,
-    "precompiledReferences": [
-        "System.Runtime.CompilerServices.Unsafe.dll"
-    ],
-    "autoReferenced": true,
-    "defineConstraints": [],
-    "versionDefines": [],
-    "noEngineReferences": false
+  "name": "WallstopStudios.DxMessaging",
+  "rootNamespace": "DxMessaging",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": ["System.Runtime.CompilerServices.Unsafe.dll"],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
 }

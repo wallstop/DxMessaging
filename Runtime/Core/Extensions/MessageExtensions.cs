@@ -259,6 +259,40 @@ namespace DxMessaging.Core.Extensions
             messageBus.UntargetedBroadcast(ref message);
         }
 
+        public static void EmitAt<TMessage>(
+            this ref TMessage message,
+            InstanceId target,
+            IMessageBus messageBus = null
+        )
+            where TMessage : struct, ITargetedMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) == typeof(ITargetedMessage))
+            {
+                messageBus.UntypedTargetedBroadcast(target, message);
+                return;
+            }
+
+            messageBus.TargetedBroadcast(ref target, ref message);
+        }
+
+        public static void EmitFrom<TMessage>(
+            this ref TMessage message,
+            InstanceId source,
+            IMessageBus messageBus = null
+        )
+            where TMessage : struct, IBroadcastMessage
+        {
+            messageBus ??= MessageHandler.MessageBus;
+            if (typeof(TMessage) == typeof(ITargetedMessage))
+            {
+                messageBus.UntypedSourcedBroadcast(source, message);
+                return;
+            }
+
+            messageBus.SourcedBroadcast(ref source, ref message);
+        }
+
 #if UNITY_2017_1_OR_NEWER
         /// <summary>
         /// Emits a BroadcastMessage of the given type.

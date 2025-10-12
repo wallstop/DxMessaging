@@ -1,14 +1,13 @@
 {
-  "name": "WallstopStudios.DxMessaging.Editor",
-  "rootNamespace": "DxMessaging.Editor",
+  "name": "WallstopStudios.DxMessaging.MiniCombat.Sample",
+  "rootNamespace": "WallstopStudios.DxMessaging.MiniCombat.Sample",
   "references": ["WallstopStudios.DxMessaging"],
-  "includePlatforms": ["Editor"],
+  "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,
   "precompiledReferences": [],
   "autoReferenced": true,
   "defineConstraints": [],
-  "versionDefines": [],
   "noEngineReferences": false
 }

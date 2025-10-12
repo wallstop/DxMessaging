@@ -2,11 +2,11 @@
 
 If you're brand new to messaging systems, this visual guide will help you understand DxMessaging in minutes.
 
-## 🎯 What Problem Does It Solve?
+## 🎯 What Problem Does It Solve
 
 ### The Old Way (Spaghetti Code)
 
-```
+```text
 ┌─────────────┐
 │   Player    │───────┐
 └─────────────┘       │
@@ -23,11 +23,11 @@ Problems:
 ❌ Everyone needs to know everyone else
 ❌ Hard to add/remove systems
 ❌ Memory leaks from forgotten unsubscribes
-```
+```text
 
 ### The DxMessaging Way (Clean Separation)
 
-```
+```text
 ┌─────────┐                    ┌─────────┐
 │ Player  │──→ Message ──→     │   UI    │
 └─────────┘        ↓           └─────────┘
@@ -44,7 +44,7 @@ Benefits:
 ✅ Nobody knows about anyone else
 ✅ Easy to add/remove systems
 ✅ Zero memory leaks (automatic cleanup)
-```
+```text
 
 ## 📨 The Three Message Types (Simple!)
 
@@ -66,9 +66,10 @@ msg.Emit();
 
 // Anyone can listen
 _ = token.RegisterUntargeted<GamePaused>(OnPause);
-```
+```text
 
 **Real-world uses:**
+
 - "Game paused!"
 - "Settings changed!"
 - "Level loaded!"
@@ -89,9 +90,10 @@ heal.EmitGameObjectTargeted(playerObject);
 
 // Only the player listens
 _ = token.RegisterComponentTargeted<Heal>(this, OnHeal);
-```
+```text
 
 **Real-world uses:**
+
 - "Player, heal yourself!"
 - "Enemy #3, take damage!"
 - "Button, update your text!"
@@ -115,9 +117,10 @@ _ = token.RegisterGameObjectBroadcast<TookDamage>(enemyObject, OnThisEnemy);
 
 // OR achievement system can listen to ALL enemies
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyEnemy);
-```
+```text
 
 **Real-world uses:**
+
 - "I (player) took damage!"
 - "I (enemy) died!"
 - "I (chest) was opened!"
@@ -126,7 +129,7 @@ _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyEnemy);
 
 When you send a message, here's what happens:
 
-```
+```text
 1. You create a message
    var heal = new Heal(10);
 
@@ -152,7 +155,7 @@ When you send a message, here's what happens:
    │ Analytics.Track(...)        │
    │ Debug.Log(...)              │
    └─────────────────────────────┘
-```
+```text
 
 ## 🎮 Your First Message (3 Easy Steps)
 
@@ -176,6 +179,7 @@ They're called **attributes** — magic markers that tell the computer to write 
 - **`[DxAutoConstructor]`** → "Hey robot, create a constructor for me"
 
 The `[DxAutoConstructor]` automatically creates this:
+
 ```csharp
 public Heal(int amount) { this.amount = amount; }
 ```
@@ -204,6 +208,7 @@ public class Player : MessageAwareComponent {
 ```
 
 **Magic:** `MessageAwareComponent` handles all the lifecycle automatically!
+
 - Creates registration in `Awake()`
 - Activates in `OnEnable()`
 - Deactivates in `OnDisable()`
@@ -223,7 +228,7 @@ healMsg.EmitComponentTargeted(playerComponent);
 
 ### Pattern: Scene Transition
 
-```
+```text
 SceneManager               AudioSystem
      │                          │
      │  [SceneChanged]          │
@@ -238,6 +243,7 @@ All independent! No coupling!
 ```
 
 Code:
+
 ```csharp
 // Define
 [DxUntargetedMessage]
@@ -255,7 +261,7 @@ _ = saveToken.RegisterUntargeted<SceneChanged>(OnScene);
 
 ### Pattern: Player Input → Action
 
-```
+```text
 InputSystem          Player
      │                 │
      │   [Jump]        │
@@ -266,6 +272,7 @@ Decoupled! Input doesn't need reference to Player.
 ```
 
 Code:
+
 ```csharp
 // Input system (doesn't know about Player!)
 void Update() {
@@ -284,7 +291,7 @@ void OnJump(ref Jump msg) {
 
 ### Pattern: Achievement Tracking
 
-```
+```text
 Any System                Achievement System
      │                           │
      │  [Any Message]            │
@@ -292,9 +299,10 @@ Any System                Achievement System
      │                           │ UnlockIfReady()
 
 Achievements see EVERYTHING without coupling!
-```
+```text
 
 Code:
+
 ```csharp
 public class AchievementSystem : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
@@ -309,19 +317,22 @@ public class AchievementSystem : MessageAwareComponent {
 }
 ```
 
-## 🚦 When to Use Which Message Type?
+## 🚦 When to Use Which Message Type
 
-### Use Untargeted When:
+### Use Untargeted When
+
 - ✅ Global game state changes (pause, settings, scene load)
 - ✅ System-wide announcements
 - ✅ Configuration updates
 
-### Use Targeted When:
+### Use Targeted When
+
 - ✅ Commanding a specific object ("You, do this!")
 - ✅ UI updates for specific elements
 - ✅ Direct communication (A → B)
 
-### Use Broadcast When:
+### Use Broadcast When
+
 - ✅ Events others should know about ("I did this!")
 - ✅ Analytics tracking
 - ✅ Achievement triggers
@@ -332,30 +343,33 @@ public class AchievementSystem : MessageAwareComponent {
 Think of DxMessaging like a restaurant:
 
 ### Untargeted = Restaurant Announcement
-```
+
+```text
 "Attention all customers: We're closing in 10 minutes!"
 → Everyone hears it
-```
+```text
 
 ### Targeted = Waiter Delivering Food
-```
+
+```text
 "Order for table 5: Here's your burger"
 → Only table 5 gets it
 ```
 
 ### Broadcast = Customer Calling Waiter
-```
+
+```text
 "Excuse me, I need a refill!" (from table 3)
 → Comes from table 3
 → Any available waiter can respond
 → Manager might track it for statistics
-```
+```text
 
 ## 🔍 Debugging Visualized
 
 DxMessaging has built-in Inspector support!
 
-```
+```text
 MessagingComponent Inspector:
 ┌─────────────────────────────────────┐
 │ Message History (last 10)           │
@@ -376,7 +390,7 @@ MessagingComponent Inspector:
 
 ## ⚡ Performance at a Glance
 
-```
+```text
 Traditional C# Event: ████░░░░░░ (baseline)
 DxMessaging:          █████░░░░░ (~10ns slower, negligible)
 
@@ -390,6 +404,7 @@ DxMessaging:          ░░░░░░░░░░ (zero!)
 ```
 
 **Bottom line:** Slightly slower than raw events, but:
+
 - ✅ Zero memory leaks
 - ✅ Zero coupling
 - ✅ Full observability
@@ -397,7 +412,7 @@ DxMessaging:          ░░░░░░░░░░ (zero!)
 
 ## 🎓 Learning Path
 
-```
+```text
 START HERE
     │
     ├─→ 1. Read this Visual Guide (5 min) ✓
@@ -426,6 +441,7 @@ START HERE
 ### "Can I send a message to multiple targets?"
 
 **No** - Targeted is for ONE target. Instead:
+
 - Use **Untargeted** if everyone should hear it
 - Use **Broadcast** if it's from a source and many can observe
 
@@ -440,13 +456,14 @@ START HERE
 ### "Can I cancel a message?"
 
 **Yes!** Use an **Interceptor**:
+
 ```csharp
 _ = token.RegisterInterceptor<Damage>(
     (ref Damage msg) => msg.amount > 0  // Return false to cancel
 );
 ```
 
-## ✅ Quick Checklist: Am I Doing It Right?
+## ✅ Quick Checklist: Am I Doing It Right
 
 - [ ] Using `MessageAwareComponent` for Unity components? ✅
 - [ ] Defining messages as `readonly struct`? ✅
@@ -462,9 +479,9 @@ If you checked all these, **you're doing it right!** 🎉
 Ready to dive deeper?
 
 1. **[Getting Started Guide](GettingStarted.md)** - Full guide with more details
-2. **[Common Patterns](Patterns.md)** - Real-world examples
-3. **[Message Types](MessageTypes.md)** - Deep dive into when to use what
-4. **[Diagnostics](Diagnostics.md)** - Master the Inspector tools
+1. **[Common Patterns](Patterns.md)** - Real-world examples
+1. **[Message Types](MessageTypes.md)** - Deep dive into when to use what
+1. **[Diagnostics](Diagnostics.md)** - Master the Inspector tools
 
 ---
 

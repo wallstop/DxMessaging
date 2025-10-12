@@ -252,7 +252,6 @@ namespace DxMessaging.Core.DataStructure
                 throw new ArgumentException(nameof(newCapacity));
             }
 
-            int oldCapacity = Capacity;
             Capacity = newCapacity;
 
             // Normalize underlying storage so the oldest element is at index 0.
@@ -276,15 +275,7 @@ namespace DxMessaging.Core.DataStructure
 
             // Count cannot exceed new capacity
             Count = Math.Min(newCapacity, Count);
-
-            if (_buffer.Count >= Capacity)
-            {
-                _position = 0;
-            }
-            else
-            {
-                _position = _buffer.Count;
-            }
+            _position = _buffer.Count >= Capacity ? 0 : _buffer.Count;
         }
 
         /// <summary>
