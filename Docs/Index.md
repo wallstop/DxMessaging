@@ -79,8 +79,8 @@
 
 - **[End-to-End Example](EndToEnd.md)** — Complete feature walkthrough
 - **[Scene Transitions Example](EndToEndSceneTransitions.md)** — Scene management pattern
-- **[Mini Combat Sample](Samples~/Mini Combat/README.md)** — Interactive combat demo
-- **[UI Buttons + Inspector Sample](Samples~/UI Buttons + Inspector/README.md)** — Interactive diagnostics demo
+- **[Mini Combat Sample](../Samples~/Mini%20Combat/README.md)** — Interactive combat demo
+- **[UI Buttons + Inspector Sample](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** — Interactive diagnostics demo
 
 ### Real-World Patterns
 
@@ -216,8 +216,8 @@ From [Comparisons](Comparisons.md):
 - [Compatibility](Compatibility.md)
 - [End-to-End Example](EndToEnd.md)
 - [Scene Transitions Example](EndToEndSceneTransitions.md)
-- [Mini Combat Sample](Samples~/Mini Combat/README.md)
-- [UI Buttons + Inspector Sample](Samples~/UI Buttons + Inspector/README.md)
+- [Mini Combat Sample](../Samples~/Mini%20Combat/README.md)
+- [UI Buttons + Inspector Sample](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md)
 
 ---
 
@@ -228,7 +228,7 @@ From [Comparisons](Comparisons.md):
 1. ⏱️ 5 min: [Visual Guide](VisualGuide.md) 🎨 — Start here for pictures & analogies!
 2. ⏱️ 10 min: [Getting Started](GettingStarted.md) — Deep dive
 3. ⏱️ 5 min: [Quick Start](QuickStart.md) — Hands-on code
-4. ⏱️ 10 min: Try a [Sample](Samples~/Mini Combat/README.md) — See it in action
+4. ⏱️ 10 min: Try a [Sample](../Samples~/Mini%20Combat/README.md) — See it in action
 
 **Want to go deep?** Continue with:
 

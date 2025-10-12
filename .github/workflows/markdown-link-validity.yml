@@ -19,6 +19,7 @@ jobs:
         with:
           # Include fragments ensures anchors are validated
           args: >-
+            -c .lychee.toml
             --no-progress
             --include-fragments
             --verbose

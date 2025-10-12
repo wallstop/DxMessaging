@@ -16,3 +16,6 @@ jobs:
 
       - name: Validate link text for markdown-to-markdown links
         run: python .github/scripts/check_markdown_links.py .
+
+      - name: Verify relative links are URL-encoded
+        run: python .github/scripts/check_markdown_url_encoding.py .
