@@ -1,6 +1,6 @@
 # DxMessaging for Unity — The Modern Event System
 
-[![Unity](https://img.shields.io/badge/Unity-2021.3+-black.svg)](https://unity3d.com/get-unity/download)<br/>
+[![Unity](https://img.shields.io/badge/Unity-2021.3+-black.svg)](https://unity.com/download)<br/>
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)<br/>
 [![Version](https://img.shields.io/badge/version-2.0.0--rc27-green.svg)](package.json)<br/>
 [![Performance: OS-Specific Benchmarks](https://img.shields.io/badge/Performance-OS--specific-blueviolet.svg)](Docs/Performance.md)<br/>
