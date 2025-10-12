@@ -1,9 +1,10 @@
 # String Messages (Prototyping & Debugging)
 
-Sometimes you just want to fire a quick string without defining a formal message. DxMessaging provides two built‑in types:
+Sometimes you just want to fire a quick string without defining a formal message. DxMessaging provides three built‑in types:
 
 - `StringMessage`: targeted string message (to a specific recipient)
 - `GlobalStringMessage`: untargeted string message (global broadcast)
+- `SourcedStringMessage`: broadcast string message (from a specific source)
 
 When to use
 
@@ -37,6 +38,14 @@ var msg = new StringMessage("Hello!");
 msg.EmitGameObjectTargeted(gameObject);
 // Or even
 "Hello!".EmitGameObjectTargeted(gameObject);
+// Or shorthand by InstanceId shape
+"Hello!".EmitAt(gameObject);
+
+// Broadcast (from a specific source)
+var b = new SourcedStringMessage("Hit");
+b.EmitGameObjectBroadcast(gameObject);
+// Or shorthand by InstanceId shape
+"Hit".EmitFrom(gameObject);
 ```
 
 Listening

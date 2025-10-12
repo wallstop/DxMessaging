@@ -20,6 +20,19 @@ repos:
         types:
           - c#
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
+      - id: markdownlint
+        name: Lint/format Markdown (markdownlint-cli)
+        entry: markdownlint
+        language: node
+        additional_dependencies:
+          - markdownlint-cli@0.41.0
+        types:
+          - markdown
+        args:
+          - -c
+          - .markdownlint.jsonc
+          - --fix
+        description: Lints and auto-fixes Markdown files with markdownlint-cli.
       - id: markdown-link-text-check
         name: Markdown link text must be human-readable
         entry: python .github/scripts/check_markdown_links.py
@@ -36,3 +49,14 @@ repos:
         types:
           - markdown
         description: Detect broken internal markdown links and dangling anchors.
+      - id: prettier-json
+        name: Format JSON and asmdef with Prettier
+        entry: prettier
+        language: node
+        additional_dependencies:
+          - prettier@3.3.3
+        files: \.(json|asmdef)$
+        args:
+          - --ignore-unknown
+          - --write
+        description: Formats JSON and Unity .asmdef files consistently (2-space indent).

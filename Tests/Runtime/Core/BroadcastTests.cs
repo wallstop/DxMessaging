@@ -857,7 +857,7 @@ namespace DxMessaging.Tests.Runtime.Core
             {
                 int priority = i;
                 token.RegisterBroadcastInterceptor(
-                    (ref InstanceId source, ref SimpleBroadcastMessage _) =>
+                    (ref InstanceId _, ref SimpleBroadcastMessage _) =>
                     {
                         int previous = received[priority]++;
                         for (int j = priority - 1; j >= 0; --j)

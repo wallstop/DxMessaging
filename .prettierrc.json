@@ -1,0 +1,9 @@
+{
+  "endOfLine": "crlf",
+  "overrides": [
+    {
+      "files": "*.asmdef",
+      "options": { "parser": "json" }
+    }
+  ]
+}

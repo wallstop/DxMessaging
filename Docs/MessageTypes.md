@@ -1,5 +1,9 @@
 # Message Types: When and How to Use
 
+[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Patterns](Patterns.md) | [Visual Guide](VisualGuide.md)
+
+---
+
 This guide introduces the three message categories in DxMessaging with concepts, when to use them, and practical code.
 
 ## Overview
@@ -116,7 +120,22 @@ void OnAnyTookDamage(ref InstanceId source, ref TookDamage m) => Track(source, m
 - Avoid deep inheritance trees; messages should be small, flat data.
 - Don’t emit from temporaries; bind structs to a variable before `Emit*`.
 
-Related
+---
 
-- [Interceptors & Ordering](InterceptorsAndOrdering.md)
-- [Listening Patterns](ListeningPatterns.md)
+## Related Documentation
+
+**Prerequisites:**
+
+- → [Getting Started](GettingStarted.md) — Understand the basics first
+- → [Visual Guide](VisualGuide.md) — See the 3 types visualized
+
+**Next Steps:**
+
+- → [Patterns](Patterns.md) — Real-world examples of each type
+- → [Listening Patterns](ListeningPatterns.md) — All the ways to receive messages
+- → [Interceptors & Ordering](InterceptorsAndOrdering.md) — Control message flow
+
+**Try It:**
+
+- → [Quick Start](QuickStart.md) — Working example
+- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — See all 3 types in action

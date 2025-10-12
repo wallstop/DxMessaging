@@ -848,7 +848,7 @@ namespace DxMessaging.Tests.Runtime.Core
             {
                 int priority = i;
                 token.RegisterTargetedInterceptor(
-                    (ref InstanceId source, ref SimpleTargetedMessage _) =>
+                    (ref InstanceId _, ref SimpleTargetedMessage _) =>
                     {
                         int previous = received[priority]++;
                         for (int j = priority - 1; j >= 0; --j)

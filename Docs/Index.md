@@ -2,33 +2,71 @@
 
 **Welcome!** This is your complete guide to DxMessaging — a high-performance, type-safe messaging system for Unity.
 
-## 🚀 New to DxMessaging?
+## Visual Documentation Map
+
+```text
+                    ┌─────────────────┐
+                    │   START HERE    │
+                    │  Visual Guide   │
+                    │   (5 minutes)   │
+                    └────────┬────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+    ┌─────▼──────┐    ┌─────▼──────┐    ┌─────▼──────┐
+    │   Quick    │    │  Getting   │    │  Overview  │
+    │   Start    │    │  Started   │    │            │
+    │ (5 min)    │    │ (10 min)   │    │ (5 min)    │
+    └─────┬──────┘    └─────┬──────┘    └─────┬──────┘
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             │
+                      ┌──────▼──────┐
+                      │   Patterns  │
+                      │  & Samples  │
+                      │ (Hands-on!) │
+                      └─────────────┘
+```
+
+## Table of Contents
+
+- [New to DxMessaging](#new-to-dxmessaging)
+- [Learning Path](#learning-path)
+- [Core Documentation](#core-documentation)
+- [Reference](#reference)
+- [Examples and Samples](#examples-and-samples)
+- [By Use Case](#by-use-case)
+- [Quick Start Path](#quick-start-path)
+
+---
+
+## New to DxMessaging
 
 **Never used a messaging system before?** Start here:
 
 1. **[Visual Guide](VisualGuide.md)** 🎨 ⭐ — Beginner-friendly visual introduction (5 min)
-2. **[Getting Started Guide](GettingStarted.md)** — Comprehensive guide with examples (10 min)
-3. **[Quick Start](QuickStart.md)** — Your first working message (5 min)
-4. **[Overview](Overview.md)** — What DxMessaging is and why it exists (5 min)
+1. **[Getting Started Guide](GettingStarted.md)** — Comprehensive guide with examples (10 min)
+1. **[Quick Start](QuickStart.md)** — Your first working message (5 min)
+1. **[Overview](Overview.md)** — What DxMessaging is and why it exists (5 min)
 
-## 📚 Learning Path
+## Learning Path
 
 ### For Absolute Beginners (Never Used Messaging Before)
 
 1. Read [Visual Guide](VisualGuide.md) (5 min) 🎨 — Pictures and analogies!
-2. Read [Getting Started](GettingStarted.md) (10 min) — Complete introduction
-3. Try [Quick Start](QuickStart.md) (5 min) — Hands-on tutorial
-4. Understand [Message Types](MessageTypes.md) (10 min) — When to use what
-5. Study [Common Patterns](Patterns.md) (15 min) — Real examples
+1. Read [Getting Started](GettingStarted.md) (10 min) — Complete introduction
+1. Try [Quick Start](QuickStart.md) (5 min) — Hands-on tutorial
+1. Understand [Message Types](MessageTypes.md) (10 min) — When to use what
+1. Study [Common Patterns](Patterns.md) (15 min) — Real examples
 
 ### For Advanced Users
 
 1. Master [Interceptors & Ordering](InterceptorsAndOrdering.md)
-2. Explore [Listening Patterns](ListeningPatterns.md)
-3. Deep dive into [Design & Architecture](DesignAndArchitecture.md)
-4. Review [Advanced Topics](Advanced.md)
+1. Explore [Listening Patterns](ListeningPatterns.md)
+1. Deep dive into [Design & Architecture](DesignAndArchitecture.md)
+1. Review [Advanced Topics](Advanced.md)
 
-## 📖 Core Documentation
+## Core Documentation
 
 ### Essentials
 
@@ -61,6 +99,7 @@
 
 ### Quick Lookups
 
+- **[Glossary](Glossary.md)** ⭐ NEW! — All terms explained in plain English
 - **[Quick Reference](QuickReference.md)** — API cheat sheet
 - **[API Reference](Reference.md)** — Complete API documentation
 - **[FAQ](FAQ.md)** — Common questions
@@ -69,22 +108,36 @@
 ### Tools & Utilities
 
 - **[Helpers](Helpers.md)** — Source generators, attributes, extensions
+- **[Emit Shorthands](EmitShorthands.md)** — `Emit`/`EmitAt`/`EmitFrom` usage and pitfalls
 - **[String Messages](StringMessages.md)** — Prototyping and debugging
 - **[Compatibility](Compatibility.md)** — Unity versions and render pipelines
 - **[Install](Install.md)** — Installation guide
 
-## 💡 Examples & Samples
+## Examples and Samples
 
-### Code Examples
+### 📦 Unity Samples (Importable!)
+
+**Located in `Samples~/` directory** — Import via Unity Package Manager!
+
+- **[Mini Combat](../Samples~/Mini%20Combat/README.md)** ⭐ — Interactive combat demo with Heal/Damage messages
+  - Perfect first example to understand message flow
+  - Shows Targeted and Broadcast messages in action
+  - Complete working scene you can play with
+
+- **[UI Buttons + Inspector](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** — Interactive diagnostics demo
+  - See the Inspector diagnostics in action
+  - Explore message history and handler registrations
+  - Great for debugging and understanding the system
+
+### Code Examples (In Docs)
 
 - **[End-to-End Example](EndToEnd.md)** — Complete feature walkthrough
 - **[Scene Transitions Example](EndToEndSceneTransitions.md)** — Scene management pattern
-- **[Mini Combat Sample](../Samples~/Mini%20Combat/README.md)** — Interactive combat demo
-- **[UI Buttons + Inspector Sample](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** — Interactive diagnostics demo
 
 ### Real-World Patterns
 
 From [Common Patterns](Patterns.md):
+
 - Scene-wide events (Untargeted)
 - Directed commands (Targeted)
 - Observability (Broadcast)
@@ -92,7 +145,7 @@ From [Common Patterns](Patterns.md):
 - Analytics with Post-Processors
 - Local bus islands for testing
 
-## 🎯 By Use Case
+## By Use Case
 
 ### "I want to..."
 
@@ -126,10 +179,10 @@ flowchart LR
 ### Must-Read Docs (In Order)
 
 1. **[Getting Started](GettingStarted.md)** — Start here! (10 min)
-2. **[Message Types](MessageTypes.md)** — Choose the right type (10 min)
-3. **[Patterns](Patterns.md)** — See real examples (15 min)
-4. **[Diagnostics](Diagnostics.md)** — Debug like a pro (10 min)
-5. **[Design & Architecture](DesignAndArchitecture.md)** — Understand the internals (30 min)
+1. **[Message Types](MessageTypes.md)** — Choose the right type (10 min)
+1. **[Patterns](Patterns.md)** — See real examples (15 min)
+1. **[Diagnostics](Diagnostics.md)** — Debug like a pro (10 min)
+1. **[Design & Architecture](DesignAndArchitecture.md)** — Understand the internals (30 min)
 
 ### Feature-Specific
 
@@ -182,6 +235,7 @@ From [Comparisons](Comparisons.md):
 ## 📦 Complete Document List
 
 ### Getting Started
+
 - [Visual Guide](VisualGuide.md) 🎨 ⭐ NEW! Perfect for beginners
 - [Getting Started Guide](GettingStarted.md) ⭐
 - [Overview](Overview.md)
@@ -189,22 +243,26 @@ From [Comparisons](Comparisons.md):
 - [Install](Install.md)
 
 ### Core Concepts
+
 - [Message Types](MessageTypes.md)
 - [Interceptors & Ordering](InterceptorsAndOrdering.md)
 - [Listening Patterns](ListeningPatterns.md)
 - [Targeting & Context](TargetingAndContext.md)
 
 ### Unity
+
 - [Unity Integration](UnityIntegration.md)
 - [Diagnostics](Diagnostics.md)
 - [Patterns](Patterns.md)
 
 ### Deep Dives
+
 - [Design & Architecture](DesignAndArchitecture.md) ⭐
 - [Advanced](Advanced.md)
 - [Comparisons](Comparisons.md)
 
 ### Reference
+
 - [Quick Reference](QuickReference.md)
 - [API Reference](Reference.md)
 - [Helpers](Helpers.md)
@@ -212,6 +270,7 @@ From [Comparisons](Comparisons.md):
 - [Troubleshooting](Troubleshooting.md)
 
 ### Miscellaneous
+
 - [String Messages](StringMessages.md)
 - [Compatibility](Compatibility.md)
 - [End-to-End Example](EndToEnd.md)
@@ -221,20 +280,20 @@ From [Comparisons](Comparisons.md):
 
 ---
 
-## 🎯 Quick Start Path
+## Quick Start Path
 
 **Absolute Beginner?** Follow this 30-minute path:
 
 1. ⏱️ 5 min: [Visual Guide](VisualGuide.md) 🎨 — Start here for pictures & analogies!
-2. ⏱️ 10 min: [Getting Started](GettingStarted.md) — Deep dive
-3. ⏱️ 5 min: [Quick Start](QuickStart.md) — Hands-on code
-4. ⏱️ 10 min: Try a [Sample](../Samples~/Mini%20Combat/README.md) — See it in action
+1. ⏱️ 10 min: [Getting Started](GettingStarted.md) — Deep dive
+1. ⏱️ 5 min: [Quick Start](QuickStart.md) — Hands-on code
+1. ⏱️ 10 min: Try a [Sample](../Samples~/Mini%20Combat/README.md) — See it in action
 
 **Want to go deep?** Continue with:
 
-5. ⏱️ 15 min: [Patterns](Patterns.md)
-6. ⏱️ 20 min: [Interceptors & Ordering](InterceptorsAndOrdering.md)
-7. ⏱️ 30 min: [Design & Architecture](DesignAndArchitecture.md)
+1. ⏱️ 15 min: [Patterns](Patterns.md)
+1. ⏱️ 20 min: [Interceptors & Ordering](InterceptorsAndOrdering.md)
+1. ⏱️ 30 min: [Design & Architecture](DesignAndArchitecture.md)
 
 ---
 

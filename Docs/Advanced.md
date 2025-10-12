@@ -13,7 +13,7 @@ Table of contents
 - Local bus islands (subsystems/tests)
 - Safety and troubleshooting
 - Side‑by‑side patterns: before vs after
- - More advanced use cases
+- More advanced use cases
 
 Lifecycles and tokens
 

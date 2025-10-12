@@ -15,4 +15,3 @@ Notes
 
 - RP‑agnostic: DxMessaging does not depend on rendering APIs; it works equally across Built‑In, URP, and HDRP.
 - Minimum version is governed by the package manifest (`unity`: 2021.3). Newer LTS versions are expected to work.
-

@@ -490,7 +490,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             MessageRegistrationHandle primaryHandle =
                 token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                    (target, _) =>
+                    (_, _) =>
                     {
                         ++primaryCount;
                         if (secondaryHandle == null)
@@ -542,7 +542,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             MessageRegistrationHandle primaryHandle =
                 token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                    (source, _) =>
+                    (_, _) =>
                     {
                         ++primaryCount;
                         if (secondaryHandle == null)

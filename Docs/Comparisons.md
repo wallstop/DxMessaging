@@ -115,7 +115,7 @@ DxMessaging
 using DxMessaging.Core;
 using DxMessaging.Core.Messages;
 
-var target = (InstanceId)gameObject;
+InstanceId target = gameObject;
 var msg = new ReflexiveMessage("OnHit", ReflexiveSendMode.Upwards, 10);
 MessageHandler.MessageBus.TargetedBroadcast(ref target, ref msg);
 ```
@@ -187,12 +187,14 @@ No solution is perfect. Here's what you sacrifice and gain with DxMessaging comp
 
 ### Learning Curve
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ Immediate productivity - There's a 1-2 day learning curve
 - ❌ Familiarity - Team needs to understand message types, tokens, and lifecycle
 - ❌ "Just works" - Requires upfront design (which message type? what priority?)
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ Long-term velocity - Once learned, adding features is faster
 - ✅ Reduced debugging time - Clear message flow, Inspector diagnostics
 - ✅ Onboarding clarity - New devs see explicit message contracts instead of hidden event chains
@@ -201,16 +203,18 @@ No solution is perfect. Here's what you sacrifice and gain with DxMessaging comp
 
 ### Boilerplate
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ "One-liners" - C# events can be `public event Action OnClick;` done
 - ❌ Quick and dirty - Need to define message struct, attributes, handler registration
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ Explicit contracts - Messages are discoverable types, not hidden delegates
 - ✅ Auto-generated code - `[DxAutoConstructor]` reduces boilerplate
 - ✅ Compile-time safety - Refactors update all usages
 
-**Example comparison:**
+#### Example Comparison
 
 ```csharp
 // C# Event (minimal boilerplate)
@@ -230,17 +234,20 @@ msg.EmitGameObjectBroadcast(gameObject);
 
 ### Performance
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ Absolute minimal overhead - Raw C# events/delegates are faster (~10ns per call)
 - ❌ Zero abstraction cost - Direct calls can be inlined by the compiler
 - ❌ Simplicity in profiler - One extra layer in call stack
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ Zero-allocation struct messages - No GC pressure from boxing
 - ✅ Predictable performance - No hidden allocations from lambdas
 - ✅ Scalable diagnostics - Built-in profiling/logging without custom instrumentation
 
-**Hard numbers:**
+#### Hard Numbers
+
 - C# event invoke: ~50ns baseline
 - DxMessaging handler: ~60ns (~10ns overhead)
 - Memory: Zero allocations for struct messages
@@ -249,18 +256,20 @@ msg.EmitGameObjectBroadcast(gameObject);
 
 ### Flexibility
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ Return values - DxMessaging is fire-and-forget (no synchronous responses)
 - ❌ Out parameters - Can't use `out` or `ref` for bidirectional communication
 - ❌ Dynamic subscriptions - Can't easily pass lambdas inline
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ Interception - Validate/transform messages before handlers
 - ✅ Post-processing - Analytics/logging without polluting handlers
 - ✅ Priority control - Explicit execution order
 - ✅ Context - Always know who sent/received
 
-**When limitations hurt:**
+#### When Limitations Hurt
 
 ```csharp
 // C# events can return values (DxMessaging can't)
@@ -278,17 +287,19 @@ if (OnValidateDamage?.Invoke(damage) == true) {
 
 ### Debuggability
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ Simplicity - Stack traces show message bus internals
 - ❌ Step-through - Can't F11 directly from emit to handler (need breakpoints)
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ Message history - See last N messages in Inspector
 - ✅ Registration view - Know exactly who's listening
 - ✅ Global observability - Track all messages without instrumenting code
 - ✅ Filtering - Intercept messages for debugging without changing code
 
-**Example: Finding who fired a message**
+#### Example: Finding Who Fired a Message
 
 ```csharp
 // C# events: Set breakpoint on every possible Invoke(), or add logging everywhere
@@ -304,26 +315,30 @@ _ = debugToken.RegisterBroadcastWithoutSource<TookDamage>(
 
 ### Coupling and Architecture
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ Quick hacks - Can't just `GetComponent<T>().DoThing()` anymore
 - ❌ Direct inspector wiring - Can't drag-and-drop references to emit messages
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ True decoupling - Systems don't know about each other
 - ✅ Testability - Easy to isolate with local buses
 - ✅ Refactorability - Move/rename components without breaking wiring
 
-**Impact on architecture:**
+#### Impact on Architecture
 
 Before (tight coupling):
-```
+
+```text
 UI → References 15 systems
 System A → References System B, C, D
 Every change ripples through dependencies
 ```
 
 After (loose coupling):
-```
+
+```text
 All systems → Emit messages
 All systems → Listen to messages
 Add/remove systems without affecting others
@@ -333,10 +348,12 @@ Add/remove systems without affecting others
 
 ### Testing
 
-**What You Give Up:**
+#### What You Give Up
+
 - ❌ Simplicity - Can't just mock an event subscription
 
-**What You Gain:**
+#### What You Gain
+
 - ✅ Isolation - Local buses per test, zero global state
 - ✅ Observability - Count messages, inspect payloads easily
 - ✅ Determinism - Priority-based ordering eliminates flakiness
@@ -376,7 +393,7 @@ public void TestAchievementSystem() {
 | **Memory Safety** | ⭐ Leak-prone | ⭐⭐⭐ Unity-managed | ⭐ Leak-prone | ⭐⭐⭐⭐⭐ Leak-free |
 | **Debugging** | ⭐⭐ Hard at scale | ⭐⭐ Hard at scale | ⭐ Very Hard | ⭐⭐⭐⭐⭐ Excellent |
 
-**Overall verdict by use case:**
+### Overall Verdict by Use Case
 
 - **Small prototype/jam:** C# Events or UnityEvents win (simplicity > all)
 - **Mid-size game (5-20k lines):** DxMessaging starts paying off
@@ -386,22 +403,26 @@ public void TestAchievementSystem() {
 
 ## When Each Approach ACTUALLY Wins
 
-### C# Events Win When:
+### C# Events Win When
+
 - ✅ You need return values or out parameters
 - ✅ Writing a library (DxMessaging is Unity-specific)
 - ✅ Small, stable scope (5-10 events max)
 - ✅ Team is C# experts, Unity beginners
 
-### UnityEvents Win When:
+### UnityEvents Win When
+
 - ✅ Designers need to wire logic without code
 - ✅ Rapid prototyping with prefabs
 - ✅ Very simple games (mobile casual, hyper-casual)
 
-### Static Event Bus Wins When:
+### Static Event Bus Wins When
+
 - ✅ You've already built one and it works
 - ✅ Very simple use cases (just need globals)
 
-### DxMessaging Wins When:
+### DxMessaging Wins When
+
 - ✅ 10+ systems that communicate
 - ✅ You need observability (debugging complex flows)
 - ✅ Memory leaks are a pain point
@@ -410,19 +431,21 @@ public void TestAchievementSystem() {
 
 ## Cost-Benefit Summary
 
-**Costs:**
-1. Learning curve (~1-2 days to feel comfortable)
-2. More upfront code (message definitions)
-3. Slightly slower than raw C# events (~10ns/call)
-4. Can't return values (fire-and-forget only)
+### Costs
 
-**Benefits:**
+1. Learning curve (~1-2 days to feel comfortable)
+1. More upfront code (message definitions)
+1. Slightly slower than raw C# events (~10ns/call)
+1. Can't return values (fire-and-forget only)
+
+### Benefits
+
 1. Zero memory leaks (automatic lifecycle)
-2. Full decoupling (systems don't reference each other)
-3. Observability (Inspector diagnostics, message history)
-4. Predictable ordering (priority-based execution)
-5. Interception/validation (before handlers run)
-6. Testability (isolated buses)
+1. Full decoupling (systems don't reference each other)
+1. Observability (Inspector diagnostics, message history)
+1. Predictable ordering (priority-based execution)
+1. Interception/validation (before handlers run)
+1. Testability (isolated buses)
 
 **Break-even point:** Usually around 10-20 hours into a project, when event management becomes painful.
 
@@ -431,10 +454,10 @@ public void TestAchievementSystem() {
 Ask yourself:
 
 1. **Project lifespan?** <1 week → Skip DxMessaging | >1 month → Consider it
-2. **Team size?** Solo → Optional | 3+ devs → Highly valuable
-3. **Codebase size?** <5k lines → Optional | >10k lines → Recommended
-4. **Event complexity?** <10 events → Skip | >20 events → Use DxMessaging
-5. **Memory leak history?** None → Optional | Frequent → MUST HAVE
+1. **Team size?** Solo → Optional | 3+ devs → Highly valuable
+1. **Codebase size?** <5k lines → Optional | >10k lines → Recommended
+1. **Event complexity?** <10 events → Skip | >20 events → Use DxMessaging
+1. **Memory leak history?** None → Optional | Frequent → MUST HAVE
 
 **Rule of thumb:** If you're reading this and thinking "I've experienced these pain points," DxMessaging will help. If you're thinking "I've never had these problems," maybe you don't need it yet.
 

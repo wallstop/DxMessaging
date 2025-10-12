@@ -1,13 +1,30 @@
-# Quick Start
+# Quick Start — Your First Message in 5 Minutes
 
-This quick start walks you from install, to defining a message, to sending and receiving it in Unity.
+[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Visual Guide](VisualGuide.md) | [Samples~](../Samples~/)
 
-Before you begin
+---
 
-- Install via UPM: [Install](Install.md)
-- Target Unity 2021.3+ (see [Compatibility](Compatibility.md))
+**Goal:** Get a working message system in 5 minutes. Copy, paste, run. No explanations yet — just results!
 
-1) Define messages
+**Stuck?** → [Troubleshooting](Troubleshooting.md) | [FAQ](FAQ.md)
+
+---
+
+## Step 0: Install (30 seconds)
+
+Unity Package Manager → Add package from git URL:
+
+```text
+https://github.com/wallstop/DxMessaging.git
+```
+
+**Requirements:** Unity 2021.3+ | .NET Standard 2.1 | All render pipelines supported
+
+---
+
+## Your First Message (3 Steps)
+
+### Step 1: Define messages
 
 ```csharp
 using DxMessaging.Core.Messages;
@@ -47,7 +64,7 @@ public readonly partial struct TookDamage
 // public readonly struct Heal : ITargetedMessage<Heal> { public readonly int amount; public Heal(int amount) { this.amount = amount; } }
 ```
 
-2) Add a messaging component
+### Step 2: Add a messaging component
 
 ```csharp
 using DxMessaging.Unity;
@@ -68,7 +85,7 @@ public sealed class HealthUI : MessageAwareComponent
 }
 ```
 
-3) Send messages
+### Step 3: Send messages
 
 ```csharp
 using DxMessaging.Core.Extensions;   // Emit helpers
@@ -90,24 +107,62 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 "Saved".Emit();
 ```
 
-Do’s
+---
 
-- Prefer attributes + `DxAutoConstructor` for clarity; use interfaces on structs for hot paths.
-- Bind struct messages to a variable before calling `Emit*`.
-- Use GameObject/Component emit helpers to avoid manual `InstanceId` casts.
-- Define named handler methods for readability and reuse.
+## ✅ Done! You just
 
-Don’ts
+1. ✅ Defined 4 message types
+1. ✅ Created a component that listens
+1. ✅ Sent messages from anywhere
 
-- Don’t emit from temporaries; use a local variable (e.g., `var msg = new MyMessage(...); msg.Emit();`).
-- Don’t use Untargeted for per‑entity commands; use Targeted.
-- Don’t manually manage lifecycles—use `MessageRegistrationToken` and enable/disable with component state.
-- Don’t forget base calls when inheriting from `MessageAwareComponent` (`base.RegisterMessageHandlers()`, `base.OnEnable()`, `base.OnDisable()`).
+**No manual unsubscribe. No memory leaks. Full type safety.**
 
-What’s next
+---
 
-- [Message Types](MessageTypes.md) (when to use which)
-- [Interceptors & Ordering](InterceptorsAndOrdering.md)
-- [Unity Integration](UnityIntegration.md)
- - [Quick Reference](QuickReference.md)
- - [Targeting & Context](TargetingAndContext.md)
+## 🎯 What You Just Built
+
+- **Untargeted messages** (`WorldRegenerated`, `VideoSettingsChanged`) → Global announcements anyone can hear
+- **Targeted messages** (`Heal`) → Commands to a specific object
+- **Broadcast messages** (`TookDamage`) → Events from a source that others observe
+
+---
+
+## 🚀 Next Steps
+
+**Understand What You Did:**
+
+- → [Getting Started Guide](GettingStarted.md) (10 min) — Full explanation with mental models
+- → [Visual Guide](VisualGuide.md) (5 min) — Pictures and analogies
+
+**Try Real Examples:**
+
+- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — Working combat example
+- → [Samples~/UI Buttons + Inspector](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — See diagnostics in action
+
+**Go Deeper:**
+
+- → [Message Types](MessageTypes.md) (10 min) — When to use which type
+- → [Common Patterns](Patterns.md) (15 min) — Real-world solutions
+- → [Interceptors & Ordering](InterceptorsAndOrdering.md) (10 min) — Advanced control
+
+**Reference:**
+
+- → [Quick Reference](QuickReference.md) — Cheat sheet
+- → [API Reference](Reference.md) — Complete API
+- → [Troubleshooting](Troubleshooting.md) — Fix common issues
+
+---
+
+## 💡 Quick Tips
+
+**Do's:**
+
+- ✅ Use `MessageAwareComponent` for Unity components (automatic lifecycle)
+- ✅ Store struct in variable before emitting: `var msg = new Heal(10); msg.Emit();`
+- ✅ Call `base.RegisterMessageHandlers()` when overriding
+
+**Don'ts:**
+
+- ❌ Don't emit from temporaries: `new Heal(10).Emit()` won't compile correctly
+- ❌ Don't use Untargeted for commands to one object (use Targeted instead)
+- ❌ Don't forget `using DxMessaging.Core.Extensions;` for `Emit*` methods
