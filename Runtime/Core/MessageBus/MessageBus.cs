@@ -2425,10 +2425,7 @@ namespace DxMessaging.Core.MessageBus
                     List<object> interceptors = entry.Value;
                     int count = interceptors.Count;
 
-                    for (int i = 0; i < count; ++i)
-                    {
-                        interceptorObjects.Add(interceptors[i]);
-                    }
+                    interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
@@ -2472,10 +2469,7 @@ namespace DxMessaging.Core.MessageBus
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
                     int count = interceptors.Count;
-                    for (int i = 0; i < count; ++i)
-                    {
-                        interceptorObjects.Add(interceptors[i]);
-                    }
+                    interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
@@ -2520,10 +2514,7 @@ namespace DxMessaging.Core.MessageBus
                     List<object> interceptors = entry.Value;
                     int count = interceptors.Count;
 
-                    for (int i = 0; i < count; ++i)
-                    {
-                        interceptorObjects.Add(interceptors[i]);
-                    }
+                    interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
@@ -3320,10 +3311,7 @@ namespace DxMessaging.Core.MessageBus
             List<MessageHandler> list = cache.cache;
             list.Clear();
             Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
-            foreach (MessageHandler key in keys)
-            {
-                list.Add(key);
-            }
+            list.AddRange(keys);
             cache.lastSeenVersion = cache.version;
             return list;
         }

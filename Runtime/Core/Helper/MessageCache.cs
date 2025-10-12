@@ -2,6 +2,7 @@ namespace DxMessaging.Core.Helper
 {
     using System.Collections;
     using System.Collections.Generic;
+    using System.Runtime.CompilerServices;
 
     public sealed class MessageCache<TValue> : IEnumerable<TValue>
         where TValue : class, new()
@@ -20,11 +21,14 @@ namespace DxMessaging.Core.Helper
                 _current = default;
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool MoveNext()
             {
-                while (++_index < _cache._values.Count)
+                List<TValue> values = _cache._values;
+                int count = values.Count;
+                while (++_index < count)
                 {
-                    _current = _cache._values[_index];
+                    _current = values[_index];
                     if (_current != null)
                     {
                         return true;
@@ -39,6 +43,7 @@ namespace DxMessaging.Core.Helper
 
             object IEnumerator.Current => Current;
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Reset()
             {
                 _index = -1;
@@ -50,6 +55,7 @@ namespace DxMessaging.Core.Helper
 
         private readonly List<TValue> _values = new();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public TValue GetOrAdd<TMessage>()
             where TMessage : IMessage
         {
@@ -57,10 +63,7 @@ namespace DxMessaging.Core.Helper
             int index = MessageHelperIndexer<TMessage>.SequentialId;
             if (0 <= index)
             {
-                while (_values.Count <= index)
-                {
-                    _values.Add(null);
-                }
+                FillToIndex(index);
                 value = _values[index];
                 if (value != null)
                 {
@@ -74,10 +77,7 @@ namespace DxMessaging.Core.Helper
             {
                 index = MessageHelperIndexer.TotalMessages++;
                 MessageHelperIndexer<TMessage>.SequentialId = index;
-                while (_values.Count < index)
-                {
-                    _values.Add(null);
-                }
+                FillToIndex(index - 1);
                 value = new TValue();
                 _values.Add(value);
             }
@@ -85,29 +85,25 @@ namespace DxMessaging.Core.Helper
             return value;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Set<TMessage>(TValue value)
             where TMessage : IMessage
         {
             int index = MessageHelperIndexer<TMessage>.SequentialId;
             if (0 <= index)
             {
-                while (_values.Count <= index)
-                {
-                    _values.Add(null);
-                }
+                FillToIndex(index);
                 _values[index] = value;
                 return;
             }
 
             index = MessageHelperIndexer.TotalMessages++;
             MessageHelperIndexer<TMessage>.SequentialId = index;
-            while (_values.Count < index)
-            {
-                _values.Add(null);
-            }
+            FillToIndex(index - 1);
             _values.Add(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryGetValue<TMessage>(out TValue value)
             where TMessage : IMessage
         {
@@ -122,6 +118,7 @@ namespace DxMessaging.Core.Helper
             return false;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Remove<TMessage>()
             where TMessage : IMessage
         {
@@ -132,6 +129,7 @@ namespace DxMessaging.Core.Helper
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public MessageCacheEnumerator GetEnumerator()
         {
             return new MessageCacheEnumerator(this);
@@ -145,6 +143,16 @@ namespace DxMessaging.Core.Helper
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void FillToIndex(int index)
+        {
+            int count = _values.Count;
+            for (int i = count; i <= index; ++i)
+            {
+                _values.Add(null);
+            }
         }
     }
 }
