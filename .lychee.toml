@@ -3,6 +3,10 @@ exclude = [
   "^mailto:",
   "^tel:",
   "^data:",
+  # Ignore links that point into Unity Samples~ content. These files
+  # are available when the package is opened in Unity, but link
+  # checking on CI may not mount them in the same path.
+  "^file://.*/Samples~/",
 ]
 include_verbatim = true
 max_redirects = 5
