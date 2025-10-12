@@ -8,10 +8,10 @@ This document explains DxMessaging's internal design, performance optimizations,
 - [Architecture Overview](#architecture-overview)
 - [Performance Optimizations](#performance-optimizations)
 - [Message Type System](#message-type-system)
-- [Registration & Lifecycle](#registration--lifecycle)
+- [Registration and Lifecycle](#registration-and-lifecycle)
 - [The Message Bus](#the-message-bus)
 - [Why DxMessaging is Fast](#why-dxmessaging-is-fast)
-- [Design Decisions & Tradeoffs](#design-decisions--tradeoffs)
+- [Design Decisions and Tradeoffs](#design-decisions-and-tradeoffs)
 
 ## Core Design Principles
 
@@ -313,7 +313,7 @@ Source generators create:
 
 **Result:** Clean message definitions with zero boilerplate.
 
-## Registration & Lifecycle
+## Registration and Lifecycle
 
 ### The Token Pattern
 
@@ -496,7 +496,7 @@ Compared to alternatives:
 
 **Production tip:** Disable diagnostics in release builds to save ~10KB per bus.
 
-## Design Decisions & Tradeoffs
+## Design Decisions and Tradeoffs
 
 ### Decision 1: Synchronous Execution
 
