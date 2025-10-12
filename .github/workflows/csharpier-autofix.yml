@@ -40,7 +40,7 @@ jobs:
           branch: ${{ github.head_ref }}
 
       - name: Verify formatting (CI gate)
-        run: dotnet tool run csharpier --check .
+        run: dotnet tool run csharpier check .
 
   format_fork:
     name: Fork PR bot formatting PR
