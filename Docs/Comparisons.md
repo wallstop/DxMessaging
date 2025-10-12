@@ -222,7 +222,8 @@ OnDamage?.Invoke(5);
 [DxAutoConstructor]
 public readonly partial struct TookDamage { public readonly int amount; }
 
-new TookDamage(5).EmitGameObjectBroadcast(gameObject);
+var msg = new TookDamage(5);
+msg.EmitGameObjectBroadcast(gameObject);
 ```
 
 **Verdict:** For 1-3 simple events, C# events win on brevity. For 10+ events with complex flows, DxMessaging's structure pays dividends.

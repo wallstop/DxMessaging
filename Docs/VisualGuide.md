@@ -244,7 +244,8 @@ Code:
 public readonly partial struct SceneChanged { public readonly int sceneIndex; }
 
 // Anyone can send
-new SceneChanged(2).Emit();
+var msg = new SceneChanged(2);
+msg.Emit();
 
 // Many can listen independently
 _ = audioToken.RegisterUntargeted<SceneChanged>(OnScene);
@@ -268,7 +269,8 @@ Code:
 // Input system (doesn't know about Player!)
 void Update() {
     if (Input.GetKeyDown(KeyCode.Space)) {
-        new Jump(10f).EmitComponentTargeted(playerController);
+        var jump = new Jump(10f);
+        jump.EmitComponentTargeted(playerController);
     }
 }
 

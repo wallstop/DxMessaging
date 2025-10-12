@@ -128,8 +128,10 @@ _ = token.RegisterUntargeted<GamePaused>(OnPause);
 _ = token.RegisterUntargeted<SettingsChanged>(OnSettings);
 
 // Anyone can send
-new GamePaused().Emit();
-new SettingsChanged(0.8f, 2).Emit();
+var msg1 = new GamePaused();
+msg1.Emit();
+var msg2 = new SettingsChanged(0.8f, 2);
+msg2.Emit();
 ```
 
 **When to use:** Scene events, global state changes, settings updates
@@ -356,7 +358,8 @@ public readonly partial struct Jump { public readonly float force; }
 // Input system sends
 void Update() {
     if (Input.GetKeyDown(KeyCode.Space)) {
-        new Jump(10f).EmitComponentTargeted(playerController);
+        var msg = new Jump(10f);
+        msg.EmitComponentTargeted(playerController);
     }
 }
 
@@ -431,7 +434,9 @@ _ = achievementToken.RegisterGlobalAcceptAll(
 
 1. **Don't emit from temporaries (structs)**
    ```csharp
-   new MyMessage(42).Emit();  // ❌ Won't compile for structs
+   // ✅ CORRECT - Store in a local variable, then emit
+   var msg = new MyMessage(42);
+   msg.Emit();
    ```
 
 2. **Don't use Untargeted for entity-specific commands**
@@ -467,10 +472,7 @@ _ = achievementToken.RegisterGlobalAcceptAll(
 ### ❌ Mistake 1: Emitting from Temporaries
 
 ```csharp
-// ❌ WRONG - Won't compile for structs
-new MyMessage(42).Emit();
-
-// ✅ CORRECT - Store in variable first
+// ✅ CORRECT - Store in a local variable first
 var msg = new MyMessage(42);
 msg.Emit();
 ```
@@ -643,9 +645,14 @@ protected override void RegisterMessageHandlers() {
 }
 
 // ─── EMIT ───
-new MyGlobalMsg(42).Emit();
-new MyTargetMsg("hi").EmitComponentTargeted(targetComponent);
-new MyBroadcastMsg(Time.time).EmitGameObjectBroadcast(this.gameObject);
+var globalMsg = new MyGlobalMsg(42);
+globalMsg.Emit();
+
+var targetMsg = new MyTargetMsg("hi");
+targetMsg.EmitComponentTargeted(targetComponent);
+
+var broadcastMsg = new MyBroadcastMsg(Time.time);
+broadcastMsg.EmitGameObjectBroadcast(this.gameObject);
 
 // ─── INTERCEPTORS & POST-PROCESSORS ───
 _ = Token.RegisterUntargetedInterceptor<MyMsg>(

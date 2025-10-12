@@ -15,19 +15,24 @@ namespace DxMessaging.Core.Extensions
     /// <example>
     /// <code>
     /// // Untargeted (global)
-    /// new WorldRegenerated(42).Emit();
+    /// var msg0 = new WorldRegenerated(42);
+    /// msg0.Emit();
     ///
     /// // Targeted (InstanceId)
     /// var target = (DxMessaging.Core.InstanceId)gameObject;
-    /// new Heal(10).EmitTargeted(target);
+    /// var heal = new Heal(10);
+    /// heal.EmitTargeted(target);
     ///
     /// // Broadcast (from source)
     /// var source = (DxMessaging.Core.InstanceId)gameObject;
-    /// new TookDamage(5).EmitBroadcast(source);
+    /// var dmg = new TookDamage(5);
+    /// dmg.EmitBroadcast(source);
     ///
     /// // Unity conveniences
-    /// new StringMessage("Hello").EmitGameObjectTargeted(gameObject);
-    /// new GlobalStringMessage("Saved").Emit();
+    /// var hello = new StringMessage("Hello");
+    /// hello.EmitGameObjectTargeted(gameObject);
+    /// var saved = new GlobalStringMessage("Saved");
+    /// saved.Emit();
     /// </code>
     /// </example>
     public static class MessageExtensions

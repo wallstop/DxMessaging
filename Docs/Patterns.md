@@ -424,7 +424,8 @@ public class UISystem : MessageAwareComponent {
 }
 
 // Emit once, all systems execute in priority order
-new GameExit().Emit();
+var msg = new GameExit();
+msg.Emit();
 ```
 
 **Key insight:** Lower priority numbers run first. Use priority to eliminate race conditions and ensure deterministic ordering.
@@ -540,7 +541,8 @@ _ = Token.RegisterUntargeted<LevelCompleted>(OnLevelComplete);
 // ❌ WASTEFUL: Emit after every tiny change
 void TakeDamage(int amount) {
     health -= amount;
-    new HealthChanged(health).Emit(); // Emits every frame
+    var msg = new HealthChanged(health);
+    msg.Emit(); // Emits every frame
 }
 
 // ✅ EFFICIENT: Batch updates, emit once per frame
@@ -553,7 +555,8 @@ void TakeDamage(int amount) {
 
 void LateUpdate() {
     if (healthDirty) {
-        new HealthChanged(health).Emit(); // Emits once per frame max
+        var msg = new HealthChanged(health);
+        msg.Emit(); // Emits once per frame max
         healthDirty = false;
     }
 }

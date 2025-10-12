@@ -12,7 +12,7 @@ Do’s
 
 Don’ts
 
-- Don’t emit from temporaries (struct calls like `new M().Emit()` won’t compile).
+- Don’t emit from temporaries; use a local variable (e.g., `var msg = new M(...); msg.Emit();`).
 - Don’t mix Component vs GameObject targeting if you expect matches (see targeting notes below).
 - Don’t register in Update; use `Awake` for staging + `OnEnable`/`OnDisable` for lifecycle.
 

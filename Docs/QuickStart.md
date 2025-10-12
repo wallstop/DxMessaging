@@ -98,7 +98,7 @@ Do’s
 
 Don’ts
 
-- Don’t emit from temporaries (e.g., `new MyMessage(...).Emit()` won’t compile for structs).
+- Don’t emit from temporaries; use a local variable (e.g., `var msg = new MyMessage(...); msg.Emit();`).
 - Don’t use Untargeted for per‑entity commands; use Targeted.
 - Don’t manually manage lifecycles—use `MessageRegistrationToken` and enable/disable with component state.
 

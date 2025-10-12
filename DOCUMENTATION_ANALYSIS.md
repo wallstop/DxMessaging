@@ -304,7 +304,9 @@ Eliminates boilerplate while maintaining type safety.
 
 1. **Don't emit from temporaries (structs)**
    ```csharp
-   new MyMsg(42).Emit();  // ❌ Won't compile
+   // ✅ CORRECT - Store in a local variable first
+   var msg = new MyMsg(42);
+   msg.Emit();
    ```
 
 2. **Don't use Untargeted for entity commands**
