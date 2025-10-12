@@ -83,6 +83,7 @@ public readonly partial struct TookDamage { public readonly int amount; }
 public class GameUI : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterGameObjectTargeted<Heal>(playerGO, OnPlayerHealed);
         _ = Token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
     }
@@ -251,6 +252,7 @@ using DxMessaging.Unity;
 public class ChestController : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         // Listen for OpenChest messages targeted at this component
         _ = Token.RegisterComponentTargeted<OpenChest>(this, OnOpen);
     }
@@ -400,6 +402,7 @@ _ = achievementToken.RegisterGlobalAcceptAll(
    ```csharp
    public class MyComponent : MessageAwareComponent {
        protected override void RegisterMessageHandlers() {
+           base.RegisterMessageHandlers();
            _ = Token.RegisterUntargeted<MyMessage>(OnMessage);
        }
    }
@@ -555,6 +558,16 @@ if (someGameObject != null) {
 
 ## Troubleshooting Quick Fixes
 
+### Inheritance gotcha: Call base.* in overrides
+
+- `MessageAwareComponent` uses virtual hooks for setup and lifecycle.
+- If you override them, call the base methods:
+  - `base.RegisterMessageHandlers()` to keep default string‑message registrations.
+  - `base.OnEnable()` / `base.OnDisable()` to preserve token enable/disable.
+  - If you override `Awake`/`OnDestroy`, call `base.Awake()` / `base.OnDestroy()` so the token is created/cleaned up.
+- Skipping base calls is a common cause of “handlers not firing” or string messages not appearing.
+- Avoid hiding Unity methods with `new` (e.g., `new void OnEnable()`). Always `override` and call `base.*`.
+
 ### "My handler isn't being called!"
 
 **Checklist:**
@@ -631,6 +644,7 @@ public readonly partial struct MyBroadcastMsg { public readonly float time; }
 
 // ─── LISTEN (in MessageAwareComponent) ───
 protected override void RegisterMessageHandlers() {
+    base.RegisterMessageHandlers();
     // Untargeted (global)
     _ = Token.RegisterUntargeted<MyGlobalMsg>(OnGlobal);
 

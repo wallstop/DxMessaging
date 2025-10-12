@@ -50,6 +50,7 @@ public sealed class GlobalOverlay : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         DontDestroyOnLoad(gameObject);
         _ = Token.RegisterUntargeted<SceneLoaded>(OnSceneLoaded);
         _ = Token.RegisterUntargeted<Paused>(m => ShowPause());

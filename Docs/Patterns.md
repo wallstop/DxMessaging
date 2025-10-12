@@ -2,6 +2,13 @@
 
 This document captures practical patterns for building systems with DxMessaging. It complements the README by focusing on composition, structure, and problem-solving techniques.
 
+Important: Inheritance with MessageAwareComponent
+
+- Many examples derive from `MessageAwareComponent`. When overriding hooks, call the base method.
+- Use `base.RegisterMessageHandlers()` to preserve default string‑message registrations.
+- Call `base.OnEnable()` / `base.OnDisable()` if you override lifecycle methods; otherwise your token may never enable/disable.
+- To opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
+
 ## 1) Scene-wide Events (Untargeted)
 
 Use untargeted messages for global state changes that any system might care about. Keep messages small and immutable.

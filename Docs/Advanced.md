@@ -77,6 +77,7 @@ public sealed class PersistentListener : MessageAwareComponent
 
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterUntargeted<MyEvent>(OnMyEvent);
         Token.Enable(); // explicitly enable once
     }
@@ -157,6 +158,10 @@ remove();
 Safety and troubleshooting
 
 Do’s
+
+- When overriding `MessageAwareComponent` hooks, call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
+- Prefer overriding `RegisterForStringMessages => false` instead of removing `base.RegisterMessageHandlers()` if you don’t want string demos.
+- Avoid hiding Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
 
 - Register once; enable/disable with component state.
 - Prefer named handler methods for clarity and reuse.

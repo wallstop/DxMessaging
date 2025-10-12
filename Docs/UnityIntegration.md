@@ -22,6 +22,7 @@ public sealed class HealthComponent : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterComponentTargeted<TookDamage>(this, OnTookDamage);
         _ = Token.RegisterUntargeted<WorldRegenerated>(OnWorldRegenerated);
     }
@@ -41,6 +42,14 @@ Don’ts
 
 - Don’t register in Update; register once and enable/disable with component state.
 - Don’t forget to call `base.RegisterMessageHandlers()` if your subclass relies on base registrations.
+
+Important: Inheritance and base calls
+
+- `MessageAwareComponent` uses many virtual methods (e.g., `Awake`, `OnEnable`, `OnDisable`, `RegisterMessageHandlers`).
+- If you override any of these, call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
+- Skipping base calls can break core setup (token creation/enable) and default string‑message registrations.
+- If you need to opt out of string demos, prefer overriding `RegisterForStringMessages => false` rather than removing the base call.
+- Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
 
 Manual token management
 
@@ -80,6 +89,7 @@ public sealed class AlwaysListening : MessageAwareComponent
 
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterUntargeted<MyEvent>(OnEvent);
         Token.Enable(); // explicitly enable once
     }

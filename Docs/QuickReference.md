@@ -15,6 +15,8 @@ Don’ts
 - Don’t emit from temporaries; use a local variable (e.g., `var msg = new M(...); msg.Emit();`).
 - Don’t mix Component vs GameObject targeting if you expect matches (see targeting notes below).
 - Don’t register in Update; use `Awake` for staging + `OnEnable`/`OnDisable` for lifecycle.
+- Don’t forget base calls when inheriting from `MessageAwareComponent` — call `base.RegisterMessageHandlers()` and `base.OnEnable()`/`base.OnDisable()`.
+- Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); prefer `override` and call `base.*`.
 
 Define messages
 
@@ -94,6 +96,11 @@ void Awake()     { /* stage registrations */ }
 void OnEnable()  { token.Enable(); }
 void OnDisable() { token.Disable(); }
 ```
+
+Inheritance tip (MessageAwareComponent)
+
+- If you override `RegisterMessageHandlers`, start with `base.RegisterMessageHandlers()`.
+- If you override Unity lifecycle methods, call `base.OnEnable()` / `base.OnDisable()` (and `base.Awake()`/`base.OnDestroy()` if overridden).
 
 Targeting notes (Component vs GameObject)
 

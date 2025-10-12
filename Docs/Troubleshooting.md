@@ -6,6 +6,9 @@ Not receiving messages
 - Verify the category matches the emission (Untargeted vs Targeted vs Broadcast).
 - Targeted/Broadcast require a valid `InstanceId`; ensure the target/source object exists when you emit.
 - In Unity, confirm your `MessagingComponent` exists on sender/receiver GameObjects.
+- If inheriting from `MessageAwareComponent`, ensure your overrides call base methods:
+  - `base.RegisterMessageHandlers()` to preserve default setup (including string message demos).
+  - `base.OnEnable()` / `base.OnDisable()` so the token actually enables/disables.
 
 Unexpected ordering
 

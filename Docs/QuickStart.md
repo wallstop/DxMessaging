@@ -58,6 +58,7 @@ public sealed class HealthUI : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterUntargeted<WorldRegenerated>(OnWorld);
         _ = Token.RegisterComponentTargeted<TookDamage>(this, OnDamage);
     }
@@ -101,6 +102,7 @@ Don’ts
 - Don’t emit from temporaries; use a local variable (e.g., `var msg = new MyMessage(...); msg.Emit();`).
 - Don’t use Untargeted for per‑entity commands; use Targeted.
 - Don’t manually manage lifecycles—use `MessageRegistrationToken` and enable/disable with component state.
+- Don’t forget base calls when inheriting from `MessageAwareComponent` (`base.RegisterMessageHandlers()`, `base.OnEnable()`, `base.OnDisable()`).
 
 What’s next
 

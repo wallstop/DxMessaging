@@ -191,6 +191,7 @@ using DxMessaging.Unity;
 
 public class Player : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         // "When someone sends Heal to ME, call OnHeal"
         _ = Token.RegisterComponentTargeted<Heal>(this, OnHeal);
     }
@@ -297,6 +298,7 @@ Code:
 ```csharp
 public class AchievementSystem : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         // Listen to EVERYTHING
         _ = Token.RegisterGlobalAcceptAll(
             (ref IUntargetedMessage m) => Check(m),

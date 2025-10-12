@@ -39,6 +39,7 @@ public sealed class Player : MessageAwareComponent
 
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterComponentTargeted<Heal>(this, OnHeal);
     }
 
@@ -76,6 +77,7 @@ public sealed class UIOverlay : MessageAwareComponent
 {
     protected override void RegisterMessageHandlers()
     {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterUntargeted<VideoSettingsChanged>(OnSettings);
         _ = Token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
     }

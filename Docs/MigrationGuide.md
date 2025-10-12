@@ -30,13 +30,15 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 
    public class TestListener : MessageAwareComponent {
        protected override void RegisterMessageHandlers() {
+           base.RegisterMessageHandlers();
            _ = Token.RegisterUntargeted<TestMessage>(OnTest);
        }
        void OnTest(ref TestMessage m) => Debug.Log($"Got {m.value}");
    }
 
    // In another script:
-   new TestMessage(42).Emit();
+   var msg = new TestMessage(42);
+   msg.Emit();
    ```
 
 **Success criteria:** You understand the basic flow and have no build errors.
@@ -64,6 +66,7 @@ public readonly partial struct EnemyKilled {
 // 2. Make your NEW achievement system listen
 public class AchievementSystem : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterBroadcastWithoutSource<EnemyKilled>(OnEnemyKilled);
     }
 
@@ -120,7 +123,8 @@ void TakeDamage(int amount) {
 
     // Fire both during migration
     OnHealthChanged?.Invoke(health);  // OLD
-    new HealthChanged(health).EmitGameObjectBroadcast(gameObject);  // NEW
+    var msg = new HealthChanged(health);
+    msg.EmitGameObjectBroadcast(gameObject);  // NEW
 }
 ```
 
@@ -136,6 +140,7 @@ public class HealthBar : MessageAwareComponent {
     [SerializeField] private GameObject playerObject;
 
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterGameObjectBroadcast<HealthChanged>(playerObject, OnHealthChanged);
     }
 
@@ -151,7 +156,8 @@ public class HealthBar : MessageAwareComponent {
 
 void TakeDamage(int amount) {
     health -= amount;
-    new HealthChanged(health).EmitGameObjectBroadcast(gameObject);  // Only this now
+    var msg = new HealthChanged(health);
+    msg.EmitGameObjectBroadcast(gameObject);  // Only this now
 }
 ```
 
@@ -183,15 +189,15 @@ System: _________________
 **Example team policy:**
 ```
 When to use DxMessaging (for new code):
-- Any UI listening to game state í DxMessaging
-- Any analytics/logging í DxMessaging
-- Any cross-scene communication í DxMessaging
-- Any event with 2+ listeners í DxMessaging
+- Any UI listening to game state ÔøΩ DxMessaging
+- Any analytics/logging ÔøΩ DxMessaging
+- Any cross-scene communication ÔøΩ DxMessaging
+- Any event with 2+ listeners ÔøΩ DxMessaging
 
 When to use direct references/events:
-- Simple UI button í method call (use UnityEvents)
-- Single listener, same GameObject í direct reference
-- Private implementation details í keep internal
+- Simple UI button ÔøΩ method call (use UnityEvents)
+- Single listener, same GameObject ÔøΩ direct reference
+- Private implementation details ÔøΩ keep internal
 ```
 
 ## Coexistence Patterns
@@ -219,6 +225,7 @@ public class ModernBridge : MessageAwareComponent {
     public event Action<int> LegacyEvent; // For old code that needs events
 
     protected override void RegisterMessageHandlers() {
+        base.RegisterMessageHandlers();
         _ = Token.RegisterUntargeted<NewMessage>(OnMessage);
     }
 
@@ -238,17 +245,19 @@ public class Player : MonoBehaviour {
     void TakeDamage(int amount) {
         health -= amount;
         healthBar.UpdateHealth(health); // OLD direct call
-        new HealthChanged(health).EmitGameObjectBroadcast(gameObject); // NEW message
+        var msg = new HealthChanged(health);
+        msg.EmitGameObjectBroadcast(gameObject); // NEW message
     }
 }
 
 // Phase 2: Remove direct references
 public class Player : MonoBehaviour {
-    // [SerializeField] private HealthBar healthBar; ê DELETED
+    // [SerializeField] private HealthBar healthBar; ÔøΩ DELETED
 
     void TakeDamage(int amount) {
         health -= amount;
-        new HealthChanged(health).EmitGameObjectBroadcast(gameObject); // Only this
+        var msg = new HealthChanged(health);
+        msg.EmitGameObjectBroadcast(gameObject); // Only this
     }
 }
 ```
@@ -271,7 +280,7 @@ public class Player : MonoBehaviour {
 
 ### DON'T Migrate (Keep As-Is):
 
-1. **Simple button onClick í method** - UnityEvents are fine
+1. **Simple button onClick ÔøΩ method** - UnityEvents are fine
 2. **Private implementation details** - Internal events are okay
 3. **Single-listener, same-GameObject** - Direct references are clearer
 4. **Legacy systems about to be deleted** - Why bother?
@@ -302,9 +311,9 @@ _ = Token.RegisterBroadcast<HealthChanged>(...);
 **Problem:** Using Untargeted for everything because it's "simpler."
 
 **Solution:** Follow message type guidelines:
-- Global state? í Untargeted
-- Command to one? í Targeted
-- Event from one? í Broadcast
+- Global state? ÔøΩ Untargeted
+- Command to one? ÔøΩ Targeted
+- Event from one? ÔøΩ Broadcast
 
 ### L Pitfall 4: Over-Messaging
 
@@ -313,7 +322,8 @@ _ = Token.RegisterBroadcast<HealthChanged>(...);
 **Solution:** Keep simple things simple:
 ```csharp
 // L OVERKILL - Just call the method!
-new CloseDoorMessage(doorId).Emit();
+var msg = new CloseDoorMessage(doorId);
+msg.Emit();
 
 //  BETTER - Direct reference is fine
 door.Close();
@@ -432,3 +442,4 @@ Profile early, measure impact.
 ---
 
 **Questions?** See [FAQ](FAQ.md) | **Need patterns?** See [Common Patterns](Patterns.md)
+

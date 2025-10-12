@@ -60,6 +60,7 @@ Unity bridge types
   - Properties: `Token`
   - Virtuals: `MessageRegistrationTiedToEnableStatus`, `RegisterForStringMessages`
   - Hooks: `RegisterMessageHandlers()` calls in `Awake()`, auto `Enable()`/`Disable()` in `OnEnable`/`OnDisable` when tied to enable state
+  - Inheritance tip: If you override any of these hooks, call the base method (`base.RegisterMessageHandlers()`, `base.OnEnable()`, `base.OnDisable()`, `base.Awake()`/`base.OnDestroy()`). Skipping base calls may prevent token setup and default string‑message registrations.
 
 Source files (for exploration)
 

@@ -118,6 +118,12 @@ Unity convenience base class:
 - Calls Enable()/Disable() with Unity lifecycle
 - Provides clean override points
 
+Important inheritance note
+
+- `MessageAwareComponent` relies on virtual hooks (`Awake`, `OnEnable`, `OnDisable`, `RegisterMessageHandlers`).
+- If you override any of these, call the base method (`base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`).
+- Skipping base calls can skip token creation/enable or default string‑message registrations.
+
 ## Performance Optimizations
 
 ### 1. Type-Indexed Caching (MessageCache)
