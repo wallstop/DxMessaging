@@ -462,6 +462,143 @@ _ = achievementToken.RegisterGlobalAcceptAll(
    // ✅ Better - separate concerns into focused components
    ```
 
+## Common Beginner Mistakes (Avoid These!)
+
+### ❌ Mistake 1: Emitting from Temporaries
+
+```csharp
+// ❌ WRONG - Won't compile for structs
+new MyMessage(42).Emit();
+
+// ✅ CORRECT - Store in variable first
+var msg = new MyMessage(42);
+msg.Emit();
+```
+
+**Why?** Struct extension methods need a variable reference.
+
+### ❌ Mistake 2: Wrong Message Type
+
+```csharp
+// ❌ WRONG - Using Untargeted for entity-specific command
+[DxUntargetedMessage]
+public struct DamagePlayer { public int amount; }
+
+// ✅ CORRECT - Use Targeted for specific entity
+[DxTargetedMessage]
+public struct DamagePlayer { public int amount; }
+```
+
+**Rule of thumb:**
+- Everyone hears it? → Untargeted
+- One specific target? → Targeted
+- From one source, others observe? → Broadcast
+
+### ❌ Mistake 3: Forgetting `readonly` on Structs
+
+```csharp
+// ❌ WRONG - Not readonly (can be accidentally mutated)
+[DxUntargetedMessage]
+public partial struct MyMsg { public int value; }
+
+// ✅ CORRECT - Readonly struct, readonly field
+[DxUntargetedMessage]
+public readonly partial struct MyMsg { public readonly int value; }
+```
+
+**Why?** Immutability prevents bugs and enables optimizations.
+
+### ❌ Mistake 4: Manual Lifecycle Management
+
+```csharp
+// ❌ WRONG - Don't manage lifecycle manually
+public class MyComponent : MonoBehaviour {
+    void OnDestroy() {
+        token.Disable();  // MessageAwareComponent does this!
+        token = null;
+    }
+}
+
+// ✅ CORRECT - Use MessageAwareComponent
+public class MyComponent : MessageAwareComponent {
+    // Lifecycle handled automatically!
+}
+```
+
+### ❌ Mistake 5: Forgetting Handler Parameter
+
+```csharp
+// ❌ WRONG - Missing ref keyword
+void OnDamage(TookDamage msg) { }
+
+// ✅ CORRECT - Use ref for struct messages
+void OnDamage(ref TookDamage msg) { }
+```
+
+**Why?** `ref` avoids copying structs (performance + semantics).
+
+### ❌ Mistake 6: Not Checking for Null/Invalid InstanceId
+
+```csharp
+// ❌ WRONG - Can emit to destroyed object
+msg.EmitGameObjectTargeted(someGameObject);
+
+// ✅ CORRECT - Check first
+if (someGameObject != null) {
+    msg.EmitGameObjectTargeted(someGameObject);
+}
+```
+
+**Why?** Objects can be destroyed between frames.
+
+## Troubleshooting Quick Fixes
+
+### "My handler isn't being called!"
+
+**Checklist:**
+1. Is the component enabled? (Check `OnEnable()` was called)
+2. Did you register in `RegisterMessageHandlers()`?
+3. Are you emitting to the right target?
+4. Is there an interceptor cancelling the message?
+
+**Debug:**
+```csharp
+// Add logging to verify registration
+_ = Token.RegisterUntargeted<MyMsg>(msg => {
+    Debug.Log("Handler called!");  // Does this print?
+});
+```
+
+### "Compile error: 'Emit' not found"
+
+**Cause:** Forgetting `using DxMessaging.Core.Extensions;`
+
+**Fix:**
+```csharp
+using DxMessaging.Core.Extensions;  // ← Add this!
+```
+
+### "Messages work in Editor but not in build"
+
+**Cause:** IL2CPP stripping or AOT compilation issues.
+
+**Fix:** Add link.xml to preserve types (see [Troubleshooting.md](Troubleshooting.md))
+
+### "Performance is slower than expected"
+
+**Causes:**
+1. Diagnostics enabled in production
+2. Too many GlobalAcceptAll handlers
+3. Hundreds of handlers per message
+
+**Fixes:**
+```csharp
+// Disable diagnostics in builds
+IMessageBus.GlobalDiagnosticsMode = false;
+
+// Use specific handlers, not GlobalAcceptAll everywhere
+```
+
 ## Next Steps
 
 Now that you understand the basics:
@@ -471,6 +608,8 @@ Now that you understand the basics:
 3. **Understand message types deeply** - [MessageTypes.md](MessageTypes.md)
 4. **Learn about interceptors** - [InterceptorsAndOrdering.md](InterceptorsAndOrdering.md)
 5. **Master the inspector** - [Diagnostics.md](Diagnostics.md)
+
+**Still confused?** Check out the [Visual Guide](VisualGuide.md) for pictures and analogies!
 
 ## Quick Reference Card
 
