@@ -50,7 +50,11 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
 
             Assert.AreEqual(0, handled, "Handlers must not run when interceptor cancels.");
-            Assert.AreEqual(0, postProcessed, "Post-processors must not run when interceptor cancels.");
+            Assert.AreEqual(
+                0,
+                postProcessed,
+                "Post-processors must not run when interceptor cancels."
+            );
             Assert.AreEqual(0, laterRan, "Later interceptors must not run after cancellation.");
             yield break;
         }
@@ -95,8 +99,16 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(host);
 
             Assert.AreEqual(0, handled, "Targeted handlers must not run when interceptor cancels.");
-            Assert.AreEqual(0, postProcessed, "Targeted post-processors must not run when interceptor cancels.");
-            Assert.AreEqual(0, laterRan, "Later targeted interceptors must not run after cancellation.");
+            Assert.AreEqual(
+                0,
+                postProcessed,
+                "Targeted post-processors must not run when interceptor cancels."
+            );
+            Assert.AreEqual(
+                0,
+                laterRan,
+                "Later targeted interceptors must not run after cancellation."
+            );
             yield break;
         }
 
@@ -139,9 +151,21 @@ namespace DxMessaging.Tests.Runtime.Core
             SimpleBroadcastMessage msg = new();
             msg.EmitGameObjectBroadcast(host);
 
-            Assert.AreEqual(0, handled, "Broadcast handlers must not run when interceptor cancels.");
-            Assert.AreEqual(0, postProcessed, "Broadcast post-processors must not run when interceptor cancels.");
-            Assert.AreEqual(0, laterRan, "Later broadcast interceptors must not run after cancellation.");
+            Assert.AreEqual(
+                0,
+                handled,
+                "Broadcast handlers must not run when interceptor cancels."
+            );
+            Assert.AreEqual(
+                0,
+                postProcessed,
+                "Broadcast post-processors must not run when interceptor cancels."
+            );
+            Assert.AreEqual(
+                0,
+                laterRan,
+                "Later broadcast interceptors must not run after cancellation."
+            );
             yield break;
         }
     }

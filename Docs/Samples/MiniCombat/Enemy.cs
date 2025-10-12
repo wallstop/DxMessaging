@@ -1,6 +1,6 @@
-using DxMessaging.Unity;
 using DxMessaging.Core.Extensions;
 using DxMessaging.Core.Messages;
+using DxMessaging.Unity;
 using UnityEngine;
 
 [RequireComponent(typeof(MessagingComponent))]
@@ -13,4 +13,3 @@ public sealed class Enemy : MonoBehaviour
         Debug.Log($"Enemy took damage: {amount}");
     }
 }
-

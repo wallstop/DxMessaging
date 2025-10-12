@@ -20,4 +20,3 @@ public sealed class Boot : MonoBehaviour
         enemy.ApplyDamage(5);
     }
 }
-

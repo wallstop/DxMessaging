@@ -1,5 +1,5 @@
-using DxMessaging.Unity;
 using DxMessaging.Core.Messages;
+using DxMessaging.Unity;
 using UnityEngine;
 
 public sealed class Player : MessageAwareComponent

@@ -23,8 +23,10 @@ namespace DxMessaging.Core.Diagnostics
 
         /// <summary>Emitted message payload.</summary>
         public readonly IMessage message;
+
         /// <summary>Relevant context (target/source) for the emission; null for untargeted.</summary>
         public readonly InstanceId? context;
+
         /// <summary>Trimmed stack trace captured at the emission site.</summary>
         public readonly string stackTrace;
 

@@ -15,7 +15,11 @@ namespace DxMessaging.Tests.Runtime.Core
             buf.Add(1);
             buf.Add(2);
 
-            Assert.AreEqual(3, buf.Count, "Count should reflect number of elements added up to capacity.");
+            Assert.AreEqual(
+                3,
+                buf.Count,
+                "Count should reflect number of elements added up to capacity."
+            );
             Assert.AreEqual(0, buf[0], "Oldest element should be at index 0 before wrap.");
             Assert.AreEqual(1, buf[1], "Next element should be index 1.");
             Assert.AreEqual(2, buf[2], "Newest element should be index 2 before wrap.");
