@@ -11,3 +11,6 @@ timeout = 20
 user_agent = "lychee/markdown-ci"
 accept = ["200..=299", "300..=399"]
 
+# Ensure file:// links resolve correctly inside GitHub Actions container.
+# The repository is mounted at /github/workspace in the lychee Docker image.
+root_dir = "/github/workspace"
