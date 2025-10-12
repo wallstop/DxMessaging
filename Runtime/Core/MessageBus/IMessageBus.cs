@@ -6,11 +6,46 @@ namespace DxMessaging.Core.MessageBus
     using Messages;
 
     /// <summary>
-    /// Description of a general purpose message bus that provides both registration, deregistration, and broadcast capabilities.
+    /// Contract for a general-purpose message bus handling registration and dispatch.
     /// </summary>
+    /// <remarks>
+    /// <para>Concepts:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Handlers</b>: register to receive messages of specific types.</description></item>
+    /// <item><description><b>Interceptors</b>: mutate or cancel messages before handlers run.</description></item>
+    /// <item><description><b>Post-processors</b>: observe messages after handlers complete.</description></item>
+    /// <item><description><b>Priority</b>: most registration APIs accept a <c>priority</c> parameter (lower runs first).</description></item>
+    /// </list>
+    /// <para>Message categories:</para>
+    /// <list type="bullet">
+    /// <item><description><see cref="Messages.IUntargetedMessage"/> — Global notifications.</description></item>
+    /// <item><description><see cref="Messages.ITargetedMessage"/> — Directed at a specific <see cref="InstanceId"/>.</description></item>
+    /// <item><description><see cref="Messages.IBroadcastMessage"/> — Emitted from a source for any listener.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Unity: register then send a targeted message
+    /// var token = messagingComponent.Create(this);
+    /// token.RegisterComponentTargeted&lt;TookDamage&gt;(this, (ref TookDamage m) =&gt; OnDamage(m));
+    /// token.Enable();
+    ///
+    /// // Later, somewhere else
+    /// DxMessaging.Core.InstanceId me = GetComponent&lt;UnityEngine.Component&gt;();
+    /// var msg = new TookDamage(5);
+    /// DxMessaging.Core.MessageHandler.MessageBus.TargetedBroadcast(ref me, ref msg);
+    /// </code>
+    /// </example>
     public interface IMessageBus
     {
+        /// <summary>
+        /// Default diagnostics mode for newly created buses and tokens.
+        /// </summary>
         public static bool GlobalDiagnosticsMode { get; set; }
+
+        /// <summary>
+        /// Default ring buffer size for emission history when diagnostics are enabled.
+        /// </summary>
         public static int GlobalMessageBufferSize { get; set; }
 
         internal static int GlobalSequentialIndex = -1;
@@ -18,6 +53,9 @@ namespace DxMessaging.Core.MessageBus
         protected static int GenerateNewGlobalSequentialIndex() =>
             Interlocked.Increment(ref GlobalSequentialIndex);
 
+        /// <summary>
+        /// Whether diagnostics are recorded for this bus instance.
+        /// </summary>
         public bool DiagnosticsMode { get; }
 
         public int RegisteredGlobalSequentialIndex { get; }
@@ -28,7 +66,7 @@ namespace DxMessaging.Core.MessageBus
         public int RegisteredUntargeted { get; }
 
         /// <summary>
-        /// Given an Untargeted message, determines whether it should be processed or skipped
+        /// Interceptor delegate for untargeted messages to transform or cancel them.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="message">Message to consider.</param>
@@ -37,7 +75,7 @@ namespace DxMessaging.Core.MessageBus
             where TMessage : IUntargetedMessage;
 
         /// <summary>
-        /// Given a Targeted message and its target, determines whether it should be processed or skipped.
+        /// Interceptor delegate for targeted messages to transform or cancel them.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="target">Target of the message.</param>
@@ -50,7 +88,7 @@ namespace DxMessaging.Core.MessageBus
             where TMessage : ITargetedMessage;
 
         /// <summary>
-        /// Given a Broadcast message and its source, determines whether it should be processed or skipped.
+        /// Interceptor delegate for broadcast messages to transform or cancel them.
         /// </summary>
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="source">Source of the message.</param>
@@ -72,7 +110,8 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         /// <typeparam name="T">Specific type of UntargetedMessages to register for.</typeparam>
         /// <param name="messageHandler">MessageHandler to register to accept UntargetedMessages of the specified type.</param>
-        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <param name="priority">Priority at which to run; lower runs earlier.</param>
+        /// <returns>The deregistration action. Invoke when the handler no longer wants to receive messages.</returns>
         Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage;
 
@@ -82,7 +121,8 @@ namespace DxMessaging.Core.MessageBus
         /// <typeparam name="T">Specific type of TargetedMessages to register for.</typeparam>
         /// <param name="target">Target of messages to listen for.</param>
         /// <param name="messageHandler">MessageHandler to register the TargetedMessages of the specified type.</param>
-        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive the messages.</returns>
+        /// <param name="priority">Priority at which to run; lower runs earlier.</param>
+        /// <returns>The deregistration action. Invoke when the handler no longer wants to receive the messages.</returns>
         Action RegisterTargeted<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -96,7 +136,8 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         /// <typeparam name="T">Specific type of TargetedMessages to register for.</typeparam>
         /// <param name="messageHandler">MessageHandler to register to accept all TargetedMessages of the specified type.</param>
-        /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <param name="priority">Priority at which to run; lower runs earlier.</param>
+        /// <returns>The deregistration action. Invoke when the handler no longer wants to receive messages.</returns>
         Action RegisterTargetedWithoutTargeting<T>(MessageHandler messageHandler, int priority = 0)
             where T : ITargetedMessage;
 

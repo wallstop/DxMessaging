@@ -3,6 +3,12 @@ namespace DxMessaging.Core
     using System;
     using System.Threading;
 
+    /// <summary>
+    /// Opaque identifier for a staged registration within a <see cref="MessageRegistrationToken"/>.
+    /// </summary>
+    /// <remarks>
+    /// Use with <see cref="MessageRegistrationToken.RemoveRegistration"/> to selectively cancel a registration.
+    /// </remarks>
     public readonly struct MessageRegistrationHandle
         : IEquatable<MessageRegistrationHandle>,
             IComparable<MessageRegistrationHandle>,
@@ -13,6 +19,9 @@ namespace DxMessaging.Core
         private readonly long _id;
         private readonly int _hashCode;
 
+        /// <summary>
+        /// Creates a new unique handle.
+        /// </summary>
         public static MessageRegistrationHandle CreateMessageRegistrationHandle()
         {
             return new MessageRegistrationHandle(Interlocked.Increment(ref StaticIdCount));

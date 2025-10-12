@@ -5,8 +5,13 @@ namespace DxMessaging.Core.MessageBus
     using System.Text;
 
     /// <summary>
-    /// Logs all MessageHandler registrations from the beginning of time.
+    /// Logs MessageHandler registrations for diagnostics.
     /// </summary>
+    /// <remarks>
+    /// Disabled by default for performance. Set <see cref="Enabled"/> to true to start collecting
+    /// <see cref="MessagingRegistration"/> entries, then inspect via <see cref="Registrations"/>,
+    /// <see cref="GetRegistrations"/>, or <see cref="ToString()"/>.
+    /// </remarks>
     public sealed class RegistrationLog
     {
         public IReadOnlyList<MessagingRegistration> Registrations => _finalizedRegistrations;

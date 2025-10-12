@@ -5,6 +5,12 @@ namespace DxMessaging.Editor.Settings
     using UnityEditor;
     using UnityEngine;
 
+    /// <summary>
+    /// Project Settings provider for DxMessaging configuration.
+    /// </summary>
+    /// <remarks>
+    /// Exposes toggles for global diagnostics mode and message buffer size under Project Settings → DxMessaging.
+    /// </remarks>
     public sealed class DxMessagingSettingsProvider : SettingsProvider
     {
         private SerializedObject _messagingSettings;

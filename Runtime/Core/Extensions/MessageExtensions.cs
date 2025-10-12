@@ -5,8 +5,31 @@ namespace DxMessaging.Core.Extensions
     using Messages;
 
     /// <summary>
-    /// Extensions to smartly go about emitting messages :^)
+    /// Convenience extension methods for emitting messages.
     /// </summary>
+    /// <remarks>
+    /// These helpers select the correct dispatch overloads, handle by-ref messages for structs, and default to the
+    /// global bus when none is provided. Overloads exist for Unity <see cref="UnityEngine.GameObject"/> and
+    /// <see cref="UnityEngine.Component"/> to convert to <see cref="Core.InstanceId"/> implicitly.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Untargeted (global)
+    /// new WorldRegenerated(42).Emit();
+    ///
+    /// // Targeted (InstanceId)
+    /// var target = (DxMessaging.Core.InstanceId)gameObject;
+    /// new Heal(10).EmitTargeted(target);
+    ///
+    /// // Broadcast (from source)
+    /// var source = (DxMessaging.Core.InstanceId)gameObject;
+    /// new TookDamage(5).EmitBroadcast(source);
+    ///
+    /// // Unity conveniences
+    /// new StringMessage("Hello").EmitGameObjectTargeted(gameObject);
+    /// new GlobalStringMessage("Saved").Emit();
+    /// </code>
+    /// </example>
     public static class MessageExtensions
     {
 #if UNITY_2017_1_OR_NEWER

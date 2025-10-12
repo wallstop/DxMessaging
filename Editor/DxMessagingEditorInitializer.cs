@@ -5,6 +5,9 @@ namespace DxMessaging.Editor
     using Settings;
     using UnityEditor;
 
+    /// <summary>
+    /// Applies DxMessaging Editor settings to global runtime defaults on domain load.
+    /// </summary>
     [InitializeOnLoad]
     public static class DxMessagingEditorInitializer
     {

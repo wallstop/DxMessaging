@@ -5,6 +5,13 @@ namespace DxMessaging.Editor.Settings
     using UnityEditor;
     using UnityEngine;
 
+    /// <summary>
+    /// Project-wide DxMessaging settings asset (Editor-only).
+    /// </summary>
+    /// <remarks>
+    /// Stored at <c>Assets/Editor/DxMessagingSettings.asset</c>. Controls global diagnostics defaults applied in the
+    /// editor through <see cref="DxMessaging.Editor.DxMessagingEditorInitializer"/>.
+    /// </remarks>
     public sealed class DxMessagingSettings : ScriptableObject
     {
         private const int DefaultBufferSize = 100;
@@ -16,18 +23,27 @@ namespace DxMessaging.Editor.Settings
         [SerializeField]
         internal int _messageBufferSize = DefaultBufferSize;
 
+        /// <summary>
+        /// Enables <see cref="Core.MessageBus.IMessageBus.GlobalDiagnosticsMode"/> in the Editor.
+        /// </summary>
         public bool EnableDiagnosticsInEditor
         {
             get => _enableDiagnosticsInEditor;
             set => _enableDiagnosticsInEditor = value;
         }
 
+        /// <summary>
+        /// Sets <see cref="Core.MessageBus.IMessageBus.GlobalMessageBufferSize"/> for Editor sessions.
+        /// </summary>
         public int MessageBufferSize
         {
             get => _messageBufferSize;
             set => _messageBufferSize = value;
         }
 
+        /// <summary>
+        /// Loads the settings asset if present, otherwise creates it with sensible defaults.
+        /// </summary>
         internal static DxMessagingSettings GetOrCreateSettings()
         {
             DxMessagingSettings settings = AssetDatabase.LoadAssetAtPath<DxMessagingSettings>(
@@ -59,6 +75,9 @@ namespace DxMessaging.Editor.Settings
             return settings;
         }
 
+        /// <summary>
+        /// Returns a serialized wrapper for use in SettingsProvider inspectors.
+        /// </summary>
         internal static SerializedObject GetSerializedSettings()
         {
             return new SerializedObject(GetOrCreateSettings());

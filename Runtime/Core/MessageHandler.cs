@@ -8,17 +8,41 @@ namespace DxMessaging.Core
     using Messages;
 
     /// <summary>
-    /// Abstraction layer for immediate-mode Message passing. An instance of this handles all
-    /// kinds of types to trigger functions that are registered with it.
+    /// Per-owner handler that executes registered message callbacks.
     /// </summary>
+    /// <remarks>
+    /// A <see cref="MessageHandler"/> is typically created and managed by <see cref="Unity.MessagingComponent"/> in Unity.
+    /// Most user code interacts with the handler through <see cref="MessageRegistrationToken"/>, which stages
+    /// registrations and ensures correct enable/disable lifecycles.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Plain .NET usage without Unity
+    /// var owner = new DxMessaging.Core.InstanceId(1);
+    /// var handler = new DxMessaging.Core.MessageHandler(owner) { active = true };
+    /// var token = DxMessaging.Core.MessageRegistrationToken.Create(handler);
+    /// _ = token.RegisterUntargeted&lt;WorldRegenerated&gt;((ref WorldRegenerated m) =&gt; Console.WriteLine(m.seed));
+    /// token.Enable();
+    ///
+    /// var bus = DxMessaging.Core.MessageHandler.MessageBus;
+    /// var msg = new WorldRegenerated(42);
+    /// bus.UntargetedBroadcast(ref msg);
+    /// </code>
+    /// </example>
     public sealed class MessageHandler
         : IEquatable<MessageHandler>,
             IComparable,
             IComparable<MessageHandler>
     {
+        /// <summary>
+        /// High-performance handler that receives the message by reference (no boxing/copies).
+        /// </summary>
         public delegate void FastHandler<TMessage>(ref TMessage message)
             where TMessage : IMessage;
 
+        /// <summary>
+        /// High-performance handler with an additional context value (e.g., target/source) by reference.
+        /// </summary>
         public delegate void FastHandlerWithContext<TMessage>(
             ref InstanceId context,
             ref TMessage message
@@ -26,7 +50,7 @@ namespace DxMessaging.Core
             where TMessage : IMessage;
 
         /// <summary>
-        /// MessageBus for all MessageHandlers to use. Currently immutable, but may change in the future.
+        /// Global message bus used when no explicit bus is provided.
         /// </summary>
         public static readonly MessageBus.MessageBus MessageBus = new();
 

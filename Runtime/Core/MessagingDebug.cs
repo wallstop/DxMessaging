@@ -14,8 +14,13 @@ namespace DxMessaging.Core
     }
 
     /// <summary>
-    /// Debug functionality for all the Messaging Components.
+    /// Debug/diagnostic logging helper for DxMessaging.
     /// </summary>
+    /// <remarks>
+    /// Set <see cref="enabled"/> to <c>true</c> and assign <see cref="LogFunction"/> to receive formatted logs
+    /// from the messaging system (e.g., registration mismatches, over-deregistration, etc.). In Unity, you can set
+    /// <c>MessagingDebug.LogFunction = (lvl, msg) =&gt; Debug.Log($"[{lvl}] {msg}");</c>
+    /// </remarks>
     public static class MessagingDebug
     {
         public static bool enabled = false;

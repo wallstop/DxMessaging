@@ -1,0 +1,15 @@
+{
+  "name": "WallstopStudios.DxMessaging.Sample",
+  "rootNamespace": "",
+  "references": [
+    "WallstopStudios.DxMessaging"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "noEngineReferences": false
+}
