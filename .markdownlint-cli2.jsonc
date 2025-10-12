@@ -1,0 +1,8 @@
+{
+  // Limit linting impact until large, single-line docs are reformatted
+  "ignores": [
+    "Docs/GettingStarted.md",
+    "Docs/DesignAndArchitecture.md"
+  ]
+}
+
