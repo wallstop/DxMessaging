@@ -26,18 +26,16 @@ namespace DxMessaging.Tests.Runtime.Core
             int postProcessed = 0;
 
             _ = token.RegisterUntargeted<SimpleUntargetedMessage>(_ => handled++);
-            _ = token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref SimpleUntargetedMessage _) => postProcessed++
             );
 
             // Register a canceling interceptor (always false)
-            _ = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => false
-            );
+            _ = token.RegisterUntargetedInterceptor((ref SimpleUntargetedMessage _) => false);
 
             // Also register a later interceptor that would be skipped if earlier cancels
             int laterRan = 0;
-            _ = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedInterceptor(
                 (ref SimpleUntargetedMessage _) =>
                 {
                     laterRan++;
@@ -74,19 +72,19 @@ namespace DxMessaging.Tests.Runtime.Core
             int postProcessed = 0;
 
             _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(host, _ => handled++);
-            _ = token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargetedPostProcessor(
                 host,
                 (ref SimpleTargetedMessage _) => postProcessed++
             );
 
             // Cancel targeted messages
-            _ = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(
+            _ = token.RegisterTargetedInterceptor(
                 (ref InstanceId _, ref SimpleTargetedMessage _) => false
             );
 
             // A later interceptor that would not execute after cancellation
             int laterRan = 0;
-            _ = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(
+            _ = token.RegisterTargetedInterceptor(
                 (ref InstanceId _, ref SimpleTargetedMessage _) =>
                 {
                     laterRan++;
@@ -133,13 +131,13 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             // Cancel broadcast messages
-            _ = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
+            _ = token.RegisterBroadcastInterceptor(
                 (ref InstanceId _, ref SimpleBroadcastMessage _) => false
             );
 
             // A later interceptor that would not execute after cancellation
             int laterRan = 0;
-            _ = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
+            _ = token.RegisterBroadcastInterceptor(
                 (ref InstanceId _, ref SimpleBroadcastMessage _) =>
                 {
                     laterRan++;

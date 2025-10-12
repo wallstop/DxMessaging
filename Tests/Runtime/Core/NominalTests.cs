@@ -1064,7 +1064,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 Action<LogLevel, string> previousLog = MessagingDebug.LogFunction;
                 try
                 {
-                    MessagingDebug.LogFunction = (level, logMessage) =>
+                    MessagingDebug.LogFunction = (_, logMessage) =>
                     {
                         if (logMessage.Contains("matching"))
                         {

@@ -21,22 +21,13 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<string> order = new();
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => order.Add("F1"),
-                0
-            );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add("A1"),
-                0
-            );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add("A2"),
-                0
-            );
-            var msg = new SimpleUntargetedMessage();
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => order.Add("F1"), 0);
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add("A1"), 0);
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add("A2"), 0);
+            SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
             Assert.AreEqual(new[] { "F1", "A1", "A2" }, order.ToArray());
             yield break;
@@ -56,7 +47,7 @@
             List<string> stages = new();
 
             // Interceptors at different priorities
-            _ = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedInterceptor(
                 (ref SimpleUntargetedMessage _) =>
                 {
                     stages.Add("I0");
@@ -64,7 +55,7 @@
                 },
                 priority: 0
             );
-            _ = token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedInterceptor(
                 (ref SimpleUntargetedMessage _) =>
                 {
                     stages.Add("I1");
@@ -74,19 +65,13 @@
             );
 
             // Global accept-all (untargeted only)
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => stages.Add("G"),
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => stages.Add("G"), (_, _) => { }, (_, _) => { });
 
             // Type handler
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => stages.Add("H")
-            );
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => stages.Add("H"));
 
             // Post-processor
-            _ = token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref SimpleUntargetedMessage _) => stages.Add("P")
             );
 
@@ -115,16 +100,16 @@
 
             List<string> stages = new();
 
-            _ = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) =>
+            _ = token.RegisterTargetedInterceptor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) =>
                 {
                     stages.Add("I0");
                     return true;
                 },
                 0
             );
-            _ = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) =>
+            _ = token.RegisterTargetedInterceptor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) =>
                 {
                     stages.Add("I1");
                     return true;
@@ -132,19 +117,15 @@
                 1
             );
 
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => stages.Add("G"),
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => stages.Add("G"), (_, _) => { });
 
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
-                (ref SimpleTargetedMessage __) => stages.Add("H")
+                (ref SimpleTargetedMessage _) => stages.Add("H")
             );
-            _ = token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargetedPostProcessor(
                 go,
-                (ref SimpleTargetedMessage __) => stages.Add("P")
+                (ref SimpleTargetedMessage _) => stages.Add("P")
             );
 
             SimpleTargetedMessage msg = new();
@@ -170,16 +151,16 @@
 
             List<string> stages = new();
 
-            _ = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) =>
+            _ = token.RegisterBroadcastInterceptor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) =>
                 {
                     stages.Add("I0");
                     return true;
                 },
                 0
             );
-            _ = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) =>
+            _ = token.RegisterBroadcastInterceptor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) =>
                 {
                     stages.Add("I1");
                     return true;
@@ -187,19 +168,15 @@
                 1
             );
 
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => stages.Add("G")
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => { }, (_, _) => stages.Add("G"));
 
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
-                (ref SimpleBroadcastMessage __) => stages.Add("H")
+                (ref SimpleBroadcastMessage _) => stages.Add("H")
             );
-            _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcastPostProcessor(
                 go,
-                (ref SimpleBroadcastMessage __) => stages.Add("P")
+                (ref SimpleBroadcastMessage _) => stages.Add("P")
             );
 
             SimpleBroadcastMessage msg = new();
@@ -224,17 +201,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargetedPostProcessor(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargetedPostProcessor(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargetedPostProcessor(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add(3),
                 0
@@ -262,17 +239,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcastPostProcessor(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcastPostProcessor(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcastPostProcessor(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add(3),
                 0
@@ -300,16 +277,16 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(1),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(2),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(3),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(3),
                 0
             );
 
@@ -335,16 +312,16 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(1),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(2),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(3),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(3),
                 0
             );
 
@@ -370,16 +347,16 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(1),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(2),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(3),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(3),
                 0
             );
 
@@ -405,16 +382,16 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(1),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(2),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(3),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(3),
                 0
             );
 
@@ -441,15 +418,11 @@
 
             List<string> order = new();
             // Register action first, then fast — fast should still run first
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => order.Add("A"),
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => order.Add("A"), (_, _) => { }, (_, _) => { });
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => order.Add("F"),
-                (ref InstanceId _, ref ITargetedMessage __) => { },
-                (ref InstanceId _, ref IBroadcastMessage __) => { }
+                (ref InstanceId _, ref ITargetedMessage _) => { },
+                (ref InstanceId _, ref IBroadcastMessage _) => { }
             );
 
             SimpleUntargetedMessage msg = new();
@@ -474,15 +447,11 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => order.Add("A"),
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => order.Add("A"), (_, _) => { });
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => { },
-                (ref InstanceId _, ref ITargetedMessage __) => order.Add("F"),
-                (ref InstanceId _, ref IBroadcastMessage __) => { }
+                (ref InstanceId _, ref ITargetedMessage _) => order.Add("F"),
+                (ref InstanceId _, ref IBroadcastMessage _) => { }
             );
 
             SimpleTargetedMessage msg = new();
@@ -507,15 +476,11 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => order.Add("A")
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => { }, (_, _) => order.Add("A"));
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => { },
-                (ref InstanceId _, ref ITargetedMessage __) => { },
-                (ref InstanceId _, ref IBroadcastMessage __) => order.Add("F")
+                (ref InstanceId _, ref ITargetedMessage _) => { },
+                (ref InstanceId _, ref IBroadcastMessage _) => order.Add("F")
             );
 
             SimpleBroadcastMessage msg = new();
@@ -541,12 +506,12 @@
 
             List<string> order = new();
             // Register action then fast — fast should still be invoked first within the group
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add("A"),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A"),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add("F"),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add("F"),
                 0
             );
 
@@ -568,12 +533,12 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add("A"),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A"),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add("F"),
+            _ = token.RegisterBroadcastWithoutSource(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add("F"),
                 0
             );
 
@@ -596,32 +561,28 @@
 
             List<string> stages = new();
 
-            _ = token.RegisterTargetedInterceptor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) =>
+            _ = token.RegisterTargetedInterceptor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) =>
                 {
                     stages.Add("I");
                     return true;
                 },
                 0
             );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => stages.Add("G"),
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => stages.Add("G"), (_, _) => { });
+            _ = token.RegisterGameObjectTargeted(
                 go,
-                (ref SimpleTargetedMessage __) => stages.Add("Hspec")
+                (ref SimpleTargetedMessage _) => stages.Add("Hspec")
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => stages.Add("Hall")
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => stages.Add("Hall")
             );
-            _ = token.RegisterGameObjectTargetedPostProcessor<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargetedPostProcessor(
                 go,
-                (ref SimpleTargetedMessage __) => stages.Add("Pspec")
+                (ref SimpleTargetedMessage _) => stages.Add("Pspec")
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => stages.Add("Pall")
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => stages.Add("Pall")
             );
 
             SimpleTargetedMessage msg = new();
@@ -646,32 +607,28 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> stages = new();
-            _ = token.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) =>
+            _ = token.RegisterBroadcastInterceptor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) =>
                 {
                     stages.Add("I");
                     return true;
                 },
                 0
             );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => stages.Add("G")
-            );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => { }, (_, _) => stages.Add("G"));
+            _ = token.RegisterGameObjectBroadcast(
                 go,
-                (ref SimpleBroadcastMessage __) => stages.Add("Hspec")
+                (ref SimpleBroadcastMessage _) => stages.Add("Hspec")
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => stages.Add("Hall")
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => stages.Add("Hall")
             );
-            _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcastPostProcessor(
                 go,
-                (ref SimpleBroadcastMessage __) => stages.Add("Pspec")
+                (ref SimpleBroadcastMessage _) => stages.Add("Pspec")
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => stages.Add("Pall")
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => stages.Add("Pall")
             );
 
             SimpleBroadcastMessage msg = new();
@@ -696,18 +653,9 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add(1),
-                0
-            );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add(2),
-                0
-            );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add(3),
-                0
-            );
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add(1), 0);
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add(2), 0);
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add(3), 0);
 
             SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
@@ -731,18 +679,9 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => order.Add(1),
-                0
-            );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => order.Add(2),
-                0
-            );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => order.Add(3),
-                0
-            );
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => order.Add(1), 0);
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => order.Add(2), 0);
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => order.Add(3), 0);
 
             SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
@@ -767,20 +706,11 @@
 
             List<string> order = new();
             // Register an action handler first (by-value)
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add("A1"),
-                0
-            );
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add("A1"), 0);
             // Then a fast handler (by-ref)
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => order.Add("F1"),
-                0
-            );
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => order.Add("F1"), 0);
             // Another action handler (by-value)
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (SimpleUntargetedMessage _) => order.Add("A2"),
-                0
-            );
+            _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => order.Add("A2"), 0);
 
             SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
@@ -801,21 +731,9 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                go,
-                (SimpleTargetedMessage _) => order.Add(1),
-                0
-            );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                go,
-                (SimpleTargetedMessage _) => order.Add(2),
-                0
-            );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                go,
-                (SimpleTargetedMessage _) => order.Add(3),
-                0
-            );
+            _ = token.RegisterGameObjectTargeted(go, (SimpleTargetedMessage _) => order.Add(1), 0);
+            _ = token.RegisterGameObjectTargeted(go, (SimpleTargetedMessage _) => order.Add(2), 0);
+            _ = token.RegisterGameObjectTargeted(go, (SimpleTargetedMessage _) => order.Add(3), 0);
 
             SimpleTargetedMessage msg = new();
             msg.EmitGameObjectTargeted(go);
@@ -839,16 +757,16 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add(1),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add(2),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add(3),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add(3),
                 0
             );
 
@@ -872,16 +790,16 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add(1),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add(2),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add(3),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add(3),
                 0
             );
 
@@ -903,17 +821,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add(3),
                 0
@@ -941,17 +859,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (SimpleBroadcastMessage _) => order.Add(3),
                 0
@@ -979,17 +897,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add(3),
                 0
@@ -1017,15 +935,15 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<int> order = new();
-            _ = token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref SimpleUntargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref SimpleUntargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref SimpleUntargetedMessage _) => order.Add(3),
                 0
             );
@@ -1052,7 +970,7 @@
             MessageRegistrationToken token = GetToken(comp);
 
             int count = 0;
-            MessageRegistrationHandle handle = token.RegisterUntargeted<SimpleUntargetedMessage>(
+            MessageRegistrationHandle handle = token.RegisterUntargeted(
                 (ref SimpleUntargetedMessage _) => ++count
             );
             using (token.AsDisposable(handle))
@@ -1080,17 +998,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
                 (SimpleTargetedMessage _) => order.Add("A1"),
                 0
             );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
                 (ref SimpleTargetedMessage _) => order.Add("F1"),
                 0
             );
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterGameObjectTargeted(
                 go,
                 (SimpleTargetedMessage _) => order.Add("A2"),
                 0
@@ -1114,17 +1032,17 @@
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (SimpleBroadcastMessage _) => order.Add("A1"),
                 0
             );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (ref SimpleBroadcastMessage _) => order.Add("F1"),
                 0
             );
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterGameObjectBroadcast(
                 go,
                 (SimpleBroadcastMessage _) => order.Add("A2"),
                 0
@@ -1144,24 +1062,12 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
-                comp,
-                (SimpleTargetedMessage _) => order.Add(1),
-                0
-            );
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
-                comp,
-                (SimpleTargetedMessage _) => order.Add(2),
-                0
-            );
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
-                comp,
-                (SimpleTargetedMessage _) => order.Add(3),
-                0
-            );
+            _ = token.RegisterComponentTargeted(comp, (SimpleTargetedMessage _) => order.Add(1), 0);
+            _ = token.RegisterComponentTargeted(comp, (SimpleTargetedMessage _) => order.Add(2), 0);
+            _ = token.RegisterComponentTargeted(comp, (SimpleTargetedMessage _) => order.Add(3), 0);
             SimpleTargetedMessage msg = new();
             msg.EmitComponentTargeted(comp);
             Assert.AreEqual(new[] { 1, 2, 3 }, order.ToArray());
@@ -1176,20 +1082,20 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterComponentTargeted(
                 comp,
                 (ref SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterComponentTargeted(
                 comp,
                 (ref SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterComponentTargeted(
                 comp,
                 (ref SimpleTargetedMessage _) => order.Add(3),
                 0
@@ -1208,20 +1114,20 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<string> order = new();
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterComponentTargeted(
                 comp,
                 (SimpleTargetedMessage _) => order.Add("A1"),
                 0
             );
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterComponentTargeted(
                 comp,
                 (ref SimpleTargetedMessage _) => order.Add("F1"),
                 0
             );
-            _ = token.RegisterComponentTargeted<SimpleTargetedMessage>(
+            _ = token.RegisterComponentTargeted(
                 comp,
                 (SimpleTargetedMessage _) => order.Add("A2"),
                 0
@@ -1240,20 +1146,20 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (SimpleBroadcastMessage _) => order.Add(3),
                 0
@@ -1272,20 +1178,20 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (ref SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (ref SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (ref SimpleBroadcastMessage _) => order.Add(3),
                 0
@@ -1304,20 +1210,20 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<string> order = new();
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (SimpleBroadcastMessage _) => order.Add("A1"),
                 0
             );
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (ref SimpleBroadcastMessage _) => order.Add("F1"),
                 0
             );
-            _ = token.RegisterComponentBroadcast<SimpleBroadcastMessage>(
+            _ = token.RegisterComponentBroadcast(
                 comp,
                 (SimpleBroadcastMessage _) => order.Add("A2"),
                 0
@@ -1336,19 +1242,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(1),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(2),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(3),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(3),
                 0
             );
             SimpleTargetedMessage msg = new();
@@ -1365,19 +1271,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<string> order = new();
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add("A1"),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A1"),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add("F1"),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add("F1"),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add("A2"),
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A2"),
                 0
             );
             SimpleTargetedMessage msg = new();
@@ -1396,19 +1302,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(1),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(2),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (InstanceId _, SimpleTargetedMessage __) => order.Add(3),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add(3),
                 0
             );
             SimpleTargetedMessage msg = new();
@@ -1425,19 +1331,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add(1),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add(2),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
-                (ref InstanceId _, ref SimpleTargetedMessage __) => order.Add(3),
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add(3),
                 0
             );
             SimpleTargetedMessage msg = new();
@@ -1454,19 +1360,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(1),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(2),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(3),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(3),
                 0
             );
             SimpleBroadcastMessage msg = new();
@@ -1483,19 +1389,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<string> order = new();
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add("A1"),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A1"),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add("F1"),
+            _ = token.RegisterBroadcastWithoutSource(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add("F1"),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add("A2"),
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A2"),
                 0
             );
             SimpleBroadcastMessage msg = new();
@@ -1514,19 +1420,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(1),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(2),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (InstanceId _, SimpleBroadcastMessage __) => order.Add(3),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add(3),
                 0
             );
             SimpleBroadcastMessage msg = new();
@@ -1543,19 +1449,19 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<int> order = new();
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add(1),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add(1),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add(2),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add(2),
                 0
             );
-            _ = token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) => order.Add(3),
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add(3),
                 0
             );
             SimpleBroadcastMessage msg = new();
@@ -1572,17 +1478,17 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             int gUntargeted = 0,
                 gTargeted = 0,
                 gBroadcast = 0;
             _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => ++gUntargeted,
-                (InstanceId _, ITargetedMessage __) => ++gTargeted,
-                (InstanceId _, IBroadcastMessage __) => ++gBroadcast
+                _ => ++gUntargeted,
+                (_, _) => ++gTargeted,
+                (_, _) => ++gBroadcast
             );
-            var msg = new SimpleUntargetedMessage();
+            SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
             Assert.AreEqual(1, gUntargeted);
             Assert.AreEqual(0, gTargeted);
@@ -1598,17 +1504,17 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             int gUntargeted = 0,
                 gTargeted = 0,
                 gBroadcast = 0;
             _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => ++gUntargeted,
-                (InstanceId _, ITargetedMessage __) => ++gTargeted,
-                (InstanceId _, IBroadcastMessage __) => ++gBroadcast
+                _ => ++gUntargeted,
+                (_, _) => ++gTargeted,
+                (_, _) => ++gBroadcast
             );
-            var msg = new SimpleTargetedMessage();
+            SimpleTargetedMessage msg = new();
             msg.EmitComponentTargeted(comp);
             Assert.AreEqual(0, gUntargeted);
             Assert.AreEqual(1, gTargeted);
@@ -1624,17 +1530,17 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             int gUntargeted = 0,
                 gTargeted = 0,
                 gBroadcast = 0;
             _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => ++gUntargeted,
-                (InstanceId _, ITargetedMessage __) => ++gTargeted,
-                (InstanceId _, IBroadcastMessage __) => ++gBroadcast
+                _ => ++gUntargeted,
+                (_, _) => ++gTargeted,
+                (_, _) => ++gBroadcast
             );
-            var msg = new SimpleBroadcastMessage();
+            SimpleBroadcastMessage msg = new();
             msg.EmitComponentBroadcast(comp);
             Assert.AreEqual(0, gUntargeted);
             Assert.AreEqual(0, gTargeted);
@@ -1650,13 +1556,13 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
             // No explicit registrations
-            var msg1 = new SimpleUntargetedMessage();
+            SimpleUntargetedMessage msg1 = new();
             msg1.EmitUntargeted();
-            var msg2 = new SimpleTargetedMessage();
+            SimpleTargetedMessage msg2 = new();
             msg2.EmitComponentTargeted(comp);
-            var msg3 = new SimpleBroadcastMessage();
+            SimpleBroadcastMessage msg3 = new();
             msg3.EmitComponentBroadcast(comp);
             Assert.Pass();
             yield break;
@@ -1670,32 +1576,24 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
             // Fast group (F1, F2)
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => order.Add("F1"),
-                (ref InstanceId _, ref ITargetedMessage __) => { },
-                (ref InstanceId _, ref IBroadcastMessage __) => { }
+                (ref InstanceId _, ref ITargetedMessage _) => { },
+                (ref InstanceId _, ref IBroadcastMessage _) => { }
             );
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => order.Add("F2"),
-                (ref InstanceId _, ref ITargetedMessage __) => { },
-                (ref InstanceId _, ref IBroadcastMessage __) => { }
+                (ref InstanceId _, ref ITargetedMessage _) => { },
+                (ref InstanceId _, ref IBroadcastMessage _) => { }
             );
             // Action group (A1, A2)
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => order.Add("A1"),
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => order.Add("A2"),
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => order.Add("A1"), (_, _) => { }, (_, _) => { });
+            _ = token.RegisterGlobalAcceptAll(_ => order.Add("A2"), (_, _) => { }, (_, _) => { });
 
             SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
@@ -1711,30 +1609,22 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => { },
-                (ref InstanceId _, ref ITargetedMessage __) => order.Add("F1"),
-                (ref InstanceId _, ref IBroadcastMessage __) => { }
+                (ref InstanceId _, ref ITargetedMessage _) => order.Add("F1"),
+                (ref InstanceId _, ref IBroadcastMessage _) => { }
             );
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => { },
-                (ref InstanceId _, ref ITargetedMessage __) => order.Add("F2"),
-                (ref InstanceId _, ref IBroadcastMessage __) => { }
+                (ref InstanceId _, ref ITargetedMessage _) => order.Add("F2"),
+                (ref InstanceId _, ref IBroadcastMessage _) => { }
             );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => order.Add("A1"),
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => order.Add("A2"),
-                (InstanceId _, IBroadcastMessage __) => { }
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => order.Add("A1"), (_, _) => { });
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => order.Add("A2"), (_, _) => { });
 
             SimpleTargetedMessage msg = new();
             msg.EmitGameObjectTargeted(go);
@@ -1750,30 +1640,22 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => { },
-                (ref InstanceId _, ref ITargetedMessage __) => { },
-                (ref InstanceId _, ref IBroadcastMessage __) => order.Add("F1")
+                (ref InstanceId _, ref ITargetedMessage _) => { },
+                (ref InstanceId _, ref IBroadcastMessage _) => order.Add("F1")
             );
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => { },
-                (ref InstanceId _, ref ITargetedMessage __) => { },
-                (ref InstanceId _, ref IBroadcastMessage __) => order.Add("F2")
+                (ref InstanceId _, ref ITargetedMessage _) => { },
+                (ref InstanceId _, ref IBroadcastMessage _) => order.Add("F2")
             );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => order.Add("A1")
-            );
-            _ = token.RegisterGlobalAcceptAll(
-                (IUntargetedMessage _) => { },
-                (InstanceId _, ITargetedMessage __) => { },
-                (InstanceId _, IBroadcastMessage __) => order.Add("A2")
-            );
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => { }, (_, _) => order.Add("A1"));
+            _ = token.RegisterGlobalAcceptAll(_ => { }, (_, _) => { }, (_, _) => order.Add("A2"));
 
             SimpleBroadcastMessage msg = new();
             msg.EmitGameObjectBroadcast(go);
@@ -1789,25 +1671,25 @@
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(go);
-            var comp = go.GetComponent<EmptyMessageAwareComponent>();
-            var token = GetToken(comp);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
             List<string> order = new();
 
             // Priority 0: fast then action
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargeted(
                 (ref SimpleUntargetedMessage _) => order.Add("F0"),
                 priority: 0
             );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargeted(
                 (SimpleUntargetedMessage _) => order.Add("A0"),
                 priority: 0
             );
             // Priority 1: fast then action
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargeted(
                 (ref SimpleUntargetedMessage _) => order.Add("F1"),
                 priority: 1
             );
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargeted(
                 (SimpleUntargetedMessage _) => order.Add("A1"),
                 priority: 1
             );
@@ -1815,6 +1697,232 @@
             SimpleUntargetedMessage msg = new();
             msg.EmitUntargeted();
             Assert.AreEqual(new[] { "F0", "A0", "F1", "A1" }, order.ToArray());
+            yield break;
+        }
+
+        // Mixed tests for GameObject "without targeting/source" groups (fast registered first)
+
+        [UnityTest]
+        public IEnumerator TargetedWithoutTargetingMixedFastThenActionsGameObject()
+        {
+            GameObject go = new(
+                nameof(TargetedWithoutTargetingMixedFastThenActionsGameObject),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterTargetedWithoutTargeting(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add("F1"),
+                0
+            );
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A1"),
+                0
+            );
+            _ = token.RegisterTargetedWithoutTargeting(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A2"),
+                0
+            );
+            SimpleTargetedMessage msg = new();
+            msg.EmitGameObjectTargeted(go);
+            Assert.AreEqual(new[] { "F1", "A1", "A2" }, order.ToArray());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourceMixedFastThenActionsGameObject()
+        {
+            GameObject go = new(
+                nameof(BroadcastWithoutSourceMixedFastThenActionsGameObject),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterBroadcastWithoutSource(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add("F1"),
+                0
+            );
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A1"),
+                0
+            );
+            _ = token.RegisterBroadcastWithoutSource(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A2"),
+                0
+            );
+            SimpleBroadcastMessage msg = new();
+            msg.EmitGameObjectBroadcast(go);
+            Assert.AreEqual(new[] { "F1", "A1", "A2" }, order.ToArray());
+            yield break;
+        }
+
+        // Mixed tests for post-processors in "without targeting/source" groups (fast & action)
+
+        [UnityTest]
+        public IEnumerator TargetedWithoutTargetingPostProcessorsMixedFastBeforeActions()
+        {
+            GameObject go = new(
+                nameof(TargetedWithoutTargetingPostProcessorsMixedFastBeforeActions),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add("F"),
+                0
+            );
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A"),
+                0
+            );
+            SimpleTargetedMessage msg = new();
+            msg.EmitComponentTargeted(comp);
+            Assert.AreEqual(new[] { "F", "A" }, order.ToArray());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator TargetedWithoutTargetingPostProcessorsMixedFastThenActions()
+        {
+            GameObject go = new(
+                nameof(TargetedWithoutTargetingPostProcessorsMixedFastThenActions),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (InstanceId _, SimpleTargetedMessage _) => order.Add("A"),
+                0
+            );
+            _ = token.RegisterTargetedWithoutTargetingPostProcessor(
+                (ref InstanceId _, ref SimpleTargetedMessage _) => order.Add("F"),
+                0
+            );
+            SimpleTargetedMessage msg = new();
+            msg.EmitComponentTargeted(comp);
+            Assert.AreEqual(new[] { "F", "A" }, order.ToArray());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourcePostProcessorsMixedFastBeforeActions()
+        {
+            GameObject go = new(
+                nameof(BroadcastWithoutSourcePostProcessorsMixedFastBeforeActions),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add("F"),
+                0
+            );
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A"),
+                0
+            );
+            SimpleBroadcastMessage msg = new();
+            msg.EmitComponentBroadcast(comp);
+            Assert.AreEqual(new[] { "F", "A" }, order.ToArray());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourcePostProcessorsMixedFastThenActions()
+        {
+            GameObject go = new(
+                nameof(BroadcastWithoutSourcePostProcessorsMixedFastThenActions),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (InstanceId _, SimpleBroadcastMessage _) => order.Add("A"),
+                0
+            );
+            _ = token.RegisterBroadcastWithoutSourcePostProcessor(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => order.Add("F"),
+                0
+            );
+            SimpleBroadcastMessage msg = new();
+            msg.EmitComponentBroadcast(comp);
+            Assert.AreEqual(new[] { "F", "A" }, order.ToArray());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator TargetedMixedFastThenActionsComponent()
+        {
+            GameObject go = new(
+                nameof(TargetedMixedFastThenActionsComponent),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterComponentTargeted(
+                comp,
+                (ref SimpleTargetedMessage _) => order.Add("F1"),
+                0
+            );
+            _ = token.RegisterComponentTargeted(
+                comp,
+                (SimpleTargetedMessage _) => order.Add("A1"),
+                0
+            );
+            _ = token.RegisterComponentTargeted(
+                comp,
+                (SimpleTargetedMessage _) => order.Add("A2"),
+                0
+            );
+            SimpleTargetedMessage msg = new();
+            msg.EmitComponentTargeted(comp);
+            Assert.AreEqual(new[] { "F1", "A1", "A2" }, order.ToArray());
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator BroadcastMixedFastThenActionsComponent()
+        {
+            GameObject go = new(
+                nameof(BroadcastMixedFastThenActionsComponent),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(go);
+            EmptyMessageAwareComponent comp = go.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            List<string> order = new();
+            _ = token.RegisterComponentBroadcast(
+                comp,
+                (ref SimpleBroadcastMessage _) => order.Add("F1"),
+                0
+            );
+            _ = token.RegisterComponentBroadcast(
+                comp,
+                (SimpleBroadcastMessage _) => order.Add("A1"),
+                0
+            );
+            _ = token.RegisterComponentBroadcast(
+                comp,
+                (SimpleBroadcastMessage _) => order.Add("A2"),
+                0
+            );
+            SimpleBroadcastMessage msg = new();
+            msg.EmitComponentBroadcast(comp);
+            Assert.AreEqual(new[] { "F1", "A1", "A2" }, order.ToArray());
             yield break;
         }
     }

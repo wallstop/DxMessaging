@@ -60,7 +60,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 MessagingDebug.LogFunction = (level, msg) => logs.Add($"{level}:{msg}");
 
                 IMessageBus bus = MessageHandler.MessageBus;
-                Action dereg = bus.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                Action dereg = bus.RegisterUntargetedInterceptor(
                     (ref SimpleUntargetedMessage _) => true
                 );
 
