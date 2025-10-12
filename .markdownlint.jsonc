@@ -1,0 +1,30 @@
+{
+  // Markdownlint rules configuration
+  // Keep defaults, relax overly noisy ones for docs-heavy repos
+  "default": true,
+
+  // Allow long lines in prose-heavy docs and changelogs
+  "MD013": false,
+
+  // Allow duplicate headings in different sections only
+  "MD024": { "siblings_only": true },
+
+  // List indentation and marker style consistency
+  "MD007": { "indent": 2 },
+  "MD004": { "style": "dash" },
+  "MD029": { "style": "one" },
+
+  // Headings should avoid trailing punctuation; keep common punctuation
+  "MD026": { "punctuation": ".,;:!?" },
+
+  // Spaces after list markers
+  "MD030": { "ul_single": 1, "ol_single": 1, "ul_multi": 1, "ol_multi": 1 },
+
+  // Prefer fenced code blocks and backticks
+  "MD046": { "style": "fenced" },
+  "MD048": { "style": "backtick" },
+
+  // Allow common inline HTML elements used in docs
+  "MD033": { "allowed_elements": ["br", "img", "sub", "sup"] }
+}
+

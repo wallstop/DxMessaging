@@ -1951,16 +1951,16 @@ namespace DxMessaging.Core
         /// </summary>
         /// <param name="handle">The registration handle to remove when disposed.</param>
         /// <returns>An <see cref="IDisposable"/> that calls <see cref="RemoveRegistration"/> once.</returns>
-        public IDisposable AsDisposable(MessageRegistrationHandle handle)
+        public RegistrationDisposable AsDisposable(MessageRegistrationHandle handle)
         {
             return new RegistrationDisposable(this, handle);
         }
 
-        private readonly struct RegistrationDisposable : IDisposable
+        public struct RegistrationDisposable : IDisposable
         {
             private readonly MessageRegistrationToken _token;
             private readonly MessageRegistrationHandle _handle;
-            private readonly int _disposed; // 0 = false, 1 = true (immutability-friendly pattern)
+            private int _disposed; // 0 = false, 1 = true (immutability-friendly pattern)
 
             public RegistrationDisposable(
                 MessageRegistrationToken token,
@@ -1969,16 +1969,18 @@ namespace DxMessaging.Core
             {
                 _token = token;
                 _handle = handle;
-                _disposed = 0;
+                _disposed = 1;
             }
 
             public void Dispose()
             {
                 // Best-effort idempotence; AsDisposable instances are short-lived and immutable
-                if (_disposed == 0)
+                if (_disposed != 0)
                 {
                     _token.RemoveRegistration(_handle);
                 }
+
+                _disposed = 0;
             }
         }
 
