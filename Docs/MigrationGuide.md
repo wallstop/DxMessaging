@@ -5,11 +5,13 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 ## Philosophy: Start Small, Prove Value
 
 **Don't do this:**
+
 - L Rip out all C# events and rewrite everything
 - L Force the whole team to learn it before trying it
 - L Commit to full adoption before seeing benefits
 
 **Do this instead:**
+
 -  Pick ONE system to migrate (low risk, high visibility)
 -  Let old and new approaches coexist
 -  Expand usage as team comfort grows
@@ -20,9 +22,10 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 ### Goal: Get comfortable without touching production code
 
 1. **Install DxMessaging** via Package Manager
-2. **Read the [Visual Guide](VisualGuide.md)** (5 minutes)
-3. **Import the Mini Combat sample** from Package Manager
-4. **Create a throwaway test scene** and try:
+1. **Read the [Visual Guide](VisualGuide.md)** (5 minutes)
+1. **Import the Mini Combat sample** from Package Manager
+1. **Create a throwaway test scene** and try:
+
    ```csharp
    [DxUntargetedMessage]
    [DxAutoConstructor]
@@ -48,11 +51,12 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 ### Goal: Prove value without refactoring existing code
 
 **Best candidates for first adoption:**
+
 -  **New UI system** - Add a new settings menu that reacts to game state
 -  **Achievement/analytics system** - Listen to existing events without coupling
 -  **New game mode** - Implement it with DxMessaging from scratch
 
-**Example: Adding an Achievement System**
+### Example: Adding an Achievement System
 
 ```csharp
 // 1. Define messages for interesting events (don't touch existing code yet)
@@ -91,6 +95,7 @@ public class Enemy : MonoBehaviour {
 ```
 
 **Why this works:**
+
 -  Old code still works (zero risk)
 -  New system is decoupled
 -  Team sees immediate value (achievements without wiring)
@@ -101,13 +106,14 @@ public class Enemy : MonoBehaviour {
 ### Goal: Replace the systems causing the most problems
 
 **High-value migration targets:**
+
 1. **UI that references too many systems** - Replace with message listeners
-2. **Global static event buses** - Convert to DxMessaging
-3. **Memory-leak prone event chains** - Eliminate manual unsubscribe
+1. **Global static event buses** - Convert to DxMessaging
+1. **Memory-leak prone event chains** - Eliminate manual unsubscribe
 
 ### Strategy: Parallel Paths During Transition
 
-**Step 1: Add DxMessages alongside existing events**
+#### Step 1: Add DxMessages alongside existing events
 
 ```csharp
 // Old event (keep for now)
@@ -128,7 +134,7 @@ void TakeDamage(int amount) {
 }
 ```
 
-**Step 2: Migrate listeners one-by-one**
+#### Step 2: Migrate listeners one-by-one
 
 ```csharp
 // OLD listener (comment out when ready)
@@ -148,7 +154,7 @@ public class HealthBar : MessageAwareComponent {
 }
 ```
 
-**Step 3: Remove old events once all listeners migrated**
+#### Step 3: Remove old events once all listeners migrated
 
 ```csharp
 // Delete after confirming no one uses it:
@@ -165,7 +171,7 @@ void TakeDamage(int amount) {
 
 Use this for each system you migrate:
 
-```
+```text
 System: _________________
 
 [ ] Identified all listeners to migrate
@@ -182,12 +188,14 @@ System: _________________
 ### Goal: Make DxMessaging the default for new features
 
 **Team guidelines:**
+
 -  All new cross-system communication uses DxMessaging
 -  Old code migrates opportunistically (when touched)
 -  Code reviews check for messaging best practices
 
 **Example team policy:**
-```
+
+```text
 When to use DxMessaging (for new code):
 - Any UI listening to game state � DxMessaging
 - Any analytics/logging � DxMessaging
@@ -264,26 +272,26 @@ public class Player : MonoBehaviour {
 
 ## What to Migrate First vs. Last
 
-### Migrate FIRST (High Value, Low Risk):
+### Migrate FIRST (High Value, Low Risk)
 
 1. **New systems** - No refactor needed, immediate win
-2. **Analytics/logging** - Decoupled observers, zero disruption
-3. **UI that needs to listen to many systems** - Eliminate reference spaghetti
-4. **Global event buses** - Direct replacement, clear improvement
+1. **Analytics/logging** - Decoupled observers, zero disruption
+1. **UI that needs to listen to many systems** - Eliminate reference spaghetti
+1. **Global event buses** - Direct replacement, clear improvement
 
-### Migrate LATER (Lower Priority):
+### Migrate LATER (Lower Priority)
 
 1. **Stable, working code** - If it ain't broke, don't rush
-2. **Performance-critical paths** - Validate overhead first
-3. **Code that rarely changes** - Low ROI for migration
-4. **Third-party integrations** - Keep adapters simple
+1. **Performance-critical paths** - Validate overhead first
+1. **Code that rarely changes** - Low ROI for migration
+1. **Third-party integrations** - Keep adapters simple
 
-### DON'T Migrate (Keep As-Is):
+### DON'T Migrate (Keep As-Is)
 
 1. **Simple button onClick � method** - UnityEvents are fine
-2. **Private implementation details** - Internal events are okay
-3. **Single-listener, same-GameObject** - Direct references are clearer
-4. **Legacy systems about to be deleted** - Why bother?
+1. **Private implementation details** - Internal events are okay
+1. **Single-listener, same-GameObject** - Direct references are clearer
+1. **Legacy systems about to be deleted** - Why bother?
 
 ## Common Migration Pitfalls
 
@@ -298,6 +306,7 @@ public class Player : MonoBehaviour {
 **Problem:** Full commit before proving value.
 
 **Solution:** Keep old code commented for 1-2 sprints:
+
 ```csharp
 // OLD (keep until 2024-02-01)
 // player.OnHealthChanged += UpdateBar;
@@ -311,6 +320,7 @@ _ = Token.RegisterBroadcast<HealthChanged>(...);
 **Problem:** Using Untargeted for everything because it's "simpler."
 
 **Solution:** Follow message type guidelines:
+
 - Global state? � Untargeted
 - Command to one? � Targeted
 - Event from one? � Broadcast
@@ -320,6 +330,7 @@ _ = Token.RegisterBroadcast<HealthChanged>(...);
 **Problem:** Converting every method call to a message.
 
 **Solution:** Keep simple things simple:
+
 ```csharp
 // L OVERKILL - Just call the method!
 var msg = new CloseDoorMessage(doorId);
@@ -334,6 +345,7 @@ door.Close();
 **Problem:** Team doesn't understand when/how to use it.
 
 **Solution:**
+
 - Schedule a 30-minute walkthrough
 - Share the [Visual Guide](VisualGuide.md)
 - Pair program on first migrations
@@ -344,11 +356,13 @@ door.Close();
 Track these to validate migration is worthwhile:
 
 **Quantitative:**
+
 - Lines of event subscribe/unsubscribe code removed
 - Number of SerializedField references eliminated
 - Memory leaks fixed (profiler)
 
 **Qualitative:**
+
 - Time to add new observers (before/after)
 - Ease of debugging message flow
 - Team satisfaction (survey)
@@ -359,34 +373,40 @@ Track these to validate migration is worthwhile:
 
 ## Timeline Examples
 
-### Small Project (10k lines):
+### Small Project (10k lines)
+
 - **Week 1:** Experiment + add to one new feature
 - **Week 2-3:** Migrate high-pain UI systems
 - **Week 4+:** New code uses DxMessaging
 
-### Medium Project (50k lines):
+### Medium Project (50k lines)
+
 - **Month 1:** Pilot with 2-3 systems
 - **Month 2-4:** Gradual migration of problem areas
 - **Month 5+:** Standard practice for new code
 
-### Large Project (100k+ lines):
+### Large Project (100k+ lines)
+
 - **Quarter 1:** Pilot + evangelize
 - **Quarter 2-3:** Migrate critical systems
 - **Quarter 4+:** Opportunistic refactors
 
 ## Getting Team Buy-In
 
-### For Managers:
+### For Managers
+
 - "Reduces memory leaks and hard-to-debug issues"
 - "Faster feature development (decoupled systems)"
 - "Easier onboarding (clear message contracts)"
 
-### For Developers:
+### For Developers
+
 - "No more manual unsubscribe hell"
 - "Built-in debugging (Inspector shows message history)"
 - "Add features without touching existing code"
 
-### For QA:
+### For QA
+
 - "Easier to reproduce bugs (message logs)"
 - "Fewer null reference errors"
 - "Clear system boundaries"
@@ -404,14 +424,16 @@ Keep old events during migration. If you hate it, delete the DxMessaging parts a
 ### "How do we handle prefabs with Inspector references?"
 
 Phase them out gradually:
+
 1. Keep references during transition
-2. Emit messages alongside old calls
-3. Migrate listeners
-4. Remove references in next refactor pass
+1. Emit messages alongside old calls
+1. Migrate listeners
+1. Remove references in next refactor pass
 
 ### "Should we migrate tests?"
 
 Yes! Tests benefit from isolated message buses:
+
 ```csharp
 var testBus = new MessageBus();
 var token = MessageRegistrationToken.Create(handler, testBus);
@@ -421,6 +443,7 @@ var token = MessageRegistrationToken.Create(handler, testBus);
 ### "What about mobile performance?"
 
 Enable diagnostics only in Editor:
+
 ```csharp
 #if UNITY_EDITOR
 IMessageBus.GlobalDiagnosticsMode = true;
@@ -432,14 +455,13 @@ Profile early, measure impact.
 ## Next Steps
 
 1. **Try Phase 0** - Install and experiment (today)
-2. **Pick one system** - Choose a low-risk, high-value target (this week)
-3. **Timebox it** - Give yourself 2 weeks to evaluate
-4. **Measure results** - Did it make life better?
-5. **Expand or abort** - Based on evidence, not hope
+1. **Pick one system** - Choose a low-risk, high-value target (this week)
+1. **Timebox it** - Give yourself 2 weeks to evaluate
+1. **Measure results** - Did it make life better?
+1. **Expand or abort** - Based on evidence, not hope
 
 **Remember:** Migration is a journey, not a destination. Go at your own pace.
 
 ---
 
 **Questions?** See [FAQ](FAQ.md) | **Need patterns?** See [Common Patterns](Patterns.md)
-

@@ -307,3 +307,4 @@ SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/obj*
 node_modules/*
 node_modules.meta
 package-lock.json
+package-lock.json.meta

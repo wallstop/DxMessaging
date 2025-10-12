@@ -113,42 +113,42 @@ See also
 
 - [Advanced](Advanced.md)
 - [Targeting & Context](TargetingAndContext.md)
- - [Interceptors & Ordering](InterceptorsAndOrdering.md)
+- [Interceptors & Ordering](InterceptorsAndOrdering.md)
 
 Execution order (short)
 
-- Untargeted: Interceptors → Global Accept‑All → Handlers<T> → Post‑Processors<T>
-- Targeted: Interceptors → Global Accept‑All → Handlers<T> @ target → Handlers<T> (All Targets) → Post‑Processors<T> @ target → Post‑Processors<T> (All Targets)
-- Broadcast: Interceptors → Global Accept‑All → Handlers<T> @ source → Handlers<T> (All Sources) → Post‑Processors<T> @ source → Post‑Processors<T> (All Sources)
+- Untargeted: Interceptors → Global Accept‑All → `Handlers&lt;T&gt;` → `Post‑Processors&lt;T&gt;`
+- Targeted: Interceptors → Global Accept‑All → `Handlers&lt;T&gt;` @ target → `Handlers&lt;T&gt;` (All Targets) → `Post‑Processors&lt;T&gt;` @ target → `Post‑Processors&lt;T&gt;` (All Targets)
+- Broadcast: Interceptors → Global Accept‑All → `Handlers&lt;T&gt;` @ source → `Handlers&lt;T&gt;` (All Sources) → `Post‑Processors&lt;T&gt;` @ source → `Post‑Processors&lt;T&gt;` (All Sources)
 
 Notes: Lower priority runs earlier. Same priority preserves registration order. Within a priority, fast (by‑ref) handlers run before action handlers.
 
 API quick ref
 
 - Token: Untargeted
-  - `RegisterUntargeted<T>(Action<T> | FastHandler<T>, priority=0)`
-  - `RegisterUntargetedPostProcessor<T>(FastHandler<T>, priority=0)`
+  - `RegisterUntargeted&lt;T&gt;(Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - `RegisterUntargetedPostProcessor&lt;T&gt;(FastHandler&lt;T&gt;, priority=0)`
 - Token: Targeted (specific)
-  - `RegisterGameObjectTargeted<T>(GameObject, Action<T> | FastHandler<T>, priority=0)`
-  - `RegisterComponentTargeted<T>(Component, Action<T> | FastHandler<T>, priority=0)`
-  - `RegisterTargeted<T>(InstanceId, Action<T> | FastHandler<T>, priority=0)`
-  - Post: `RegisterTargetedPostProcessor<T>(InstanceId, FastHandler<T>, priority=0)`
+  - `RegisterGameObjectTargeted&lt;T&gt;(GameObject, Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - `RegisterComponentTargeted&lt;T&gt;(Component, Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - `RegisterTargeted&lt;T&gt;(InstanceId, Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - Post: `RegisterTargetedPostProcessor&lt;T&gt;(InstanceId, FastHandler&lt;T&gt;, priority=0)`
 - Token: Targeted (all targets)
-  - `RegisterTargetedWithoutTargeting<T>(FastHandlerWithContext<T>, priority=0)`
-  - Post: `RegisterTargetedWithoutTargetingPostProcessor<T>(FastHandlerWithContext<T>, priority=0)`
+  - `RegisterTargetedWithoutTargeting&lt;T&gt;(FastHandlerWithContext&lt;T&gt;, priority=0)`
+  - Post: `RegisterTargetedWithoutTargetingPostProcessor&lt;T&gt;(FastHandlerWithContext&lt;T&gt;, priority=0)`
 - Token: Broadcast (specific)
-  - `RegisterGameObjectBroadcast<T>(GameObject, Action<T> | FastHandler<T>, priority=0)`
-  - `RegisterComponentBroadcast<T>(Component, Action<T> | FastHandler<T>, priority=0)`
-  - `RegisterBroadcast<T>(InstanceId, Action<T> | FastHandler<T>, priority=0)`
-  - Post: `RegisterBroadcastPostProcessor<T>(InstanceId, FastHandler<T>, priority=0)`
+  - `RegisterGameObjectBroadcast&lt;T&gt;(GameObject, Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - `RegisterComponentBroadcast&lt;T&gt;(Component, Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - `RegisterBroadcast&lt;T&gt;(InstanceId, Action&lt;T&gt; | FastHandler&lt;T&gt;, priority=0)`
+  - Post: `RegisterBroadcastPostProcessor&lt;T&gt;(InstanceId, FastHandler&lt;T&gt;, priority=0)`
 - Token: Broadcast (all sources)
-  - `RegisterBroadcastWithoutSource<T>(FastHandlerWithContext<T>, priority=0)`
-  - Post: `RegisterBroadcastWithoutSourcePostProcessor<T>(Action<InstanceId,T> | FastHandlerWithContext<T>, priority=0)`
+  - `RegisterBroadcastWithoutSource&lt;T&gt;(FastHandlerWithContext&lt;T&gt;, priority=0)`
+  - Post: `RegisterBroadcastWithoutSourcePostProcessor&lt;T&gt;(Action&lt;InstanceId,T&gt; | FastHandlerWithContext&lt;T&gt;, priority=0)`
 - Token: Global observer
   - `RegisterGlobalAcceptAll(Action<IUntargetedMessage>, Action<InstanceId,ITargetedMessage>, Action<InstanceId,IBroadcastMessage>)`
   - `RegisterGlobalAcceptAll(FastHandler<IUntargetedMessage>, FastHandlerWithContext<ITargetedMessage>, FastHandlerWithContext<IBroadcastMessage>)`
 - Bus: Interceptors
-  - `RegisterUntargetedInterceptor<T>(UntargetedInterceptor<T>, priority=0)`
-  - `RegisterTargetedInterceptor<T>(TargetedInterceptor<T>, priority=0)`
-  - `RegisterBroadcastInterceptor<T>(BroadcastInterceptor<T>, priority=0)`
+  - `RegisterUntargetedInterceptor&lt;T&gt;(UntargetedInterceptor&lt;T&gt;, priority=0)`
+  - `RegisterTargetedInterceptor&lt;T&gt;(TargetedInterceptor&lt;T&gt;, priority=0)`
+  - `RegisterBroadcastInterceptor&lt;T&gt;(BroadcastInterceptor&lt;T&gt;, priority=0)`
   - `RegisterGlobalAcceptAll(MessageHandler)` (bus‑level)
