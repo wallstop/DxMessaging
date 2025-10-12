@@ -11,28 +11,28 @@ DxMessaging runs emissions through a fixed pipeline. This section documents the 
 
 Untargeted pipeline
 
-1) Interceptors for `T` (ascending priority; within priority by registration order)
-2) Global Accept‑All Untargeted handlers (in the MessageHandler that registered them)
-3) Untargeted handlers for `T` (ascending priority; within priority by registration order)
-4) Untargeted Post‑Processors for `T` (ascending priority; within priority by registration order)
+1. Interceptors for `T` (ascending priority; within priority by registration order)
+1. Global Accept‑All Untargeted handlers (in the MessageHandler that registered them)
+1. Untargeted handlers for `T` (ascending priority; within priority by registration order)
+1. Untargeted Post‑Processors for `T` (ascending priority; within priority by registration order)
 
 Targeted pipeline
 
-1) Interceptors for `T` (ascending priority)
-2) Global Accept‑All Targeted handlers (receive `(target, ITargetedMessage)`)
-3) Targeted handlers for `T` registered for the specific `target`
-4) Targeted‑Without‑Targeting handlers for `T` (listen for all targets)
-5) Targeted Post‑Processors for `T` registered for the specific `target`
-6) Targeted‑Without‑Targeting Post‑Processors for `T` (listen for all targets)
+1. Interceptors for `T` (ascending priority)
+1. Global Accept‑All Targeted handlers (receive `(target, ITargetedMessage)`)
+1. Targeted handlers for `T` registered for the specific `target`
+1. Targeted‑Without‑Targeting handlers for `T` (listen for all targets)
+1. Targeted Post‑Processors for `T` registered for the specific `target`
+1. Targeted‑Without‑Targeting Post‑Processors for `T` (listen for all targets)
 
 Broadcast pipeline
 
-1) Interceptors for `T` (ascending priority)
-2) Global Accept‑All Broadcast handlers (receive `(source, IBroadcastMessage)`)
-3) Broadcast handlers for `T` registered for the specific `source`
-4) Broadcast‑Without‑Source handlers for `T` (listen for all sources)
-5) Broadcast Post‑Processors for `T` registered for the specific `source`
-6) Broadcast‑Without‑Source Post‑Processors for `T` (listen for all sources)
+1. Interceptors for `T` (ascending priority)
+1. Global Accept‑All Broadcast handlers (receive `(source, IBroadcastMessage)`)
+1. Broadcast handlers for `T` registered for the specific `source`
+1. Broadcast‑Without‑Source handlers for `T` (listen for all sources)
+1. Broadcast Post‑Processors for `T` registered for the specific `source`
+1. Broadcast‑Without‑Source Post‑Processors for `T` (listen for all sources)
 
 Notes on handler groups
 

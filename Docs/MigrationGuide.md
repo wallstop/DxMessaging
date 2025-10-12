@@ -321,9 +321,9 @@ _ = Token.RegisterBroadcast<HealthChanged>(...);
 
 **Solution:** Follow message type guidelines:
 
-- Global state? � Untargeted
-- Command to one? � Targeted
-- Event from one? � Broadcast
+- Global state? Untargeted
+- Command to one? Targeted
+- Event from one? Broadcast
 
 ### L Pitfall 4: Over-Messaging
 
@@ -336,7 +336,7 @@ _ = Token.RegisterBroadcast<HealthChanged>(...);
 var msg = new CloseDoorMessage(doorId);
 msg.Emit();
 
-//  BETTER - Direct reference is fine
+// BETTER - Direct reference is fine
 door.Close();
 ```
 

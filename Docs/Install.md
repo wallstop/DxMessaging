@@ -6,9 +6,11 @@ Fast path
 
 - Unity Package Manager > Add package from git URL...
 - Paste:
-  ```
+  
+  ```text
   https://github.com/wallstop/DxMessaging.git?path=/Packages/com.wallstop-studios.dxmessaging
   ```
+  
 - Click Add. Unity imports the package and its analyzers/generators.
 
 Manifest.json (alternative)
