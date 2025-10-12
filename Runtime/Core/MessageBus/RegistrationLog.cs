@@ -47,8 +47,9 @@ namespace DxMessaging.Core.MessageBus
         /// <returns>All registrations for the provided InstanceId.</returns>
         public IEnumerable<MessagingRegistration> GetRegistrations(InstanceId instanceId)
         {
-            foreach (MessagingRegistration registration in _finalizedRegistrations)
+            for (int i = 0; i < _finalizedRegistrations.Count; ++i)
             {
+                MessagingRegistration registration = _finalizedRegistrations[i];
                 if (registration.id == instanceId)
                 {
                     yield return registration;

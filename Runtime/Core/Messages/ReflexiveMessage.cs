@@ -34,9 +34,10 @@ namespace DxMessaging.Core.Messages
         private int CalculateHashCode()
         {
             int hashCode = HashBase + _methodName.GetHashCode();
-            foreach (Type type in _parameterTypes)
+            ReadOnlySpan<Type> types = _parameterTypes.AsSpan();
+            for (int i = 0; i < types.Length; ++i)
             {
-                hashCode = hashCode * HashMultiplier + type.GetHashCode();
+                hashCode = hashCode * HashMultiplier + types[i].GetHashCode();
             }
 
             return hashCode;

@@ -1275,7 +1275,7 @@ namespace DxMessaging.Core
             MessageCache<object> handlersByType = _handlersByTypeByMessageBus[messageBusIndex];
             if (handlersByType.TryGetValue<T>(out object untypedHandler))
             {
-                return (TypedHandler<T>)untypedHandler;
+                return Unsafe.As<TypedHandler<T>>(untypedHandler);
             }
 
             TypedHandler<T> typedHandler = new();
@@ -1307,7 +1307,7 @@ namespace DxMessaging.Core
                     .TryGetValue<T>(out object untypedHandler)
             )
             {
-                existingTypedHandler = (TypedHandler<T>)untypedHandler;
+                existingTypedHandler = Unsafe.As<TypedHandler<T>>(untypedHandler);
                 return true;
             }
 
@@ -1541,9 +1541,9 @@ namespace DxMessaging.Core
                 List<Action<IUntargetedMessage>> handlers = GetOrAddNewHandlerStack(
                     _globalUntargetedHandlers
                 );
-                foreach (Action<IUntargetedMessage> handler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    handler(message);
+                    handlers[i](message);
                 }
             }
 
@@ -1564,9 +1564,9 @@ namespace DxMessaging.Core
                 List<Action<InstanceId, ITargetedMessage>> handlers = GetOrAddNewHandlerStack(
                     _globalTargetedHandlers
                 );
-                foreach (Action<InstanceId, ITargetedMessage> handler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    handler(target, message);
+                    handlers[i](target, message);
                 }
             }
 
@@ -1626,9 +1626,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (Action<InstanceId, IBroadcastMessage> handler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    handler(source, message);
+                    handlers[i](source, message);
                 }
             }
 
@@ -2431,9 +2431,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (FastHandler<T> fastHandler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    fastHandler(ref typedMessage);
+                    handlers[i](ref typedMessage);
                 }
             }
 
@@ -2491,9 +2491,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (FastHandler<TU> fastHandler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    fastHandler(ref typedMessage);
+                    handlers[i](ref typedMessage);
                 }
             }
 
@@ -2552,9 +2552,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (FastHandlerWithContext<TU> fastHandler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    fastHandler(ref context, ref typedMessage);
+                    handlers[i](ref context, ref typedMessage);
                 }
             }
 
@@ -2624,9 +2624,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (FastHandlerWithContext<TU> fastHandler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    fastHandler(ref context, ref typedMessage);
+                    handlers[i](ref context, ref typedMessage);
                 }
             }
 
@@ -2714,9 +2714,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (Action<T> handler in handlers)
+                for (int i = 0; i < handlers.Count; ++i)
                 {
-                    handler(typedMessage);
+                    handlers[i](typedMessage);
                 }
             }
 
@@ -2785,9 +2785,9 @@ namespace DxMessaging.Core
                     }
                 }
 
-                foreach (Action<InstanceId, T> handler in typedHandlers)
+                for (int i = 0; i < typedHandlers.Count; ++i)
                 {
-                    handler(context, typedMessage);
+                    typedHandlers[i](context, typedMessage);
                 }
             }
 
@@ -2803,9 +2803,15 @@ namespace DxMessaging.Core
 
                 if (actionCache.entries.Count > 0)
                 {
-                    foreach (HandlerActionCache<TU>.Entry entry in actionCache.entries.Values)
+                    Dictionary<TU, HandlerActionCache<TU>.Entry>.ValueCollection values =
+                        actionCache.entries.Values;
+                    Dictionary<
+                        TU,
+                        HandlerActionCache<TU>.Entry
+                    >.ValueCollection.Enumerator enumerator = values.GetEnumerator();
+                    while (enumerator.MoveNext())
                     {
-                        cache.Add(entry.handler);
+                        cache.Add(enumerator.Current.handler);
                     }
                 }
 

@@ -1731,9 +1731,13 @@ namespace DxMessaging.Core
 
             if (_registrations is { Count: > 0 })
             {
-                foreach (Action registrationAction in _registrations.Values)
+                Dictionary<
+                    MessageRegistrationHandle,
+                    Action
+                >.ValueCollection.Enumerator enumerator = _registrations.Values.GetEnumerator();
+                while (enumerator.MoveNext())
                 {
-                    registrationAction();
+                    enumerator.Current();
                 }
             }
 
@@ -1755,9 +1759,13 @@ namespace DxMessaging.Core
 
             if (_deregistrations is { Count: > 0 })
             {
-                foreach (Action deregistrationAction in _deregistrations.Values)
+                Dictionary<
+                    MessageRegistrationHandle,
+                    Action
+                >.ValueCollection.Enumerator enumerator = _deregistrations.Values.GetEnumerator();
+                while (enumerator.MoveNext())
                 {
-                    deregistrationAction();
+                    enumerator.Current();
                 }
             }
 
@@ -1773,9 +1781,13 @@ namespace DxMessaging.Core
         {
             if (_enabled && _deregistrations is { Count: > 0 })
             {
-                foreach (Action deregistrationAction in _deregistrations.Values)
+                Dictionary<
+                    MessageRegistrationHandle,
+                    Action
+                >.ValueCollection.Enumerator enumerator = _deregistrations.Values.GetEnumerator();
+                while (enumerator.MoveNext())
                 {
-                    deregistrationAction();
+                    enumerator.Current();
                 }
             }
 
