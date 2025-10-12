@@ -547,17 +547,24 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 return;
             }
 
+            // Prefer writing to Docs/Performance.md; fall back to README.md if not found.
+            string performancePath = FindPerformanceDocPath();
             string readmePath = FindReadmePath();
-            if (string.IsNullOrEmpty(readmePath))
+            string targetPath = !string.IsNullOrEmpty(performancePath)
+                ? performancePath
+                : readmePath;
+            if (string.IsNullOrEmpty(targetPath))
             {
-                Debug.LogWarning("Skipping README update because README.md could not be located.");
+                Debug.LogWarning(
+                    "Skipping benchmarks update because neither Docs/Performance.md nor README.md could be located."
+                );
                 return;
             }
 
             try
             {
                 string table = BuildBenchmarkTable();
-                string originalContent = File.ReadAllText(readmePath);
+                string originalContent = File.ReadAllText(targetPath);
                 string updatedContent = ReplaceOperatingSystemSection(
                     originalContent,
                     operatingSystemSection,
@@ -567,17 +574,17 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 if (string.Equals(originalContent, updatedContent, StringComparison.Ordinal))
                 {
                     Debug.Log(
-                        $"README benchmarks for {operatingSystemSection} are already up to date."
+                        $"Benchmark section for {operatingSystemSection} is already up to date in {targetPath}."
                     );
                     return;
                 }
 
-                File.WriteAllText(readmePath, updatedContent, new UTF8Encoding(false));
-                Debug.Log($"Updated README benchmarks for {operatingSystemSection}.");
+                File.WriteAllText(targetPath, updatedContent, new UTF8Encoding(false));
+                Debug.Log($"Updated benchmarks for {operatingSystemSection} in {targetPath}.");
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"Failed to update README benchmarks: {exception}");
+                Debug.LogWarning($"Failed to update benchmark documentation: {exception}");
             }
         }
 
@@ -737,6 +744,95 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
 
             return null;
+        }
+
+        private static string FindPerformanceDocPath()
+        {
+            // Try to locate an existing Docs/Performance.md near the working directory
+            string current = Directory.GetCurrentDirectory();
+            while (!string.IsNullOrEmpty(current))
+            {
+                string candidate = Path.Combine(current, "Docs", "Performance.md");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                string packageCandidate = Path.Combine(
+                    current,
+                    "Packages",
+                    "com.wallstop-studios.dxmessaging",
+                    "Docs",
+                    "Performance.md"
+                );
+                if (File.Exists(packageCandidate))
+                {
+                    return packageCandidate;
+                }
+
+                DirectoryInfo parent = Directory.GetParent(current);
+                current = parent?.FullName;
+            }
+
+            // If not found, try to create it next to the discovered README.md
+            string readmePath = FindReadmePath();
+            if (!string.IsNullOrEmpty(readmePath))
+            {
+                string baseDir = Path.GetDirectoryName(readmePath);
+                if (!string.IsNullOrEmpty(baseDir))
+                {
+                    string docsDir = Path.Combine(baseDir, "Docs");
+                    string perfPath = Path.Combine(docsDir, "Performance.md");
+
+                    try
+                    {
+                        if (!Directory.Exists(docsDir))
+                        {
+                            Directory.CreateDirectory(docsDir);
+                        }
+
+                        if (!File.Exists(perfPath))
+                        {
+                            const string header =
+                                "# Performance Benchmarks\n\n"
+                                + "This page is auto-updated by the Unity PlayMode benchmark tests.\n\n"
+                                + "Sections below are OS-specific. Run tests locally to refresh.\n\n";
+                            File.WriteAllText(perfPath, header, new UTF8Encoding(false));
+                        }
+
+                        return perfPath;
+                    }
+                    catch
+                    {
+                        // Fall back silently; caller will try README.md
+                    }
+                }
+            }
+
+            // Last resort: try to create under the current working directory
+            try
+            {
+                string cwd = Directory.GetCurrentDirectory();
+                string docsDir = Path.Combine(cwd, "Docs");
+                string perfPath = Path.Combine(docsDir, "Performance.md");
+                if (!Directory.Exists(docsDir))
+                {
+                    Directory.CreateDirectory(docsDir);
+                }
+                if (!File.Exists(perfPath))
+                {
+                    const string header =
+                        "# Performance Benchmarks\n\n"
+                        + "This page is auto-updated by the Unity PlayMode benchmark tests.\n\n"
+                        + "Sections below are OS-specific. Run tests locally to refresh.\n\n";
+                    File.WriteAllText(perfPath, header, new UTF8Encoding(false));
+                }
+                return perfPath;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

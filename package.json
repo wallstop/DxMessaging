@@ -4,6 +4,9 @@
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
+  "documentationUrl": "Docs/Index.md",
+  "changelogUrl": "https://github.com/wallstop/DxMessaging/blob/master/CHANGELOG.md",
+  "licensesUrl": "https://github.com/wallstop/DxMessaging/blob/master/LICENSE.md",
   "dependencies": {},
   "keywords": [
     "messaging",
@@ -30,5 +33,17 @@
   "main": "README.md",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
-  }
+  },
+  "samples": [
+    {
+      "displayName": "Mini Combat",
+      "description": "Simple combat scenario showing Untargeted (settings), Targeted (heal), Broadcast (damage) with MessageAwareComponent and emit helpers.",
+      "path": "Samples~/Mini Combat"
+    },
+    {
+      "displayName": "UI Buttons + Inspector",
+      "description": "UI-driven message emissions and a global observer demonstrating inspector diagnostics and RegisterGlobalAcceptAll.",
+      "path": "Samples~/UI Buttons + Inspector"
+    }
+  ]
 }

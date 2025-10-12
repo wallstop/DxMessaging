@@ -5,6 +5,13 @@ namespace DxMessaging.Core.DataStructure
     using System.Collections.Generic;
     using Extensions;
 
+    /// <summary>
+    /// Fixed-capacity ring buffer used for lightweight diagnostics/history.
+    /// </summary>
+    /// <remarks>
+    /// Maintains the most recent <see cref="Capacity"/> items, overwriting the oldest entries as new items are added.
+    /// Provides efficient iteration in chronological order and supports simple remove/resize operations.
+    /// </remarks>
     [Serializable]
     internal sealed class CyclicBuffer<T> : IReadOnlyList<T>
     {
@@ -47,13 +54,19 @@ namespace DxMessaging.Core.DataStructure
             public void Dispose() { }
         }
 
+        /// <summary>Maximum number of elements retained in the buffer.</summary>
         public int Capacity { get; private set; }
+
+        /// <summary>Current number of elements stored (≤ <see cref="Capacity"/>).</summary>
         public int Count { get; private set; }
 
         private readonly List<T> _buffer;
         private readonly List<T> _cache;
         private int _position;
 
+        /// <summary>
+        /// Accesses the element at the specified chronological index (0 = oldest).
+        /// </summary>
         public T this[int index]
         {
             get
@@ -68,6 +81,11 @@ namespace DxMessaging.Core.DataStructure
             }
         }
 
+        /// <summary>
+        /// Creates a ring buffer with the given capacity and optional initial contents.
+        /// </summary>
+        /// <param name="capacity">Maximum number of elements to retain.</param>
+        /// <param name="initialContents">Items to seed the buffer with (truncated to capacity).</param>
         public CyclicBuffer(int capacity, IEnumerable<T> initialContents = null)
         {
             if (capacity < 0)
@@ -104,6 +122,9 @@ namespace DxMessaging.Core.DataStructure
             return GetEnumerator();
         }
 
+        /// <summary>
+        /// Adds an item, overwriting the oldest element when the buffer is full.
+        /// </summary>
         public void Add(T item)
         {
             if (Capacity == 0)
@@ -127,6 +148,12 @@ namespace DxMessaging.Core.DataStructure
             }
         }
 
+        /// <summary>
+        /// Removes the first occurrence of the specified element.
+        /// </summary>
+        /// <param name="element">Element to remove.</param>
+        /// <param name="comparer">Optional equality comparer; defaults to <see cref="EqualityComparer{T}.Default"/>.</param>
+        /// <returns>True if an element was removed.</returns>
         public bool Remove(T element, IEqualityComparer<T> comparer = null)
         {
             if (Count == 0)
@@ -163,6 +190,11 @@ namespace DxMessaging.Core.DataStructure
             return true;
         }
 
+        /// <summary>
+        /// Removes all elements that match the given predicate.
+        /// </summary>
+        /// <param name="predicate">Function returning true for items to remove.</param>
+        /// <returns>Number of elements removed.</returns>
         public int RemoveAll(Predicate<T> predicate)
         {
             if (Count == 0)
@@ -194,6 +226,9 @@ namespace DxMessaging.Core.DataStructure
             _position = Count < Capacity ? Count : 0;
         }
 
+        /// <summary>
+        /// Clears the buffer (Count becomes 0).
+        /// </summary>
         public void Clear()
         {
             Count = 0;
@@ -201,6 +236,10 @@ namespace DxMessaging.Core.DataStructure
             _buffer.Clear();
         }
 
+        /// <summary>
+        /// Changes the capacity, truncating or expanding storage accordingly.
+        /// </summary>
+        /// <param name="newCapacity">New maximum number of elements.</param>
         public void Resize(int newCapacity)
         {
             if (newCapacity == Capacity)
@@ -215,17 +254,42 @@ namespace DxMessaging.Core.DataStructure
 
             int oldCapacity = Capacity;
             Capacity = newCapacity;
+
+            // Normalize underlying storage so the oldest element is at index 0.
             _buffer.Shift(-_position);
+
             if (newCapacity < _buffer.Count)
             {
-                _buffer.RemoveRange(newCapacity, _buffer.Count - newCapacity);
+                // When shrinking, drop the oldest elements to retain the most recent window.
+                int removeCount = _buffer.Count - newCapacity;
+                _buffer.RemoveRange(0, removeCount);
             }
 
-            _position =
-                newCapacity < oldCapacity && newCapacity <= _buffer.Count ? 0 : _buffer.Count;
+            // Update next-write position: if full, wrap to 0 to overwrite oldest; otherwise append at end.
+            if (Capacity <= 0)
+            {
+                _position = 0;
+                Count = 0;
+                _buffer.Clear();
+                return;
+            }
+
+            // Count cannot exceed new capacity
             Count = Math.Min(newCapacity, Count);
+
+            if (_buffer.Count >= Capacity)
+            {
+                _position = 0;
+            }
+            else
+            {
+                _position = _buffer.Count;
+            }
         }
 
+        /// <summary>
+        /// Returns true if the buffer currently contains the specified item.
+        /// </summary>
         public bool Contains(T item)
         {
             return _buffer.Contains(item);

@@ -472,10 +472,14 @@ namespace DxMessaging.Tests.Runtime.Core
             }
             yield break;
         }
+
         [UnityTest]
         public IEnumerator AddRegistrationDuringTargetedWithoutTargetingEmission()
         {
-            GameObject test = new(nameof(AddRegistrationDuringTargetedWithoutTargetingEmission), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(
+                nameof(AddRegistrationDuringTargetedWithoutTargetingEmission),
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test);
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
@@ -484,16 +488,20 @@ namespace DxMessaging.Tests.Runtime.Core
             int secondaryCount = 0;
             MessageRegistrationHandle? secondaryHandle = null;
 
-            MessageRegistrationHandle primaryHandle = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
-                (target, _) =>
-                {
-                    ++primaryCount;
-                    if (secondaryHandle == null)
+            MessageRegistrationHandle primaryHandle =
+                token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                    (target, _) =>
                     {
-                        secondaryHandle = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>((_, _) => ++secondaryCount);
+                        ++primaryCount;
+                        if (secondaryHandle == null)
+                        {
+                            secondaryHandle =
+                                token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                                    (_, _) => ++secondaryCount
+                                );
+                        }
                     }
-                }
-            );
+                );
 
             SimpleTargetedMessage message = new();
             message.EmitGameObjectTargeted(test);
@@ -520,7 +528,10 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator AddRegistrationDuringBroadcastWithoutSourceEmission()
         {
-            GameObject test = new(nameof(AddRegistrationDuringBroadcastWithoutSourceEmission), typeof(EmptyMessageAwareComponent));
+            GameObject test = new(
+                nameof(AddRegistrationDuringBroadcastWithoutSourceEmission),
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(test);
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
@@ -529,16 +540,20 @@ namespace DxMessaging.Tests.Runtime.Core
             int secondaryCount = 0;
             MessageRegistrationHandle? secondaryHandle = null;
 
-            MessageRegistrationHandle primaryHandle = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                (source, _) =>
-                {
-                    ++primaryCount;
-                    if (secondaryHandle == null)
+            MessageRegistrationHandle primaryHandle =
+                token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                    (source, _) =>
                     {
-                        secondaryHandle = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>((_, _) => ++secondaryCount);
+                        ++primaryCount;
+                        if (secondaryHandle == null)
+                        {
+                            secondaryHandle =
+                                token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                                    (_, _) => ++secondaryCount
+                                );
+                        }
                     }
-                }
-            );
+                );
 
             SimpleBroadcastMessage message = new();
             message.EmitComponentBroadcast(component);
@@ -562,4 +577,3 @@ namespace DxMessaging.Tests.Runtime.Core
         }
     }
 }
-

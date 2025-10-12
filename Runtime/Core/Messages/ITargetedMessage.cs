@@ -3,20 +3,36 @@ namespace DxMessaging.Core.Messages
     using System;
 
     /// <summary>
-    /// Used to specify general-purposes messages that are meant to be sent to a specific entity.
+    /// Messages addressed to a specific entity.
     /// </summary>
-    /// <note>
-    /// TargetedMessages should be thought of as commands. Things like "EntityX, pick up this rock" or
-    /// "EntityX, you successfully completed an active reload".
-    /// Inheritance should be completely flat. Ie, TargetedMessages should be the direct parent of every implementer.
-    /// </note>
+    /// <remarks>
+    /// Targeted messages are best used for commands or directed events such as "Entity X, pick up item" or
+    /// "Entity X completed an active reload". Keep message types flat and immutable.
+    /// <para>
+    /// Implement this interface or mark your type with <see cref="Attributes.DxTargetedMessageAttribute"/>.
+    /// Prefer the generic variant <see cref="ITargetedMessage{T}"/> for structs to avoid boxing and ensure a stable
+    /// <see cref="IMessage.MessageType"/>.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Generic interface form (no boxing for structs)
+    /// public readonly struct Heal : DxMessaging.Core.Messages.ITargetedMessage&lt;Heal&gt;
+    /// {
+    ///     public readonly int amount;
+    ///     public Heal(int amount) { this.amount = amount; }
+    /// }
+    ///
+    /// // Attribute form with auto constructor
+    /// [DxMessaging.Core.Attributes.DxTargetedMessage]
+    /// [DxMessaging.Core.Attributes.DxAutoConstructor]
+    /// public readonly struct EquipWeapon { public readonly int weaponId; }
+    /// </code>
+    /// </example>
     public interface ITargetedMessage : IMessage { }
 
     /// <summary>
-    /// No-alloc TargetedMessages. Derive from this type to not have your messages boxed (if they are structs).
-    /// <code>
-    /// public readonly MyCoolStruct : ITargetedMessage{MyCoolStruct}
-    /// </code>
+    /// No-alloc TargetedMessages. Implement to avoid boxing for struct messages.
     /// </summary>
     /// <typeparam name="T">Concrete type of the derived. Should be the derived type and nothing else.</typeparam>
     public interface ITargetedMessage<T> : ITargetedMessage

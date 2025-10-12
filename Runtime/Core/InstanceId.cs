@@ -5,8 +5,20 @@ namespace DxMessaging.Core
     using System.Runtime.Serialization;
 
     /// <summary>
-    /// A light abstraction layer over Unity's InstanceId. Meant to uniquely identify a game object.
+    /// Lightweight wrapper around Unity instance IDs to uniquely identify objects.
     /// </summary>
+    /// <remarks>
+    /// In Unity builds, this struct also carries a reference to the underlying <see cref="UnityEngine.Object"/>.
+    /// It supports implicit conversions from <see cref="UnityEngine.GameObject"/> and <see cref="UnityEngine.Component"/>,
+    /// and provides value semantics for hashing, equality, and ordering. Outside Unity, it stores only the integer ID.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Unity: send a targeted message to a GameObject
+    /// var msg = new DxMessaging.Core.Messages.StringMessage("Hello");
+    /// msg.EmitGameObjectTargeted(gameObject); // implicit conversion from GameObject handled by extension overload
+    /// </code>
+    /// </example>
     [Serializable]
     [DataContract]
     public readonly struct InstanceId : IComparable, IComparable<InstanceId>, IEquatable<InstanceId>

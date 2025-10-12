@@ -15,8 +15,24 @@ repos:
         description: Install the .NET tools listed at .config/dotnet-tools.json.
       - id: csharpier
         name: Run CSharpier on C# files
-        entry: dotnet tool run Csharpier format
+        entry: dotnet tool run csharpier format
         language: system
         types:
           - c#
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
+      - id: markdown-link-text-check
+        name: Markdown link text must be human-readable
+        entry: python .github/scripts/check_markdown_links.py
+        language: python
+        pass_filenames: false
+        types:
+          - markdown
+        description: Ensure markdown-to-markdown links do not use raw file names or paths as link text.
+      - id: markdown-link-validity
+        name: Validate internal markdown links
+        entry: python .github/scripts/validate_markdown_links.py
+        language: python
+        pass_filenames: true
+        types:
+          - markdown
+        description: Detect broken internal markdown links and dangling anchors.

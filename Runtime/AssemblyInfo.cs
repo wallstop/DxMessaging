@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo(
     assemblyName: "WallstopStudios.DxMessaging.Tests.Runtime",

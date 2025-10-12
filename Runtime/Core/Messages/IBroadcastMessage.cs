@@ -3,20 +3,35 @@ namespace DxMessaging.Core.Messages
     using System;
 
     /// <summary>
-    /// Message from a specific entity but for any listener.
+    /// Messages emitted by a specific source for any listener to consume.
     /// </summary>
-    /// <note>
-    /// BroadcastMessages should be thought of as reactionary. Things like "EntityX has died", "EntityX has picked up ItemZ",
-    /// or "EntityX has lost 1 health".
-    /// Inheritance should be completely flat. Ie, IBroadcastMessage should be the direct parent of every implementer.
-    /// </note>
+    /// <remarks>
+    /// Broadcast messages are reactionary: for example, "Entity X took damage" or "Entity X picked up item Z".
+    /// Keep message types flat and immutable.
+    /// <para>
+    /// Implement this interface or annotate your type with <see cref="Attributes.DxBroadcastMessageAttribute"/>.
+    /// Prefer the generic variant <see cref="IBroadcastMessage{T}"/> for structs to avoid boxing.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Generic interface form (no boxing for structs)
+    /// public readonly struct TookDamage : DxMessaging.Core.Messages.IBroadcastMessage&lt;TookDamage&gt;
+    /// {
+    ///     public readonly int amount;
+    ///     public TookDamage(int amount) { this.amount = amount; }
+    /// }
+    ///
+    /// // Attribute + auto constructor
+    /// [DxMessaging.Core.Attributes.DxBroadcastMessage]
+    /// [DxMessaging.Core.Attributes.DxAutoConstructor]
+    /// public readonly struct PickedUpItem { public readonly int itemId; }
+    /// </code>
+    /// </example>
     public interface IBroadcastMessage : IMessage { }
 
     /// <summary>
-    /// No-alloc BroadcastMessages. Derive from this type to not have your messages boxed (if they are structs).
-    /// <code>
-    /// public readonly MyCoolStruct : IBroadCastMessage{MyCoolStruct}
-    /// </code>
+    /// No-alloc BroadcastMessages. Implement to avoid boxing for struct messages.
     /// </summary>
     /// <typeparam name="T">Concrete type of the derived. Should be the derived type and nothing else.</typeparam>
     public interface IBroadcastMessage<T> : IBroadcastMessage

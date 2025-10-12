@@ -22,7 +22,8 @@ namespace DxMessaging.Core.MessageBus
     {
         private sealed class HandlerCache<TKey, TValue>
         {
-            public readonly SortedList<TKey, TValue> handlers = new();
+            public readonly Dictionary<TKey, TValue> handlers = new();
+            public readonly List<TKey> order = new();
             public readonly List<KeyValuePair<TKey, TValue>> cache = new();
             public long version;
             public long lastSeenVersion = -1;
@@ -41,10 +42,13 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                foreach (
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _targetedSinks
-                )
+                using MessageCache<
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+                >.MessageCacheEnumerator enumeratorT = _targetedSinks.GetEnumerator();
+                while (enumeratorT.MoveNext())
                 {
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry =
+                        enumeratorT.Current;
                     count += entry.Count;
                 }
 
@@ -59,10 +63,13 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                foreach (
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _broadcastSinks
-                )
+                using MessageCache<
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+                >.MessageCacheEnumerator enumeratorB = _broadcastSinks.GetEnumerator();
+                while (enumeratorB.MoveNext())
                 {
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry =
+                        enumeratorB.Current;
                     count += entry.Count;
                 }
 
@@ -75,8 +82,12 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                foreach (HandlerCache<int, HandlerCache> entry in _sinks)
+                using MessageCache<
+                    HandlerCache<int, HandlerCache>
+                >.MessageCacheEnumerator enumeratorU = _sinks.GetEnumerator();
+                while (enumeratorU.MoveNext())
                 {
+                    HandlerCache<int, HandlerCache> entry = enumeratorU.Current;
                     count += entry.handlers.Count;
                 }
 
@@ -131,7 +142,14 @@ namespace DxMessaging.Core.MessageBus
             HandlerCache<int, HandlerCache>
         > _postProcessingBroadcastWithoutSourceSinks = new();
         private readonly HandlerCache _globalSinks = new();
-        private readonly MessageCache<HandlerCache<int, List<object>>> _interceptsByType = new();
+
+        // Interceptors split by category to avoid mixing types
+        private readonly MessageCache<HandlerCache<int, List<object>>> _untargetedInterceptsByType =
+            new();
+        private readonly MessageCache<HandlerCache<int, List<object>>> _targetedInterceptsByType =
+            new();
+        private readonly MessageCache<HandlerCache<int, List<object>>> _broadcastInterceptsByType =
+            new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
@@ -284,7 +302,131 @@ namespace DxMessaging.Core.MessageBus
         )
             where T : IUntargetedMessage
         {
-            return RegisterInterceptor<T>(interceptor, priority);
+            HandlerCache<int, List<object>> prioritizedInterceptors =
+                _untargetedInterceptsByType.GetOrAdd<T>();
+
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
+            {
+                prioritizedInterceptors.version++;
+                interceptors = new List<object>();
+                prioritizedInterceptors.handlers[priority] = interceptors;
+                // maintain sorted order
+                List<int> order = prioritizedInterceptors.order;
+                int idx = 0;
+                while (idx < order.Count && order[idx] < priority)
+                {
+                    idx++;
+                }
+                order.Insert(idx, priority);
+            }
+
+            if (
+                !_uniqueInterceptorsAndPriorities.TryGetValue(
+                    interceptor,
+                    out Dictionary<int, int> priorityCount
+                )
+            )
+            {
+                priorityCount = new Dictionary<int, int>();
+                _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
+            }
+
+            if (!priorityCount.TryGetValue(priority, out int count))
+            {
+                count = 0;
+                interceptors.Add(interceptor);
+            }
+
+            priorityCount[priority] = count + 1;
+
+            Type type = typeof(T);
+            _log.Log(
+                new MessagingRegistration(
+                    InstanceId.EmptyId,
+                    type,
+                    RegistrationType.Register,
+                    RegistrationMethod.Interceptor
+                )
+            );
+
+            return () =>
+            {
+                _log.Log(
+                    new MessagingRegistration(
+                        InstanceId.EmptyId,
+                        type,
+                        RegistrationType.Deregister,
+                        RegistrationMethod.Interceptor
+                    )
+                );
+                bool removed = false;
+                if (_uniqueInterceptorsAndPriorities.TryGetValue(interceptor, out priorityCount))
+                {
+                    if (priorityCount.TryGetValue(priority, out count))
+                    {
+                        if (1 < count)
+                        {
+                            priorityCount[priority] = count - 1;
+                        }
+                        else
+                        {
+                            removed = true;
+                            _ = priorityCount.Remove(priority);
+                        }
+                    }
+
+                    if (priorityCount.Count == 0)
+                    {
+                        _uniqueInterceptorsAndPriorities.Remove(interceptor);
+                    }
+                }
+                else if (MessagingDebug.enabled)
+                {
+                    MessagingDebug.Log(
+                        LogLevel.Error,
+                        "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                        interceptor
+                    );
+                }
+
+                bool complete = false;
+                if (removed)
+                {
+                    if (_untargetedInterceptsByType.TryGetValue<T>(out prioritizedInterceptors))
+                    {
+                        prioritizedInterceptors.version++;
+                        if (
+                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                        )
+                        {
+                            complete = interceptors.Remove(interceptor);
+                            if (interceptors.Count == 0)
+                            {
+                                _ = prioritizedInterceptors.handlers.Remove(priority);
+                                int removeIdx = prioritizedInterceptors.order.IndexOf(priority);
+                                if (removeIdx >= 0)
+                                {
+                                    prioritizedInterceptors.order.RemoveAt(removeIdx);
+                                }
+                            }
+                        }
+                    }
+
+                    if (!complete && MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Error,
+                            "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                            interceptor
+                        );
+                    }
+                }
+            };
         }
 
         public Action RegisterTargetedInterceptor<T>(
@@ -293,7 +435,131 @@ namespace DxMessaging.Core.MessageBus
         )
             where T : ITargetedMessage
         {
-            return RegisterInterceptor<T>(interceptor, priority);
+            HandlerCache<int, List<object>> prioritizedInterceptors =
+                _targetedInterceptsByType.GetOrAdd<T>();
+
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
+            {
+                prioritizedInterceptors.version++;
+                interceptors = new List<object>();
+                prioritizedInterceptors.handlers[priority] = interceptors;
+                // maintain sorted order
+                List<int> order = prioritizedInterceptors.order;
+                int idx = 0;
+                while (idx < order.Count && order[idx] < priority)
+                {
+                    idx++;
+                }
+                order.Insert(idx, priority);
+            }
+
+            if (
+                !_uniqueInterceptorsAndPriorities.TryGetValue(
+                    interceptor,
+                    out Dictionary<int, int> priorityCount
+                )
+            )
+            {
+                priorityCount = new Dictionary<int, int>();
+                _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
+            }
+
+            if (!priorityCount.TryGetValue(priority, out int count))
+            {
+                count = 0;
+                interceptors.Add(interceptor);
+            }
+
+            priorityCount[priority] = count + 1;
+
+            Type type = typeof(T);
+            _log.Log(
+                new MessagingRegistration(
+                    InstanceId.EmptyId,
+                    type,
+                    RegistrationType.Register,
+                    RegistrationMethod.Interceptor
+                )
+            );
+
+            return () =>
+            {
+                _log.Log(
+                    new MessagingRegistration(
+                        InstanceId.EmptyId,
+                        type,
+                        RegistrationType.Deregister,
+                        RegistrationMethod.Interceptor
+                    )
+                );
+                bool removed = false;
+                if (_uniqueInterceptorsAndPriorities.TryGetValue(interceptor, out priorityCount))
+                {
+                    if (priorityCount.TryGetValue(priority, out count))
+                    {
+                        if (1 < count)
+                        {
+                            priorityCount[priority] = count - 1;
+                        }
+                        else
+                        {
+                            removed = true;
+                            _ = priorityCount.Remove(priority);
+                        }
+                    }
+
+                    if (priorityCount.Count == 0)
+                    {
+                        _uniqueInterceptorsAndPriorities.Remove(interceptor);
+                    }
+                }
+                else if (MessagingDebug.enabled)
+                {
+                    MessagingDebug.Log(
+                        LogLevel.Error,
+                        "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                        interceptor
+                    );
+                }
+
+                bool complete = false;
+                if (removed)
+                {
+                    if (_targetedInterceptsByType.TryGetValue<T>(out prioritizedInterceptors))
+                    {
+                        prioritizedInterceptors.version++;
+                        if (
+                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                        )
+                        {
+                            complete = interceptors.Remove(interceptor);
+                            if (interceptors.Count == 0)
+                            {
+                                _ = prioritizedInterceptors.handlers.Remove(priority);
+                                int removeIdx = prioritizedInterceptors.order.IndexOf(priority);
+                                if (removeIdx >= 0)
+                                {
+                                    prioritizedInterceptors.order.RemoveAt(removeIdx);
+                                }
+                            }
+                        }
+                    }
+
+                    if (!complete && MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Error,
+                            "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                            interceptor
+                        );
+                    }
+                }
+            };
         }
 
         public Action RegisterBroadcastInterceptor<T>(
@@ -302,7 +568,131 @@ namespace DxMessaging.Core.MessageBus
         )
             where T : IBroadcastMessage
         {
-            return RegisterInterceptor<T>(interceptor, priority);
+            HandlerCache<int, List<object>> prioritizedInterceptors =
+                _broadcastInterceptsByType.GetOrAdd<T>();
+
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
+            {
+                prioritizedInterceptors.version++;
+                interceptors = new List<object>();
+                prioritizedInterceptors.handlers[priority] = interceptors;
+                // maintain sorted order
+                List<int> order = prioritizedInterceptors.order;
+                int idx = 0;
+                while (idx < order.Count && order[idx] < priority)
+                {
+                    idx++;
+                }
+                order.Insert(idx, priority);
+            }
+
+            if (
+                !_uniqueInterceptorsAndPriorities.TryGetValue(
+                    interceptor,
+                    out Dictionary<int, int> priorityCount
+                )
+            )
+            {
+                priorityCount = new Dictionary<int, int>();
+                _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
+            }
+
+            if (!priorityCount.TryGetValue(priority, out int count))
+            {
+                count = 0;
+                interceptors.Add(interceptor);
+            }
+
+            priorityCount[priority] = count + 1;
+
+            Type type = typeof(T);
+            _log.Log(
+                new MessagingRegistration(
+                    InstanceId.EmptyId,
+                    type,
+                    RegistrationType.Register,
+                    RegistrationMethod.Interceptor
+                )
+            );
+
+            return () =>
+            {
+                _log.Log(
+                    new MessagingRegistration(
+                        InstanceId.EmptyId,
+                        type,
+                        RegistrationType.Deregister,
+                        RegistrationMethod.Interceptor
+                    )
+                );
+                bool removed = false;
+                if (_uniqueInterceptorsAndPriorities.TryGetValue(interceptor, out priorityCount))
+                {
+                    if (priorityCount.TryGetValue(priority, out count))
+                    {
+                        if (1 < count)
+                        {
+                            priorityCount[priority] = count - 1;
+                        }
+                        else
+                        {
+                            removed = true;
+                            _ = priorityCount.Remove(priority);
+                        }
+                    }
+
+                    if (priorityCount.Count == 0)
+                    {
+                        _uniqueInterceptorsAndPriorities.Remove(interceptor);
+                    }
+                }
+                else if (MessagingDebug.enabled)
+                {
+                    MessagingDebug.Log(
+                        LogLevel.Error,
+                        "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                        interceptor
+                    );
+                }
+
+                bool complete = false;
+                if (removed)
+                {
+                    if (_broadcastInterceptsByType.TryGetValue<T>(out prioritizedInterceptors))
+                    {
+                        prioritizedInterceptors.version++;
+                        if (
+                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                        )
+                        {
+                            complete = interceptors.Remove(interceptor);
+                            if (interceptors.Count == 0)
+                            {
+                                _ = prioritizedInterceptors.handlers.Remove(priority);
+                                int removeIdx = prioritizedInterceptors.order.IndexOf(priority);
+                                if (removeIdx >= 0)
+                                {
+                                    prioritizedInterceptors.order.RemoveAt(removeIdx);
+                                }
+                            }
+                        }
+                    }
+
+                    if (!complete && MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Error,
+                            "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
+                            interceptor
+                        );
+                    }
+                }
+            };
         }
 
         public Action RegisterUntargetedPostProcessor<T>(
@@ -379,118 +769,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
-        private Action RegisterInterceptor<T>(object interceptor, int priority)
-            where T : IMessage
-        {
-            Type type = typeof(T);
-            HandlerCache<int, List<object>> prioritizedInterceptors =
-                _interceptsByType.GetOrAdd<T>();
-
-            if (
-                !prioritizedInterceptors.handlers.TryGetValue(
-                    priority,
-                    out List<object> interceptors
-                )
-            )
-            {
-                prioritizedInterceptors.version++;
-                interceptors = new List<object>();
-                prioritizedInterceptors.handlers[priority] = interceptors;
-            }
-
-            if (
-                !_uniqueInterceptorsAndPriorities.TryGetValue(
-                    interceptor,
-                    out Dictionary<int, int> priorityCount
-                )
-            )
-            {
-                priorityCount = new Dictionary<int, int>();
-                _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
-            }
-
-            if (!priorityCount.TryGetValue(priority, out int count))
-            {
-                count = 0;
-                interceptors.Add(interceptor);
-            }
-
-            priorityCount[priority] = count + 1;
-
-            _log.Log(
-                new MessagingRegistration(
-                    InstanceId.EmptyId,
-                    type,
-                    RegistrationType.Register,
-                    RegistrationMethod.Interceptor
-                )
-            );
-
-            return () =>
-            {
-                _log.Log(
-                    new MessagingRegistration(
-                        InstanceId.EmptyId,
-                        type,
-                        RegistrationType.Deregister,
-                        RegistrationMethod.Interceptor
-                    )
-                );
-                bool removed = false;
-                if (_uniqueInterceptorsAndPriorities.TryGetValue(interceptor, out priorityCount))
-                {
-                    if (priorityCount.TryGetValue(priority, out count))
-                    {
-                        if (1 < count)
-                        {
-                            priorityCount[priority] = count - 1;
-                        }
-                        else
-                        {
-                            removed = true;
-                            _ = priorityCount.Remove(priority);
-                        }
-                    }
-
-                    if (priorityCount.Count == 0)
-                    {
-                        _uniqueInterceptorsAndPriorities.Remove(interceptor);
-                    }
-                }
-                else if (MessagingDebug.enabled)
-                {
-                    MessagingDebug.Log(
-                        LogLevel.Error,
-                        "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
-                        interceptor
-                    );
-                }
-
-                bool complete = false;
-                if (removed)
-                {
-                    if (_interceptsByType.TryGetValue<T>(out prioritizedInterceptors))
-                    {
-                        prioritizedInterceptors.version++;
-                        if (
-                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
-                        )
-                        {
-                            complete = interceptors.Remove(interceptor);
-                        }
-                    }
-
-                    if (!complete && MessagingDebug.enabled)
-                    {
-                        MessagingDebug.Log(
-                            LogLevel.Error,
-                            "Received over-deregistration of Interceptor {0}. Check to make sure you're not calling (de)registration multiple times.",
-                            interceptor
-                        );
-                    }
-                }
-            };
-        }
+        // Legacy RegisterInterceptor removed in favor of split implementations above
 
         public void UntypedUntargetedBroadcast(IUntargetedMessage typedMessage)
         {
@@ -515,7 +794,9 @@ namespace DxMessaging.Core.MessageBus
                 _broadcastMethodsByType[messageType] = untargetedMethod;
             }
 
-            Action<IUntargetedMessage> broadcast = (Action<IUntargetedMessage>)untargetedMethod;
+            Action<IUntargetedMessage> broadcast = Unsafe.As<Action<IUntargetedMessage>>(
+                untargetedMethod
+            );
             broadcast.Invoke(typedMessage);
         }
 
@@ -604,8 +885,9 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        for (int i = 0; i < handlerList.Count; ++i)
                         {
+                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
                         }
                         break;
@@ -640,10 +922,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 list.Clear();
                 Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
-                foreach (MessageHandler handler in keys)
-                {
-                    list.Add(handler);
-                }
+                list.AddRange(keys);
                 cache.lastSeenVersion = cache.version;
             }
 
@@ -686,8 +965,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in cache.cache)
+            for (int i = 0; i < cache.cache.Count; ++i)
             {
+                MessageHandler handler = cache.cache[i];
                 handler.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
             }
         }
@@ -715,8 +995,9 @@ namespace DxMessaging.Core.MessageBus
                 _broadcastMethodsByType[messageType] = targetedMethod;
             }
 
-            Action<InstanceId, ITargetedMessage> broadcast =
-                (Action<InstanceId, ITargetedMessage>)targetedMethod;
+            Action<InstanceId, ITargetedMessage> broadcast = Unsafe.As<
+                Action<InstanceId, ITargetedMessage>
+            >(targetedMethod);
             broadcast.Invoke(target, typedMessage);
         }
 
@@ -809,8 +1090,9 @@ namespace DxMessaging.Core.MessageBus
                                     {
                                         _componentCache.Clear();
                                         current.GetComponents(_componentCache);
-                                        foreach (MonoBehaviour script in _componentCache)
+                                        for (int i = 0; i < _componentCache.Count; ++i)
                                         {
+                                            MonoBehaviour script = _componentCache[i];
                                             SendMessage(script, ref reflexiveMessage, false);
                                         }
                                         current = current.parent;
@@ -827,8 +1109,9 @@ namespace DxMessaging.Core.MessageBus
                             {
                                 _componentCache.Clear();
                                 current.GetComponents(_componentCache);
-                                foreach (MonoBehaviour script in _componentCache)
+                                for (int i = 0; i < _componentCache.Count; ++i)
                                 {
+                                    MonoBehaviour script = _componentCache[i];
                                     SendMessage(script, ref reflexiveMessage, true);
                                 }
                                 current = current.parent;
@@ -862,8 +1145,9 @@ namespace DxMessaging.Core.MessageBus
                                 {
                                     _componentCache.Clear();
                                     go.GetComponentsInChildren(true, _componentCache);
-                                    foreach (MonoBehaviour parentComponent in _componentCache)
+                                    for (int i = 0; i < _componentCache.Count; ++i)
                                     {
+                                        MonoBehaviour parentComponent = _componentCache[i];
                                         SendMessage(parentComponent, ref reflexiveMessage, false);
                                     }
 
@@ -875,8 +1159,9 @@ namespace DxMessaging.Core.MessageBus
                         {
                             _componentCache.Clear();
                             go.GetComponentsInChildren(_componentCache);
-                            foreach (MonoBehaviour parentComponent in _componentCache)
+                            for (int i = 0; i < _componentCache.Count; ++i)
                             {
+                                MonoBehaviour parentComponent = _componentCache[i];
                                 SendMessage(parentComponent, ref reflexiveMessage, true);
                             }
                         }
@@ -904,8 +1189,9 @@ namespace DxMessaging.Core.MessageBus
                                 {
                                     _componentCache.Clear();
                                     go.GetComponents(_componentCache);
-                                    foreach (MonoBehaviour component in _componentCache)
+                                    for (int i = 0; i < _componentCache.Count; ++i)
                                     {
+                                        MonoBehaviour component = _componentCache[i];
                                         SendMessage(component, ref reflexiveMessage, false);
                                     }
 
@@ -917,8 +1203,9 @@ namespace DxMessaging.Core.MessageBus
                         {
                             _componentCache.Clear();
                             go.GetComponents(_componentCache);
-                            foreach (MonoBehaviour component in _componentCache)
+                            for (int i = 0; i < _componentCache.Count; ++i)
                             {
+                                MonoBehaviour component = _componentCache[i];
                                 SendMessage(component, ref reflexiveMessage, true);
                             }
                         }
@@ -1001,8 +1288,9 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        for (int i = 0; i < handlerList.Count; ++i)
                         {
+                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunTargetedBroadcast(
                                 ref target,
                                 ref typedMessage,
@@ -1157,8 +1445,9 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        for (int i = 0; i < handlerList.Count; ++i)
                         {
+                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunTargetedPostProcessing(
                                 ref target,
                                 ref typedMessage,
@@ -1174,13 +1463,13 @@ namespace DxMessaging.Core.MessageBus
 
             if (
                 _postProcessingTargetedWithoutTargetingSinks.TryGetValue<TMessage>(
-                    out sortedHandlers
+                    out HandlerCache<int, HandlerCache> postTwt
                 )
-                && 0 < sortedHandlers.handlers.Count
+                && postTwt.handlers.Count > 0
             )
             {
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    postTwt
                 );
                 switch (handlerList.Count)
                 {
@@ -1311,8 +1600,9 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        for (int i = 0; i < handlerList.Count; ++i)
                         {
+                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunTargetedWithoutTargetingPostProcessing(
                                 ref target,
                                 ref typedMessage,
@@ -1480,8 +1770,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleTargetedWithoutTargetingPostProcessing(
                     ref target,
                     ref typedMessage,
@@ -1559,8 +1850,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
             }
         }
@@ -1618,8 +1910,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleTargeted(ref target, ref typedMessage, this, priority);
             }
         }
@@ -1650,8 +1943,9 @@ namespace DxMessaging.Core.MessageBus
                 _broadcastMethodsByType[messageType] = sourcedBroadcastMethod;
             }
 
-            Action<InstanceId, IBroadcastMessage> broadcast =
-                (Action<InstanceId, IBroadcastMessage>)sourcedBroadcastMethod;
+            Action<InstanceId, IBroadcastMessage> broadcast = Unsafe.As<
+                Action<InstanceId, IBroadcastMessage>
+            >(sourcedBroadcastMethod);
             broadcast.Invoke(source, typedMessage);
         }
 
@@ -1675,10 +1969,10 @@ namespace DxMessaging.Core.MessageBus
             }
 
             bool foundAnyHandlers = false;
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers;
+            _ = _broadcastSinks.TryGetValue<TMessage>(out broadcastHandlers);
             if (
-                _broadcastSinks.TryGetValue<TMessage>(
-                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers
-                )
+                broadcastHandlers != null
                 && broadcastHandlers.TryGetValue(
                     source,
                     out HandlerCache<int, HandlerCache> sortedHandlers
@@ -1744,8 +2038,9 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        for (int i = 0; i < handlerList.Count; ++i)
                         {
+                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
                         }
 
@@ -1895,8 +2190,9 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                        for (int i = 0; i < handlerList.Count; ++i)
                         {
+                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunBroadcastPostProcessing(
                                 ref source,
                                 ref typedMessage,
@@ -1918,8 +2214,9 @@ namespace DxMessaging.Core.MessageBus
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     sortedHandlers
                 );
-                foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+                for (int i = 0; i < handlerList.Count; ++i)
                 {
+                    KeyValuePair<int, HandlerCache> entry = handlerList[i];
                     RunBroadcastWithoutSourcePostProcessing(
                         ref source,
                         ref typedMessage,
@@ -1949,8 +2246,9 @@ namespace DxMessaging.Core.MessageBus
             where TMessage : IBroadcastMessage
         {
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
                     ref source,
                     ref typedMessage,
@@ -2102,8 +2400,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcastPostProcessing(
                     ref source,
                     ref typedMessage,
@@ -2181,8 +2480,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
             }
         }
@@ -2234,8 +2534,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleGlobalUntargetedMessage(ref message, this);
             }
         }
@@ -2287,8 +2588,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleGlobalTargetedMessage(ref target, ref message, this);
             }
         }
@@ -2358,20 +2660,21 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
             }
         }
 
-        private bool TryGetInterceptorCaches<TMessage>(
+        private bool TryGetUntargetedInterceptorCaches<TMessage>(
             out List<KeyValuePair<int, List<object>>> interceptorStack,
             out List<object> interceptorObjects
         )
-            where TMessage : IMessage
+            where TMessage : IUntargetedMessage
         {
             if (
-                !_interceptsByType.TryGetValue<TMessage>(
+                !_untargetedInterceptsByType.TryGetValue<TMessage>(
                     out HandlerCache<int, List<object>> interceptors
                 )
                 || interceptors.handlers.Count == 0
@@ -2386,11 +2689,100 @@ namespace DxMessaging.Core.MessageBus
             if (interceptors.version != interceptors.lastSeenVersion)
             {
                 interceptorStack.Clear();
-                IList<int> keys = interceptors.handlers.Keys;
-                IList<List<object>> values = interceptors.handlers.Values;
-                for (int i = 0; i < interceptors.handlers.Count; ++i)
+                List<int> keys = interceptors.order;
+                for (int i = 0; i < keys.Count; ++i)
                 {
-                    interceptorStack.Add(new KeyValuePair<int, List<object>>(keys[i], values[i]));
+                    int key = keys[i];
+                    if (interceptors.handlers.TryGetValue(key, out List<object> values))
+                    {
+                        interceptorStack.Add(new KeyValuePair<int, List<object>>(key, values));
+                    }
+                }
+
+                interceptors.lastSeenVersion = interceptors.version;
+            }
+
+            if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
+            {
+                interceptorObjects = new List<object>();
+            }
+
+            return true;
+        }
+
+        private bool TryGetTargetedInterceptorCaches<TMessage>(
+            out List<KeyValuePair<int, List<object>>> interceptorStack,
+            out List<object> interceptorObjects
+        )
+            where TMessage : ITargetedMessage
+        {
+            if (
+                !_targetedInterceptsByType.TryGetValue<TMessage>(
+                    out HandlerCache<int, List<object>> interceptors
+                )
+                || interceptors.handlers.Count == 0
+            )
+            {
+                interceptorStack = default;
+                interceptorObjects = default;
+                return false;
+            }
+
+            interceptorStack = interceptors.cache;
+            if (interceptors.version != interceptors.lastSeenVersion)
+            {
+                interceptorStack.Clear();
+                List<int> keys = interceptors.order;
+                for (int i = 0; i < keys.Count; ++i)
+                {
+                    int key = keys[i];
+                    if (interceptors.handlers.TryGetValue(key, out List<object> values))
+                    {
+                        interceptorStack.Add(new KeyValuePair<int, List<object>>(key, values));
+                    }
+                }
+
+                interceptors.lastSeenVersion = interceptors.version;
+            }
+
+            if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
+            {
+                interceptorObjects = new List<object>();
+            }
+
+            return true;
+        }
+
+        private bool TryGetBroadcastInterceptorCaches<TMessage>(
+            out List<KeyValuePair<int, List<object>>> interceptorStack,
+            out List<object> interceptorObjects
+        )
+            where TMessage : IBroadcastMessage
+        {
+            if (
+                !_broadcastInterceptsByType.TryGetValue<TMessage>(
+                    out HandlerCache<int, List<object>> interceptors
+                )
+                || interceptors.handlers.Count == 0
+            )
+            {
+                interceptorStack = default;
+                interceptorObjects = default;
+                return false;
+            }
+
+            interceptorStack = interceptors.cache;
+            if (interceptors.version != interceptors.lastSeenVersion)
+            {
+                interceptorStack.Clear();
+                List<int> keys = interceptors.order;
+                for (int i = 0; i < keys.Count; ++i)
+                {
+                    int key = keys[i];
+                    if (interceptors.handlers.TryGetValue(key, out List<object> values))
+                    {
+                        interceptorStack.Add(new KeyValuePair<int, List<object>>(key, values));
+                    }
                 }
 
                 interceptors.lastSeenVersion = interceptors.version;
@@ -2408,7 +2800,7 @@ namespace DxMessaging.Core.MessageBus
             where T : IUntargetedMessage
         {
             if (
-                !TryGetInterceptorCaches<T>(
+                !TryGetUntargetedInterceptorCaches<T>(
                     out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
@@ -2419,24 +2811,18 @@ namespace DxMessaging.Core.MessageBus
 
             try
             {
-                foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
+                for (int s = 0; s < interceptorStack.Count; ++s)
                 {
+                    KeyValuePair<int, List<object>> entry = interceptorStack[s];
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
-                    int count = interceptors.Count;
-
-                    for (int i = 0; i < count; ++i)
-                    {
-                        interceptorObjects.Add(interceptors[i]);
-                    }
+                    interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
-                        if (interceptorObjects[i] is not UntargetedInterceptor<T> typedTransformer)
-                        {
-                            continue;
-                        }
-
+                        UntargetedInterceptor<T> typedTransformer = Unsafe.As<
+                            UntargetedInterceptor<T>
+                        >(interceptorObjects[i]);
                         if (!typedTransformer(ref message))
                         {
                             return false;
@@ -2456,7 +2842,7 @@ namespace DxMessaging.Core.MessageBus
             where T : ITargetedMessage
         {
             if (
-                !TryGetInterceptorCaches<T>(
+                !TryGetTargetedInterceptorCaches<T>(
                     out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
@@ -2467,23 +2853,18 @@ namespace DxMessaging.Core.MessageBus
 
             try
             {
-                foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
+                for (int s = 0; s < interceptorStack.Count; ++s)
                 {
+                    KeyValuePair<int, List<object>> entry = interceptorStack[s];
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
-                    int count = interceptors.Count;
-                    for (int i = 0; i < count; ++i)
-                    {
-                        interceptorObjects.Add(interceptors[i]);
-                    }
+                    interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
-                        if (interceptorObjects[i] is not TargetedInterceptor<T> typedTransformer)
-                        {
-                            continue;
-                        }
-
+                        TargetedInterceptor<T> typedTransformer = Unsafe.As<TargetedInterceptor<T>>(
+                            interceptorObjects[i]
+                        );
                         if (!typedTransformer(ref target, ref message))
                         {
                             return false;
@@ -2503,7 +2884,7 @@ namespace DxMessaging.Core.MessageBus
             where T : IBroadcastMessage
         {
             if (
-                !TryGetInterceptorCaches<T>(
+                !TryGetBroadcastInterceptorCaches<T>(
                     out List<KeyValuePair<int, List<object>>> interceptorStack,
                     out List<object> interceptorObjects
                 )
@@ -2514,24 +2895,18 @@ namespace DxMessaging.Core.MessageBus
 
             try
             {
-                foreach (KeyValuePair<int, List<object>> entry in interceptorStack)
+                for (int s = 0; s < interceptorStack.Count; ++s)
                 {
+                    KeyValuePair<int, List<object>> entry = interceptorStack[s];
                     interceptorObjects.Clear();
                     List<object> interceptors = entry.Value;
-                    int count = interceptors.Count;
-
-                    for (int i = 0; i < count; ++i)
-                    {
-                        interceptorObjects.Add(interceptors[i]);
-                    }
+                    interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
-                        if (interceptorObjects[i] is not BroadcastInterceptor<T> typedTransformer)
-                        {
-                            continue;
-                        }
-
+                        BroadcastInterceptor<T> typedTransformer = Unsafe.As<
+                            BroadcastInterceptor<T>
+                        >(interceptorObjects[i]);
                         if (!typedTransformer(ref source, ref message))
                         {
                             return false;
@@ -2616,8 +2991,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+            for (int i = 0; i < handlerList.Count; ++i)
             {
+                KeyValuePair<int, HandlerCache> entry = handlerList[i];
                 RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
             }
             return true;
@@ -2674,8 +3050,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleUntargetedMessage(ref message, this, priority);
             }
         }
@@ -2752,8 +3129,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+            for (int i = 0; i < handlerList.Count; ++i)
             {
+                KeyValuePair<int, HandlerCache> entry = handlerList[i];
                 RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
             }
 
@@ -2828,8 +3206,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
             }
         }
@@ -2905,8 +3284,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (KeyValuePair<int, HandlerCache> entry in handlerList)
+            for (int i = 0; i < handlerList.Count; ++i)
             {
+                KeyValuePair<int, HandlerCache> entry = handlerList[i];
                 RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
             }
 
@@ -3056,8 +3436,9 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            foreach (MessageHandler handler in messageHandlers)
+            for (int i = 0; i < messageHandlers.Count; ++i)
             {
+                MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcastWithoutSource(
                     ref source,
                     ref message,
@@ -3081,8 +3462,6 @@ namespace DxMessaging.Core.MessageBus
             }
 
             InstanceId handlerOwnerId = messageHandler.owner;
-            Type type = typeof(T);
-
             HandlerCache<int, HandlerCache> handlers = sinks.GetOrAdd<T>();
 
             if (!handlers.handlers.TryGetValue(priority, out HandlerCache cache))
@@ -3090,6 +3469,14 @@ namespace DxMessaging.Core.MessageBus
                 handlers.version++;
                 cache = new HandlerCache();
                 handlers.handlers[priority] = cache;
+                // insert priority in sorted order
+                List<int> order = handlers.order;
+                int idx = 0;
+                while (idx < order.Count && order[idx] < priority)
+                {
+                    idx++;
+                }
+                order.Insert(idx, priority);
             }
 
             Dictionary<MessageHandler, int> handler = cache.handlers;
@@ -3097,6 +3484,12 @@ namespace DxMessaging.Core.MessageBus
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
+            if (count == 0)
+            {
+                cache.cache.Add(messageHandler);
+            }
+            cache.lastSeenVersion = cache.version;
+            Type type = typeof(T);
             _log.Log(
                 new MessagingRegistration(
                     handlerOwnerId,
@@ -3141,10 +3534,23 @@ namespace DxMessaging.Core.MessageBus
                 if (count <= 1)
                 {
                     bool complete = handler.Remove(messageHandler);
+                    cache.version++;
+                    if (complete)
+                    {
+                        _ = cache.cache.Remove(messageHandler);
+                    }
+                    cache.lastSeenVersion = cache.version;
 
                     if (handler.Count == 0)
                     {
                         _ = handlers.handlers.Remove(priority);
+                        // remove priority from order
+                        List<int> order = handlers.order;
+                        int removeIdx = order.IndexOf(priority);
+                        if (removeIdx >= 0)
+                        {
+                            order.RemoveAt(removeIdx);
+                        }
                     }
 
                     if (handlers.handlers.Count == 0)
@@ -3165,6 +3571,7 @@ namespace DxMessaging.Core.MessageBus
                 else
                 {
                     handler[messageHandler] = count - 1;
+                    cache.lastSeenVersion = cache.version;
                 }
             };
         }
@@ -3183,7 +3590,6 @@ namespace DxMessaging.Core.MessageBus
                 throw new ArgumentNullException(nameof(messageHandler));
             }
 
-            Type type = typeof(T);
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers =
                 sinks.GetOrAdd<T>();
 
@@ -3203,6 +3609,14 @@ namespace DxMessaging.Core.MessageBus
                 handlers.version++;
                 cache = new HandlerCache();
                 handlers.handlers[priority] = cache;
+                // insert priority in sorted order
+                List<int> order = handlers.order;
+                int idx = 0;
+                while (idx < order.Count && order[idx] < priority)
+                {
+                    idx++;
+                }
+                order.Insert(idx, priority);
             }
 
             cache.version++;
@@ -3210,6 +3624,13 @@ namespace DxMessaging.Core.MessageBus
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
+            if (count == 0)
+            {
+                cache.cache.Add(messageHandler);
+            }
+            cache.lastSeenVersion = cache.version;
+
+            Type type = typeof(T);
             _log.Log(
                 new MessagingRegistration(
                     context,
@@ -3254,10 +3675,23 @@ namespace DxMessaging.Core.MessageBus
                 if (count <= 1)
                 {
                     bool complete = handler.Remove(messageHandler);
+                    cache.version++;
+                    if (complete)
+                    {
+                        _ = cache.cache.Remove(messageHandler);
+                    }
+                    cache.lastSeenVersion = cache.version;
                     if (handler.Count == 0)
                     {
                         handlers.version++;
                         _ = handlers.handlers.Remove(priority);
+                        // remove priority from order
+                        List<int> order = handlers.order;
+                        int removeIdx = order.IndexOf(priority);
+                        if (removeIdx >= 0)
+                        {
+                            order.RemoveAt(removeIdx);
+                        }
                     }
 
                     if (handlers.handlers.Count == 0)
@@ -3283,10 +3717,12 @@ namespace DxMessaging.Core.MessageBus
                 else
                 {
                     handler[messageHandler] = count - 1;
+                    cache.lastSeenVersion = cache.version;
                 }
             };
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static List<KeyValuePair<int, HandlerCache>> GetOrAddMessageHandlerStack(
             HandlerCache<int, HandlerCache> cache
         )
@@ -3298,18 +3734,21 @@ namespace DxMessaging.Core.MessageBus
 
             List<KeyValuePair<int, HandlerCache>> list = cache.cache;
             list.Clear();
-            SortedList<int, HandlerCache> handlers = cache.handlers;
-            IList<int> keys = handlers.Keys;
-            IList<HandlerCache> values = handlers.Values;
-            for (int i = 0; i < handlers.Count; i++)
+            List<int> keys = cache.order;
+            for (int i = 0; i < keys.Count; i++)
             {
-                list.Add(new KeyValuePair<int, HandlerCache>(keys[i], values[i]));
+                int key = keys[i];
+                if (cache.handlers.TryGetValue(key, out HandlerCache value))
+                {
+                    list.Add(new KeyValuePair<int, HandlerCache>(key, value));
+                }
             }
 
             cache.lastSeenVersion = cache.version;
             return list;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static List<MessageHandler> GetOrAddMessageHandlerStack(HandlerCache cache)
         {
             if (cache.version == cache.lastSeenVersion)
@@ -3320,10 +3759,7 @@ namespace DxMessaging.Core.MessageBus
             List<MessageHandler> list = cache.cache;
             list.Clear();
             Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
-            foreach (MessageHandler key in keys)
-            {
-                list.Add(key);
-            }
+            list.AddRange(keys);
             cache.lastSeenVersion = cache.version;
             return list;
         }
@@ -3347,8 +3783,17 @@ namespace DxMessaging.Core.MessageBus
 
             void UntypedBroadcast(IUntargetedMessage message)
             {
-                T typedMessage = (T)message;
-                untargetedBroadcast(ref typedMessage);
+                if (typeof(T).IsValueType)
+                {
+                    object box = message;
+                    ref T typedRef = ref Unsafe.As<object, T>(ref box);
+                    untargetedBroadcast(ref typedRef);
+                }
+                else
+                {
+                    T typedMessage = (T)message;
+                    untargetedBroadcast(ref typedMessage);
+                }
             }
         }
 
@@ -3370,8 +3815,17 @@ namespace DxMessaging.Core.MessageBus
 
             void UntypedBroadcast(InstanceId target, ITargetedMessage message)
             {
-                T typedMessage = (T)message;
-                targetedBroadcast(ref target, ref typedMessage);
+                if (typeof(T).IsValueType)
+                {
+                    object box = message;
+                    ref T typedRef = ref Unsafe.As<object, T>(ref box);
+                    targetedBroadcast(ref target, ref typedRef);
+                }
+                else
+                {
+                    T typedMessage = (T)message;
+                    targetedBroadcast(ref target, ref typedMessage);
+                }
             }
         }
 
@@ -3393,8 +3847,17 @@ namespace DxMessaging.Core.MessageBus
 
             void UntypedBroadcast(InstanceId target, IBroadcastMessage message)
             {
-                T typedMessage = (T)message;
-                sourcedBroadcast(ref target, ref typedMessage);
+                if (typeof(T).IsValueType)
+                {
+                    object box = message;
+                    ref T typedRef = ref Unsafe.As<object, T>(ref box);
+                    sourcedBroadcast(ref target, ref typedRef);
+                }
+                else
+                {
+                    T typedMessage = (T)message;
+                    sourcedBroadcast(ref target, ref typedMessage);
+                }
             }
         }
 
@@ -3486,8 +3949,10 @@ namespace DxMessaging.Core.MessageBus
                     MethodInfo[] matchingMethods = componentType.GetMethods(
                         ReflexiveMethodBindingFlags
                     );
-                    foreach (MethodInfo matchingMethod in matchingMethods)
+                    Span<MethodInfo> span = matchingMethods.AsSpan();
+                    for (int i = 0; i < span.Length; ++i)
                     {
+                        MethodInfo matchingMethod = span[i];
                         if (
                             !string.Equals(
                                 matchingMethod.Name,

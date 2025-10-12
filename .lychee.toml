@@ -1,0 +1,13 @@
+exclude_path = [".git", "node_modules", ".vs"]
+exclude = [
+  "^mailto:",
+  "^tel:",
+  "^data:",
+]
+include_verbatim = true
+max_redirects = 5
+max_retries = 2
+timeout = 20
+user_agent = "lychee/markdown-ci"
+accept = ["200..=299", "300..=399"]
+

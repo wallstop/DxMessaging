@@ -5,15 +5,36 @@ namespace DxMessaging.Core.Diagnostics
     using UnityEngine;
 #endif
 
+    /// <summary>
+    /// Captures a snapshot of a message emission for diagnostics.
+    /// </summary>
+    /// <remarks>
+    /// When diagnostics are enabled (see <see cref="MessageBus.IMessageBus.GlobalDiagnosticsMode"/>),
+    /// the bus and tokens record recent emissions in ring buffers along with a trimmed stack trace
+    /// that excludes DxMessaging internals for easier debugging.
+    ///
+    /// The <see cref="context"/> contains the relevant <see cref="InstanceId"/> for targeted/broadcast messages
+    /// (target or source respectively) and is null for untargeted messages.
+    /// </remarks>
     public readonly struct MessageEmissionData
     {
         private static readonly string[] NewlineSeparators = { "\r\n", "\n", "\r" };
         private static readonly string JoinSeparator = Environment.NewLine;
 
+        /// <summary>Emitted message payload.</summary>
         public readonly IMessage message;
+
+        /// <summary>Relevant context (target/source) for the emission; null for untargeted.</summary>
         public readonly InstanceId? context;
+
+        /// <summary>Trimmed stack trace captured at the emission site.</summary>
         public readonly string stackTrace;
 
+        /// <summary>
+        /// Creates a new diagnostic record for an emitted message.
+        /// </summary>
+        /// <param name="message">The message that was emitted.</param>
+        /// <param name="context">Target or source depending on message category; null for untargeted.</param>
         public MessageEmissionData(IMessage message, InstanceId? context = null)
         {
             this.message = message;
