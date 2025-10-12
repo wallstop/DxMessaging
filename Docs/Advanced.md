@@ -157,12 +157,14 @@ remove();
 
 Safety and troubleshooting
 
-Do’s
+Do's
 
-- When overriding `MessageAwareComponent` hooks, call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
-- Prefer overriding `RegisterForStringMessages => false` instead of removing `base.RegisterMessageHandlers()` if you don’t want string demos.
-- Avoid hiding Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
+- **CRITICAL**: When overriding `MessageAwareComponent` hooks, you MUST call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
+- **Always call `base.RegisterMessageHandlers()` first** in your override to ensure parent class registrations happen before yours.
+- Prefer overriding `RegisterForStringMessages => false` instead of removing `base.RegisterMessageHandlers()` if you don't want string demos.
+- **Don't hide Unity methods** with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
 
+- **Prefer `Awake()` for registration** rather than `Start()`. `MessageAwareComponent` calls `RegisterMessageHandlers()` in `Awake()`.
 - Register once; enable/disable with component state.
 - Prefer named handler methods for clarity and reuse.
 - Use diagnostics in Editor; disable for release if not needed.

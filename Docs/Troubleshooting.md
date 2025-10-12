@@ -6,9 +6,18 @@ Not receiving messages
 - Verify the category matches the emission (Untargeted vs Targeted vs Broadcast).
 - Targeted/Broadcast require a valid `InstanceId`; ensure the target/source object exists when you emit.
 - In Unity, confirm your `MessagingComponent` exists on sender/receiver GameObjects.
-- If inheriting from `MessageAwareComponent`, ensure your overrides call base methods:
-  - `base.RegisterMessageHandlers()` to preserve default setup (including string message demos).
-  - `base.OnEnable()` / `base.OnDisable()` so the token actually enables/disables.
+- **CRITICAL**: If inheriting from `MessageAwareComponent`, ensure your overrides call base methods:
+  - **`base.RegisterMessageHandlers()`** - Call this FIRST in your override to preserve default setup (including string message demos) and parent class registrations.
+  - **`base.Awake()`** - Call this if you override `Awake()`, or your token won't be created (this is the #1 cause of handlers not firing).
+  - **`base.OnEnable()` / `base.OnDisable()`** - Call these so the token actually enables/disables.
+  - **Never use `new` to hide Unity methods** (e.g., `new void OnEnable()`); always use `override` and call `base.*`.
+
+Registration timing
+
+- **ALWAYS register message handlers in `Awake()`**, not `Start()`.
+- `MessageAwareComponent` automatically calls `RegisterMessageHandlers()` in `Awake()`.
+- Registering in `Awake()` ensures handlers are ready before other components' `Start()` methods run.
+- If you register in `Start()`, you may miss messages emitted by other components in their `Start()` methods.
 
 Unexpected ordering
 

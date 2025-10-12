@@ -46,10 +46,18 @@ Don’ts
 Important: Inheritance and base calls
 
 - `MessageAwareComponent` uses many virtual methods (e.g., `Awake`, `OnEnable`, `OnDisable`, `RegisterMessageHandlers`).
-- If you override any of these, call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
+- **CRITICAL**: If you override any of these, you MUST call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
+- **Always call `base.RegisterMessageHandlers()` first** in your override—this ensures parent class registrations happen before yours.
 - Skipping base calls can break core setup (token creation/enable) and default string‑message registrations.
 - If you need to opt out of string demos, prefer overriding `RegisterForStringMessages => false` rather than removing the base call.
-- Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
+- **Don't hide Unity methods** with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
+
+Registration timing
+
+- **Prefer `Awake()` for registration** rather than `Start()`.
+- `MessageAwareComponent` automatically calls `RegisterMessageHandlers()` in `Awake()`.
+- Early registration in `Awake()` ensures handlers are ready before other components' `Start()` methods run.
+- If you need custom setup before registration, override `Awake()`, do your setup, then call `base.Awake()`.
 
 Manual token management
 

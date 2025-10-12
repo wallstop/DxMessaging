@@ -4,10 +4,18 @@ This document captures practical patterns for building systems with DxMessaging.
 
 Important: Inheritance with MessageAwareComponent
 
-- Many examples derive from `MessageAwareComponent`. When overriding hooks, call the base method.
-- Use `base.RegisterMessageHandlers()` to preserve default string‑message registrations.
-- Call `base.OnEnable()` / `base.OnDisable()` if you override lifecycle methods; otherwise your token may never enable/disable.
+- Many examples derive from `MessageAwareComponent`. **When overriding hooks, you MUST call the base method.**
+- **Always call `base.RegisterMessageHandlers()` FIRST** in your override to preserve default string‑message registrations and parent class registrations.
+- **CRITICAL**: Call `base.OnEnable()` / `base.OnDisable()` if you override lifecycle methods; otherwise your token may never enable/disable.
+- **CRITICAL**: Call `base.Awake()` if you override `Awake()`; otherwise your token won't be created.
 - To opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
+- **Don't use `new` to hide methods** (e.g., `new void OnEnable()`); always use `override` and call `base.*`.
+
+Registration timing (pit of success)
+
+- **Prefer `Awake()` for all message handler registration**—this is when `MessageAwareComponent` calls `RegisterMessageHandlers()`.
+- Avoid registering in `Start()` unless you have a specific order-of-execution reason.
+- Early registration in `Awake()` ensures your handlers are ready before other components' `Start()` methods run.
 
 ## 1) Scene-wide Events (Untargeted)
 
@@ -117,9 +125,15 @@ var token = MessageRegistrationToken.Create(handler, localBus);
 
 ## 7) Lifecycle Pattern in Unity
 
-- Stage registrations in `Awake`/`Start`.
+- **Stage registrations in `Awake()`** (preferred) or `Start()` (only if order-dependent).
 - Call `token.Enable()` in `OnEnable` and `token.Disable()` in `OnDisable`.
-- Use `MessageAwareComponent` to avoid boilerplate.
+- Use `MessageAwareComponent` to avoid boilerplate—it handles all of this automatically.
+
+Why Awake over Start?
+
+- `Awake()` runs before any `Start()` methods, ensuring your handlers are ready early.
+- Other components may emit messages in their `Start()` methods—registering in `Awake()` ensures you don't miss them.
+- `MessageAwareComponent` automatically calls `RegisterMessageHandlers()` in `Awake()`, following this best practice.
 
 Side‑by‑side: lifecycle
 
@@ -133,7 +147,7 @@ void OnDestroy() { /* maybe unregister (often forgotten) */ }
 After (token)
 
 ```csharp
-void Awake()     { /* stage */ }
+void Awake()     { /* stage registrations - PREFERRED */ }
 void OnEnable()  { token.Enable(); }
 void OnDisable() { token.Disable(); }
 ```

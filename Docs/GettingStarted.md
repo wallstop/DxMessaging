@@ -558,15 +558,26 @@ if (someGameObject != null) {
 
 ## Troubleshooting Quick Fixes
 
-### Inheritance gotcha: Call base.* in overrides
+### CRITICAL: Inheritance gotcha - Always call base.* in overrides
 
 - `MessageAwareComponent` uses virtual hooks for setup and lifecycle.
-- If you override them, call the base methods:
-  - `base.RegisterMessageHandlers()` to keep default string‑message registrations.
-  - `base.OnEnable()` / `base.OnDisable()` to preserve token enable/disable.
-  - If you override `Awake`/`OnDestroy`, call `base.Awake()` / `base.OnDestroy()` so the token is created/cleaned up.
-- Skipping base calls is a common cause of “handlers not firing” or string messages not appearing.
-- Avoid hiding Unity methods with `new` (e.g., `new void OnEnable()`). Always `override` and call `base.*`.
+- **If you override ANY of these methods, you MUST call the base method:**
+  - **`base.RegisterMessageHandlers()`** - ALWAYS call this FIRST in your override to preserve default string‑message registrations and parent class registrations.
+  - **`base.Awake()`** - If you override `Awake()`, call this or your token won't be created (handlers will never fire).
+  - **`base.OnEnable()` / `base.OnDisable()`** - Call these to preserve token enable/disable (handlers won't activate without them).
+  - **`base.OnDestroy()`** - Call this if you override to ensure proper cleanup.
+- **Skipping base calls is the #1 cause of "handlers not firing"** or string messages not appearing.
+- **Don't hide Unity methods** with `new` (e.g., `new void OnEnable()`). Always use `override` and call `base.*`.
+
+### Registration timing: Prefer Awake() over Start()
+
+- **ALWAYS prefer `Awake()` for message handler registration**, not `Start()`.
+- `MessageAwareComponent` automatically calls `RegisterMessageHandlers()` in `Awake()`.
+- Why Awake?
+  - Runs before any `Start()` methods, ensuring handlers are ready early.
+  - Other components may emit messages in their `Start()`—you don't want to miss them.
+  - Follows Unity's recommended initialization pattern.
+- Only use `Start()` if you have a specific order-of-execution requirement.
 
 ### "My handler isn't being called!"
 
