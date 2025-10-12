@@ -1,7 +1,9 @@
 ###############################################################################
-# Set default behavior to automatically normalize line endings.
+# Normalize line endings and enforce CRLF in working trees across platforms.
+# This aligns with .editorconfig (end_of_line = crlf) and keeps checkouts
+# consistent regardless of OS or user git settings.
 ###############################################################################
-* text=auto
+* text=auto eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
