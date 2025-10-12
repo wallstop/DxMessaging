@@ -44,8 +44,8 @@ Recommended practices
 
 Related
 
-- [Listening Patterns](Docs/ListeningPatterns.md)
-- [Troubleshooting](Docs/Troubleshooting.md)
+- [Listening Patterns](ListeningPatterns.md)
+- [Troubleshooting](Troubleshooting.md)
 
 Editor integration (Inspector)
 

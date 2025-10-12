@@ -111,8 +111,8 @@ Targeting notes (Component vs GameObject)
 
 See also
 
-- [Advanced](Docs/Advanced.md)
-- [Targeting & Context](Docs/TargetingAndContext.md)
+- [Advanced](Advanced.md)
+- [Targeting & Context](TargetingAndContext.md)
 
 API quick ref
 

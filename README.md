@@ -200,9 +200,7 @@ _ = token.RegisterBroadcastInterceptor<TookDamage>(
 
 ### 🔍 Built-in Inspector Diagnostics
 
-See message history, handler counts, and registrations live in the Unity Inspector:
-
-![MessagingComponent Inspector](https://via.placeholder.com/800x400/1a1a1a/4CAF50?text=MessagingComponent+Inspector+Shows+Live+Message+History)
+See message history, handler counts, and registrations live in the Unity Inspector. For screenshots and details, see Unity Integration → Diagnostics.
 
 ### 🏝️ Local Bus Islands for Testing
 
@@ -405,7 +403,7 @@ Created and maintained by [wallstop studios](https://wallstopstudios.com)
 
 - 📦 [Package on GitHub](https://github.com/wallstop/DxMessaging)
 - 🐛 [Report Issues](https://github.com/wallstop/DxMessaging/issues)
-- 📘 [Full Documentation](https://github.com/wallstop/DxMessaging/blob/master/Docs/Index.md)
+- 📘 [Full Documentation](Docs/Index.md)
 
 ---
 

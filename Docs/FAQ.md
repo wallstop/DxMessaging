@@ -20,7 +20,7 @@ Can I observe all targets/sources for a type?
 
 How do I diagnose what’s happening?
 
-- Enable logs and diagnostics: [Diagnostics](Docs/Diagnostics.md).
+- Enable logs and diagnostics: [Diagnostics](Diagnostics.md).
 
 Do I need a global bus?
 

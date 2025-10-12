@@ -120,5 +120,5 @@ Anti‑patterns
 
 Related
 
-- [Interceptors & Ordering](Docs/InterceptorsAndOrdering.md)
-- [Listening Patterns](Docs/ListeningPatterns.md)
+- [Interceptors & Ordering](InterceptorsAndOrdering.md)
+- [Listening Patterns](ListeningPatterns.md)

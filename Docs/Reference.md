@@ -49,7 +49,7 @@ Key types
 - `DxMessaging.Core.MessageHandler` — per‑owner callback runner.
 - `DxMessaging.Core.MessageBus.MessageBus` — instanced bus; global at `MessageHandler.MessageBus`.
 - `DxMessaging.Core.Messages.*` — Untargeted/Targeted/Broadcast interfaces and built‑in string messages.
-  - See also [String Messages](Docs/StringMessages.md)
+  - See also [String Messages](StringMessages.md)
 
 Unity bridge types
 

@@ -132,6 +132,6 @@ msg.EmitGameObjectTargeted(gameObject);
 
 Related
 
-- [Quick Start](Docs/QuickStart.md)
-- [Patterns](Docs/Patterns.md)
-- [Diagnostics (Inspector)](Docs/Diagnostics.md)
+- [Quick Start](QuickStart.md)
+- [Patterns](Patterns.md)
+- [Diagnostics (Inspector)](Diagnostics.md)

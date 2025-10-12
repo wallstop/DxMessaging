@@ -57,5 +57,5 @@ sequenceDiagram
 
 Related
 
-- [Message Types](Docs/MessageTypes.md)
-- [Listening Patterns](Docs/ListeningPatterns.md)
+- [Message Types](MessageTypes.md)
+- [Listening Patterns](ListeningPatterns.md)

@@ -54,5 +54,5 @@ Tips
 
 Related
 
-- [Interceptors & Ordering](Docs/InterceptorsAndOrdering.md)
-- [Diagnostics](Docs/Diagnostics.md)
+- [Interceptors & Ordering](InterceptorsAndOrdering.md)
+- [Diagnostics](Diagnostics.md)

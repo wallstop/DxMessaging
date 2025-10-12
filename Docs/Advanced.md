@@ -223,6 +223,6 @@ More advanced use cases
 
 Related
 
-- [Unity Integration](Docs/UnityIntegration.md)
-- [Diagnostics (Inspector)](Docs/Diagnostics.md)
-- [String Messages](Docs/StringMessages.md)
+- [Unity Integration](UnityIntegration.md)
+- [Diagnostics (Inspector)](Diagnostics.md)
+- [String Messages](StringMessages.md)

@@ -135,5 +135,5 @@ Diagnostics (Editor)
 
 Notes
 
-- Use component vs gameObject context consistently for targeted/broadcast messages (see [Targeting & Context](Docs/TargetingAndContext.md)).
+- Use component vs gameObject context consistently for targeted/broadcast messages (see [Targeting & Context](TargetingAndContext.md)).
 - For tests/subsystems, use a local MessageBus and pass it to the token factory.

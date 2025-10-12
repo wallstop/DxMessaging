@@ -87,6 +87,6 @@ Don’ts
 
 Related
 
-- [Quick Reference](Docs/QuickReference.md)
-- [Message Types](Docs/MessageTypes.md)
-- [Unity Integration](Docs/UnityIntegration.md)
+- [Quick Reference](QuickReference.md)
+- [Message Types](MessageTypes.md)
+- [Unity Integration](UnityIntegration.md)

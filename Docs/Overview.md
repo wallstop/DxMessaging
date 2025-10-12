@@ -39,8 +39,8 @@ Killer features
 
 See also
 
-- [Install](Docs/Install.md)
-- [Quick Start](Docs/QuickStart.md)
-- [Message Types](Docs/MessageTypes.md)
-- [Comparisons](Docs/Comparisons.md)
-- [Interceptors & Ordering](Docs/InterceptorsAndOrdering.md)
+- [Install](Install.md)
+- [Quick Start](QuickStart.md)
+- [Message Types](MessageTypes.md)
+- [Comparisons](Comparisons.md)
+- [Interceptors & Ordering](InterceptorsAndOrdering.md)

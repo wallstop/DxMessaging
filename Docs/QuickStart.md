@@ -4,8 +4,8 @@ This quick start walks you from install, to defining a message, to sending and r
 
 Before you begin
 
-- Install via UPM: [Install](Docs/Install.md)
-- Target Unity 2021.3+ (see [Compatibility](Docs/Compatibility.md))
+- Install via UPM: [Install](Install.md)
+- Target Unity 2021.3+ (see [Compatibility](Compatibility.md))
 
 1) Define messages
 
@@ -106,8 +106,8 @@ Don’ts
 
 What’s next
 
-- [Message Types](Docs/MessageTypes.md) (when to use which)
-- [Interceptors & Ordering](Docs/InterceptorsAndOrdering.md)
-- [Unity Integration](Docs/UnityIntegration.md)
- - [Quick Reference](Docs/QuickReference.md)
- - [Targeting & Context](Docs/TargetingAndContext.md)
+- [Message Types](MessageTypes.md) (when to use which)
+- [Interceptors & Ordering](InterceptorsAndOrdering.md)
+- [Unity Integration](UnityIntegration.md)
+ - [Quick Reference](QuickReference.md)
+ - [Targeting & Context](TargetingAndContext.md)

@@ -58,5 +58,5 @@ Tips
 
 Related
 
-- [Message Types](Docs/MessageTypes.md)
-- [Diagnostics](Docs/Diagnostics.md)
+- [Message Types](MessageTypes.md)
+- [Diagnostics](Diagnostics.md)

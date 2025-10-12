@@ -44,5 +44,5 @@ Diagnostics overhead
 
 See also
 
-- [Diagnostics](Docs/Diagnostics.md)
-- [Listening Patterns](Docs/ListeningPatterns.md)
+- [Diagnostics](Diagnostics.md)
+- [Listening Patterns](ListeningPatterns.md)
