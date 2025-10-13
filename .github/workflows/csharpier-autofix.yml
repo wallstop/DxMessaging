@@ -136,7 +136,13 @@ jobs:
               const body = `A formatting PR has been opened: #${fmtPr.number} (applies CSharpier to this PR).`;
               // Avoid duplicate comments by checking recent comments
               const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 50 });
-              const already = comments.data.some(c => c.body && c.body.includes(`#${fmtPr.number}`) && c.user && c.user.login === 'github-actions[bot]');
+              const already = comments.data.some(
+                (c) =>
+                  c.body &&
+                  c.body.includes(`#${fmtPr.number}`) &&
+                  c.user &&
+                  c.user.login === 'github-actions[bot]'
+              );
               if (!already) {
                 await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
               }
