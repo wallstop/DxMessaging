@@ -35,6 +35,56 @@ namespace DxMessaging.Core
             IComparable<MessageHandler>
     {
         /// <summary>
+        /// Pre-freezes this handler's broadcast post-processor caches for the given message type, source, and priority
+        /// for the specified emission id, so registrations during the same emission are not observed.
+        /// </summary>
+        /// <typeparam name="T">Broadcast message type.</typeparam>
+        /// <param name="source">Source instance id.</param>
+        /// <param name="priority">Priority bucket to freeze.</param>
+        /// <param name="emissionId">Current emission id.</param>
+        /// <param name="messageBus">Bus whose typed handler mapping to use.</param>
+        internal void PrefreezeBroadcastPostProcessorsForEmission<T>(
+            InstanceId source,
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : IBroadcastMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._broadcastPostProcessingFastHandlers != null
+                && handler._broadcastPostProcessingFastHandlers.TryGetValue(
+                    source,
+                    out Dictionary<int, HandlerActionCache<FastHandler<T>>> fastByPriority
+                )
+                && fastByPriority.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._broadcastPostProcessingHandlers != null
+                && handler._broadcastPostProcessingHandlers.TryGetValue(
+                    source,
+                    out Dictionary<int, HandlerActionCache<Action<T>>> byPriority
+                )
+                && byPriority.TryGetValue(priority, out HandlerActionCache<Action<T>> cache)
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
         /// High-performance handler that receives the message by reference (no boxing/copies).
         /// </summary>
         public delegate void FastHandler<TMessage>(ref TMessage message)
@@ -1417,99 +1467,99 @@ namespace DxMessaging.Core
         private sealed class TypedHandler<T>
             where T : IMessage
         {
-            private Dictionary<
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<Action<T>>>
             > _targetedHandlers;
-            private Dictionary<int, HandlerActionCache<Action<T>>> _untargetedHandlers;
-            private Dictionary<
+            internal Dictionary<int, HandlerActionCache<Action<T>>> _untargetedHandlers;
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<Action<T>>>
             > _broadcastHandlers;
-            private Dictionary<
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<Action<T>>>
             > _targetedPostProcessingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<Action<T>>
             > _untargetedPostProcessingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<Action<T>>>
             > _broadcastPostProcessingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _targetedFastHandlers;
-            private Dictionary<int, HandlerActionCache<FastHandler<T>>> _untargetedFastHandlers;
-            private Dictionary<
+            internal Dictionary<int, HandlerActionCache<FastHandler<T>>> _untargetedFastHandlers;
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _broadcastFastHandlers;
-            private Dictionary<
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _targetedPostProcessingFastHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<FastHandler<T>>
             > _untargetedPostProcessingFastHandlers;
-            private Dictionary<
+            internal Dictionary<
                 InstanceId,
                 Dictionary<int, HandlerActionCache<FastHandler<T>>>
             > _broadcastPostProcessingFastHandlers;
 
-            private HandlerActionCache<Action<IUntargetedMessage>> _globalUntargetedHandlers;
+            internal HandlerActionCache<Action<IUntargetedMessage>> _globalUntargetedHandlers;
 
-            private HandlerActionCache<
+            internal HandlerActionCache<
                 Action<InstanceId, ITargetedMessage>
             > _globalTargetedHandlers;
 
-            private HandlerActionCache<
+            internal HandlerActionCache<
                 Action<InstanceId, IBroadcastMessage>
             > _globalBroadcastHandlers;
 
-            private HandlerActionCache<
+            internal HandlerActionCache<
                 FastHandler<IUntargetedMessage>
             > _globalUntargetedFastHandlers;
 
-            private HandlerActionCache<
+            internal HandlerActionCache<
                 FastHandlerWithContext<ITargetedMessage>
             > _globalTargetedFastHandlers;
 
-            private HandlerActionCache<
+            internal HandlerActionCache<
                 FastHandlerWithContext<IBroadcastMessage>
             > _globalBroadcastFastHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<Action<InstanceId, T>>
             > _targetedWithoutTargetingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastTargetedWithoutTargetingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<Action<InstanceId, T>>
             > _broadcastWithoutSourceHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourceHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<Action<InstanceId, T>>
             > _targetedWithoutTargetingPostProcessingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastTargetedWithoutTargetingPostProcessingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<Action<InstanceId, T>>
             > _broadcastWithoutSourcePostProcessingHandlers;
-            private Dictionary<
+            internal Dictionary<
                 int,
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourcePostProcessingHandlers;
@@ -3034,7 +3084,7 @@ namespace DxMessaging.Core
                 }
             }
 
-            private static List<TU> GetOrAddNewHandlerStack<TU>(
+            internal static List<TU> GetOrAddNewHandlerStack<TU>(
                 HandlerActionCache<TU> actionCache,
                 long emissionId
             )

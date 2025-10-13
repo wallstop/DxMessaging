@@ -817,6 +817,26 @@ namespace DxMessaging.Core.MessageBus
                 _emissionBuffer.Add(new MessageEmissionData(typedMessage));
             }
 
+            // Pre-freeze post-processing stacks for this emission so mutations during
+            // handlers/post-processors are not observed until the next emission.
+            if (
+                _postProcessingSinks.TryGetValue<TMessage>(
+                    out HandlerCache<int, HandlerCache> prefreezeUntargetedPost
+                )
+                && prefreezeUntargetedPost.handlers.Count > 0
+            )
+            {
+                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
+                    prefreezeUntargetedPost,
+                    _emissionId
+                );
+                int frozenCount = frozen.Count;
+                for (int i = 0; i < frozenCount; ++i)
+                {
+                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                }
+            }
+
             if (!RunUntargetedInterceptors(ref typedMessage))
             {
                 return;
@@ -928,15 +948,7 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> list = cache.cache;
-            if (cache.version != cache.lastSeenVersion)
-            {
-                list.Clear();
-                Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
-                list.AddRange(keys);
-                cache.lastSeenVersion = cache.version;
-            }
-
+            List<MessageHandler> list = GetOrAddMessageHandlerStack(cache, _emissionId);
             switch (list.Count)
             {
                 case 1:
@@ -1022,6 +1034,46 @@ namespace DxMessaging.Core.MessageBus
             if (_diagnosticsMode)
             {
                 _emissionBuffer.Add(new MessageEmissionData(typedMessage, target));
+            }
+
+            // Pre-freeze targeted post-processing for this emission (target-specific and without targeting)
+            if (
+                _postProcessingTargetedSinks.TryGetValue<TMessage>(
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> prefreezeTargeted
+                )
+                && prefreezeTargeted.TryGetValue(
+                    target,
+                    out HandlerCache<int, HandlerCache> prefreezeTargetedByPriority
+                )
+                && prefreezeTargetedByPriority.handlers.Count > 0
+            )
+            {
+                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
+                    prefreezeTargetedByPriority,
+                    _emissionId
+                );
+                int frozenCount = frozen.Count;
+                for (int i = 0; i < frozenCount; ++i)
+                {
+                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                }
+            }
+            if (
+                _postProcessingTargetedWithoutTargetingSinks.TryGetValue<TMessage>(
+                    out HandlerCache<int, HandlerCache> prefreezeTwt
+                )
+                && prefreezeTwt.handlers.Count > 0
+            )
+            {
+                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
+                    prefreezeTwt,
+                    _emissionId
+                );
+                int frozenCount = frozen.Count;
+                for (int i = 0; i < frozenCount; ++i)
+                {
+                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                }
             }
 
             if (!RunTargetedInterceptors(ref typedMessage, ref target))
@@ -1983,6 +2035,60 @@ namespace DxMessaging.Core.MessageBus
             if (_diagnosticsMode)
             {
                 _emissionBuffer.Add(new MessageEmissionData(typedMessage, source));
+            }
+
+            // Pre-freeze broadcast post-processing for this emission (source-specific and without source)
+            if (
+                _postProcessingBroadcastSinks.TryGetValue<TMessage>(
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> prefreezeBroadcast
+                )
+                && prefreezeBroadcast.TryGetValue(
+                    source,
+                    out HandlerCache<int, HandlerCache> prefreezeBroadcastByPriority
+                )
+                && prefreezeBroadcastByPriority.handlers.Count > 0
+            )
+            {
+                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
+                    prefreezeBroadcastByPriority,
+                    _emissionId
+                );
+                int frozenCount = frozen.Count;
+                for (int i = 0; i < frozenCount; ++i)
+                {
+                    KeyValuePair<int, HandlerCache> entry = frozen[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        entry.Value,
+                        _emissionId
+                    );
+                    for (int h = 0; h < mhList.Count; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeBroadcastPostProcessorsForEmission<TMessage>(
+                                source,
+                                entry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
+                }
+            }
+            if (
+                _postProcessingBroadcastWithoutSourceSinks.TryGetValue<TMessage>(
+                    out HandlerCache<int, HandlerCache> prefreezeBws
+                )
+                && prefreezeBws.handlers.Count > 0
+            )
+            {
+                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
+                    prefreezeBws,
+                    _emissionId
+                );
+                int frozenCount = frozen.Count;
+                for (int i = 0; i < frozenCount; ++i)
+                {
+                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                }
             }
 
             if (!RunBroadcastInterceptors(ref typedMessage, ref source))
