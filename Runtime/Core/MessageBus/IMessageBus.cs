@@ -43,6 +43,8 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         public static bool GlobalDiagnosticsMode { get; set; }
 
+        long EmissionId { get; }
+
         /// <summary>
         /// Default ring buffer size for emission history when diagnostics are enabled.
         /// </summary>

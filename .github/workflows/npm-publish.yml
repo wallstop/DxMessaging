@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - 'package.json'
+      - "package.json"
   workflow_dispatch:
 
 jobs:
@@ -16,13 +16,13 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # Ensure full commit history for version comparison
+          fetch-depth: 0 # Ensure full commit history for version comparison
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 18
-          registry-url: 'https://registry.npmjs.org/'
+          registry-url: "https://registry.npmjs.org/"
 
       - name: Check if version changed
         id: version_check

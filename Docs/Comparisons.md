@@ -76,7 +76,7 @@ Problems
 - Great for small demos, but brittle at scale (hidden references, order issues, refactors break wiring).
 - No interception or post‑processing stages to validate/normalize.
 
- Typical code
+Typical code
 
 ```csharp
 using UnityEngine;
@@ -127,7 +127,7 @@ Problems
 - Often devolves to one giant bag of static events; naming, ownership, and routing semantics get muddy.
 - Still manual lifecycle and ordering issues.
 
- Typical code
+Typical code
 
 ```csharp
 public static class EventHub
@@ -150,7 +150,7 @@ DxMessaging
 - A single `MessageBus` with clear categories: Untargeted (global), Targeted (to one), Broadcast (from one).
 - Interceptors and post‑processors provide a structured pipeline.
 - You can create isolated buses for sub‑systems or tests (local islands), and keep a global default (`MessageHandler.MessageBus`).
-  
+
 ```csharp
 using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
@@ -378,20 +378,20 @@ public void TestAchievementSystem() {
 
 ## Feature-by-Feature Comparison Matrix
 
-| Aspect | C# Events | UnityEvents | Static Bus | DxMessaging |
-|--------|-----------|-------------|------------|-------------|
-| **Setup Complexity** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Simple | ⭐⭐⭐ Moderate | ⭐⭐⭐ Moderate |
-| **Boilerplate** | ⭐⭐⭐⭐⭐ Low | ⭐⭐⭐⭐⭐ Low | ⭐⭐⭐ Medium | ⭐⭐⭐ Medium |
-| **Performance** | ⭐⭐⭐⭐⭐ Fastest | ⭐⭐ Slow (boxing) | ⭐⭐⭐⭐ Fast | ⭐⭐⭐⭐ Fast |
-| **Decoupling** | ⭐ Tight | ⭐⭐ Hidden | ⭐⭐⭐⭐ Good | ⭐⭐⭐⭐⭐ Excellent |
-| **Lifecycle Safety** | ⭐ Manual | ⭐⭐⭐ Unity-managed | ⭐ Manual | ⭐⭐⭐⭐⭐ Automatic |
-| **Observability** | ⭐ None | ⭐ None | ⭐ None | ⭐⭐⭐⭐⭐ Built-in |
-| **Execution Order** | ⭐ Undefined | ⭐ Undefined | ⭐ Undefined | ⭐⭐⭐⭐⭐ Priority-based |
-| **Type Safety** | ⭐⭐⭐⭐⭐ Strong | ⭐⭐ Weak | ⭐⭐⭐ Varies | ⭐⭐⭐⭐⭐ Strong |
-| **Testability** | ⭐⭐ Hard | ⭐⭐ Hard | ⭐ Very Hard | ⭐⭐⭐⭐⭐ Easy |
-| **Learning Curve** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Low | ⭐⭐⭐ Moderate |
-| **Memory Safety** | ⭐ Leak-prone | ⭐⭐⭐ Unity-managed | ⭐ Leak-prone | ⭐⭐⭐⭐⭐ Leak-free |
-| **Debugging** | ⭐⭐ Hard at scale | ⭐⭐ Hard at scale | ⭐ Very Hard | ⭐⭐⭐⭐⭐ Excellent |
+| Aspect               | C# Events          | UnityEvents          | Static Bus      | DxMessaging               |
+| -------------------- | ------------------ | -------------------- | --------------- | ------------------------- |
+| **Setup Complexity** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Simple      | ⭐⭐⭐ Moderate | ⭐⭐⭐ Moderate           |
+| **Boilerplate**      | ⭐⭐⭐⭐⭐ Low     | ⭐⭐⭐⭐⭐ Low       | ⭐⭐⭐ Medium   | ⭐⭐⭐ Medium             |
+| **Performance**      | ⭐⭐⭐⭐⭐ Fastest | ⭐⭐ Slow (boxing)   | ⭐⭐⭐⭐ Fast   | ⭐⭐⭐⭐ Fast             |
+| **Decoupling**       | ⭐ Tight           | ⭐⭐ Hidden          | ⭐⭐⭐⭐ Good   | ⭐⭐⭐⭐⭐ Excellent      |
+| **Lifecycle Safety** | ⭐ Manual          | ⭐⭐⭐ Unity-managed | ⭐ Manual       | ⭐⭐⭐⭐⭐ Automatic      |
+| **Observability**    | ⭐ None            | ⭐ None              | ⭐ None         | ⭐⭐⭐⭐⭐ Built-in       |
+| **Execution Order**  | ⭐ Undefined       | ⭐ Undefined         | ⭐ Undefined    | ⭐⭐⭐⭐⭐ Priority-based |
+| **Type Safety**      | ⭐⭐⭐⭐⭐ Strong  | ⭐⭐ Weak            | ⭐⭐⭐ Varies   | ⭐⭐⭐⭐⭐ Strong         |
+| **Testability**      | ⭐⭐ Hard          | ⭐⭐ Hard            | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Easy           |
+| **Learning Curve**   | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐⭐ Minimal   | ⭐⭐⭐⭐ Low    | ⭐⭐⭐ Moderate           |
+| **Memory Safety**    | ⭐ Leak-prone      | ⭐⭐⭐ Unity-managed | ⭐ Leak-prone   | ⭐⭐⭐⭐⭐ Leak-free      |
+| **Debugging**        | ⭐⭐ Hard at scale | ⭐⭐ Hard at scale   | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Excellent      |
 
 ### Overall Verdict by Use Case
 

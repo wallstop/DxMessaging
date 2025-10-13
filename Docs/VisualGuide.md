@@ -6,7 +6,7 @@ If you're brand new to messaging systems, this visual guide will help you unders
 
 ### The Old Way (Spaghetti Code)
 
-```text
+````text
 ┌─────────────┐
 │   Player    │───────┐
 └─────────────┘       │
@@ -169,7 +169,7 @@ using DxMessaging.Core.Attributes;
 public readonly partial struct Heal {
     public readonly int amount;
 }
-```
+````
 
 **What are those `[DxSomething]` tags?**
 
@@ -291,7 +291,7 @@ void OnJump(ref Jump msg) {
 
 ### Pattern: Achievement Tracking
 
-```text
+````text
 Any System                Achievement System
      │                           │
      │  [Any Message]            │
@@ -315,7 +315,7 @@ public class AchievementSystem : MessageAwareComponent {
         );
     }
 }
-```
+````
 
 ## 🚦 When to Use Which Message Type
 
@@ -344,7 +344,7 @@ Think of DxMessaging like a restaurant:
 
 ### Untargeted = Restaurant Announcement
 
-```text
+````text
 "Attention all customers: We're closing in 10 minutes!"
 → Everyone hears it
 ```text
@@ -354,11 +354,11 @@ Think of DxMessaging like a restaurant:
 ```text
 "Order for table 5: Here's your burger"
 → Only table 5 gets it
-```
+````
 
 ### Broadcast = Customer Calling Waiter
 
-```text
+````text
 "Excuse me, I need a refill!" (from table 3)
 → Comes from table 3
 → Any available waiter can respond
@@ -386,7 +386,7 @@ MessagingComponent Inspector:
 │ │ ✓ TookDamage (priority: 10)     │ │
 │ └─────────────────────────────────┘ │
 └─────────────────────────────────────┘
-```
+````
 
 ## ⚡ Performance at a Glance
 

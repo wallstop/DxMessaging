@@ -368,6 +368,7 @@ Track these to validate migration is worthwhile:
 - Team satisfaction (survey)
 
 **Example:**
+
 > "Before: Adding achievement tracking required touching 12 files.
 > After: Added achievement system with zero changes to existing code."
 

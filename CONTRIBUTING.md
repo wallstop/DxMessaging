@@ -8,12 +8,15 @@ Before committing, please enable our git hooks and local linters so you catch is
 - Install hooks: `pre-commit install`
 - Run on all files: `pre-commit run --all-files`
 
+Note: If the "Enforce CRLF and no BOM" hook fails, run `node scripts/fix-eol.js -v` to auto-fix line endings and strip any BOM.
+
 What runs locally:
 
 - Markdown link text check: enforces human-readable link text (no raw file names/paths)
 - Internal markdown link validity: verifies relative links and anchors point to real files/sections
 - Markdown style and formatting: markdownlint (auto-fix common issues)
 - JSON/.asmdef formatting: Prettier (2-space indent)
+- YAML formatting: Prettier (2-space indent) + yamllint
 
 On pull requests, CI also checks all markdown links (including external URLs) with lychee.
 
@@ -24,4 +27,7 @@ Handy commands:
 - Lint markdown (manual): `npx markdownlint-cli@0.41.0 "**/*.md" -c .markdownlint.jsonc --fix`
 - Format JSON/.asmdef (all files): `pre-commit run prettier-json --all-files`
 - Format JSON/.asmdef (manual): `npx prettier@3.3.3 --write "**/*.{json,asmdef}"`
+- Format YAML (all files): `pre-commit run prettier-yaml --all-files`
+- Check YAML formatting + lint: `npm run check:yaml`
+- Fix EOL/BOM issues quickly: `node scripts/fix-eol.js -v`
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`

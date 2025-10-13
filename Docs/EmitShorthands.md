@@ -8,11 +8,11 @@ These shorthands make your code cleaner and more expressive, but they come with 
 
 Three simple methods that work on any message:
 
-| Method | Purpose | Message Type | Example |
-|--------|---------|--------------|---------|
-| **`Emit()`** | Send globally to everyone | `IUntargetedMessage` | `new SceneLoaded(1).Emit();` |
-| **`EmitAt(target)`** | Send to a specific target | `ITargetedMessage` | `new Heal(10).EmitAt(playerId);` |
-| **`EmitFrom(source)`** | Broadcast from a source | `IBroadcastMessage` | `new TookDamage(5).EmitFrom(enemyId);` |
+| Method                 | Purpose                   | Message Type         | Example                                |
+| ---------------------- | ------------------------- | -------------------- | -------------------------------------- |
+| **`Emit()`**           | Send globally to everyone | `IUntargetedMessage` | `new SceneLoaded(1).Emit();`           |
+| **`EmitAt(target)`**   | Send to a specific target | `ITargetedMessage`   | `new Heal(10).EmitAt(playerId);`       |
+| **`EmitFrom(source)`** | Broadcast from a source   | `IBroadcastMessage`  | `new TookDamage(5).EmitFrom(enemyId);` |
 
 ## Quick Start Examples
 
@@ -217,10 +217,10 @@ damage.EmitFrom(sourceId); // Clean and clear
 
 DxMessaging includes three built-in string message types for rapid prototyping:
 
-| String Type | Message Class | Shorthand | Use Case |
-|-------------|--------------|-----------|----------|
-| **Global** | `GlobalStringMessage` | `"text".Emit()` | Debug notifications |
-| **Targeted** | `StringMessage` | `"text".EmitAt(target)` | Commands to specific objects |
+| String Type   | Message Class          | Shorthand                 | Use Case                            |
+| ------------- | ---------------------- | ------------------------- | ----------------------------------- |
+| **Global**    | `GlobalStringMessage`  | `"text".Emit()`           | Debug notifications                 |
+| **Targeted**  | `StringMessage`        | `"text".EmitAt(target)`   | Commands to specific objects        |
 | **Broadcast** | `SourcedStringMessage` | `"text".EmitFrom(source)` | Announcements from specific objects |
 
 ### Examples
@@ -298,14 +298,17 @@ If a handler isn’t firing, first suspect a GameObject vs Component mismatch. S
 **Check these in order:**
 
 1. **GameObject vs Component mismatch?**
+
    - Did you register for a GameObject but emit to a Component (or vice versa)?
    - Use explicit helpers (`EmitGameObjectTargeted` vs `EmitComponentTargeted`) to eliminate this issue
 
 1. **Is the handler enabled?**
+
    - Check that `token.Enable()` was called (usually in `OnEnable`)
    - Verify the component is active
 
 1. **Correct message type?**
+
    - Untargeted messages use `Emit()`
    - Targeted messages use `EmitAt(target)`
    - Broadcast messages use `EmitFrom(source)`
@@ -332,14 +335,14 @@ See [Diagnostics](Diagnostics.md) for more debugging tools.
 
 ## Comparison: Shorthands vs Explicit Helpers
 
-| Scenario | Shorthand | Explicit Helper |
-|----------|-----------|-----------------|
-| **Untargeted/Global** | `msg.Emit()` | `msg.EmitUntargeted()` |
-| **Targeted to GameObject** | `msg.EmitAt(gameObject)` | `msg.EmitGameObjectTargeted(gameObject)` |
-| **Targeted to Component** | `msg.EmitAt(component)` | `msg.EmitComponentTargeted(component)` |
+| Scenario                      | Shorthand                  | Explicit Helper                           |
+| ----------------------------- | -------------------------- | ----------------------------------------- |
+| **Untargeted/Global**         | `msg.Emit()`               | `msg.EmitUntargeted()`                    |
+| **Targeted to GameObject**    | `msg.EmitAt(gameObject)`   | `msg.EmitGameObjectTargeted(gameObject)`  |
+| **Targeted to Component**     | `msg.EmitAt(component)`    | `msg.EmitComponentTargeted(component)`    |
 | **Broadcast from GameObject** | `msg.EmitFrom(gameObject)` | `msg.EmitGameObjectBroadcast(gameObject)` |
-| **Broadcast from Component** | `msg.EmitFrom(component)` | `msg.EmitComponentBroadcast(component)` |
-| **Non-Unity InstanceId** | `msg.EmitAt(id)` | `msg.EmitTargeted(id)` |
+| **Broadcast from Component**  | `msg.EmitFrom(component)`  | `msg.EmitComponentBroadcast(component)`   |
+| **Non-Unity InstanceId**      | `msg.EmitAt(id)`           | `msg.EmitTargeted(id)`                    |
 
 **Our recommendation:**
 

@@ -64,5 +64,5 @@ Diagnostics overhead
 
 **Examples:**
 
-- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — See working code
+- → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — See working code
 - → [Common Patterns](Patterns.md) — Real-world solutions

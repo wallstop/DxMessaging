@@ -1,9 +1,31 @@
 ###############################################################################
-# Normalize line endings and enforce CRLF in working trees across platforms.
-# This aligns with .editorconfig (end_of_line = crlf) and keeps checkouts
-# consistent regardless of OS or user git settings.
+# Line endings
+#
+# Enforce CRLF in the working tree for all text files to align with
+# .editorconfig (end_of_line = crlf, charset = utf-8 without BOM) and avoid
+# formatter diffs on Linux runners.
 ###############################################################################
 * text=auto eol=crlf
+
+# Be explicit for common text file types in this repo
+*.cs        text eol=crlf
+*.csproj    text eol=crlf
+*.sln       text eol=crlf
+*.json      text eol=crlf
+*.yaml      text eol=crlf
+*.yml       text eol=crlf
+*.md        text eol=crlf
+*.xml       text eol=crlf
+*.uxml      text eol=crlf
+*.uss       text eol=crlf
+*.shader    text eol=crlf
+*.hlsl      text eol=crlf
+*.compute   text eol=crlf
+*.cginc     text eol=crlf
+*.asmdef    text eol=crlf
+*.asmref    text eol=crlf
+*.meta      text eol=crlf
+*.ps1       text eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

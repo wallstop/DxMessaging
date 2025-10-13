@@ -15,9 +15,6 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    versioning-strategy: increase # always move to latest stable that satisfies constraints
-    allow:
-      - dependency-type: "all" # direct + development where applicable
     assignees:
       - wallstop
     reviewers:
@@ -29,8 +26,6 @@ updates:
     schedule:
       interval: "daily"
     versioning-strategy: increase
-    allow:
-      - dependency-type: "all"
     assignees:
       - wallstop
     reviewers:

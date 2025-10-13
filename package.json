@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.dxmessaging",
-  "version": "2.0.0-rc27.1",
+  "version": "2.0.0-rc27.2",
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
@@ -32,7 +32,19 @@
   "homepage": "https://github.com/wallstop/DxMessaging#readme",
   "main": "README.md",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "format:md": "prettier --write \"**/*.{md,markdown}\"",
+    "format:md:check": "prettier --check \"**/*.{md,markdown}\"",
+    "format:json": "prettier --write \"**/*.{json,asmdef,asmref}\"",
+    "format:json:check": "prettier --check \"**/*.{json,asmdef,asmref}\"",
+    "format:yaml": "prettier --write \"**/*.{yml,yaml}\"",
+    "format:yaml:check": "prettier --check \"**/*.{yml,yaml}\"",
+    "check:yaml": "prettier --check \"**/*.{yml,yaml}\" && yamllint -c .yamllint.yaml .",
+    "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\""
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "^0.17.1",
+    "prettier": "3.3.3"
   },
   "samples": [
     {

@@ -4,12 +4,12 @@ DxMessaging is render‑pipeline agnostic (pure C#) and targets Unity 2021.3+. T
 
 Unity Version vs Render Pipeline
 
-| Unity | Built‑In RP | URP | HDRP |
-| --- | --- | --- | --- |
+| Unity      | Built‑In RP   | URP           | HDRP          |
+| ---------- | ------------- | ------------- | ------------- |
 | 2021.3 LTS | ✅ Compatible | ✅ Compatible | ✅ Compatible |
 | 2022.3 LTS | ✅ Compatible | ✅ Compatible | ✅ Compatible |
-| 2023.x | ✅ Compatible | ✅ Compatible | ✅ Compatible |
-| 6.x | ✅ Compatible | ✅ Compatible | ✅ Compatible |
+| 2023.x     | ✅ Compatible | ✅ Compatible | ✅ Compatible |
+| 6.x        | ✅ Compatible | ✅ Compatible | ✅ Compatible |
 
 Notes
 

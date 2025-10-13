@@ -1,6 +1,6 @@
 # DxMessaging Patterns
 
-[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Message Types](MessageTypes.md) | [Samples~](../Samples~/)
+[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Message Types](MessageTypes.md) | [Samples](../Samples~/)
 
 ---
 
@@ -14,7 +14,7 @@ This document captures practical patterns for building systems with DxMessaging.
 - [Directed Commands (Targeted)](#2-directed-commands-targeted)
 - [Observability (Broadcast)](#3-observability-broadcast)
 - [Validation and Normalization (Interceptors)](#4-validation-and-normalization-interceptors)
-- [Analytics/Logging (Post-Processors)](#5-analyticslogging-post-processors)
+- [Analytics and Logging (Post-Processors)](#5-analyticslogging-post-processors)
 - [Local Bus Islands](#6-local-bus-islands)
 - [Lifecycle Pattern in Unity](#7-lifecycle-pattern-in-unity)
 - [Cross-Scene Messaging](#8-cross-scene-messaging)
@@ -629,13 +629,13 @@ void LateUpdate() {
 
 ### Scaling Guidelines
 
-| Entity Count | Message Rate | Recommendations |
-|--------------|--------------|-----------------|
-| 1-10 | Any | Default settings fine |
-| 10-50 | <1000/sec | Disable diagnostics in builds |
-| 50-100 | <5000/sec | Batch emissions, avoid GlobalAcceptAll |
-| 100-500 | <10k/sec | Use local buses for subsystems, profile carefully |
-| 500+ | <20k/sec | Consider ECS or native code for hot paths |
+| Entity Count | Message Rate | Recommendations                                   |
+| ------------ | ------------ | ------------------------------------------------- |
+| 1-10         | Any          | Default settings fine                             |
+| 10-50        | <1000/sec    | Disable diagnostics in builds                     |
+| 50-100       | <5000/sec    | Batch emissions, avoid GlobalAcceptAll            |
+| 100-500      | <10k/sec     | Use local buses for subsystems, profile carefully |
+| 500+         | <20k/sec     | Consider ECS or native code for hot paths         |
 
 **Rule of thumb:** If you're emitting >20,000 messages/second, you're likely using DxMessaging for something better suited to ECS or direct method calls.
 
@@ -739,8 +739,8 @@ public class MatchStats : MessageAwareComponent {
 
 ### Try Real Examples
 
-- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — Working combat example
-- → [Samples~/UI Buttons + Inspector](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — Interactive diagnostics
+- → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — Working combat example
+- → [UI Buttons + Inspector sample](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — Interactive diagnostics
 - → [End-to-End Example](EndToEnd.md) — Complete feature walkthrough
 
 ### Deep Dives

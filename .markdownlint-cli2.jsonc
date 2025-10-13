@@ -1,8 +1,14 @@
 {
   // Limit linting impact until large, single-line docs are reformatted
   "ignores": [
-    "Docs/GettingStarted.md",
-    "Docs/DesignAndArchitecture.md"
+    // Exclude third-party and generated content
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/Library/**",
+    "**/obj/**",
+    "**/Temp/**",
+    "**/Samples~/**",
+    "**/.github/**"
   ]
 }
 

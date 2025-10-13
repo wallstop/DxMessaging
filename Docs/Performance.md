@@ -12,17 +12,17 @@ See also: `Docs/DesignAndArchitecture.md#performance-optimizations` for design d
 
 ## Windows
 
-| Message Tech | Operations / Second | Allocations? |
-| ------------ | ------------------- | ------------ |
-| Unity | 2,551,000 | Yes |
-| DxMessaging (GameObject) - Normal | 8,863,000 | No |
-| DxMessaging (Component) - Normal | 8,855,000 | No |
-| DxMessaging (GameObject) - No-Copy | 9,758,200 | No |
-| DxMessaging (Component) - No-Copy | 9,880,600 | No |
-| DxMessaging (Untargeted) - No-Copy | 15,625,000 | No |
-| Reflexive (One Argument) | 2,798,200 | No |
-| Reflexive (Two Arguments) | 2,214,800 | No |
-| Reflexive (Three Arguments) | 2,236,400 | No |
+| Message Tech                       | Operations / Second | Allocations? |
+| ---------------------------------- | ------------------- | ------------ |
+| Unity                              | 2,555,400           | Yes          |
+| DxMessaging (GameObject) - Normal  | 8,199,600           | No           |
+| DxMessaging (Component) - Normal   | 8,191,000           | No           |
+| DxMessaging (GameObject) - No-Copy | 9,227,600           | No           |
+| DxMessaging (Component) - No-Copy  | 8,807,000           | No           |
+| DxMessaging (Untargeted) - No-Copy | 14,560,400          | No           |
+| Reflexive (One Argument)           | 2,782,600           | No           |
+| Reflexive (Two Arguments)          | 2,308,400           | No           |
+| Reflexive (Three Arguments)        | 2,310,400           | No           |
 
 ## macOS
 

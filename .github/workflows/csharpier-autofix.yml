@@ -16,39 +16,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Restore .NET tools
         run: dotnet tool restore
 
       - name: Run CSharpier (format repository)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: dotnet tool run csharpier format
 
-      - name: Commit formatting changes to PR branch (same-repo PRs only)
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Commit formatting changes to PR branch (Dependabot only)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
-          commit_message: 'chore(format): apply CSharpier formatting'
+          commit_message: "chore(format): apply CSharpier formatting"
           branch: ${{ github.head_ref }}
+          file_pattern: |
+            **/*.cs
 
       - name: Verify formatting (CI gate)
         run: dotnet tool run csharpier check .
 
   format_fork:
-    name: Fork PR bot formatting PR
-    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository }}
+    name: Fork PR bot formatting PR (Dependabot only)
+    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout fork PR HEAD
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
@@ -56,9 +58,9 @@ jobs:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Install CSharpier (pinned)
         run: dotnet tool install -g csharpier --version 1.1.2
@@ -88,7 +90,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add -A
+          # Only stage C# files to avoid touching workflow YAML (requires special permissions)
+          git add '**/*.cs'
           git commit -m "chore(format): apply CSharpier formatting for PR #${{ github.event.pull_request.number }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream
@@ -136,7 +139,13 @@ jobs:
               const body = `A formatting PR has been opened: #${fmtPr.number} (applies CSharpier to this PR).`;
               // Avoid duplicate comments by checking recent comments
               const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 50 });
-              const already = comments.data.some(c => c.body && c.body.includes(`#${fmtPr.number}`) && c.user && c.user.login === 'github-actions[bot]');
+              const already = comments.data.some(
+                (c) =>
+                  c.body &&
+                  c.body.includes(`#${fmtPr.number}`) &&
+                  c.user &&
+                  c.user.login === 'github-actions[bot]'
+              );
               if (!already) {
                 await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
               }

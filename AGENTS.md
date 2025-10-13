@@ -34,6 +34,8 @@
 - Do not use regions.
 - Try to use minimal comments and instead rely on expressive naming conventions and assertions.
 - Do not use Description annotations for tests.
+- Do not create `async Task` test methods - the Unity test runner does not support this. Make do with `IEnumerator` based UnityTestMethods.
+- Do not use `Assert.ThrowsAsync`, it does not exist.
 
 ## Commit & Pull Request Guidelines
 

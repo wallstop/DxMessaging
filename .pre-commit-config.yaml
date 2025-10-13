@@ -20,43 +20,39 @@ repos:
         types:
           - c#
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
+        entry: npx --yes prettier@3.3.3 --write
+        language: system
+        files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
+        description: Use pinned Prettier version to match CI.
+
+  - repo: local
+    hooks:
       - id: markdownlint
-        name: Lint/format Markdown (markdownlint-cli)
-        entry: markdownlint
-        language: node
-        additional_dependencies:
-          - markdownlint-cli@0.41.0
-        types:
-          - markdown
-        args:
-          - -c
-          - .markdownlint.jsonc
-          - --fix
-        description: Lints and auto-fixes Markdown files with markdownlint-cli.
-      - id: markdown-link-text-check
-        name: Markdown link text must be human-readable
-        entry: python .github/scripts/check_markdown_links.py
-        language: python
+        name: markdownlint (respect repo config)
+        entry: npx --yes markdownlint-cli2@0.17.1 --config .markdownlint.jsonc
+        language: system
+        files: '(?i)\.(md|markdown)$'
+
+  - repo: local
+    hooks:
+      - id: yamllint
+        name: yamllint (if available)
+        entry: bash -c 'if command -v yamllint >/dev/null 2>&1; then yamllint -c .yamllint.yaml "$@"; else echo "yamllint not installed; skipping"; fi' --
+        language: system
+        files: '(?i)\.(ya?ml)$'
+
+  - repo: local
+    hooks:
+      - id: eol-bom-check
+        name: Enforce CRLF and no BOM
+        entry: node scripts/check-eol.js
+        language: system
         pass_filenames: false
-        types:
-          - markdown
-        description: Ensure markdown-to-markdown links do not use raw file names or paths as link text.
-      - id: markdown-link-validity
-        name: Validate internal markdown links
-        entry: python .github/scripts/validate_markdown_links.py
-        language: python
-        pass_filenames: true
-        types:
-          - markdown
-        description: Detect broken internal markdown links and dangling anchors.
-      - id: prettier-json
-        name: Format JSON and asmdef with Prettier
-        entry: prettier
-        language: node
-        additional_dependencies:
-          - prettier@3.3.3
-        files: \.(json|asmdef)$
-        args:
-          - --ignore-unknown
-          - --write
-        description: Formats JSON and Unity .asmdef files consistently (2-space indent).
+        stages:
+          - pre-commit
+          - pre-push

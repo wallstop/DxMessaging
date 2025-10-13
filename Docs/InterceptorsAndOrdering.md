@@ -1,5 +1,45 @@
 # Interceptors, Ordering, and Post‑Processing
 
+## Snapshot Semantics: Frozen Listener Lists
+
+**IMPORTANT:** DxMessaging uses snapshot semantics for message emissions. When a message is emitted, the system creates a snapshot of all current listeners (interceptors, handlers, and post-processors). This snapshot is "frozen" for the duration of that emission.
+
+**What this means:**
+
+- Listeners added during emission will **not** be invoked for the current message
+- Newly registered listeners will only become active starting with the **next** emission
+- Listeners removed during emission will still complete their execution for the current message
+- This behavior applies to all registration types: handlers, interceptors, and post-processors
+- This behavior applies to all message categories: Untargeted, Targeted, and Broadcast
+
+**Example:**
+
+```csharp
+// Handler adds a new listener during emission
+_ = token.RegisterUntargeted<GameEvent>(msg => {
+    DoWork();
+    // This new listener will NOT run for this emission
+    _ = token.RegisterUntargeted<GameEvent>(newMsg => ProcessLater());
+});
+
+// First emission: only the original handler runs
+new GameEvent().Emit();  // DoWork() executes, ProcessLater() does NOT
+
+// Second emission: both handlers run
+new GameEvent().Emit();  // Both DoWork() and ProcessLater() execute
+```
+
+**Why this matters:**
+
+- Prevents infinite loops (a handler that registers itself won't recurse)
+- Guarantees predictable execution order
+- Ensures all listeners see a consistent view of the registration state
+- Makes debugging and reasoning about message flow easier
+
+This snapshot behavior is extensively tested in `MutationDuringEmissionTests.cs`.
+
+---
+
 Execution order (precise)
 
 DxMessaging runs emissions through a fixed pipeline. This section documents the exact order used at runtime for every category. Unless otherwise noted:
