@@ -33,13 +33,13 @@
   "main": "README.md",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "format:md": "prettier --write \"**/*.{md,markdown}\"",
-    "format:md:check": "prettier --check \"**/*.{md,markdown}\"",
-    "format:json": "prettier --write \"**/*.{json,asmdef,asmref}\"",
-    "format:json:check": "prettier --check \"**/*.{json,asmdef,asmref}\"",
-    "format:yaml": "prettier --write \"**/*.{yml,yaml}\"",
-    "format:yaml:check": "prettier --check \"**/*.{yml,yaml}\"",
-    "check:yaml": "prettier --check \"**/*.{yml,yaml}\" && yamllint -c .yamllint.yaml .",
+    "format:md": "npx --yes prettier@3.6.2 --write \"**/*.{md,markdown}\"",
+    "format:md:check": "npx --yes prettier@3.6.2 --check \"**/*.{md,markdown}\"",
+    "format:json": "npx --yes prettier@3.6.2 --write \"**/*.{json,asmdef,asmref}\"",
+    "format:json:check": "npx --yes prettier@3.6.2 --check \"**/*.{json,asmdef,asmref}\"",
+    "format:yaml": "npx --yes prettier@3.6.2 --write \"**/*.{yml,yaml}\"",
+    "format:yaml:check": "npx --yes prettier@3.6.2 --check \"**/*.{yml,yaml}\"",
+    "check:yaml": "npx --yes prettier@3.6.2 --check \"**/*.{yml,yaml}\" && yamllint -c .yamllint.yaml .",
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\""
   },
   "devDependencies": {
