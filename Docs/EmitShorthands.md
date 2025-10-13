@@ -298,17 +298,14 @@ If a handler isn’t firing, first suspect a GameObject vs Component mismatch. S
 **Check these in order:**
 
 1. **GameObject vs Component mismatch?**
-
    - Did you register for a GameObject but emit to a Component (or vice versa)?
    - Use explicit helpers (`EmitGameObjectTargeted` vs `EmitComponentTargeted`) to eliminate this issue
 
 1. **Is the handler enabled?**
-
    - Check that `token.Enable()` was called (usually in `OnEnable`)
    - Verify the component is active
 
 1. **Correct message type?**
-
    - Untargeted messages use `Emit()`
    - Targeted messages use `EmitAt(target)`
    - Broadcast messages use `EmitFrom(source)`

@@ -120,7 +120,6 @@
 **Located in `Samples~/` directory** — Import via Unity Package Manager!
 
 - **[Mini Combat](../Samples~/Mini%20Combat/README.md)** ⭐ — Interactive combat demo with Heal/Damage messages
-
   - Perfect first example to understand message flow
   - Shows Targeted and Broadcast messages in action
   - Complete working scene you can play with
