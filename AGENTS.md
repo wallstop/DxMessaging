@@ -23,6 +23,7 @@
 - Place code under `DxMessaging.Core`, `DxMessaging.Unity`, or `DxMessaging.Editor` as appropriate.
 - Do not use underscores in function names, especially test function names.
 - Do not use regions, anywhere, ever.
+- Avoid `var` wherever possible, use expressive types.
 
 ## Testing Guidelines
 
