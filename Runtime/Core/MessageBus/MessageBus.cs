@@ -20,6 +20,9 @@ namespace DxMessaging.Core.MessageBus
     /// </summary>
     public sealed class MessageBus : IMessageBus
     {
+        private long _emissionId;
+        public long EmissionId => _emissionId;
+
         private sealed class HandlerCache<TKey, TValue>
         {
             public readonly Dictionary<TKey, TValue> handlers = new();
@@ -27,6 +30,7 @@ namespace DxMessaging.Core.MessageBus
             public readonly List<KeyValuePair<TKey, TValue>> cache = new();
             public long version;
             public long lastSeenVersion = -1;
+            public long lastSeenEmissionId;
         }
 
         private sealed class HandlerCache
@@ -35,6 +39,7 @@ namespace DxMessaging.Core.MessageBus
             public readonly List<MessageHandler> cache = new();
             public long version;
             public long lastSeenVersion = -1;
+            public long lastSeenEmissionId;
         }
 
         public int RegisteredTargeted
@@ -803,6 +808,10 @@ namespace DxMessaging.Core.MessageBus
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage
         {
+            unchecked
+            {
+                _emissionId++;
+            }
             if (_diagnosticsMode)
             {
                 _emissionBuffer.Add(new MessageEmissionData(typedMessage));
@@ -829,9 +838,11 @@ namespace DxMessaging.Core.MessageBus
             )
             {
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    sortedHandlers,
+                    _emissionId
                 );
-                switch (handlerList.Count)
+                int handlerListCount = handlerList.Count;
+                switch (handlerListCount)
                 {
                     case 1:
                     {
@@ -885,7 +896,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        for (int i = 0; i < handlerList.Count; ++i)
+                        for (int i = 0; i < handlerListCount; ++i)
                         {
                             KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
@@ -1004,6 +1015,10 @@ namespace DxMessaging.Core.MessageBus
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
             where TMessage : ITargetedMessage
         {
+            unchecked
+            {
+                _emissionId++;
+            }
             if (_diagnosticsMode)
             {
                 _emissionBuffer.Add(new MessageEmissionData(typedMessage, target));
@@ -1232,9 +1247,11 @@ namespace DxMessaging.Core.MessageBus
             {
                 foundAnyHandlers = true;
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    sortedHandlers,
+                    _emissionId
                 );
-                switch (handlerList.Count)
+                int handlerListCount = handlerList.Count;
+                switch (handlerListCount)
                 {
                     case 1:
                     {
@@ -1288,7 +1305,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        for (int i = 0; i < handlerList.Count; ++i)
+                        for (int i = 0; i < handlerListCount; ++i)
                         {
                             KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunTargetedBroadcast(
@@ -1314,9 +1331,11 @@ namespace DxMessaging.Core.MessageBus
             {
                 foundAnyHandlers = true;
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    sortedHandlers,
+                    _emissionId
                 );
-                switch (handlerList.Count)
+                int handlerListCount = handlerList.Count;
+                switch (handlerListCount)
                 {
                     case 1:
                     {
@@ -1445,7 +1464,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        for (int i = 0; i < handlerList.Count; ++i)
+                        for (int i = 0; i < handlerListCount; ++i)
                         {
                             KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunTargetedPostProcessing(
@@ -1469,9 +1488,11 @@ namespace DxMessaging.Core.MessageBus
             )
             {
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    postTwt
+                    postTwt,
+                    _emissionId
                 );
-                switch (handlerList.Count)
+                int handlerListCount = handlerList.Count;
+                switch (handlerListCount)
                 {
                     case 1:
                     {
@@ -1600,7 +1621,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        for (int i = 0; i < handlerList.Count; ++i)
+                        for (int i = 0; i < handlerListCount; ++i)
                         {
                             KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunTargetedWithoutTargetingPostProcessing(
@@ -1640,8 +1661,9 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -1770,7 +1792,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleTargetedWithoutTargetingPostProcessing(
@@ -1795,8 +1817,9 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -1850,7 +1873,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleTargetedPostProcessing(ref target, ref typedMessage, this, priority);
@@ -1870,8 +1893,9 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -1910,7 +1934,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleTargeted(ref target, ref typedMessage, this, priority);
@@ -1952,6 +1976,10 @@ namespace DxMessaging.Core.MessageBus
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
             where TMessage : IBroadcastMessage
         {
+            unchecked
+            {
+                _emissionId++;
+            }
             if (_diagnosticsMode)
             {
                 _emissionBuffer.Add(new MessageEmissionData(typedMessage, source));
@@ -1982,9 +2010,11 @@ namespace DxMessaging.Core.MessageBus
             {
                 foundAnyHandlers = true;
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    sortedHandlers,
+                    _emissionId
                 );
-                switch (handlerList.Count)
+                int handlerListCount = handlerList.Count;
+                switch (handlerListCount)
                 {
                     case 1:
                     {
@@ -2038,7 +2068,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        for (int i = 0; i < handlerList.Count; ++i)
+                        for (int i = 0; i < handlerListCount; ++i)
                         {
                             KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunBroadcast(ref source, ref typedMessage, entry.Key, entry.Value);
@@ -2059,9 +2089,11 @@ namespace DxMessaging.Core.MessageBus
             {
                 foundAnyHandlers = true;
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    sortedHandlers,
+                    _emissionId
                 );
-                switch (handlerList.Count)
+                int handlerListCount = handlerList.Count;
+                switch (handlerListCount)
                 {
                     case 1:
                     {
@@ -2190,7 +2222,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                     default:
                     {
-                        for (int i = 0; i < handlerList.Count; ++i)
+                        for (int i = 0; i < handlerListCount; ++i)
                         {
                             KeyValuePair<int, HandlerCache> entry = handlerList[i];
                             RunBroadcastPostProcessing(
@@ -2212,9 +2244,11 @@ namespace DxMessaging.Core.MessageBus
             )
             {
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                    sortedHandlers
+                    sortedHandlers,
+                    _emissionId
                 );
-                for (int i = 0; i < handlerList.Count; ++i)
+                int handlerListCount = handlerList.Count;
+                for (int i = 0; i < handlerListCount; ++i)
                 {
                     KeyValuePair<int, HandlerCache> entry = handlerList[i];
                     RunBroadcastWithoutSourcePostProcessing(
@@ -2245,8 +2279,13 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : IBroadcastMessage
         {
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
+            {
+                return;
+            }
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
@@ -2270,8 +2309,9 @@ namespace DxMessaging.Core.MessageBus
             {
                 return;
             }
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -2400,7 +2440,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcastPostProcessing(
@@ -2425,8 +2465,9 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -2480,7 +2521,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcast(ref source, ref typedMessage, this, priority);
@@ -2494,8 +2535,12 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
+                _globalSinks,
+                _emissionId
+            );
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -2534,7 +2579,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleGlobalUntargetedMessage(ref message, this);
@@ -2548,8 +2593,12 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
+                _globalSinks,
+                _emissionId
+            );
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -2588,7 +2637,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleGlobalTargetedMessage(ref target, ref message, this);
@@ -2605,8 +2654,12 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(_globalSinks);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
+                _globalSinks,
+                _emissionId
+            );
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -2660,7 +2713,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
@@ -2934,10 +2987,12 @@ namespace DxMessaging.Core.MessageBus
             }
 
             List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                sortedHandlers
+                sortedHandlers,
+                _emissionId
             );
 
-            switch (handlerList.Count)
+            int handlerListCount = handlerList.Count;
+            switch (handlerListCount)
             {
                 case 1:
                 {
@@ -2991,7 +3046,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < handlerList.Count; ++i)
+            for (int i = 0; i < handlerListCount; ++i)
             {
                 KeyValuePair<int, HandlerCache> entry = handlerList[i];
                 RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
@@ -3010,8 +3065,13 @@ namespace DxMessaging.Core.MessageBus
             {
                 return;
             }
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
+            {
+                return;
+            }
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -3050,7 +3110,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleUntargetedMessage(ref message, this, priority);
@@ -3072,10 +3132,12 @@ namespace DxMessaging.Core.MessageBus
             }
 
             List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                sortedHandlers
+                sortedHandlers,
+                _emissionId
             );
 
-            switch (handlerList.Count)
+            int handlerListCount = handlerList.Count;
+            switch (handlerListCount)
             {
                 case 1:
                 {
@@ -3129,7 +3191,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < handlerList.Count; ++i)
+            for (int i = 0; i < handlerListCount; ++i)
             {
                 KeyValuePair<int, HandlerCache> entry = handlerList[i];
                 RunTargetedWithoutTargeting(ref target, ref message, entry.Key, entry.Value);
@@ -3151,8 +3213,9 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -3206,7 +3269,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleTargetedWithoutTargeting(ref target, ref message, this, priority);
@@ -3228,9 +3291,11 @@ namespace DxMessaging.Core.MessageBus
             }
 
             List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
-                sortedHandlers
+                sortedHandlers,
+                _emissionId
             );
-            switch (handlerList.Count)
+            int handlerListCount = handlerList.Count;
+            switch (handlerListCount)
             {
                 case 1:
                 {
@@ -3284,7 +3349,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < handlerList.Count; ++i)
+            for (int i = 0; i < handlerListCount; ++i)
             {
                 KeyValuePair<int, HandlerCache> entry = handlerList[i];
                 RunBroadcastWithoutSource(ref source, ref message, entry.Key, entry.Value);
@@ -3306,8 +3371,9 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache);
-            switch (messageHandlers.Count)
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            switch (messageHandlersCount)
             {
                 case 1:
                 {
@@ -3436,7 +3502,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int i = 0; i < messageHandlersCount; ++i)
             {
                 MessageHandler handler = messageHandlers[i];
                 handler.HandleSourcedBroadcastWithoutSource(
@@ -3484,11 +3550,6 @@ namespace DxMessaging.Core.MessageBus
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
-            if (count == 0)
-            {
-                cache.cache.Add(messageHandler);
-            }
-            cache.lastSeenVersion = cache.version;
             Type type = typeof(T);
             _log.Log(
                 new MessagingRegistration(
@@ -3535,11 +3596,7 @@ namespace DxMessaging.Core.MessageBus
                 {
                     bool complete = handler.Remove(messageHandler);
                     cache.version++;
-                    if (complete)
-                    {
-                        _ = cache.cache.Remove(messageHandler);
-                    }
-                    cache.lastSeenVersion = cache.version;
+                    // do not mutate cache.cache here; let next read rebuild from handlers
 
                     if (handler.Count == 0)
                     {
@@ -3571,7 +3628,6 @@ namespace DxMessaging.Core.MessageBus
                 else
                 {
                     handler[messageHandler] = count - 1;
-                    cache.lastSeenVersion = cache.version;
                 }
             };
         }
@@ -3624,11 +3680,6 @@ namespace DxMessaging.Core.MessageBus
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
-            if (count == 0)
-            {
-                cache.cache.Add(messageHandler);
-            }
-            cache.lastSeenVersion = cache.version;
 
             Type type = typeof(T);
             _log.Log(
@@ -3676,11 +3727,7 @@ namespace DxMessaging.Core.MessageBus
                 {
                     bool complete = handler.Remove(messageHandler);
                     cache.version++;
-                    if (complete)
-                    {
-                        _ = cache.cache.Remove(messageHandler);
-                    }
-                    cache.lastSeenVersion = cache.version;
+                    // do not mutate cache.cache here; let next read rebuild from handlers
                     if (handler.Count == 0)
                     {
                         handlers.version++;
@@ -3717,51 +3764,57 @@ namespace DxMessaging.Core.MessageBus
                 else
                 {
                     handler[messageHandler] = count - 1;
-                    cache.lastSeenVersion = cache.version;
                 }
             };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static List<KeyValuePair<int, HandlerCache>> GetOrAddMessageHandlerStack(
-            HandlerCache<int, HandlerCache> cache
+            HandlerCache<int, HandlerCache> cache,
+            long emissionId
         )
         {
-            if (cache.version == cache.lastSeenVersion)
+            if (cache.lastSeenEmissionId != emissionId)
             {
-                return cache.cache;
-            }
-
-            List<KeyValuePair<int, HandlerCache>> list = cache.cache;
-            list.Clear();
-            List<int> keys = cache.order;
-            for (int i = 0; i < keys.Count; i++)
-            {
-                int key = keys[i];
-                if (cache.handlers.TryGetValue(key, out HandlerCache value))
+                if (cache.version != cache.lastSeenVersion)
                 {
-                    list.Add(new KeyValuePair<int, HandlerCache>(key, value));
+                    List<KeyValuePair<int, HandlerCache>> list = cache.cache;
+                    list.Clear();
+                    List<int> keys = cache.order;
+                    for (int i = 0; i < keys.Count; i++)
+                    {
+                        int key = keys[i];
+                        if (cache.handlers.TryGetValue(key, out HandlerCache value))
+                        {
+                            list.Add(new KeyValuePair<int, HandlerCache>(key, value));
+                        }
+                    }
+                    cache.lastSeenVersion = cache.version;
                 }
+                cache.lastSeenEmissionId = emissionId;
             }
-
-            cache.lastSeenVersion = cache.version;
-            return list;
+            return cache.cache;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static List<MessageHandler> GetOrAddMessageHandlerStack(HandlerCache cache)
+        private static List<MessageHandler> GetOrAddMessageHandlerStack(
+            HandlerCache cache,
+            long emissionId
+        )
         {
-            if (cache.version == cache.lastSeenVersion)
+            if (cache.lastSeenEmissionId != emissionId)
             {
-                return cache.cache;
+                if (cache.version != cache.lastSeenVersion)
+                {
+                    List<MessageHandler> list = cache.cache;
+                    list.Clear();
+                    Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
+                    list.AddRange(keys);
+                    cache.lastSeenVersion = cache.version;
+                }
+                cache.lastSeenEmissionId = emissionId;
             }
-
-            List<MessageHandler> list = cache.cache;
-            list.Clear();
-            Dictionary<MessageHandler, int>.KeyCollection keys = cache.handlers.Keys;
-            list.AddRange(keys);
-            cache.lastSeenVersion = cache.version;
-            return list;
+            return cache.cache;
         }
 
         // https://blogs.msmvps.com/jonskeet/2008/08/09/making-reflection-fly-and-exploring-delegates/

@@ -101,7 +101,8 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleUntargeted(ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleUntargeted(ref message, priority, emissionId);
             }
         }
 
@@ -128,7 +129,8 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleUntargetedPostProcessing(ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleUntargetedPostProcessing(ref message, priority, emissionId);
             }
         }
 
@@ -157,7 +159,8 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleTargeted(ref target, ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleTargeted(ref target, ref message, priority, emissionId);
             }
         }
 
@@ -186,7 +189,13 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleTargetedWithoutTargeting(ref target, ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleTargetedWithoutTargeting(
+                    ref target,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
         }
 
@@ -215,7 +224,8 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleTargetedPostProcessing(ref target, ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleTargetedPostProcessing(ref target, ref message, priority, emissionId);
             }
         }
 
@@ -244,10 +254,12 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
                 handler.HandleTargetedWithoutTargetingPostProcessing(
                     ref target,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
         }
@@ -277,7 +289,8 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleSourcedBroadcast(ref source, ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleSourcedBroadcast(ref source, ref message, priority, emissionId);
             }
         }
 
@@ -306,7 +319,13 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleSourcedBroadcastWithoutSource(ref source, ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleSourcedBroadcastWithoutSource(
+                    ref source,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
         }
 
@@ -335,7 +354,13 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                handler.HandleSourcedBroadcastPostProcessing(ref source, ref message, priority);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleSourcedBroadcastPostProcessing(
+                    ref source,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
         }
 
@@ -364,10 +389,12 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
                 handler.HandleBroadcastWithoutSourcePostProcessing(
                     ref source,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
         }
@@ -390,7 +417,8 @@ namespace DxMessaging.Core
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
             if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
-                handler.HandleGlobalUntargeted(ref message);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleGlobalUntargeted(ref message, emissionId);
             }
         }
 
@@ -414,7 +442,8 @@ namespace DxMessaging.Core
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
             if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
-                handler.HandleGlobalTargeted(ref target, ref message);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleGlobalTargeted(ref target, ref message, emissionId);
             }
         }
 
@@ -438,7 +467,8 @@ namespace DxMessaging.Core
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
             if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
-                handler.HandleGlobalBroadcast(ref source, ref message);
+                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                handler.HandleGlobalBroadcast(ref source, ref message, emissionId);
             }
         }
 
@@ -576,7 +606,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -610,7 +641,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -644,7 +676,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -678,7 +711,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -709,7 +743,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -740,7 +775,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -770,7 +806,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -800,7 +837,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -830,7 +868,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -860,7 +899,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -890,7 +930,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -920,7 +961,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -955,7 +997,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -989,7 +1032,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1019,7 +1063,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1049,7 +1094,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1083,7 +1129,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1117,7 +1164,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1148,7 +1196,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1179,7 +1228,8 @@ namespace DxMessaging.Core
                 originalHandler,
                 messageHandler,
                 messageBusDeregistration,
-                priority
+                priority,
+                messageBus.EmissionId
             );
         }
 
@@ -1357,6 +1407,7 @@ namespace DxMessaging.Core
             public readonly List<T> cache = new();
             public long version;
             public long lastSeenVersion = -1;
+            public long lastSeenEmissionId;
         }
 
         /// <summary>
@@ -1468,10 +1519,44 @@ namespace DxMessaging.Core
             /// </summary>
             /// <param name="message">Message to emit.</param>
             /// <param name="priority">Priority at which to run the handlers.</param>
-            public void HandleUntargeted(ref T message, int priority)
+            public void HandleUntargeted(ref T message, int priority, long emissionId)
             {
-                RunFastHandlers(_untargetedFastHandlers, ref message, priority);
-                RunHandlers(_untargetedHandlers, ref message, priority);
+                // Pre-freeze untargeted post-processors for this emission/priority
+                if (
+                    _untargetedPostProcessingFastHandlers != null
+                    && _untargetedPostProcessingFastHandlers.TryGetValue(priority, out var upf)
+                )
+                {
+                    _ = GetOrAddNewHandlerStack(upf, emissionId);
+                }
+                if (
+                    _untargetedPostProcessingHandlers != null
+                    && _untargetedPostProcessingHandlers.TryGetValue(priority, out var up)
+                )
+                {
+                    _ = GetOrAddNewHandlerStack(up, emissionId);
+                }
+                // Pre-freeze post-processors for this emission/priority
+                if (
+                    _untargetedPostProcessingFastHandlers != null
+                    && _untargetedPostProcessingFastHandlers.TryGetValue(
+                        priority,
+                        out var fastCache
+                    )
+                )
+                {
+                    _ = GetOrAddNewHandlerStack(fastCache, emissionId);
+                }
+                if (
+                    _untargetedPostProcessingHandlers != null
+                    && _untargetedPostProcessingHandlers.TryGetValue(priority, out var cache)
+                )
+                {
+                    _ = GetOrAddNewHandlerStack(cache, emissionId);
+                }
+
+                RunFastHandlers(_untargetedFastHandlers, ref message, priority, emissionId);
+                RunHandlers(_untargetedHandlers, ref message, priority, emissionId);
             }
 
             /// <summary>
@@ -1480,15 +1565,27 @@ namespace DxMessaging.Core
             /// <param name="target">Target the message is for.</param>
             /// <param name="message">Message to emit.</param>
             /// <param name="priority">Priority at which to run the handlers.</param>
-            public void HandleTargeted(ref InstanceId target, ref T message, int priority)
+            public void HandleTargeted(
+                ref InstanceId target,
+                ref T message,
+                int priority,
+                long emissionId
+            )
             {
                 RunFastHandlersWithContext(
                     ref target,
                     _targetedFastHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
-                RunHandlersWithContext(ref target, _targetedHandlers, ref message, priority);
+                RunHandlersWithContext(
+                    ref target,
+                    _targetedHandlers,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
 
             /// <summary>
@@ -1500,16 +1597,24 @@ namespace DxMessaging.Core
             public void HandleTargetedWithoutTargeting(
                 ref InstanceId target,
                 ref T message,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 RunFastHandlers(
                     ref target,
                     _fastTargetedWithoutTargetingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
-                RunHandlers(ref target, _targetedWithoutTargetingHandlers, ref message, priority);
+                RunHandlers(
+                    ref target,
+                    _targetedWithoutTargetingHandlers,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
 
             /// <summary>
@@ -1518,15 +1623,27 @@ namespace DxMessaging.Core
             /// <param name="source">Source the message is from.</param>
             /// <param name="message">Message to emit.</param>
             /// <param name="priority">Priority at which to run the handlers.</param>
-            public void HandleSourcedBroadcast(ref InstanceId source, ref T message, int priority)
+            public void HandleSourcedBroadcast(
+                ref InstanceId source,
+                ref T message,
+                int priority,
+                long emissionId
+            )
             {
                 RunFastHandlersWithContext(
                     ref source,
                     _broadcastFastHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
-                RunHandlersWithContext(ref source, _broadcastHandlers, ref message, priority);
+                RunHandlersWithContext(
+                    ref source,
+                    _broadcastHandlers,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
 
             /// <summary>
@@ -1538,34 +1655,44 @@ namespace DxMessaging.Core
             public void HandleSourcedBroadcastWithoutSource(
                 ref InstanceId source,
                 ref T message,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 RunFastHandlers(
                     ref source,
                     _fastBroadcastWithoutSourceHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
-                RunHandlers(ref source, _broadcastWithoutSourceHandlers, ref message, priority);
+                RunHandlers(
+                    ref source,
+                    _broadcastWithoutSourceHandlers,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
 
             /// <summary>
             /// Emits the UntargetedMessage to all global listeners.
             /// </summary>
             /// <param name="message">Message to emit.</param>
-            public void HandleGlobalUntargeted(ref IUntargetedMessage message)
+            public void HandleGlobalUntargeted(ref IUntargetedMessage message, long emissionId)
             {
-                RunFastHandlers(_globalUntargetedFastHandlers, ref message);
+                RunFastHandlers(_globalUntargetedFastHandlers, ref message, emissionId);
                 if (_globalUntargetedHandlers?.entries is not { Count: > 0 })
                 {
                     return;
                 }
 
                 List<Action<IUntargetedMessage>> handlers = GetOrAddNewHandlerStack(
-                    _globalUntargetedHandlers
+                    _globalUntargetedHandlers,
+                    emissionId
                 );
-                for (int i = 0; i < handlers.Count; ++i)
+                int handlersCount = handlers.Count;
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](message);
                 }
@@ -1576,9 +1703,13 @@ namespace DxMessaging.Core
             /// </summary>
             /// <param name="target">Target that this message is intended for.</param>
             /// <param name="message">Message to emit.</param>
-            public void HandleGlobalTargeted(ref InstanceId target, ref ITargetedMessage message)
+            public void HandleGlobalTargeted(
+                ref InstanceId target,
+                ref ITargetedMessage message,
+                long emissionId
+            )
             {
-                RunFastHandlers(ref target, _globalTargetedFastHandlers, ref message);
+                RunFastHandlers(ref target, _globalTargetedFastHandlers, ref message, emissionId);
 
                 if (_globalTargetedHandlers?.entries is not { Count: > 0 })
                 {
@@ -1586,9 +1717,11 @@ namespace DxMessaging.Core
                 }
 
                 List<Action<InstanceId, ITargetedMessage>> handlers = GetOrAddNewHandlerStack(
-                    _globalTargetedHandlers
+                    _globalTargetedHandlers,
+                    emissionId
                 );
-                for (int i = 0; i < handlers.Count; ++i)
+                int handlersCount = handlers.Count;
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](target, message);
                 }
@@ -1599,9 +1732,13 @@ namespace DxMessaging.Core
             /// </summary>
             /// <param name="source">Source that this message is from.</param>
             /// <param name="message">Message to emit.</param>
-            public void HandleGlobalBroadcast(ref InstanceId source, ref IBroadcastMessage message)
+            public void HandleGlobalBroadcast(
+                ref InstanceId source,
+                ref IBroadcastMessage message,
+                long emissionId
+            )
             {
-                RunFastHandlers(ref source, _globalBroadcastFastHandlers, ref message);
+                RunFastHandlers(ref source, _globalBroadcastFastHandlers, ref message, emissionId);
 
                 if (_globalBroadcastHandlers?.entries is not { Count: > 0 })
                 {
@@ -1609,9 +1746,11 @@ namespace DxMessaging.Core
                 }
 
                 List<Action<InstanceId, IBroadcastMessage>> handlers = GetOrAddNewHandlerStack(
-                    _globalBroadcastHandlers
+                    _globalBroadcastHandlers,
+                    emissionId
                 );
-                switch (handlers.Count)
+                int handlersCount = handlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -1650,95 +1789,112 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < handlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](source, message);
                 }
             }
 
-            public void HandleUntargetedPostProcessing(ref T message, int priority)
+            public void HandleUntargetedPostProcessing(ref T message, int priority, long emissionId)
             {
-                RunFastHandlers(_untargetedPostProcessingFastHandlers, ref message, priority);
-                RunHandlers(_untargetedPostProcessingHandlers, ref message, priority);
+                RunFastHandlers(
+                    _untargetedPostProcessingFastHandlers,
+                    ref message,
+                    priority,
+                    emissionId
+                );
+                RunHandlers(_untargetedPostProcessingHandlers, ref message, priority, emissionId);
             }
 
             public void HandleTargetedPostProcessing(
                 ref InstanceId target,
                 ref T message,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 RunFastHandlersWithContext(
                     ref target,
                     _targetedPostProcessingFastHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
                 RunHandlersWithContext(
                     ref target,
                     _targetedPostProcessingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
             public void HandleTargetedWithoutTargetingPostProcessing(
                 ref InstanceId target,
                 ref T message,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 RunFastHandlersWithContext(
                     ref target,
                     _fastTargetedWithoutTargetingPostProcessingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
                 RunHandlers(
                     ref target,
                     _targetedWithoutTargetingPostProcessingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
             public void HandleSourcedBroadcastPostProcessing(
                 ref InstanceId source,
                 ref T message,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 RunFastHandlersWithContext(
                     ref source,
                     _broadcastPostProcessingFastHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
                 RunHandlersWithContext(
                     ref source,
                     _broadcastPostProcessingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
             public void HandleBroadcastWithoutSourcePostProcessing(
                 ref InstanceId source,
                 ref T message,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 RunFastHandlersWithContext(
                     ref source,
                     _fastBroadcastWithoutSourcePostProcessingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
                 RunHandlers(
                     ref source,
                     _broadcastWithoutSourcePostProcessingHandlers,
                     ref message,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1755,7 +1911,8 @@ namespace DxMessaging.Core
                 Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1764,7 +1921,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1781,7 +1939,8 @@ namespace DxMessaging.Core
                 FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1790,7 +1949,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1805,7 +1965,8 @@ namespace DxMessaging.Core
                 Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1813,7 +1974,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1828,7 +1990,8 @@ namespace DxMessaging.Core
                 FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1836,7 +1999,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1851,7 +2015,8 @@ namespace DxMessaging.Core
                 Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1859,7 +2024,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1874,7 +2040,8 @@ namespace DxMessaging.Core
                 FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1882,7 +2049,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1899,7 +2067,8 @@ namespace DxMessaging.Core
                 Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1908,7 +2077,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1925,7 +2095,8 @@ namespace DxMessaging.Core
                 FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1934,7 +2105,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1949,7 +2121,8 @@ namespace DxMessaging.Core
                 Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1957,7 +2130,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -1972,7 +2146,8 @@ namespace DxMessaging.Core
                 FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -1980,7 +2155,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2115,7 +2291,8 @@ namespace DxMessaging.Core
                 Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2123,7 +2300,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2138,7 +2316,8 @@ namespace DxMessaging.Core
                 FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2146,7 +2325,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2163,7 +2343,8 @@ namespace DxMessaging.Core
                 Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2172,7 +2353,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2189,7 +2371,8 @@ namespace DxMessaging.Core
                 FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2198,7 +2381,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2213,7 +2397,8 @@ namespace DxMessaging.Core
                 Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2221,7 +2406,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2236,7 +2422,8 @@ namespace DxMessaging.Core
                 FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2244,7 +2431,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2261,7 +2449,8 @@ namespace DxMessaging.Core
                 Action<T> originalHandler,
                 Action<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2270,7 +2459,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2287,7 +2477,8 @@ namespace DxMessaging.Core
                 FastHandler<T> originalHandler,
                 FastHandler<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2296,7 +2487,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2311,7 +2503,8 @@ namespace DxMessaging.Core
                 Action<InstanceId, T> originalHandler,
                 Action<InstanceId, T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2319,7 +2512,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2334,7 +2528,8 @@ namespace DxMessaging.Core
                 FastHandlerWithContext<T> originalHandler,
                 FastHandlerWithContext<T> handler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 return AddHandler(
@@ -2342,7 +2537,8 @@ namespace DxMessaging.Core
                     originalHandler,
                     handler,
                     deregistration,
-                    priority
+                    priority,
+                    emissionId
                 );
             }
 
@@ -2353,7 +2549,8 @@ namespace DxMessaging.Core
                     HandlerActionCache<FastHandlerWithContext<T>>
                 > fastHandlersByContext,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
             {
@@ -2362,7 +2559,13 @@ namespace DxMessaging.Core
                     return;
                 }
 
-                RunFastHandlers(ref context, fastHandlersByContext, ref message, priority);
+                RunFastHandlers(
+                    ref context,
+                    fastHandlersByContext,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
 
             private static void RunFastHandlersWithContext<TMessage>(
@@ -2372,7 +2575,8 @@ namespace DxMessaging.Core
                     Dictionary<int, HandlerActionCache<FastHandler<T>>>
                 > fastHandlersByContext,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
             {
@@ -2387,13 +2591,14 @@ namespace DxMessaging.Core
                     return;
                 }
 
-                RunFastHandlers(cache, ref message, priority);
+                RunFastHandlers(cache, ref message, priority, emissionId);
             }
 
             private static void RunFastHandlers<TMessage>(
                 Dictionary<int, HandlerActionCache<FastHandler<T>>> fastHandlers,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
             {
@@ -2413,8 +2618,9 @@ namespace DxMessaging.Core
                 }
 
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
-                List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(cache);
-                switch (handlers.Count)
+                List<FastHandler<T>> handlers = GetOrAddNewHandlerStack(cache, emissionId);
+                int handlersCount = handlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -2453,7 +2659,7 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < handlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](ref typedMessage);
                 }
@@ -2461,7 +2667,8 @@ namespace DxMessaging.Core
 
             private static void RunFastHandlers<TMessage, TU>(
                 HandlerActionCache<FastHandler<TU>> cache,
-                ref TMessage message
+                ref TMessage message,
+                long emissionId
             )
                 where TMessage : IMessage
                 where TU : IMessage
@@ -2472,8 +2679,9 @@ namespace DxMessaging.Core
                 }
 
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
-                List<FastHandler<TU>> handlers = GetOrAddNewHandlerStack(cache);
-                switch (handlers.Count)
+                List<FastHandler<TU>> handlers = GetOrAddNewHandlerStack(cache, emissionId);
+                int handlersCount = handlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -2512,7 +2720,7 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < handlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](ref typedMessage);
                 }
@@ -2521,7 +2729,8 @@ namespace DxMessaging.Core
             private static void RunFastHandlers<TMessage, TU>(
                 ref InstanceId context,
                 HandlerActionCache<FastHandlerWithContext<TU>> cache,
-                ref TMessage message
+                ref TMessage message,
+                long emissionId
             )
                 where TMessage : IMessage
                 where TU : IMessage
@@ -2532,8 +2741,12 @@ namespace DxMessaging.Core
                 }
 
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
-                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(cache);
-                switch (handlers.Count)
+                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(
+                    cache,
+                    emissionId
+                );
+                int handlersCount = handlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -2572,7 +2785,7 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < handlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](ref context, ref typedMessage);
                 }
@@ -2582,7 +2795,8 @@ namespace DxMessaging.Core
                 ref InstanceId context,
                 Dictionary<int, HandlerActionCache<FastHandlerWithContext<TU>>> fastHandlers,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
                 where TU : IMessage
@@ -2603,8 +2817,12 @@ namespace DxMessaging.Core
                 }
 
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
-                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(cache);
-                switch (handlers.Count)
+                List<FastHandlerWithContext<TU>> handlers = GetOrAddNewHandlerStack(
+                    cache,
+                    emissionId
+                );
+                int handlersCount = handlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -2643,7 +2861,7 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < handlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](ref context, ref typedMessage);
                 }
@@ -2656,7 +2874,8 @@ namespace DxMessaging.Core
                     Dictionary<int, HandlerActionCache<Action<T>>>
                 > handlersByContext,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
             {
@@ -2671,13 +2890,14 @@ namespace DxMessaging.Core
                     return;
                 }
 
-                RunHandlers(cache, ref message, priority);
+                RunHandlers(cache, ref message, priority, emissionId);
             }
 
             private static void RunHandlers<TMessage>(
                 Dictionary<int, HandlerActionCache<Action<T>>> sortedHandlers,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
             {
@@ -2691,9 +2911,10 @@ namespace DxMessaging.Core
                     return;
                 }
 
-                List<Action<T>> handlers = GetOrAddNewHandlerStack(cache);
+                List<Action<T>> handlers = GetOrAddNewHandlerStack(cache, emissionId);
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
-                switch (handlers.Count)
+                int handlersCount = handlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -2732,7 +2953,7 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < handlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     handlers[i](typedMessage);
                 }
@@ -2742,7 +2963,8 @@ namespace DxMessaging.Core
                 ref InstanceId context,
                 Dictionary<int, HandlerActionCache<Action<InstanceId, T>>> handlers,
                 ref TMessage message,
-                int priority
+                int priority,
+                long emissionId
             )
                 where TMessage : IMessage
             {
@@ -2761,9 +2983,13 @@ namespace DxMessaging.Core
                     return;
                 }
 
-                List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(cache);
+                List<Action<InstanceId, T>> typedHandlers = GetOrAddNewHandlerStack(
+                    cache,
+                    emissionId
+                );
                 ref T typedMessage = ref Unsafe.As<TMessage, T>(ref message);
-                switch (typedHandlers.Count)
+                int handlersCount = typedHandlers.Count;
+                switch (handlersCount)
                 {
                     case 1:
                     {
@@ -2802,16 +3028,31 @@ namespace DxMessaging.Core
                     }
                 }
 
-                for (int i = 0; i < typedHandlers.Count; ++i)
+                for (int i = 0; i < handlersCount; ++i)
                 {
                     typedHandlers[i](context, typedMessage);
                 }
             }
 
-            private static List<TU> GetOrAddNewHandlerStack<TU>(HandlerActionCache<TU> actionCache)
+            private static List<TU> GetOrAddNewHandlerStack<TU>(
+                HandlerActionCache<TU> actionCache,
+                long emissionId
+            )
             {
-                // Invocation list is maintained incrementally on add/remove
-                actionCache.lastSeenVersion = actionCache.version;
+                if (actionCache.lastSeenEmissionId != emissionId)
+                {
+                    if (actionCache.version != actionCache.lastSeenVersion)
+                    {
+                        List<TU> list = actionCache.cache;
+                        list.Clear();
+                        foreach (var kvp in actionCache.entries)
+                        {
+                            list.Add(kvp.Value.handler);
+                        }
+                        actionCache.lastSeenVersion = actionCache.version;
+                    }
+                    actionCache.lastSeenEmissionId = emissionId;
+                }
                 return actionCache.cache;
             }
 
@@ -2824,7 +3065,8 @@ namespace DxMessaging.Core
                 TU originalHandler,
                 TU augmentedHandler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 handlersByContext ??=
@@ -2864,11 +3106,6 @@ namespace DxMessaging.Core
 
                 cache.entries[originalHandler] = entry;
                 cache.version++;
-                if (firstRegistration)
-                {
-                    cache.cache.Add(entry.handler);
-                    cache.lastSeenVersion = cache.version;
-                }
 
                 Dictionary<
                     InstanceId,
@@ -2906,8 +3143,7 @@ namespace DxMessaging.Core
                     if (localEntry.count <= 1)
                     {
                         _ = localCache.entries.Remove(originalHandler);
-                        _ = localCache.cache.Remove(localEntry.handler);
-                        localCache.lastSeenVersion = localCache.version;
+                        localCache.version++;
                         if (localCache.entries.Count == 0)
                         {
                             _ = sortedHandlers.Remove(priority);
@@ -2955,11 +3191,6 @@ namespace DxMessaging.Core
 
                 cache.entries[originalHandler] = entry;
                 cache.version++;
-                if (firstRegistration)
-                {
-                    cache.cache.Add(entry.handler);
-                    cache.lastSeenVersion = cache.version;
-                }
 
                 HandlerActionCache<TU> localCache = cache;
 
@@ -2982,8 +3213,7 @@ namespace DxMessaging.Core
                     if (localEntry.count <= 1)
                     {
                         _ = localCache.entries.Remove(originalHandler);
-                        _ = localCache.cache.Remove(localEntry.handler);
-                        localCache.lastSeenVersion = localCache.version;
+                        localCache.version++;
                         return;
                     }
 
@@ -3000,7 +3230,8 @@ namespace DxMessaging.Core
                 TU originalHandler,
                 TU augmentedHandler,
                 Action deregistration,
-                int priority
+                int priority,
+                long emissionId
             )
             {
                 handlers ??= new Dictionary<int, HandlerActionCache<TU>>();
@@ -3028,11 +3259,6 @@ namespace DxMessaging.Core
 
                 cache.entries[originalHandler] = entry;
                 cache.version++;
-                if (firstRegistration)
-                {
-                    cache.cache.Add(entry.handler);
-                    cache.lastSeenVersion = cache.version;
-                }
 
                 Dictionary<int, HandlerActionCache<TU>> localHandlers = handlers;
 
@@ -3060,8 +3286,7 @@ namespace DxMessaging.Core
                     if (localEntry.count <= 1)
                     {
                         _ = localCache.entries.Remove(originalHandler);
-                        _ = localCache.cache.Remove(localEntry.handler);
-                        localCache.lastSeenVersion = localCache.version;
+                        localCache.version++;
                         if (localCache.entries.Count == 0)
                         {
                             _ = localHandlers.Remove(priority);
