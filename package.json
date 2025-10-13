@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.dxmessaging",
-  "version": "2.0.0-rc27.3",
+  "version": "2.0.0-rc27.2",
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
@@ -43,8 +43,8 @@
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\""
   },
   "devDependencies": {
-    "markdownlint-cli2": "^0.17.1",
-    "prettier": "3.3.3"
+    "markdownlint-cli2": "^0.18.1",
+    "prettier": "3.6.2"
   },
   "samples": [
     {
