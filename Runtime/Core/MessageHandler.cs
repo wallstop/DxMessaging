@@ -101,7 +101,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleUntargeted(ref message, priority, emissionId);
             }
         }
@@ -129,7 +129,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleUntargetedPostProcessing(ref message, priority, emissionId);
             }
         }
@@ -159,7 +159,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleTargeted(ref target, ref message, priority, emissionId);
             }
         }
@@ -189,7 +189,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleTargetedWithoutTargeting(
                     ref target,
                     ref message,
@@ -224,7 +224,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleTargetedPostProcessing(ref target, ref message, priority, emissionId);
             }
         }
@@ -254,7 +254,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleTargetedWithoutTargetingPostProcessing(
                     ref target,
                     ref message,
@@ -289,7 +289,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleSourcedBroadcast(ref source, ref message, priority, emissionId);
             }
         }
@@ -319,7 +319,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleSourcedBroadcastWithoutSource(
                     ref source,
                     ref message,
@@ -354,7 +354,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleSourcedBroadcastPostProcessing(
                     ref source,
                     ref message,
@@ -389,7 +389,7 @@ namespace DxMessaging.Core
 
             if (GetHandlerForType(messageBus, out TypedHandler<TMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleBroadcastWithoutSourcePostProcessing(
                     ref source,
                     ref message,
@@ -417,7 +417,7 @@ namespace DxMessaging.Core
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
             if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleGlobalUntargeted(ref message, emissionId);
             }
         }
@@ -442,7 +442,7 @@ namespace DxMessaging.Core
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
             if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleGlobalTargeted(ref target, ref message, emissionId);
             }
         }
@@ -467,7 +467,7 @@ namespace DxMessaging.Core
             // Use the "IMessage" explicitly to indicate global messages, allowing us to multipurpose a single dictionary
             if (GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
             {
-                long emissionId = (messageBus as MessageBus.MessageBus)?.EmissionId ?? 0;
+                long emissionId = messageBus.EmissionId;
                 handler.HandleGlobalBroadcast(ref source, ref message, emissionId);
             }
         }
