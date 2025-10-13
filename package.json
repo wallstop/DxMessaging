@@ -43,7 +43,7 @@
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\""
   },
   "devDependencies": {
-    "markdownlint-cli2": "^0.17.1",
+    "markdownlint-cli2": "^0.18.1",
     "prettier": "3.6.2"
   },
   "samples": [
