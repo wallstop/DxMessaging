@@ -228,18 +228,18 @@ public class UI : MessageAwareComponent {
 
 ## Quick Reference Table
 
-| Term | One-Line Explanation |
-|------|---------------------|
-| **Message** | Data saying "something happened" or "do something" |
-| **Handler** | Function that runs when you receive a message |
-| **Token** | Subscription manager (auto-cleanup) |
-| **Interceptor** | Guard that checks/modifies messages before delivery |
-| **Post-Processor** | Code that runs after all handlers (logging/metrics) |
-| **Priority** | Number controlling execution order (lower = earlier) |
-| **Emit** | Send a message |
-| **Register** | Subscribe to receive messages |
-| **InstanceId** | Unique ID for a GameObject or Component |
-| **Bus** | Central message router (like a post office) |
+| Term               | One-Line Explanation                                 |
+| ------------------ | ---------------------------------------------------- |
+| **Message**        | Data saying "something happened" or "do something"   |
+| **Handler**        | Function that runs when you receive a message        |
+| **Token**          | Subscription manager (auto-cleanup)                  |
+| **Interceptor**    | Guard that checks/modifies messages before delivery  |
+| **Post-Processor** | Code that runs after all handlers (logging/metrics)  |
+| **Priority**       | Number controlling execution order (lower = earlier) |
+| **Emit**           | Send a message                                       |
+| **Register**       | Subscribe to receive messages                        |
+| **InstanceId**     | Unique ID for a GameObject or Component              |
+| **Bus**            | Central message router (like a post office)          |
 
 ---
 
@@ -258,5 +258,5 @@ public class UI : MessageAwareComponent {
 
 **Examples:**
 
-- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — See concepts in action
+- → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — See concepts in action
 - → [Patterns](Patterns.md) — Real-world usage patterns

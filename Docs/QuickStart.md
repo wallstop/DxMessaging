@@ -1,6 +1,6 @@
 # Quick Start — Your First Message in 5 Minutes
 
-[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Visual Guide](VisualGuide.md) | [Samples~](../Samples~/)
+[← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Visual Guide](VisualGuide.md) | [Samples](../Samples~/)
 
 ---
 
@@ -136,8 +136,8 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 **Try Real Examples:**
 
-- → [Samples~/Mini Combat](../Samples~/Mini%20Combat/README.md) — Working combat example
-- → [Samples~/UI Buttons + Inspector](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — See diagnostics in action
+- → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — Working combat example
+- → [UI Buttons + Inspector sample](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — See diagnostics in action
 
 **Go Deeper:**
 
