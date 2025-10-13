@@ -14,6 +14,7 @@ What runs locally:
 - Internal markdown link validity: verifies relative links and anchors point to real files/sections
 - Markdown style and formatting: markdownlint (auto-fix common issues)
 - JSON/.asmdef formatting: Prettier (2-space indent)
+- YAML formatting: Prettier (2-space indent) + yamllint
 
 On pull requests, CI also checks all markdown links (including external URLs) with lychee.
 
@@ -24,4 +25,6 @@ Handy commands:
 - Lint markdown (manual): `npx markdownlint-cli@0.41.0 "**/*.md" -c .markdownlint.jsonc --fix`
 - Format JSON/.asmdef (all files): `pre-commit run prettier-json --all-files`
 - Format JSON/.asmdef (manual): `npx prettier@3.3.3 --write "**/*.{json,asmdef}"`
+- Format YAML (all files): `pre-commit run prettier-yaml --all-files`
+- Check YAML formatting + lint: `npm run check:yaml`
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`

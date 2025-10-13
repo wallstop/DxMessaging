@@ -6,10 +6,8 @@ rules:
     spaces: 2
     indent-sequences: consistent
 
-  # Allow longer lines as warnings to avoid noisy CI
-  line-length:
-    max: 140
-    level: warning
+  # Disable line-length checks to avoid noisy CI in strict mode
+  line-length: disable
 
   # Use CRLF to match repo EOL policy (Windows-friendly)
   new-lines:
@@ -26,3 +24,7 @@ rules:
 
   # Some Actions examples use inline comments that can be oddly indented
   comments-indentation: disable
+
+  # Align with Prettier: allow a single space before inline comments
+  comments:
+    min-spaces-from-content: 1
