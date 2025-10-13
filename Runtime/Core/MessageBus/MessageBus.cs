@@ -2215,7 +2215,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            _ = InternalBroadcastWithoutSource(ref source, ref typedMessage);
+            bool bwsFound = InternalBroadcastWithoutSource(ref source, ref typedMessage);
 
             if (
                 _postProcessingBroadcastSinks.TryGetValue<TMessage>(out broadcastHandlers)
@@ -2396,7 +2396,7 @@ namespace DxMessaging.Core.MessageBus
                 }
             }
 
-            if (!foundAnyHandlers && MessagingDebug.enabled)
+            if (!(foundAnyHandlers || bwsFound) && MessagingDebug.enabled)
             {
                 MessagingDebug.Log(
                     LogLevel.Info,
@@ -3509,6 +3509,16 @@ namespace DxMessaging.Core.MessageBus
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
             int messageHandlersCount = messageHandlers.Count;
+            // Ensure each handler's typed no-source caches are frozen for this emission/priority
+            for (int j = 0; j < messageHandlersCount; ++j)
+            {
+                messageHandlers[j]
+                    .PrefreezeBroadcastWithoutSourceHandlersForEmission<TMessage>(
+                        priority,
+                        _emissionId,
+                        this
+                    );
+            }
             switch (messageHandlersCount)
             {
                 case 1:
