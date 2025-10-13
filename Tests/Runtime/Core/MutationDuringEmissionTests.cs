@@ -607,14 +607,14 @@ namespace DxMessaging.Tests.Runtime.Core
             for (int i = 0; i < ManyCount; i++)
                 total += counts[i];
             Assert.AreEqual(
-                ManyCount * 6,
+                ManyCount * 2,
                 total,
-                "Global listeners should run again on second emission."
+                "Global listeners should run again on second emission for the emitted category."
             );
             Assert.AreEqual(
-                3,
+                1,
                 counts[ManyCount],
-                "New global listener should run on second emission for all categories."
+                "New global listener should run on second emission for the emitted category."
             );
 
             foreach (

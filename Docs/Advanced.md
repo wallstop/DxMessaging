@@ -170,6 +170,14 @@ Do's
 - Use diagnostics in Editor; disable for release if not needed.
 - Use GameObject/Component emit helpers (no manual `InstanceId`).
 
+## Important behavior note: Snapshot Semantics
+
+- When a message is emitted, DxMessaging takes a snapshot of all current listeners (handlers, interceptors, post-processors).
+- Listeners registered **during** an emission will **not** run for that emission — they only become active for the **next** emission.
+- This prevents infinite loops (e.g., a handler that registers itself won't recurse).
+- This applies to all message types (Untargeted, Targeted, Broadcast) and all listener types.
+- See [Interceptors & Ordering](InterceptorsAndOrdering.md#snapshot-semantics-frozen-listener-lists) for detailed examples.
+
 Don’ts
 
 - Don’t register in `Update`/`FixedUpdate` every frame.

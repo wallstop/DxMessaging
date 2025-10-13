@@ -22,9 +22,16 @@ Can I observe all targets/sources for a type?
 
 - Yes. Use `RegisterTargetedWithoutTargeting<T>` or `RegisterBroadcastWithoutSource<T>` (and their post‑processor counterparts).
 
-How do I diagnose what’s happening?
+How do I diagnose what's happening?
 
 - Enable logs and diagnostics: [Diagnostics](Diagnostics.md).
+
+## What happens if I register a listener inside a message handler?
+
+- The newly registered listener will **not** run for the current message emission. It will only become active starting with the **next** message emission.
+- This is called "snapshot semantics" — when a message is emitted, DxMessaging takes a snapshot of all current listeners and uses that frozen list for the entire emission.
+- This applies to all listener types (handlers, interceptors, post-processors) and all message categories (Untargeted, Targeted, Broadcast).
+- This behavior prevents infinite loops and ensures predictable execution order. See [Interceptors & Ordering](InterceptorsAndOrdering.md#snapshot-semantics-frozen-listener-lists) for details and examples.
 
 Do I need a global bus?
 

@@ -10,8 +10,8 @@
   "MD046": { "style": "fenced" },
   // Duplicate headings only matter among siblings
   "MD024": { "siblings_only": true },
-  // Accept ascending ordered list numbers (matches Prettier behavior)
-  "MD029": { "style": "ordered" },
+  // Allow uniform '1.' numbering (matches Prettier behavior)
+  "MD029": { "style": "one" },
   // Permit bare URLs; Prettier won’t auto-wrap, and link checks are handled separately
   "MD034": false,
   // Allow exactly one blank line between blocks (Prettier’s behavior)

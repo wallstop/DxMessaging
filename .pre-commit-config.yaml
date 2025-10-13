@@ -34,7 +34,7 @@ repos:
     hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
-        entry: npx --yes markdownlint --config .markdownlint.json --ignore-path .markdownlintignore
+        entry: npx --yes markdownlint-cli2 --config .markdownlint.jsonc
         language: system
         files: '(?i)\.(md|markdown)$'
 
