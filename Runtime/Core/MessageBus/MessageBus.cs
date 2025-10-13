@@ -2728,6 +2728,11 @@ namespace DxMessaging.Core.MessageBus
                 _globalSinks,
                 _emissionId
             );
+            // Freeze each handler's global untargeted caches for this emission
+            for (int i = 0; i < messageHandlers.Count; ++i)
+            {
+                messageHandlers[i].PrefreezeGlobalUntargetedForEmission(_emissionId, this);
+            }
             int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
@@ -2786,6 +2791,11 @@ namespace DxMessaging.Core.MessageBus
                 _globalSinks,
                 _emissionId
             );
+            // Freeze each handler's global targeted caches for this emission
+            for (int i = 0; i < messageHandlers.Count; ++i)
+            {
+                messageHandlers[i].PrefreezeGlobalTargetedForEmission(_emissionId, this);
+            }
             int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
@@ -2847,6 +2857,11 @@ namespace DxMessaging.Core.MessageBus
                 _globalSinks,
                 _emissionId
             );
+            // Freeze each handler's global broadcast caches for this emission
+            for (int i = 0; i < messageHandlers.Count; ++i)
+            {
+                messageHandlers[i].PrefreezeGlobalBroadcastForEmission(_emissionId, this);
+            }
             int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {

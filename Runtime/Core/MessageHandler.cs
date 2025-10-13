@@ -719,6 +719,84 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
+        /// Pre-freezes this handler's GlobalAcceptAll untargeted caches for this emission.
+        /// </summary>
+        internal void PrefreezeGlobalUntargetedForEmission(long emissionId, IMessageBus messageBus)
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
+            {
+                return;
+            }
+
+            if (handler._globalUntargetedFastHandlers != null)
+            {
+                _ = TypedHandler<IMessage>.GetOrAddNewHandlerStack(
+                    handler._globalUntargetedFastHandlers,
+                    emissionId
+                );
+            }
+            if (handler._globalUntargetedHandlers != null)
+            {
+                _ = TypedHandler<IMessage>.GetOrAddNewHandlerStack(
+                    handler._globalUntargetedHandlers,
+                    emissionId
+                );
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's GlobalAcceptAll targeted caches for this emission.
+        /// </summary>
+        internal void PrefreezeGlobalTargetedForEmission(long emissionId, IMessageBus messageBus)
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
+            {
+                return;
+            }
+
+            if (handler._globalTargetedFastHandlers != null)
+            {
+                _ = TypedHandler<IMessage>.GetOrAddNewHandlerStack(
+                    handler._globalTargetedFastHandlers,
+                    emissionId
+                );
+            }
+            if (handler._globalTargetedHandlers != null)
+            {
+                _ = TypedHandler<IMessage>.GetOrAddNewHandlerStack(
+                    handler._globalTargetedHandlers,
+                    emissionId
+                );
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's GlobalAcceptAll broadcast caches for this emission.
+        /// </summary>
+        internal void PrefreezeGlobalBroadcastForEmission(long emissionId, IMessageBus messageBus)
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<IMessage> handler))
+            {
+                return;
+            }
+
+            if (handler._globalBroadcastFastHandlers != null)
+            {
+                _ = TypedHandler<IMessage>.GetOrAddNewHandlerStack(
+                    handler._globalBroadcastFastHandlers,
+                    emissionId
+                );
+            }
+            if (handler._globalBroadcastHandlers != null)
+            {
+                _ = TypedHandler<IMessage>.GetOrAddNewHandlerStack(
+                    handler._globalBroadcastHandlers,
+                    emissionId
+                );
+            }
+        }
+
+        /// <summary>
         /// Callback from the MessageBus for handling Messages when this MessageHandler has subscribed to GlobalAcceptAll - user code should generally never use this.
         /// </summary>
         /// <param name="target">Target of the message.</param>
