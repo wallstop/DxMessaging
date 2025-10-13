@@ -2218,7 +2218,8 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                // Preserve the priority bucket during the current emission so frozen snapshots remain valid
+                return AddHandlerPreservingPriorityKey(
                     ref _broadcastWithoutSourceHandlers,
                     originalHandler,
                     handler,
@@ -2243,7 +2244,8 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                // Preserve the priority bucket during the current emission so frozen snapshots remain valid
+                return AddHandlerPreservingPriorityKey(
                     ref _fastBroadcastWithoutSourceHandlers,
                     originalHandler,
                     handler,
@@ -3385,6 +3387,85 @@ namespace DxMessaging.Core
                             _ = localHandlers.Remove(priority);
                         }
 
+                        return;
+                    }
+
+                    localEntry = new HandlerActionCache<TU>.Entry(
+                        localEntry.handler,
+                        localEntry.count - 1
+                    );
+
+                    localCache.entries[originalHandler] = localEntry;
+                };
+            }
+
+            // Variant of AddHandler that preserves the priority key in the dictionary when the last entry is removed.
+            // This ensures that during an in-flight emission (where handler stacks are already frozen),
+            // subsequent removals do not cause lookups to fail for the current pass.
+            private static Action AddHandlerPreservingPriorityKey<TU>(
+                ref Dictionary<int, HandlerActionCache<TU>> handlers,
+                TU originalHandler,
+                TU augmentedHandler,
+                Action deregistration,
+                int priority,
+                long emissionId
+            )
+            {
+                handlers ??= new Dictionary<int, HandlerActionCache<TU>>();
+
+                if (!handlers.TryGetValue(priority, out HandlerActionCache<TU> cache))
+                {
+                    cache = new HandlerActionCache<TU>();
+                    handlers[priority] = cache;
+                }
+
+                if (
+                    !cache.entries.TryGetValue(
+                        originalHandler,
+                        out HandlerActionCache<TU>.Entry entry
+                    )
+                )
+                {
+                    entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
+                }
+
+                bool firstRegistration = entry.count == 0;
+                entry = firstRegistration
+                    ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                    : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+
+                cache.entries[originalHandler] = entry;
+                cache.version++;
+
+                Dictionary<int, HandlerActionCache<TU>> localHandlers = handlers;
+
+                return () =>
+                {
+                    if (!localHandlers.TryGetValue(priority, out HandlerActionCache<TU> localCache))
+                    {
+                        return;
+                    }
+
+                    if (
+                        !localCache.entries.TryGetValue(
+                            originalHandler,
+                            out HandlerActionCache<TU>.Entry localEntry
+                        )
+                    )
+                    {
+                        return;
+                    }
+
+                    localCache.version++;
+
+                    deregistration?.Invoke();
+
+                    if (localEntry.count <= 1)
+                    {
+                        _ = localCache.entries.Remove(originalHandler);
+                        localCache.version++;
+                        // Intentionally DO NOT remove the priority key here to preserve
+                        // the cache handle during an in-flight emission.
                         return;
                     }
 
