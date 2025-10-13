@@ -45,19 +45,19 @@ Killer features
 
 ## Related Documentation
 
-**Start Here:**
+### Start Here
 
 - → [Visual Guide](VisualGuide.md) (5 min) — Beginner-friendly introduction
 - → [Getting Started](GettingStarted.md) (10 min) — Complete guide
 - → [Quick Start](QuickStart.md) (5 min) — Working example
 
-**Go Deeper:**
+#### Go Deeper
 
 - → [Message Types](MessageTypes.md) — When to use Untargeted/Targeted/Broadcast
 - → [Comparisons](Comparisons.md) — DxMessaging vs alternatives
 - → [Design & Architecture](DesignAndArchitecture.md) — How it works
 
-**Install & Setup:**
+##### Install & Setup
 
 - → [Install](Install.md) — Installation guide
 - → [Compatibility](Compatibility.md) — Unity versions

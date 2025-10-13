@@ -14,6 +14,24 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
     [Generator(LanguageNames.CSharp)]
     public sealed class DxMessageIdGenerator : IIncrementalGenerator
     {
+        private static readonly DiagnosticDescriptor NonPartialContainerDiagnostic = new(
+            id: "DXMSG003",
+            title: "Containing type must be partial for nested generation",
+            messageFormat: "Type '{0}' is nested inside non-partial container(s): {1}. Suggested fix: add the 'partial' keyword to the containing type declaration(s).",
+            category: "DxMessaging",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true
+        );
+
+        private static readonly DiagnosticDescriptor AddPartialSuggestionDiagnostic = new(
+            id: "DXMSG004",
+            title: "Add 'partial' keyword to containing type",
+            messageFormat: "Add 'partial' to the declaration of '{0}' to enable generation for nested type '{1}'.",
+            category: "DxMessaging",
+            defaultSeverity: DiagnosticSeverity.Info,
+            isEnabledByDefault: true
+        );
+
         // Base IMessage interface (used for implementation checks if needed, and property names)
         // *** Assumes the user has defined this interface in their code ***
         private const string BaseInterfaceFullName = "DxMessaging.Core.IMessage";
@@ -232,6 +250,54 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
 
+                // If nested, ensure all containers are declared partial; otherwise report diagnostic and skip
+                if (messageInfo.TypeSymbol.ContainingType is not null)
+                {
+                    List<INamedTypeSymbol> nonPartial = GetNonPartialContainers(
+                        messageInfo.TypeSymbol
+                    );
+                    if (nonPartial.Count > 0)
+                    {
+                        string containersList = string.Join(
+                            ", ",
+                            nonPartial.Select(static s =>
+                                s.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                            )
+                        );
+                        context.ReportDiagnostic(
+                            Diagnostic.Create(
+                                NonPartialContainerDiagnostic,
+                                messageInfo.DeclarationSyntax.Identifier.GetLocation(),
+                                messageInfo.TypeSymbol.ToDisplayString(
+                                    SymbolDisplayFormat.MinimallyQualifiedFormat
+                                ),
+                                containersList
+                            )
+                        );
+                        foreach (INamedTypeSymbol container in nonPartial)
+                        {
+                            SyntaxReference? sr =
+                                container.DeclaringSyntaxReferences.FirstOrDefault();
+                            if (sr != null && sr.GetSyntax() is TypeDeclarationSyntax tds)
+                            {
+                                context.ReportDiagnostic(
+                                    Diagnostic.Create(
+                                        AddPartialSuggestionDiagnostic,
+                                        tds.Identifier.GetLocation(),
+                                        container.ToDisplayString(
+                                            SymbolDisplayFormat.MinimallyQualifiedFormat
+                                        ),
+                                        messageInfo.TypeSymbol.ToDisplayString(
+                                            SymbolDisplayFormat.MinimallyQualifiedFormat
+                                        )
+                                    )
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                }
+
                 // Generate the partial IMessage implementation source
                 string implSource = GenerateImplementationSource(
                     messageInfo.TargetInterfaceFullName,
@@ -263,9 +329,63 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
             const string indent = "    ";
 
-            string typeNameWithGenerics = typeSymbol.ToDisplayString(
-                SymbolDisplayFormat.MinimallyQualifiedFormat
-            );
+            // Build container wrappers so partial can merge nested types correctly
+            var containers = new Stack<INamedTypeSymbol>();
+            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            while (current is not null)
+            {
+                containers.Push(current);
+                current = current.ContainingType;
+            }
+
+            var containersOpen = new StringBuilder();
+            var containersClose = new StringBuilder();
+            string currentIndent = indent;
+            foreach (INamedTypeSymbol container in containers)
+            {
+                string containerAccessibility = container.DeclaredAccessibility switch
+                {
+                    Accessibility.Public => "public",
+                    Accessibility.Protected => "protected",
+                    Accessibility.Private => "private",
+                    Accessibility.Internal => "internal",
+                    Accessibility.ProtectedOrInternal => "protected internal",
+                    Accessibility.ProtectedAndInternal => "private protected",
+                    _ => "internal",
+                };
+
+                string containerKind = container.TypeKind switch
+                {
+                    TypeKind.Class => container.IsRecord ? "record class" : "class",
+                    TypeKind.Struct => container.IsRecord ? "record struct" : "struct",
+                    _ => "class",
+                };
+
+                string containerTypeParams =
+                    container.TypeParameters.Length > 0
+                        ? "<"
+                            + string.Join(", ", container.TypeParameters.Select(static p => p.Name))
+                            + ">"
+                        : string.Empty;
+
+                // Avoid repeating sealed/abstract/static/readonly/ref to prevent conflicting semantics
+                containersOpen.AppendLine(
+                    $"{currentIndent}{containerAccessibility} partial {containerKind} {container.Name}{containerTypeParams}"
+                );
+                containersOpen.Append(currentIndent).AppendLine("{");
+                currentIndent += indent;
+            }
+
+            string innerIndent = currentIndent;
+
+            // Use unqualified nested identifier for declaration (containers already opened)
+            string typeGenericParams =
+                typeSymbol.TypeParameters.Length > 0
+                    ? "<"
+                        + string.Join(", ", typeSymbol.TypeParameters.Select(static p => p.Name))
+                        + ">"
+                    : string.Empty;
+            string typeNameWithGenerics = typeSymbol.Name + typeGenericParams;
             string fullyQualifiedName = typeSymbol.ToDisplayString(
                 SymbolDisplayFormat.FullyQualifiedFormat
             );
@@ -283,11 +403,22 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 Accessibility.Protected => "protected",
                 Accessibility.Private => "private",
                 Accessibility.Internal => "internal",
-                // Add others if necessary, default to internal if restrictive
+                Accessibility.ProtectedOrInternal => "protected internal",
+                Accessibility.ProtectedAndInternal => "private protected",
                 _ => "internal",
             };
 
             string interfaceDeclaration = $", global::{targetInterfaceFullName}";
+
+            // Close containers string
+            for (int i = 0; i < containers.Count; i++)
+            {
+                currentIndent = currentIndent.Substring(
+                    0,
+                    Math.Max(0, currentIndent.Length - indent.Length)
+                );
+                containersClose.Append(currentIndent).AppendLine("}");
+            }
 
             return $$"""
                 // <auto-generated by DxMessageIdGenerator/>
@@ -295,14 +426,56 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 #nullable enable annotations
 
                 {{namespaceBlockOpen}}
-                {{indent}}// Partial implementation for {{typeNameWithGenerics}} to implement {{BaseInterfaceFullName}}
-                {{indent}}{{accessibility}} partial {{typeKind}} {{typeNameWithGenerics}} : global::{{BaseInterfaceFullName}} {{interfaceDeclaration}}
-                {{indent}}{
-                {{indent}}    /// <inheritdoc/>
-                {{indent}}    public global::System.Type MessageType => typeof({{fullyQualifiedName}});
-                {{indent}}}
+                {{containersOpen}}{{innerIndent}}// Partial implementation for {{typeNameWithGenerics}} to implement {{BaseInterfaceFullName}}
+                {{innerIndent}}{{accessibility}} partial {{typeKind}} {{typeNameWithGenerics}} : global::{{BaseInterfaceFullName}} {{interfaceDeclaration}}
+                {{innerIndent}}{
+                {{innerIndent}}    /// <inheritdoc/>
+                {{innerIndent}}    public global::System.Type MessageType => typeof({{fullyQualifiedName}});
+                {{innerIndent}}}
+                {{containersClose}}
                 {{namespaceBlockClose}}
                 """;
+        }
+
+        private static List<INamedTypeSymbol> GetNonPartialContainers(INamedTypeSymbol typeSymbol)
+        {
+            List<INamedTypeSymbol> result = new();
+            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            while (current is not null)
+            {
+                if (!IsDeclaredFullyPartial(current))
+                {
+                    result.Add(current);
+                }
+                current = current.ContainingType;
+            }
+            return result;
+        }
+
+        private static bool IsDeclaredFullyPartial(INamedTypeSymbol symbol)
+        {
+            if (symbol.DeclaringSyntaxReferences.Length == 0)
+            {
+                return false;
+            }
+            foreach (SyntaxReference syntaxRef in symbol.DeclaringSyntaxReferences)
+            {
+                if (syntaxRef.GetSyntax() is TypeDeclarationSyntax tds)
+                {
+                    bool hasPartial = tds.Modifiers.Any(static m =>
+                        m.IsKind(SyntaxKind.PartialKeyword)
+                    );
+                    if (!hasPartial)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

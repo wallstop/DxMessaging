@@ -83,6 +83,49 @@ var hit = new TookDamage(5);
 hit.EmitGameObjectBroadcast(enemyGameObject);
 ```
 
+## Organizing Messages with Nested Types
+
+Group related messages inside a container class for better organization:
+
+```csharp
+using DxMessaging.Core.Attributes;
+
+public partial class CombatEvents
+{
+    [DxTargetedMessage]
+    [DxAutoConstructor]
+    public readonly partial struct Heal
+    {
+        public readonly int amount;
+        [DxOptionalParameter(false)]  // Custom default value
+        public readonly bool showEffect;
+    }
+
+    [DxBroadcastMessage]
+    [DxAutoConstructor]
+    public readonly partial struct TookDamage
+    {
+        public readonly int amount;
+        [DxOptionalParameter(Expression = "DamageType.Physical")]  // Enum default
+        public readonly DamageType type;
+    }
+}
+
+// Usage:
+var heal = new CombatEvents.Heal(10, showEffect: true);
+heal.EmitComponentTargeted(player);
+
+var damage = new CombatEvents.TookDamage(5);  // Uses DamageType.Physical
+damage.EmitGameObjectBroadcast(enemy);
+```
+
+### Benefits
+
+- Reduces namespace pollution
+- Makes message relationships clear
+- Works with all message types (Untargeted, Targeted, Broadcast)
+- Full source generator support
+
 ## Listening to everything in a category
 
 - All targeted of a type (any target): `RegisterTargetedWithoutTargeting<T>` or post‑process with `RegisterTargetedWithoutTargetingPostProcessor<T>`.
@@ -107,11 +150,13 @@ void OnAnyTookDamage(ref InstanceId source, ref TookDamage m) => Track(source, m
 - Use Targeted when one specific recipient must act.
 - Use Untargeted for global state changes anyone might care about.
 
-## Do’s
+## Do's
 
 - Keep messages small, immutable, and specific.
 - Use attributes + `DxAutoConstructor` for clarity and onboarding.
 - Use GameObject/Component helpers (`EmitGameObject*`/`EmitComponent*`) instead of manual `InstanceId` casts.
+- Organize related messages using nested types for better structure.
+- Use internal visibility for implementation-only messages.
 
 ## Don’ts
 
@@ -124,18 +169,18 @@ void OnAnyTookDamage(ref InstanceId source, ref TookDamage m) => Track(source, m
 
 ## Related Documentation
 
-**Prerequisites:**
+### Prerequisites
 
 - → [Getting Started](GettingStarted.md) — Understand the basics first
 - → [Visual Guide](VisualGuide.md) — See the 3 types visualized
 
-**Next Steps:**
+#### Next Steps
 
 - → [Patterns](Patterns.md) — Real-world examples of each type
 - → [Listening Patterns](ListeningPatterns.md) — All the ways to receive messages
 - → [Interceptors & Ordering](InterceptorsAndOrdering.md) — Control message flow
 
-**Try It:**
+##### Try It
 
 - → [Quick Start](QuickStart.md) — Working example
 - → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — See all 3 types in action

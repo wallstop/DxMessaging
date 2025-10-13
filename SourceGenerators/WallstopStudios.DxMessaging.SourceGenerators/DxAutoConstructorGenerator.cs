@@ -4,6 +4,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
     using System.Collections.Generic;
     using System.Collections.Immutable;
     using System.Diagnostics;
+    using System.Globalization;
     using System.Linq;
     using System.Text;
     using System.Threading;
@@ -15,6 +16,33 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
     [Generator(LanguageNames.CSharp)]
     public sealed class DxAutoConstructorGenerator : IIncrementalGenerator
     {
+        private static readonly DiagnosticDescriptor NonPartialContainerDiagnostic = new(
+            id: "DXMSG003",
+            title: "Containing type must be partial for nested generation",
+            messageFormat: "Type '{0}' is nested inside non-partial container(s): {1}. Suggested fix: add the 'partial' keyword to the containing type declaration(s).",
+            category: "DxMessaging",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true
+        );
+
+        private static readonly DiagnosticDescriptor AddPartialSuggestionDiagnostic = new(
+            id: "DXMSG004",
+            title: "Add 'partial' keyword to containing type",
+            messageFormat: "Add 'partial' to the declaration of '{0}' to enable generation for nested type '{1}'.",
+            category: "DxMessaging",
+            defaultSeverity: DiagnosticSeverity.Info,
+            isEnabledByDefault: true
+        );
+
+        private static readonly DiagnosticDescriptor InvalidOptionalDefaultDiagnostic = new(
+            id: "DXMSG005",
+            title: "Invalid optional default value",
+            messageFormat: "Field '{0}' default value expression '{1}' is not a valid optional parameter default for type '{2}'.",
+            category: "DxMessaging",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true
+        );
+
         private const string AutoGenConstructorAttrFullName =
             "DxMessaging.Core.Attributes.DxAutoConstructorAttribute";
 
@@ -153,11 +181,57 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
                 context.CancellationToken.ThrowIfCancellationRequested();
 
+                // If nested, ensure all containers are declared partial; otherwise report diagnostic and skip
+                if (typeInfo.TypeSymbol.ContainingType is not null)
+                {
+                    List<INamedTypeSymbol> nonPartial = GetNonPartialContainers(
+                        typeInfo.TypeSymbol
+                    );
+                    if (nonPartial.Count > 0)
+                    {
+                        string containersList = string.Join(
+                            ", ",
+                            nonPartial.Select(static s =>
+                                s.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                            )
+                        );
+                        context.ReportDiagnostic(
+                            Diagnostic.Create(
+                                NonPartialContainerDiagnostic,
+                                typeInfo.DeclarationSyntax.Identifier.GetLocation(),
+                                typeInfo.TypeSymbol.ToDisplayString(
+                                    SymbolDisplayFormat.MinimallyQualifiedFormat
+                                ),
+                                containersList
+                            )
+                        );
+                        // Location-specific suggestions on each non-partial container
+                        foreach (INamedTypeSymbol container in nonPartial)
+                        {
+                            SyntaxReference? sr =
+                                container.DeclaringSyntaxReferences.FirstOrDefault();
+                            if (sr != null && sr.GetSyntax() is TypeDeclarationSyntax tds)
+                            {
+                                context.ReportDiagnostic(
+                                    Diagnostic.Create(
+                                        AddPartialSuggestionDiagnostic,
+                                        tds.Identifier.GetLocation(),
+                                        container.ToDisplayString(
+                                            SymbolDisplayFormat.MinimallyQualifiedFormat
+                                        ),
+                                        typeInfo.TypeSymbol.ToDisplayString(
+                                            SymbolDisplayFormat.MinimallyQualifiedFormat
+                                        )
+                                    )
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                }
+
                 // Generate the partial class/struct with the constructor
-                string generatedSource = GenerateConstructorSource(
-                    typeInfo.TypeSymbol,
-                    typeInfo.FieldsToInject
-                );
+                string generatedSource = GenerateConstructorSource(compilation, typeInfo, context);
                 string hintName =
                     $"{typeInfo.TypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.AutoGenConstructor.g.cs"
                         .Replace("global::", "")
@@ -170,10 +244,13 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         }
 
         private static string GenerateConstructorSource(
-            INamedTypeSymbol typeSymbol,
-            ImmutableArray<IFieldSymbol> fieldsToInject
+            Compilation compilation,
+            TypeToGenerateInfo typeInfo,
+            SourceProductionContext spc
         )
         {
+            INamedTypeSymbol typeSymbol = typeInfo.TypeSymbol;
+            ImmutableArray<IFieldSymbol> fieldsToInject = typeInfo.FieldsToInject;
             string namespaceName = typeSymbol.ContainingNamespace.IsGlobalNamespace
                 ? string.Empty
                 : typeSymbol.ContainingNamespace.ToDisplayString();
@@ -183,9 +260,65 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
             const string indent = "    ";
 
-            string typeName = typeSymbol.ToDisplayString(
-                SymbolDisplayFormat.MinimallyQualifiedFormat
-            );
+            // Build container wrappers for nested types so the partial can merge correctly
+            var containers = new Stack<INamedTypeSymbol>();
+            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            while (current is not null)
+            {
+                containers.Push(current);
+                current = current.ContainingType;
+            }
+
+            var containersOpen = new StringBuilder();
+            var containersClose = new StringBuilder();
+            string currentIndent = indent; // one level inside namespace (or top-level)
+
+            foreach (INamedTypeSymbol container in containers)
+            {
+                string containerAccessibility = container.DeclaredAccessibility switch
+                {
+                    Accessibility.Public => "public",
+                    Accessibility.Protected => "protected",
+                    Accessibility.Private => "private",
+                    Accessibility.Internal => "internal",
+                    Accessibility.ProtectedOrInternal => "protected internal",
+                    Accessibility.ProtectedAndInternal => "private protected",
+                    _ => "internal",
+                };
+
+                string containerKind = container.TypeKind switch
+                {
+                    TypeKind.Class => container.IsRecord ? "record class" : "class",
+                    TypeKind.Struct => container.IsRecord ? "record struct" : "struct",
+                    _ => "class",
+                };
+
+                // Render generic parameters for the container
+                string containerTypeParams =
+                    container.TypeParameters.Length > 0
+                        ? "<"
+                            + string.Join(", ", container.TypeParameters.Select(static p => p.Name))
+                            + ">"
+                        : string.Empty;
+
+                // Do not repeat modifiers like sealed/abstract/static/readonly/ref here to avoid changing semantics across parts
+                containersOpen.AppendLine(
+                    $"{currentIndent}{containerAccessibility} partial {containerKind} {container.Name}{containerTypeParams}"
+                );
+                containersOpen.Append(currentIndent).AppendLine("{");
+                currentIndent += indent;
+            }
+
+            string innerIndent = currentIndent; // indent level for the target (innermost) type
+
+            // Use simple identifier + type parameters (no containers) because we are inside container wrappers
+            string typeGenericParams =
+                typeSymbol.TypeParameters.Length > 0
+                    ? "<"
+                        + string.Join(", ", typeSymbol.TypeParameters.Select(static p => p.Name))
+                        + ">"
+                    : string.Empty;
+            string typeName = typeSymbol.Name + typeGenericParams;
             string typeKind = typeSymbol.TypeKind switch
             {
                 TypeKind.Class => typeSymbol.IsRecord ? "record class" : "class",
@@ -201,7 +334,9 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 Accessibility.Protected => "protected",
                 Accessibility.Private => "private",
                 Accessibility.Internal => "internal",
-                _ => "internal", // Default to internal if not public or protected
+                Accessibility.ProtectedOrInternal => "protected internal",
+                Accessibility.ProtectedAndInternal => "private protected",
+                _ => "internal",
             };
 
             string constructorAccessibility = "public"; // Always public as requested
@@ -215,33 +350,163 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
                 );
 
-            List<(string Type, string Name, bool IsOptional)> parameterDetails = [];
+            List<(
+                string Type,
+                string Name,
+                bool IsOptional,
+                string? DefaultExpr
+            )> parameterDetails =
+                new List<(string Type, string Name, bool IsOptional, string? DefaultExpr)>();
+
+            // For validating expressions, use the semantic model for this type's tree
+            SemanticModel semanticModel = compilation.GetSemanticModel(
+                typeInfo.DeclarationSyntax.SyntaxTree
+            );
+            int anchorPosition = typeInfo.DeclarationSyntax.SpanStart;
 
             foreach (IFieldSymbol field in fieldsToInject)
             {
                 string fieldType = field.Type.ToDisplayString(fieldTypeFormat);
                 string fieldName = field.Name;
-                bool isOptional = field
-                    .GetAttributes()
-                    .Any(attr =>
-                        string.Equals(
+                string? defaultExpr = null;
+                bool isOptional = false;
+
+                foreach (AttributeData attr in field.GetAttributes())
+                {
+                    if (
+                        !string.Equals(
                             attr.AttributeClass?.ToDisplayString(),
                             OptionalParameterAttrFullName,
                             StringComparison.Ordinal
                         )
-                    );
+                    )
+                    {
+                        continue;
+                    }
 
-                parameterDetails.Add((fieldType, fieldName, isOptional));
+                    isOptional = true;
+
+                    // Named argument: Expression (verbatim C# expression)
+                    if (attr.NamedArguments.Any())
+                    {
+                        foreach (KeyValuePair<string, TypedConstant> kv in attr.NamedArguments)
+                        {
+                            if (
+                                string.Equals(kv.Key, "Expression", StringComparison.Ordinal)
+                                && kv.Value.Kind == TypedConstantKind.Primitive
+                                && kv.Value.Value is string exprStr
+                                && !string.IsNullOrWhiteSpace(exprStr)
+                            )
+                            {
+                                defaultExpr = exprStr.Trim();
+                                // Validate expression compatibility with field type
+                                if (
+                                    !IsValidDefaultExpression(
+                                        compilation,
+                                        semanticModel,
+                                        anchorPosition,
+                                        field,
+                                        defaultExpr
+                                    )
+                                )
+                                {
+                                    Location reportLoc =
+                                        attr.ApplicationSyntaxReference?.GetSyntax()?.GetLocation()
+                                        ?? field.Locations.FirstOrDefault()
+                                        ?? Location.None;
+                                    spc.ReportDiagnostic(
+                                        Diagnostic.Create(
+                                            InvalidOptionalDefaultDiagnostic,
+                                            reportLoc,
+                                            fieldName,
+                                            defaultExpr,
+                                            fieldType
+                                        )
+                                    );
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // If no explicit expression, check constructor argument constant
+                    if (defaultExpr == null && attr.ConstructorArguments.Length == 1)
+                    {
+                        TypedConstant arg = attr.ConstructorArguments[0];
+                        if (arg.IsNull)
+                        {
+                            defaultExpr = "null"; // only valid for reference or nullable types; compiler will enforce
+                            if (!IsReferenceOrNullable(field.Type))
+                            {
+                                Location reportLoc =
+                                    attr.ApplicationSyntaxReference?.GetSyntax()?.GetLocation()
+                                    ?? field.Locations.FirstOrDefault()
+                                    ?? Location.None;
+                                spc.ReportDiagnostic(
+                                    Diagnostic.Create(
+                                        InvalidOptionalDefaultDiagnostic,
+                                        reportLoc,
+                                        fieldName,
+                                        defaultExpr,
+                                        fieldType
+                                    )
+                                );
+                            }
+                        }
+                        else if (arg.Kind == TypedConstantKind.Primitive)
+                        {
+                            object? val = arg.Value;
+                            defaultExpr = FormatLiteral(val, arg.Type);
+                            // Validate primitive conversion to field type
+                            ITypeSymbol? sourceType = arg.Type;
+                            if (sourceType != null)
+                            {
+                                Conversion conv = compilation.ClassifyConversion(
+                                    sourceType,
+                                    field.Type
+                                );
+                                if (!conv.IsImplicit)
+                                {
+                                    Location reportLoc =
+                                        attr.ApplicationSyntaxReference?.GetSyntax()?.GetLocation()
+                                        ?? field.Locations.FirstOrDefault()
+                                        ?? Location.None;
+                                    spc.ReportDiagnostic(
+                                        Diagnostic.Create(
+                                            InvalidOptionalDefaultDiagnostic,
+                                            reportLoc,
+                                            fieldName,
+                                            defaultExpr,
+                                            fieldType
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    break; // only one DxOptionalParameterAttribute expected
+                }
+
+                parameterDetails.Add((fieldType, fieldName, isOptional, defaultExpr));
                 constructorBody.AppendLine($"{indent}{indent}    this.{fieldName} = {fieldName};");
             }
 
             for (int i = 0; i < parameterDetails.Count; i++)
             {
-                (string Type, string Name, bool IsOptional) p = parameterDetails[i];
+                (string Type, string Name, bool IsOptional, string? DefaultExpr) p =
+                    parameterDetails[i];
                 constructorParams.Append($"{p.Type} {p.Name}");
                 if (p.IsOptional)
                 {
-                    constructorParams.Append(" = default");
+                    if (!string.IsNullOrWhiteSpace(p.DefaultExpr))
+                    {
+                        constructorParams.Append(" = ").Append(p.DefaultExpr);
+                    }
+                    else
+                    {
+                        constructorParams.Append(" = default");
+                    }
                 }
 
                 if (i < parameterDetails.Count - 1)
@@ -250,24 +515,185 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 }
             }
 
+            // Close containers
+            for (int i = 0; i < containers.Count; i++)
+            {
+                currentIndent = currentIndent.Substring(
+                    0,
+                    Math.Max(0, currentIndent.Length - indent.Length)
+                );
+                containersClose.Append(currentIndent).AppendLine("}");
+            }
+
             return $$"""
                 // <auto-generated by DxAutoGenConstructorGenerator/>
                 #pragma warning disable
                 #nullable enable annotations
 
                 {{namespaceBlockOpen}}
-                {{indent}}{{typeAccessibility}} partial {{typeKind}} {{typeName}}
-                {{indent}}{
+                {{containersOpen}}{{innerIndent}}{{typeAccessibility}} partial {{typeKind}} {{typeName}}
+                {{innerIndent}}{
                 {{indent}}    /// <summary>
                 {{indent}}    /// Auto-generated constructor by DxAutoGenConstructorGenerator.
                 {{indent}}    /// </summary>
-                {{indent}}    {{constructorAccessibility}} {{typeSymbol.Name}}({{constructorParams}})
-                {{indent}}    {
+                {{innerIndent}}    {{constructorAccessibility}} {{typeSymbol.Name}}({{constructorParams}})
+                {{innerIndent}}    {
                 {{constructorBody}}
-                {{indent}}    }
-                {{indent}}}
+                {{innerIndent}}    }
+                {{innerIndent}}}
+                {{containersClose}}
                 {{namespaceBlockClose}}
                 """;
+        }
+
+        private static string FormatLiteral(object? value, ITypeSymbol? type)
+        {
+            if (value == null)
+            {
+                return "null";
+            }
+
+            // Respect underlying type for correct literal formatting
+            switch (value)
+            {
+                case bool b:
+                    return b ? "true" : "false";
+                case char ch:
+                    return Microsoft.CodeAnalysis.CSharp.SyntaxFactory.Literal(ch).ToString();
+                case string s:
+                    return Microsoft.CodeAnalysis.CSharp.SyntaxFactory.Literal(s).ToString();
+                case byte by:
+                    return by.ToString(CultureInfo.InvariantCulture);
+                case sbyte sb:
+                    return sb.ToString(CultureInfo.InvariantCulture);
+                case short sh:
+                    return sh.ToString(CultureInfo.InvariantCulture);
+                case ushort ush:
+                    return ush.ToString(CultureInfo.InvariantCulture);
+                case int i32:
+                    return i32.ToString(CultureInfo.InvariantCulture);
+                case uint ui32:
+                    return ui32.ToString(CultureInfo.InvariantCulture) + "u";
+                case long i64:
+                    return i64.ToString(CultureInfo.InvariantCulture) + "L";
+                case ulong ui64:
+                    return ui64.ToString(CultureInfo.InvariantCulture) + "UL";
+                case float f:
+                    return f.ToString("R", CultureInfo.InvariantCulture) + "f";
+                case double d:
+                    return d.ToString("R", CultureInfo.InvariantCulture);
+            }
+
+            // Fallback: use ToString(), but this should not occur for attribute constants
+            return value.ToString() ?? "default";
+        }
+
+        private static bool IsReferenceOrNullable(ITypeSymbol type)
+        {
+            if (type.IsReferenceType)
+            {
+                return true;
+            }
+
+            if (
+                type is INamedTypeSymbol named
+                && named.ConstructedFrom.SpecialType == SpecialType.System_Nullable_T
+            )
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsValidDefaultExpression(
+            Compilation compilation,
+            SemanticModel semanticModel,
+            int anchorPosition,
+            IFieldSymbol field,
+            string expr
+        )
+        {
+            string trimmed = expr.Trim();
+            if (string.Equals(trimmed, "default", StringComparison.Ordinal))
+            {
+                // default literal is permitted for any type as parameter default (typed by parameter)
+                return true;
+            }
+
+            if (string.Equals(trimmed, "null", StringComparison.Ordinal))
+            {
+                return IsReferenceOrNullable(field.Type);
+            }
+
+            try
+            {
+                var exprSyntax = SyntaxFactory.ParseExpression(trimmed);
+                var typeInfo = semanticModel.GetSpeculativeTypeInfo(
+                    anchorPosition,
+                    exprSyntax,
+                    SpeculativeBindingOption.BindAsExpression
+                );
+
+                ITypeSymbol? sourceType = typeInfo.Type;
+                if (sourceType == null)
+                {
+                    // Could not bind; let the compiler decide but report as invalid here
+                    return false;
+                }
+
+                Conversion conv = compilation.ClassifyConversion(sourceType, field.Type);
+                return conv.IsImplicit;
+            }
+            catch
+            {
+                // If the expression cannot be parsed, it is invalid
+                return false;
+            }
+        }
+
+        private static List<INamedTypeSymbol> GetNonPartialContainers(INamedTypeSymbol typeSymbol)
+        {
+            List<INamedTypeSymbol> result = new();
+            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            while (current is not null)
+            {
+                if (!IsDeclaredFullyPartial(current))
+                {
+                    result.Add(current);
+                }
+                current = current.ContainingType;
+            }
+            return result;
+        }
+
+        private static bool IsDeclaredFullyPartial(INamedTypeSymbol symbol)
+        {
+            // If we cannot find syntax references, assume not partial to be safe
+            if (symbol.DeclaringSyntaxReferences.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (SyntaxReference syntaxRef in symbol.DeclaringSyntaxReferences)
+            {
+                if (syntaxRef.GetSyntax() is TypeDeclarationSyntax tds)
+                {
+                    bool hasPartial = tds.Modifiers.Any(static m =>
+                        m.IsKind(SyntaxKind.PartialKeyword)
+                    );
+                    if (!hasPartial)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

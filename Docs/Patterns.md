@@ -298,14 +298,14 @@ public class CombatAnalytics : MessageAwareComponent {
 }
 ```
 
-**Scale characteristics:**
+#### Scale characteristics
 
 - ✅ Each entity broadcasts ~10-50 messages/second → No GC allocations (struct messages)
 - ✅ Targeted listeners (health bars) only receive relevant messages → O(1) lookup
 - ✅ Global listeners (analytics) receive all messages → Single handler, not N handlers
 - ✅ Adding/removing entities doesn't break registrations (no manual wiring)
 
-**Performance notes:**
+##### Performance notes
 
 - Disable diagnostics in production (`IMessageBus.GlobalDiagnosticsMode = false`)
 - Use `RegisterBroadcastWithoutSource` sparingly (it's called for every emit)
@@ -420,13 +420,13 @@ public class PlayerStats : MonoBehaviour {
 }
 ```
 
-**Benefits at scale:**
+#### Benefits at scale
 
 - ✅ Add/remove panels without touching game logic
 - ✅ Panels can be enabled/disabled freely (tokens handle lifecycle)
 - ✅ Easy to add "observer panels" (e.g., debug overlays) without modifying existing code
 
-**Anti-pattern to avoid:**
+##### Anti-pattern to avoid
 
 ```csharp
 // ❌ DON'T: Separate message per UI element (too granular)
@@ -492,7 +492,7 @@ msg.Emit();
 
 **Key insight:** Lower priority numbers run first. Use priority to eliminate race conditions and ensure deterministic ordering.
 
-**Recommended priority ranges:**
+#### Recommended priority ranges
 
 - **-100 to -50:** Critical systems (save, validation)
 - **-10 to 0:** Core gameplay logic
@@ -714,7 +714,7 @@ public class MatchStats : MessageAwareComponent {
 }
 ```
 
-**Key insights:**
+#### Key insights
 
 - Self health UI: 1 registration, receives ~10 messages/sec
 - Team health UI: 4 registrations, receives ~40 messages/sec
@@ -731,7 +731,7 @@ public class MatchStats : MessageAwareComponent {
 
 ## Related Documentation
 
-**Learn the Basics First?**
+### Learn the Basics First?
 
 - → [Getting Started](GettingStarted.md) (10 min) — Complete introduction
 - → [Message Types](MessageTypes.md) (10 min) — When to use what

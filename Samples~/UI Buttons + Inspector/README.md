@@ -95,7 +95,7 @@ Add your own partial struct next to it, then emit it from `UIButtonEmitter` usin
 
 ## CRITICAL: Inheriting from MessageAwareComponent
 
-**If you extend `MessagingObserver` or create your own scripts deriving from `MessageAwareComponent`:**
+### If you extend `MessagingObserver` or create your own scripts deriving from `MessageAwareComponent`:
 
 ### The Golden Rules (Follow These to Avoid Pain)
 

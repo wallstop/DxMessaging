@@ -68,7 +68,7 @@ msg.Emit();
 _ = token.RegisterUntargeted<GamePaused>(OnPause);
 ```text
 
-**Real-world uses:**
+#### Real-world uses:
 
 - "Game paused!"
 - "Settings changed!"
@@ -92,7 +92,7 @@ heal.EmitGameObjectTargeted(playerObject);
 _ = token.RegisterComponentTargeted<Heal>(this, OnHeal);
 ```text
 
-**Real-world uses:**
+#### Real-world uses:
 
 - "Player, heal yourself!"
 - "Enemy #3, take damage!"
@@ -119,7 +119,7 @@ _ = token.RegisterGameObjectBroadcast<TookDamage>(enemyObject, OnThisEnemy);
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyEnemy);
 ```text
 
-**Real-world uses:**
+#### Real-world uses:
 
 - "I (player) took damage!"
 - "I (enemy) died!"
@@ -171,7 +171,7 @@ public readonly partial struct Heal {
 }
 ````
 
-**What are those `[DxSomething]` tags?**
+#### What are those `[DxSomething]` tags?
 
 They're called **attributes** — magic markers that tell the computer to write code for you! It's like having a robot assistant:
 

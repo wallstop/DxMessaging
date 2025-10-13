@@ -4,13 +4,13 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 
 ## Philosophy: Start Small, Prove Value
 
-**Don't do this:**
+### Don't do this
 
 - L Rip out all C# events and rewrite everything
 - L Force the whole team to learn it before trying it
 - L Commit to full adoption before seeing benefits
 
-**Do this instead:**
+#### Do this instead
 
 -  Pick ONE system to migrate (low risk, high visibility)
 -  Let old and new approaches coexist
@@ -50,7 +50,7 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 
 ### Goal: Prove value without refactoring existing code
 
-**Best candidates for first adoption:**
+#### Best candidates for first adoption
 
 -  **New UI system** - Add a new settings menu that reacts to game state
 -  **Achievement/analytics system** - Listen to existing events without coupling
@@ -94,7 +94,7 @@ public class Enemy : MonoBehaviour {
 }
 ```
 
-**Why this works:**
+#### Why this works
 
 -  Old code still works (zero risk)
 -  New system is decoupled
@@ -105,7 +105,7 @@ public class Enemy : MonoBehaviour {
 
 ### Goal: Replace the systems causing the most problems
 
-**High-value migration targets:**
+#### High-value migration targets
 
 1. **UI that references too many systems** - Replace with message listeners
 1. **Global static event buses** - Convert to DxMessaging
@@ -187,13 +187,13 @@ System: _________________
 
 ### Goal: Make DxMessaging the default for new features
 
-**Team guidelines:**
+#### Team guidelines
 
 -  All new cross-system communication uses DxMessaging
 -  Old code migrates opportunistically (when touched)
 -  Code reviews check for messaging best practices
 
-**Example team policy:**
+##### Example team policy
 
 ```text
 When to use DxMessaging (for new code):
@@ -344,7 +344,7 @@ door.Close();
 
 **Problem:** Team doesn't understand when/how to use it.
 
-**Solution:**
+#### Solution
 
 - Schedule a 30-minute walkthrough
 - Share the [Visual Guide](VisualGuide.md)
@@ -355,19 +355,19 @@ door.Close();
 
 Track these to validate migration is worthwhile:
 
-**Quantitative:**
+### Quantitative
 
 - Lines of event subscribe/unsubscribe code removed
 - Number of SerializedField references eliminated
 - Memory leaks fixed (profiler)
 
-**Qualitative:**
+#### Qualitative
 
 - Time to add new observers (before/after)
 - Ease of debugging message flow
 - Team satisfaction (survey)
 
-**Example:**
+##### Example
 
 > "Before: Adding achievement tracking required touching 12 files.
 > After: Added achievement system with zero changes to existing code."

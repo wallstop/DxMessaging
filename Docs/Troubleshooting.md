@@ -50,19 +50,19 @@ Diagnostics overhead
 
 ## Related Documentation
 
-**Get Unstuck:**
+### Get Unstuck
 
 - → [FAQ](FAQ.md) — Common questions answered
 - → [Getting Started](GettingStarted.md) — Learn the basics
 - → [Glossary](Glossary.md) — Understand the terminology
 
-**Debug & Inspect:**
+#### Debug & Inspect
 
 - → [Diagnostics](Diagnostics.md) — Inspector tools and debugging
 - → [Listening Patterns](ListeningPatterns.md) — Verify you're listening correctly
 - → [Message Types](MessageTypes.md) — Ensure you're using the right type
 
-**Examples:**
+##### Examples
 
 - → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — See working code
 - → [Common Patterns](Patterns.md) — Real-world solutions

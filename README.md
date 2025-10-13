@@ -67,6 +67,8 @@ using DxMessaging.Core.Attributes;
 [DxAutoConstructor]  // Auto-generates constructor
 public readonly partial struct OpenChest {
     public readonly int chestId;
+    [DxOptionalParameter(true)]  // Optional with custom default
+    public readonly bool playSound;
 }
 ```
 

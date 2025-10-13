@@ -25,10 +25,19 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-        entry: npx --yes prettier@3.3.3 --write
+        entry: npx --yes prettier@3.6.2 --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
         description: Use pinned Prettier version to match CI.
+
+  - repo: local
+    hooks:
+      - id: markdown-structure-fix
+        name: Markdown structure auto-fix (headings, fences)
+        entry: node scripts/fix-md036-headings.js
+        language: system
+        files: '(?i)\.(md|markdown)$'
+        description: Auto-fix MD036 (no-emphasis-as-heading) by converting bold-only lines to headings.
 
   - repo: local
     hooks:
@@ -64,3 +73,13 @@ repos:
         stages:
           - pre-commit
           - pre-push
+
+  - repo: local
+    hooks:
+      - id: conflict-markers
+        name: Fail on merge conflict markers
+        entry: bash -lc 'if rg -n -S -g "!**/.git/**" -e "^(<<<<<<<|=======|>>>>>>>)" .; then echo "Conflict markers found. Resolve merges before committing." >&2; exit 1; fi'
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-commit

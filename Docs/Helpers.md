@@ -4,14 +4,14 @@
 
 **Source generators** are a C# feature (introduced in C# 9.0) that **automatically write code for you at compile time**. Think of them as smart code wizards that look at your code, see what you need, and generate the boilerplate automatically.
 
-**In plain English:**
+### In plain English
 
 - You write: `[DxAutoConstructor]` on a struct
 - Source generator sees: "Oh, they want a constructor!"
 - Source generator creates: A constructor with all the fields as parameters
 - You get: Less typing, fewer bugs, cleaner code
 
-**Learn more about source generators:**
+#### Learn more about source generators
 
 - [Microsoft Docs: Source Generators](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/source-generators-overview)
 - [Introduction to C# Source Generators](https://devblogs.microsoft.com/dotnet/introducing-c-source-generators/)
@@ -31,7 +31,7 @@ These tell the source generator what KIND of message you're making:
 public readonly partial struct GamePaused { }
 ```
 
-**What it generates:**
+##### What it generates
 
 - Implements `IUntargetedMessage<GamePaused>`
 - Adds required plumbing for the message system
@@ -46,7 +46,7 @@ public readonly partial struct Heal {
 }
 ```
 
-**What it generates:**
+##### What it generates
 
 - Implements `ITargetedMessage<Heal>`
 - Adds required plumbing for targeted emissions
@@ -61,7 +61,7 @@ public readonly partial struct TookDamage {
 }
 ```
 
-**What it generates:**
+##### What it generates
 
 - Implements `IBroadcastMessage<TookDamage>`
 - Adds required plumbing for broadcast emissions
@@ -83,7 +83,7 @@ public readonly partial struct VideoSettingsChanged
 }
 ```
 
-**What you get (auto-generated):**
+#### What you get (auto-generated)
 
 ```csharp
 // You don't write this - it's generated for you!
@@ -94,16 +94,18 @@ public VideoSettingsChanged(int width, int height)
 }
 ```
 
-**Rules:**
+##### Rules
 
 - Creates constructor parameters in **field declaration order**
 - Only includes `public` fields
 - Ignores `static` fields
 - Works with `readonly` structs (recommended!)
+- Supports nested types (types defined inside other classes/structs)
+- Supports internal types (types with `internal` visibility)
 
 ### 3. `[DxOptionalParameter]` - Optional Constructor Parameters
 
-Make some constructor parameters optional:
+Make constructor parameters optional with type-safe default values:
 
 ```csharp
 [DxUntargetedMessage]
@@ -112,29 +114,75 @@ public readonly partial struct SettingsChanged
 {
     public readonly float volume;
     public readonly int quality;
-    [DxOptionalParameter]  // ← This parameter becomes optional
+    [DxOptionalParameter]  // ← Defaults to type's default (false for bool)
     public readonly bool fullscreen;
+    [DxOptionalParameter(100)]  // ← Custom default value
+    public readonly int brightness;
 }
 ```
 
-**Generated constructor:**
+#### Generated constructor
 
 ```csharp
-public SettingsChanged(float volume, int quality, bool fullscreen = default)
+public SettingsChanged(float volume, int quality, bool fullscreen = default, int brightness = 100)
 {
     this.volume = volume;
     this.quality = quality;
     this.fullscreen = fullscreen;
+    this.brightness = brightness;
 }
 ```
 
-**Usage:**
+##### Usage
 
 ```csharp
-// Both work!
-var settings1 = new SettingsChanged(0.8f, 2, true);
-var settings2 = new SettingsChanged(0.8f, 2);  // fullscreen defaults to false
+// All variations work!
+var settings1 = new SettingsChanged(0.8f, 2, true, 80);
+var settings2 = new SettingsChanged(0.8f, 2);  // fullscreen=false, brightness=100
+var settings3 = new SettingsChanged(0.8f, 2, fullscreen: true);  // brightness=100
 ```
+
+###### Supported default value types
+
+- Numeric types: `int`, `uint`, `long`, `ulong`, `short`, `ushort`, `byte`, `sbyte`, `float`, `double`
+- Text types: `char`, `string`
+- Boolean: `bool`
+
+```csharp
+[DxOptionalParameter(42)]        // int default
+public readonly int score;
+
+[DxOptionalParameter("unknown")] // string default
+public readonly string playerName;
+
+[DxOptionalParameter(true)]      // bool default
+public readonly bool isActive;
+```
+
+###### Advanced: Custom expressions for any type
+
+For types that don't have built-in support (like enums, nullables, or custom structs), use the `Expression` property:
+
+```csharp
+[DxAutoConstructor]
+public readonly partial struct ComplexMessage
+{
+    [DxOptionalParameter(Expression = "null")]
+    public readonly string? optionalName;
+
+    [DxOptionalParameter(Expression = "DamageType.Physical")]
+    public readonly DamageType type;
+
+    [DxOptionalParameter(Expression = "Vector3.zero")]
+    public readonly Vector3 position;
+}
+```
+
+###### How it works
+
+- The expression is inserted verbatim into the generated constructor
+- The C# compiler validates type safety automatically
+- Perfect for enums, nullable types, static constants, or complex defaults
 
 ## Why Use Attributes Instead of Manual Implementation
 
@@ -168,7 +216,7 @@ public readonly partial struct Heal
 // Constructor and plumbing generated automatically!
 ```
 
-**Benefits:**
+#### Benefits
 
 - ✅ **Less code** - 50% fewer lines
 - ✅ **Fewer bugs** - Can't forget fields in constructor
@@ -241,19 +289,19 @@ public readonly struct Heal : ITargetedMessage<Heal>
 }
 ```
 
-**Why use generics?**
+#### Why use generics?
 
 - Avoids boxing structs (important for performance)
 - Provides stable `MessageType` without `GetType()` calls
 - Same performance as attribute-based approach
 
-**When to use:**
+##### When to use
 
 - Hot path messages (sent/received every frame)
 - Very large structs where boxing matters
 - When you want explicit control
 
-**When to use attributes:**
+###### When to use attributes
 
 - 99% of cases (they generate the same code!)
 - Cleaner, less boilerplate
@@ -291,7 +339,7 @@ dmg.EmitComponentBroadcast(enemyComponent);
 
 **Located in:** `DxMessaging.Core.Extensions.MessageExtensions`
 
-**Automatic overload selection:**
+### Automatic overload selection
 
 - Extension methods pick the right overload based on type
 - Defaults to global `MessageHandler.MessageBus`
@@ -318,7 +366,7 @@ var msg = new MyMessage();
 msg.Emit(testBus);
 ```
 
-**Use cases:**
+### Use cases
 
 - Unit tests (no global side effects!)
 - Subsystem isolation (UI has own bus)
@@ -326,13 +374,21 @@ msg.Emit(testBus);
 
 ## Attributes Quick Reference
 
-| Attribute               | Purpose                   | Example                                            |
-| ----------------------- | ------------------------- | -------------------------------------------------- |
-| `[DxUntargetedMessage]` | Mark as global message    | `[DxUntargetedMessage]`                            |
-| `[DxTargetedMessage]`   | Mark as targeted message  | `[DxTargetedMessage]`                              |
-| `[DxBroadcastMessage]`  | Mark as broadcast message | `[DxBroadcastMessage]`                             |
-| `[DxAutoConstructor]`   | Generate constructor      | `[DxAutoConstructor]`                              |
-| `[DxOptionalParameter]` | Make parameter optional   | `[DxOptionalParameter] public readonly bool flag;` |
+| Attribute               | Purpose                              | Example                                                               |
+| ----------------------- | ------------------------------------ | --------------------------------------------------------------------- |
+| `[DxUntargetedMessage]` | Mark as global message               | `[DxUntargetedMessage]`                                               |
+| `[DxTargetedMessage]`   | Mark as targeted message             | `[DxTargetedMessage]`                                                 |
+| `[DxBroadcastMessage]`  | Mark as broadcast message            | `[DxBroadcastMessage]`                                                |
+| `[DxAutoConstructor]`   | Generate constructor                 | `[DxAutoConstructor]`                                                 |
+| `[DxOptionalParameter]` | Make parameter optional (default)    | `[DxOptionalParameter] public readonly bool flag;`                    |
+| `[DxOptionalParameter]` | Make parameter optional (custom)     | `[DxOptionalParameter(42)] public readonly int count;`                |
+| `[DxOptionalParameter]` | Make parameter optional (expression) | `[DxOptionalParameter(Expression = "null")] public readonly string?;` |
+
+### Works with
+
+- Top-level types (public structs/classes)
+- Nested types (types inside other classes)
+- Internal types (assembly-private messages)
 
 ## Common Patterns with Attributes
 
@@ -387,6 +443,61 @@ public readonly partial struct LevelCompleted
 }
 // All fields become constructor parameters, last two are optional
 ```
+
+### Pattern 5: Nested Types
+
+Define messages inside other classes for better organization:
+
+```csharp
+public partial class GameEvents
+{
+    [DxUntargetedMessage]
+    [DxAutoConstructor]
+    public readonly partial struct LevelUp
+    {
+        public readonly int newLevel;
+    }
+
+    [DxTargetedMessage]
+    [DxAutoConstructor]
+    public readonly partial struct GainExperience
+    {
+        public readonly int amount;
+    }
+}
+
+// Usage:
+var levelUp = new GameEvents.LevelUp(5);
+levelUp.Emit();
+```
+
+#### Benefits
+
+- Organizes related messages into namespaces or classes
+- Reduces global namespace pollution
+- Works identically to top-level messages
+
+### Pattern 6: Internal Types (Assembly-Private Messages)
+
+Keep implementation details private to your assembly:
+
+```csharp
+[DxUntargetedMessage]
+[DxAutoConstructor]
+internal readonly partial struct InternalDebugMessage
+{
+    public readonly string debugInfo;
+}
+
+// Only visible within this assembly
+// Perfect for internal messaging that shouldn't leak to other packages
+```
+
+#### Use cases
+
+- Implementation details that shouldn't be public API
+- Plugin or package-internal messaging
+- Test-only messages
 
 ## FAQ: Source Generators & Attributes
 
@@ -488,14 +599,14 @@ public readonly struct MessageB : IUntargetedMessage<MessageB>
 
 ### "Attributes not working / code not generated"
 
-**Checklist:**
+#### Checklist
 
 1. ✅ Is type marked `partial`?
 1. ✅ Did you rebuild the project?
 1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
 1. ✅ Check `obj/` folder for `.g.cs` files
 
-**Fix:**
+##### Fix
 
 ```csharp
 // ❌ Missing partial
@@ -525,7 +636,7 @@ public readonly partial struct WithData {
 
 ### "Unity can't find generated code"
 
-**Solution:**
+#### Solution
 
 1. Close Unity
 1. Delete `Library/` folder
@@ -543,14 +654,14 @@ public readonly partial struct WithData {
 
 ### Source generators = Code wizards that write boilerplate for you
 
-**Use attributes for:**
+#### Use attributes for
 
 - ✅ Clean, maintainable code
 - ✅ Automatic constructor generation
 - ✅ Zero boilerplate
 - ✅ Refactor safety
 
-**Use manual implementation for:**
+##### Use manual implementation for
 
 - ✅ Custom constructor logic
 - ✅ Explicit control

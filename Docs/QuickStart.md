@@ -62,6 +62,18 @@ public readonly partial struct TookDamage
 
 // Performance option: generic interfaces on structs (zero boxing)
 // public readonly struct Heal : ITargetedMessage<Heal> { public readonly int amount; public Heal(int amount) { this.amount = amount; } }
+
+// Optional parameters with custom defaults
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct HealAdvanced
+{
+    public readonly int amount;
+    [DxOptionalParameter(true)]  // Custom default value
+    public readonly bool showEffect;
+    [DxOptionalParameter(Expression = "Color.green")]  // Expression for any type
+    public readonly Color effectColor;
+}
 ```
 
 ### Step 2: Add a messaging component
@@ -115,7 +127,7 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 1. ✅ Created a component that listens
 1. ✅ Sent messages from anywhere
 
-**No manual unsubscribe. No memory leaks. Full type safety.**
+### No manual unsubscribe. No memory leaks. Full type safety
 
 ---
 
@@ -129,23 +141,23 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 ## 🚀 Next Steps
 
-**Understand What You Did:**
+### Understand What You Did
 
 - → [Getting Started Guide](GettingStarted.md) (10 min) — Full explanation with mental models
 - → [Visual Guide](VisualGuide.md) (5 min) — Pictures and analogies
 
-**Try Real Examples:**
+#### Try Real Examples
 
 - → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — Working combat example
 - → [UI Buttons + Inspector sample](../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — See diagnostics in action
 
-**Go Deeper:**
+##### Go Deeper
 
 - → [Message Types](MessageTypes.md) (10 min) — When to use which type
 - → [Common Patterns](Patterns.md) (15 min) — Real-world solutions
 - → [Interceptors & Ordering](InterceptorsAndOrdering.md) (10 min) — Advanced control
 
-**Reference:**
+###### Reference
 
 - → [Quick Reference](QuickReference.md) — Cheat sheet
 - → [API Reference](Reference.md) — Complete API
@@ -155,13 +167,13 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 ## 💡 Quick Tips
 
-**Do's:**
+### Do's
 
 - ✅ Use `MessageAwareComponent` for Unity components (automatic lifecycle)
 - ✅ Store struct in variable before emitting: `var msg = new Heal(10); msg.Emit();`
 - ✅ Call `base.RegisterMessageHandlers()` when overriding
 
-**Don'ts:**
+#### Don'ts
 
 - ❌ Don't emit from temporaries: `new Heal(10).Emit()` won't compile correctly
 - ❌ Don't use Untargeted for commands to one object (use Targeted instead)

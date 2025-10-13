@@ -16,10 +16,7 @@ namespace DxMessaging.Tests.Runtime.Core
         public IEnumerator TargetedWithoutTargetingRemoveOtherAcrossHandlersDuringPostProcessing()
         {
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
-                new System.Collections.Generic.List<(
-                    EmptyMessageAwareComponent comp,
-                    MessageRegistrationToken token
-                )>();
+                new();
             for (int i = 0; i < 2; i++)
             {
                 GameObject go = new($"TWT_PP_Rem_{i}", typeof(EmptyMessageAwareComponent));
@@ -66,10 +63,7 @@ namespace DxMessaging.Tests.Runtime.Core
         public IEnumerator BroadcastWithoutSourceRemoveOtherAcrossHandlersDuringPostProcessing()
         {
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
-                new System.Collections.Generic.List<(
-                    EmptyMessageAwareComponent comp,
-                    MessageRegistrationToken token
-                )>();
+                new();
             for (int i = 0; i < 2; i++)
             {
                 GameObject go = new($"BWO_PP_Rem_{i}", typeof(EmptyMessageAwareComponent));
