@@ -1,4 +1,7 @@
 {
+  // Apply automatic fixes when available
+  "fix": true,
+
   // Limit linting impact until large, single-line docs are reformatted
   "ignores": [
     // Exclude third-party and generated content

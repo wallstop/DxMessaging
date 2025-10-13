@@ -32,6 +32,15 @@ repos:
 
   - repo: local
     hooks:
+      - id: markdown-structure-fix
+        name: Markdown structure auto-fix (headings, fences)
+        entry: node scripts/fix-md036-headings.js
+        language: system
+        files: '(?i)\.(md|markdown)$'
+        description: Auto-fix MD036 (no-emphasis-as-heading) by converting bold-only lines to headings.
+
+  - repo: local
+    hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
         entry: npx --yes markdownlint-cli2@0.17.1 --config .markdownlint.jsonc
