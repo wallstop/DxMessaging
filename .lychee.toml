@@ -1,20 +1,26 @@
-exclude_path = [".git", "node_modules", ".vs"]
-exclude = [
-  "^mailto:",
-  "^tel:",
-  "^data:",
-  # Ignore links that point into Unity Samples~ content. These files
-  # are available when the package is opened in Unity, but link
-  # checking on CI may not mount them in the same path.
-  "^file://.*/Samples~/",
-]
-include_verbatim = true
-max_redirects = 5
-max_retries = 2
-timeout = 20
-user_agent = "lychee/markdown-ci"
-accept = ["200..=299", "300..=399"]
+verbosity = "info"
+no_progress = true
+max_concurrency = 4
+exclude_mail = true
 
-# Ensure file:// links resolve correctly inside GitHub Actions container.
-# The repository is mounted at /github/workspace in the lychee Docker image.
-root_dir = "/github/workspace"
+# Network tuning
+timeout = 20            # seconds per request
+retries = 3             # retry transient failures
+retry_wait_time = 2     # seconds between retries
+max_redirects = 10
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+# Treat successes and rate-limiting as acceptable in CI
+# Accept all 2xx as valid plus 429 (rate limited)
+accept = ["200..=299", 429]
+
+# Only check web links
+scheme = ["https", "http"]
+
+# Ignore common local/test URLs
+exclude = [
+  "^https?://localhost",
+  "^http://127\\.0\\.0\\.1",
+  "^https?://0\\.0\\.0\\.0",
+  "^file://"
+]

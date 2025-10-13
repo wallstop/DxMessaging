@@ -1,30 +1,31 @@
 extends: default
 
+ignore: |
+  node_modules/
+  .git/
+  Library/
+  obj/
+  Temp/
+  Samples~/
+
 rules:
-  # Enforce 2-space indent per repo guidelines
+  line-length:
+    max: 200
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+  truthy: disable
+  document-start: disable
+  comments-indentation: disable
+  comments:
+    min-spaces-from-content: 1
   indentation:
     spaces: 2
     indent-sequences: consistent
-
-  # Disable line-length checks to avoid noisy CI in strict mode
-  line-length: disable
-
-  # Use CRLF to match repo EOL policy (Windows-friendly)
   new-lines:
     type: dos
-
-  # Do not require '---' document start (common in GitHub Actions)
-  document-start:
-    present: false
-
-  # Avoid false positives in GitHub Actions/Dependabot usage
-  truthy:
-    check-keys: false
-    allowed-values: ["on", "off", "yes", "no", "true", "false"]
-
-  # Some Actions examples use inline comments that can be oddly indented
-  comments-indentation: disable
-
-  # Align with Prettier: allow a single space before inline comments
-  comments:
-    min-spaces-from-content: 1
+  new-line-at-end-of-file: enable
+  trailing-spaces: enable
+  empty-lines:
+    max: 1
+    max-start: 0
+    max-end: 1
