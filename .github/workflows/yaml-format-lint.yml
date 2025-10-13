@@ -24,7 +24,7 @@ jobs:
         run: npx -y prettier@3.3.3 --check "**/*.{yml,yaml}"
 
       - name: yamllint
-        uses: ibiqlik/action-yamllint@v5
+        uses: ibiqlik/action-yamllint@v3.1.1
         with:
           file_or_dir: .
           config_file: .yamllint.yaml
