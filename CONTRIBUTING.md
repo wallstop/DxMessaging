@@ -8,6 +8,8 @@ Before committing, please enable our git hooks and local linters so you catch is
 - Install hooks: `pre-commit install`
 - Run on all files: `pre-commit run --all-files`
 
+Note: If the "Enforce CRLF and no BOM" hook fails, run `node scripts/fix-eol.js -v` to auto-fix line endings and strip any BOM.
+
 What runs locally:
 
 - Markdown link text check: enforces human-readable link text (no raw file names/paths)
@@ -27,4 +29,5 @@ Handy commands:
 - Format JSON/.asmdef (manual): `npx prettier@3.3.3 --write "**/*.{json,asmdef}"`
 - Format YAML (all files): `pre-commit run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
+- Fix EOL/BOM issues quickly: `node scripts/fix-eol.js -v`
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`

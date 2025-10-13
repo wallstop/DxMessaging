@@ -25,16 +25,16 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-        entry: npx --yes prettier --write
+        entry: npx --yes prettier@3.3.3 --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
-        description: Use the repo's Prettier version from package.json.
+        description: Use pinned Prettier version to match CI.
 
   - repo: local
     hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
-        entry: npx --yes markdownlint-cli2 --config .markdownlint.jsonc
+        entry: npx --yes markdownlint-cli2@0.17.1 --config .markdownlint.jsonc
         language: system
         files: '(?i)\.(md|markdown)$'
 
@@ -45,3 +45,14 @@ repos:
         entry: bash -c 'if command -v yamllint >/dev/null 2>&1; then yamllint -c .yamllint.yaml "$@"; else echo "yamllint not installed; skipping"; fi' --
         language: system
         files: '(?i)\.(ya?ml)$'
+
+  - repo: local
+    hooks:
+      - id: eol-bom-check
+        name: Enforce CRLF and no BOM
+        entry: node scripts/check-eol.js
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-commit
+          - pre-push
