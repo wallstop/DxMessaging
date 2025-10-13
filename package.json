@@ -32,7 +32,9 @@
   "homepage": "https://github.com/wallstop/DxMessaging#readme",
   "main": "README.md",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "format:yaml": "prettier --write \"**/*.{yml,yaml}\"",
+    "check:yaml": "prettier --check \"**/*.{yml,yaml}\" && yamllint -c .yamllint.yaml ."
   },
   "samples": [
     {

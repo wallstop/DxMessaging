@@ -1,0 +1,28 @@
+extends: default
+
+rules:
+  # Enforce 2-space indent per repo guidelines
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+  # Allow longer lines as warnings to avoid noisy CI
+  line-length:
+    max: 140
+    level: warning
+
+  # Use CRLF to match repo EOL policy (Windows-friendly)
+  new-lines:
+    type: dos
+
+  # Do not require '---' document start (common in GitHub Actions)
+  document-start:
+    present: false
+
+  # Avoid false positives in GitHub Actions/Dependabot usage
+  truthy:
+    check-keys: false
+    allowed-values: ["on", "off", "yes", "no", "true", "false"]
+
+  # Some Actions examples use inline comments that can be oddly indented
+  comments-indentation: disable
