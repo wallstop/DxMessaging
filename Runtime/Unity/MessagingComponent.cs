@@ -74,6 +74,30 @@ namespace DxMessaging.Unity
         }
 
         /// <summary>
+        /// Releases the registration token previously created for <paramref name="listener"/>.
+        /// </summary>
+        /// <param name="listener">Listener whose token should be released.</param>
+        /// <remarks>
+        /// Invokes <see cref="MessageRegistrationToken.Disable"/> and removes the listener from the internal cache.
+        /// Safe to call multiple times.
+        /// </remarks>
+        public bool Release(MonoBehaviour listener)
+        {
+            if (listener is null)
+            {
+                return false;
+            }
+
+            if (_registeredListeners.Remove(listener, out MessageRegistrationToken token))
+            {
+                token?.Disable();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Ensures the underlying <see cref="Core.MessageHandler"/> exists.
         /// </summary>
         private void Awake()

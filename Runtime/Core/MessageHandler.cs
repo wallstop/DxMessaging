@@ -1782,6 +1782,7 @@ namespace DxMessaging.Core
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+            internal int prefreezeInvocationCount;
         }
 
         /// <summary>
@@ -1895,39 +1896,16 @@ namespace DxMessaging.Core
             /// <param name="priority">Priority at which to run the handlers.</param>
             public void HandleUntargeted(ref T message, int priority, long emissionId)
             {
-                // Pre-freeze untargeted post-processors for this emission/priority
-                if (
-                    _untargetedPostProcessingFastHandlers != null
-                    && _untargetedPostProcessingFastHandlers.TryGetValue(priority, out var upf)
-                )
-                {
-                    _ = GetOrAddNewHandlerStack(upf, emissionId);
-                }
-                if (
-                    _untargetedPostProcessingHandlers != null
-                    && _untargetedPostProcessingHandlers.TryGetValue(priority, out var up)
-                )
-                {
-                    _ = GetOrAddNewHandlerStack(up, emissionId);
-                }
-                // Pre-freeze post-processors for this emission/priority
-                if (
-                    _untargetedPostProcessingFastHandlers != null
-                    && _untargetedPostProcessingFastHandlers.TryGetValue(
-                        priority,
-                        out var fastCache
-                    )
-                )
-                {
-                    _ = GetOrAddNewHandlerStack(fastCache, emissionId);
-                }
-                if (
-                    _untargetedPostProcessingHandlers != null
-                    && _untargetedPostProcessingHandlers.TryGetValue(priority, out var cache)
-                )
-                {
-                    _ = GetOrAddNewHandlerStack(cache, emissionId);
-                }
+                PrefreezeHandlersForEmission(
+                    _untargetedPostProcessingFastHandlers,
+                    priority,
+                    emissionId
+                );
+                PrefreezeHandlersForEmission(
+                    _untargetedPostProcessingHandlers,
+                    priority,
+                    emissionId
+                );
 
                 RunFastHandlers(_untargetedFastHandlers, ref message, priority, emissionId);
                 RunHandlers(_untargetedHandlers, ref message, priority, emissionId);
@@ -3533,6 +3511,22 @@ namespace DxMessaging.Core
                     actionCache.lastSeenEmissionId = emissionId;
                 }
                 return actionCache.cache;
+            }
+
+            private static void PrefreezeHandlersForEmission<THandler>(
+                Dictionary<int, HandlerActionCache<THandler>> handlers,
+                int priority,
+                long emissionId
+            )
+            {
+                if (
+                    handlers != null
+                    && handlers.TryGetValue(priority, out HandlerActionCache<THandler> cache)
+                )
+                {
+                    cache.prefreezeInvocationCount++;
+                    _ = GetOrAddNewHandlerStack(cache, emissionId);
+                }
             }
 
             private static Action AddHandler<TU>(

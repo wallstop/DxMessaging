@@ -7,6 +7,7 @@ namespace DxMessaging.Core.MessageBus
     using System.Runtime.CompilerServices;
     using DataStructure;
     using Diagnostics;
+    using DxMessaging.Core;
     using Extensions;
     using Helper;
     using Messages;
@@ -177,6 +178,7 @@ namespace DxMessaging.Core.MessageBus
         );
 
         private bool _diagnosticsMode = GlobalDiagnosticsMode;
+        private bool _loggedReflexiveWarning;
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
@@ -1131,6 +1133,17 @@ namespace DxMessaging.Core.MessageBus
 
             if (typeof(TMessage) == typeof(ReflexiveMessage))
             {
+                if (!_loggedReflexiveWarning)
+                {
+                    _loggedReflexiveWarning = true;
+                    if (MessagingDebug.enabled)
+                    {
+                        MessagingDebug.Log(
+                            LogLevel.Warn,
+                            "ReflexiveMessage dispatch traverses the Unity hierarchy and is significantly slower than typed messages. Prefer targeted or broadcast messages where possible."
+                        );
+                    }
+                }
 #if UNITY_2017_1_OR_NEWER
                 ref ReflexiveMessage reflexiveMessage = ref Unsafe.As<TMessage, ReflexiveMessage>(
                     ref typedMessage

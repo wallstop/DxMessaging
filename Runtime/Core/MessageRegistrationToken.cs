@@ -59,6 +59,7 @@ namespace DxMessaging.Core
 
         private readonly Dictionary<MessageRegistrationHandle, Action> _registrations = new();
         private readonly Dictionary<MessageRegistrationHandle, Action> _deregistrations = new();
+        private readonly List<Action> _deregistrationQueue = new();
         internal readonly Dictionary<
             MessageRegistrationHandle,
             MessageRegistrationMetadata
@@ -1878,13 +1879,11 @@ namespace DxMessaging.Core
 
             if (_deregistrations is { Count: > 0 })
             {
-                Dictionary<
-                    MessageRegistrationHandle,
-                    Action
-                >.ValueCollection.Enumerator enumerator = _deregistrations.Values.GetEnumerator();
-                while (enumerator.MoveNext())
+                _deregistrationQueue.Clear();
+                _deregistrationQueue.AddRange(_deregistrations.Values);
+                foreach (Action deregistration in _deregistrationQueue)
                 {
-                    enumerator.Current();
+                    deregistration?.Invoke();
                 }
             }
 
@@ -1905,15 +1904,13 @@ namespace DxMessaging.Core
         /// </example>
         public void UnregisterAll()
         {
-            if (_enabled && _deregistrations is { Count: > 0 })
+            if (_deregistrations is { Count: > 0 })
             {
-                Dictionary<
-                    MessageRegistrationHandle,
-                    Action
-                >.ValueCollection.Enumerator enumerator = _deregistrations.Values.GetEnumerator();
-                while (enumerator.MoveNext())
+                _deregistrationQueue.Clear();
+                _deregistrationQueue.AddRange(_deregistrations.Values);
+                foreach (Action deregistration in _deregistrationQueue)
                 {
-                    enumerator.Current();
+                    deregistration?.Invoke();
                 }
             }
 
@@ -1934,16 +1931,10 @@ namespace DxMessaging.Core
         /// </example>
         public void RemoveRegistration(MessageRegistrationHandle handle)
         {
-            if (
-                _deregistrations != null
-                && _deregistrations.TryGetValue(handle, out Action deregistrationAction)
-            )
+            if (_deregistrations?.Remove(handle, out Action deregistrationAction) == true)
             {
-                deregistrationAction();
-                _ = _deregistrations.Remove(handle);
+                deregistrationAction?.Invoke();
             }
-
-            _ = _registrations?.Remove(handle);
         }
 
         /// <summary>

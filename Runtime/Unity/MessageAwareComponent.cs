@@ -124,8 +124,14 @@ namespace DxMessaging.Unity
         /// </summary>
         protected virtual void OnDestroy()
         {
+            if (_messagingComponent != null)
+            {
+                _messagingComponent.Release(this);
+            }
+
             _messageRegistrationToken?.Disable();
             _messageRegistrationToken = null;
+            _messagingComponent = null;
         }
 
         /// <summary>
