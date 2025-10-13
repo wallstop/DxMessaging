@@ -592,9 +592,9 @@ namespace DxMessaging.Tests.Runtime.Core
             for (int i = 0; i < ManyCount; i++)
                 total += counts[i];
             Assert.AreEqual(
-                ManyCount * 3,
+                ManyCount,
                 total,
-                "All global listeners should run once per category on first emission."
+                "All global listeners should run once for the emitted category on first emission."
             );
             Assert.AreEqual(
                 0,

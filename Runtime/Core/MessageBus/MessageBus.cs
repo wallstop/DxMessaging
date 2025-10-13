@@ -1579,6 +1579,7 @@ namespace DxMessaging.Core.MessageBus
                 && postTwt.handlers.Count > 0
             )
             {
+                foundAnyHandlers = true;
                 List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
                     postTwt,
                     _emissionId

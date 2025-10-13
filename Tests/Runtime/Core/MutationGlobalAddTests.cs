@@ -48,7 +48,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             msg.EmitGameObjectTargeted(host);
             Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(3, counts[1]);
+            Assert.AreEqual(1, counts[1]);
 
             token.RemoveRegistration(adder);
             yield break;
@@ -90,7 +90,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             msg.EmitGameObjectBroadcast(host);
             Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(3, counts[1]);
+            Assert.AreEqual(1, counts[1]);
 
             token.RemoveRegistration(adder);
             yield break;

@@ -2777,7 +2777,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _targetedWithoutTargetingPostProcessingHandlers,
                     originalHandler,
                     handler,
@@ -2802,7 +2802,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _fastTargetedWithoutTargetingPostProcessingHandlers,
                     originalHandler,
                     handler,
