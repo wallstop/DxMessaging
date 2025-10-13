@@ -171,12 +171,12 @@ This is a game-changer for:
 
 **Why this is different from classic event buses:**
 
-| Approach | Classic Event Bus | DxMessaging Global Observers |
-|----------|------------------|------------------------------|
-| **Subscriptions needed** | One per entity type | One for ALL entities |
-| **Coupling** | Tight (know all entity types) | Zero (no knowledge needed) |
-| **New entity types** | Update all subscribers | Zero changes needed |
-| **Context** | Lost (who was damaged?) | Provided (source/target parameter) |
+| Approach                 | Classic Event Bus             | DxMessaging Global Observers       |
+| ------------------------ | ----------------------------- | ---------------------------------- |
+| **Subscriptions needed** | One per entity type           | One for ALL entities               |
+| **Coupling**             | Tight (know all entity types) | Zero (no knowledge needed)         |
+| **New entity types**     | Update all subscribers        | Zero changes needed                |
+| **Context**              | Lost (who was damaged?)       | Provided (source/target parameter) |
 
 ### Classic Event Bus Anti-Pattern
 
@@ -433,14 +433,14 @@ See [Troubleshooting](Troubleshooting.md) for more debugging tips.
 
 ## Quick Reference
 
-| Operation | GameObject Variant | Component Variant |
-|-----------|-------------------|-------------------|
-| **Emit Targeted** | `msg.EmitGameObjectTargeted(go)` | `msg.EmitComponentTargeted(comp)` |
-| **Emit Broadcast** | `msg.EmitGameObjectBroadcast(go)` | `msg.EmitComponentBroadcast(comp)` |
-| **Register Targeted** | `RegisterGameObjectTargeted<T>(go, handler)` | `RegisterComponentTargeted<T>(comp, handler)` |
-| **Register Broadcast** | `RegisterGameObjectBroadcast<T>(go, handler)` | `RegisterComponentBroadcast<T>(comp, handler)` |
-| **Global Targeted** | `RegisterTargetedWithoutTargeting<T>(handler)` | (Same — no distinction) |
-| **Global Broadcast** | `RegisterBroadcastWithoutSource<T>(handler)` | (Same — no distinction) |
+| Operation              | GameObject Variant                             | Component Variant                              |
+| ---------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| **Emit Targeted**      | `msg.EmitGameObjectTargeted(go)`               | `msg.EmitComponentTargeted(comp)`              |
+| **Emit Broadcast**     | `msg.EmitGameObjectBroadcast(go)`              | `msg.EmitComponentBroadcast(comp)`             |
+| **Register Targeted**  | `RegisterGameObjectTargeted<T>(go, handler)`   | `RegisterComponentTargeted<T>(comp, handler)`  |
+| **Register Broadcast** | `RegisterGameObjectBroadcast<T>(go, handler)`  | `RegisterComponentBroadcast<T>(comp, handler)` |
+| **Global Targeted**    | `RegisterTargetedWithoutTargeting<T>(handler)` | (Same — no distinction)                        |
+| **Global Broadcast**   | `RegisterBroadcastWithoutSource<T>(handler)`   | (Same — no distinction)                        |
 
 ## See Also
 

@@ -68,21 +68,21 @@ Source files (for exploration)
 - Message bus: Runtime/Core/MessageBus/MessageBus.cs
 - Message handler/token: Runtime/Core/MessageHandler.cs, Runtime/Core/MessageRegistrationToken.cs
 - Emit helpers: Runtime/Core/Extensions/MessageExtensions.cs
-- Attributes: Runtime/Core/Attributes/*.cs
+- Attributes: Runtime/Core/Attributes/\*.cs
 
 API tables (quick view)
 
 Token registrations
 
-| Category | Specific (Unity overloads) | All targets/sources | Post‑processing |
-| --- | --- | --- | --- |
-| Untargeted | `RegisterUntargeted&lt;T&gt;(Action&lt;T&gt; or FastHandler&lt;T&gt;)` | — | `RegisterUntargetedPostProcessor&lt;T&gt;(FastHandler&lt;T&gt;)` |
-| Targeted | `RegisterGameObjectTargeted&lt;T&gt;(GameObject, ...)` · `RegisterComponentTargeted&lt;T&gt;(Component, ...)` · `RegisterTargeted&lt;T&gt;(InstanceId, ...)` | `RegisterTargetedWithoutTargeting&lt;T&gt;(FastHandlerWithContext&lt;T&gt;)` | `RegisterTargetedPostProcessor&lt;T&gt;(InstanceId, FastHandler&lt;T&gt;)` · `RegisterTargetedWithoutTargetingPostProcessor&lt;T&gt;(FastHandlerWithContext&lt;T&gt;)` |
-| Broadcast | `RegisterGameObjectBroadcast&lt;T&gt;(GameObject, ...)` · `RegisterComponentBroadcast&lt;T&gt;(Component, ...)` · `RegisterBroadcast&lt;T&gt;(InstanceId, ...)` | `RegisterBroadcastWithoutSource&lt;T&gt;(FastHandlerWithContext&lt;T&gt;)` | `RegisterBroadcastPostProcessor&lt;T&gt;(InstanceId, FastHandler&lt;T&gt;)` · `RegisterBroadcastWithoutSourcePostProcessor&lt;T&gt;(Action&lt;InstanceId,T&gt; or FastHandlerWithContext&lt;T&gt;)` |
+| Category   | Specific (Unity overloads)                                                                                                                                      | All targets/sources                                                          | Post‑processing                                                                                                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Untargeted | `RegisterUntargeted&lt;T&gt;(Action&lt;T&gt; or FastHandler&lt;T&gt;)`                                                                                          | —                                                                            | `RegisterUntargetedPostProcessor&lt;T&gt;(FastHandler&lt;T&gt;)`                                                                                                                                    |
+| Targeted   | `RegisterGameObjectTargeted&lt;T&gt;(GameObject, ...)` · `RegisterComponentTargeted&lt;T&gt;(Component, ...)` · `RegisterTargeted&lt;T&gt;(InstanceId, ...)`    | `RegisterTargetedWithoutTargeting&lt;T&gt;(FastHandlerWithContext&lt;T&gt;)` | `RegisterTargetedPostProcessor&lt;T&gt;(InstanceId, FastHandler&lt;T&gt;)` · `RegisterTargetedWithoutTargetingPostProcessor&lt;T&gt;(FastHandlerWithContext&lt;T&gt;)`                              |
+| Broadcast  | `RegisterGameObjectBroadcast&lt;T&gt;(GameObject, ...)` · `RegisterComponentBroadcast&lt;T&gt;(Component, ...)` · `RegisterBroadcast&lt;T&gt;(InstanceId, ...)` | `RegisterBroadcastWithoutSource&lt;T&gt;(FastHandlerWithContext&lt;T&gt;)`   | `RegisterBroadcastPostProcessor&lt;T&gt;(InstanceId, FastHandler&lt;T&gt;)` · `RegisterBroadcastWithoutSourcePostProcessor&lt;T&gt;(Action&lt;InstanceId,T&gt; or FastHandlerWithContext&lt;T&gt;)` |
 
 Bus‑level
 
-| Category | API |
-| --- | --- |
-| Interceptors | `RegisterUntargetedInterceptor&lt;T&gt;(UntargetedInterceptor&lt;T&gt;)` · `RegisterTargetedInterceptor&lt;T&gt;(TargetedInterceptor&lt;T&gt;)` · `RegisterBroadcastInterceptor&lt;T&gt;(BroadcastInterceptor&lt;T&gt;)` |
-| Global observer | `RegisterGlobalAcceptAll(MessageHandler)` |
+| Category        | API                                                                                                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Interceptors    | `RegisterUntargetedInterceptor&lt;T&gt;(UntargetedInterceptor&lt;T&gt;)` · `RegisterTargetedInterceptor&lt;T&gt;(TargetedInterceptor&lt;T&gt;)` · `RegisterBroadcastInterceptor&lt;T&gt;(BroadcastInterceptor&lt;T&gt;)` |
+| Global observer | `RegisterGlobalAcceptAll(MessageHandler)`                                                                                                                                                                                |

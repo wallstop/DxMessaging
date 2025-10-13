@@ -120,6 +120,7 @@
 **Located in `Samples~/` directory** — Import via Unity Package Manager!
 
 - **[Mini Combat](../Samples~/Mini%20Combat/README.md)** ⭐ — Interactive combat demo with Heal/Damage messages
+
   - Perfect first example to understand message flow
   - Shows Targeted and Broadcast messages in action
   - Complete working scene you can play with
@@ -197,13 +198,13 @@ flowchart LR
 
 From [Comparisons](Comparisons.md):
 
-| Feature | DxMessaging | C# Events | UnityEvents | Static Bus |
-|---------|-------------|-----------|-------------|------------|
-| Decoupling | ✅ Full | ❌ Tight | ⚠️ Hidden | ✅ Yes |
-| Lifecycle Safety | ✅ Auto | ❌ Manual | ⚠️ Unity | ❌ Manual |
-| Execution Order | ✅ Priority | ❌ Random | ❌ Random | ❌ Random |
-| Observability | ✅ Built-in | ❌ No | ❌ No | ❌ No |
-| Performance | ✅ Zero-alloc | ✅ Good | ⚠️ Boxing | ✅ Good |
+| Feature          | DxMessaging   | C# Events | UnityEvents | Static Bus |
+| ---------------- | ------------- | --------- | ----------- | ---------- |
+| Decoupling       | ✅ Full       | ❌ Tight  | ⚠️ Hidden   | ✅ Yes     |
+| Lifecycle Safety | ✅ Auto       | ❌ Manual | ⚠️ Unity    | ❌ Manual  |
+| Execution Order  | ✅ Priority   | ❌ Random | ❌ Random   | ❌ Random  |
+| Observability    | ✅ Built-in   | ❌ No     | ❌ No       | ❌ No      |
+| Performance      | ✅ Zero-alloc | ✅ Good   | ⚠️ Boxing   | ✅ Good    |
 
 ## 🔍 Search by Topic
 

@@ -326,13 +326,13 @@ msg.Emit(testBus);
 
 ## Attributes Quick Reference
 
-| Attribute | Purpose | Example |
-|-----------|---------|---------|
-| `[DxUntargetedMessage]` | Mark as global message | `[DxUntargetedMessage]` |
-| `[DxTargetedMessage]` | Mark as targeted message | `[DxTargetedMessage]` |
-| `[DxBroadcastMessage]` | Mark as broadcast message | `[DxBroadcastMessage]` |
-| `[DxAutoConstructor]` | Generate constructor | `[DxAutoConstructor]` |
-| `[DxOptionalParameter]` | Make parameter optional | `[DxOptionalParameter] public readonly bool flag;` |
+| Attribute               | Purpose                   | Example                                            |
+| ----------------------- | ------------------------- | -------------------------------------------------- |
+| `[DxUntargetedMessage]` | Mark as global message    | `[DxUntargetedMessage]`                            |
+| `[DxTargetedMessage]`   | Mark as targeted message  | `[DxTargetedMessage]`                              |
+| `[DxBroadcastMessage]`  | Mark as broadcast message | `[DxBroadcastMessage]`                             |
+| `[DxAutoConstructor]`   | Generate constructor      | `[DxAutoConstructor]`                              |
+| `[DxOptionalParameter]` | Make parameter optional   | `[DxOptionalParameter] public readonly bool flag;` |
 
 ## Common Patterns with Attributes
 
@@ -431,8 +431,8 @@ public readonly partial struct MyMessage : IUntargetedMessage<MyMessage>
 **Yes!** In Visual Studio/Rider:
 
 1. Right-click on the message type
-$11. Select "Go to Implementation" or "Go to Definition"
-$11. You'll see the auto-generated file
+   $11. Select "Go to Implementation" or "Go to Definition"
+   $11. You'll see the auto-generated file
 
 **Or** check your `obj/` folder for `.g.cs` files.
 
