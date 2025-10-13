@@ -85,6 +85,209 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
+        /// Pre-freezes this handler's targeted post-processor caches for the given message type, target, and priority
+        /// for the specified emission id, so registrations during the same emission are not observed.
+        /// </summary>
+        /// <typeparam name="T">Targeted message type.</typeparam>
+        /// <param name="target">Target instance id.</param>
+        /// <param name="priority">Priority bucket to freeze.</param>
+        /// <param name="emissionId">Current emission id.</param>
+        /// <param name="messageBus">Bus whose typed handler mapping to use.</param>
+        internal void PrefreezeTargetedPostProcessorsForEmission<T>(
+            InstanceId target,
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : ITargetedMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._targetedPostProcessingFastHandlers != null
+                && handler._targetedPostProcessingFastHandlers.TryGetValue(
+                    target,
+                    out Dictionary<int, HandlerActionCache<FastHandler<T>>> fastByPriority
+                )
+                && fastByPriority.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._targetedPostProcessingHandlers != null
+                && handler._targetedPostProcessingHandlers.TryGetValue(
+                    target,
+                    out Dictionary<int, HandlerActionCache<Action<T>>> byPriority
+                )
+                && byPriority.TryGetValue(priority, out HandlerActionCache<Action<T>> cache)
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's targeted-without-targeting handler caches for the given message type and priority
+        /// so that removals/additions during the same emission are not observed.
+        /// </summary>
+        internal void PrefreezeTargetedWithoutTargetingHandlersForEmission<T>(
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : ITargetedMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._fastTargetedWithoutTargetingHandlers != null
+                && handler._fastTargetedWithoutTargetingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandlerWithContext<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._targetedWithoutTargetingHandlers != null
+                && handler._targetedWithoutTargetingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<Action<InstanceId, T>> cache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's targeted-without-targeting post-processor caches for a given priority.
+        /// </summary>
+        internal void PrefreezeTargetedWithoutTargetingPostProcessorsForEmission<T>(
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : ITargetedMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._fastTargetedWithoutTargetingPostProcessingHandlers != null
+                && handler._fastTargetedWithoutTargetingPostProcessingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandlerWithContext<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._targetedWithoutTargetingPostProcessingHandlers != null
+                && handler._targetedWithoutTargetingPostProcessingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<Action<InstanceId, T>> cache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's untargeted post-processor caches for a given priority.
+        /// </summary>
+        internal void PrefreezeUntargetedPostProcessorsForEmission<T>(
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : IUntargetedMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._untargetedPostProcessingFastHandlers != null
+                && handler._untargetedPostProcessingFastHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._untargetedPostProcessingHandlers != null
+                && handler._untargetedPostProcessingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<Action<T>> cache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's broadcast-without-source post-processor caches for a given priority.
+        /// </summary>
+        internal void PrefreezeBroadcastWithoutSourcePostProcessorsForEmission<T>(
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : IBroadcastMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._fastBroadcastWithoutSourcePostProcessingHandlers != null
+                && handler._fastBroadcastWithoutSourcePostProcessingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandlerWithContext<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._broadcastWithoutSourcePostProcessingHandlers != null
+                && handler._broadcastWithoutSourcePostProcessingHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<Action<InstanceId, T>> cache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
         /// Pre-freezes this handler's broadcast-without-source handler caches for the given message type and priority
         /// for the specified emission id, so removals during the same emission are not observed.
         /// </summary>
@@ -2062,7 +2265,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _targetedWithoutTargetingHandlers,
                     originalHandler,
                     handler,
@@ -2087,7 +2290,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _fastTargetedWithoutTargetingHandlers,
                     originalHandler,
                     handler,
@@ -2390,7 +2593,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _untargetedPostProcessingHandlers,
                     originalHandler,
                     handler,
@@ -2415,7 +2618,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _untargetedPostProcessingFastHandlers,
                     originalHandler,
                     handler,
@@ -2442,7 +2645,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     target,
                     ref _targetedPostProcessingHandlers,
                     originalHandler,
@@ -2470,7 +2673,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     target,
                     ref _targetedPostProcessingFastHandlers,
                     originalHandler,
@@ -2548,7 +2751,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     source,
                     ref _broadcastPostProcessingHandlers,
                     originalHandler,
@@ -2576,7 +2779,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     source,
                     ref _broadcastPostProcessingFastHandlers,
                     originalHandler,
@@ -2602,7 +2805,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _broadcastWithoutSourcePostProcessingHandlers,
                     originalHandler,
                     handler,
@@ -2627,7 +2830,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _fastBroadcastWithoutSourcePostProcessingHandlers,
                     originalHandler,
                     handler,
@@ -2635,6 +2838,109 @@ namespace DxMessaging.Core
                     priority,
                     emissionId
                 );
+            }
+
+            // Context-aware variant that preserves the priority key mapping on deregistration for the current emission.
+            private static Action AddHandlerPreservingPriorityKey<TU>(
+                InstanceId context,
+                ref Dictionary<
+                    InstanceId,
+                    Dictionary<int, HandlerActionCache<TU>>
+                > handlersByContext,
+                TU originalHandler,
+                TU augmentedHandler,
+                Action deregistration,
+                int priority,
+                long emissionId
+            )
+            {
+                handlersByContext ??=
+                    new Dictionary<InstanceId, Dictionary<int, HandlerActionCache<TU>>>();
+
+                if (
+                    !handlersByContext.TryGetValue(
+                        context,
+                        out Dictionary<int, HandlerActionCache<TU>> sortedHandlers
+                    )
+                )
+                {
+                    sortedHandlers = new Dictionary<int, HandlerActionCache<TU>>();
+                    handlersByContext[context] = sortedHandlers;
+                }
+
+                if (!sortedHandlers.TryGetValue(priority, out HandlerActionCache<TU> cache))
+                {
+                    cache = new HandlerActionCache<TU>();
+                    sortedHandlers[priority] = cache;
+                }
+
+                if (
+                    !cache.entries.TryGetValue(
+                        originalHandler,
+                        out HandlerActionCache<TU>.Entry entry
+                    )
+                )
+                {
+                    entry = new HandlerActionCache<TU>.Entry(augmentedHandler, 0);
+                }
+
+                bool firstRegistration = entry.count == 0;
+                entry = firstRegistration
+                    ? new HandlerActionCache<TU>.Entry(augmentedHandler, 1)
+                    : new HandlerActionCache<TU>.Entry(entry.handler, entry.count + 1);
+
+                cache.entries[originalHandler] = entry;
+                cache.version++;
+
+                Dictionary<
+                    InstanceId,
+                    Dictionary<int, HandlerActionCache<TU>>
+                > localHandlersByContext = handlersByContext;
+
+                return () =>
+                {
+                    if (!localHandlersByContext.TryGetValue(context, out sortedHandlers))
+                    {
+                        return;
+                    }
+
+                    if (
+                        !sortedHandlers.TryGetValue(priority, out HandlerActionCache<TU> localCache)
+                    )
+                    {
+                        return;
+                    }
+
+                    if (
+                        !localCache.entries.TryGetValue(
+                            originalHandler,
+                            out HandlerActionCache<TU>.Entry localEntry
+                        )
+                    )
+                    {
+                        return;
+                    }
+
+                    localCache.version++;
+
+                    deregistration?.Invoke();
+
+                    if (localEntry.count <= 1)
+                    {
+                        _ = localCache.entries.Remove(originalHandler);
+                        localCache.version++;
+                        // Deliberately keep the priority and context mappings to preserve
+                        // frozen snapshots for the current emission.
+                        return;
+                    }
+
+                    localEntry = new HandlerActionCache<TU>.Entry(
+                        localEntry.handler,
+                        localEntry.count - 1
+                    );
+
+                    localCache.entries[originalHandler] = localEntry;
+                };
             }
 
             private static void RunFastHandlersWithContext<TMessage>(

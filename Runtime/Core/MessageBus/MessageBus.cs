@@ -833,7 +833,20 @@ namespace DxMessaging.Core.MessageBus
                 int frozenCount = frozen.Count;
                 for (int i = 0; i < frozenCount; ++i)
                 {
-                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                    KeyValuePair<int, HandlerCache> entry = frozen[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        entry.Value,
+                        _emissionId
+                    );
+                    for (int h = 0; h < mhList.Count; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeUntargetedPostProcessorsForEmission<TMessage>(
+                                entry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
                 }
             }
 
@@ -1055,7 +1068,21 @@ namespace DxMessaging.Core.MessageBus
                 int frozenCount = frozen.Count;
                 for (int i = 0; i < frozenCount; ++i)
                 {
-                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                    KeyValuePair<int, HandlerCache> entry = frozen[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        entry.Value,
+                        _emissionId
+                    );
+                    for (int h = 0; h < mhList.Count; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeTargetedPostProcessorsForEmission<TMessage>(
+                                target,
+                                entry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
                 }
             }
             if (
@@ -1072,7 +1099,20 @@ namespace DxMessaging.Core.MessageBus
                 int frozenCount = frozen.Count;
                 for (int i = 0; i < frozenCount; ++i)
                 {
-                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                    KeyValuePair<int, HandlerCache> entry = frozen[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        entry.Value,
+                        _emissionId
+                    );
+                    for (int h = 0; h < mhList.Count; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeTargetedWithoutTargetingPostProcessorsForEmission<TMessage>(
+                                entry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
                 }
             }
 
@@ -2087,7 +2127,20 @@ namespace DxMessaging.Core.MessageBus
                 int frozenCount = frozen.Count;
                 for (int i = 0; i < frozenCount; ++i)
                 {
-                    _ = GetOrAddMessageHandlerStack(frozen[i].Value, _emissionId);
+                    KeyValuePair<int, HandlerCache> entry = frozen[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        entry.Value,
+                        _emissionId
+                    );
+                    for (int h = 0; h < mhList.Count; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeBroadcastWithoutSourcePostProcessorsForEmission<TMessage>(
+                                entry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
                 }
             }
 
@@ -3350,6 +3403,16 @@ namespace DxMessaging.Core.MessageBus
             }
 
             List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            // Freeze each handler's typed caches for this emission/priority to ensure snapshot semantics
+            for (int j = 0; j < messageHandlers.Count; ++j)
+            {
+                messageHandlers[j]
+                    .PrefreezeTargetedWithoutTargetingHandlersForEmission<TMessage>(
+                        priority,
+                        _emissionId,
+                        this
+                    );
+            }
             int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
