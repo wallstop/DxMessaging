@@ -2102,6 +2102,36 @@ namespace DxMessaging.Core.MessageBus
                 BroadcastGlobalSourcedBroadcast(ref source, ref broadcastMessage);
             }
 
+            // Pre-freeze broadcast-without-source handler stacks for this emission
+            if (
+                _sinks.TryGetValue<TMessage>(out HandlerCache<int, HandlerCache> bwsHandlers)
+                && bwsHandlers.handlers.Count > 0
+            )
+            {
+                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
+                    bwsHandlers,
+                    _emissionId
+                );
+                int frozenCount = frozen.Count;
+                for (int i = 0; i < frozenCount; ++i)
+                {
+                    KeyValuePair<int, HandlerCache> entry = frozen[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        entry.Value,
+                        _emissionId
+                    );
+                    for (int h = 0; h < mhList.Count; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeBroadcastWithoutSourceHandlersForEmission<TMessage>(
+                                entry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
+                }
+            }
+
             bool foundAnyHandlers = false;
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers;
             _ = _broadcastSinks.TryGetValue<TMessage>(out broadcastHandlers);

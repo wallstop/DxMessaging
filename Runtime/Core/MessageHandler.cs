@@ -85,6 +85,49 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
+        /// Pre-freezes this handler's broadcast-without-source handler caches for the given message type and priority
+        /// for the specified emission id, so removals during the same emission are not observed.
+        /// </summary>
+        /// <typeparam name="T">Broadcast message type.</typeparam>
+        /// <param name="priority">Priority bucket to freeze.</param>
+        /// <param name="emissionId">Current emission id.</param>
+        /// <param name="messageBus">Bus whose typed handler mapping to use.</param>
+        internal void PrefreezeBroadcastWithoutSourceHandlersForEmission<T>(
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : IBroadcastMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._fastBroadcastWithoutSourceHandlers != null
+                && handler._fastBroadcastWithoutSourceHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandlerWithContext<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._broadcastWithoutSourceHandlers != null
+                && handler._broadcastWithoutSourceHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<Action<InstanceId, T>> cache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
         /// High-performance handler that receives the message by reference (no boxing/copies).
         /// </summary>
         public delegate void FastHandler<TMessage>(ref TMessage message)
