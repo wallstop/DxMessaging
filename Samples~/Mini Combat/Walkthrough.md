@@ -131,19 +131,19 @@ Settings changes are **global events**—they don't target anyone specifically. 
 
 ### Developer Notes
 
-**When to use untargeted messages:**
+#### When to use untargeted messages:
 
 - Global game state changes (settings, game mode, pause state)
 - Events that multiple unrelated systems might care about
 - Configuration updates
 
-**Pros:**
+##### Pros:
 
 - Simple and fast
 - No need to know who's listening
 - Easy to add new listeners
 
-**Cons:**
+###### Cons:
 
 - No targeting—everyone gets it
 - Can't send to just one specific object
@@ -169,19 +169,19 @@ We want to heal **one specific player**, not all players in the scene.
 
 ### Developer Notes
 
-**When to use targeted messages:**
+#### When to use targeted messages:
 
 - Actions directed at specific objects (heal this player, damage this enemy)
 - Commands for specific systems (open this door, activate this switch)
 - Any time you need precision delivery
 
-**Pros:**
+##### Pros:
 
 - Precise delivery to one recipient
 - Multiple instances can exist without crosstalk
 - Clear intent in code
 
-**Cons:**
+###### Cons:
 
 - Need a reference to the target
 - Can't easily notify multiple targets
@@ -207,20 +207,20 @@ The Enemy doesn't know (or care) who needs to know about the damage. It just ann
 
 ### Developer Notes
 
-**When to use broadcast messages:**
+#### When to use broadcast messages:
 
 - Events that multiple systems might monitor (damage, death, score)
 - Audio triggers (play sound when anything explodes)
 - Analytics/logging systems
 - UI notifications
 
-**Pros:**
+##### Pros:
 
 - Publisher doesn't need to know about subscribers
 - Easy to add new listeners without modifying emitter
 - Great for cross-cutting concerns (audio, VFX, analytics)
 
-**Cons:**
+###### Cons:
 
 - Less efficient than targeted messages
 - Every listener is notified (can't filter by source unless registered specifically)
@@ -236,13 +236,13 @@ The Enemy doesn't know (or care) who needs to know about the damage. It just ann
 token.RegisterComponent<Heal>(this, OnHeal);
 ```
 
-**Reasoning:**
+#### Reasoning:
 
 - Multiple Player instances might exist (multiplayer, AI companions)
 - Each Player should only respond to heals directed at **itself**
 - Component-level targeting provides this precision
 
-**What if we used untargeted instead?**
+##### What if we used untargeted instead?
 
 - Problem: ALL players would be healed simultaneously
 - Not realistic for gameplay
@@ -255,18 +255,18 @@ token.RegisterComponent<Heal>(this, OnHeal);
 token.RegisterBroadcastWithoutSource<TookDamage>(OnTookDamage);
 ```
 
-**Reasoning:**
+#### Reasoning:
 
 - UI needs to monitor **all damage events** in the game
 - Doesn't matter which enemy was damaged
 - Acts as a global observer
 
-**Alternative approaches:**
+##### Alternative approaches:
 
 - `RegisterGameObjectBroadcast`: Listen only to broadcasts from specific GameObject
 - `RegisterComponentBroadcast`: Listen only to broadcasts from specific Component
 
-**When to use each:**
+###### When to use each:
 
 | Method | Use Case | Example |
 |--------|----------|---------|
@@ -285,7 +285,7 @@ token.RegisterBroadcastWithoutSource<TookDamage>(OnTookDamage);
 1. Check the **"Enable Diagnostics"** box
 1. Press Play
 
-**What you'll see:**
+#### What you'll see:
 
 - Real-time log of messages sent and received
 - Message types and payloads
@@ -294,7 +294,7 @@ token.RegisterBroadcastWithoutSource<TookDamage>(OnTookDamage);
 
 ### Debugging Checklist
 
-**Message not received?**
+#### Message not received?
 
 - [ ] Is `MessagingComponent` attached to the GameObject?
 - [ ] Did you call `MessagingComponent.Create(this)` to get a token?
@@ -302,13 +302,13 @@ token.RegisterBroadcastWithoutSource<TookDamage>(OnTookDamage);
 - [ ] Does the message type match exactly?
 - [ ] Is the targeting correct (Component vs GameObject vs Untargeted)?
 
-**Message received by wrong object?**
+##### Message received by wrong object?
 
 - [ ] Check if using Broadcast when you meant Targeted
 - [ ] Verify Component vs GameObject targeting
 - [ ] Check registration method (`RegisterComponent` vs `RegisterGameObject`)
 
-**Message sent but nothing happens?**
+###### Message sent but nothing happens?
 
 - [ ] Verify handler method signature matches
 - [ ] Check if GameObject is active

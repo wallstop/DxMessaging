@@ -6,7 +6,7 @@
 
 This mini-sample showcases a basic combat loop using DxMessaging with Unity-friendly APIs. You'll see how different game objects (Player, Enemy, UI) communicate without direct references to each other.
 
-**Key Concepts Demonstrated:**
+### Key Concepts Demonstrated:
 
 - **Untargeted Messages**: Global messages anyone can listen to (like game settings)
 - **Targeted Messages**: Messages sent to a specific component (like healing a player)
@@ -120,13 +120,13 @@ Boot.cs (sends messages)
 
 This sample includes an `.asmdef` (Assembly Definition) file that references `WallstopStudios.DxMessaging`.
 
-**What this means:**
+#### What this means:
 
 - The sample scripts are in their own assembly for clean separation
 - The assembly definition already references DxMessaging for you
 - `using DxMessaging.*` statements work automatically
 
-**If you move these scripts:**
+##### If you move these scripts:
 
 - If you move them to your main Assets folder, they'll use your project's default assembly
 - If you move them to a different assembly, make sure that assembly references `WallstopStudios.DxMessaging`
@@ -141,7 +141,7 @@ Each script uses `MessagingComponent.Create(this)` to get a `MessageRegistration
 
 ### CRITICAL: Inheriting from MessageAwareComponent
 
-**If you extend these sample scripts or create your own derived classes:**
+#### If you extend these sample scripts or create your own derived classes:
 
 1. **ALWAYS call `base.RegisterMessageHandlers()` FIRST** in your override:
 

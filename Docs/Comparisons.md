@@ -358,7 +358,7 @@ Add/remove systems without affecting others
 - ✅ Observability - Count messages, inspect payloads easily
 - ✅ Determinism - Priority-based ordering eliminates flakiness
 
-**Example:**
+##### Example
 
 ```csharp
 // Test with isolated bus

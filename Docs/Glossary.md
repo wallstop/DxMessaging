@@ -205,7 +205,7 @@ DxMessaging handles this automatically via `MessageAwareComponent`:
 
 Making systems **independent** so they don't need references to each other.
 
-**Before DxMessaging:**
+#### Before DxMessaging
 
 ```csharp
 public class UI : MonoBehaviour {
@@ -215,7 +215,7 @@ public class UI : MonoBehaviour {
 }
 ```
 
-**With DxMessaging:**
+##### With DxMessaging
 
 ```csharp
 public class UI : MessageAwareComponent {
@@ -245,18 +245,18 @@ public class UI : MessageAwareComponent {
 
 ## Related Documentation
 
-**Learn More:**
+### Learn More
 
 - → [Visual Guide](VisualGuide.md) — See these concepts visualized
 - → [Getting Started](GettingStarted.md) — Full introduction with examples
 - → [Message Types](MessageTypes.md) — When to use each type
 
-**Reference:**
+#### Reference
 
 - → [Quick Reference](QuickReference.md) — API cheat sheet
 - → [API Reference](Reference.md) — Complete API documentation
 
-**Examples:**
+##### Examples
 
 - → [Mini Combat sample](../Samples~/Mini%20Combat/README.md) — See concepts in action
 - → [Patterns](Patterns.md) — Real-world usage patterns

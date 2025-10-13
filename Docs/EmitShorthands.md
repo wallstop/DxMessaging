@@ -60,7 +60,7 @@ var msg = new GamePaused();
 msg.Emit();  // Every listener receives this
 ```
 
-**Equivalent to:**
+#### Equivalent to
 
 ```csharp
 msg.EmitUntargeted();
@@ -68,7 +68,7 @@ msg.EmitUntargeted();
 MessageHandler.MessageBus.UntargetedBroadcast(ref msg);
 ```
 
-**Examples:**
+##### Examples
 
 - Scene loaded/unloaded
 - Game state changes (paused, resumed)
@@ -90,7 +90,7 @@ heal.EmitAt(player); // Only the player receives this
 
 **Caution:** `InstanceId` has implicit conversion from both `GameObject` and `Component`. Make sure your target type matches how listeners registered!
 
-**Examples:**
+#### Examples
 
 - Heal/damage commands to specific entities
 - UI updates for specific panels
@@ -109,7 +109,7 @@ var damage = new TookDamage(5);
 damage.EmitFrom(enemy);  // Anyone interested in this enemy receives it
 ```
 
-**Use cases:**
+#### Use cases
 
 - Combat logging ("Enemy X took damage")
 - Analytics ("Track damage from specific boss")
@@ -160,7 +160,7 @@ void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
 }
 ```
 
-**Why this is revolutionary:**
+#### Why this is revolutionary
 
 - **Classic event bus:** Subscribe to PlayerDamaged, EnemyDamaged, NPCDamaged... (tight coupling)
 - **DxMessaging:** Subscribe to ALL damage once (zero coupling, infinite scalability)
@@ -169,7 +169,7 @@ void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
 
 ---
 
-**📖 For the full deep dive on GameObject vs Component targeting and global observers, see [Targeting & Context](TargetingAndContext.md)**
+##### 📖 For the full deep dive on GameObject vs Component targeting and global observers, see [Targeting & Context](TargetingAndContext.md)
 
 ---
 
@@ -244,14 +244,14 @@ DxMessaging includes three built-in string message types for rapid prototyping:
 
 ### When to Use String Messages
 
-**Good for:**
+#### Good for
 
 - Rapid prototyping
 - Debug logging
 - Test utilities
 - Tool scripts
 
-**Not good for:**
+##### Not good for
 
 - Production gameplay code (use typed messages instead)
 - Performance-critical paths
@@ -271,7 +271,7 @@ msg.EmitAt(target, localBus);    // Target on specific bus
 msg.EmitFrom(source, localBus);  // Broadcast on specific bus
 ```
 
-**When to use:**
+### When to use
 
 - Testing with isolated buses
 - Subsystems with their own message domains
@@ -295,20 +295,17 @@ If a handler isn’t firing, first suspect a GameObject vs Component mismatch. S
 
 ### "My handler isn't firing!"
 
-**Check these in order:**
+#### Check these in order
 
 1. **GameObject vs Component mismatch?**
-
    - Did you register for a GameObject but emit to a Component (or vice versa)?
    - Use explicit helpers (`EmitGameObjectTargeted` vs `EmitComponentTargeted`) to eliminate this issue
 
 1. **Is the handler enabled?**
-
    - Check that `token.Enable()` was called (usually in `OnEnable`)
    - Verify the component is active
 
 1. **Correct message type?**
-
    - Untargeted messages use `Emit()`
    - Targeted messages use `EmitAt(target)`
    - Broadcast messages use `EmitFrom(source)`
@@ -344,7 +341,7 @@ See [Diagnostics](Diagnostics.md) for more debugging tools.
 | **Broadcast from Component**  | `msg.EmitFrom(component)`  | `msg.EmitComponentBroadcast(component)`   |
 | **Non-Unity InstanceId**      | `msg.EmitAt(id)`           | `msg.EmitTargeted(id)`                    |
 
-**Our recommendation:**
+### Our recommendation
 
 - In Unity gameplay code: Use **explicit helpers** for clarity and safety
 - In tests and non-Unity code: Use **shorthands** for brevity

@@ -38,13 +38,13 @@ var heal = new Heal(10);
 heal.EmitGameObjectTargeted(playerGameObject);
 ```
 
-**Who receives it?**
+#### Who receives it?
 
 - Any Component on that GameObject that registered with `RegisterGameObjectTargeted`
 - Multiple components on the same GameObject can all receive it
 - Components on child/parent GameObjects will NOT receive it
 
-**Use when:**
+##### Use when
 
 - You don't care which specific component handles it
 - You want flexibility (multiple components can respond)
@@ -60,13 +60,13 @@ var heal = new Heal(10);
 heal.EmitComponentTargeted(playerHealthComponent);
 ```
 
-**Who receives it?**
+#### Who receives it?
 
 - ONLY that specific Component instance
 - Other components on the same GameObject will NOT receive it
 - This is a direct, pinpoint message
 
-**Use when:**
+##### Use when
 
 - You have a reference to the exact component you want to message
 - You need precise control (only this component, not its siblings)
@@ -169,7 +169,7 @@ This is a game-changer for:
 - **Debugging** — See all events of a type in one place
 - **Cross-cutting concerns** — Achievements, logging, VFX that respond to any entity's events
 
-**Why this is different from classic event buses:**
+### Why this is different from classic event buses
 
 | Approach                 | Classic Event Bus             | DxMessaging Global Observers       |
 | ------------------------ | ----------------------------- | ---------------------------------- |
@@ -232,7 +232,7 @@ heal.EmitAt(enemy);     // OnAnyHeal fires with target = enemy
 heal.EmitAt(npc);       // OnAnyHeal fires with target = npc
 ```
 
-**Use cases:**
+#### Use cases
 
 - Analytics ("track all damage dealt")
 - Debugging ("log every heal in the game")
@@ -263,7 +263,7 @@ damage.EmitFrom(player);    // OnAnyDamage fires with source = player
 damage.EmitFrom(boss);      // OnAnyDamage fires with source = boss
 ```
 
-**Use cases:**
+#### Use cases
 
 - Combat logs ("record all damage in the scene")
 - Particle effects ("spawn blood VFX for any damage")
@@ -350,7 +350,7 @@ public class AchievementSystem : MessageAwareComponent
 
 Global listeners (`RegisterTargetedWithoutTargeting` / `RegisterBroadcastWithoutSource`) are **slightly slower** than specific listeners because they receive every message of that type. This is usually negligible, but avoid them in hot paths if you're emitting thousands of messages per frame.
 
-**Rule of thumb:**
+#### Rule of thumb
 
 - For gameplay (< 100 messages/frame): Use freely
 - For analytics/debugging: Perfect use case
@@ -360,14 +360,14 @@ Global listeners (`RegisterTargetedWithoutTargeting` / `RegisterBroadcastWithout
 
 ### GameObject Context
 
-**Use when:**
+#### Use when
 
 - The whole object is the logical target/source (e.g., "Player was healed", "Enemy took damage")
 - Multiple components should coordinate under the same address
 - You don't care which specific component handles it
 - You want flexibility for future refactoring (adding/removing components)
 
-**Examples:**
+##### Examples
 
 - Combat: "Deal damage to this enemy"
 - UI: "Update all panels related to this character"
@@ -375,14 +375,14 @@ Global listeners (`RegisterTargetedWithoutTargeting` / `RegisterBroadcastWithout
 
 ### Component Context
 
-**Use when:**
+#### Use when
 
 - The message is explicitly for one component's responsibility (e.g., "open JUST this DoorController")
 - Multiple components on the same GameObject must be independently addressable
 - You need pinpoint precision
 - You have a direct reference to the target component
 
-**Examples:**
+##### Examples
 
 - UI: "Update this specific health bar, not the mana bar"
 - Animation: "Tell this animator to play a clip"
@@ -423,7 +423,7 @@ _ = token.RegisterGameObjectTargeted<Heal>(gameObject, OnHeal);
 heal.EmitAt(gameObject);  // Both GameObject
 ```
 
-**Other causes:**
+#### Other causes
 
 1. Handler not enabled (call `token.Enable()` in `OnEnable`)
 1. Registration happened after emission

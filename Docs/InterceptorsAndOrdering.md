@@ -4,7 +4,7 @@
 
 **IMPORTANT:** DxMessaging uses snapshot semantics for message emissions. When a message is emitted, the system creates a snapshot of all current listeners (interceptors, handlers, and post-processors). This snapshot is "frozen" for the duration of that emission.
 
-**What this means:**
+### What this means
 
 - Listeners added during emission will **not** be invoked for the current message
 - Newly registered listeners will only become active starting with the **next** emission
@@ -12,7 +12,7 @@
 - This behavior applies to all registration types: handlers, interceptors, and post-processors
 - This behavior applies to all message categories: Untargeted, Targeted, and Broadcast
 
-**Example:**
+#### Example
 
 ```csharp
 // Handler adds a new listener during emission
@@ -29,7 +29,7 @@ new GameEvent().Emit();  // DoWork() executes, ProcessLater() does NOT
 new GameEvent().Emit();  // Both DoWork() and ProcessLater() execute
 ```
 
-**Why this matters:**
+##### Why this matters
 
 - Prevents infinite loops (a handler that registers itself won't recurse)
 - Guarantees predictable execution order

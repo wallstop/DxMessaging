@@ -73,3 +73,13 @@ repos:
         stages:
           - pre-commit
           - pre-push
+
+  - repo: local
+    hooks:
+      - id: conflict-markers
+        name: Fail on merge conflict markers
+        entry: bash -lc 'if rg -n -S -g "!**/.git/**" -e "^(<<<<<<<|=======|>>>>>>>)" .; then echo "Conflict markers found. Resolve merges before committing." >&2; exit 1; fi'
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-commit

@@ -18,31 +18,26 @@ This document explains DxMessaging’s internal design, performance optimization
 DxMessaging was built with these principles:
 
 1. Zero‑Allocation Communication
-
    - Messages are `readonly struct` types passed by `ref`.
    - No boxing, no temporary objects, minimal GC pressure.
    - Handlers receive `ref` parameters for struct messages.
 
 1. Type‑Safe by Default
-
    - Compile‑time guarantees via generic constraints.
    - No string‑based dispatch (unlike Unity’s `SendMessage`).
    - Source generators provide boilerplate‑free message definitions.
 
 1. Predictable Execution
-
    - Priority‑based handler ordering (lower priority runs first).
    - Three‑stage pipeline: Interceptors → Handlers → Post‑Processors.
    - Deterministic behavior within each priority level.
 
 1. Observable & Debuggable
-
    - Built‑in diagnostics via `CyclicBuffer`.
    - Registration logging with `RegistrationLog`.
    - Inspector integration for runtime visibility.
 
 1. Lifecycle Safety
-
    - `MessageRegistrationToken` manages enable/disable.
    - Automatic cleanup prevents memory leaks.
    - Unity lifecycle integration via `MessageAwareComponent`.

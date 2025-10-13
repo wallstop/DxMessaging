@@ -45,18 +45,18 @@ Do I need a global bus?
 
 ## Related Documentation
 
-**New to DxMessaging?**
+### New to DxMessaging?
 
 - → [Visual Guide](VisualGuide.md) — Beginner-friendly introduction
 - → [Getting Started](GettingStarted.md) — Complete guide
 - → [Glossary](Glossary.md) — All terms explained
 
-**Common Issues:**
+#### Common Issues
 
 - → [Troubleshooting](Troubleshooting.md) — Solutions to common problems
 - → [Common Patterns](Patterns.md) — See how to use it correctly
 
-**Reference:**
+##### Reference
 
 - → [Quick Reference](QuickReference.md) — API cheat sheet
 - → [Message Types](MessageTypes.md) — Which type to use when
