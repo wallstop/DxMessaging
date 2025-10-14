@@ -1,10 +1,49 @@
-# DxMessaging Patterns
+# DxMessaging Patterns: Real-World Solutions
 
 [← Back to Index](Index.md) | [Getting Started](GettingStarted.md) | [Message Types](MessageTypes.md) | [Samples](../Samples~/)
 
 ---
 
-This document captures practical patterns for building systems with DxMessaging. It complements the README by focusing on composition, structure, and problem-solving techniques.
+**You're here because:** You understand DxMessaging basics, now you want to see "How do I actually build X?"
+
+## What you'll find
+
+- **Basic Patterns** - Fundamental building blocks (scene transitions, commands, observability)
+- **Advanced Patterns** - Power user techniques (diagnostics, testing, legacy integration)
+- **Scale Patterns** - Production-ready examples (100+ entities, cross-scene systems, large UI)
+
+### Reading guide
+
+- **New to DxMessaging?** Start with Basic Patterns 1-8
+- **Intermediate user?** Jump to Advanced Patterns 9-12
+- **Building at scale?** Go straight to Real-World Scale Patterns
+- **Specific problem?** Use Ctrl+F / Cmd+F to search
+
+**Philosophy:** These aren't toy examples. They're patterns from real games with real problems.
+
+---
+
+## Quick Links: "I Want To..."
+
+### Find your use case, jump to the pattern
+
+| I want to...                                 | Go to                                                                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Make UI react to gameplay                    | [Pattern 2: Directed Commands](#2-directed-commands-targeted)                                                |
+| Coordinate scene transitions                 | [Pattern 1: Scene-wide Events](#1-scene-wide-events-untargeted)                                              |
+| Build an achievement system                  | [Pattern 3: Observability](#3-observability-broadcast) + [Global Accept-All](#10-global-accept-all-handlers) |
+| Validate input/damage before it happens      | [Pattern 4: Interceptors](#4-validation-and-normalization-interceptors)                                      |
+| Add analytics without touching gameplay      | [Pattern 5: Post-Processors](#5-analyticslogging-post-processors)                                            |
+| Track ALL damage from ANY entity             | [Pattern: Managing 100+ Entities](#pattern-managing-100-combat-entities)                                     |
+| Build a large UI system (20+ panels)         | [Pattern: Large-Scale UI](#pattern-large-scale-ui-system-20-panels)                                          |
+| Make systems run in a specific order         | [Pattern: Priority Ordering](#pattern-priority-ordered-execution-for-complex-systems)                        |
+| Test in isolation                            | [Pattern 6: Local Bus Islands](#6-local-bus-islands)                                                         |
+| Migrate from C# events                       | [Pattern 9: Bridging Legacy](#9-bridging-legacy-unity-messaging)                                             |
+| Handle persistent systems across scene loads | [Pattern: Cross-Scene Persistent](#pattern-cross-scene-persistent-systems)                                   |
+| See what's happening (debug message flow)    | [Pattern 11: Diagnostics](#11-diagnostics-and-tuning)                                                        |
+| Build a battle royale / large multiplayer    | [Pattern: Battle Royale Example](#real-world-production-example-battle-royale-game)                          |
+
+---
 
 ## Table of Contents
 

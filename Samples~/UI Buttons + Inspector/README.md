@@ -1,21 +1,64 @@
-# UI Buttons + Inspector (Sample)
+# UI Buttons + Inspector Sample
 
-Make a Unity UI Button send a message with a single OnClick hook — no plumbing, no scene-wide singletons, and easy to understand even if you’re new to event systems.
+> **Perfect for:** Seeing DxMessaging work with Unity UI in 60 seconds
 
-## What You’ll Learn
+## What You'll Learn (No Code Required!)
 
-- How to wire a UI Button to emit a DxMessaging message from the Inspector.
-- How to observe messages in the Console with a tiny listener component.
-- How to turn on diagnostics to see message traffic while you click.
+**Stop writing button click handlers!** This sample shows you how to:
 
-## Import The Sample (60 seconds)
+1. **Wire UI Buttons to messages** - directly from the Inspector (drag & drop)
+2. **See messages flow in real-time** - watch the Console as you click
+3. **Enable diagnostics** - see every message with timestamps and payloads
 
-1. Open `Window > Package Manager` in Unity.
-1. Select `com.wallstop-studios.dxmessaging`.
-1. In Samples, import “UI Buttons + Inspector”.
-1. Open the sample scene (created under your project’s `Assets/Samples/...`).
+**Why this matters:** You can add new systems (analytics, audio, achievements) that react to button clicks WITHOUT touching existing code.
 
-That’s it — the scene includes everything you need to click and see messages.
+---
+
+## The Power Move
+
+### Before DxMessaging:
+
+```csharp
+public class PlayButton : MonoBehaviour {
+    [SerializeField] private GameManager gameManager;   // Coupling
+    [SerializeField] private AudioManager audio;        // Coupling
+    [SerializeField] private Analytics analytics;       // Coupling
+
+    public void OnClick() {
+        gameManager.StartGame();     // Manual call
+        audio.PlayClickSound();       // Manual call
+        analytics.LogButtonClick();   // Manual call
+    }
+}
+```
+
+#### Every new system = update PlayButton script. Exhausting.
+
+##### With DxMessaging:
+
+```csharp
+public class PlayButton : MonoBehaviour {
+    public void OnClick() {
+        new ButtonClicked("Play").Emit();
+        // Done! Everything reacts automatically.
+    }
+}
+```
+
+###### GameManager, Audio, and Analytics listen independently. Zero coupling.
+
+## Import & Run (30 Seconds)
+
+### Want to see it immediately?
+
+1. **Window → Package Manager**
+2. **Find DxMessaging** → Scroll to **Samples**
+3. **"UI Buttons + Inspector"** → Click **Import**
+4. **Navigate to** Assets/Samples/.../UI Buttons + Inspector/
+5. **Open the scene** → **Press Play** 🎮
+6. **Click the buttons** → Watch Console logs
+
+**Done!** You're seeing DxMessaging in action.
 
 ## Click-To-Message: The Quick Path
 

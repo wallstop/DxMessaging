@@ -39,7 +39,7 @@ namespace DxMessaging.Tests.Runtime.Core
             public readonly string c;
 
             [DxOptionalParameter(Expression = "null")]
-            public readonly string? d;
+            public readonly string d;
         }
     }
 
