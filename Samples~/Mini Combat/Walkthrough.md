@@ -8,7 +8,7 @@
 - ✅ **You want to build your own** - need to see the patterns in action
 - ✅ **You're debugging something** - need to understand the flow
 
-**Haven't run the sample yet?** Go back to [README.md](README.md) and press Play first. Come back when you've seen it work.
+**Haven't run the sample yet?** Go back to [the sample README](README.md) and press Play first. Come back when you've seen it work.
 
 ---
 
