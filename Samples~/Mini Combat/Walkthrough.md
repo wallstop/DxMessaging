@@ -1,6 +1,28 @@
 # Mini Combat Walkthrough
 
-> **Deep Dive**: This walkthrough explains the implementation details and shows how all the sample scripts work together at runtime. Great for understanding the "why" behind the code!
+> **Deep Dive**: Ready to understand HOW it works? This walkthrough explains every line of code and shows the complete message flow.
+
+## Who This Is For
+
+- ✅ **You've imported and run the sample** - now you want to understand it
+- ✅ **You want to build your own** - need to see the patterns in action
+- ✅ **You're debugging something** - need to understand the flow
+
+**Haven't run the sample yet?** Go back to [README.md](README.md) and press Play first. Come back when you've seen it work.
+
+---
+
+## What You'll Understand By The End
+
+After reading this walkthrough, you'll know:
+
+1. **Why each message type was chosen** - the reasoning behind Untargeted vs Targeted vs Broadcast
+2. **How the code flows** - step-by-step from Boot.cs through every script
+3. **Common patterns** - Observer, Broadcaster, Orchestrator, and more
+4. **Debugging strategies** - how to find and fix issues
+5. **How to extend it** - add your own messages and handlers
+
+**Estimated time:** 20-30 minutes for thorough understanding
 
 ---
 

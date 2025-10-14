@@ -1,16 +1,79 @@
 # Mini Combat Sample
 
-> **What You'll Learn**: This sample demonstrates a simple combat system using DxMessaging to show how components communicate through messages. Perfect for beginners learning the messaging system!
+> **Perfect for:** First-time users who want to see messaging in action with a working combat example
 
-## Overview
+## What You'll Learn in 10 Minutes
 
-This mini-sample showcases a basic combat loop using DxMessaging with Unity-friendly APIs. You'll see how different game objects (Player, Enemy, UI) communicate without direct references to each other.
+**Stop reading documentation and start seeing it work!** This sample shows:
 
-### Key Concepts Demonstrated:
+1. How Player heals without UI knowing about Player (**zero coupling**)
+2. How Enemy broadcasts damage without knowing who cares (**observer pattern**)
+3. How settings changes update everything automatically (**global events**)
 
-- **Untargeted Messages**: Global messages anyone can listen to (like game settings)
-- **Targeted Messages**: Messages sent to a specific component (like healing a player)
-- **Broadcast Messages**: Messages announced to all listeners (like damage events)
+**No prior messaging experience needed** - this sample walks you through everything.
+
+---
+
+## Why This Sample Matters
+
+### Before DxMessaging:
+
+```csharp
+public class Player {
+    [SerializeField] private UI ui;          // Coupling!
+    [SerializeField] private AudioManager audio; // More coupling!
+
+    void Heal(int amount) {
+        health += amount;
+        ui.UpdateHealth(health);     // Manual call
+        audio.PlayHealSound();        // Manual call
+    }
+}
+```
+
+#### Every new system = another SerializeField + another manual call.
+
+##### With DxMessaging:
+
+```csharp
+public class Player : MessageAwareComponent {
+    void Heal(int amount) {
+        health += amount;
+        new PlayerHealed(amount).EmitBroadcast(this);
+        // Done! UI, audio, analytics all react automatically.
+    }
+}
+```
+
+###### Zero coupling. Zero manual wiring. That's the power of messaging.
+
+---
+
+## Key Concepts (3 Message Types)
+
+### 1. Untargeted - "Everyone, listen up!"
+
+**Example:** Game settings changed
+
+- Like a stadium announcement - everyone hears it
+- No specific target
+- Perfect for: settings, pause, scene transitions
+
+### 2. Targeted - "Hey YOU, do this!"
+
+**Example:** Heal this specific player
+
+- Like mailing a letter to one address
+- Only the target receives it
+- Perfect for: commands, direct actions
+
+### 3. Broadcast - "I did something!"
+
+**Example:** Enemy took damage
+
+- Like ringing a bell - anyone nearby can hear
+- Source announces, observers react
+- Perfect for: events, notifications, analytics
 
 ---
 
@@ -28,25 +91,22 @@ Here's what each script does:
 
 ---
 
-## Quick Start Guide
+## Quick Start Guide (2 Minutes to Working Demo)
 
-### Method 1: Import from Package Manager (Recommended)
+### Import & Run (Fastest Way)
 
-1. **Open Package Manager**:
-   - Window → Package Manager
+#### Want to see it work immediately?
 
-1. **Find DxMessaging**:
-   - Look for "DxMessaging" in the package list
-   - Click on it to select
+1. **Open Package Manager**: Window → Package Manager
+2. **Find DxMessaging** in the package list
+3. **Scroll to Samples** section → Find "Mini Combat" → Click **Import**
+4. **Navigate to** Assets/Samples/DxMessaging/.../Mini Combat/
+5. **Open the scene**
+6. **Press Play** 🎮
 
-1. **Import the Sample**:
-   - In the Package Manager details view, scroll down to find the "Samples" section
-   - Find "Mini Combat" and click **Import**
-   - The sample files will be imported into your Assets/Samples folder
+**That's it!** Watch the Console logs as messages flow.
 
-1. **Open the Scene**:
-   - Navigate to Assets/Samples/DxMessaging/.../Mini Combat/
-   - Open the sample scene or create a new scene and follow Step 1 below
+**Pro tip:** Enable diagnostics in the Inspector (MessagingComponent → Enable Diagnostics) to see message traffic in real-time.
 
 ### Method 2: Manual Setup in Your Scene
 
