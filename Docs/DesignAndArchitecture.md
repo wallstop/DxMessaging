@@ -49,41 +49,47 @@ DxMessaging was built with these principles:
 
 ## Architecture Overview
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                        Application                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Component A  │  │ Component B  │  │ Component C  │      │
-│  │              │  │              │  │              │      │
-│  │ Token.Reg()  │  │ Token.Reg()  │  │ Token.Reg()  │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │               │
-│         └─────────────────┼─────────────────┘               │
-│                           ▼                                 │
-│              ┌─────────────────────────┐                    │
-│              │ MessageRegistrationToken│                    │
-│              │                         │                    │
-│              │ • Stages registrations  │                    │
-│              │ • Enable/Disable        │                    │
-│              │ • Lifecycle management  │                    │
-│              └────────────┬────────────┘                    │
-│                           ▼                                 │
-│              ┌─────────────────────────┐                    │
-│              │     MessageHandler      │                    │
-│              │                         │                    │
-│              │ • Per-component handler │                    │
-│              │ • Active/Inactive state │                    │
-│              └────────────┬────────────┘                    │
-│                           ▼                                 │
-│              ┌─────────────────────────┐                    │
-│              │        MessageBus       │                    │
-│              │                         │                    │
-│              │ • Interceptors          │                    │
-│              │ • Handlers              │                    │
-│              │ • Post-Processors       │                    │
-│              └─────────────────────────┘                    │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph App[Application Layer]
+        CompA[Component A<br/>Token.Reg]
+        CompB[Component B<br/>Token.Reg]
+        CompC[Component C<br/>Token.Reg]
+    end
+
+    subgraph Token[Registration Layer]
+        MRT[MessageRegistrationToken<br/>• Stages registrations<br/>• Enable/Disable<br/>• Lifecycle management]
+    end
+
+    subgraph Handler[Handler Layer]
+        MH[MessageHandler<br/>• Per-component handler<br/>• Active/Inactive state]
+    end
+
+    subgraph Bus[Message Bus Layer]
+        MB[MessageBus<br/>• Interceptors<br/>• Handlers<br/>• Post-Processors]
+    end
+
+    CompA --> MRT
+    CompB --> MRT
+    CompC --> MRT
+    MRT --> MH
+    MH --> MB
+
+    style App fill:#e6f3ff,stroke:#0066cc
+    style Token fill:#fff4e5,stroke:#f0b429
+    style Handler fill:#f0f5ff,stroke:#597ef7
+    style Bus fill:#eef7ee,stroke:#52c41a
+    style MRT fill:#fff4e5,stroke:#f0b429
+    style MH fill:#f0f5ff,stroke:#597ef7
+    style MB fill:#eef7ee,stroke:#52c41a
 ```
+
+### Layer Responsibilities
+
+1. **Application Layer** - Your Unity components register message handlers
+1. **Registration Layer** - Token manages handler lifecycle (enable/disable/cleanup)
+1. **Handler Layer** - Per-component state management (active/inactive)
+1. **Message Bus Layer** - Routes messages through interceptors → handlers → post-processors
 
 ## Performance Optimizations
 

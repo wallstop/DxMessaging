@@ -6,45 +6,67 @@ If you're brand new to messaging systems, this visual guide will help you unders
 
 ### The Old Way (Spaghetti Code)
 
-````text
-┌─────────────┐
-│   Player    │───────┐
-└─────────────┘       │
-                      ├──→ ┌─────────┐
-┌─────────────┐       │    │   UI    │
-│   Enemy     │───────┤    └─────────┘
-└─────────────┘       │
-                      │    ┌─────────┐
-┌─────────────┐       └───→│  Audio  │
-│ Inventory   │───────────→└─────────┘
-└─────────────┘
+```mermaid
+graph LR
+    Player[Player]
+    Enemy[Enemy]
+    Inventory[Inventory]
+    UI[UI]
+    Audio[Audio]
 
-Problems:
-❌ Everyone needs to know everyone else
-❌ Hard to add/remove systems
-❌ Memory leaks from forgotten unsubscribes
-```text
+    Player -->|direct ref| UI
+    Player -->|direct ref| Audio
+    Enemy -->|direct ref| UI
+    Enemy -->|direct ref| Audio
+    Inventory -->|direct ref| Audio
+
+    style Player fill:#ffcccc,stroke:#cc0000
+    style Enemy fill:#ffcccc,stroke:#cc0000
+    style Inventory fill:#ffcccc,stroke:#cc0000
+    style UI fill:#ccccff,stroke:#0000cc
+    style Audio fill:#ccccff,stroke:#0000cc
+```
+
+#### Problems
+
+- ❌ Everyone needs to know everyone else
+- ❌ Hard to add/remove systems
+- ❌ Memory leaks from forgotten unsubscribes
 
 ### The DxMessaging Way (Clean Separation)
 
-```text
-┌─────────┐                    ┌─────────┐
-│ Player  │──→ Message ──→     │   UI    │
-└─────────┘        ↓           └─────────┘
-                   │
-┌─────────┐        ↓           ┌─────────┐
-│ Enemy   │──→  BUS   ──→      │  Audio  │
-└─────────┘        ↓           └─────────┘
-                   │
-┌──────────┐       ↓           ┌──────────┐
-│Inventory │──→ Message ──→    │Analytics │
-└──────────┘                   └──────────┘
+```mermaid
+graph TB
+    Player[Player]
+    Enemy[Enemy]
+    Inventory[Inventory]
+    Bus((Message<br/>Bus))
+    UI[UI]
+    Audio[Audio]
+    Analytics[Analytics]
 
-Benefits:
-✅ Nobody knows about anyone else
-✅ Easy to add/remove systems
-✅ Zero memory leaks (automatic cleanup)
-```text
+    Player -->|message| Bus
+    Enemy -->|message| Bus
+    Inventory -->|message| Bus
+
+    Bus -->|notify| UI
+    Bus -->|notify| Audio
+    Bus -->|notify| Analytics
+
+    style Player fill:#e6f3ff,stroke:#0066cc
+    style Enemy fill:#e6f3ff,stroke:#0066cc
+    style Inventory fill:#e6f3ff,stroke:#0066cc
+    style Bus fill:#fff4e5,stroke:#f0b429,stroke-width:3px
+    style UI fill:#eef7ee,stroke:#52c41a
+    style Audio fill:#eef7ee,stroke:#52c41a
+    style Analytics fill:#eef7ee,stroke:#52c41a
+```
+
+#### Benefits
+
+- ✅ Nobody knows about anyone else
+- ✅ Easy to add/remove systems
+- ✅ Zero memory leaks (automatic cleanup)
 
 ## 📨 The Three Message Types (Simple!)
 
@@ -66,9 +88,9 @@ msg.Emit();
 
 // Anyone can listen
 _ = token.RegisterUntargeted<GamePaused>(OnPause);
-```text
+```
 
-#### Real-world uses:
+#### Real-world uses
 
 - "Game paused!"
 - "Settings changed!"
@@ -90,9 +112,9 @@ heal.EmitGameObjectTargeted(playerObject);
 
 // Only the player listens
 _ = token.RegisterComponentTargeted<Heal>(this, OnHeal);
-```text
+```
 
-#### Real-world uses:
+#### Real-world uses
 
 - "Player, heal yourself!"
 - "Enemy #3, take damage!"
@@ -117,9 +139,9 @@ _ = token.RegisterGameObjectBroadcast<TookDamage>(enemyObject, OnThisEnemy);
 
 // OR achievement system can listen to ALL enemies
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyEnemy);
-```text
+```
 
-#### Real-world uses:
+#### Real-world uses
 
 - "I (player) took damage!"
 - "I (enemy) died!"
@@ -129,33 +151,49 @@ _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyEnemy);
 
 When you send a message, here's what happens:
 
-```text
-1. You create a message
-   var heal = new Heal(10);
+```mermaid
+sequenceDiagram
+    participant You as Your Code
+    participant Msg as Message
+    participant Int as Interceptors<br/>(Optional)
+    participant H0 as Handler<br/>priority: 0
+    participant H5 as Handler<br/>priority: 5
+    participant H10 as Handler<br/>priority: 10
+    participant PP as Post-Processors<br/>(Optional)
 
-2. You emit it
-   heal.EmitGameObjectTargeted(player);
+    Note over You: 1. Create message
+    You->>Msg: var heal = new Heal(10);
 
-3. [OPTIONAL] Interceptors check it
-   ┌─────────────────────────────┐
-   │ Is damage valid? (>0)       │
-   │ Should we clamp it? (<999)  │
-   │ Cancel bad messages? ❌     │
-   └─────────────────────────────┘
+    Note over You,Msg: 2. Emit message
+    You->>Msg: heal.EmitGameObjectTargeted(player);
 
-4. Handlers receive it (your main logic)
-   ┌─────────────────────────────┐
-   │ priority: 0  → SaveSystem   │
-   │ priority: 5  → AudioSystem  │
-   │ priority: 10 → UISystem     │
-   └─────────────────────────────┘
+    Note over Int: 3. Validate & Normalize
+    Msg->>Int: Check message
+    Int->>Int: Is valid? (>0)<br/>Clamp if needed (<999)
+    alt Invalid message
+        Int--xMsg: ❌ Cancel
+    else Valid message
+        Int->>H0: ✅ Continue
+    end
 
-5. [OPTIONAL] Post-processors log it
-   ┌─────────────────────────────┐
-   │ Analytics.Track(...)        │
-   │ Debug.Log(...)              │
-   └─────────────────────────────┘
-```text
+    Note over H0,H10: 4. Execute handlers (by priority)
+    H0->>H0: SaveSystem runs first
+    H0->>H5: Next priority
+    H5->>H5: AudioSystem runs
+    H5->>H10: Next priority
+    H10->>H10: UISystem runs last
+
+    Note over PP: 5. Analytics & Logging
+    H10->>PP: All handlers complete
+    PP->>PP: Analytics.Track(...)<br/>Debug.Log(...)
+```
+
+### Key points
+
+- **Step 1-2:** You create and emit the message
+- **Step 3 (Optional):** Interceptors can validate, modify, or cancel
+- **Step 4:** Handlers run in priority order (lower number = earlier)
+- **Step 5 (Optional):** Post-processors run after everything (perfect for analytics)
 
 ## 🎮 Your First Message (3 Easy Steps)
 
@@ -169,7 +207,7 @@ using DxMessaging.Core.Attributes;
 public readonly partial struct Heal {
     public readonly int amount;
 }
-````
+```
 
 #### What are those `[DxSomething]` tags?
 
@@ -228,19 +266,28 @@ healMsg.EmitComponentTargeted(playerComponent);
 
 ### Pattern: Scene Transition
 
-```text
-SceneManager               AudioSystem
-     │                          │
-     │  [SceneChanged]          │
-     ├────────────────────────→ │ FadeOutMusic()
-     │                          │
-     │                     SaveSystem
-     │                          │
-     │  [SceneChanged]          │
-     └────────────────────────→ │ SaveGame()
+```mermaid
+sequenceDiagram
+    participant SM as SceneManager
+    participant Bus as Message Bus
+    participant Audio as AudioSystem
+    participant Save as SaveSystem
 
-All independent! No coupling!
+    Note over SM: Scene is changing
+    SM->>Bus: SceneChanged(sceneIndex: 2)
+
+    Note over Bus: Message broadcast to all listeners
+
+    Bus->>Audio: SceneChanged received
+    Audio->>Audio: FadeOutMusic()
+
+    Bus->>Save: SceneChanged received
+    Save->>Save: SaveGame()
+
+    Note over Audio,Save: ✅ All independent!<br/>No coupling!
 ```
+
+**Why this works:** AudioSystem and SaveSystem don't know about SceneManager or each other. They just listen for `SceneChanged` messages and react independently.
 
 Code:
 
@@ -261,15 +308,22 @@ _ = saveToken.RegisterUntargeted<SceneChanged>(OnScene);
 
 ### Pattern: Player Input → Action
 
-```text
-InputSystem          Player
-     │                 │
-     │   [Jump]        │
-     ├───────────────→ │ ApplyForce()
-     │                 │
+```mermaid
+sequenceDiagram
+    participant Input as InputSystem
+    participant Bus as Message Bus
+    participant Player as Player
 
-Decoupled! Input doesn't need reference to Player.
+    Note over Input: User presses Space
+    Input->>Bus: Jump(force: 10f)<br/>[Targeted to Player]
+
+    Bus->>Player: Jump message received
+    Player->>Player: ApplyForce()<br/>rb.AddForce(...)
+
+    Note over Input,Player: ✅ Decoupled!<br/>Input doesn't reference Player
 ```
+
+**Why this works:** InputSystem doesn't need a reference to Player. It just sends a `Jump` message targeted at the player, and the player responds.
 
 Code:
 
@@ -291,15 +345,29 @@ void OnJump(ref Jump msg) {
 
 ### Pattern: Achievement Tracking
 
-````text
-Any System                Achievement System
-     │                           │
-     │  [Any Message]            │
-     ├─────────────────────────→ │ CheckProgress()
-     │                           │ UnlockIfReady()
+```mermaid
+sequenceDiagram
+    participant E as Enemy
+    participant P as Player
+    participant C as Chest
+    participant Bus as Message Bus
+    participant Ach as Achievement System
 
-Achievements see EVERYTHING without coupling!
-```text
+    Note over Ach: Listens to ALL messages
+
+    E->>Bus: EnemyKilled
+    Bus->>Ach: CheckProgress()<br/>UnlockIfReady()
+
+    P->>Bus: LevelCompleted
+    Bus->>Ach: CheckProgress()<br/>UnlockIfReady()
+
+    C->>Bus: ChestOpened
+    Bus->>Ach: CheckProgress()<br/>UnlockIfReady()
+
+    Note over Ach: ✅ Sees EVERYTHING<br/>without coupling!
+```
+
+**Why this works:** Achievement System uses `RegisterGlobalAcceptAll()` to observe every message type, tracking progress across the entire game without any system knowing about it.
 
 Code:
 
@@ -315,7 +383,7 @@ public class AchievementSystem : MessageAwareComponent {
         );
     }
 }
-````
+```
 
 ## 🚦 When to Use Which Message Type
 
@@ -347,7 +415,7 @@ Think of DxMessaging like a restaurant:
 ````text
 "Attention all customers: We're closing in 10 minutes!"
 → Everyone hears it
-```text
+```
 
 ### Targeted = Waiter Delivering Food
 
@@ -363,7 +431,7 @@ Think of DxMessaging like a restaurant:
 → Comes from table 3
 → Any available waiter can respond
 → Manager might track it for statistics
-```text
+```
 
 ## 🔍 Debugging Visualized
 

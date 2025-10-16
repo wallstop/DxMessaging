@@ -12,6 +12,33 @@ This guide introduces the three message categories in DxMessaging with concepts,
 - Targeted: directed at one recipient (e.g., heal Player by 10).
 - Broadcast: emitted from a source for anyone to observe (e.g., Enemy took 5 damage).
 
+### Quick Decision Guide
+
+```mermaid
+flowchart TD
+    Start([Choose Message Type])
+
+    Start --> Q1{Is it a global<br/>announcement?}
+
+    Q1 -->|Yes<br/>e.g., game paused,<br/>settings changed| Untargeted[✅ Use UNTARGETED<br/>Everyone listens]
+
+    Q1 -->|No| Q2{Are you commanding<br/>a specific entity?}
+
+    Q2 -->|Yes<br/>e.g., heal Player,<br/>open Chest #3| Targeted[✅ Use TARGETED<br/>One recipient]
+
+    Q2 -->|No| Q3{Is an entity announcing<br/>something happened?}
+
+    Q3 -->|Yes<br/>e.g., Enemy died,<br/>Chest opened| Broadcast[✅ Use BROADCAST<br/>Anyone can observe]
+
+    Q3 -->|No| Rethink[🤔 Rethink your<br/>message design]
+
+    style Untargeted fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    style Targeted fill:#fff4e5,stroke:#f0b429,stroke-width:3px
+    style Broadcast fill:#eef7ee,stroke:#52c41a,stroke-width:3px
+    style Rethink fill:#ffe6e6,stroke:#cc0000
+    style Start fill:#f0f0f0,stroke:#666
+```
+
 ## Untargeted Messages
 
 - Use for cross‑cutting notifications: settings changed, scene loaded, world regenerated.
