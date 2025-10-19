@@ -51,21 +51,21 @@ DxMessaging was built with these principles:
 
 ```mermaid
 flowchart TB
-    subgraph App[Application Layer]
+    subgraph App["<b>Application Layer</b>"]
         CompA[Component A<br/>Token.Reg]
         CompB[Component B<br/>Token.Reg]
         CompC[Component C<br/>Token.Reg]
     end
 
-    subgraph Token[Registration Layer]
+    subgraph Token["<b>Registration Layer</b>"]
         MRT[MessageRegistrationToken<br/>• Stages registrations<br/>• Enable/Disable<br/>• Lifecycle management]
     end
 
-    subgraph Handler[Handler Layer]
+    subgraph Handler["<b>Handler Layer</b>"]
         MH[MessageHandler<br/>• Per-component handler<br/>• Active/Inactive state]
     end
 
-    subgraph Bus[Message Bus Layer]
+    subgraph Bus["<b>Message Bus Layer</b>"]
         MB[MessageBus<br/>• Interceptors<br/>• Handlers<br/>• Post-Processors]
     end
 
@@ -75,10 +75,10 @@ flowchart TB
     MRT --> MH
     MH --> MB
 
-    style App fill:#bae7ff,stroke:#0050b3,stroke-width:2px
-    style Token fill:#ffe7ba,stroke:#d48806,stroke-width:2px
-    style Handler fill:#d3adf7,stroke:#531dab,stroke-width:2px
-    style Bus fill:#b7eb8f,stroke:#389e0d,stroke-width:2px
+    style App fill:#bae7ff,stroke:#0050b3,stroke-width:3px,color:#000
+    style Token fill:#ffe7ba,stroke:#d48806,stroke-width:3px,color:#000
+    style Handler fill:#d3adf7,stroke:#531dab,stroke-width:3px,color:#000
+    style Bus fill:#b7eb8f,stroke:#389e0d,stroke-width:3px,color:#000
     style MRT fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
     style MH fill:#d3adf7,stroke:#531dab,stroke-width:2px,color:#000
     style MB fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
