@@ -1,13 +1,7 @@
 namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
-    using System.Collections.Generic;
     using System.Diagnostics;
-    using System.Globalization;
-    using System.IO;
-    using System.Runtime.InteropServices;
-    using System.Text;
-    using System.Text.RegularExpressions;
     using Core;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
@@ -19,42 +13,30 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using UnityEngine.TestTools.Constraints;
     using Debug = UnityEngine.Debug;
     using Is = NUnit.Framework.Is;
-    using Object = UnityEngine.Object;
 
-    public sealed class PerformanceTests : MessagingTestBase
+    public sealed class PerformanceTests : BenchmarkTestBase
     {
-        private const int NumInvocationsPerIteration = 1_000;
-
-        private static readonly List<BenchmarkResult> BenchmarkResults = new();
-
-        private readonly struct BenchmarkResult
-        {
-            internal BenchmarkResult(string messageTech, long operationsPerSecond, bool allocating)
-            {
-                MessageTech = messageTech;
-                OperationsPerSecond = operationsPerSecond;
-                Allocating = allocating;
-            }
-
-            internal string MessageTech { get; }
-
-            internal long OperationsPerSecond { get; }
-
-            internal bool Allocating { get; }
-        }
 
         protected override bool MessagingDebugEnabled => false;
 
         [Test]
         public void Benchmark()
         {
-            BenchmarkResults.Clear();
-            try
+            string? operatingSystemSection = BenchmarkDocumentation.GetOperatingSystemSection();
+            BenchmarkSession session = new(
+                operatingSystemSection,
+                "## ",
+                new Func<string?>[]
+                {
+                    BenchmarkDocumentation.TryFindPerformanceDocPath,
+                    BenchmarkDocumentation.TryFindReadmePath,
+                }
+            );
+
+            RunWithSession(session, () =>
             {
                 TimeSpan timeout = TimeSpan.FromSeconds(5);
-
-                Debug.Log("| Message Tech | Operations / Second | Allocations? |");
-                Debug.Log("| ------------ | ------------------- | ------------ | ");
+                Stopwatch timer = Stopwatch.StartNew();
 
                 ComplexTargetedMessage message = new(Guid.NewGuid());
                 ReflexiveMessage reflexiveMessage = new(
@@ -63,79 +45,36 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     message
                 );
 
-                Stopwatch timer = Stopwatch.StartNew();
+                RunWithComponent(component => Unity(timer, timeout, component.gameObject, message));
 
-                RunTest(component => Unity(timer, timeout, component.gameObject, message));
-
-                RunTest(component => NormalGameObject(timer, timeout, component, message));
-                RunTest(component => NormalComponent(timer, timeout, component, message));
-                RunTest(component => NoCopyGameObject(timer, timeout, component, message));
-                RunTest(component => NoCopyComponent(timer, timeout, component, message));
+                RunWithComponent(component => NormalGameObject(timer, timeout, component, message));
+                RunWithComponent(component => NormalComponent(timer, timeout, component, message));
+                RunWithComponent(component => NoCopyGameObject(timer, timeout, component, message));
+                RunWithComponent(component => NoCopyComponent(timer, timeout, component, message));
 
                 SimpleUntargetedMessage untargetedMessage = new();
-                RunTest(component =>
+                RunWithComponent(component =>
                     NoCopyUntargeted(timer, timeout, component, untargetedMessage)
                 );
-                RunTest(component =>
+                RunWithComponent(component =>
                     ReflexiveOneArgument(timer, timeout, component.gameObject, reflexiveMessage)
                 );
-                RunTest(component => ReflexiveTwoArguments(timer, timeout, component.gameObject));
-                RunTest(component => ReflexiveThreeArguments(timer, timeout, component.gameObject));
-
-                UpdateReadmeWithBenchmarks();
-            }
-            finally
-            {
-                BenchmarkResults.Clear();
-            }
+                RunWithComponent(component => ReflexiveTwoArguments(timer, timeout, component.gameObject));
+                RunWithComponent(component => ReflexiveThreeArguments(timer, timeout, component.gameObject));
+            });
         }
 
-        private GameObject CreateGameObject()
-        {
-            GameObject target = new(
-                nameof(Benchmark),
-                typeof(EmptyMessageAwareComponent),
-                typeof(SpriteRenderer),
-                typeof(Rigidbody2D),
-                typeof(CircleCollider2D),
-                typeof(LineRenderer)
-            );
-            _spawned.Add(target);
-
-            return target;
-        }
-
-        private static void DisplayCount(
+        private void DisplayCount(
             string testName,
             int count,
             TimeSpan timeout,
             bool allocating
         )
         {
-            long operationsPerSecond = (long)Math.Floor(count / timeout.TotalSeconds);
-            BenchmarkResults.Add(new BenchmarkResult(testName, operationsPerSecond, allocating));
-            string formattedOperations = operationsPerSecond.ToString(
-                "N0",
-                CultureInfo.InvariantCulture
-            );
-            Debug.Log($"| {testName} | {formattedOperations} | {(allocating ? "Yes" : "No")} |");
+            RecordBenchmark(testName, count, timeout, allocating);
         }
 
-        private void RunTest(Action<EmptyMessageAwareComponent> test)
-        {
-            GameObject go = CreateGameObject();
-            try
-            {
-                test(go.GetComponent<EmptyMessageAwareComponent>());
-            }
-            finally
-            {
-                _spawned.Remove(go);
-                Object.Destroy(go);
-            }
-        }
-
-        private static void Unity(
+        private void Unity(
             Stopwatch timer,
             TimeSpan timeout,
             GameObject target,
@@ -186,7 +125,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             DisplayCount("Unity", count, timeout, allocating);
         }
 
-        private static void ReflexiveThreeArguments(
+        private void ReflexiveThreeArguments(
             Stopwatch timer,
             TimeSpan timeout,
             GameObject go
@@ -231,7 +170,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             DisplayCount("Reflexive (Three Arguments)", count, timeout, allocating);
         }
 
-        private static void ReflexiveTwoArguments(Stopwatch timer, TimeSpan timeout, GameObject go)
+        private void ReflexiveTwoArguments(Stopwatch timer, TimeSpan timeout, GameObject go)
         {
             int count = 0;
             if (!go.TryGetComponent(out SimpleMessageAwareComponent component))
@@ -271,7 +210,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             DisplayCount("Reflexive (Two Arguments)", count, timeout, allocating);
         }
 
-        private static void ReflexiveOneArgument(
+        private void ReflexiveOneArgument(
             Stopwatch timer,
             TimeSpan timeout,
             GameObject go,
@@ -310,7 +249,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             DisplayCount("Reflexive (One Argument)", count, timeout, allocating);
         }
 
-        private static void NormalGameObject(
+        private void NormalGameObject(
             Stopwatch timer,
             TimeSpan timeout,
             EmptyMessageAwareComponent component,
@@ -354,7 +293,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
         }
 
-        private static void NormalComponent(
+        private void NormalComponent(
             Stopwatch timer,
             TimeSpan timeout,
             EmptyMessageAwareComponent component,
@@ -397,7 +336,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
         }
 
-        private static void NoCopyGameObject(
+        private void NoCopyGameObject(
             Stopwatch timer,
             TimeSpan timeout,
             EmptyMessageAwareComponent component,
@@ -440,7 +379,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
         }
 
-        private static void NoCopyComponent(
+        private void NoCopyComponent(
             Stopwatch timer,
             TimeSpan timeout,
             EmptyMessageAwareComponent component,
@@ -483,7 +422,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
         }
 
-        private static void NoCopyUntargeted(
+        private void NoCopyUntargeted(
             Stopwatch timer,
             TimeSpan timeout,
             EmptyMessageAwareComponent component,
@@ -524,315 +463,3 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 ++count;
             }
         }
-
-        private static void UpdateReadmeWithBenchmarks()
-        {
-            if (BenchmarkResults.Count == 0)
-            {
-                return;
-            }
-
-            if (IsRunningInContinuousIntegration())
-            {
-                Debug.Log("Skipping README update because the benchmarks are running in CI.");
-                return;
-            }
-
-            string operatingSystemSection = GetOperatingSystemSection();
-            if (string.IsNullOrEmpty(operatingSystemSection))
-            {
-                Debug.LogWarning(
-                    "Skipping README update because the operating system could not be determined."
-                );
-                return;
-            }
-
-            // Prefer writing to Docs/Performance.md; fall back to README.md if not found.
-            string performancePath = FindPerformanceDocPath();
-            string readmePath = FindReadmePath();
-            string targetPath = !string.IsNullOrEmpty(performancePath)
-                ? performancePath
-                : readmePath;
-            if (string.IsNullOrEmpty(targetPath))
-            {
-                Debug.LogWarning(
-                    "Skipping benchmarks update because neither Docs/Performance.md nor README.md could be located."
-                );
-                return;
-            }
-
-            try
-            {
-                string table = BuildBenchmarkTable();
-                string originalContent = File.ReadAllText(targetPath);
-                string updatedContent = ReplaceOperatingSystemSection(
-                    originalContent,
-                    operatingSystemSection,
-                    table
-                );
-
-                if (string.Equals(originalContent, updatedContent, StringComparison.Ordinal))
-                {
-                    Debug.Log(
-                        $"Benchmark section for {operatingSystemSection} is already up to date in {targetPath}."
-                    );
-                    return;
-                }
-
-                File.WriteAllText(targetPath, updatedContent, new UTF8Encoding(false));
-                Debug.Log($"Updated benchmarks for {operatingSystemSection} in {targetPath}.");
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"Failed to update benchmark documentation: {exception}");
-            }
-        }
-
-        private static string BuildBenchmarkTable()
-        {
-            StringBuilder builder = new();
-            builder.AppendLine("| Message Tech | Operations / Second | Allocations? |");
-            builder.AppendLine("| ------------ | ------------------- | ------------ |");
-
-            foreach (BenchmarkResult result in BenchmarkResults)
-            {
-                builder
-                    .Append("| ")
-                    .Append(result.MessageTech)
-                    .Append(" | ")
-                    .Append(result.OperationsPerSecond.ToString("N0", CultureInfo.InvariantCulture))
-                    .Append(" | ")
-                    .Append(result.Allocating ? "Yes" : "No")
-                    .AppendLine(" |");
-            }
-
-            return builder.ToString().TrimEnd('\r', '\n');
-        }
-
-        private static string ReplaceOperatingSystemSection(
-            string content,
-            string sectionName,
-            string tableContent
-        )
-        {
-            string replacement = $"## {sectionName}\n\n{tableContent}\n";
-            string pattern =
-                $@"## {Regex.Escape(sectionName)}\r?\n(?:\r?\n)*[\s\S]*?(?=\r?\n## |\r?\n# |\Z)";
-            Regex regex = new(pattern, RegexOptions.CultureInvariant);
-            string updated = regex.Replace(content, replacement, 1);
-
-            if (string.Equals(content, updated, StringComparison.Ordinal))
-            {
-                string prefix = content.EndsWith("\n", StringComparison.Ordinal)
-                    ? string.Empty
-                    : "\n";
-                updated = $"{content}{prefix}\n{replacement}";
-            }
-
-            if (!updated.EndsWith("\n", StringComparison.Ordinal))
-            {
-                updated += "\n";
-            }
-
-            return updated;
-        }
-
-        private static string GetOperatingSystemSection()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                return "Windows";
-            }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                return "macOS";
-            }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                return "Linux";
-            }
-
-            return null;
-        }
-
-        private static bool IsRunningInContinuousIntegration()
-        {
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CI")))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JENKINS_URL")))
-            {
-                return true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITLAB_CI")))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        private static string FindReadmePath()
-        {
-            string current = Directory.GetCurrentDirectory();
-            while (!string.IsNullOrEmpty(current))
-            {
-                string candidate = Path.Combine(current, "README.md");
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-
-                string packageCandidate = Path.Combine(
-                    current,
-                    "Packages",
-                    "com.wallstop-studios.dxmessaging",
-                    "README.md"
-                );
-                if (File.Exists(packageCandidate))
-                {
-                    return packageCandidate;
-                }
-
-                DirectoryInfo parent = Directory.GetParent(current);
-                current = parent?.FullName;
-            }
-
-            string assemblyLocation = typeof(PerformanceTests).Assembly.Location;
-            if (string.IsNullOrEmpty(assemblyLocation))
-            {
-                return null;
-            }
-
-            string assemblyDirectoryPath = Path.GetDirectoryName(assemblyLocation);
-            if (string.IsNullOrEmpty(assemblyDirectoryPath))
-            {
-                return null;
-            }
-
-            DirectoryInfo directory = new(assemblyDirectoryPath);
-            while (directory != null)
-            {
-                string candidate = Path.Combine(directory.FullName, "README.md");
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-
-                string packageCandidate = Path.Combine(
-                    directory.FullName,
-                    "Packages",
-                    "com.wallstop-studios.dxmessaging",
-                    "README.md"
-                );
-                if (File.Exists(packageCandidate))
-                {
-                    return packageCandidate;
-                }
-
-                directory = directory.Parent;
-            }
-
-            return null;
-        }
-
-        private static string FindPerformanceDocPath()
-        {
-            // Try to locate an existing Docs/Performance.md near the working directory
-            string current = Directory.GetCurrentDirectory();
-            while (!string.IsNullOrEmpty(current))
-            {
-                string candidate = Path.Combine(current, "Docs", "Performance.md");
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-
-                string packageCandidate = Path.Combine(
-                    current,
-                    "Packages",
-                    "com.wallstop-studios.dxmessaging",
-                    "Docs",
-                    "Performance.md"
-                );
-                if (File.Exists(packageCandidate))
-                {
-                    return packageCandidate;
-                }
-
-                DirectoryInfo parent = Directory.GetParent(current);
-                current = parent?.FullName;
-            }
-
-            // If not found, try to create it next to the discovered README.md
-            string readmePath = FindReadmePath();
-            if (!string.IsNullOrEmpty(readmePath))
-            {
-                string baseDir = Path.GetDirectoryName(readmePath);
-                if (!string.IsNullOrEmpty(baseDir))
-                {
-                    string docsDir = Path.Combine(baseDir, "Docs");
-                    string perfPath = Path.Combine(docsDir, "Performance.md");
-
-                    try
-                    {
-                        if (!Directory.Exists(docsDir))
-                        {
-                            Directory.CreateDirectory(docsDir);
-                        }
-
-                        if (!File.Exists(perfPath))
-                        {
-                            const string header =
-                                "# Performance Benchmarks\n\n"
-                                + "This page is auto-updated by the Unity PlayMode benchmark tests.\n\n"
-                                + "Sections below are OS-specific. Run tests locally to refresh.\n\n";
-                            File.WriteAllText(perfPath, header, new UTF8Encoding(false));
-                        }
-
-                        return perfPath;
-                    }
-                    catch
-                    {
-                        // Fall back silently; caller will try README.md
-                    }
-                }
-            }
-
-            // Last resort: try to create under the current working directory
-            try
-            {
-                string cwd = Directory.GetCurrentDirectory();
-                string docsDir = Path.Combine(cwd, "Docs");
-                string perfPath = Path.Combine(docsDir, "Performance.md");
-                if (!Directory.Exists(docsDir))
-                {
-                    Directory.CreateDirectory(docsDir);
-                }
-                if (!File.Exists(perfPath))
-                {
-                    const string header =
-                        "# Performance Benchmarks\n\n"
-                        + "This page is auto-updated by the Unity PlayMode benchmark tests.\n\n"
-                        + "Sections below are OS-specific. Run tests locally to refresh.\n\n";
-                    File.WriteAllText(perfPath, header, new UTF8Encoding(false));
-                }
-                return perfPath;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-    }
-}
