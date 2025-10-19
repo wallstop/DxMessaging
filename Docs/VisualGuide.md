@@ -20,11 +20,11 @@ graph LR
     Enemy -->|direct ref| Audio
     Inventory -->|direct ref| Audio
 
-    style Player fill:#ffcccc,stroke:#cc0000
-    style Enemy fill:#ffcccc,stroke:#cc0000
-    style Inventory fill:#ffcccc,stroke:#cc0000
-    style UI fill:#ccccff,stroke:#0000cc
-    style Audio fill:#ccccff,stroke:#0000cc
+    style Player fill:#ffa39e,stroke:#cf1322,stroke-width:2px,color:#000
+    style Enemy fill:#ffa39e,stroke:#cf1322,stroke-width:2px,color:#000
+    style Inventory fill:#ffa39e,stroke:#cf1322,stroke-width:2px,color:#000
+    style UI fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
+    style Audio fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
 ```
 
 #### Problems
@@ -53,13 +53,13 @@ graph TB
     Bus -->|notify| Audio
     Bus -->|notify| Analytics
 
-    style Player fill:#e6f3ff,stroke:#0066cc
-    style Enemy fill:#e6f3ff,stroke:#0066cc
-    style Inventory fill:#e6f3ff,stroke:#0066cc
-    style Bus fill:#fff4e5,stroke:#f0b429,stroke-width:3px
-    style UI fill:#eef7ee,stroke:#52c41a
-    style Audio fill:#eef7ee,stroke:#52c41a
-    style Analytics fill:#eef7ee,stroke:#52c41a
+    style Player fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style Enemy fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style Inventory fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style Bus fill:#ffd591,stroke:#d46b08,stroke-width:3px,color:#000
+    style UI fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
+    style Audio fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
+    style Analytics fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
 ```
 
 #### Benefits
@@ -475,8 +475,8 @@ graph TD
     Step3 --> Step4[Read Common Patterns<br/>15 min<br/>Real-world solutions]
     Step4 --> Step5[Build your first feature!<br/>30 min<br/>You're ready!]
 
-    style Start fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
-    style Step5 fill:#eef7ee,stroke:#52c41a,stroke-width:2px
+    style Start fill:#91d5ff,stroke:#096dd9,stroke-width:3px,color:#000
+    style Step5 fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
 ```
 
 ## 🆘 Common Beginner Questions

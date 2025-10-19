@@ -82,28 +82,52 @@ Notes on handler groups
 Visual overview
 
 ```mermaid
-flowchart TD
-  subgraph Untargeted
-    U1[Interceptors<T>] --> U2[Global Accept‑All Untargeted]
-    U2 --> U3[Handlers<T>]
-    U3 --> U4[Post‑Processors<T>]
+flowchart LR
+  subgraph Untargeted["<b>Untargeted Messages</b>"]
+    direction TB
+    U1["Interceptors&lt;T&gt;"] --> U2[Global Accept‑All Untargeted]
+    U2 --> U3["Handlers&lt;T&gt;"]
+    U3 --> U4["Post‑Processors&lt;T&gt;"]
   end
 
-  subgraph Targeted
-    T1[Interceptors<T>] --> T2[Global Accept‑All Targeted]
-    T2 --> T3[Handlers<T> @ target]
-    T3 --> T4[Handlers<T> (All Targets)]
-    T4 --> T5[Post‑Processors<T> @ target]
-    T5 --> T6[Post‑Processors<T> (All Targets)]
+  subgraph Targeted["<b>Targeted Messages</b>"]
+    direction TB
+    T1["Interceptors&lt;T&gt;"] --> T2[Global Accept‑All Targeted]
+    T2 --> T3["Handlers&lt;T&gt; @ target"]
+    T3 --> T4["Handlers&lt;T&gt; (All Targets)"]
+    T4 --> T5["Post‑Processors&lt;T&gt; @ target"]
+    T5 --> T6["Post‑Processors&lt;T&gt; (All Targets)"]
   end
 
-  subgraph Broadcast
-    B1[Interceptors<T>] --> B2[Global Accept‑All Broadcast]
-    B2 --> B3[Handlers<T> @ source]
-    B3 --> B4[Handlers<T> (All Sources)]
-    B4 --> B5[Post‑Processors<T> @ source]
-    B5 --> B6[Post‑Processors<T> (All Sources)]
+  subgraph Broadcast["<b>Broadcast Messages</b>"]
+    direction TB
+    B1["Interceptors&lt;T&gt;"] --> B2[Global Accept‑All Broadcast]
+    B2 --> B3["Handlers&lt;T&gt; @ source"]
+    B3 --> B4["Handlers&lt;T&gt; (All Sources)"]
+    B4 --> B5["Post‑Processors&lt;T&gt; @ source"]
+    B5 --> B6["Post‑Processors&lt;T&gt; (All Sources)"]
   end
+
+  style Untargeted fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+  style Targeted fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+  style Broadcast fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+
+  style U1 fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
+  style U2 fill:#d3adf7,stroke:#531dab,stroke-width:2px,color:#000
+  style U3 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+  style U4 fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
+  style T1 fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
+  style T2 fill:#d3adf7,stroke:#531dab,stroke-width:2px,color:#000
+  style T3 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+  style T4 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+  style T5 fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
+  style T6 fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
+  style B1 fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
+  style B2 fill:#d3adf7,stroke:#531dab,stroke-width:2px,color:#000
+  style B3 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+  style B4 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+  style B5 fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
+  style B6 fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
 ```
 
 Example sequence
