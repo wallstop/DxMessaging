@@ -32,11 +32,11 @@ flowchart TD
 
     Q3 -->|No| Rethink[🤔 Rethink your<br/>message design]
 
-    style Untargeted fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
-    style Targeted fill:#fff4e5,stroke:#f0b429,stroke-width:3px
-    style Broadcast fill:#eef7ee,stroke:#52c41a,stroke-width:3px
-    style Rethink fill:#ffe6e6,stroke:#cc0000
-    style Start fill:#f0f0f0,stroke:#666
+    style Untargeted fill:#91d5ff,stroke:#096dd9,stroke-width:3px,color:#000
+    style Targeted fill:#ffd591,stroke:#d46b08,stroke-width:3px,color:#000
+    style Broadcast fill:#95de64,stroke:#237804,stroke-width:3px,color:#000
+    style Rethink fill:#ffa39e,stroke:#cf1322,stroke-width:2px,color:#000
+    style Start fill:#f0f0f0,stroke:#595959,stroke-width:2px,color:#000
 ```
 
 ## Untargeted Messages

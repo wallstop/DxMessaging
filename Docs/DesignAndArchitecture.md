@@ -75,13 +75,13 @@ flowchart TB
     MRT --> MH
     MH --> MB
 
-    style App fill:#e6f3ff,stroke:#0066cc
-    style Token fill:#fff4e5,stroke:#f0b429
-    style Handler fill:#f0f5ff,stroke:#597ef7
-    style Bus fill:#eef7ee,stroke:#52c41a
-    style MRT fill:#fff4e5,stroke:#f0b429
-    style MH fill:#f0f5ff,stroke:#597ef7
-    style MB fill:#eef7ee,stroke:#52c41a
+    style App fill:#bae7ff,stroke:#0050b3,stroke-width:2px
+    style Token fill:#ffe7ba,stroke:#d48806,stroke-width:2px
+    style Handler fill:#d3adf7,stroke:#531dab,stroke-width:2px
+    style Bus fill:#b7eb8f,stroke:#389e0d,stroke-width:2px
+    style MRT fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
+    style MH fill:#d3adf7,stroke:#531dab,stroke-width:2px,color:#000
+    style MB fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
 ```
 
 ### Layer Responsibilities

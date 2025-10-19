@@ -14,8 +14,8 @@ graph TD
     Getting --> Patterns
     Overview --> Patterns
 
-    style Start fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
-    style Patterns fill:#eef7ee,stroke:#52c41a,stroke-width:2px
+    style Start fill:#91d5ff,stroke:#096dd9,stroke-width:3px,color:#000
+    style Patterns fill:#95de64,stroke:#237804,stroke-width:2px,color:#000
 ```
 
 ## Table of Contents
@@ -159,9 +159,9 @@ flowchart LR
     P[Producer] --> I[Interceptors<br/>validate/mutate/cancel]
     I --> H[Handlers<br/>main logic by priority]
     H --> PP[Post-Processors<br/>analytics/logging]
-    style I fill:#fff4e5,stroke:#f0b429
-    style H fill:#e6f7ff,stroke:#1890ff
-    style PP fill:#eef7ee,stroke:#52c41a
+    style I fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
+    style H fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style PP fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
 ```
 
 ## 🎓 Learning Resources
