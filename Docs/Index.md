@@ -4,28 +4,18 @@
 
 ## Visual Documentation Map
 
-```text
-                    ┌─────────────────┐
-                    │   START HERE    │
-                    │  Visual Guide   │
-                    │   (5 minutes)   │
-                    └────────┬────────┘
-                             │
-          ┌──────────────────┼──────────────────┐
-          │                  │                  │
-    ┌─────▼──────┐    ┌─────▼──────┐    ┌─────▼──────┐
-    │   Quick    │    │  Getting   │    │  Overview  │
-    │   Start    │    │  Started   │    │            │
-    │ (5 min)    │    │ (10 min)   │    │ (5 min)    │
-    └─────┬──────┘    └─────┬──────┘    └─────┬──────┘
-          │                  │                  │
-          └──────────────────┼──────────────────┘
-                             │
-                      ┌──────▼──────┐
-                      │   Patterns  │
-                      │  & Samples  │
-                      │ (Hands-on!) │
-                      └─────────────┘
+```mermaid
+graph TD
+    Start[START HERE<br/>Visual Guide<br/>5 minutes]
+    Start --> Quick[Quick Start<br/>5 min]
+    Start --> Getting[Getting Started<br/>10 min]
+    Start --> Overview[Overview<br/>5 min]
+    Quick --> Patterns[Patterns & Samples<br/>Hands-on!]
+    Getting --> Patterns
+    Overview --> Patterns
+
+    style Start fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    style Patterns fill:#eef7ee,stroke:#52c41a,stroke-width:2px
 ```
 
 ## Table of Contents

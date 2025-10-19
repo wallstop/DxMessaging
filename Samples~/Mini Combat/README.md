@@ -147,13 +147,11 @@ Press Play! The Boot script will automatically:
 
 ### The Message Flow
 
-```text
-Boot.cs (sends messages)
-    ↓
-    ├─→ VideoSettingsChanged (Untargeted) → UIOverlay.cs (receives)
-    ├─→ Heal (Targeted to Player)         → Player.cs (receives)
-    └─→ TookDamage (Broadcast from Enemy) → UIOverlay.cs (receives)
-```
+#### Boot.cs sends messages:
+
+1. `VideoSettingsChanged` (Untargeted) → UIOverlay.cs receives
+2. `Heal` (Targeted to Player) → Player.cs receives
+3. `TookDamage` (Broadcast from Enemy) → UIOverlay.cs receives
 
 ### Understanding Message Types
 

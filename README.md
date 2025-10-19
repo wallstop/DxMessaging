@@ -431,27 +431,22 @@ void OnDamage(ref TookDamage msg) {
 
 **DxMessaging solution:** Click any `MessageAwareComponent` in the Inspector:
 
-```text
-┌─────────────────────────────────────────────────────┐
-│ Message History (last 50)                           │
-├─────────────────────────────────────────────────────┤
-│ [12:34:56.123] HealthChanged                        │
-│   → amount: 25                                       │
-│   → priority: 0                                      │
-│   → handlers: 3                                      │
-│                                                      │
-│ [12:34:55.987] ItemAdded                            │
-│   → itemId: 42, count: 1                            │
-│   → priority: 5                                      │
-│   → handlers: 2                                      │
-├─────────────────────────────────────────────────────┤
-│ Active Registrations                                │
-├─────────────────────────────────────────────────────┤
-│ ✓ HealthChanged (priority: 0, called: 847 times)   │
-│ ✓ ItemAdded (priority: 5, called: 23 times)        │
-│ ✓ TookDamage (priority: 10, called: 1,203 times)   │
-└─────────────────────────────────────────────────────┘
-```
+#### Message History (last 50)
+
+- `[12:34:56.123] HealthChanged`
+  - amount: 25
+  - priority: 0
+  - handlers: 3
+- `[12:34:55.987] ItemAdded`
+  - itemId: 42, count: 1
+  - priority: 5
+  - handlers: 2
+
+##### Active Registrations
+
+- ✓ HealthChanged (priority: 0, called: 847 times)
+- ✓ ItemAdded (priority: 5, called: 23 times)
+- ✓ TookDamage (priority: 10, called: 1,203 times)
 
 #### Real-world debugging scenarios
 

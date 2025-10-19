@@ -107,30 +107,24 @@ Let's understand what each script does:
 
 Here's the full sequence that happens when you press Play:
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│ STEP 1: Boot starts and sends VideoSettingsChanged             │
-│         (Untargeted - anyone can listen)                        │
-└────────────┬────────────────────────────────────────────────────┘
-             │
-             ├──────────────► UIOverlay receives it
-             │                └─► Rebuilds its UI
-             │
-┌────────────▼────────────────────────────────────────────────────┐
-│ STEP 2: Boot sends Heal message to Player                       │
-│         (Targeted - only the Player Component receives it)      │
-└────────────┬────────────────────────────────────────────────────┘
-             │
-             ├──────────────► Player receives it
-             │                └─► Increases HP by heal amount
-             │
-┌────────────▼────────────────────────────────────────────────────┐
-│ STEP 3: Enemy broadcasts TookDamage                             │
-│         (Broadcast - all listeners receive it)                  │
-└────────────┬────────────────────────────────────────────────────┘
-             │
-             ├──────────────► UIOverlay receives it
-                              └─► Shows damage notification
+```mermaid
+sequenceDiagram
+    participant Boot
+    participant UIOverlay
+    participant Player
+    participant Enemy
+
+    Note over Boot: STEP 1: Boot starts
+    Boot->>UIOverlay: VideoSettingsChanged (Untargeted)
+    Note over UIOverlay: Rebuilds UI
+
+    Note over Boot: STEP 2: Boot sends Heal
+    Boot->>Player: Heal (Targeted)
+    Note over Player: Increases HP by heal amount
+
+    Note over Enemy: STEP 3: Enemy broadcasts
+    Enemy->>UIOverlay: TookDamage (Broadcast)
+    Note over UIOverlay: Shows damage notification
 ```
 
 ---

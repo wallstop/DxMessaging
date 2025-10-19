@@ -412,64 +412,51 @@ Think of DxMessaging like a restaurant:
 
 ### Untargeted = Restaurant Announcement
 
-````text
-"Attention all customers: We're closing in 10 minutes!"
-→ Everyone hears it
-```
+> "Attention all customers: We're closing in 10 minutes!"
+>
+> → Everyone hears it
 
 ### Targeted = Waiter Delivering Food
 
-```text
-"Order for table 5: Here's your burger"
-→ Only table 5 gets it
-````
+> "Order for table 5: Here's your burger"
+>
+> → Only table 5 gets it
 
 ### Broadcast = Customer Calling Waiter
 
-````text
-"Excuse me, I need a refill!" (from table 3)
-→ Comes from table 3
-→ Any available waiter can respond
-→ Manager might track it for statistics
-```
+> "Excuse me, I need a refill!" (from table 3)
+>
+> → Comes from table 3
+>
+> → Any available waiter can respond
+>
+> → Manager might track it for statistics
 
 ## 🔍 Debugging Visualized
 
 DxMessaging has built-in Inspector support!
 
-```text
-MessagingComponent Inspector:
-┌─────────────────────────────────────┐
-│ Message History (last 10)           │
-│ ┌─────────────────────────────────┐ │
-│ │ 12:34:05 - Heal → Player (50)   │ │
-│ │ 12:34:03 - Jump → Player        │ │
-│ │ 12:34:01 - GamePaused (global)  │ │
-│ └─────────────────────────────────┘ │
-│                                     │
-│ Registrations:                      │
-│ ┌─────────────────────────────────┐ │
-│ │ ✓ Heal (priority: 0, 5 calls)   │ │
-│ │ ✓ Jump (priority: 0, 2 calls)   │ │
-│ │ ✓ TookDamage (priority: 10)     │ │
-│ └─────────────────────────────────┘ │
-└─────────────────────────────────────┘
-````
+### MessagingComponent Inspector
+
+#### Message History (last 10)
+
+- `12:34:05 - Heal → Player (50)`
+- `12:34:03 - Jump → Player`
+- `12:34:01 - GamePaused (global)`
+
+##### Registrations
+
+- ✓ Heal (priority: 0, 5 calls)
+- ✓ Jump (priority: 0, 2 calls)
+- ✓ TookDamage (priority: 10)
 
 ## ⚡ Performance at a Glance
 
-```text
-Traditional C# Event: ████░░░░░░ (baseline)
-DxMessaging:          █████░░░░░ (~10ns slower, negligible)
-
-Memory:
-Traditional Events:   ████████░░ (can leak!)
-DxMessaging:          ██░░░░░░░░ (zero leaks, struct messages)
-
-Coupling:
-Traditional Events:   ██████████ (tight!)
-DxMessaging:          ░░░░░░░░░░ (zero!)
-```
+| Metric       | Traditional C# Events | DxMessaging                         |
+| ------------ | --------------------- | ----------------------------------- |
+| **Speed**    | ⚡⚡⚡⚡ (baseline)   | ⚡⚡⚡⚡ (~10ns slower, negligible) |
+| **Memory**   | ⚠️ Can leak!          | ✅ Zero leaks (struct messages)     |
+| **Coupling** | ❌ Tight coupling     | ✅ Zero coupling                    |
 
 **Bottom line:** Slightly slower than raw events, but:
 
@@ -480,22 +467,16 @@ DxMessaging:          ░░░░░░░░░░ (zero!)
 
 ## 🎓 Learning Path
 
-```text
-START HERE
-    │
-    ├─→ 1. Read this Visual Guide (5 min) ✓
-    │
-    ├─→ 2. Try Quick Start example (5 min)
-    │      [Define → Listen → Send]
-    │
-    ├─→ 3. Import Mini Combat sample (10 min)
-    │      [See it in action!]
-    │
-    ├─→ 4. Read Common Patterns (15 min)
-    │      [Real-world solutions]
-    │
-    └─→ 5. Build your first feature! (30 min)
-        [You're ready!]
+```mermaid
+graph TD
+    Start[START HERE<br/>Read this Visual Guide<br/>5 min ✓]
+    Start --> Step2[Try Quick Start example<br/>5 min<br/>Define → Listen → Send]
+    Step2 --> Step3[Import Mini Combat sample<br/>10 min<br/>See it in action!]
+    Step3 --> Step4[Read Common Patterns<br/>15 min<br/>Real-world solutions]
+    Step4 --> Step5[Build your first feature!<br/>30 min<br/>You're ready!]
+
+    style Start fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    style Step5 fill:#eef7ee,stroke:#52c41a,stroke-width:2px
 ```
 
 ## 🆘 Common Beginner Questions
