@@ -2,17 +2,22 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
     using System.Diagnostics;
-    using System.Linq;
-    using System.Reflection;
     using DxMessaging.Core;
-    using DxMessaging.Core.Messages;
+    using DxMessaging.Core.Extensions;
     using NUnit.Framework;
-    using Scripts.Components;
     using Scripts.Messages;
-    using UnityEngine;
     using UnityEngine.TestTools.Constraints;
     using Debug = UnityEngine.Debug;
     using Is = NUnit.Framework.Is;
+#if UNIRX_PRESENT
+    using UniRx;
+#endif
+#if MESSAGEPIPE_PRESENT
+    using MessagePipe;
+#endif
+#if ZENJECT_PRESENT
+    using Zenject;
+#endif
 
     public sealed class ComparisonPerformanceTests : BenchmarkTestBase
     {
@@ -21,15 +26,15 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         [Test]
         public void Benchmark()
         {
-            string? operatingSystemSection = BenchmarkDocumentation.GetOperatingSystemSection();
-            string? sectionName = string.IsNullOrEmpty(operatingSystemSection)
+            string operatingSystemSection = BenchmarkDocumentation.GetOperatingSystemSection();
+            string sectionName = string.IsNullOrEmpty(operatingSystemSection)
                 ? null
                 : $"Comparisons ({operatingSystemSection})";
 
             BenchmarkSession session = new(
                 sectionName,
                 "### ",
-                new Func<string?>[]
+                new Func<string>[]
                 {
                     BenchmarkDocumentation.TryFindComparisonsDocPath,
                     BenchmarkDocumentation.TryFindPerformanceDocPath,
@@ -37,14 +42,17 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 }
             );
 
-            RunWithSession(session, () =>
-            {
-                TimeSpan timeout = TimeSpan.FromSeconds(5);
-                BenchmarkDxMessaging(timeout);
-                BenchmarkUniRx(timeout);
-                BenchmarkMessagePipe(timeout);
-                BenchmarkZenjectSignals(timeout);
-            });
+            RunWithSession(
+                session,
+                () =>
+                {
+                    TimeSpan timeout = TimeSpan.FromSeconds(5);
+                    BenchmarkDxMessaging(timeout);
+                    BenchmarkUniRx(timeout);
+                    BenchmarkMessagePipe(timeout);
+                    BenchmarkZenjectSignals(timeout);
+                }
+            );
         }
 
         private void BenchmarkDxMessaging(TimeSpan timeout)
@@ -67,8 +75,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     {
                         message.EmitUntargeted();
                     }
-                }
-                while (timer.Elapsed < timeout);
+                } while (timer.Elapsed < timeout);
 
                 bool allocating;
                 try
@@ -82,6 +89,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 }
 
                 RecordBenchmark("DxMessaging (Untargeted) - No-Copy", count, timeout, allocating);
+                return;
 
                 void Handle(ref SimpleUntargetedMessage _)
                 {
@@ -90,9 +98,10 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             });
         }
 
+#if ZENJECT_PRESENT
         private void BenchmarkZenjectSignals(TimeSpan timeout)
         {
-            ZenjectBridge? bridge = ZenjectBridge.Create();
+            ZenjectBridge bridge = ZenjectBridge.Create();
             if (bridge == null)
             {
                 Debug.LogWarning("Zenject SignalBus not found. Skipping comparison benchmark.");
@@ -112,8 +121,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 {
                     bridge.Publish(message);
                 }
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
@@ -128,10 +136,17 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
             RecordBenchmark("Zenject SignalBus", count, timeout, allocating);
         }
+#else
+        private void BenchmarkZenjectSignals(TimeSpan timeout)
+        {
+            Debug.LogWarning("Zenject package not detected. Skipping comparison benchmark.");
+        }
+#endif
 
+#if UNIRX_PRESENT
         private void BenchmarkUniRx(TimeSpan timeout)
         {
-            UniRxBridge? bridge = UniRxBridge.Create();
+            UniRxBridge bridge = UniRxBridge.Create();
             if (bridge == null)
             {
                 Debug.LogWarning("UniRx.MessageBroker not found. Skipping comparison benchmark.");
@@ -151,8 +166,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 {
                     bridge.Publish(message);
                 }
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
@@ -167,10 +181,17 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
             RecordBenchmark("UniRx MessageBroker", count, timeout, allocating);
         }
+#else
+        private void BenchmarkUniRx(TimeSpan timeout)
+        {
+            Debug.LogWarning("UniRx package not detected. Skipping comparison benchmark.");
+        }
+#endif
 
+#if MESSAGEPIPE_PRESENT
         private void BenchmarkMessagePipe(TimeSpan timeout)
         {
-            MessagePipeBridge? bridge = MessagePipeBridge.Create();
+            MessagePipeBridge bridge = MessagePipeBridge.Create();
             if (bridge == null)
             {
                 Debug.LogWarning("Cysharp.MessagePipe not found. Skipping comparison benchmark.");
@@ -190,8 +211,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 {
                     bridge.Publish(message);
                 }
-            }
-            while (timer.Elapsed < timeout);
+            } while (timer.Elapsed < timeout);
 
             bool allocating;
             try
@@ -206,398 +226,156 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
             RecordBenchmark("MessagePipe (Global)", count, timeout, allocating);
         }
+#else
+        private void BenchmarkMessagePipe(TimeSpan timeout)
+        {
+            Debug.LogWarning("MessagePipe package not detected. Skipping comparison benchmark.");
+        }
+#endif
 
+#if UNIRX_PRESENT
         private sealed class UniRxBridge
         {
-            private readonly Action<SimpleUntargetedMessage> _publish;
-            private readonly Func<Action<SimpleUntargetedMessage>, IDisposable> _subscribe;
+            private readonly IMessageBroker _broker;
 
-            private UniRxBridge(
-                Action<SimpleUntargetedMessage> publish,
-                Func<Action<SimpleUntargetedMessage>, IDisposable> subscribe
-            )
+            private UniRxBridge(IMessageBroker broker)
             {
-                _publish = publish;
-                _subscribe = subscribe;
+                _broker = broker;
             }
 
-            internal static UniRxBridge? Create()
+            internal static UniRxBridge Create()
             {
-                Type? messageBrokerType = Type.GetType("UniRx.MessageBroker, UniRx");
-                if (messageBrokerType == null)
-                {
-                    return null;
-                }
-
-                PropertyInfo? defaultProperty = messageBrokerType.GetProperty(
-                    "Default",
-                    BindingFlags.Public | BindingFlags.Static
-                );
-                if (defaultProperty == null)
-                {
-                    Debug.LogWarning("UniRx.MessageBroker.Default property could not be located.");
-                    return null;
-                }
-
-                object? broker = defaultProperty.GetValue(null);
+                IMessageBroker broker = MessageBroker.Default;
                 if (broker == null)
                 {
-                    Debug.LogWarning("UniRx.MessageBroker.Default returned null.");
                     return null;
                 }
 
-                MethodInfo? publishDefinition = messageBrokerType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(
-                        method =>
-                            string.Equals(method.Name, "Publish", StringComparison.Ordinal)
-                            && method.IsGenericMethodDefinition
-                            && method.GetGenericArguments().Length == 1
-                            && method.GetParameters().Length == 1
-                    );
-                MethodInfo? subscribeDefinition = messageBrokerType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(
-                        method =>
-                            string.Equals(method.Name, "Subscribe", StringComparison.Ordinal)
-                            && method.IsGenericMethodDefinition
-                            && method.GetGenericArguments().Length == 1
-                            && method.GetParameters().Length == 1
-                    );
-
-                if (publishDefinition == null || subscribeDefinition == null)
-                {
-                    Debug.LogWarning("UniRx.MessageBroker methods could not be located.");
-                    return null;
-                }
-
-                MethodInfo publishMethod = publishDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage));
-                MethodInfo subscribeMethod = subscribeDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage));
-
-                Action<SimpleUntargetedMessage> publish = (Action<SimpleUntargetedMessage>)publishMethod.CreateDelegate(
-                    typeof(Action<SimpleUntargetedMessage>),
-                    broker
-                );
-                Func<Action<SimpleUntargetedMessage>, IDisposable> subscribe =
-                    (Func<Action<SimpleUntargetedMessage>, IDisposable>)subscribeMethod.CreateDelegate(
-                        typeof(Func<Action<SimpleUntargetedMessage>, IDisposable>),
-                        broker
-                    );
-
-                return new UniRxBridge(publish, subscribe);
+                return new UniRxBridge(broker);
             }
 
             internal IDisposable Subscribe(Action<SimpleUntargetedMessage> handler)
             {
-                return _subscribe(handler);
+                return _broker.Receive<SimpleUntargetedMessage>().Subscribe(handler);
             }
 
             internal void Publish(in SimpleUntargetedMessage message)
             {
-                _publish(message);
+                _broker.Publish(message);
             }
         }
+#endif
 
+#if MESSAGEPIPE_PRESENT
         private sealed class MessagePipeBridge
         {
-            private readonly Action<SimpleUntargetedMessage> _publish;
-            private readonly object _subscriber;
-            private readonly MethodInfo _subscribeMethod;
-            private readonly Array _emptyFilters;
+            private readonly IPublisher<SimpleUntargetedMessage> _publisher;
+            private readonly ISubscriber<SimpleUntargetedMessage> _subscriber;
 
             private MessagePipeBridge(
-                Action<SimpleUntargetedMessage> publish,
-                object subscriber,
-                MethodInfo subscribeMethod,
-                Array emptyFilters
+                IPublisher<SimpleUntargetedMessage> publisher,
+                ISubscriber<SimpleUntargetedMessage> subscriber
             )
             {
-                _publish = publish;
+                _publisher = publisher;
                 _subscriber = subscriber;
-                _subscribeMethod = subscribeMethod;
-                _emptyFilters = emptyFilters;
             }
 
-            internal static MessagePipeBridge? Create()
+            internal static MessagePipeBridge Create()
             {
-                Type? builderType = Type.GetType("MessagePipe.BuiltinContainerBuilder, MessagePipe");
-                Type? globalType = Type.GetType("MessagePipe.GlobalMessagePipe, MessagePipe");
-                if (builderType == null || globalType == null)
+                try
                 {
+                    BuiltinContainerBuilder builder = new();
+                    builder.AddMessagePipe();
+                    builder.AddMessageBroker<SimpleUntargetedMessage>();
+                    IServiceProvider provider = builder.BuildServiceProvider();
+                    GlobalMessagePipe.SetProvider(provider);
+                    IPublisher<SimpleUntargetedMessage> publisher =
+                        GlobalMessagePipe.GetPublisher<SimpleUntargetedMessage>();
+                    ISubscriber<SimpleUntargetedMessage> subscriber =
+                        GlobalMessagePipe.GetSubscriber<SimpleUntargetedMessage>();
+                    if (publisher == null || subscriber == null)
+                    {
+                        if (provider is IDisposable disposable)
+                        {
+                            disposable.Dispose();
+                        }
+                        Debug.LogWarning(
+                            "MessagePipe publisher or subscriber could not be resolved."
+                        );
+                        return null;
+                    }
+
+                    return new MessagePipeBridge(publisher, subscriber);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"MessagePipe setup failed: {exception}");
                     return null;
                 }
-
-                object? builder = Activator.CreateInstance(builderType);
-                if (builder == null)
-                {
-                    return null;
-                }
-
-                MethodInfo? addMessagePipe = builderType.GetMethod("AddMessagePipe", Type.EmptyTypes);
-                addMessagePipe?.Invoke(builder, Array.Empty<object>());
-
-                MethodInfo? addMessageBrokerDefinition = builderType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(
-                        method =>
-                            string.Equals(method.Name, "AddMessageBroker", StringComparison.Ordinal)
-                            && method.IsGenericMethodDefinition
-                            && method.GetGenericArguments().Length == 1
-                    );
-                if (addMessageBrokerDefinition == null)
-                {
-                    Debug.LogWarning("MessagePipe BuiltinContainerBuilder.AddMessageBroker<T> could not be located.");
-                    return null;
-                }
-
-                addMessageBrokerDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage)).Invoke(
-                    builder,
-                    Array.Empty<object>()
-                );
-
-                MethodInfo? buildMethod = builderType.GetMethod("BuildServiceProvider", Type.EmptyTypes);
-                if (buildMethod == null)
-                {
-                    Debug.LogWarning("MessagePipe BuiltinContainerBuilder.BuildServiceProvider could not be located.");
-                    return null;
-                }
-
-                object? provider = buildMethod.Invoke(builder, Array.Empty<object>());
-                if (provider == null)
-                {
-                    return null;
-                }
-
-                MethodInfo? setProvider = globalType.GetMethod("SetProvider", BindingFlags.Public | BindingFlags.Static);
-                setProvider?.Invoke(null, new[] { provider });
-
-                MethodInfo? getPublisherMethod = globalType.GetMethod("GetPublisher", BindingFlags.Public | BindingFlags.Static);
-                MethodInfo? getSubscriberMethod = globalType.GetMethod("GetSubscriber", BindingFlags.Public | BindingFlags.Static);
-                if (getPublisherMethod == null || getSubscriberMethod == null)
-                {
-                    Debug.LogWarning("MessagePipe.GlobalMessagePipe.GetPublisher/GetSubscriber could not be located.");
-                    return null;
-                }
-
-                object? publisher = getPublisherMethod.MakeGenericMethod(typeof(SimpleUntargetedMessage)).Invoke(null, Array.Empty<object>());
-                object? subscriber = getSubscriberMethod.MakeGenericMethod(typeof(SimpleUntargetedMessage)).Invoke(null, Array.Empty<object>());
-                if (publisher == null || subscriber == null)
-                {
-                    return null;
-                }
-
-                MethodInfo? publishMethod = publisher.GetType().GetMethod(
-                    "Publish",
-                    new[] { typeof(SimpleUntargetedMessage) }
-                );
-                if (publishMethod == null)
-                {
-                    Debug.LogWarning("MessagePipe publish method could not be located.");
-                    return null;
-                }
-
-                Action<SimpleUntargetedMessage> publish = (Action<SimpleUntargetedMessage>)publishMethod.CreateDelegate(
-                    typeof(Action<SimpleUntargetedMessage>),
-                    publisher
-                );
-
-                Type? subscriberExtensions = Type.GetType("MessagePipe.SubscriberExtensions, MessagePipe");
-                if (subscriberExtensions == null)
-                {
-                    Debug.LogWarning("MessagePipe.SubscriberExtensions could not be located.");
-                    return null;
-                }
-
-                MethodInfo? subscribeDefinition = subscriberExtensions
-                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .FirstOrDefault(
-                        method =>
-                            string.Equals(method.Name, "Subscribe", StringComparison.Ordinal)
-                            && method.IsGenericMethodDefinition
-                            && method.GetGenericArguments().Length == 1
-                            && method.GetParameters().Length == 3
-                            && method.GetParameters()[0].ParameterType.IsGenericType
-                            && string.Equals(
-                                method.GetParameters()[0].ParameterType.GetGenericTypeDefinition().FullName,
-                                "MessagePipe.ISubscriber`1",
-                                StringComparison.Ordinal
-                            )
-                    );
-                if (subscribeDefinition == null)
-                {
-                    Debug.LogWarning("MessagePipe subscriber Subscribe<T> extension could not be located.");
-                    return null;
-                }
-
-                MethodInfo subscribeMethod = subscribeDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage));
-
-                Type? filterGenericType = Type.GetType("MessagePipe.MessageHandlerFilter`1, MessagePipe");
-                if (filterGenericType == null)
-                {
-                    Debug.LogWarning("MessagePipe.MessageHandlerFilter<T> type could not be located.");
-                    return null;
-                }
-
-                Array emptyFilters = Array.CreateInstance(
-                    filterGenericType.MakeGenericType(typeof(SimpleUntargetedMessage)),
-                    0
-                );
-
-                return new MessagePipeBridge(publish, subscriber, subscribeMethod, emptyFilters);
             }
 
             internal IDisposable Subscribe(Action<SimpleUntargetedMessage> handler)
             {
-                object? result = _subscribeMethod.Invoke(null, new object[] { _subscriber, handler, _emptyFilters });
-                return result as IDisposable ?? throw new InvalidOperationException("MessagePipe Subscribe did not return IDisposable.");
+                return _subscriber.Subscribe(handler);
             }
 
             internal void Publish(in SimpleUntargetedMessage message)
             {
-                _publish(message);
+                _publisher.Publish(message);
             }
         }
+#endif
 
+#if ZENJECT_PRESENT
         private sealed class ZenjectBridge
         {
-            private readonly object _container;
-            private readonly object _signalBus;
-            private readonly MethodInfo _subscribeMethod;
-            private readonly MethodInfo _unsubscribeMethod;
-            private readonly MethodInfo _fireMethod;
+            private readonly SignalBus _signalBus;
 
-            private ZenjectBridge(
-                object container,
-                object signalBus,
-                MethodInfo subscribeMethod,
-                MethodInfo unsubscribeMethod,
-                MethodInfo fireMethod
-            )
+            private ZenjectBridge(SignalBus signalBus)
             {
-                _container = container;
                 _signalBus = signalBus;
-                _subscribeMethod = subscribeMethod;
-                _unsubscribeMethod = unsubscribeMethod;
-                _fireMethod = fireMethod;
             }
 
-            internal static ZenjectBridge? Create()
+            internal static ZenjectBridge Create()
             {
-                Type? containerType = Type.GetType("Zenject.DiContainer, Zenject");
-                Type? installerType = Type.GetType("Zenject.SignalBusInstaller, Zenject");
-                Type? extensionsType = Type.GetType("Zenject.SignalExtensions, Zenject");
-                Type? signalBusType = Type.GetType("Zenject.SignalBus, Zenject");
-                if (containerType == null || installerType == null || extensionsType == null || signalBusType == null)
+                try
                 {
+                    DiContainer container = new();
+                    SignalBusInstaller.Install(container);
+                    container.DeclareSignal<SimpleUntargetedMessage>();
+                    container.ResolveRoots();
+                    SignalBus signalBus = container.Resolve<SignalBus>();
+                    return new ZenjectBridge(signalBus);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"Zenject SignalBus setup failed: {exception}");
                     return null;
                 }
-
-                object? container = Activator.CreateInstance(containerType);
-                if (container == null)
-                {
-                    return null;
-                }
-
-                MethodInfo? installMethod = installerType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .FirstOrDefault(method =>
-                        string.Equals(method.Name, "Install", StringComparison.Ordinal)
-                        && method.GetParameters().Length == 1
-                        && method.GetParameters()[0].ParameterType.IsAssignableFrom(containerType));
-                installMethod?.Invoke(null, new[] { container });
-
-                MethodInfo? declareSignalMethod = extensionsType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                    .FirstOrDefault(method =>
-                        string.Equals(method.Name, "DeclareSignal", StringComparison.Ordinal)
-                        && method.IsGenericMethodDefinition
-                        && method.GetParameters().Length == 1
-                        && method.GetParameters()[0].ParameterType.IsAssignableFrom(containerType));
-                if (declareSignalMethod == null)
-                {
-                    return null;
-                }
-
-                declareSignalMethod
-                    .MakeGenericMethod(typeof(SimpleUntargetedMessage))
-                    .Invoke(null, new[] { container });
-
-                MethodInfo? resolveMethod = containerType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(method =>
-                        string.Equals(method.Name, "Resolve", StringComparison.Ordinal)
-                        && method.IsGenericMethodDefinition
-                        && method.GetParameters().Length == 0);
-                if (resolveMethod == null)
-                {
-                    return null;
-                }
-
-                object? signalBus = resolveMethod
-                    .MakeGenericMethod(signalBusType)
-                    .Invoke(container, Array.Empty<object>());
-                if (signalBus == null)
-                {
-                    return null;
-                }
-
-                MethodInfo? subscribeDefinition = signalBusType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(method =>
-                        string.Equals(method.Name, "Subscribe", StringComparison.Ordinal)
-                        && method.IsGenericMethodDefinition
-                        && method.GetParameters().Length == 1
-                        && method.GetParameters()[0].ParameterType.IsGenericType);
-                MethodInfo? unsubscribeDefinition = signalBusType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(method =>
-                        string.Equals(method.Name, "Unsubscribe", StringComparison.Ordinal)
-                        && method.IsGenericMethodDefinition
-                        && method.GetParameters().Length == 1
-                        && method.GetParameters()[0].ParameterType.IsGenericType);
-                MethodInfo? fireDefinition = signalBusType
-                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(method =>
-                        string.Equals(method.Name, "Fire", StringComparison.Ordinal)
-                        && method.IsGenericMethodDefinition
-                        && method.GetParameters().Length == 1);
-
-                if (subscribeDefinition == null || unsubscribeDefinition == null || fireDefinition == null)
-                {
-                    Debug.LogWarning("Zenject SignalBus methods could not be located.");
-                    return null;
-                }
-
-                MethodInfo subscribeMethod = subscribeDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage));
-                MethodInfo unsubscribeMethod = unsubscribeDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage));
-                MethodInfo fireMethod = fireDefinition.MakeGenericMethod(typeof(SimpleUntargetedMessage));
-
-                return new ZenjectBridge(container, signalBus, subscribeMethod, unsubscribeMethod, fireMethod);
             }
 
             internal IDisposable Subscribe(Action<SimpleUntargetedMessage> handler)
             {
-                _subscribeMethod.Invoke(_signalBus, new object[] { handler });
-                return new Subscription(_signalBus, _unsubscribeMethod, handler);
+                return new Subscription(_signalBus, handler);
             }
 
             internal void Publish(in SimpleUntargetedMessage message)
             {
-                _fireMethod.Invoke(_signalBus, new object[] { message });
+                _signalBus.Fire(message);
             }
 
             private sealed class Subscription : IDisposable
             {
-                private readonly object _signalBus;
-                private readonly MethodInfo _unsubscribeMethod;
-                private readonly Delegate _handler;
+                private readonly SignalBus _signalBus;
+                private readonly Action<SimpleUntargetedMessage> _handler;
                 private bool _disposed;
 
-                internal Subscription(object signalBus, MethodInfo unsubscribeMethod, Delegate handler)
+                internal Subscription(SignalBus signalBus, Action<SimpleUntargetedMessage> handler)
                 {
                     _signalBus = signalBus;
-                    _unsubscribeMethod = unsubscribeMethod;
                     _handler = handler;
+                    _signalBus.Subscribe(handler);
                 }
 
                 public void Dispose()
@@ -607,20 +385,11 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                         return;
                     }
 
-                    try
-                    {
-                        _unsubscribeMethod.Invoke(_signalBus, new object[] { _handler });
-                    }
-                    catch (Exception exception)
-                    {
-                        Debug.LogWarning($"Zenject SignalBus unsubscribe failed: {exception}");
-                    }
-                    finally
-                    {
-                        _disposed = true;
-                    }
+                    _signalBus.TryUnsubscribe(_handler);
+                    _disposed = true;
                 }
             }
         }
+#endif
     }
 }

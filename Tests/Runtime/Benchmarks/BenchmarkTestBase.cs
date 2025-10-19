@@ -7,13 +7,13 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using UnityEngine;
     using Object = UnityEngine.Object;
 
-    internal abstract class BenchmarkTestBase : MessagingTestBase
+    public abstract class BenchmarkTestBase : MessagingTestBase
     {
-        protected const int NumInvocationsPerIteration = 1_000;
+        protected const int NumInvocationsPerIteration = 10_000;
 
-        private BenchmarkSession? _session;
+        private BenchmarkSession _session;
 
-        protected BenchmarkSession? CurrentSession => _session;
+        protected BenchmarkSession CurrentSession => _session;
 
         protected void RunWithSession(BenchmarkSession session, Action body)
         {
@@ -43,9 +43,8 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
         protected void RecordBenchmark(string label, int count, TimeSpan duration, bool allocating)
         {
-            long operationsPerSecond = duration.TotalSeconds <= 0.0
-                ? 0
-                : (long)Math.Floor(count / duration.TotalSeconds);
+            long operationsPerSecond =
+                duration.TotalSeconds <= 0.0 ? 0 : (long)Math.Floor(count / duration.TotalSeconds);
 
             if (_session != null)
             {
@@ -81,7 +80,8 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             GameObject go = CreateBenchmarkGameObject();
             try
             {
-                EmptyMessageAwareComponent component = go.GetComponent<EmptyMessageAwareComponent>();
+                EmptyMessageAwareComponent component =
+                    go.GetComponent<EmptyMessageAwareComponent>();
                 action(component);
             }
             finally

@@ -14,15 +14,15 @@ See also: `Docs/DesignAndArchitecture.md#performance-optimizations` for design d
 
 | Message Tech                       | Operations / Second | Allocations? |
 | ---------------------------------- | ------------------- | ------------ |
-| Unity                              | 2,747,000           | Yes          |
-| DxMessaging (GameObject) - Normal  | 8,412,800           | No           |
-| DxMessaging (Component) - Normal   | 8,406,200           | No           |
-| DxMessaging (GameObject) - No-Copy | 9,358,200           | No           |
-| DxMessaging (Component) - No-Copy  | 9,177,800           | No           |
-| DxMessaging (Untargeted) - No-Copy | 14,922,800          | No           |
-| Reflexive (One Argument)           | 2,832,800           | No           |
-| Reflexive (Two Arguments)          | 2,371,200           | No           |
-| Reflexive (Three Arguments)        | 2,350,600           | No           |
+| Unity                              | 2,646,000           | Yes          |
+| DxMessaging (GameObject) - Normal  | 8,604,000           | No           |
+| DxMessaging (Component) - Normal   | 8,600,000           | No           |
+| DxMessaging (GameObject) - No-Copy | 9,586,000           | No           |
+| DxMessaging (Component) - No-Copy  | 9,484,000           | No           |
+| DxMessaging (Untargeted) - No-Copy | 14,984,000          | No           |
+| Reflexive (One Argument)           | 2,838,000           | No           |
+| Reflexive (Two Arguments)          | 2,372,000           | No           |
+| Reflexive (Three Arguments)        | 2,356,000           | No           |
 
 ## macOS
 

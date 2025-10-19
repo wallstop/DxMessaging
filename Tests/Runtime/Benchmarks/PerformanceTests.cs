@@ -2,7 +2,6 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
     using System.Diagnostics;
-    using Core;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.Messages;
@@ -11,65 +10,75 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using Scripts.Messages;
     using UnityEngine;
     using UnityEngine.TestTools.Constraints;
-    using Debug = UnityEngine.Debug;
     using Is = NUnit.Framework.Is;
 
     public sealed class PerformanceTests : BenchmarkTestBase
     {
-
         protected override bool MessagingDebugEnabled => false;
 
         [Test]
         public void Benchmark()
         {
-            string? operatingSystemSection = BenchmarkDocumentation.GetOperatingSystemSection();
+            string operatingSystemSection = BenchmarkDocumentation.GetOperatingSystemSection();
             BenchmarkSession session = new(
                 operatingSystemSection,
                 "## ",
-                new Func<string?>[]
+                new Func<string>[]
                 {
                     BenchmarkDocumentation.TryFindPerformanceDocPath,
                     BenchmarkDocumentation.TryFindReadmePath,
                 }
             );
 
-            RunWithSession(session, () =>
-            {
-                TimeSpan timeout = TimeSpan.FromSeconds(5);
-                Stopwatch timer = Stopwatch.StartNew();
+            RunWithSession(
+                session,
+                () =>
+                {
+                    TimeSpan timeout = TimeSpan.FromSeconds(5);
+                    Stopwatch timer = Stopwatch.StartNew();
 
-                ComplexTargetedMessage message = new(Guid.NewGuid());
-                ReflexiveMessage reflexiveMessage = new(
-                    nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
-                    ReflexiveSendMode.Flat,
-                    message
-                );
+                    ComplexTargetedMessage message = new(Guid.NewGuid());
+                    ReflexiveMessage reflexiveMessage = new(
+                        nameof(SimpleMessageAwareComponent.HandleSlowComplexTargetedMessage),
+                        ReflexiveSendMode.Flat,
+                        message
+                    );
 
-                RunWithComponent(component => Unity(timer, timeout, component.gameObject, message));
+                    RunWithComponent(component =>
+                        Unity(timer, timeout, component.gameObject, message)
+                    );
 
-                RunWithComponent(component => NormalGameObject(timer, timeout, component, message));
-                RunWithComponent(component => NormalComponent(timer, timeout, component, message));
-                RunWithComponent(component => NoCopyGameObject(timer, timeout, component, message));
-                RunWithComponent(component => NoCopyComponent(timer, timeout, component, message));
+                    RunWithComponent(component =>
+                        NormalGameObject(timer, timeout, component, message)
+                    );
+                    RunWithComponent(component =>
+                        NormalComponent(timer, timeout, component, message)
+                    );
+                    RunWithComponent(component =>
+                        NoCopyGameObject(timer, timeout, component, message)
+                    );
+                    RunWithComponent(component =>
+                        NoCopyComponent(timer, timeout, component, message)
+                    );
 
-                SimpleUntargetedMessage untargetedMessage = new();
-                RunWithComponent(component =>
-                    NoCopyUntargeted(timer, timeout, component, untargetedMessage)
-                );
-                RunWithComponent(component =>
-                    ReflexiveOneArgument(timer, timeout, component.gameObject, reflexiveMessage)
-                );
-                RunWithComponent(component => ReflexiveTwoArguments(timer, timeout, component.gameObject));
-                RunWithComponent(component => ReflexiveThreeArguments(timer, timeout, component.gameObject));
-            });
+                    SimpleUntargetedMessage untargetedMessage = new();
+                    RunWithComponent(component =>
+                        NoCopyUntargeted(timer, timeout, component, untargetedMessage)
+                    );
+                    RunWithComponent(component =>
+                        ReflexiveOneArgument(timer, timeout, component.gameObject, reflexiveMessage)
+                    );
+                    RunWithComponent(component =>
+                        ReflexiveTwoArguments(timer, timeout, component.gameObject)
+                    );
+                    RunWithComponent(component =>
+                        ReflexiveThreeArguments(timer, timeout, component.gameObject)
+                    );
+                }
+            );
         }
 
-        private void DisplayCount(
-            string testName,
-            int count,
-            TimeSpan timeout,
-            bool allocating
-        )
+        private void DisplayCount(string testName, int count, TimeSpan timeout, bool allocating)
         {
             RecordBenchmark(testName, count, timeout, allocating);
         }
@@ -86,6 +95,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 component = target.AddComponent<SimpleMessageAwareComponent>();
             }
+
             component.slowComplexTargetedHandler = () => ++count;
             // Pre-warm
             target.SendMessage(
@@ -122,20 +132,18 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 allocating = true;
             }
+
             DisplayCount("Unity", count, timeout, allocating);
         }
 
-        private void ReflexiveThreeArguments(
-            Stopwatch timer,
-            TimeSpan timeout,
-            GameObject go
-        )
+        private void ReflexiveThreeArguments(Stopwatch timer, TimeSpan timeout, GameObject go)
         {
             int count = 0;
             if (!go.TryGetComponent(out SimpleMessageAwareComponent component))
             {
                 component = go.AddComponent<SimpleMessageAwareComponent>();
             }
+
             component.reflexiveThreeArgumentHandler = () => ++count;
             ReflexiveMessage message = new(
                 nameof(SimpleMessageAwareComponent.HandleReflexiveMessageThreeArguments),
@@ -156,6 +164,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     message.EmitTargeted(target);
                 }
             } while (timer.Elapsed < timeout);
+
             bool allocating;
             try
             {
@@ -177,6 +186,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 component = go.AddComponent<SimpleMessageAwareComponent>();
             }
+
             component.reflexiveTwoArgumentHandler = () => ++count;
             ReflexiveMessage message = new(
                 nameof(SimpleMessageAwareComponent.HandleReflexiveMessageTwoArguments),
@@ -196,6 +206,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     message.EmitTargeted(target);
                 }
             } while (timer.Elapsed < timeout);
+
             bool allocating;
             try
             {
@@ -222,6 +233,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 component = go.AddComponent<SimpleMessageAwareComponent>();
             }
+
             component.slowComplexTargetedHandler = () => ++count;
             InstanceId target = go;
             // Pre-warm
@@ -235,6 +247,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     message.EmitTargeted(target);
                 }
             } while (timer.Elapsed < timeout);
+
             bool allocating;
             try
             {
@@ -273,6 +286,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     message.EmitTargeted(target);
                 }
             } while (timer.Elapsed < timeout);
+
             bool allocating;
             try
             {
@@ -327,6 +341,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 allocating = true;
             }
+
             DisplayCount("DxMessaging (Component) - Normal", count, timeout, allocating);
             return;
 
@@ -360,6 +375,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     message.EmitTargeted(target);
                 }
             } while (timer.Elapsed < timeout);
+
             bool allocating;
             try
             {
@@ -370,6 +386,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 allocating = true;
             }
+
             DisplayCount("DxMessaging (GameObject) - No-Copy", count, timeout, allocating);
             return;
 
@@ -413,6 +430,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 allocating = true;
             }
+
             DisplayCount("DxMessaging (Component) - No-Copy", count, timeout, allocating);
             return;
 
@@ -455,6 +473,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             {
                 allocating = true;
             }
+
             DisplayCount("DxMessaging (Untargeted) - No-Copy", count, timeout, allocating);
             return;
 
@@ -463,3 +482,5 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 ++count;
             }
         }
+    }
+}

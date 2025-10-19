@@ -26,17 +26,17 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         internal bool Allocating { get; }
     }
 
-    internal sealed class BenchmarkSession : IDisposable
+    public sealed class BenchmarkSession : IDisposable
     {
-        private readonly string? _sectionName;
+        private readonly string _sectionName;
         private readonly string _headingPrefix;
-        private readonly IReadOnlyList<Func<string?>> _docPathResolvers;
+        private readonly IReadOnlyList<Func<string>> _docPathResolvers;
         private readonly List<BenchmarkEntry> _entries = new();
 
         internal BenchmarkSession(
-            string? sectionName,
+            string sectionName,
             string headingPrefix,
-            IReadOnlyList<Func<string?>> docPathResolvers
+            IReadOnlyList<Func<string>> docPathResolvers
         )
         {
             _sectionName = sectionName;
@@ -91,26 +91,15 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     internal static class BenchmarkDocumentation
     {
         private const string PerformanceHeader =
-            "# Performance Benchmarks
+            "# Performance Benchmarks\n\n"
+            + "This page is auto-updated by the Unity PlayMode benchmark tests in `Tests/Runtime/Benchmarks/PerformanceTests.cs`.\n\n"
+            + "How it works:\n\n"
+            + "- Run PlayMode tests locally in your Unity project that references this package.\n"
+            + "- The benchmark test writes an OS-specific section below with a markdown table.\n"
+            + "- CI runs skip writing to avoid noisy diffs.\n\n"
+            + "See also: `Docs/DesignAndArchitecture.md#performance-optimizations` for design details.\n";
 
-"
-            + "This page is auto-updated by the Unity PlayMode benchmark tests in `Tests/Runtime/Benchmarks/PerformanceTests.cs`.
-
-"
-            + "How it works:
-
-"
-            + "- Run PlayMode tests locally in your Unity project that references this package.
-"
-            + "- The benchmark test writes an OS-specific section below with a markdown table.
-"
-            + "- CI runs skip writing to avoid noisy diffs.
-
-"
-            + "See also: `Docs/DesignAndArchitecture.md#performance-optimizations` for design details.
-";
-
-        internal static string? GetOperatingSystemSection()
+        internal static string GetOperatingSystemSection()
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -130,7 +119,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             return null;
         }
 
-        internal static bool IsRunningInContinuousIntegration()
+        private static bool IsRunningInContinuousIntegration()
         {
             if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
             {
@@ -159,7 +148,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             string sectionName,
             string headingPrefix,
             IReadOnlyList<BenchmarkEntry> entries,
-            IReadOnlyList<Func<string?>> docPathResolvers
+            IReadOnlyList<Func<string>> docPathResolvers
         )
         {
             if (entries.Count == 0)
@@ -175,7 +164,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 return;
             }
 
-            string? docPath = ResolveDocPath(docPathResolvers);
+            string docPath = ResolveDocPath(docPathResolvers);
             if (string.IsNullOrEmpty(docPath))
             {
                 Debug.LogWarning(
@@ -216,20 +205,17 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
         }
 
-        internal static string? TryFindPerformanceDocPath()
+        internal static string TryFindPerformanceDocPath()
         {
-            return TryFindDocPath(
-                Path.Combine("Docs", "Performance.md"),
-                PerformanceHeader
-            );
+            return TryFindDocPath(Path.Combine("Docs", "Performance.md"), PerformanceHeader);
         }
 
-        internal static string? TryFindComparisonsDocPath()
+        internal static string TryFindComparisonsDocPath()
         {
             return TryFindDocPath(Path.Combine("Docs", "Comparisons.md"));
         }
 
-        internal static string? TryFindReadmePath()
+        internal static string TryFindReadmePath()
         {
             return TrySearchForFile("README.md");
         }
@@ -252,9 +238,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     .AppendLine(" |");
             }
 
-            return builder.ToString().TrimEnd('
-', '
-');
+            return builder.ToString().TrimEnd('\r', '\n');
         }
 
         private static string ReplaceSection(
@@ -264,38 +248,25 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             string tableContent
         )
         {
-            string replacement = $"{headingPrefix}{sectionName}
-
-{tableContent}
-";
+            string replacement = $"{headingPrefix}{sectionName}\n\n{tableContent}\n";
             int headingLevel = CountHeadingLevel(headingPrefix);
             string stopPattern = headingLevel <= 1 ? "#" : $"#{{1,{headingLevel}}}";
             string pattern =
-                $@"^{Regex.Escape(headingPrefix)}{Regex.Escape(sectionName)}
-?
-(?:
-?
-)*[\s\S]*?(?=^\s*{stopPattern}\s|\Z)";
-            Regex regex = new(
-                pattern,
-                RegexOptions.CultureInvariant | RegexOptions.Multiline
-            );
+                $@"^{Regex.Escape(headingPrefix)}{Regex.Escape(sectionName)}[^\S\r\n]*(?:\r?\n|$)[\s\S]*?(?=^\s*{stopPattern}\s|\Z)";
+            Regex regex = new(pattern, RegexOptions.CultureInvariant | RegexOptions.Multiline);
             string updated = regex.Replace(content, replacement, 1);
 
             if (string.Equals(content, updated, StringComparison.Ordinal))
             {
-                string prefix = content.EndsWith("
-", StringComparison.Ordinal) ? string.Empty : "
-";
-                updated = $"{content}{prefix}
-{replacement}";
+                string prefix = content.EndsWith("\n", StringComparison.Ordinal)
+                    ? string.Empty
+                    : "\n";
+                updated = $"{content}{prefix}{replacement}";
             }
 
-            if (!updated.EndsWith("
-", StringComparison.Ordinal))
+            if (!updated.EndsWith("\n", StringComparison.Ordinal))
             {
-                updated += "
-";
+                updated += "\n";
             }
 
             return updated;
@@ -307,9 +278,9 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             return level > 0 ? level : 1;
         }
 
-        private static string? ResolveDocPath(IReadOnlyList<Func<string?>> resolvers)
+        private static string ResolveDocPath(IReadOnlyList<Func<string>> resolvers)
         {
-            foreach (Func<string?> resolver in resolvers)
+            foreach (Func<string> resolver in resolvers)
             {
                 if (resolver == null)
                 {
@@ -318,7 +289,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
                 try
                 {
-                    string? path = resolver();
+                    string path = resolver();
                     if (!string.IsNullOrEmpty(path))
                     {
                         return path;
@@ -333,28 +304,32 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             return null;
         }
 
-        private static string? TryFindDocPath(string relativePath, string? seedContent = null)
+        private static string TryFindDocPath(string relativePath, string seedContent = null)
         {
-            string? discovered = TrySearchForFile(relativePath);
+            string discovered = TrySearchForFile(relativePath);
             if (!string.IsNullOrEmpty(discovered))
             {
                 return discovered;
             }
 
-            string? readmePath = TryFindReadmePath();
+            string readmePath = TryFindReadmePath();
             if (!string.IsNullOrEmpty(readmePath))
             {
-                string? candidate = TryEnsureFileAdjacent(readmePath, relativePath, seedContent);
+                string candidate = TryEnsureFileAdjacent(readmePath, relativePath, seedContent);
                 if (!string.IsNullOrEmpty(candidate))
                 {
                     return candidate;
                 }
             }
 
-            return TryEnsureFileAdjacent(Directory.GetCurrentDirectory(), relativePath, seedContent);
+            return TryEnsureFileAdjacent(
+                Directory.GetCurrentDirectory(),
+                relativePath,
+                seedContent
+            );
         }
 
-        private static string? TrySearchForFile(string relativePath)
+        private static string TrySearchForFile(string relativePath)
         {
             string current = Directory.GetCurrentDirectory();
             while (!string.IsNullOrEmpty(current))
@@ -376,7 +351,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     return packageCandidate;
                 }
 
-                DirectoryInfo? parent = Directory.GetParent(current);
+                DirectoryInfo parent = Directory.GetParent(current);
                 current = parent?.FullName;
             }
 
@@ -386,7 +361,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 return null;
             }
 
-            string? assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
+            string assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
             if (string.IsNullOrEmpty(assemblyDirectory))
             {
                 return null;
@@ -418,10 +393,10 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             return null;
         }
 
-        private static string? TryEnsureFileAdjacent(
+        private static string TryEnsureFileAdjacent(
             string anchorPath,
             string relativePath,
-            string? seedContent
+            string seedContent
         )
         {
             string baseDirectory = File.Exists(anchorPath)
@@ -433,7 +408,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
 
             string candidate = Path.Combine(baseDirectory, relativePath);
-            string? directory = Path.GetDirectoryName(candidate);
+            string directory = Path.GetDirectoryName(candidate);
             try
             {
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -441,23 +416,27 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     Directory.CreateDirectory(directory);
                 }
 
-                if (!File.Exists(candidate))
+                if (File.Exists(candidate))
                 {
-                    if (!string.IsNullOrEmpty(seedContent))
-                    {
-                        File.WriteAllText(candidate, seedContent, new UTF8Encoding(false));
-                    }
-                    else
-                    {
-                        File.WriteAllText(candidate, string.Empty, new UTF8Encoding(false));
-                    }
+                    return candidate;
+                }
+
+                if (!string.IsNullOrEmpty(seedContent))
+                {
+                    File.WriteAllText(candidate, seedContent, new UTF8Encoding(false));
+                }
+                else
+                {
+                    File.WriteAllText(candidate, string.Empty, new UTF8Encoding(false));
                 }
 
                 return candidate;
             }
             catch (Exception exception)
             {
-                Debug.LogWarning($"Failed to create documentation file at {candidate}: {exception}");
+                Debug.LogWarning(
+                    $"Failed to create documentation file at {candidate}: {exception}"
+                );
                 return null;
             }
         }
