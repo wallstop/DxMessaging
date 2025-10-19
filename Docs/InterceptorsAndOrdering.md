@@ -82,14 +82,16 @@ Notes on handler groups
 Visual overview
 
 ```mermaid
-flowchart TD
-  subgraph Untargeted
+flowchart TB
+  subgraph Untargeted["<b>Untargeted Messages</b>"]
+    direction LR
     U1["Interceptors&lt;T&gt;"] --> U2[Global Accept‑All Untargeted]
     U2 --> U3["Handlers&lt;T&gt;"]
     U3 --> U4["Post‑Processors&lt;T&gt;"]
   end
 
-  subgraph Targeted
+  subgraph Targeted["<b>Targeted Messages</b>"]
+    direction LR
     T1["Interceptors&lt;T&gt;"] --> T2[Global Accept‑All Targeted]
     T2 --> T3["Handlers&lt;T&gt; @ target"]
     T3 --> T4["Handlers&lt;T&gt; (All Targets)"]
@@ -97,13 +99,18 @@ flowchart TD
     T5 --> T6["Post‑Processors&lt;T&gt; (All Targets)"]
   end
 
-  subgraph Broadcast
+  subgraph Broadcast["<b>Broadcast Messages</b>"]
+    direction LR
     B1["Interceptors&lt;T&gt;"] --> B2[Global Accept‑All Broadcast]
     B2 --> B3["Handlers&lt;T&gt; @ source"]
     B3 --> B4["Handlers&lt;T&gt; (All Sources)"]
     B4 --> B5["Post‑Processors&lt;T&gt; @ source"]
     B5 --> B6["Post‑Processors&lt;T&gt; (All Sources)"]
   end
+
+  style Untargeted fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+  style Targeted fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+  style Broadcast fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
 
   style U1 fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
   style U2 fill:#d3adf7,stroke:#531dab,stroke-width:2px,color:#000
