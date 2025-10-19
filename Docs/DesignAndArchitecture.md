@@ -50,6 +50,7 @@ DxMessaging was built with these principles:
 ## Architecture Overview
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#fff','primaryTextColor':'#000','primaryBorderColor':'#000','lineColor':'#2563eb','secondaryColor':'#fff','tertiaryColor':'#fff','edgeLabelBackground':'#fff'}}}%%
 flowchart TB
     subgraph App["<b>Application Layer</b>"]
         CompA[Component A<br/>Token.Reg]
@@ -69,11 +70,11 @@ flowchart TB
         MB[MessageBus<br/>• Interceptors<br/>• Handlers<br/>• Post-Processors]
     end
 
-    CompA --> MRT
-    CompB --> MRT
-    CompC --> MRT
-    MRT --> MH
-    MH --> MB
+    CompA ==> MRT
+    CompB ==> MRT
+    CompC ==> MRT
+    MRT ==> MH
+    MH ==> MB
 
     style App fill:#bae7ff,stroke:#0050b3,stroke-width:3px,color:#000
     style Token fill:#ffe7ba,stroke:#d48806,stroke-width:3px,color:#000
