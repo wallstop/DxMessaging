@@ -82,16 +82,16 @@ Notes on handler groups
 Visual overview
 
 ```mermaid
-flowchart TB
+flowchart LR
   subgraph Untargeted["<b>Untargeted Messages</b>"]
-    direction LR
+    direction TB
     U1["Interceptors&lt;T&gt;"] --> U2[Global Accept‑All Untargeted]
     U2 --> U3["Handlers&lt;T&gt;"]
     U3 --> U4["Post‑Processors&lt;T&gt;"]
   end
 
   subgraph Targeted["<b>Targeted Messages</b>"]
-    direction LR
+    direction TB
     T1["Interceptors&lt;T&gt;"] --> T2[Global Accept‑All Targeted]
     T2 --> T3["Handlers&lt;T&gt; @ target"]
     T3 --> T4["Handlers&lt;T&gt; (All Targets)"]
@@ -100,7 +100,7 @@ flowchart TB
   end
 
   subgraph Broadcast["<b>Broadcast Messages</b>"]
-    direction LR
+    direction TB
     B1["Interceptors&lt;T&gt;"] --> B2[Global Accept‑All Broadcast]
     B2 --> B3["Handlers&lt;T&gt; @ source"]
     B3 --> B4["Handlers&lt;T&gt; (All Sources)"]
