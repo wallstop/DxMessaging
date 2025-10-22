@@ -43,7 +43,7 @@ Grab a copy of this repo (either `git clone` [this repo](https://github.com/wall
 ```json
 {
   "dependencies": {
-    "com.wallstop-studios.dxmessaging": "https://github.com/wallstop/DxMessaging.git
+    "com.wallstop-studios.dxmessaging": "https://github.com/wallstop/DxMessaging.git"
   }
 }
 ```
