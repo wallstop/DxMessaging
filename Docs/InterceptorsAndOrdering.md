@@ -179,16 +179,18 @@ Prevent UI messages from being processed based on current UI state:
 using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 
-public readonly struct OpenMenu : IUntargetedMessage
+[DxUntargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct OpenMenu
 {
     public readonly string menuName;
-    public OpenMenu(string menuName) => this.menuName = menuName;
 }
 
-public readonly struct ShowDialog : IUntargetedMessage
+[DxUntargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct ShowDialog
 {
     public readonly string dialogText;
-    public ShowDialog(string dialogText) => this.dialogText = dialogText;
 }
 
 public class UIStateManager
@@ -235,16 +237,12 @@ using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 using UnityEngine;
 
-public readonly struct MovementInput : IUntargetedMessage
+[DxUntargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct MovementInput
 {
     public readonly Vector2 direction;
     public readonly float speed;
-
-    public MovementInput(Vector2 direction, float speed)
-    {
-        this.direction = direction;
-        this.speed = speed;
-    }
 }
 
 public class InputNormalizer
@@ -289,16 +287,18 @@ Block messages that violate game rules or permissions:
 using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 
-public readonly struct SpendCurrency : ITargetedMessage
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct SpendCurrency
 {
     public readonly int amount;
-    public SpendCurrency(int amount) => this.amount = amount;
 }
 
-public readonly struct UnlockAchievement : ITargetedMessage
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct UnlockAchievement
 {
     public readonly string achievementId;
-    public UnlockAchievement(string achievementId) => this.achievementId = achievementId;
 }
 
 public class PermissionSystem
@@ -364,18 +364,15 @@ using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 using System;
 
-public readonly struct PlayerAction : ITargetedMessage
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct PlayerAction
 {
     public readonly string actionType;
+    [DxOptionalParameter]
     public readonly long timestamp;  // Added by interceptor
+    [DxOptionalParameter]
     public readonly string sessionId; // Added by interceptor
-
-    public PlayerAction(string actionType, long timestamp = 0, string sessionId = null)
-    {
-        this.actionType = actionType;
-        this.timestamp = timestamp;
-        this.sessionId = sessionId;
-    }
 }
 
 public class TelemetryEnricher
@@ -427,10 +424,11 @@ using DxMessaging.Core.MessageBus;
 using System;
 using System.Collections.Generic;
 
-public readonly struct CastSpell : ITargetedMessage
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct CastSpell
 {
     public readonly string spellName;
-    public CastSpell(string spellName) => this.spellName = spellName;
 }
 
 public class CooldownManager

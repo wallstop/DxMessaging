@@ -101,17 +101,19 @@ using DxMessaging.Core.Messages;
 public class NetworkedAttribute : Attribute { }
 
 [Networked]
-public readonly struct PlayerMoved : IUntargetedMessage
+[DxUntargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct PlayerMoved
 {
     public readonly Vector3 position;
-    public PlayerMoved(Vector3 position) => this.position = position;
 }
 
 [Networked]
-public readonly struct DealDamage : ITargetedMessage
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct DealDamage
 {
     public readonly float amount;
-    public DealDamage(float amount) => this.amount = amount;
 }
 
 // Network replication handler
