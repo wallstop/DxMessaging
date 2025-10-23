@@ -169,6 +169,338 @@ _ = bus.RegisterTargetedInterceptor<TookDamage>(
 );
 ```
 
+Real‑World Use Cases
+
+###### State‑Based Message Cancellation
+
+Prevent UI messages from being processed based on current UI state:
+
+```csharp
+using DxMessaging.Core;
+using DxMessaging.Core.MessageBus;
+
+public readonly struct OpenMenu : IUntargetedMessage
+{
+    public readonly string menuName;
+    public OpenMenu(string menuName) => this.menuName = menuName;
+}
+
+public readonly struct ShowDialog : IUntargetedMessage
+{
+    public readonly string dialogText;
+    public ShowDialog(string dialogText) => this.dialogText = dialogText;
+}
+
+public class UIStateManager
+{
+    private bool _isInCutscene;
+    private bool _isPaused;
+    private bool _isLoading;
+
+    public void RegisterInterceptors()
+    {
+        var bus = MessageHandler.MessageBus;
+
+        // Block all UI interactions during cutscenes, loading, or when paused
+        _ = bus.RegisterUntargetedInterceptor<OpenMenu>(
+            (ref OpenMenu m) => !_isInCutscene && !_isLoading,
+            priority: -100  // Run early
+        );
+
+        _ = bus.RegisterUntargetedInterceptor<ShowDialog>(
+            (ref ShowDialog m) => !_isInCutscene && !_isPaused,
+            priority: -100
+        );
+    }
+
+    public void EnterCutscene() => _isInCutscene = true;
+    public void ExitCutscene() => _isInCutscene = false;
+}
+
+// Usage: UI messages automatically blocked during cutscenes
+var uiManager = new UIStateManager();
+uiManager.RegisterInterceptors();
+uiManager.EnterCutscene();
+
+new OpenMenu("inventory").Emit();  // Cancelled by interceptor
+new ShowDialog("Hello!").Emit();   // Cancelled by interceptor
+```
+
+###### Value Clamping and Normalization
+
+Ensure message data stays within valid ranges:
+
+```csharp
+using DxMessaging.Core;
+using DxMessaging.Core.MessageBus;
+using UnityEngine;
+
+public readonly struct MovementInput : IUntargetedMessage
+{
+    public readonly Vector2 direction;
+    public readonly float speed;
+
+    public MovementInput(Vector2 direction, float speed)
+    {
+        this.direction = direction;
+        this.speed = speed;
+    }
+}
+
+public class InputNormalizer
+{
+    public void RegisterInterceptors()
+    {
+        var bus = MessageHandler.MessageBus;
+
+        // Normalize and clamp movement input
+        _ = bus.RegisterUntargetedInterceptor<MovementInput>(
+            (ref MovementInput m) =>
+            {
+                // Normalize direction vector
+                var normalized = m.direction.normalized;
+
+                // Clamp speed to valid range
+                var clampedSpeed = Mathf.Clamp(m.speed, 0f, 10f);
+
+                // Mutate the message with cleaned values
+                m = new MovementInput(normalized, clampedSpeed);
+                return true;
+            },
+            priority: 0
+        );
+    }
+}
+
+// Usage: all movement input is automatically normalized
+var normalizer = new InputNormalizer();
+normalizer.RegisterInterceptors();
+
+// Even invalid input gets cleaned
+new MovementInput(new Vector2(100, 200), 9999f).Emit();
+// Handlers receive: direction=(0.45, 0.89), speed=10.0
+```
+
+###### Permission and Authorization Checks
+
+Block messages that violate game rules or permissions:
+
+```csharp
+using DxMessaging.Core;
+using DxMessaging.Core.MessageBus;
+
+public readonly struct SpendCurrency : ITargetedMessage
+{
+    public readonly int amount;
+    public SpendCurrency(int amount) => this.amount = amount;
+}
+
+public readonly struct UnlockAchievement : ITargetedMessage
+{
+    public readonly string achievementId;
+    public UnlockAchievement(string achievementId) => this.achievementId = achievementId;
+}
+
+public class PermissionSystem
+{
+    private readonly IPlayerDataService _playerData;
+
+    public PermissionSystem(IPlayerDataService playerData)
+    {
+        _playerData = playerData;
+    }
+
+    public void RegisterInterceptors()
+    {
+        var bus = MessageHandler.MessageBus;
+
+        // Block currency spending if player doesn't have enough
+        _ = bus.RegisterTargetedInterceptor<SpendCurrency>(
+            (ref InstanceId playerId, ref SpendCurrency m) =>
+            {
+                var balance = _playerData.GetCurrencyBalance(playerId);
+                if (balance < m.amount)
+                {
+                    Debug.LogWarning($"Player {playerId} attempted to spend {m.amount} but only has {balance}");
+                    return false;  // Cancel the message
+                }
+                return true;
+            },
+            priority: -50
+        );
+
+        // Block achievement unlocks if already unlocked (idempotency)
+        _ = bus.RegisterTargetedInterceptor<UnlockAchievement>(
+            (ref InstanceId playerId, ref UnlockAchievement m) =>
+            {
+                if (_playerData.HasAchievement(playerId, m.achievementId))
+                {
+                    return false;  // Already unlocked, skip
+                }
+                return true;
+            },
+            priority: -50
+        );
+    }
+}
+
+// Usage: invalid operations automatically blocked
+var permissions = new PermissionSystem(playerDataService);
+permissions.RegisterInterceptors();
+
+// This will be blocked if player doesn't have 100 currency
+new SpendCurrency(100).EmitTargeted(playerId);
+
+// This will be blocked if achievement is already unlocked
+new UnlockAchievement("first_boss").EmitTargeted(playerId);
+```
+
+###### Message Enrichment and Context Addition
+
+Add contextual data to messages as they flow through the system:
+
+```csharp
+using DxMessaging.Core;
+using DxMessaging.Core.MessageBus;
+using System;
+
+public readonly struct PlayerAction : ITargetedMessage
+{
+    public readonly string actionType;
+    public readonly long timestamp;  // Added by interceptor
+    public readonly string sessionId; // Added by interceptor
+
+    public PlayerAction(string actionType, long timestamp = 0, string sessionId = null)
+    {
+        this.actionType = actionType;
+        this.timestamp = timestamp;
+        this.sessionId = sessionId;
+    }
+}
+
+public class TelemetryEnricher
+{
+    private readonly string _currentSessionId;
+
+    public TelemetryEnricher(string sessionId)
+    {
+        _currentSessionId = sessionId;
+    }
+
+    public void RegisterInterceptors()
+    {
+        var bus = MessageHandler.MessageBus;
+
+        // Enrich player actions with timestamp and session context
+        _ = bus.RegisterTargetedInterceptor<PlayerAction>(
+            (ref InstanceId playerId, ref PlayerAction m) =>
+            {
+                // Add timestamp and session ID to every action
+                m = new PlayerAction(
+                    m.actionType,
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    _currentSessionId
+                );
+                return true;
+            },
+            priority: -100  // Run very early to enrich before other interceptors
+        );
+    }
+}
+
+// Usage: messages automatically enriched with context
+var enricher = new TelemetryEnricher(Guid.NewGuid().ToString());
+enricher.RegisterInterceptors();
+
+// Emit without timestamp/session - interceptor adds them
+new PlayerAction("jump").EmitTargeted(playerId);
+// Handlers receive fully enriched message with timestamp and sessionId
+```
+
+###### Cooldown and Rate Limiting
+
+Prevent message spam by enforcing cooldowns:
+
+```csharp
+using DxMessaging.Core;
+using DxMessaging.Core.MessageBus;
+using System;
+using System.Collections.Generic;
+
+public readonly struct CastSpell : ITargetedMessage
+{
+    public readonly string spellName;
+    public CastSpell(string spellName) => this.spellName = spellName;
+}
+
+public class CooldownManager
+{
+    private readonly Dictionary<(InstanceId, string), DateTime> _lastCastTimes = new();
+    private readonly TimeSpan _globalCooldown = TimeSpan.FromSeconds(1.5);
+
+    public void RegisterInterceptors()
+    {
+        var bus = MessageHandler.MessageBus;
+
+        _ = bus.RegisterTargetedInterceptor<CastSpell>(
+            (ref InstanceId casterId, ref CastSpell m) =>
+            {
+                var key = (casterId, m.spellName);
+                var now = DateTime.UtcNow;
+
+                if (_lastCastTimes.TryGetValue(key, out var lastCast))
+                {
+                    if (now - lastCast < _globalCooldown)
+                    {
+                        // Still on cooldown
+                        return false;
+                    }
+                }
+
+                _lastCastTimes[key] = now;
+                return true;
+            },
+            priority: -10
+        );
+    }
+}
+
+// Usage: rapid spell casts automatically throttled
+var cooldowns = new CooldownManager();
+cooldowns.RegisterInterceptors();
+
+new CastSpell("fireball").EmitTargeted(playerId);  // ✓ Allowed
+new CastSpell("fireball").EmitTargeted(playerId);  // ✗ Blocked (too soon)
+// ... wait 1.5s ...
+new CastSpell("fireball").EmitTargeted(playerId);  // ✓ Allowed
+```
+
+When to Use Interceptors
+
+✅ **Good use cases:**
+
+- Input validation and sanitization
+- Value clamping and normalization
+- Permission and authorization checks
+- State‑based message filtering
+- Rate limiting and cooldown enforcement
+- Message enrichment (adding timestamps, session IDs, etc.)
+- Early exit for duplicate or redundant messages
+- Logging suspicious or invalid message attempts
+
+⚠️ **Key principles:**
+
+- **Run before handlers**: Interceptors execute before any type‑specific handlers, making them perfect for preprocessing
+- **Can mutate**: Unlike post‑processors, interceptors can modify message data
+- **Can cancel**: Return `false` to prevent the message from reaching handlers
+- **Priority matters**: Lower priority values run first (use negative priorities for early interceptors)
+
+❌ **Avoid for:**
+
+- Read‑only observation (use handlers or post‑processors instead)
+- Actions that should run after message processing (use post‑processors)
+- Heavy computation that doesn't need to block the message
+
 Post‑processors
 
 - Observe after handlers. Great for logging, analytics, or follow‑up emission.
