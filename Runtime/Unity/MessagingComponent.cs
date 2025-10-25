@@ -3,6 +3,7 @@ namespace DxMessaging.Unity
     using System;
     using System.Collections.Generic;
     using Core;
+    using Core.MessageBus;
     using UnityEngine;
     using UnityEngine.Serialization;
 
@@ -27,6 +28,9 @@ namespace DxMessaging.Unity
         public bool emitMessagesWhenDisabled;
 
         private MessageHandler _messageHandler;
+
+        [NonSerialized]
+        private IMessageBus _messageBusOverride;
 
         internal readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
             new();
@@ -71,6 +75,16 @@ namespace DxMessaging.Unity
             createdToken = MessageRegistrationToken.Create(_messageHandler);
             _registeredListeners[listener] = createdToken;
             return createdToken;
+        }
+
+        /// <summary>
+        /// Overrides the default message bus used when new handlers are created.
+        /// </summary>
+        /// <param name="messageBus">Message bus to prefer. Pass <c>null</c> to fall back to the global bus.</param>
+        public void Configure(IMessageBus messageBus)
+        {
+            _messageBusOverride = messageBus;
+            _messageHandler?.SetDefaultMessageBus(_messageBusOverride);
         }
 
         /// <summary>
@@ -143,7 +157,8 @@ namespace DxMessaging.Unity
         /// </summary>
         private MessageHandler CreateMessageHandler()
         {
-            return new MessageHandler(gameObject) { active = true };
+            MessageHandler handler = new(gameObject, _messageBusOverride) { active = true };
+            return handler;
         }
     }
 }

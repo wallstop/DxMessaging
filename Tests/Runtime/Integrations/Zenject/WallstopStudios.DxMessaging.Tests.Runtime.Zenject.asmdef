@@ -1,0 +1,36 @@
+{
+  "name": "WallstopStudios.DxMessaging.Tests.Runtime.Zenject",
+  "rootNamespace": "DxMessaging.Tests.Runtime.Zenject",
+  "references": [
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "WallstopStudios.DxMessaging",
+    "WallstopStudios.DxMessaging.Tests.Runtime",
+    "Zenject"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": true,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "ZENJECT_PRESENT"],
+  "versionDefines": [
+    {
+      "name": "com.extenject.zenject",
+      "expression": "0.0.1",
+      "define": "ZENJECT_PRESENT"
+    },
+    {
+      "name": "com.modesttree.zenject",
+      "expression": "0.0.1",
+      "define": "ZENJECT_PRESENT"
+    },
+    {
+      "name": "com.svermeulen.extenject",
+      "expression": "0.0.1",
+      "define": "ZENJECT_PRESENT"
+    }
+  ],
+  "noEngineReferences": false
+}

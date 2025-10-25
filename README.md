@@ -468,7 +468,7 @@ void OnDamage(ref TookDamage msg) {
 public void TestAchievementSystem() {
     // Create isolated bus - zero global state
     var testBus = new MessageBus();
-    var handler = new MessageHandler(new InstanceId(1)) { active = true };
+    var handler = new MessageHandler(new InstanceId(1), testBus) { active = true };
     var token = MessageRegistrationToken.Create(handler, testBus);
 
     // Test in isolation
@@ -518,6 +518,12 @@ Important: Inheritance with MessageAwareComponent
 - Use `base.OnEnable()` / `base.OnDisable()` to preserve token enable/disable.
 - If you need to opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
 - Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
+
+### 🧩 Integrations
+
+- [DxMessaging + Zenject](Docs/Integrations/Zenject.md) — Wire DxMessaging into a Zenject container
+- [DxMessaging + VContainer](Docs/Integrations/VContainer.md) — Bind DxMessaging inside VContainer scopes
+- [DxMessaging + Reflex](Docs/Integrations/Reflex.md) — Minimal injection with Reflex installers
 
 ### 🆚 Comparisons
 

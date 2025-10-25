@@ -182,7 +182,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 | ------------------------ | ---------------------- | ------------------------ |
 | **Primary Use Case**     | Stream transformations | Pub/sub messaging        |
 | **Unity Compatibility**  | ✅ Built for Unity     | ✅ Built for Unity       |
-| **Learning Curve**       | ⭐⭐ (Steep)           | ⭐⭐⭐ (Moderate)        |
+| **Learning Curve**       | ⭐ (Steep)             | ⭐⭐⭐ (Moderate)        |
 | **Execution Order**      | ❌ Not built-in        | ✅ Priority-based        |
 | **Validation/Intercept** | ❌ Not built-in        | ✅ Interceptor pipeline  |
 | **Inspector Debugging**  | ❌ No                  | ✅ Yes (history + stats) |
@@ -321,8 +321,9 @@ public class AchievementSystem
 
 | Aspect                   | MessagePipe                    | DxMessaging                |
 | ------------------------ | ------------------------------ | -------------------------- |
-| **Performance**          | ✅ Best-in-class (97M ops/sec) | ✅ Excellent (14M ops/sec) |
 | **Unity Compatibility**  | ✅ Built for Unity             | ✅ Built for Unity         |
+| **Learning Curve**       | ⭐⭐⭐⭐ (DI needed)           | ⭐⭐⭐ (Moderate)          |
+| **Performance**          | ✅ Best-in-class (97M ops/sec) | ✅ Excellent (14M ops/sec) |
 | **Allocations**          | ✅ Zero                        | ✅ Zero                    |
 | **Unity Integration**    | ⚠️ Basic (no lifecycle)        | ✅ Deep (lifecycle-aware)  |
 | **DI Integration**       | ✅ First-class                 | ⚠️ Optional                |
@@ -335,7 +336,6 @@ public class AchievementSystem
 | **Global Observers**     | ❌ Not built-in                | ✅ Listen to all sources   |
 | **Interceptors**         | ⚠️ Filters (middleware)        | ✅ Full pipeline           |
 | **Post-Processing**      | ⚠️ Via filters                 | ✅ Dedicated stage         |
-| **Learning Curve**       | ⭐⭐⭐⭐ (DI needed)           | ⭐⭐⭐ (Moderate)          |
 
 **Bottom Line:** MessagePipe is the performance king with DI-first design. DxMessaging is Unity-first with lifecycle awareness and debugging. Use MessagePipe if you have DI infrastructure and need maximum performance. Use DxMessaging if you want Unity-native messaging with automatic lifecycle management.
 
@@ -695,7 +695,7 @@ public readonly partial struct TookDamage { public readonly int amount; }
 
 // Local bus for combat system
 var bus = new MessageBus();
-var handler = new MessageHandler(new InstanceId(1)) { active = true };
+var handler = new MessageHandler(new InstanceId(1), bus) { active = true };
 var token = MessageRegistrationToken.Create(handler, bus);
 
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
@@ -929,7 +929,7 @@ public void TestAchievementSystem() {
 | ------------------------ | ---------------------------- | ------------------------ | --------------------------- | -------------------------- |
 | **Primary Use Case**     | Pub/sub messaging            | Stream transformations   | High-perf DI messaging      | DI-integrated messaging    |
 | **Unity Compatibility**  | ✅ Built for Unity           | ✅ Built for Unity       | ✅ Built for Unity          | ✅ Built for Unity         |
-| **Performance**          | ⭐⭐⭐⭐⭐ Excellent (14M)   | ⭐⭐⭐⭐ Good (18M)      | ⭐⭐⭐⭐⭐ Best (97M)       | ⭐⭐⭐ Moderate (2.5M)     |
+| **Performance**          | ⭐⭐⭐⭐ Good (14M)          | ⭐⭐⭐⭐ Good (18M)      | ⭐⭐⭐⭐⭐ Best (97M)       | ⭐⭐ Moderate (2.5M)       |
 | **Zero Allocations**     | ✅ Yes (structs)             | ⚠️ Can allocate          | ✅ Yes (structs)            | ⚠️ Can allocate            |
 | **Unity Integration**    | ⭐⭐⭐⭐⭐ Deep (lifecycle)  | ⭐⭐⭐⭐ Good (UI/async) | ⭐⭐⭐ Basic (no lifecycle) | ⭐⭐⭐⭐ Good (DI-managed) |
 | **Inspector Debugging**  | ✅ Yes (history + stats)     | ❌ No                    | ❌ No                       | ❌ No                      |

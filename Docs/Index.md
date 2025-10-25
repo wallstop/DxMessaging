@@ -149,6 +149,7 @@ From [Common Patterns](Patterns.md):
 - **Debug message flow** → Use [Diagnostics](Diagnostics.md)
 - **Optimize performance** → Read [Performance Tips](DesignAndArchitecture.md#performance-tuning-tips)
 - **Isolate tests** → Create [Local Bus Islands](DesignAndArchitecture.md#local-bus-islands)
+- **Use dependency injection** → [DxMessaging + Zenject](Integrations/Zenject.md), [DxMessaging + VContainer](Integrations/VContainer.md), [DxMessaging + Reflex](Integrations/Reflex.md)
 
 ## 📊 Visual: Message Pipeline
 

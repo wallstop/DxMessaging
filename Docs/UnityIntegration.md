@@ -5,7 +5,8 @@ Unity‑centric helpers make registration lifecycles explicit and safe.
 MessagingComponent
 
 - Attach to any GameObject that will send or receive messages.
-- Creates a per‑owner `MessageHandler` and offers `Create(this)` to get a `MessageRegistrationToken`.
+- Creates a per-owner `MessageHandler` and offers `Create(this)` to get a `MessageRegistrationToken`.
+- Call `Configure(IMessageBus)` before `Create` if you want the component to use a custom bus (e.g., one resolved from a DI container). Calling `Configure` later updates the existing handler too.
 - Optional: set `emitMessagesWhenDisabled` if you need to emit while disabled.
 
 MessageAwareComponent

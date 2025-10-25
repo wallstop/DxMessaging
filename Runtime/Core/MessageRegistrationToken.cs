@@ -359,7 +359,7 @@ namespace DxMessaging.Core
                     )
             );
         }
-#else
+#endif
 
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards the provided target.
@@ -475,9 +475,9 @@ namespace DxMessaging.Core
                         _messageBus
                     );
 
-                    void AugmentedHandler(ref T message)
+                    void AugmentedHandler(T message)
                     {
-                        targetedPostProcessor(ref message);
+                        targetedPostProcessor(message);
                         if (_diagnosticMode)
                         {
                             _callCounts[handle] = _callCounts.GetValueOrDefault(handle) + 1;
@@ -493,9 +493,7 @@ namespace DxMessaging.Core
                         priority
                     )
             );
-            ;
         }
-#endif
 
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept TargetedMessages of the given type targeted towards anything (including itself).
@@ -1246,7 +1244,7 @@ namespace DxMessaging.Core
                     )
             );
         }
-#else
+#endif
 
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.
@@ -1331,7 +1329,6 @@ namespace DxMessaging.Core
         {
             return RegisterBroadcastPostProcessorInternal(source, broadcastPostProcessor, priority);
         }
-#endif
 
         /// <summary>
         /// Stages a registration of the provided MessageHandler to accept BroadcastMessages of the given type.

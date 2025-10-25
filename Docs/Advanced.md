@@ -133,9 +133,11 @@ using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 
 var localBus  = new MessageBus();
-var handler   = new MessageHandler(new InstanceId(123)) { active = true };
+var handler   = new MessageHandler(new InstanceId(123), localBus) { active = true };
 var token     = MessageRegistrationToken.Create(handler, localBus);
 // stage registrations on token; emit to localBus in tests
+// optional: replace the global singleton so shorthands use your DI bus
+MessageHandler.SetGlobalMessageBus(localBus);
 ```
 
 Scoped interceptors (debug)
