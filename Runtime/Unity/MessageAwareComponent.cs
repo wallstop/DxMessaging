@@ -1,6 +1,7 @@
 namespace DxMessaging.Unity
 {
     using Core;
+    using Core.MessageBus;
     using Core.Messages;
     using UnityEngine;
 
@@ -65,6 +66,7 @@ namespace DxMessaging.Unity
         protected virtual bool RegisterForStringMessages => true;
 
         protected MessagingComponent _messagingComponent;
+        protected IMessageBus _configuredMessageBus;
 
         /// <summary>
         /// Creates the <see cref="MessagingComponent"/>, token, and calls <see cref="RegisterMessageHandlers"/>.
@@ -72,6 +74,10 @@ namespace DxMessaging.Unity
         protected virtual void Awake()
         {
             _messagingComponent = GetComponent<MessagingComponent>();
+            if (_configuredMessageBus != null)
+            {
+                _messagingComponent.Configure(_configuredMessageBus);
+            }
             _messageRegistrationToken = _messagingComponent.Create(this);
             RegisterMessageHandlers();
         }
@@ -141,6 +147,23 @@ namespace DxMessaging.Unity
         protected virtual void OnApplicationQuit()
         {
             // Intentionally left blank
+        }
+
+        /// <summary>
+        /// Supplies a custom <see cref="IMessageBus"/> for this component's underlying <see cref="MessageHandler"/>.
+        /// </summary>
+        /// <param name="messageBus">
+        /// Container-managed bus to use. Pass <see langword="null"/> to revert to the global bus
+        /// returned by <see cref="MessageHandler.MessageBus"/>.
+        /// </param>
+        /// <remarks>
+        /// Call this during dependency injection (before <see cref="Awake"/>) to ensure the token is created against
+        /// the provided bus, or invoke it later to retarget existing registrations.
+        /// </remarks>
+        public virtual void ConfigureMessageBus(IMessageBus messageBus)
+        {
+            _configuredMessageBus = messageBus;
+            _messagingComponent?.Configure(_configuredMessageBus);
         }
 
         /// <summary>

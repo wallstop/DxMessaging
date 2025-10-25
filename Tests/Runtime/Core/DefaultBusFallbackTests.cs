@@ -161,5 +161,50 @@ namespace DxMessaging.Tests.Runtime.Core
             token.Disable();
             yield break;
         }
+
+        [UnityTest]
+        public IEnumerator MessageAwareComponentConfigureMessageBusAppliesOverride()
+        {
+            MessageBus customBus = new();
+            GameObject go = new(
+                nameof(MessageAwareComponentConfigureMessageBusAppliesOverride),
+                typeof(MessagingComponent),
+                typeof(BusAwareComponent)
+            );
+            _spawned.Add(go);
+
+            BusAwareComponent component = go.GetComponent<BusAwareComponent>();
+            component.ConfigureMessageBus(customBus);
+
+            yield return null;
+
+            SimpleUntargetedMessage message = new();
+            message.EmitUntargeted(customBus);
+            Assert.AreEqual(
+                1,
+                component.Received,
+                "MessageAwareComponent should route through the configured bus."
+            );
+
+            message.EmitUntargeted();
+            Assert.AreEqual(
+                1,
+                component.Received,
+                "Global bus should no longer deliver to the component after override."
+            );
+        }
+
+        private sealed class BusAwareComponent : MessageAwareComponent
+        {
+            internal int Received { get; private set; }
+
+            protected override bool RegisterForStringMessages => false;
+
+            protected override void RegisterMessageHandlers()
+            {
+                base.RegisterMessageHandlers();
+                _ = Token.RegisterUntargeted<SimpleUntargetedMessage>(_ => ++Received);
+            }
+        }
     }
 }

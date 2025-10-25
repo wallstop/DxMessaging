@@ -97,7 +97,7 @@ namespace DxMessaging.Unity
         /// </remarks>
         public bool Release(MonoBehaviour listener)
         {
-            if (listener is null)
+            if (listener == null)
             {
                 return false;
             }

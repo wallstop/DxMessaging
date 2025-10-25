@@ -14,6 +14,7 @@ MessageAwareComponent
 - Derive for a batteries‑included pattern; it manages a token for you.
 - Override `RegisterMessageHandlers()` to stage registrations.
 - The token is enabled/disabled with the component’s enable state.
+- Call `ConfigureMessageBus(IMessageBus)` before `base.Awake()` (or shortly after via a DI bootstrapper) to ensure the token is created against your container-provided bus.
 
 ```csharp
 using DxMessaging.Unity;
