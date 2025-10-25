@@ -352,6 +352,14 @@ namespace DxMessaging.Core
 
         private static readonly MessageBus.MessageBus _defaultGlobalMessageBus = new();
 
+        /// <summary>
+        /// Gets the process-wide <see cref="MessageBus.MessageBus"/> used when no explicit bus is supplied.
+        /// </summary>
+        /// <remarks>
+        /// This mirrors the legacy singleton so existing code continues to function. Use
+        /// <see cref="SetGlobalMessageBus(MessageBus.MessageBus)"/> to replace the instance (for example from a DI container) and
+        /// <see cref="ResetGlobalMessageBus"/> to restore the stock configuration afterwards.
+        /// </remarks>
         public static MessageBus.MessageBus MessageBus => _globalMessageBus;
 
         static MessageHandler()
@@ -359,6 +367,17 @@ namespace DxMessaging.Core
             _globalMessageBus = _defaultGlobalMessageBus;
         }
 
+        /// <summary>
+        /// Replaces the global <see cref="MessageBus.MessageBus"/> instance returned by <see cref="MessageBus"/>.
+        /// </summary>
+        /// <param name="messageBus">Instance to expose globally.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="messageBus"/> is <see langword="null"/>.
+        /// </exception>
+        /// <remarks>
+        /// This is primarily intended for integration tests or dependency injection bootstrap code. Invoke
+        /// <see cref="ResetGlobalMessageBus"/> when the customisation is no longer required.
+        /// </remarks>
         public static void SetGlobalMessageBus(MessageBus.MessageBus messageBus)
         {
             if (messageBus == null)
@@ -369,6 +388,12 @@ namespace DxMessaging.Core
             _globalMessageBus = messageBus;
         }
 
+        /// <summary>
+        /// Restores the global <see cref="MessageBus.MessageBus"/> to the built-in default instance.
+        /// </summary>
+        /// <remarks>
+        /// The default instance is created during static initialisation and reused across resets to minimise allocations.
+        /// </remarks>
         public static void ResetGlobalMessageBus()
         {
             _globalMessageBus = _defaultGlobalMessageBus;
@@ -393,6 +418,13 @@ namespace DxMessaging.Core
         private readonly List<MessageCache<object>> _handlersByTypeByMessageBus;
         private IMessageBus _defaultMessageBus;
 
+        /// <summary>
+        /// Gets the <see cref="IMessageBus"/> that will be used when a registration does not specify one explicitly.
+        /// </summary>
+        /// <remarks>
+        /// When no override has been provided via <see cref="SetDefaultMessageBus"/>, this value defers to the global
+        /// <see cref="MessageBus"/> singleton.
+        /// </remarks>
         public IMessageBus DefaultMessageBus => _defaultMessageBus ?? MessageBus;
 
         public MessageHandler(InstanceId owner, IMessageBus defaultMessageBus = null)
@@ -402,6 +434,16 @@ namespace DxMessaging.Core
             _defaultMessageBus = defaultMessageBus;
         }
 
+        /// <summary>
+        /// Assigns an <see cref="IMessageBus"/> for registrations that omit an explicit bus parameter.
+        /// </summary>
+        /// <param name="messageBus">
+        /// Bus to use; pass <see langword="null"/> to revert to the global <see cref="MessageBus"/> singleton.
+        /// </param>
+        /// <remarks>
+        /// This allows a handler to participate in dependency injection scenarios without forcing every caller to supply
+        /// a bus manually.
+        /// </remarks>
         public void SetDefaultMessageBus(IMessageBus messageBus)
         {
             _defaultMessageBus = messageBus;
