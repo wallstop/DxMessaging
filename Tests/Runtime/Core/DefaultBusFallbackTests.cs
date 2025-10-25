@@ -175,6 +175,65 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
+        public IEnumerator MessagingComponentConfigurePreserveDefersRebindUntilReenabled()
+        {
+            MessageBus initialBus = new();
+            MessageBus newBus = new();
+            GameObject go = new(
+                nameof(MessagingComponentConfigurePreserveDefersRebindUntilReenabled),
+                typeof(MessagingComponent),
+                typeof(ManualListenerComponent)
+            );
+            _spawned.Add(go);
+
+            MessagingComponent messagingComponent = go.GetComponent<MessagingComponent>();
+            messagingComponent.Configure(initialBus, MessageBusRebindMode.RebindActive);
+
+            ManualListenerComponent listener = go.GetComponent<ManualListenerComponent>();
+            MessageRegistrationToken token = listener.RequestToken(messagingComponent);
+            _tokens.Add(token);
+
+            int callCount = 0;
+            MessageRegistrationHandle handle = token.RegisterUntargeted<SimpleUntargetedMessage>(
+                _ => ++callCount
+            );
+            _handles.Add(handle);
+            token.Enable();
+
+            SimpleUntargetedMessage message = new();
+            message.EmitUntargeted(initialBus);
+            Assert.AreEqual(1, callCount, "Initial bus should deliver to the registered handler.");
+
+            messagingComponent.Configure(newBus, MessageBusRebindMode.PreserveRegistrations);
+
+            message.EmitUntargeted(newBus);
+            Assert.AreEqual(
+                1,
+                callCount,
+                "Preserve mode should avoid rebinding active registrations immediately."
+            );
+
+            message.EmitUntargeted(initialBus);
+            Assert.AreEqual(
+                2,
+                callCount,
+                "Handlers should continue observing the original bus until re-enabled."
+            );
+
+            token.Disable();
+            token.Enable();
+
+            message.EmitUntargeted(newBus);
+            Assert.AreEqual(
+                3,
+                callCount,
+                "Re-enabling the token should rebind handlers to the new bus."
+            );
+
+            yield break;
+        }
+
+        [UnityTest]
         public IEnumerator MessageAwareComponentConfigureMessageBusAppliesOverride()
         {
             MessageBus customBus = new();
@@ -203,6 +262,58 @@ namespace DxMessaging.Tests.Runtime.Core
                 1,
                 component.Received,
                 "Global bus should no longer deliver to the component after override."
+            );
+        }
+
+        [UnityTest]
+        public IEnumerator MessageAwareComponentConfigureMessageBusPreserveDefersUntilReenable()
+        {
+            MessageBus initialBus = new();
+            MessageBus newBus = new();
+            GameObject go = new(
+                nameof(MessageAwareComponentConfigureMessageBusPreserveDefersUntilReenable),
+                typeof(MessagingComponent),
+                typeof(BusAwareComponent)
+            );
+            _spawned.Add(go);
+
+            BusAwareComponent component = go.GetComponent<BusAwareComponent>();
+            component.ConfigureMessageBus(initialBus, MessageBusRebindMode.RebindActive);
+
+            yield return null;
+
+            SimpleUntargetedMessage message = new();
+            message.EmitUntargeted(initialBus);
+            Assert.AreEqual(
+                1,
+                component.Received,
+                "Component should receive messages emitted via the initial bus."
+            );
+
+            component.ConfigureMessageBus(newBus, MessageBusRebindMode.PreserveRegistrations);
+
+            message.EmitUntargeted(newBus);
+            Assert.AreEqual(
+                1,
+                component.Received,
+                "Preserve mode should not rebind active handlers immediately."
+            );
+
+            message.EmitUntargeted(initialBus);
+            Assert.AreEqual(
+                2,
+                component.Received,
+                "Existing registrations should continue to observe the original bus."
+            );
+
+            component.Token.Disable();
+            component.Token.Enable();
+
+            message.EmitUntargeted(newBus);
+            Assert.AreEqual(
+                3,
+                component.Received,
+                "Re-enabling the token should rebind handlers to the new bus."
             );
         }
 
