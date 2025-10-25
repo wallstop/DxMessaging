@@ -1,6 +1,7 @@
 namespace DxMessaging.Tests.Runtime.Core
 {
     using System.Collections;
+    using System.Collections.Generic;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
@@ -13,17 +14,38 @@ namespace DxMessaging.Tests.Runtime.Core
 
     public sealed class DefaultBusFallbackTests : MessagingTestBase
     {
+        private readonly List<MessageRegistrationHandle> _handles = new();
+        private readonly List<MessageRegistrationToken> _tokens = new();
+
+        [TearDown]
+        public void TearDown()
+        {
+            foreach (var token in _tokens)
+            {
+                foreach (var handle in _handles)
+                {
+                    token.RemoveRegistration(handle);
+                }
+                token.Disable();
+            }
+
+            _handles.Clear();
+            _tokens.Clear();
+        }
+
         [Test]
         public void HandlerUsesInjectedDefaultBusWhenTokenOmitsBus()
         {
             MessageBus customBus = new();
             MessageHandler handler = new(new InstanceId(42), customBus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler);
+            _tokens.Add(token);
 
             int callCount = 0;
             MessageRegistrationHandle handle = token.RegisterUntargeted<SimpleUntargetedMessage>(
                 _ => ++callCount
             );
+            _handles.Add(handle);
 
             token.Enable();
 
@@ -41,10 +63,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 callCount,
                 "Handler should remain isolated from the global bus when using an injected default."
             );
-
-            token.RemoveRegistration(handle);
-            token.Disable();
-            handler.active = false;
         }
 
         [Test]
@@ -53,13 +71,15 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageBus customBus = new();
             MessageHandler handler = new(new InstanceId(99), customBus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler);
+            _tokens.Add(token);
 
-            InstanceId target = new InstanceId(1234);
+            InstanceId target = new(1234);
             int callCount = 0;
             MessageRegistrationHandle handle = token.RegisterTargeted<SimpleTargetedMessage>(
                 target,
                 _ => ++callCount
             );
+            _handles.Add(handle);
 
             token.Enable();
 
@@ -77,10 +97,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 callCount,
                 "Targeted handler should ignore global bus emissions when a default bus is injected."
             );
-
-            token.RemoveRegistration(handle);
-            token.Disable();
-            handler.active = false;
         }
 
         [Test]
@@ -89,17 +105,18 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageBus customBus = new();
             MessageHandler handler = new(new InstanceId(1337), customBus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler);
+            _tokens.Add(token);
 
             int callCount = 0;
-            MessageRegistrationHandle handle =
-                token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
-                    (ref InstanceId _, ref SimpleBroadcastMessage _) => ++callCount
-                );
+            MessageRegistrationHandle handle = token.RegisterBroadcastWithoutSource(
+                (ref InstanceId _, ref SimpleBroadcastMessage _) => ++callCount
+            );
+            _handles.Add(handle);
 
             token.Enable();
 
             SimpleBroadcastMessage message = new();
-            InstanceId source = new InstanceId(777);
+            InstanceId source = new(777);
             message.EmitBroadcast(source, customBus);
             Assert.AreEqual(
                 1,
@@ -113,10 +130,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 callCount,
                 "Broadcast handler should remain isolated from global emissions when using an injected default bus."
             );
-
-            token.RemoveRegistration(handle);
-            token.Disable();
-            handler.active = false;
         }
 
         [UnityTest]
@@ -131,15 +144,17 @@ namespace DxMessaging.Tests.Runtime.Core
             _spawned.Add(go);
 
             MessagingComponent messagingComponent = go.GetComponent<MessagingComponent>();
-            messagingComponent.Configure(customBus);
+            messagingComponent.Configure(customBus, MessageBusRebindMode.RebindActive);
 
             ManualListenerComponent listener = go.GetComponent<ManualListenerComponent>();
             MessageRegistrationToken token = listener.RequestToken(messagingComponent);
+            _tokens.Add(token);
 
             int callCount = 0;
             MessageRegistrationHandle handle = token.RegisterUntargeted<SimpleUntargetedMessage>(
                 _ => ++callCount
             );
+            _handles.Add(handle);
             token.Enable();
 
             SimpleUntargetedMessage message = new();
@@ -156,9 +171,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 callCount,
                 "Global emissions should not reach tokens configured to use a custom bus."
             );
-
-            token.RemoveRegistration(handle);
-            token.Disable();
             yield break;
         }
 
@@ -174,7 +186,7 @@ namespace DxMessaging.Tests.Runtime.Core
             _spawned.Add(go);
 
             BusAwareComponent component = go.GetComponent<BusAwareComponent>();
-            component.ConfigureMessageBus(customBus);
+            component.ConfigureMessageBus(customBus, MessageBusRebindMode.RebindActive);
 
             yield return null;
 

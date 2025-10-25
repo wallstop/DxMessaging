@@ -75,7 +75,7 @@ namespace DxMessaging.Tests.Runtime.Reflex
             {
                 _messageBus = messageBus;
                 MessagingComponent messagingComponent = GetComponent<MessagingComponent>();
-                messagingComponent.Configure(_messageBus);
+                messagingComponent.Configure(_messageBus, MessageBusRebindMode.RebindActive);
 
                 _token = messagingComponent.Create(this);
                 _ = _token.RegisterUntargeted<SimpleUntargetedMessage>(_ => ++ReceivedCount);

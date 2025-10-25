@@ -6,7 +6,7 @@ MessagingComponent
 
 - Attach to any GameObject that will send or receive messages.
 - Creates a per-owner `MessageHandler` and offers `Create(this)` to get a `MessageRegistrationToken`.
-- Call `Configure(IMessageBus)` before `Create` if you want the component to use a custom bus (e.g., one resolved from a DI container). Calling `Configure` later updates the existing handler too.
+- Call `Configure(IMessageBus, MessageBusRebindMode)` before `Create` if you want the component to use a custom bus (e.g., one resolved from a DI container). Passing `MessageBusRebindMode.RebindActive` migrates current registrations; `PreserveRegistrations` defers the swap until the next enable.
 - Optional: set `emitMessagesWhenDisabled` if you need to emit while disabled.
 
 MessageAwareComponent
@@ -14,7 +14,7 @@ MessageAwareComponent
 - Derive for a batteries‑included pattern; it manages a token for you.
 - Override `RegisterMessageHandlers()` to stage registrations.
 - The token is enabled/disabled with the component’s enable state.
-- Call `ConfigureMessageBus(IMessageBus)` before `base.Awake()` (or shortly after via a DI bootstrapper) to ensure the token is created against your container-provided bus.
+- Call `ConfigureMessageBus(IMessageBus, MessageBusRebindMode)` before `base.Awake()` (or shortly after via a DI bootstrapper) to ensure the token is created against your container-provided bus.
 
 ```csharp
 using DxMessaging.Unity;

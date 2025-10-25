@@ -69,7 +69,7 @@ namespace DxMessaging.Core
             IMessageBus.GlobalMessageBufferSize
         );
 
-        private readonly IMessageBus _messageBus;
+        private IMessageBus _messageBus;
         private bool _enabled;
         private bool _diagnosticMode = IMessageBus.GlobalDiagnosticsMode;
 
@@ -1914,6 +1914,52 @@ namespace DxMessaging.Core
             _enabled = false;
             _registrations?.Clear();
             _deregistrations?.Clear();
+        }
+
+        /// <summary>
+        /// Retargets staged registrations to use a new message bus, re-registering active handlers if needed.
+        /// </summary>
+        /// <param name="messageBus">Bus override to apply. Pass <c>null</c> to resume using the handler default.</param>
+        /// <param name="rebindMode">Determines whether existing registrations should move to the supplied bus immediately.</param>
+#pragma warning disable CS0618 // Type or member is obsolete
+        public void RetargetMessageBus(IMessageBus messageBus, MessageBusRebindMode rebindMode)
+#pragma warning restore CS0618 // Type or member is obsolete
+        {
+#pragma warning disable CS0618 // Type or member is obsolete
+            MessageBusRebindMode effectiveMode =
+                rebindMode == MessageBusRebindMode.Unknown
+#pragma warning restore CS0618 // Type or member is obsolete
+                    ? MessageBusRebindMode.RebindActive
+                    : rebindMode;
+
+            bool sameBus = ReferenceEquals(_messageBus, messageBus);
+            bool rebindActiveRegistrations =
+                effectiveMode == MessageBusRebindMode.RebindActive
+                && _enabled
+                && _deregistrations is { Count: > 0 };
+            if (sameBus && !rebindActiveRegistrations)
+            {
+                return;
+            }
+            if (rebindActiveRegistrations)
+            {
+                _deregistrationQueue.Clear();
+                _deregistrationQueue.AddRange(_deregistrations.Values);
+                foreach (Action deregistration in _deregistrationQueue)
+                {
+                    deregistration?.Invoke();
+                }
+            }
+
+            _messageBus = messageBus;
+
+            if (rebindActiveRegistrations && _registrations is { Count: > 0 })
+            {
+                foreach (Action registration in _registrations.Values)
+                {
+                    registration();
+                }
+            }
         }
 
         /// <summary>

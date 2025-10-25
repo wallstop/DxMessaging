@@ -81,10 +81,29 @@ namespace DxMessaging.Unity
         /// Overrides the default message bus used when new handlers are created.
         /// </summary>
         /// <param name="messageBus">Message bus to prefer. Pass <c>null</c> to fall back to the global bus.</param>
-        public void Configure(IMessageBus messageBus)
+#pragma warning disable CS0618 // Type or member is obsolete
+        /// <param name="rebindMode">Controls whether existing registrations move to the new bus immediately.</param>
+        public void Configure(IMessageBus messageBus, MessageBusRebindMode rebindMode)
+#pragma warning restore CS0618 // Type or member is obsolete
         {
             _messageBusOverride = messageBus;
             _messageHandler?.SetDefaultMessageBus(_messageBusOverride);
+            if (_registeredListeners.Count == 0)
+            {
+                return;
+            }
+
+            MessageBusRebindMode effectiveMode =
+#pragma warning disable CS0618 // Type or member is obsolete
+                rebindMode == MessageBusRebindMode.Unknown
+#pragma warning restore CS0618 // Type or member is obsolete
+                    ? MessageBusRebindMode.RebindActive
+                    : rebindMode;
+
+            foreach (MessageRegistrationToken token in _registeredListeners.Values)
+            {
+                token.RetargetMessageBus(_messageBusOverride, effectiveMode);
+            }
         }
 
         /// <summary>

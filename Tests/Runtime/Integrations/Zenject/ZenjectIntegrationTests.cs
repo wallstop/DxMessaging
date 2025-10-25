@@ -58,7 +58,7 @@ namespace DxMessaging.Tests.Runtime.Zenject
             {
                 _messageBus = messageBus;
                 MessagingComponent messagingComponent = GetComponent<MessagingComponent>();
-                messagingComponent.Configure(_messageBus);
+                messagingComponent.Configure(_messageBus, MessageBusRebindMode.RebindActive);
 
                 _token = messagingComponent.Create(this);
                 _ = _token.RegisterUntargeted<SimpleUntargetedMessage>(_ => ++ReceivedCount);

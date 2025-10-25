@@ -49,7 +49,10 @@ public sealed class MessagingComponentConfigurator : MonoBehaviour
 
     private void Awake()
     {
-        GetComponent<MessagingComponent>().Configure(messageBus);
+        GetComponent<MessagingComponent>().Configure(
+            messageBus,
+            MessageBusRebindMode.RebindActive
+        );
     }
 }
 ```

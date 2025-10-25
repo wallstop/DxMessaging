@@ -58,7 +58,7 @@ public sealed class MessagingComponentConfigurator : MonoBehaviour, IStartable
 
     public void Start()
     {
-        messagingComponent.Configure(messageBus);
+        messagingComponent.Configure(messageBus, MessageBusRebindMode.RebindActive);
     }
 }
 ```

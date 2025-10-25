@@ -76,7 +76,10 @@ namespace DxMessaging.Unity
             _messagingComponent = GetComponent<MessagingComponent>();
             if (_configuredMessageBus != null)
             {
-                _messagingComponent.Configure(_configuredMessageBus);
+                _messagingComponent.Configure(
+                    _configuredMessageBus,
+                    MessageBusRebindMode.PreserveRegistrations
+                );
             }
             _messageRegistrationToken = _messagingComponent.Create(this);
             RegisterMessageHandlers();
@@ -156,14 +159,20 @@ namespace DxMessaging.Unity
         /// Container-managed bus to use. Pass <see langword="null"/> to revert to the global bus
         /// returned by <see cref="MessageHandler.MessageBus"/>.
         /// </param>
+        /// <param name="rebindMode">Controls whether existing handlers should migrate to the provided bus immediately.</param>
         /// <remarks>
         /// Call this during dependency injection (before <see cref="Awake"/>) to ensure the token is created against
         /// the provided bus, or invoke it later to retarget existing registrations.
         /// </remarks>
-        public virtual void ConfigureMessageBus(IMessageBus messageBus)
+#pragma warning disable CS0618 // Type or member is obsolete
+        public virtual void ConfigureMessageBus(
+            IMessageBus messageBus,
+            MessageBusRebindMode rebindMode
+        )
+#pragma warning restore CS0618 // Type or member is obsolete
         {
             _configuredMessageBus = messageBus;
-            _messagingComponent?.Configure(_configuredMessageBus);
+            _messagingComponent?.Configure(_configuredMessageBus, rebindMode);
         }
 
         /// <summary>

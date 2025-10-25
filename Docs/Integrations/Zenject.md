@@ -45,7 +45,7 @@ public sealed class MessagingComponentConfigurator : MonoBehaviour
     private void Awake()
     {
         MessagingComponent component = GetComponent<MessagingComponent>();
-        component.Configure(_messageBus);
+        component.Configure(_messageBus, MessageBusRebindMode.RebindActive);
     }
 }
 ```
