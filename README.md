@@ -113,6 +113,52 @@ msg.EmitComponentTargeted(chestComponent);
 
 ---
 
+## 🔧 Dependency Injection (DI) Compatible
+
+**Using Zenject, VContainer, or Reflex?** DxMessaging is fully DI-compatible out of the box!
+
+```csharp
+// Inject IMessageBus in any class
+public class PlayerService : IInitializable, IDisposable
+{
+    private readonly MessageRegistrationLease _lease;
+
+    public PlayerService(IMessageRegistrationBuilder builder)
+    {
+        // Builder automatically resolves your container-managed bus
+        _lease = builder.Build(new MessageRegistrationBuildOptions
+        {
+            Configure = token => token.RegisterUntargeted<PlayerSpawned>(OnSpawn)
+        });
+    }
+
+    public void Initialize() => _lease.Activate();
+    public void Dispose() => _lease.Dispose();
+}
+```
+
+### Why use DI + Messaging?
+
+- **DI for construction** — Inject services, repositories, managers via constructors
+- **Messaging for events** — Reactive, decoupled communication for gameplay events
+- **Best of both worlds** — Clean architecture with testable, isolated buses
+
+#### Automatic integration for
+
+- ✅ **Zenject/Extenject** — Full-featured DI with extensive Unity support
+- ✅ **VContainer** — Lightweight, high-performance DI with scoped lifetimes
+- ✅ **Reflex** — Minimal API, blazing-fast dependency injection
+
+##### Get started
+
+- [Zenject Integration Guide](Docs/Integrations/Zenject.md) — Complete setup with examples
+- [VContainer Integration Guide](Docs/Integrations/VContainer.md) — Scoped buses for scene isolation
+- [Reflex Integration Guide](Docs/Integrations/Reflex.md) — Minimal, lightweight patterns
+
+**Not using DI?** No problem! DxMessaging works perfectly standalone with zero dependencies.
+
+---
+
 ## Is DxMessaging Right for You
 
 ### ✅ Use DxMessaging When
@@ -123,7 +169,7 @@ msg.EmitComponentTargeted(chestComponent);
 - **You value observability** - Need to debug "what fired when?" or track message flow
 - **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
 - **You want decoupling** - Hate when UI classes need references to 15 different game systems
-- **DI + Messaging hybrid** - Use DI (Zenject/VContainer/Reflex) for services, DxMessaging for events (see [Integrations](#-integrations))
+- **You're using DI frameworks** - Seamless integration with Zenject/VContainer/Reflex (see [DI Compatible](#-dependency-injection-di-compatible))
 
 ### ❌ Don't Use DxMessaging When
 
@@ -520,26 +566,22 @@ Important: Inheritance with MessageAwareComponent
 - If you need to opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
 - Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
 
-### 🧩 Integrations
+### 🧩 DI Framework Integrations
 
-DxMessaging works standalone (zero dependencies) or alongside Dependency Injection frameworks:
+DxMessaging works standalone (zero dependencies) or with any major DI framework. For detailed setup guides and code examples:
 
-- **[DxMessaging + Zenject](Docs/Integrations/Zenject.md)** — Wire DxMessaging into a Zenject container
-- **[DxMessaging + VContainer](Docs/Integrations/VContainer.md)** — Bind DxMessaging inside VContainer scopes
-- **[DxMessaging + Reflex](Docs/Integrations/Reflex.md)** — Minimal injection with Reflex installers
+- **[Zenject Integration Guide](Docs/Integrations/Zenject.md)** — Full-featured DI with extensive Unity support
+- **[VContainer Integration Guide](Docs/Integrations/VContainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
+- **[Reflex Integration Guide](Docs/Integrations/Reflex.md)** — Minimal API, blazing-fast performance
 
-> **🔧 Using Dependency Injection (Zenject, VContainer, Reflex)?**
->
-> DxMessaging integrates seamlessly with DI frameworks. You can:
->
-> - Inject `IMessageBus` as a singleton dependency
-> - Use DI for service construction + DxMessaging for event communication
-> - Create per-scope message buses (e.g., per-scene or per-lifetime)
-> - Best of both worlds: Constructor injection for dependencies, messaging for events
->
-> **No DI?** No problem! DxMessaging works perfectly standalone with zero dependencies.
->
-> See integration guides above for step-by-step setup with your DI framework.
+Each guide includes:
+
+- ✅ Complete setup instructions with installers
+- ✅ Multiple usage patterns (plain classes, MonoBehaviours, direct injection)
+- ✅ Testing examples with isolated buses
+- ✅ Advanced patterns (pooling, scene scopes, signal bridges)
+
+See the [🔧 DI Compatible section](#-dependency-injection-di-compatible) above for a quick overview.
 
 ### 🆚 Comparisons
 
