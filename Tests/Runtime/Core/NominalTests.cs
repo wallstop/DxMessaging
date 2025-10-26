@@ -265,7 +265,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator Lifetime()
         {
-            MessageBus messageBus = MessageHandler.MessageBus;
+            IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
             GameObject test = new(nameof(Lifetime), typeof(SimpleMessageAwareComponent));
@@ -352,7 +352,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator NonMessagingObjects()
         {
-            MessageBus messageBus = MessageHandler.MessageBus;
+            IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
             GameObject test1 = new("NonMessaging1");

@@ -27,13 +27,36 @@ namespace DxMessaging.Unity
         [FormerlySerializedAs("_emitMessagesWhenDisabled")]
         public bool emitMessagesWhenDisabled;
 
+        [SerializeField]
+        private bool autoConfigureSerializedProviderOnAwake;
+
+        [SerializeField]
+        private MessageBusProviderHandle _serializedProviderHandle;
+
         private MessageHandler _messageHandler;
 
         [NonSerialized]
         private IMessageBus _messageBusOverride;
 
+        [NonSerialized]
+        private IMessageBusProvider _messageBusProvider;
+
         internal readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
             new();
+
+        /// <summary>
+        /// Creates a <see cref="IMessageRegistrationBuilder"/> aligned with this component's configured bus or provider.
+        /// </summary>
+        public IMessageRegistrationBuilder CreateRegistrationBuilder()
+        {
+            IMessageBusProvider provider = ResolveRegistrationProvider();
+            if (provider != null)
+            {
+                return new MessageRegistrationBuilder(provider);
+            }
+
+            return new MessageRegistrationBuilder();
+        }
 
         /// <summary>
         /// Creates (or returns existing) registration token for the given component on this GameObject.
@@ -81,29 +104,60 @@ namespace DxMessaging.Unity
         /// Overrides the default message bus used when new handlers are created.
         /// </summary>
         /// <param name="messageBus">Message bus to prefer. Pass <c>null</c> to fall back to the global bus.</param>
-#pragma warning disable CS0618 // Type or member is obsolete
         /// <param name="rebindMode">Controls whether existing registrations move to the new bus immediately.</param>
         public void Configure(IMessageBus messageBus, MessageBusRebindMode rebindMode)
-#pragma warning restore CS0618 // Type or member is obsolete
         {
             _messageBusOverride = messageBus;
-            _messageHandler?.SetDefaultMessageBus(_messageBusOverride);
-            if (_registeredListeners.Count == 0)
+            _messageBusProvider = null;
+            _serializedProviderHandle = MessageBusProviderHandle.Empty;
+            ApplyMessageBusConfiguration(rebindMode);
+        }
+
+        /// <summary>
+        /// Configures the component to resolve message buses via the supplied provider.
+        /// </summary>
+        /// <param name="messageBusProvider">Provider to use for subsequent handler/token resolution.</param>
+        /// <param name="rebindMode">Controls whether existing listeners should migrate immediately.</param>
+        public void Configure(
+            IMessageBusProvider messageBusProvider,
+            MessageBusRebindMode rebindMode
+        )
+        {
+            _messageBusProvider = messageBusProvider;
+            if (messageBusProvider != null)
             {
-                return;
+                _messageBusOverride = null;
             }
 
-            MessageBusRebindMode effectiveMode =
-#pragma warning disable CS0618 // Type or member is obsolete
-                rebindMode == MessageBusRebindMode.Unknown
-#pragma warning restore CS0618 // Type or member is obsolete
-                    ? MessageBusRebindMode.RebindActive
-                    : rebindMode;
+            _serializedProviderHandle =
+                messageBusProvider != null
+                    ? MessageBusProviderHandle.FromProvider(messageBusProvider)
+                    : MessageBusProviderHandle.Empty;
+            ApplyMessageBusConfiguration(rebindMode);
+        }
 
-            foreach (MessageRegistrationToken token in _registeredListeners.Values)
+        /// <summary>
+        /// Configures the component using a serialized provider handle.
+        /// </summary>
+        /// <param name="providerHandle">Handle that resolves the preferred provider.</param>
+        /// <param name="rebindMode">Controls whether existing listeners should migrate immediately.</param>
+        public void Configure(
+            MessageBusProviderHandle providerHandle,
+            MessageBusRebindMode rebindMode
+        )
+        {
+            _serializedProviderHandle = providerHandle;
+            if (providerHandle.TryGetProvider(out IMessageBusProvider provider))
             {
-                token.RetargetMessageBus(_messageBusOverride, effectiveMode);
+                _messageBusProvider = provider;
+                _messageBusOverride = null;
             }
+            else
+            {
+                _messageBusProvider = null;
+            }
+
+            ApplyMessageBusConfiguration(rebindMode);
         }
 
         /// <summary>
@@ -135,6 +189,16 @@ namespace DxMessaging.Unity
         /// </summary>
         private void Awake()
         {
+            if (
+                autoConfigureSerializedProviderOnAwake
+                && _messageBusOverride == null
+                && _messageBusProvider == null
+                && _serializedProviderHandle.TryGetProvider(out IMessageBusProvider provider)
+            )
+            {
+                _messageBusProvider = provider;
+            }
+
             _messageHandler ??= CreateMessageHandler();
         }
 
@@ -176,8 +240,72 @@ namespace DxMessaging.Unity
         /// </summary>
         private MessageHandler CreateMessageHandler()
         {
-            MessageHandler handler = new(gameObject, _messageBusOverride) { active = true };
+            IMessageBus resolvedBus = ResolveConfiguredBus();
+            MessageHandler handler = new(gameObject, resolvedBus) { active = true };
             return handler;
+        }
+
+        private void ApplyMessageBusConfiguration(MessageBusRebindMode rebindMode)
+        {
+            IMessageBus resolvedBus = ResolveConfiguredBus();
+            _messageHandler?.SetDefaultMessageBus(resolvedBus);
+            if (_registeredListeners.Count == 0)
+            {
+                return;
+            }
+
+            MessageBusRebindMode effectiveMode =
+#pragma warning disable CS0618 // Type or member is obsolete
+                rebindMode == MessageBusRebindMode.Unknown
+#pragma warning restore CS0618 // Type or member is obsolete
+                    ? MessageBusRebindMode.RebindActive
+                    : rebindMode;
+
+            foreach (MessageRegistrationToken token in _registeredListeners.Values)
+            {
+                token.RetargetMessageBus(resolvedBus, effectiveMode);
+            }
+        }
+
+        private IMessageBus ResolveConfiguredBus()
+        {
+            if (_messageBusOverride != null)
+            {
+                return _messageBusOverride;
+            }
+
+            if (_messageBusProvider != null)
+            {
+                IMessageBus providedBus = _messageBusProvider.Resolve();
+                if (providedBus != null)
+                {
+                    return providedBus;
+                }
+            }
+
+            return null;
+        }
+
+        private IMessageBusProvider ResolveRegistrationProvider()
+        {
+            if (_messageBusProvider != null)
+            {
+                return _messageBusProvider;
+            }
+
+            if (
+                _serializedProviderHandle.TryGetProvider(out IMessageBusProvider providerFromHandle)
+            )
+            {
+                return providerFromHandle;
+            }
+
+            if (_messageBusOverride != null)
+            {
+                return new FixedMessageBusProvider(_messageBusOverride);
+            }
+
+            return null;
         }
     }
 }

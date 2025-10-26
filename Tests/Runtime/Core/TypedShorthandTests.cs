@@ -168,7 +168,7 @@ namespace DxMessaging.Tests.Runtime.Core
             ShorthandTargetedBroadcastComponent comp =
                 go.GetComponent<ShorthandTargetedBroadcastComponent>();
 
-            MessageBus bus = MessageHandler.MessageBus;
+            IMessageBus bus = MessageHandler.MessageBus;
             bool cancel = true;
             Action dereg = bus.RegisterTargetedInterceptor(
                 (ref InstanceId t, ref SimpleTargetedMessage m) => !cancel
@@ -203,7 +203,7 @@ namespace DxMessaging.Tests.Runtime.Core
             ShorthandTargetedBroadcastComponent comp =
                 go.GetComponent<ShorthandTargetedBroadcastComponent>();
 
-            MessageBus bus = MessageHandler.MessageBus;
+            IMessageBus bus = MessageHandler.MessageBus;
             bool cancel = true;
             Action dereg = bus.RegisterBroadcastInterceptor(
                 (ref InstanceId s, ref SimpleBroadcastMessage m) => !cancel

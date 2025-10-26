@@ -1,7 +1,7 @@
 namespace DxMessaging.Tests.Runtime.Scripts.Components
 {
+    using DxMessaging.Unity;
     using Messages;
-    using Unity;
     using UnityEngine;
 
     [DisallowMultipleComponent]

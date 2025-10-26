@@ -62,36 +62,37 @@ public sealed class MessagingComponentConfigurator : MonoBehaviour
 1. **Injecting Tokens into Plain Classes**
 
 ```csharp
-using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 using Reflex.Core;
 
 public sealed class DamageService
 {
-    private readonly MessageRegistrationToken token;
+    private readonly MessageRegistrationLease lease;
 
-    public DamageService(IMessageBus messageBus)
+    public DamageService(IMessageRegistrationBuilder registrationBuilder)
     {
-        MessageHandler handler = new MessageHandler(new InstanceId(314), messageBus)
+        MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
         {
-            active = true
+            Configure = token =>
+            {
+                _ = token.RegisterUntargeted<PlayerDamaged>(OnPlayerDamaged);
+            }
         };
 
-        token = MessageRegistrationToken.Create(handler, messageBus);
+        lease = registrationBuilder.Build(options);
     }
 
     public void Initialize()
     {
-        _ = token.RegisterUntargeted<PlayerDamaged>(OnPlayerDamaged);
-        token.Enable();
+        lease.Activate();
     }
 
     public void Dispose()
     {
-        token.Disable();
+        lease.Dispose();
     }
 
-    private void OnPlayerDamaged(ref PlayerDamaged message)
+    private static void OnPlayerDamaged(ref PlayerDamaged message)
     {
         // Business logic
     }
@@ -99,6 +100,8 @@ public sealed class DamageService
 ```
 
 - Reflex has no lifecycle interfaces; wire `Initialize`/`Dispose` using installer hooks (`Container.Instantiate`, custom bootstrapper) or call them from a controlling MonoBehaviour.
+- A `MessagingComponent` or installer can create matching leases with `CreateRegistrationBuilder()` so pooled MonoBehaviours share the same bus instance.
+- Define `REFLEX_PRESENT` (the asmdef at `Runtime/Unity/Integrations/Reflex/` sets it for that assembly when Reflex is detected). With the define active, add `DxMessagingRegistrationInstaller` (under `Runtime/Unity/Integrations/`) for automatic `IMessageRegistrationBuilder` wiring.
 
 1. **Pooling & Runtime Instantiation**
 

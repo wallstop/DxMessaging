@@ -45,6 +45,40 @@ var damage = new TookDamage(5);
 damage.EmitFrom(enemy); // Broadcast: listeners interested in enemy damage receive this
 ```
 
+### Bus-First Helpers
+
+Prefer injecting `IMessageBus` (or `IMessageRegistrationBuilder`) in DI scenarios and use the bus-first extensions for parity with the shorthands:
+
+```csharp
+using DxMessaging.Core.Extensions;
+using DxMessaging.Core.Attributes;
+
+public sealed class ScoreReporter
+{
+    private readonly IMessageBus messageBus;
+
+    public ScoreReporter(IMessageBus messageBus)
+    {
+        this.messageBus = messageBus;
+    }
+
+    public void Report(int value)
+    {
+        ScoreChanged message = new ScoreChanged(value);
+        messageBus.EmitUntargeted(ref message);
+    }
+}
+
+[DxUntargetedMessage]
+public readonly struct ScoreChanged
+{
+    public readonly int Value;
+    public ScoreChanged(int value) => Value = value;
+}
+```
+
+These helpers mirror the struct/class/targeted/broadcast overloads available on message instances. They keep DI-friendly services aligned with the same dispatch path as Unity shorthands.
+
 ## Understanding Each Shorthand
 
 ### `Emit()` — Global Broadcast (Untargeted)

@@ -59,7 +59,7 @@ namespace DxMessaging.Core
 
         private readonly Dictionary<MessageRegistrationHandle, Action> _registrations = new();
         private readonly Dictionary<MessageRegistrationHandle, Action> _deregistrations = new();
-        private readonly List<Action> _deregistrationQueue = new();
+        private readonly List<Action> _actionQueue = new();
         internal readonly Dictionary<
             MessageRegistrationHandle,
             MessageRegistrationMetadata
@@ -1843,13 +1843,11 @@ namespace DxMessaging.Core
 
             if (_registrations is { Count: > 0 })
             {
-                Dictionary<
-                    MessageRegistrationHandle,
-                    Action
-                >.ValueCollection.Enumerator enumerator = _registrations.Values.GetEnumerator();
-                while (enumerator.MoveNext())
+                _actionQueue.Clear();
+                _actionQueue.AddRange(_registrations.Values);
+                foreach (Action action in _actionQueue)
                 {
-                    enumerator.Current();
+                    action();
                 }
             }
 
@@ -1876,9 +1874,9 @@ namespace DxMessaging.Core
 
             if (_deregistrations is { Count: > 0 })
             {
-                _deregistrationQueue.Clear();
-                _deregistrationQueue.AddRange(_deregistrations.Values);
-                foreach (Action deregistration in _deregistrationQueue)
+                _actionQueue.Clear();
+                _actionQueue.AddRange(_deregistrations.Values);
+                foreach (Action deregistration in _actionQueue)
                 {
                     deregistration?.Invoke();
                 }
@@ -1903,9 +1901,9 @@ namespace DxMessaging.Core
         {
             if (_deregistrations is { Count: > 0 })
             {
-                _deregistrationQueue.Clear();
-                _deregistrationQueue.AddRange(_deregistrations.Values);
-                foreach (Action deregistration in _deregistrationQueue)
+                _actionQueue.Clear();
+                _actionQueue.AddRange(_deregistrations.Values);
+                foreach (Action deregistration in _actionQueue)
                 {
                     deregistration?.Invoke();
                 }
@@ -1921,9 +1919,7 @@ namespace DxMessaging.Core
         /// </summary>
         /// <param name="messageBus">Bus override to apply. Pass <c>null</c> to resume using the handler default.</param>
         /// <param name="rebindMode">Determines whether existing registrations should move to the supplied bus immediately.</param>
-#pragma warning disable CS0618 // Type or member is obsolete
         public void RetargetMessageBus(IMessageBus messageBus, MessageBusRebindMode rebindMode)
-#pragma warning restore CS0618 // Type or member is obsolete
         {
 #pragma warning disable CS0618 // Type or member is obsolete
             MessageBusRebindMode effectiveMode =
@@ -1941,11 +1937,12 @@ namespace DxMessaging.Core
             {
                 return;
             }
+
             if (rebindActiveRegistrations)
             {
-                _deregistrationQueue.Clear();
-                _deregistrationQueue.AddRange(_deregistrations.Values);
-                foreach (Action deregistration in _deregistrationQueue)
+                _actionQueue.Clear();
+                _actionQueue.AddRange(_deregistrations.Values);
+                foreach (Action deregistration in _actionQueue)
                 {
                     deregistration?.Invoke();
                 }
@@ -1955,9 +1952,11 @@ namespace DxMessaging.Core
 
             if (rebindActiveRegistrations && _registrations is { Count: > 0 })
             {
-                foreach (Action registration in _registrations.Values)
+                _actionQueue.Clear();
+                _actionQueue.AddRange(_registrations.Values);
+                foreach (Action registration in _actionQueue)
                 {
-                    registration();
+                    registration?.Invoke();
                 }
             }
         }
@@ -1994,7 +1993,7 @@ namespace DxMessaging.Core
         {
             private readonly MessageRegistrationToken _token;
             private readonly MessageRegistrationHandle _handle;
-            private int _disposed; // 0 = false, 1 = true (immutability-friendly pattern)
+            private bool _valid;
 
             public RegistrationDisposable(
                 MessageRegistrationToken token,
@@ -2003,18 +2002,18 @@ namespace DxMessaging.Core
             {
                 _token = token;
                 _handle = handle;
-                _disposed = 1;
+                _valid = true;
             }
 
             public void Dispose()
             {
                 // Best-effort idempotence; AsDisposable instances are short-lived and immutable
-                if (_disposed != 0)
+                if (_valid)
                 {
                     _token.RemoveRegistration(_handle);
                 }
 
-                _disposed = 0;
+                _valid = false;
             }
         }
 

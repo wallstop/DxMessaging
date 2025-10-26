@@ -68,46 +68,47 @@ public sealed class MessagingComponentConfigurator : MonoBehaviour, IStartable
 1. **Injecting Tokens into Plain Classes**
 
 ```csharp
-using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 using DxMessaging.Tests.Runtime.Scripts.Messages;
 using VContainer.Unity;
 
 public sealed class PlayerService : IStartable, IDisposable
 {
-    private readonly IMessageBus messageBus;
-    private readonly MessageRegistrationToken token;
+    private readonly MessageRegistrationLease lease;
 
-    public PlayerService(IMessageBus messageBus)
+    public PlayerService(IMessageRegistrationBuilder registrationBuilder)
     {
-        this.messageBus = messageBus;
-        MessageHandler handler = new MessageHandler(new InstanceId(7), messageBus)
+        MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
         {
-            active = true
+            Configure = token =>
+            {
+                _ = token.RegisterUntargeted<PlayerSpawned>(OnPlayerSpawned);
+            }
         };
 
-        token = MessageRegistrationToken.Create(handler, messageBus);
+        lease = registrationBuilder.Build(options);
     }
 
     public void Start()
     {
-        _ = token.RegisterUntargeted<PlayerSpawned>(OnPlayerSpawned);
-        token.Enable();
+        lease.Activate();
     }
 
     public void Dispose()
     {
-        token.Disable();
+        lease.Dispose();
     }
 
-    private void OnPlayerSpawned(ref PlayerSpawned message)
+    private static void OnPlayerSpawned(ref PlayerSpawned message)
     {
         // Handle spawn
     }
 }
 ```
 
-- `IStartable` and `IDisposable` align token lifetimes with the container scope. Use `LifetimeScope.CreateChild` when you need isolated buses for spawned levels or gameplay modes.
+- `IStartable` and `IDisposable` align the lease lifetime with the container scope. Use `LifetimeScope.CreateChild` when you need isolated buses for spawned levels or gameplay modes.
+- Components can call `MessagingComponent.CreateRegistrationBuilder()` to share the same scoped bus with plain services.
+- Define `VCONTAINER_PRESENT` (the asmdef in `Runtime/Unity/Integrations/VContainer/` adds it for that assembly automatically once VContainer is detected). With the define active you can call `RegisterMessageRegistrationBuilder` (see `Runtime/Unity/Integrations/`) for a one-line binding inside your scopes.
 
 1. **Scene Scopes and Isolation**
 

@@ -1,4 +1,5 @@
 using DxMessaging.Core;
+using DxMessaging.Core.MessageBus;
 using UnityEngine;
 
 public sealed class DiagnosticsEnabler : MonoBehaviour
@@ -10,8 +11,17 @@ public sealed class DiagnosticsEnabler : MonoBehaviour
     {
         if (enableOnStart)
         {
-            MessageHandler.MessageBus.DiagnosticsMode = true;
-            Debug.Log("DxMessaging global diagnostics enabled.");
+            if (MessageHandler.MessageBus is MessageBus.MessageBus concreteBus)
+            {
+                concreteBus.DiagnosticsMode = true;
+                Debug.Log("DxMessaging global diagnostics enabled.");
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "Global diagnostics are unavailable because the active global bus is not the default DxMessaging implementation."
+                );
+            }
         }
     }
 }

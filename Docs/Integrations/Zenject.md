@@ -52,45 +52,48 @@ public sealed class MessagingComponentConfigurator : MonoBehaviour
 
 - Add this component alongside any existing `MessagingComponent` to let Zenject push the scoped bus down before listeners call `Create`.
 - Alternately, extend `MessageAwareComponent` and override `Awake` to resolve the bus and call `Configure` before `base.Awake()`.
+- When compiling with Zenject, Define `ZENJECT_PRESENT` (the asmdef under `Runtime/Unity/Integrations/Zenject/` adds it for that assembly automatically when a supported Zenject package is present) and include `DxMessagingRegistrationInstaller` to expose `IMessageRegistrationBuilder` automatically.
 
 1. **Injecting Tokens in Plain Classes**
 
 ```csharp
 public sealed class PlayerController : IInitializable, IDisposable
 {
-    private readonly IMessageBus _messageBus;
-    private readonly MessageRegistrationToken _token;
+    private readonly MessageRegistrationLease lease;
 
-    public PlayerController(IMessageBus messageBus)
+    public PlayerController(IMessageRegistrationBuilder registrationBuilder)
     {
-        _messageBus = messageBus;
-        MessageHandler handler = new MessageHandler(new InstanceId(123), _messageBus)
+        MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
         {
-            active = true
+            Configure = token =>
+            {
+                _ = token.RegisterUntargeted<PlayerSpawned>(OnPlayerSpawned);
+            }
         };
-        _token = MessageRegistrationToken.Create(handler, _messageBus);
+
+        lease = registrationBuilder.Build(options);
     }
 
     public void Initialize()
     {
-        _ = _token.RegisterUntargeted<PlayerSpawned>(OnPlayerSpawned);
-        _token.Enable();
+        lease.Activate();
     }
 
     public void Dispose()
     {
-        _token.Disable();
+        lease.Dispose();
     }
 
-    private void OnPlayerSpawned(ref PlayerSpawned message)
+    private static void OnPlayerSpawned(ref PlayerSpawned message)
     {
         // business logic
     }
 }
 ```
 
-- `IInitializable`/`IDisposable` ensures registrations align with Zenject lifecycle.
-- Use per-instance `MessageHandler` when operating outside MonoBehaviours; the injected bus keeps everything scoped.
+- `IInitializable`/`IDisposable` aligns activation and disposal with the container lifecycle.
+- The builder resolves the scoped bus automatically and keeps the handler/diagnostics wiring consistent.
+- MonoBehaviours can call `MessagingComponent.CreateRegistrationBuilder()` if they need to construct additional leases for helper services.
 
 1. **Bridging to Zenject Signals**
 

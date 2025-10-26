@@ -19,10 +19,8 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, messageBus);
 
             int postProcessCount = 0;
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(
-                (ref SimpleUntargetedMessage _) => { }
-            );
-            _ = token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+            _ = token.RegisterUntargeted((ref SimpleUntargetedMessage _) => { });
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref SimpleUntargetedMessage _) => postProcessCount++,
                 priority: 0
             );

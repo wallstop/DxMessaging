@@ -67,6 +67,8 @@ namespace DxMessaging.Unity
 
         protected MessagingComponent _messagingComponent;
         protected IMessageBus _configuredMessageBus;
+        protected IMessageBusProvider _configuredMessageBusProvider;
+        protected MessageBusProviderHandle _configuredMessageBusProviderHandle;
 
         /// <summary>
         /// Creates the <see cref="MessagingComponent"/>, token, and calls <see cref="RegisterMessageHandlers"/>.
@@ -74,7 +76,24 @@ namespace DxMessaging.Unity
         protected virtual void Awake()
         {
             _messagingComponent = GetComponent<MessagingComponent>();
-            if (_configuredMessageBus != null)
+            if (
+                _configuredMessageBusProvider == null
+                && _configuredMessageBusProviderHandle.TryGetProvider(
+                    out IMessageBusProvider handleProvider
+                )
+            )
+            {
+                _configuredMessageBusProvider = handleProvider;
+            }
+
+            if (_configuredMessageBusProvider != null)
+            {
+                _messagingComponent.Configure(
+                    _configuredMessageBusProvider,
+                    MessageBusRebindMode.PreserveRegistrations
+                );
+            }
+            else if (_configuredMessageBus != null)
             {
                 _messagingComponent.Configure(
                     _configuredMessageBus,
@@ -164,15 +183,66 @@ namespace DxMessaging.Unity
         /// Call this during dependency injection (before <see cref="Awake"/>) to ensure the token is created against
         /// the provided bus, or invoke it later to retarget existing registrations.
         /// </remarks>
-#pragma warning disable CS0618 // Type or member is obsolete
         public virtual void ConfigureMessageBus(
             IMessageBus messageBus,
             MessageBusRebindMode rebindMode
         )
-#pragma warning restore CS0618 // Type or member is obsolete
         {
             _configuredMessageBus = messageBus;
+            _configuredMessageBusProvider = null;
+            _configuredMessageBusProviderHandle = MessageBusProviderHandle.Empty;
             _messagingComponent?.Configure(_configuredMessageBus, rebindMode);
+        }
+
+        /// <summary>
+        /// Supplies an <see cref="IMessageBusProvider"/> for this component's underlying <see cref="MessageHandler"/>.
+        /// </summary>
+        /// <param name="messageBusProvider">Provider used to resolve buses for this component.</param>
+        /// <param name="rebindMode">Controls whether existing handlers should migrate to the provided bus immediately.</param>
+        public virtual void ConfigureMessageBus(
+            IMessageBusProvider messageBusProvider,
+            MessageBusRebindMode rebindMode
+        )
+        {
+            _configuredMessageBusProvider = messageBusProvider;
+            if (messageBusProvider != null)
+            {
+                _configuredMessageBus = null;
+                _configuredMessageBusProviderHandle = MessageBusProviderHandle.FromProvider(
+                    messageBusProvider
+                );
+            }
+            else
+            {
+                _configuredMessageBusProviderHandle = MessageBusProviderHandle.Empty;
+            }
+
+            _messagingComponent?.Configure(_configuredMessageBusProvider, rebindMode);
+        }
+
+        /// <summary>
+        /// Supplies a serialized handle that resolves an <see cref="IMessageBusProvider"/>.
+        /// </summary>
+        /// <param name="providerHandle">Handle referencing the provider.</param>
+        /// <param name="rebindMode">Controls whether existing handlers should migrate to the provided bus immediately.</param>
+        public virtual void ConfigureMessageBus(
+            MessageBusProviderHandle providerHandle,
+            MessageBusRebindMode rebindMode
+        )
+        {
+            _configuredMessageBusProviderHandle = providerHandle;
+            if (providerHandle.TryGetProvider(out IMessageBusProvider provider))
+            {
+                _configuredMessageBusProvider = provider;
+                _configuredMessageBus = null;
+            }
+            else
+            {
+                _configuredMessageBusProvider = null;
+                _configuredMessageBusProviderHandle = MessageBusProviderHandle.Empty;
+            }
+
+            _messagingComponent?.Configure(providerHandle, rebindMode);
         }
 
         /// <summary>

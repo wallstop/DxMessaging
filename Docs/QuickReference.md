@@ -9,6 +9,7 @@ Do’s
 - Use GameObject/Component emit helpers (no manual `InstanceId`).
 - Register once; enable/disable with component state.
 - Prefer named handler methods over inline lambdas for reuse and clarity.
+- When using DI, inject `IMessageRegistrationBuilder` instead of newing `MessageHandler`s manually.
 
 Don’ts
 
@@ -76,6 +77,36 @@ void OnAnyHeal(ref InstanceId target, ref Heal m) { /* ... */ }
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
 void OnAnyDamage(ref InstanceId src, ref TookDamage m) { /* ... */ }
 ```
+
+Register (DI / services)
+
+```csharp
+using DxMessaging.Core.MessageBus;
+
+public sealed class DamageSystem : IStartable, IDisposable
+{
+    private readonly MessageRegistrationLease lease;
+
+    public DamageSystem(IMessageRegistrationBuilder registrationBuilder)
+    {
+        lease = registrationBuilder.Build(new MessageRegistrationBuildOptions
+        {
+            Configure = token =>
+            {
+                _ = token.RegisterUntargeted<TookDamage>(OnDamage);
+            }
+        });
+    }
+
+    public void Start() => lease.Activate();
+
+    public void Dispose() => lease.Dispose();
+
+    private static void OnDamage(ref TookDamage message) { /* respond */ }
+}
+```
+
+Tip: Define `ZENJECT_PRESENT`, `VCONTAINER_PRESENT`, or `REFLEX_PRESENT` to enable the optional shims under `Runtime/Unity/Integrations/` that bind the builder automatically for those containers.
 
 Interceptors and post‑processors
 
