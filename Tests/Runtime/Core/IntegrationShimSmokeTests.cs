@@ -10,7 +10,8 @@ namespace DxMessaging.Tests.Runtime.Core
         {
 #if ZENJECT_PRESENT
             AssertIntegrationType(
-                "DxMessaging.Unity.Integrations.Zenject.DxMessagingRegistrationInstaller"
+                "DxMessaging.Unity.Integrations.Zenject.DxMessagingRegistrationInstaller",
+                "WallstopStudios.DxMessaging.Zenject"
             );
 #else
             Assert.Ignore("ZENJECT_PRESENT not defined; skipping Zenject shim smoke test.");
@@ -22,7 +23,8 @@ namespace DxMessaging.Tests.Runtime.Core
         {
 #if VCONTAINER_PRESENT
             AssertIntegrationType(
-                "DxMessaging.Unity.Integrations.VContainer.VContainerRegistrationExtensions"
+                "DxMessaging.Unity.Integrations.VContainer.VContainerRegistrationExtensions",
+                "WallstopStudios.DxMessaging.VContainer"
             );
 #else
             Assert.Ignore("VCONTAINER_PRESENT not defined; skipping VContainer shim smoke test.");
@@ -34,16 +36,17 @@ namespace DxMessaging.Tests.Runtime.Core
         {
 #if REFLEX_PRESENT
             AssertIntegrationType(
-                "DxMessaging.Unity.Integrations.Reflex.DxMessagingRegistrationInstaller"
+                "DxMessaging.Unity.Integrations.Reflex.DxMessagingRegistrationInstaller",
+                "WallstopStudios.DxMessaging.Reflex"
             );
 #else
             Assert.Ignore("REFLEX_PRESENT not defined; skipping Reflex shim smoke test.");
 #endif
         }
 
-        private static void AssertIntegrationType(string typeName)
+        private static void AssertIntegrationType(string typeName, string assemblyName)
         {
-            string qualifiedName = $"{typeName}, WallstopStudios.DxMessaging";
+            string qualifiedName = $"{typeName}, {assemblyName}";
             Type type = Type.GetType(qualifiedName, throwOnError: false);
             Assert.IsNotNull(
                 type,

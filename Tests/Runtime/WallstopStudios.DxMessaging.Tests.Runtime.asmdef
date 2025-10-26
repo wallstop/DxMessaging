@@ -5,7 +5,9 @@
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner",
     "WallstopStudios.DxMessaging",
-    "Unity.PerformanceTesting"
+    "WallstopStudios.DxMessaging.Reflex",
+    "WallstopStudios.DxMessaging.VContainer",
+    "WallstopStudios.DxMessaging.Zenject"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
