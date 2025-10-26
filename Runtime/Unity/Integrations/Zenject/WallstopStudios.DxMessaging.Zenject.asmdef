@@ -1,5 +1,5 @@
 {
-  "name": "WallstopStudios.DxMessaging.Unity.Zenject",
+  "name": "WallstopStudios.DxMessaging.Zenject",
   "rootNamespace": "DxMessaging.Unity.Integrations.Zenject",
   "references": ["WallstopStudios.DxMessaging", "Zenject"],
   "includePlatforms": [],

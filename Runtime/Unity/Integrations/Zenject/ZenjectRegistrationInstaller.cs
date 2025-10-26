@@ -1,6 +1,6 @@
-#if ZENJECT_PRESENT
 namespace DxMessaging.Unity.Integrations.Zenject
 {
+#if ZENJECT_PRESENT
     using global::Zenject;
     using Core.MessageBus;
 
@@ -28,7 +28,7 @@ namespace DxMessaging.Unity.Integrations.Zenject
             );
         }
 
-        private sealed class ContainerMessageBusProvider : IMessageBusProvider
+        public sealed class ContainerMessageBusProvider : IMessageBusProvider
         {
             private readonly DiContainer _container;
             private readonly IMessageBus _cachedBus;
@@ -45,5 +45,5 @@ namespace DxMessaging.Unity.Integrations.Zenject
             }
         }
     }
-}
 #endif
+}

@@ -169,6 +169,59 @@ namespace DxMessaging.Tests.Runtime.Core
             }
         }
 
+        [Test]
+        public void DiagnosticsModeRespectedWhenEnabled()
+        {
+            MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
+            {
+                EnableDiagnostics = true,
+                Configure = token =>
+                {
+                    _ = token.RegisterUntargeted<SimpleUntargetedMessage>(OnSimpleMessage);
+                },
+            };
+
+            MessageRegistrationLease lease = _builder.Build(options);
+            try
+            {
+                Assert.IsTrue(
+                    lease.Token.DiagnosticMode,
+                    "Diagnostics flag should propagate to the token."
+                );
+            }
+            finally
+            {
+                lease.Dispose();
+            }
+        }
+
+        [Test]
+        public void DisposingActiveLeaseInvokesDeactivateLifecycle()
+        {
+            bool deactivateInvoked = false;
+            bool disposeInvoked = false;
+
+            MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
+            {
+                ActivateOnBuild = true,
+                Lifecycle = new MessageRegistrationLifecycle(
+                    null,
+                    null,
+                    token => deactivateInvoked = true,
+                    token => disposeInvoked = true
+                ),
+            };
+
+            MessageRegistrationLease lease = _builder.Build(options);
+            lease.Dispose();
+
+            Assert.IsTrue(
+                deactivateInvoked,
+                "Disposing an active lease should trigger OnDeactivate before tear-down."
+            );
+            Assert.IsTrue(disposeInvoked, "Disposing a lease should trigger OnDispose callbacks.");
+        }
+
         private static void OnSimpleMessage(ref SimpleUntargetedMessage message) { }
     }
 }

@@ -1,9 +1,8 @@
-#if VCONTAINER_PRESENT
 namespace DxMessaging.Unity.Integrations.VContainer
 {
+#if VCONTAINER_PRESENT
     using global::VContainer;
     using Core.MessageBus;
-    using global::VContainer.Unity;
 
     /// <summary>
     /// Provides convenience extension methods for wiring <see cref="IMessageRegistrationBuilder"/> inside VContainer scopes.
@@ -28,7 +27,7 @@ namespace DxMessaging.Unity.Integrations.VContainer
             return new MessageRegistrationBuilder(new ResolverMessageBusProvider(resolver));
         }
 
-        private sealed class ResolverMessageBusProvider : IMessageBusProvider
+        public sealed class ResolverMessageBusProvider : IMessageBusProvider
         {
             private readonly IObjectResolver _resolver;
 
@@ -43,5 +42,5 @@ namespace DxMessaging.Unity.Integrations.VContainer
             }
         }
     }
-}
 #endif
+}

@@ -1,5 +1,5 @@
 {
-  "name": "WallstopStudios.DxMessaging.Unity.VContainer",
+  "name": "WallstopStudios.DxMessaging.VContainer",
   "rootNamespace": "DxMessaging.Unity.Integrations.VContainer",
   "references": ["WallstopStudios.DxMessaging", "VContainer", "VContainer.Unity"],
   "includePlatforms": [],

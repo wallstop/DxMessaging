@@ -2,15 +2,18 @@ namespace DxMessaging.Tests.Runtime.Zenject
 {
 #if ZENJECT_PRESENT
     using DxMessaging.Core;
+    using System.Reflection;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
+    using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using DxMessaging.Unity;
+    using DxMessaging.Unity.Integrations.Zenject;
     using global::Zenject;
     using NUnit.Framework;
     using UnityEngine;
 
-    public sealed class ZenjectIntegrationTests
+    public sealed class ZenjectIntegrationTests : UnityFixtureBase
     {
         [Test]
         public void InstallerBindsMessageBusAndConfiguratorAppliesIt()
@@ -21,30 +24,100 @@ namespace DxMessaging.Tests.Runtime.Zenject
             IMessageBus resolvedBus = container.Resolve<IMessageBus>();
             Assert.IsNotNull(resolvedBus, "Zenject installer should bind IMessageBus.");
 
-            GameObject go = new(
-                nameof(InstallerBindsMessageBusAndConfiguratorAppliesIt),
-                typeof(MessagingComponent),
-                typeof(ZenjectConfiguredListener)
+            GameObject go = Track(
+                new GameObject(
+                    nameof(InstallerBindsMessageBusAndConfiguratorAppliesIt),
+                    typeof(MessagingComponent),
+                    typeof(ZenjectConfiguredListener)
+                )
             );
 
-            try
-            {
-                ZenjectConfiguredListener listener = go.GetComponent<ZenjectConfiguredListener>();
-                listener.Initialize(resolvedBus);
+            ZenjectConfiguredListener listener = go.GetComponent<ZenjectConfiguredListener>();
+            listener.Initialize(resolvedBus);
 
-                SimpleUntargetedMessage message = new();
-                message.EmitUntargeted(resolvedBus);
+            SimpleUntargetedMessage message = new();
+            message.EmitUntargeted(resolvedBus);
 
-                Assert.AreEqual(
-                    1,
-                    listener.ReceivedCount,
-                    "Listener should observe messages emitted through the container-provided bus."
-                );
-            }
-            finally
-            {
-                Object.DestroyImmediate(go);
-            }
+            Assert.AreEqual(
+                1,
+                listener.ReceivedCount,
+                "Listener should observe messages emitted through the container-provided bus."
+            );
+        }
+
+        [Test]
+        public void RegistrationInstallerProvidesBuilderBoundToContainerBus()
+        {
+            DiContainer container = new();
+            container.BindInterfacesAndSelfTo<MessageBus>().AsSingle();
+
+            GameObject installerGo = Track(new GameObject("ZenjectBuilderInstaller"));
+            DxMessagingRegistrationInstaller installer =
+                installerGo.AddComponent<DxMessagingRegistrationInstaller>();
+
+            PropertyInfo containerProperty = typeof(MonoInstaller).GetProperty(
+                "Container",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
+            Assert.NotNull(
+                containerProperty,
+                "MonoInstaller.Container property should exist for reflection assignment."
+            );
+            containerProperty.SetValue(installer, container);
+
+            installer.InstallBindings();
+
+            IMessageRegistrationBuilder registrationBuilder =
+                container.Resolve<IMessageRegistrationBuilder>();
+            Assert.NotNull(registrationBuilder);
+
+            MessageRegistrationLease lease = registrationBuilder.Build(
+                new MessageRegistrationBuildOptions()
+            );
+            Assert.AreSame(
+                container.Resolve<IMessageBus>(),
+                lease.MessageBus,
+                "Builder resolved by the installer should default to the container-provided bus."
+            );
+            lease.Dispose();
+        }
+
+        [Test]
+        public void RegistrationInstallerPrefersBoundProvider()
+        {
+            DiContainer container = new();
+            MessageBus providerBus = new();
+            container
+                .Bind<IMessageBusProvider>()
+                .FromInstance(new FixedMessageBusProvider(providerBus))
+                .AsSingle();
+            container.BindInterfacesAndSelfTo<MessageBus>().AsSingle();
+
+            GameObject installerGo = Track(new GameObject("ZenjectBuilderInstallerWithProvider"));
+            DxMessagingRegistrationInstaller installer =
+                installerGo.AddComponent<DxMessagingRegistrationInstaller>();
+
+            PropertyInfo containerProperty = typeof(MonoInstaller).GetProperty(
+                "Container",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
+            containerProperty.SetValue(installer, container);
+
+            installer.InstallBindings();
+
+            IMessageRegistrationBuilder registrationBuilder =
+                container.Resolve<IMessageRegistrationBuilder>();
+            MessageRegistrationLease lease = registrationBuilder.Build(
+                new MessageRegistrationBuildOptions()
+            );
+
+            Assert.AreSame(
+                providerBus,
+                lease.MessageBus,
+                "Builder should prefer the container-provided IMessageBusProvider when available."
+            );
+
+            lease.Dispose();
         }
 
         private sealed class ZenjectConfiguredListener : MonoBehaviour
@@ -70,6 +143,21 @@ namespace DxMessaging.Tests.Runtime.Zenject
                 _token?.Disable();
                 _token = null;
                 _messageBus = null;
+            }
+        }
+
+        private sealed class FixedMessageBusProvider : IMessageBusProvider
+        {
+            private readonly IMessageBus _bus;
+
+            public FixedMessageBusProvider(IMessageBus bus)
+            {
+                _bus = bus;
+            }
+
+            public IMessageBus Resolve()
+            {
+                return _bus;
             }
         }
     }

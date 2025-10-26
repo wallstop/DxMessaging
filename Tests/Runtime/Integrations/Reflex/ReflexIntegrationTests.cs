@@ -4,14 +4,16 @@ namespace DxMessaging.Tests.Runtime.Reflex
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
+    using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using DxMessaging.Unity;
+    using DxMessaging.Unity.Integrations.Reflex;
     using global::Reflex.Core;
     using global::Reflex.Injectors;
     using NUnit.Framework;
     using UnityEngine;
 
-    public sealed class ReflexIntegrationTests
+    public sealed class ReflexIntegrationTests : UnityFixtureBase
     {
         [Test]
         public void InstallerRegistersMessageBusAndConfiguratorAppliesIt()
@@ -20,36 +22,65 @@ namespace DxMessaging.Tests.Runtime.Reflex
             DxMessagingInstaller installer = new();
             installer.InstallBindings(builder);
 
-            Container container = builder.Build();
+            Container container = TrackDisposable(builder.Build());
             IMessageBus bus = container.Resolve<IMessageBus>();
             Assert.NotNull(bus, "Reflex installer should bind IMessageBus.");
 
-            GameObject go = new(
-                nameof(InstallerRegistersMessageBusAndConfiguratorAppliesIt),
-                typeof(MessagingComponent),
-                typeof(ReflexConfiguredListener)
+            GameObject go = Track(
+                new GameObject(
+                    nameof(InstallerRegistersMessageBusAndConfiguratorAppliesIt),
+                    typeof(MessagingComponent),
+                    typeof(ReflexConfiguredListener)
+                )
             );
 
-            try
-            {
-                ReflexConfiguredListener listener = go.GetComponent<ReflexConfiguredListener>();
-                AttributeInjector.Inject(listener, container);
-                listener.Initialize(bus);
+            ReflexConfiguredListener listener = go.GetComponent<ReflexConfiguredListener>();
+            AttributeInjector.Inject(listener, container);
+            listener.Initialize(bus);
 
-                SimpleUntargetedMessage message = new();
-                message.EmitUntargeted(bus);
+            SimpleUntargetedMessage message = new();
+            message.EmitUntargeted(bus);
 
-                Assert.AreEqual(
-                    1,
-                    listener.ReceivedCount,
-                    "Listener should observe messages emitted through the Reflex container's bus."
-                );
-            }
-            finally
-            {
-                Object.DestroyImmediate(go);
-                container.Dispose();
-            }
+            Assert.AreEqual(
+                1,
+                listener.ReceivedCount,
+                "Listener should observe messages emitted through the Reflex container's bus."
+            );
+        }
+
+        [Test]
+        public void RegistrationInstallerBindsBuilderAgainstContainerBus()
+        {
+            ContainerBuilder builder = new();
+            DxMessagingInstaller coreInstaller = new();
+            coreInstaller.InstallBindings(builder);
+
+            builder.AddSingleton(
+                typeof(StaticMessageBusProvider),
+                typeof(StaticMessageBusProvider),
+                typeof(IMessageBusProvider)
+            );
+
+            DxMessagingRegistrationInstaller registrationInstaller = new();
+            registrationInstaller.InstallBindings(builder);
+
+            Container container = TrackDisposable(builder.Build());
+
+            StaticMessageBusProvider provider = container.Resolve<StaticMessageBusProvider>();
+
+            IMessageRegistrationBuilder registrationBuilder =
+                container.Resolve<IMessageRegistrationBuilder>();
+            MessageRegistrationLease lease = registrationBuilder.Build(
+                new MessageRegistrationBuildOptions()
+            );
+
+            Assert.AreSame(
+                provider.Bus,
+                lease.MessageBus,
+                "Reflex registration installer should prefer the registered IMessageBusProvider."
+            );
+
+            lease.Dispose();
         }
 
         private sealed class DxMessagingInstaller : IInstaller
@@ -87,6 +118,18 @@ namespace DxMessaging.Tests.Runtime.Reflex
                 _token?.Disable();
                 _token = null;
                 _messageBus = null;
+            }
+        }
+
+        private sealed class StaticMessageBusProvider : IMessageBusProvider
+        {
+            private readonly IMessageBus _bus = new MessageBus();
+
+            public IMessageBus Bus => _bus;
+
+            public IMessageBus Resolve()
+            {
+                return _bus;
             }
         }
     }

@@ -11,9 +11,8 @@ namespace DxMessaging.Unity
         fileName = "InitialGlobalMessageBusProvider",
         menuName = "Wallstop Studios/DxMessaging/Message Bus Providers/Initial Global Message Bus"
     )]
-    public sealed class InitialGlobalMessageBusProviderAsset : ScriptableMessageBusProvider
+    public sealed class InitialGlobalMessageBusProvider : ScriptableMessageBusProvider
     {
-        /// <inheritdoc />
         public override IMessageBus Resolve()
         {
             return MessageHandler.InitialGlobalMessageBus;

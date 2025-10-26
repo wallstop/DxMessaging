@@ -6,7 +6,8 @@
     "UnityEditor.TestRunner",
     "WallstopStudios.DxMessaging",
     "WallstopStudios.DxMessaging.Tests.Runtime",
-    "Reflex"
+    "Reflex",
+    "WallstopStudios.DxMessaging.Reflex"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

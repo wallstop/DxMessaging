@@ -298,7 +298,7 @@ namespace DxMessaging.Core.MessageBus
         }
     }
 
-    internal sealed class FixedMessageBusProvider : IMessageBusProvider
+    public sealed class FixedMessageBusProvider : IMessageBusProvider
     {
         private readonly IMessageBus _messageBus;
 

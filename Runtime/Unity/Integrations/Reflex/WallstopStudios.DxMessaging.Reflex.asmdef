@@ -1,7 +1,7 @@
 {
-  "name": "WallstopStudios.DxMessaging.Unity.Reflex",
+  "name": "WallstopStudios.DxMessaging.Reflex",
   "rootNamespace": "DxMessaging.Unity.Integrations.Reflex",
-  "references": ["WallstopStudios.DxMessaging", "Reflex"],
+  "references": ["WallstopStudios.DxMessaging", "Reflex", "Reflex.Unity"],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

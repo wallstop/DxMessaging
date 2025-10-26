@@ -7,7 +7,7 @@
     "WallstopStudios.DxMessaging",
     "WallstopStudios.DxMessaging.Tests.Runtime",
     "VContainer",
-    "VContainer.Unity"
+    "WallstopStudios.DxMessaging.VContainer"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

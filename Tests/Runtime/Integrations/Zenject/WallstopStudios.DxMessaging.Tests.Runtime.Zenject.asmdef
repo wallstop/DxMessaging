@@ -6,7 +6,8 @@
     "UnityEditor.TestRunner",
     "WallstopStudios.DxMessaging",
     "WallstopStudios.DxMessaging.Tests.Runtime",
-    "Zenject"
+    "Zenject",
+    "WallstopStudios.DxMessaging.Zenject"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

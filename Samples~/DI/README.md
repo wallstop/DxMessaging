@@ -22,7 +22,7 @@ Each sample shows:
 - `Zenject/SampleInstaller.cs`
 - `VContainer/SampleLifetimeScope.cs`
 - `Reflex/SampleInstaller.cs`
-- `Providers/GlobalMessageBusProvider.asset` — ScriptableObject that resolves whichever bus is currently configured as global.
+- `Providers/CurrentGlobalMessageBusProvider.asset` — ScriptableObject that resolves whichever bus is currently configured as global.
 - `Providers/InitialGlobalMessageBusProvider.asset` — ScriptableObject that always returns the original startup global bus, ignoring later overrides.
 - `Prefabs/MessagingInstallerSample.prefab` — ready-to-use hierarchy with `MessagingComponentInstaller` configuring a child `MessagingComponent` using the provider asset. Drop it into a scene to see provider-driven wiring without writing setup code.
 
@@ -46,6 +46,6 @@ Each sample shows:
    Use the service exposed by the container (e.g., call into `ScoreboardService` or `PlayerAlertService`) to emit a message. Because the prefab already configured `MessagingComponent` instances via the installer, the listeners run immediately.
 
 4. **Swap providers** (optional)  
-   Duplicate `Providers/GlobalMessageBusProvider.asset`, modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
+   Duplicate `Providers/CurrentGlobalMessageBusProvider.asset`, modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
 
 Feel free to duplicate these scripts into your own project and adjust lifecycles or message types as needed.
