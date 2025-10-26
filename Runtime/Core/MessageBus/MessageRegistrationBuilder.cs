@@ -7,6 +7,32 @@ namespace DxMessaging.Core.MessageBus
     /// <summary>
     /// Options controlling how <see cref="MessageRegistrationBuilder"/> constructs registration tokens.
     /// </summary>
+    /// <remarks>
+    /// These options let you override the message bus used by the generated token, opt into diagnostics,
+    /// and register lifecycle callbacks that are triggered when the returned <see cref="MessageRegistrationLease"/> is
+    /// activated or disposed.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new MessageRegistrationBuildOptions
+    /// {
+    ///     ActivateOnBuild = true,
+    ///     EnableDiagnostics = true,
+    ///     Configure = token =>
+    ///     {
+    ///         _ = token.RegisterUntargeted&lt;SimpleUntargetedMessage&gt;(OnMessage);
+    ///     },
+    ///     Lifecycle = new MessageRegistrationLifecycle(
+    ///         onBuild: token => Debug.Log("Configured"),
+    ///         onActivate: token => Debug.Log("Enabled"),
+    ///         onDeactivate: token => Debug.Log("Disabled"),
+    ///         onDispose: token => Debug.Log("Disposed"))
+    /// };
+    ///
+    /// using MessageRegistrationLease lease = registrationBuilder.Build(options);
+    /// // token is activated automatically because ActivateOnBuild = true
+    /// </code>
+    /// </example>
     public sealed class MessageRegistrationBuildOptions
     {
         /// <summary>
@@ -62,6 +88,15 @@ namespace DxMessaging.Core.MessageBus
     /// <summary>
     /// Lifecycle callbacks for registration leases.
     /// </summary>
+    /// <remarks>
+    /// Callbacks run in the following order:
+    /// <list type="number">
+    /// <item><description><c>OnBuild</c> (invoked immediately after the lease is created, before activation).</description></item>
+    /// <item><description><c>OnActivate</c> (invoked when <see cref="MessageRegistrationLease.Activate"/> runs or when <see cref="MessageRegistrationBuildOptions.ActivateOnBuild"/> is set).</description></item>
+    /// <item><description><c>OnDeactivate</c> (invoked when <see cref="MessageRegistrationLease.Deactivate"/> runs or the lease is disposed while active).</description></item>
+    /// <item><description><c>OnDispose</c> (invoked during <see cref="MessageRegistrationLease.Dispose"/>).</description></item>
+    /// </list>
+    /// </remarks>
     public readonly struct MessageRegistrationLifecycle
     {
         public MessageRegistrationLifecycle(
@@ -89,6 +124,11 @@ namespace DxMessaging.Core.MessageBus
     /// <summary>
     /// Represents the lifetime of a registration token constructed by the builder.
     /// </summary>
+    /// <remarks>
+    /// A lease grants direct access to the created <see cref="MessageRegistrationToken"/>, holds a reference to the
+    /// underlying <see cref="MessageHandler"/>, and coordinates lifecycle callbacks supplied via
+    /// <see cref="MessageRegistrationBuildOptions.Lifecycle"/>.
+    /// </remarks>
     public sealed class MessageRegistrationLease : IDisposable
     {
         private readonly MessageRegistrationToken _token;
@@ -114,16 +154,35 @@ namespace DxMessaging.Core.MessageBus
             _disposed = false;
         }
 
+        /// <summary>
+        /// Gets the registration token created for this lease.
+        /// </summary>
         public MessageRegistrationToken Token => _token;
 
+        /// <summary>
+        /// Gets the handler hosting the lease's registrations.
+        /// </summary>
         public MessageHandler Handler => _messageHandler;
 
+        /// <summary>
+        /// Gets the message bus that registrations created through this lease will target by default.
+        /// </summary>
         public IMessageBus MessageBus => _messageBus;
 
+        /// <summary>
+        /// Gets the owner identifier associated with the underlying handler.
+        /// </summary>
         public InstanceId Owner => _messageHandler.owner;
 
+        /// <summary>
+        /// Gets a value indicating whether the lease is currently active (token enabled).
+        /// </summary>
         public bool IsActive => _isActive;
 
+        /// <summary>
+        /// Enables the token managed by this lease and raises the activation lifecycle callback if provided.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">Thrown if the lease has already been disposed.</exception>
         public void Activate()
         {
             EnsureNotDisposed();
@@ -210,6 +269,12 @@ namespace DxMessaging.Core.MessageBus
             _messageBusProvider = messageBusProvider;
         }
 
+        /// <summary>
+        /// Creates a <see cref="MessageRegistrationLease"/> configured according to the supplied <paramref name="options"/>.
+        /// </summary>
+        /// <param name="options">Options controlling bus selection, diagnostics, and lifecycle behavior.</param>
+        /// <returns>A lease that wraps the created <see cref="MessageRegistrationToken"/>.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
         public MessageRegistrationLease Build(MessageRegistrationBuildOptions options)
         {
             if (options == null)
@@ -298,6 +363,9 @@ namespace DxMessaging.Core.MessageBus
         }
     }
 
+    /// <summary>
+    /// Simple provider that always resolves to the supplied bus instance.
+    /// </summary>
     public sealed class FixedMessageBusProvider : IMessageBusProvider
     {
         private readonly IMessageBus _messageBus;

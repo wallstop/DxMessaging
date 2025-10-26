@@ -9,6 +9,12 @@ namespace DxMessaging.Unity.Integrations.Zenject
     /// </summary>
     public sealed class DxMessagingRegistrationInstaller : MonoInstaller
     {
+        internal void RunInstallBindings(DiContainer container)
+        {
+            Container = container;
+            InstallBindings();
+        }
+
         public override void InstallBindings()
         {
             Container.Bind<IMessageRegistrationBuilder>().FromMethod(CreateBuilder).AsTransient();

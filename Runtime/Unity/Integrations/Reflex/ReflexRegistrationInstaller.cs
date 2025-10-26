@@ -13,12 +13,13 @@ namespace DxMessaging.Unity.Integrations.Reflex
         public void InstallBindings(ContainerBuilder containerBuilder)
         {
             containerBuilder.AddSingleton(
-                typeof(IMessageRegistrationBuilder),
-                typeof(ContainerMessageRegistrationBuilder)
+                typeof(ContainerMessageRegistrationBuilder),
+                typeof(ContainerMessageRegistrationBuilder),
+                typeof(IMessageRegistrationBuilder)
             );
         }
 
-        public sealed class ContainerMessageRegistrationBuilder : IMessageRegistrationBuilder
+        internal sealed class ContainerMessageRegistrationBuilder : IMessageRegistrationBuilder
         {
             [Inject]
             private Container _container;

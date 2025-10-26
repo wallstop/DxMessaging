@@ -51,21 +51,8 @@ namespace DxMessaging.Tests.Runtime.Zenject
             DiContainer container = new();
             container.BindInterfacesAndSelfTo<MessageBus>().AsSingle();
 
-            GameObject installerGo = Track(new GameObject("ZenjectBuilderInstaller"));
-            DxMessagingRegistrationInstaller installer =
-                installerGo.AddComponent<DxMessagingRegistrationInstaller>();
-
-            PropertyInfo containerProperty = typeof(MonoInstaller).GetProperty(
-                "Container",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-            );
-            Assert.NotNull(
-                containerProperty,
-                "MonoInstaller.Container property should exist for reflection assignment."
-            );
-            containerProperty.SetValue(installer, container);
-
-            installer.InstallBindings();
+            DxMessagingRegistrationInstaller installer = new DxMessagingRegistrationInstaller();
+            installer.RunInstallBindings(container);
 
             IMessageRegistrationBuilder registrationBuilder =
                 container.Resolve<IMessageRegistrationBuilder>();
@@ -93,17 +80,8 @@ namespace DxMessaging.Tests.Runtime.Zenject
                 .AsSingle();
             container.BindInterfacesAndSelfTo<MessageBus>().AsSingle();
 
-            GameObject installerGo = Track(new GameObject("ZenjectBuilderInstallerWithProvider"));
-            DxMessagingRegistrationInstaller installer =
-                installerGo.AddComponent<DxMessagingRegistrationInstaller>();
-
-            PropertyInfo containerProperty = typeof(MonoInstaller).GetProperty(
-                "Container",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
-            );
-            containerProperty.SetValue(installer, container);
-
-            installer.InstallBindings();
+            DxMessagingRegistrationInstaller installer = new DxMessagingRegistrationInstaller();
+            installer.RunInstallBindings(container);
 
             IMessageRegistrationBuilder registrationBuilder =
                 container.Resolve<IMessageRegistrationBuilder>();

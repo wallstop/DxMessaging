@@ -98,6 +98,7 @@ graph TD
 ### Tools & Utilities
 
 - **[Helpers](Helpers.md)** — Source generators, attributes, extensions
+- **[Message Bus Providers](MessageBusProviders.md)** — ScriptableObject providers for global bus selection
 - **[Emit Shorthands](EmitShorthands.md)** — `Emit`/`EmitAt`/`EmitFrom` usage and pitfalls
 - **[String Messages](StringMessages.md)** — Prototyping and debugging
 - **[Compatibility](Compatibility.md)** — Unity versions and render pipelines

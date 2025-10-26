@@ -83,6 +83,33 @@ namespace DxMessaging.Tests.Runtime.Reflex
             lease.Dispose();
         }
 
+        [Test]
+        public void RegistrationInstallerExposesConcreteBuilder()
+        {
+            ContainerBuilder builder = new();
+            DxMessagingInstaller coreInstaller = new();
+            coreInstaller.InstallBindings(builder);
+
+            DxMessagingRegistrationInstaller registrationInstaller = new();
+            registrationInstaller.InstallBindings(builder);
+
+            Container container = TrackDisposable(builder.Build());
+
+            var concrete =
+                container.Resolve<DxMessagingRegistrationInstaller.ContainerMessageRegistrationBuilder>();
+            Assert.IsNotNull(
+                concrete,
+                "Container should resolve the concrete registration builder type."
+            );
+
+            IMessageRegistrationBuilder builderInterface =
+                container.Resolve<IMessageRegistrationBuilder>();
+            Assert.IsTrue(
+                ReferenceEquals(concrete, builderInterface),
+                "Container should return the same instance for concrete and interface resolutions."
+            );
+        }
+
         private sealed class DxMessagingInstaller : IInstaller
         {
             public void InstallBindings(ContainerBuilder containerBuilder)
