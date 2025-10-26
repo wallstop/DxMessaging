@@ -16,6 +16,7 @@
   - [UniRx](#unirx-reactive-extensions-for-unity)
   - [MessagePipe](#messagepipe-high-performance-messaging)
   - [Zenject Signals](#zenject-signals-di-based-messaging)
+- [Scriptable Object Architecture (SOA)](#scriptable-object-architecture-soa)
 - [Traditional Approaches](#traditional-approaches)
   - [C# Events/Delegates](#standard-c-eventsactions)
   - [UnityEvents](#unityevents-inspector-wiring)
@@ -63,8 +64,9 @@ Need absolute simplest pub/sub setup (zero boilerplate)?
 Need complex event stream transformations (debounce, throttle, combine)?
   → Use UniRx (reactive programming paradigm)
 
-Already using Dependency Injection (Zenject, VContainer)?
+Already using Dependency Injection (Zenject, VContainer, Reflex)?
   → Use MessagePipe (DI-first, best performance) or Zenject Signals (if on Zenject)
+  → Or DxMessaging (integrates with DI, see Integrations guides for Zenject/VContainer/Reflex)
 
 Need Unity-specific features (GameObject targeting, Inspector debugging, global observers)?
   → Use DxMessaging (Unity-first design)
@@ -84,10 +86,12 @@ Simple pub/sub with automatic lifecycle management and debugging?
 
 ##### One-Line Summary for Each
 
-- **DxMessaging:** Unity-first pub/sub with automatic lifecycle, global observers, interceptors, priorities, and Inspector debugging
+- **DxMessaging:** Unity-first pub/sub with automatic lifecycle, global observers, interceptors, priorities, and Inspector debugging (works standalone OR with DI)
 - **UniRx:** Reactive programming with LINQ-style stream operators for complex event transformations
 - **MessagePipe:** DI-first, highest throughput for high-frequency messaging in DI architectures
 - **Zenject Signals:** Decoupled messaging integrated with Zenject dependency injection
+
+> **💡 Note:** DxMessaging works both standalone (zero dependencies) AND with DI frameworks. See [Integration Guides](../Integrations/) for Zenject, VContainer, and Reflex.
 
 ---
 
@@ -399,6 +403,8 @@ public class AchievementSystem
 
 **Bottom Line:** MessagePipe is the performance king with DI-first design. DxMessaging is Unity-first with lifecycle awareness and debugging. Use MessagePipe if you have DI infrastructure and need maximum performance. Use DxMessaging if you want Unity-native messaging with automatic lifecycle management.
 
+> **💡 Want both?** DxMessaging integrates with DI frameworks! See [DI Integration Guides](../Integrations/) for Zenject, VContainer, and Reflex. Use DI for service construction, DxMessaging for event communication.
+
 ---
 
 ### Zenject Signals (DI-Based Messaging)
@@ -560,6 +566,68 @@ public class AchievementSystem
 | **Decoupling**           | ⭐⭐⭐⭐⭐ Excellent         | ⭐⭐⭐⭐⭐ Excellent     |
 
 **Bottom Line:** Zenject Signals are great if you're already invested in Zenject and value testability through DI. DxMessaging is better if you want standalone messaging without DI overhead, with better performance and Unity integration.
+
+> **💡 Using Zenject?** DxMessaging integrates with Zenject! See [DxMessaging + Zenject Integration Guide](../Integrations/Zenject.md) for step-by-step setup. Get DxMessaging's features (priorities, interceptors, Inspector debugging) with Zenject's DI.
+
+---
+
+## Scriptable Object Architecture (SOA)
+
+**What It Is:** A Unity-specific pattern popularized by Ryan Hipple's [Unite 2017 talk](https://www.youtube.com/watch?v=raQ3iHhE_Kk) that uses ScriptableObject assets for runtime communication (GameEvent, FloatVariable, etc.).
+
+**Core Philosophy:** Designer-driven, asset-based communication where systems communicate through serialized SO assets instead of direct references.
+
+**⚠️ Controversial Pattern:** SOA has significant criticisms regarding scalability and maintainability. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for detailed critique. Unity recommends ScriptableObjects for **immutable design data**, not mutable runtime state.
+
+### Quick Comparison
+
+| Aspect               | SOA (GameEvent/Variables)                                                 | DxMessaging                         |
+| -------------------- | ------------------------------------------------------------------------- | ----------------------------------- |
+| **Designer Control** | ✅ High (create events in Inspector)                                      | ❌ Low (code-driven)                |
+| **Type Safety**      | ⚠️ Mixed (SO refs typed, but UnityEvent wiring loses compile-time safety) | ✅ Strong (compile-time validation) |
+| **Lifecycle**        | ⚠️ Manual (assets persist)                                                | ✅ Automatic (tokens clean up)      |
+| **Performance**      | ⚠️ List iteration, UnityAction overhead                                   | ✅ Zero-allocation structs          |
+| **Testability**      | ⚠️ Requires SO asset cleanup                                              | ✅ Isolated buses per test          |
+
+### When to Use Each
+
+#### Choose SOA when
+
+- Designers need to create and wire events in the Inspector without code
+- Your team is already deeply invested in SOA with existing assets
+- Designer empowerment is more important than code maintainability
+
+##### Choose DxMessaging when
+
+- You need type-safe, code-driven messaging
+- Performance and zero-allocation are priorities
+- You want automatic lifecycle management
+- You need interceptors, priorities, or global observers
+
+###### Use Both when
+
+- ScriptableObjects for **immutable config data** (weapon stats, level configs)
+- DxMessaging for **runtime events and communication**
+- This is the recommended approach - use each tool correctly
+
+### Full Comparison Guide
+
+For detailed migration patterns, interoperability strategies, and code examples, see:
+
+#### → [SOA Compatibility Guide](Patterns.md#14-compatibility-with-scriptable-object-architecture-soa)
+
+Includes:
+
+- Pattern A: Bridging SOA GameEvents to DxMessaging
+- Pattern B: Proper ScriptableObject usage (configs + messaging)
+- Migration path from SOA to DxMessaging
+- When to keep using ScriptableObjects
+
+##### Resources
+
+- [Unite 2017 Talk](https://www.youtube.com/watch?v=raQ3iHhE_Kk) - Original SOA presentation
+- [Anti-SOA Critique](https://github.com/cathei/AntiScriptableObjectArchitecture) - Detailed criticisms
+- [Unity Official Guide](https://unity.com/how-to/architect-game-code-scriptable-objects) - Unity's perspective
 
 ---
 
@@ -1403,26 +1471,29 @@ public void TestAchievementSystem() {
 
 ### Traditional Approaches Comparison
 
-| Aspect               | C# Events          | UnityEvents          | Static Bus      | DxMessaging               |
-| -------------------- | ------------------ | -------------------- | --------------- | ------------------------- |
-| **Setup Complexity** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Simple      | ⭐⭐⭐ Moderate | ⭐⭐⭐ Moderate           |
-| **Boilerplate**      | ⭐⭐⭐⭐⭐ Low     | ⭐⭐⭐⭐⭐ Low       | ⭐⭐⭐ Medium   | ⭐⭐⭐ Medium             |
-| **Performance**      | ⭐⭐⭐⭐⭐ Fastest | ⭐⭐ Slow (boxing)   | ⭐⭐⭐⭐ Fast   | ⭐⭐⭐⭐ Fast             |
-| **Decoupling**       | ⭐ Tight           | ⭐⭐ Hidden          | ⭐⭐⭐⭐ Good   | ⭐⭐⭐⭐⭐ Excellent      |
-| **Lifecycle Safety** | ⭐ Manual          | ⭐⭐⭐ Unity-managed | ⭐ Manual       | ⭐⭐⭐⭐⭐ Automatic      |
-| **Observability**    | ⭐ None            | ⭐ None              | ⭐ None         | ⭐⭐⭐⭐⭐ Built-in       |
-| **Execution Order**  | ⭐ Undefined       | ⭐ Undefined         | ⭐ Undefined    | ⭐⭐⭐⭐⭐ Priority-based |
-| **Type Safety**      | ⭐⭐⭐⭐⭐ Strong  | ⭐⭐ Weak            | ⭐⭐⭐ Varies   | ⭐⭐⭐⭐⭐ Strong         |
-| **Testability**      | ⭐⭐ Hard          | ⭐⭐ Hard            | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Easy           |
-| **Learning Curve**   | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐⭐ Minimal   | ⭐⭐⭐⭐ Low    | ⭐⭐⭐ Moderate           |
-| **Memory Safety**    | ⭐ Leak-prone      | ⭐⭐⭐ Unity-managed | ⭐ Leak-prone   | ⭐⭐⭐⭐⭐ Leak-free      |
-| **Debugging**        | ⭐⭐ Hard at scale | ⭐⭐ Hard at scale   | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Excellent      |
+| Aspect               | C# Events          | UnityEvents          | SOA (GameEvent)     | Static Bus      | DxMessaging               |
+| -------------------- | ------------------ | -------------------- | ------------------- | --------------- | ------------------------- |
+| **Setup Complexity** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Simple      | ⭐⭐ Asset creation | ⭐⭐⭐ Moderate | ⭐⭐⭐ Moderate           |
+| **Boilerplate**      | ⭐⭐⭐⭐⭐ Low     | ⭐⭐⭐⭐⭐ Low       | ⭐⭐ High           | ⭐⭐⭐ Medium   | ⭐⭐⭐ Medium             |
+| **Performance**      | ⭐⭐⭐⭐⭐ Fastest | ⭐⭐ Slow (boxing)   | ⭐⭐⭐ Moderate     | ⭐⭐⭐⭐ Fast   | ⭐⭐⭐⭐ Fast             |
+| **Decoupling**       | ⭐ Tight           | ⭐⭐ Hidden          | ⭐⭐⭐⭐ Good       | ⭐⭐⭐⭐ Good   | ⭐⭐⭐⭐⭐ Excellent      |
+| **Designer Control** | ⭐ None            | ⭐⭐⭐⭐⭐ High      | ⭐⭐⭐⭐⭐ High     | ⭐ None         | ⭐ None                   |
+| **Lifecycle Safety** | ⭐ Manual          | ⭐⭐⭐ Unity-managed | ⭐⭐ Manual persist | ⭐ Manual       | ⭐⭐⭐⭐⭐ Automatic      |
+| **Observability**    | ⭐ None            | ⭐ None              | ⭐ Inspector only   | ⭐ None         | ⭐⭐⭐⭐⭐ Built-in       |
+| **Execution Order**  | ⭐ Undefined       | ⭐ Undefined         | ⭐ Undefined        | ⭐ Undefined    | ⭐⭐⭐⭐⭐ Priority-based |
+| **Type Safety**      | ⭐⭐⭐⭐⭐ Strong  | ⭐⭐ Weak            | ⭐⭐⭐ Mixed        | ⭐⭐⭐ Varies   | ⭐⭐⭐⭐⭐ Strong         |
+| **Testability**      | ⭐⭐ Hard          | ⭐⭐ Hard            | ⭐ Very Hard        | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Easy           |
+| **Learning Curve**   | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐⭐ Minimal   | ⭐⭐⭐ Moderate     | ⭐⭐⭐⭐ Low    | ⭐⭐⭐ Moderate           |
+| **Memory Safety**    | ⭐ Leak-prone      | ⭐⭐⭐ Unity-managed | ⭐⭐ Asset persist  | ⭐ Leak-prone   | ⭐⭐⭐⭐⭐ Leak-free      |
+| **Debugging**        | ⭐⭐ Hard at scale | ⭐⭐ Hard at scale   | ⭐⭐ Inspector-only | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Excellent      |
 
 ### Overall Verdict by Use Case
 
 - **Small prototype/jam:** C# Events or UnityEvents win (simplicity > all)
 - **Mid-size game (5-20k lines):** DxMessaging starts paying off (decoupling, debugging)
 - **Large game (20k+ lines):** DxMessaging essential for maintainability
+- **Designer-driven workflow:** SOA has value (Inspector wiring) but consider maintenance costs
+- **Legacy SOA project:** Use Pattern B (keep SOs for configs, migrate events to DxMessaging)
 - **Performance-critical (millions of messages/frame):** MessagePipe wins (highest throughput)
 - **Performance-critical (Unity-specific):** DxMessaging (excellent perf + Unity integration)
 - **UI-heavy:** DxMessaging excels (decoupled updates, global observers for UI state)
@@ -1492,6 +1563,14 @@ public void TestAchievementSystem() {
 - ✅ Designers need to wire logic without code
 - ✅ Rapid prototyping with prefabs
 - ✅ Very simple games (mobile casual, hyper-casual)
+
+### SOA (GameEvent/Variables) Wins When
+
+- ✅ Designers must create and wire events without touching code
+- ✅ Team is already heavily invested in SOA with many existing assets
+- ✅ Designer empowerment is the absolute top priority
+- ⚠️ **BUT:** Consider migration costs and maintainability issues (see [Anti-SOA critique](https://github.com/cathei/AntiScriptableObjectArchitecture))
+- ⚠️ **Alternative:** Use ScriptableObjects for configs only + DxMessaging for events (Pattern B in [SOA Guide](Patterns.md#14-compatibility-with-scriptable-object-architecture-soa))
 
 ### Static Event Bus Wins When
 

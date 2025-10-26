@@ -123,6 +123,7 @@ msg.EmitComponentTargeted(chestComponent);
 - **You value observability** - Need to debug "what fired when?" or track message flow
 - **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
 - **You want decoupling** - Hate when UI classes need references to 15 different game systems
+- **DI + Messaging hybrid** - Use DI (Zenject/VContainer/Reflex) for services, DxMessaging for events (see [Integrations](#-integrations))
 
 ### ❌ Don't Use DxMessaging When
 
@@ -521,13 +522,29 @@ Important: Inheritance with MessageAwareComponent
 
 ### 🧩 Integrations
 
-- [DxMessaging + Zenject](Docs/Integrations/Zenject.md) — Wire DxMessaging into a Zenject container
-- [DxMessaging + VContainer](Docs/Integrations/VContainer.md) — Bind DxMessaging inside VContainer scopes
-- [DxMessaging + Reflex](Docs/Integrations/Reflex.md) — Minimal injection with Reflex installers
+DxMessaging works standalone (zero dependencies) or alongside Dependency Injection frameworks:
+
+- **[DxMessaging + Zenject](Docs/Integrations/Zenject.md)** — Wire DxMessaging into a Zenject container
+- **[DxMessaging + VContainer](Docs/Integrations/VContainer.md)** — Bind DxMessaging inside VContainer scopes
+- **[DxMessaging + Reflex](Docs/Integrations/Reflex.md)** — Minimal injection with Reflex installers
+
+> **🔧 Using Dependency Injection (Zenject, VContainer, Reflex)?**
+>
+> DxMessaging integrates seamlessly with DI frameworks. You can:
+>
+> - Inject `IMessageBus` as a singleton dependency
+> - Use DI for service construction + DxMessaging for event communication
+> - Create per-scope message buses (e.g., per-scene or per-lifetime)
+> - Best of both worlds: Constructor injection for dependencies, messaging for events
+>
+> **No DI?** No problem! DxMessaging works perfectly standalone with zero dependencies.
+>
+> See integration guides above for step-by-step setup with your DI framework.
 
 ### 🆚 Comparisons
 
 - [Compare with Other Unity Messaging Frameworks](Docs/Comparisons.md) — In-depth comparison with UniRx, MessagePipe, Zenject Signals, C# events, UnityEvents, and more
+- [Scriptable Object Architecture (SOA) Compatibility](Docs/Patterns.md#14-compatibility-with-scriptable-object-architecture-soa) — Migration patterns and interoperability with SOA
 
 #### Quick Framework Comparison
 
@@ -551,6 +568,15 @@ Important: Inheritance with MessageAwareComponent
 - No dependencies, plug-and-play setup
 
 See [full comparison](Docs/Comparisons.md) for detailed analysis with code examples, performance benchmarks, and decision guides.
+
+> **📦 Using Scriptable Object Architecture (SOA)?**
+>
+> DxMessaging can work alongside or replace SOA patterns. See [SOA Compatibility Guide](Docs/Patterns.md#14-compatibility-with-scriptable-object-architecture-soa) for:
+>
+> - Fair comparison of SOA vs. DxMessaging
+> - Migration patterns from GameEvent/FloatVariable to DxMessaging
+> - How to use both systems together (SOs for configs, DxMessaging for events)
+> - When to keep using ScriptableObjects (immutable design data)
 
 ### 📖 Reference
 
