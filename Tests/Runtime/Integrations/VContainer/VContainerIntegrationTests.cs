@@ -58,7 +58,7 @@ namespace DxMessaging.Tests.Runtime.VContainer
             IObjectResolver resolver = TrackDisposable(builder.Build());
             IMessageRegistrationBuilder registrationBuilder =
                 resolver.Resolve<IMessageRegistrationBuilder>();
-            MessageRegistrationLease lease = registrationBuilder.Build(
+            using MessageRegistrationLease lease = registrationBuilder.Build(
                 new MessageRegistrationBuildOptions()
             );
 
@@ -67,8 +67,6 @@ namespace DxMessaging.Tests.Runtime.VContainer
                 lease.MessageBus,
                 "Registration extension should resolve a builder backed by the container bus."
             );
-
-            lease.Dispose();
         }
 
         [Test]
@@ -86,7 +84,7 @@ namespace DxMessaging.Tests.Runtime.VContainer
             IObjectResolver resolver = TrackDisposable(builder.Build());
             IMessageRegistrationBuilder registrationBuilder =
                 resolver.Resolve<IMessageRegistrationBuilder>();
-            MessageRegistrationLease lease = registrationBuilder.Build(
+            using MessageRegistrationLease lease = registrationBuilder.Build(
                 new MessageRegistrationBuildOptions()
             );
 
@@ -95,8 +93,6 @@ namespace DxMessaging.Tests.Runtime.VContainer
                 lease.MessageBus,
                 "Registration extensions should prefer an explicitly registered IMessageBusProvider."
             );
-
-            lease.Dispose();
         }
 
         private sealed class VContainerConfiguredListener : MonoBehaviour, IDisposable

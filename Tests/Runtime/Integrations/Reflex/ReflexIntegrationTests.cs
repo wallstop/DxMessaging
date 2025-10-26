@@ -70,7 +70,7 @@ namespace DxMessaging.Tests.Runtime.Reflex
 
             IMessageRegistrationBuilder registrationBuilder =
                 container.Resolve<IMessageRegistrationBuilder>();
-            MessageRegistrationLease lease = registrationBuilder.Build(
+            using MessageRegistrationLease lease = registrationBuilder.Build(
                 new MessageRegistrationBuildOptions()
             );
 
@@ -79,8 +79,6 @@ namespace DxMessaging.Tests.Runtime.Reflex
                 lease.MessageBus,
                 "Reflex registration installer should prefer the registered IMessageBusProvider."
             );
-
-            lease.Dispose();
         }
 
         [Test]

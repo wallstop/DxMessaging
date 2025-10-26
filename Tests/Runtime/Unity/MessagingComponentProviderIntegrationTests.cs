@@ -84,12 +84,16 @@ namespace DxMessaging.Tests.Runtime.Unity
             messagingComponent.Configure(provider, MessageBusRebindMode.RebindActive);
 
             IMessageRegistrationBuilder builder = messagingComponent.CreateRegistrationBuilder();
-            MessageRegistrationLease lease = builder.Build(new MessageRegistrationBuildOptions());
+            using (
+                MessageRegistrationLease lease = builder.Build(
+                    new MessageRegistrationBuildOptions()
+                )
+            )
+            {
+                Assert.AreSame(messageBus, lease.MessageBus);
+                Assert.IsFalse(lease.Token.Enabled);
+            }
 
-            Assert.AreSame(messageBus, lease.MessageBus);
-            Assert.IsFalse(lease.Token.Enabled);
-
-            lease.Dispose();
             Object.DestroyImmediate(owner);
             yield break;
         }
@@ -104,11 +108,14 @@ namespace DxMessaging.Tests.Runtime.Unity
             messagingComponent.Configure(messageBus, MessageBusRebindMode.RebindActive);
 
             IMessageRegistrationBuilder builder = messagingComponent.CreateRegistrationBuilder();
-            MessageRegistrationLease lease = builder.Build(new MessageRegistrationBuildOptions());
-
-            Assert.AreSame(messageBus, lease.MessageBus);
-
-            lease.Dispose();
+            using (
+                MessageRegistrationLease lease = builder.Build(
+                    new MessageRegistrationBuildOptions()
+                )
+            )
+            {
+                Assert.AreSame(messageBus, lease.MessageBus);
+            }
             Object.DestroyImmediate(owner);
             yield break;
         }

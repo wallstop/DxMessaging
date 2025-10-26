@@ -58,7 +58,7 @@ namespace DxMessaging.Tests.Runtime.Zenject
                 container.Resolve<IMessageRegistrationBuilder>();
             Assert.NotNull(registrationBuilder);
 
-            MessageRegistrationLease lease = registrationBuilder.Build(
+            using MessageRegistrationLease lease = registrationBuilder.Build(
                 new MessageRegistrationBuildOptions()
             );
             Assert.AreSame(
@@ -66,7 +66,6 @@ namespace DxMessaging.Tests.Runtime.Zenject
                 lease.MessageBus,
                 "Builder resolved by the installer should default to the container-provided bus."
             );
-            lease.Dispose();
         }
 
         [Test]
@@ -85,7 +84,7 @@ namespace DxMessaging.Tests.Runtime.Zenject
 
             IMessageRegistrationBuilder registrationBuilder =
                 container.Resolve<IMessageRegistrationBuilder>();
-            MessageRegistrationLease lease = registrationBuilder.Build(
+            using MessageRegistrationLease lease = registrationBuilder.Build(
                 new MessageRegistrationBuildOptions()
             );
 
@@ -94,8 +93,6 @@ namespace DxMessaging.Tests.Runtime.Zenject
                 lease.MessageBus,
                 "Builder should prefer the container-provided IMessageBusProvider when available."
             );
-
-            lease.Dispose();
         }
 
         private sealed class ZenjectConfiguredListener : MonoBehaviour

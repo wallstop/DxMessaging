@@ -45,17 +45,11 @@ namespace DxMessaging.Tests.Runtime.Core
         public void BuildUsesResolvedBusWhenNoOverrideProvided()
         {
             MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions();
-            MessageRegistrationLease lease = _builder.Build(options);
-            try
-            {
-                Assert.AreSame(_defaultBus, lease.MessageBus);
-                Assert.IsNotNull(lease.Token);
-                Assert.IsFalse(lease.Token.Enabled);
-            }
-            finally
-            {
-                lease.Dispose();
-            }
+            using MessageRegistrationLease lease = _builder.Build(options);
+
+            Assert.AreSame(_defaultBus, lease.MessageBus);
+            Assert.IsNotNull(lease.Token);
+            Assert.IsFalse(lease.Token.Enabled);
         }
 
         [Test]
@@ -92,8 +86,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 ),
             };
 
-            MessageRegistrationLease lease = _builder.Build(options);
-            try
+            using (MessageRegistrationLease lease = _builder.Build(options))
             {
                 Assert.IsTrue(buildInvoked);
                 Assert.IsTrue(lease.Token.Enabled);
@@ -103,10 +96,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 lease.Deactivate();
                 Assert.IsFalse(lease.IsActive);
                 Assert.IsTrue(deactivateInvoked);
-            }
-            finally
-            {
-                lease.Dispose();
             }
 
             Assert.IsTrue(disposeInvoked);
@@ -121,30 +110,29 @@ namespace DxMessaging.Tests.Runtime.Core
                 PreferredMessageBus = preferredBus,
             };
 
-            MessageRegistrationLease lease = _builder.Build(options);
-            try
+            using MessageRegistrationLease lease = _builder.Build(options);
+            Assert.AreSame(preferredBus, lease.MessageBus);
+        }
+
+        [Test]
+        public void MessageBusProviderOptionOverridesBuilderDefault()
+        {
+            MessageBus providerBus = new MessageBus();
+            MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
             {
-                Assert.AreSame(preferredBus, lease.MessageBus);
-            }
-            finally
-            {
-                lease.Dispose();
-            }
+                MessageBusProvider = new PassthroughMessageBusProvider(providerBus),
+            };
+
+            using MessageRegistrationLease lease = _builder.Build(options);
+            Assert.AreSame(providerBus, lease.MessageBus);
         }
 
         [Test]
         public void SyntheticOwnerGeneratedWhenOwnerMissing()
         {
             MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions();
-            MessageRegistrationLease lease = _builder.Build(options);
-            try
-            {
-                Assert.AreNotEqual(InstanceId.EmptyId, lease.Owner);
-            }
-            finally
-            {
-                lease.Dispose();
-            }
+            using MessageRegistrationLease lease = _builder.Build(options);
+            Assert.AreNotEqual(InstanceId.EmptyId, lease.Owner);
         }
 
         [Test]
@@ -155,18 +143,12 @@ namespace DxMessaging.Tests.Runtime.Core
                 HandlerStartsActive = false,
             };
 
-            MessageRegistrationLease lease = _builder.Build(options);
-            try
-            {
-                Assert.IsFalse(lease.Handler.active);
-                lease.Activate();
-                Assert.IsTrue(lease.IsActive);
-                Assert.IsTrue(lease.Handler.active);
-            }
-            finally
-            {
-                lease.Dispose();
-            }
+            using MessageRegistrationLease lease = _builder.Build(options);
+
+            Assert.IsFalse(lease.Handler.active);
+            lease.Activate();
+            Assert.IsTrue(lease.IsActive);
+            Assert.IsTrue(lease.Handler.active);
         }
 
         [Test]
@@ -181,18 +163,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 },
             };
 
-            MessageRegistrationLease lease = _builder.Build(options);
-            try
-            {
-                Assert.IsTrue(
-                    lease.Token.DiagnosticMode,
-                    "Diagnostics flag should propagate to the token."
-                );
-            }
-            finally
-            {
-                lease.Dispose();
-            }
+            using MessageRegistrationLease lease = _builder.Build(options);
+            Assert.IsTrue(
+                lease.Token.DiagnosticMode,
+                "Diagnostics flag should propagate to the token."
+            );
         }
 
         [Test]
@@ -212,8 +187,10 @@ namespace DxMessaging.Tests.Runtime.Core
                 ),
             };
 
-            MessageRegistrationLease lease = _builder.Build(options);
-            lease.Dispose();
+            using (MessageRegistrationLease lease = _builder.Build(options))
+            {
+                // No-op
+            }
 
             Assert.IsTrue(
                 deactivateInvoked,
