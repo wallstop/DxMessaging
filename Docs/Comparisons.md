@@ -57,6 +57,9 @@ This section compares DxMessaging with other popular Unity messaging/eventing li
 #### TL;DR Decision Tree
 
 ```text
+Need absolute simplest pub/sub setup (zero boilerplate)?
+  → Use UniRx MessageBroker (publish/receive in 2 lines)
+
 Need complex event stream transformations (debounce, throttle, combine)?
   → Use UniRx (reactive programming paradigm)
 
@@ -75,8 +78,8 @@ Maximum raw throughput is THE priority?
 Need message validation, interception, or ordered execution?
   → Use DxMessaging (interceptor pipeline, priority-based ordering)
 
-Simple pub/sub with automatic lifecycle management?
-  → Use DxMessaging (automatic cleanup, priorities, validation)
+Simple pub/sub with automatic lifecycle management and debugging?
+  → Use DxMessaging (automatic cleanup, priorities, validation, Inspector)
 ```
 
 ##### One-Line Summary for Each
@@ -105,6 +108,45 @@ Simple pub/sub with automatic lifecycle management?
 
 #### Code Example
 
+##### Simple MessageBroker Setup (Pub/Sub)
+
+```csharp
+using UniRx;
+using UnityEngine;
+
+public struct EnemySpawned
+{
+    public int EnemyId;
+    public Vector3 Position;
+}
+
+// Publisher - extremely simple, no setup required
+public class EnemySpawner : MonoBehaviour
+{
+    void SpawnEnemy(int id)
+    {
+        MessageBroker.Default.Publish(new EnemySpawned
+        {
+            EnemyId = id,
+            Position = transform.position
+        });
+    }
+}
+
+// Subscriber - also extremely simple
+public class AchievementSystem : MonoBehaviour
+{
+    void Start()
+    {
+        MessageBroker.Default.Receive<EnemySpawned>()
+            .Subscribe(msg => Debug.Log($"Enemy {msg.EnemyId} spawned!"))
+            .AddTo(this); // Automatic cleanup on destroy
+    }
+}
+```
+
+###### Advanced Stream Transformations (Reactive Programming)
+
 ```csharp
 // Double-click detection using reactive operators
 Observable.EveryUpdate()
@@ -129,7 +171,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **Simple pub/sub:** Overkill for basic "emit and listen" scenarios (requires understanding reactive paradigm)
+- ⚠️ **Simple pub/sub:** MessageBroker handles this well, but using reactive operators for simple scenarios is overkill
 - ❌ **Execution order control:** No built-in priority system for handler ordering
 - ❌ **Message validation/interception:** No pre-processing pipeline to validate or transform messages before handlers
 - ❌ **Unity Inspector debugging:** No Inspector integration to visualize message flow
@@ -144,20 +186,23 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### Learning Curve
 
-- **Steep for beginners:** Requires understanding reactive programming paradigm
-- **Mental model shift:** Think in streams, not events
+- **Simple MessageBroker (basic pub/sub):** Very easy - just `Publish()` and `Receive()`, similar to events
+- **Advanced stream operators:** Steep - requires understanding reactive programming paradigm
+- **Mental model shift:** For complex features, must think in streams, not events
 - **Documentation:** Extensive examples, but reactive concepts take time to master
-- **Estimated learning time:** 1-2 weeks to become productive
+- **Estimated learning time:** 15 minutes for MessageBroker; 1-2 weeks for reactive stream mastery
 
 #### Ease of Understanding
 
-- ⭐⭐⭐ (Moderate to difficult)
-- Code is concise but requires understanding of operators
-- Hard to debug without understanding observable chains
-- Team buy-in essential; not intuitive for traditional event-driven developers
+- ⭐⭐⭐⭐⭐ (Very easy) - MessageBroker pub/sub is intuitive and straightforward
+- ⭐⭐⭐ (Moderate to difficult) - Advanced reactive operators require learning
+- Stream operator code is concise but requires understanding of reactive patterns
+- Hard to debug complex observable chains without Rx knowledge
+- For advanced features: Team buy-in essential; not intuitive for traditional event-driven developers
 
 #### When UniRx Wins
 
+- ✅ Simple pub/sub with minimal setup (MessageBroker is extremely easy)
 - ✅ Complex event transformations (e.g., double-click, gesture detection)
 - ✅ Combining multiple input sources
 - ✅ Time-based logic (debounce, throttle, sample)
@@ -166,7 +211,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### When DxMessaging Wins
 
-- ✅ Simple pub/sub patterns without reactive complexity
+- ✅ Need Unity-specific features (GameObject targeting, lifecycle management)
 - ✅ Execution order matters (priority-based ordering)
 - ✅ Message validation/interception needed (interceptor pipeline)
 - ✅ Inspector debugging required (message history, registration view)
@@ -174,7 +219,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 - ✅ Global message observation (listen to all instances of a message type)
 - ✅ Late-stage processing (post-processors after all handlers)
 - ✅ Automatic lifecycle management (zero memory leaks)
-- ✅ Teams unfamiliar with reactive programming
+- ✅ Teams unfamiliar with reactive programming (and don't need reactive features)
 
 #### Direct Comparison
 
@@ -186,7 +231,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 | **Performance**          | 18M ops/sec            | 14M ops/sec              |
 | **Allocations**          | ⚠️ Can allocate        | ✅ Zero (structs)        |
 | **Learning Curve**       | ⭐ Steep (Rx paradigm) | ⭐⭐⭐ Moderate          |
-| **Setup Complexity**     | ⭐⭐⭐⭐ Simple        | ⭐⭐⭐⭐⭐ Plug-and-play |
+| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Low         | ⭐⭐⭐⭐⭐ Plug-and-play |
 | **DI Integration**       | ⚠️ Optional            | ⚠️ Optional              |
 | **Async/Await**          | ✅ Observables         | ⚠️ Manual                |
 | **Type Safety**          | ✅ Strong              | ✅ Strong                |
@@ -203,7 +248,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 | **Temporal Operators**   | ✅ Extensive (Rx)      | ❌ Not built-in          |
 | **Complex Stream Logic** | ✅ LINQ-style          | ❌ Not designed for      |
 
-**Bottom Line:** UniRx excels at complex event stream transformations and reactive programming patterns. DxMessaging excels at straightforward pub/sub communication with control, validation, and debugging. Use UniRx when you need stream operators; use DxMessaging when you need reliable messaging.
+**Bottom Line:** UniRx excels at complex event stream transformations and reactive programming patterns, with MessageBroker providing extremely simple pub/sub setup. DxMessaging excels at straightforward pub/sub communication with control, validation, debugging, and Unity-specific features. Use UniRx when you need stream operators or simple zero-setup pub/sub; use DxMessaging when you need Unity integration with execution control and debugging.
 
 ---
 
@@ -1343,7 +1388,7 @@ public void TestAchievementSystem() {
 | **Execution Order**      | ✅ Priority-based            | ❌ Not built-in          | ❌ Subscription order       | ❌ Not built-in            |
 | **Lifecycle Management** | ✅ Automatic (MonoBehaviour) | ⚠️ Manual dispose        | ⚠️ Manual dispose           | ⚠️ DI-managed              |
 | **Learning Curve**       | ⭐⭐⭐ Moderate              | ⭐⭐ Steep (Rx paradigm) | ⭐⭐⭐⭐ Moderate (DI)      | ⭐⭐ Steep (DI+Signals)    |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Plug-and-play     | ⭐⭐⭐⭐ Simple          | ⭐⭐⭐ DI setup required    | ⭐⭐ Installers required   |
+| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Plug-and-play     | ⭐⭐⭐⭐⭐ Low           | ⭐⭐⭐ DI setup required    | ⭐⭐ Installers required   |
 | **DI Integration**       | ⚠️ Optional                  | ⚠️ Optional              | ✅ First-class              | ✅ Required (Zenject)      |
 | **Async/Await**          | ⚠️ Manual                    | ✅ Native (observables)  | ✅ Native                   | ✅ Yes                     |
 | **Message Validation**   | ✅ Interceptor pipeline      | ❌ Not built-in          | ⚠️ Filters (middleware)     | ❌ Not built-in            |
@@ -1407,6 +1452,7 @@ public void TestAchievementSystem() {
 
 ### UniRx Wins When
 
+- ✅ Simple pub/sub with minimal setup (MessageBroker is extremely easy)
 - ✅ Complex event stream transformations needed
 - ✅ Time-based operations (throttle, debounce, buffer)
 - ✅ Combining multiple input sources
