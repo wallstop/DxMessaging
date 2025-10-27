@@ -26,7 +26,7 @@ namespace DxMessaging.Core.Messages
     /// // Attribute form with auto constructor
     /// [DxMessaging.Core.Attributes.DxTargetedMessage]
     /// [DxMessaging.Core.Attributes.DxAutoConstructor]
-    /// public readonly struct EquipWeapon { public readonly int weaponId; }
+    /// public readonly partial struct EquipWeapon { public readonly int weaponId; }
     /// </code>
     /// </example>
     public interface ITargetedMessage : IMessage { }

@@ -72,10 +72,10 @@ namespace DxMessaging.Unity
                 throw new ArgumentNullException(nameof(listener));
             }
 
-            if (gameObject.GetInstanceID() != listener.gameObject.GetInstanceID())
+            if (gameObject != listener.gameObject)
             {
                 throw new ArgumentException(
-                    $"Cannot create a RegistrationToken without an valid owner. {listener.gameObject.GetInstanceID()}."
+                    $"Cannot create a RegistrationToken without a mismatched owner. {listener.gameObject} != existing {gameObject}."
                 );
             }
 
@@ -86,11 +86,15 @@ namespace DxMessaging.Unity
                 )
             )
             {
-                MessagingDebug.Log(
-                    LogLevel.Warn,
-                    "Ignoring double RegistrationToken request for {0}.",
-                    listener
-                );
+                if (MessagingDebug.enabled)
+                {
+                    MessagingDebug.Log(
+                        LogLevel.Warn,
+                        "Ignoring double RegistrationToken request for {0}.",
+                        listener
+                    );
+                }
+
                 return createdToken;
             }
 

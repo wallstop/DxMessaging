@@ -60,8 +60,7 @@ public readonly partial struct TookDamage
     public readonly int amount;
 }
 
-// Performance option: generic interfaces on structs (zero boxing)
-// public readonly struct Heal : ITargetedMessage<Heal> { public readonly int amount; public Heal(int amount) { this.amount = amount; } }
+// Performance option: keep [DxTargetedMessage] on a readonly struct to stay zero-boxing friendly, and drop [DxAutoConstructor] only if you need custom constructor logic.
 
 // Optional parameters with custom defaults
 [DxTargetedMessage]

@@ -14,7 +14,7 @@ namespace DxMessaging.Core.Attributes
     /// <code>
     /// [DxMessaging.Core.Attributes.DxUntargetedMessage]
     /// [DxMessaging.Core.Attributes.DxAutoConstructor]
-    /// public readonly struct VideoSettingsChanged
+    /// public readonly partial struct VideoSettingsChanged
     /// {
     ///     public readonly int width;
     ///     public readonly int height;
