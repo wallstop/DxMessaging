@@ -431,6 +431,51 @@ Phase them out gradually:
 1. Migrate listeners
 1. Remove references in next refactor pass
 
+### Adopt the DI Registration Builder
+
+Once the bus/provider abstractions are in place, wire listeners through the registration builder instead of hand-rolling handler lifecycles. Benefits:
+
+- Container-managed lifetimes (`IDisposable`, `IInitializable`, `IStartable`, etc.) automatically enable/disable registrations.
+- Centralises diagnostics toggles and message bus selection.
+- Keeps MonoBehaviours and pure C# services on the same path.
+
+```csharp
+public sealed class InventoryService : IStartable, IDisposable
+{
+    private readonly MessageRegistrationLease lease;
+
+    public InventoryService(IMessageRegistrationBuilder registrationBuilder)
+    {
+        lease = registrationBuilder.Build(new MessageRegistrationBuildOptions
+        {
+            Configure = token =>
+            {
+                _ = token.RegisterUntargeted<InventoryChanged>(OnInventoryChanged);
+            }
+        });
+    }
+
+    public void Start()
+    {
+        lease.Activate();
+    }
+
+    public void Dispose()
+    {
+        lease.Dispose();
+    }
+
+    private static void OnInventoryChanged(ref InventoryChanged message)
+    {
+        // respond to updates
+    }
+}
+```
+
+- **Unity scene code:** Call `MessagingComponent.CreateRegistrationBuilder()` during dependency injection and share the lease across helper services or pooled objects.
+- **Container shims:** Define `ZENJECT_PRESENT`, `VCONTAINER_PRESENT`, or `REFLEX_PRESENT` to enable the built-in installers/extensions that register the builder automatically when those frameworks are present.
+- **Tests:** Prefer the builder to create isolated tokens tied to the test fixture lifecycle.
+
 ### "Should we migrate tests?"
 
 Yes! Tests benefit from isolated message buses:

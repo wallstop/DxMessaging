@@ -113,6 +113,57 @@ msg.EmitComponentTargeted(chestComponent);
 
 ---
 
+## 🔧 Dependency Injection (DI) Compatible
+
+**Using Zenject, VContainer, or Reflex?** DxMessaging is fully DI-compatible out of the box!
+
+```csharp
+// Inject IMessageBus in any class
+public class PlayerService : IInitializable, IDisposable
+{
+    private readonly MessageRegistrationLease _lease;
+
+    public PlayerService(IMessageRegistrationBuilder builder)
+    {
+        // Builder automatically resolves your container-managed bus
+        _lease = builder.Build(new MessageRegistrationBuildOptions
+        {
+            Configure = token => token.RegisterUntargeted<PlayerSpawned>(OnSpawn)
+        });
+    }
+
+    public void Initialize() => _lease.Activate();
+    public void Dispose() => _lease.Dispose();
+}
+```
+
+### Why use DI + Messaging?
+
+- **DI for construction** — Inject services, repositories, managers via constructors
+- **Messaging for events** — Reactive, decoupled communication for gameplay events
+- **Best of both worlds** — Clean architecture with testable, isolated buses
+
+#### Automatic integration for
+
+- ✅ **Zenject/Extenject** — Full-featured DI with extensive Unity support
+- ✅ **VContainer** — Lightweight, high-performance DI with scoped lifetimes
+- ✅ **Reflex** — Minimal API, blazing-fast dependency injection
+
+##### Get started
+
+- [Zenject Integration Guide](Docs/Integrations/Zenject.md) — Complete setup with examples
+- [VContainer Integration Guide](Docs/Integrations/VContainer.md) — Scoped buses for scene isolation
+- [Reflex Integration Guide](Docs/Integrations/Reflex.md) — Minimal, lightweight patterns
+
+##### Core DI concepts
+
+- [Runtime Configuration](Docs/RuntimeConfiguration.md) — Setting message buses at runtime, re-binding registrations
+- [Message Bus Providers](Docs/MessageBusProviders.md) — Provider system for design-time and runtime bus configuration
+
+**Not using DI?** No problem! DxMessaging works perfectly standalone with zero dependencies.
+
+---
+
 ## Is DxMessaging Right for You
 
 ### ✅ Use DxMessaging When
@@ -123,6 +174,7 @@ msg.EmitComponentTargeted(chestComponent);
 - **You value observability** - Need to debug "what fired when?" or track message flow
 - **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
 - **You want decoupling** - Hate when UI classes need references to 15 different game systems
+- **You're using DI frameworks** - Seamless integration with Zenject/VContainer/Reflex (see [DI Compatible](#-dependency-injection-di-compatible))
 
 ### ❌ Don't Use DxMessaging When
 
@@ -468,7 +520,7 @@ void OnDamage(ref TookDamage msg) {
 public void TestAchievementSystem() {
     // Create isolated bus - zero global state
     var testBus = new MessageBus();
-    var handler = new MessageHandler(new InstanceId(1)) { active = true };
+    var handler = new MessageHandler(new InstanceId(1), testBus) { active = true };
     var token = MessageRegistrationToken.Create(handler, testBus);
 
     // Test in isolation
@@ -519,9 +571,32 @@ Important: Inheritance with MessageAwareComponent
 - If you need to opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
 - Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
 
+### 🧩 DI Framework Integrations
+
+DxMessaging works standalone (zero dependencies) or with any major DI framework. For detailed setup guides and code examples:
+
+- **[Zenject Integration Guide](Docs/Integrations/Zenject.md)** — Full-featured DI with extensive Unity support
+- **[VContainer Integration Guide](Docs/Integrations/VContainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
+- **[Reflex Integration Guide](Docs/Integrations/Reflex.md)** — Minimal API, blazing-fast performance
+
+#### Core DI concepts
+
+- **[Runtime Configuration](Docs/RuntimeConfiguration.md)** — Setting and overriding message buses at runtime, re-binding registrations
+- **[Message Bus Providers](Docs/MessageBusProviders.md)** — Provider system and MessageBusProviderHandle for flexible bus configuration
+
+Each guide includes:
+
+- ✅ Complete setup instructions with installers
+- ✅ Multiple usage patterns (plain classes, MonoBehaviours, direct injection)
+- ✅ Testing examples with isolated buses
+- ✅ Advanced patterns (pooling, scene scopes, signal bridges)
+
+See the [🔧 DI Compatible section](#-dependency-injection-di-compatible) above for a quick overview.
+
 ### 🆚 Comparisons
 
 - [Compare with Other Unity Messaging Frameworks](Docs/Comparisons.md) — In-depth comparison with UniRx, MessagePipe, Zenject Signals, C# events, UnityEvents, and more
+- [Scriptable Object Architecture (SOA) Compatibility](Docs/Patterns.md#14-compatibility-with-scriptable-object-architecture-soa) — Migration patterns and interoperability with SOA
 
 #### Quick Framework Comparison
 
@@ -545,6 +620,15 @@ Important: Inheritance with MessageAwareComponent
 - No dependencies, plug-and-play setup
 
 See [full comparison](Docs/Comparisons.md) for detailed analysis with code examples, performance benchmarks, and decision guides.
+
+> **📦 Using Scriptable Object Architecture (SOA)?**
+>
+> DxMessaging can work alongside or replace SOA patterns. See [SOA Compatibility Guide](Docs/Patterns.md#14-compatibility-with-scriptable-object-architecture-soa) for:
+>
+> - Fair comparison of SOA vs. DxMessaging
+> - Migration patterns from GameEvent/FloatVariable to DxMessaging
+> - How to use both systems together (SOs for configs, DxMessaging for events)
+> - When to keep using ScriptableObjects (immutable design data)
 
 ### 📖 Reference
 

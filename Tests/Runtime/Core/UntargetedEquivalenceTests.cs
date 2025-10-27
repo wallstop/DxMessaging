@@ -43,7 +43,7 @@ namespace DxMessaging.Tests.Runtime.Core
             _spawned.Add(go);
             UntargetedReceiverComponent comp = go.GetComponent<UntargetedReceiverComponent>();
 
-            MessageBus bus = MessageHandler.MessageBus;
+            IMessageBus bus = MessageHandler.MessageBus;
             bool cancel = true;
             Action dereg = bus.RegisterUntargetedInterceptor(
                 (ref SimpleUntargetedMessage _) => !cancel

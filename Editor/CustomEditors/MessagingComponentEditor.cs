@@ -5,6 +5,7 @@ namespace DxMessaging.Editor.CustomEditors
     using System.Linq;
     using Core;
     using Core.Diagnostics;
+    using Core.MessageBus;
     using Core.Messages;
     using Unity;
     using UnityEditor;
@@ -107,18 +108,26 @@ namespace DxMessaging.Editor.CustomEditors
                 }
             }
 
-            if (!MessageHandler.MessageBus.DiagnosticsMode)
+            IMessageBus globalBus = MessageHandler.MessageBus;
+            if (globalBus is not MessageBus concreteBus)
+            {
+                EditorGUILayout.HelpBox(
+                    "Global diagnostics controls are unavailable because the active global bus is not the default DxMessaging MessageBus implementation.",
+                    MessageType.Info
+                );
+            }
+            else if (!concreteBus.DiagnosticsMode)
             {
                 if (GUILayout.Button("Enable Global Diagnostics"))
                 {
-                    MessageHandler.MessageBus.DiagnosticsMode = true;
+                    concreteBus.DiagnosticsMode = true;
                 }
             }
             else
             {
                 if (GUILayout.Button("Disable Global Diagnostics"))
                 {
-                    MessageHandler.MessageBus.DiagnosticsMode = false;
+                    concreteBus.DiagnosticsMode = false;
                 }
                 else
                 {
@@ -130,7 +139,7 @@ namespace DxMessaging.Editor.CustomEditors
                         "Global Messages",
                         true
                     );
-                    int totalGlobalMessages = MessageHandler.MessageBus._emissionBuffer.Count;
+                    int totalGlobalMessages = concreteBus._emissionBuffer.Count;
                     if (_globalBufferExpanded && totalGlobalMessages > 0)
                     {
                         int page = _globalBufferPaging;
@@ -163,8 +172,8 @@ namespace DxMessaging.Editor.CustomEditors
                             }
                         }
 
-                        MessageEmissionData[] pagedGlobalMessages = MessageHandler
-                            .MessageBus._emissionBuffer.Reverse()
+                        MessageEmissionData[] pagedGlobalMessages = concreteBus
+                            ._emissionBuffer.Reverse()
                             .Skip(page * PageSize)
                             .Take(PageSize)
                             .ToArray();

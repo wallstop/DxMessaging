@@ -133,10 +133,35 @@ using DxMessaging.Core;
 using DxMessaging.Core.MessageBus;
 
 var localBus  = new MessageBus();
-var handler   = new MessageHandler(new InstanceId(123)) { active = true };
+var handler   = new MessageHandler(new InstanceId(123), localBus) { active = true };
 var token     = MessageRegistrationToken.Create(handler, localBus);
 // stage registrations on token; emit to localBus in tests
+// optional: replace the global singleton so shorthands use your DI bus
+MessageHandler.SetGlobalMessageBus(localBus);
 ```
+
+## Temporarily override the global bus
+
+When legacy shorthands or static helpers must run against a scoped bus (for example inside an integration test), use `MessageHandler.OverrideGlobalMessageBus` to push a temporary override that restores automatically:
+
+```csharp
+using DxMessaging.Core.MessageBus;
+
+IMessageBus testBus = new MessageBus();
+
+using (MessageHandler.OverrideGlobalMessageBus(testBus))
+{
+    // All static helpers (Emit shorthands, GlobalMessageBusProvider, etc.) resolve testBus.
+    RunTestScenario();
+}
+// previous global bus restored here
+```
+
+The scope throws if you pass `null` and guarantees the prior bus returns even if the wrapped code throws. Pair this with `IMessageRegistrationBuilder` for clean test lifecycles.
+
+> **Editor note:** When the global bus is replaced with a decorated implementation, certain inspector diagnostics that rely on the concrete `MessageBus` type (e.g., registration graphs) are temporarily unavailable until the override scope ends.
+
+Need a stable reference to the original bus regardless of overrides? Use `InitialGlobalMessageBusProviderAsset` (Create Asset → “DxMessaging/Message Bus Providers/Initial Global Message Bus”) to expose the startup instance.
 
 Scoped interceptors (debug)
 

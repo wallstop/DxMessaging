@@ -47,19 +47,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitGameObjectTargeted<TMessage>(
             this TMessage message,
             UnityEngine.GameObject target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, ITargetedMessage
         {
             InstanceId targetId = target;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(targetId, message);
+                resolvedBus.UntypedTargetedBroadcast(targetId, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref targetId, ref message);
+            resolvedBus.TargetedBroadcast(ref targetId, ref message);
         }
 
         /// <summary>
@@ -71,19 +72,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitGameObjectTargeted<TMessage>(
             this ref TMessage message,
             UnityEngine.GameObject target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, ITargetedMessage
         {
             InstanceId targetId = target;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(targetId, message);
+                resolvedBus.UntypedTargetedBroadcast(targetId, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref targetId, ref message);
+            resolvedBus.TargetedBroadcast(ref targetId, ref message);
         }
 
         /// <summary>
@@ -95,19 +97,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitComponentTargeted<TMessage>(
             this TMessage message,
             UnityEngine.Component target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, ITargetedMessage
         {
             InstanceId targetId = target;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(targetId, message);
+                resolvedBus.UntypedTargetedBroadcast(targetId, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref targetId, ref message);
+            resolvedBus.TargetedBroadcast(ref targetId, ref message);
         }
 
         /// <summary>
@@ -119,19 +122,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitComponentTargeted<TMessage>(
             this ref TMessage message,
             UnityEngine.Component target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, ITargetedMessage
         {
             InstanceId targetId = target;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(targetId, message);
+                resolvedBus.UntypedTargetedBroadcast(targetId, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref targetId, ref message);
+            resolvedBus.TargetedBroadcast(ref targetId, ref message);
         }
 #endif
 
@@ -144,18 +148,19 @@ namespace DxMessaging.Core.Extensions
         public static void EmitTargeted<TMessage>(
             this TMessage message,
             InstanceId target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, ITargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(target, message);
+                resolvedBus.UntypedTargetedBroadcast(target, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref target, ref message);
+            resolvedBus.TargetedBroadcast(ref target, ref message);
         }
 
         /// <summary>
@@ -167,18 +172,19 @@ namespace DxMessaging.Core.Extensions
         public static void EmitTargeted<TMessage>(
             this ref TMessage message,
             InstanceId target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, ITargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(target, message);
+                resolvedBus.UntypedTargetedBroadcast(target, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref target, ref message);
+            resolvedBus.TargetedBroadcast(ref target, ref message);
         }
 
         /// <summary>
@@ -188,18 +194,19 @@ namespace DxMessaging.Core.Extensions
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
         public static void EmitUntargeted<TMessage>(
             this TMessage message,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, IUntargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IUntargetedMessage))
             {
-                messageBus.UntypedUntargetedBroadcast(message);
+                resolvedBus.UntypedUntargetedBroadcast(message);
                 return;
             }
 
-            messageBus.UntargetedBroadcast(ref message);
+            resolvedBus.UntargetedBroadcast(ref message);
         }
 
         /// <summary>
@@ -222,17 +229,21 @@ namespace DxMessaging.Core.Extensions
         /// </example>
         /// <param name="message">Untargeted message to emit.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void Emit<TMessage>(this TMessage message, IMessageBus messageBus = null)
+        public static void Emit<TMessage>(
+            this TMessage message,
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
+        )
             where TMessage : class, IUntargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IUntargetedMessage))
             {
-                messageBus.UntypedUntargetedBroadcast(message);
+                resolvedBus.UntypedUntargetedBroadcast(message);
                 return;
             }
 
-            messageBus.UntargetedBroadcast(ref message);
+            resolvedBus.UntargetedBroadcast(ref message);
         }
 
         /// <summary>
@@ -242,18 +253,19 @@ namespace DxMessaging.Core.Extensions
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
         public static void EmitUntargeted<TMessage>(
             this ref TMessage message,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, IUntargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IUntargetedMessage))
             {
-                messageBus.UntypedUntargetedBroadcast(message);
+                resolvedBus.UntypedUntargetedBroadcast(message);
                 return;
             }
 
-            messageBus.UntargetedBroadcast(ref message);
+            resolvedBus.UntargetedBroadcast(ref message);
         }
 
         /// <summary>
@@ -276,17 +288,21 @@ namespace DxMessaging.Core.Extensions
         /// </example>
         /// <param name="message">Untargeted message to emit.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void Emit<TMessage>(this ref TMessage message, IMessageBus messageBus = null)
+        public static void Emit<TMessage>(
+            this ref TMessage message,
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
+        )
             where TMessage : struct, IUntargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IUntargetedMessage))
             {
-                messageBus.UntypedUntargetedBroadcast(message);
+                resolvedBus.UntypedUntargetedBroadcast(message);
                 return;
             }
 
-            messageBus.UntargetedBroadcast(ref message);
+            resolvedBus.UntargetedBroadcast(ref message);
         }
 
         /// <summary>
@@ -319,18 +335,19 @@ namespace DxMessaging.Core.Extensions
         public static void EmitAt<TMessage>(
             this ref TMessage message,
             InstanceId target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, ITargetedMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedTargetedBroadcast(target, message);
+                resolvedBus.UntypedTargetedBroadcast(target, message);
                 return;
             }
 
-            messageBus.TargetedBroadcast(ref target, ref message);
+            resolvedBus.TargetedBroadcast(ref target, ref message);
         }
 
         /// <summary>
@@ -363,18 +380,19 @@ namespace DxMessaging.Core.Extensions
         public static void EmitFrom<TMessage>(
             this ref TMessage message,
             InstanceId source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, IBroadcastMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(ITargetedMessage))
             {
-                messageBus.UntypedSourcedBroadcast(source, message);
+                resolvedBus.UntypedSourcedBroadcast(source, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref source, ref message);
+            resolvedBus.SourcedBroadcast(ref source, ref message);
         }
 
 #if UNITY_2017_1_OR_NEWER
@@ -387,19 +405,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitGameObjectBroadcast<TMessage>(
             this TMessage message,
             UnityEngine.GameObject source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, IBroadcastMessage
         {
             InstanceId sourceId = source;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
-                messageBus.UntypedSourcedBroadcast(sourceId, message);
+                resolvedBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref sourceId, ref message);
+            resolvedBus.SourcedBroadcast(ref sourceId, ref message);
         }
 
         /// <summary>
@@ -411,19 +430,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitGameObjectBroadcast<TMessage>(
             this ref TMessage message,
             UnityEngine.GameObject source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, IBroadcastMessage
         {
             InstanceId sourceId = source;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
-                messageBus.UntypedSourcedBroadcast(sourceId, message);
+                resolvedBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref sourceId, ref message);
+            resolvedBus.SourcedBroadcast(ref sourceId, ref message);
         }
 
         /// <summary>
@@ -435,19 +455,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitComponentBroadcast<TMessage>(
             this TMessage message,
             UnityEngine.Component source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, IBroadcastMessage
         {
             InstanceId sourceId = source;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
-                messageBus.UntypedSourcedBroadcast(sourceId, message);
+                resolvedBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref sourceId, ref message);
+            resolvedBus.SourcedBroadcast(ref sourceId, ref message);
         }
 
         /// <summary>
@@ -459,19 +480,20 @@ namespace DxMessaging.Core.Extensions
         public static void EmitComponentBroadcast<TMessage>(
             this ref TMessage message,
             UnityEngine.Component source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, IBroadcastMessage
         {
             InstanceId sourceId = source;
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
-                messageBus.UntypedSourcedBroadcast(sourceId, message);
+                resolvedBus.UntypedSourcedBroadcast(sourceId, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref sourceId, ref message);
+            resolvedBus.SourcedBroadcast(ref sourceId, ref message);
         }
 #endif
 
@@ -484,18 +506,19 @@ namespace DxMessaging.Core.Extensions
         public static void EmitBroadcast<TMessage>(
             this TMessage message,
             InstanceId source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : class, IBroadcastMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
-                messageBus.UntypedSourcedBroadcast(source, message);
+                resolvedBus.UntypedSourcedBroadcast(source, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref source, ref message);
+            resolvedBus.SourcedBroadcast(ref source, ref message);
         }
 
         /// <summary>
@@ -507,18 +530,19 @@ namespace DxMessaging.Core.Extensions
         public static void EmitBroadcast<TMessage>(
             this ref TMessage message,
             InstanceId source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
             where TMessage : struct, IBroadcastMessage
         {
-            messageBus ??= MessageHandler.MessageBus;
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
             if (typeof(TMessage) == typeof(IBroadcastMessage))
             {
-                messageBus.UntypedSourcedBroadcast(source, message);
+                resolvedBus.UntypedSourcedBroadcast(source, message);
                 return;
             }
 
-            messageBus.SourcedBroadcast(ref source, ref message);
+            resolvedBus.SourcedBroadcast(ref source, ref message);
         }
 
         /// <summary>
@@ -535,14 +559,13 @@ namespace DxMessaging.Core.Extensions
         public static void Emit(
             this string message,
             InstanceId target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
         {
             StringMessage stringMessage = new(message);
-            (messageBus ?? MessageHandler.MessageBus).TargetedBroadcast(
-                ref target,
-                ref stringMessage
-            );
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
+            resolvedBus.TargetedBroadcast(ref target, ref stringMessage);
         }
 
         /// <summary>
@@ -560,14 +583,13 @@ namespace DxMessaging.Core.Extensions
         public static void EmitAt(
             this string message,
             InstanceId target,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
         {
             StringMessage stringMessage = new(message);
-            (messageBus ?? MessageHandler.MessageBus).TargetedBroadcast(
-                ref target,
-                ref stringMessage
-            );
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
+            resolvedBus.TargetedBroadcast(ref target, ref stringMessage);
         }
 
         /// <summary>
@@ -579,10 +601,15 @@ namespace DxMessaging.Core.Extensions
         /// </remarks>
         /// <param name="message">Message to send globally.</param>
         /// <param name="messageBus">MessageBus to emit to. If null, uses the GlobalMessageBus.</param>
-        public static void Emit(this string message, IMessageBus messageBus = null)
+        public static void Emit(
+            this string message,
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
+        )
         {
             GlobalStringMessage stringMessage = new(message);
-            (messageBus ?? MessageHandler.MessageBus).UntargetedBroadcast(ref stringMessage);
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
+            resolvedBus.UntargetedBroadcast(ref stringMessage);
         }
 
         /// <summary>
@@ -602,14 +629,35 @@ namespace DxMessaging.Core.Extensions
         public static void EmitFrom(
             this string message,
             InstanceId source,
-            IMessageBus messageBus = null
+            IMessageBus messageBus = null,
+            IMessageBusProvider messageBusProvider = null
         )
         {
             SourcedStringMessage stringMessage = new(message);
-            (messageBus ?? MessageHandler.MessageBus).SourcedBroadcast(
-                ref source,
-                ref stringMessage
-            );
+            IMessageBus resolvedBus = ResolveMessageBus(messageBus, messageBusProvider);
+            resolvedBus.SourcedBroadcast(ref source, ref stringMessage);
+        }
+
+        private static IMessageBus ResolveMessageBus(
+            IMessageBus explicitBus,
+            IMessageBusProvider messageBusProvider
+        )
+        {
+            if (explicitBus != null)
+            {
+                return explicitBus;
+            }
+
+            if (messageBusProvider != null)
+            {
+                IMessageBus providedBus = messageBusProvider.Resolve();
+                if (providedBus != null)
+                {
+                    return providedBus;
+                }
+            }
+
+            return MessageHandler.MessageBus;
         }
     }
 }

@@ -2,8 +2,8 @@ namespace DxMessaging.Tests.Runtime.Scripts.Components
 {
     using System;
     using DxMessaging.Core;
+    using DxMessaging.Unity;
     using Messages;
-    using Unity;
 
     public sealed class SimpleMessageAwareComponent : MessageAwareComponent
     {

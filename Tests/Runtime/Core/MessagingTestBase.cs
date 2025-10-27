@@ -7,8 +7,8 @@ namespace DxMessaging.Tests.Runtime.Core
     using System.Linq;
     using DxMessaging.Core;
     using DxMessaging.Core.MessageBus;
+    using DxMessaging.Unity;
     using NUnit.Framework;
-    using Unity;
     using UnityEngine;
     using UnityEngine.TestTools;
     using Debug = UnityEngine.Debug;
@@ -43,7 +43,7 @@ namespace DxMessaging.Tests.Runtime.Core
                         return;
                 }
             };
-            MessageBus messageBus = MessageHandler.MessageBus;
+            IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
             messageBus.Log.Enabled = true;
             _numRegistrations = 150;
@@ -53,7 +53,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
         protected void LogMessageBusStatus()
         {
-            MessageBus messageBus = MessageHandler.MessageBus;
+            IMessageBus messageBus = MessageHandler.MessageBus;
             Debug.Log(
                 $"Untargeted registrations: {messageBus.RegisteredUntargeted}, "
                     + $"targeted registrations: {messageBus.RegisteredTargeted}, "
@@ -177,7 +177,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
         protected static IEnumerator WaitUntilMessageHandlerIsFresh()
         {
-            MessageBus messageBus = MessageHandler.MessageBus;
+            IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
             Stopwatch timer = Stopwatch.StartNew();

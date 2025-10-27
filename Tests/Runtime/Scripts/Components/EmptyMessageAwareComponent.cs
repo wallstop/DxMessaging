@@ -1,6 +1,6 @@
 namespace DxMessaging.Tests.Runtime.Scripts.Components
 {
-    using Unity;
+    using DxMessaging.Unity;
 
     public sealed class EmptyMessageAwareComponent : MessageAwareComponent
     {

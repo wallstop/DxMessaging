@@ -348,7 +348,143 @@ namespace DxMessaging.Core
         /// <summary>
         /// Global message bus used when no explicit bus is provided.
         /// </summary>
-        public static readonly MessageBus.MessageBus MessageBus = new();
+        private static IMessageBus _globalMessageBus;
+
+        private static readonly MessageBus.MessageBus _defaultGlobalMessageBus = new();
+
+        /// <summary>
+        /// Gets the process-wide <see cref="IMessageBus"/> used when no explicit bus is supplied.
+        /// </summary>
+        /// <remarks>
+        /// This mirrors the legacy singleton so existing code continues to function. Use
+        /// <see cref="SetGlobalMessageBus(MessageBus.MessageBus)"/> to replace the instance (for example from a DI container) and
+        /// <see cref="ResetGlobalMessageBus"/> to restore the stock configuration afterwards.
+        /// </remarks>
+        public static IMessageBus MessageBus => _globalMessageBus;
+
+        /// <summary>
+        /// Gets the original global <see cref="IMessageBus"/> instance created during static initialisation.
+        /// </summary>
+        /// <remarks>
+        /// This reference never changes even when <see cref="SetGlobalMessageBus(IMessageBus)"/> is invoked.
+        /// </remarks>
+        public static IMessageBus InitialGlobalMessageBus => _defaultGlobalMessageBus;
+
+        static MessageHandler()
+        {
+            _globalMessageBus = _defaultGlobalMessageBus;
+        }
+
+        /// <summary>
+        /// Replaces the global <see cref="MessageBus.MessageBus"/> instance returned by <see cref="MessageBus"/>.
+        /// </summary>
+        /// <param name="messageBus">Instance to expose globally.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="messageBus"/> is <see langword="null"/>.
+        /// </exception>
+        /// <remarks>
+        /// This is primarily intended for integration tests or dependency injection bootstrap code. Invoke
+        /// <see cref="ResetGlobalMessageBus"/> when the customisation is no longer required.
+        /// </remarks>
+        public static void SetGlobalMessageBus(MessageBus.MessageBus messageBus)
+        {
+            if (messageBus == null)
+            {
+                throw new ArgumentNullException(nameof(messageBus));
+            }
+
+            _globalMessageBus = messageBus;
+        }
+
+        /// <summary>
+        /// Replaces the global message bus with an arbitrary <see cref="IMessageBus"/> implementation.
+        /// </summary>
+        /// <param name="messageBus">Instance to expose globally.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="messageBus"/> is <see langword="null"/>.
+        /// </exception>
+        public static void SetGlobalMessageBus(IMessageBus messageBus)
+        {
+            if (messageBus == null)
+            {
+                throw new ArgumentNullException(nameof(messageBus));
+            }
+
+            _globalMessageBus = messageBus;
+        }
+
+        /// <summary>
+        /// Restores the global <see cref="MessageBus.MessageBus"/> to the built-in default instance.
+        /// </summary>
+        /// <remarks>
+        /// The default instance is created during static initialisation and reused across resets to minimise allocations.
+        /// </remarks>
+        public static void ResetGlobalMessageBus()
+        {
+            _globalMessageBus = _defaultGlobalMessageBus;
+        }
+
+        /// <summary>
+        /// Temporarily overrides the global message bus until the returned scope is disposed.
+        /// </summary>
+        /// <param name="messageBus">Message bus to expose for the duration of the scope.</param>
+        /// <returns>An <see cref="IDisposable"/> scope that restores the previous bus on dispose.</returns>
+        public static GlobalMessageBusScope OverrideGlobalMessageBus(IMessageBus messageBus)
+        {
+            return new GlobalMessageBusScope(messageBus);
+        }
+
+        /// <summary>
+        /// Represents a disposable override scope for the global message bus.
+        /// </summary>
+        public struct GlobalMessageBusScope : IDisposable
+        {
+            private readonly IMessageBus _previous;
+            private bool _disposed;
+
+            internal GlobalMessageBusScope(IMessageBus messageBus)
+            {
+                if (messageBus == null)
+                {
+                    throw new ArgumentNullException(nameof(messageBus));
+                }
+
+                _previous = MessageBus;
+                _disposed = false;
+
+                if (messageBus is MessageBus.MessageBus concrete)
+                {
+                    SetGlobalMessageBus(concrete);
+                }
+                else
+                {
+                    SetGlobalMessageBus(messageBus);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                if (_previous is MessageBus.MessageBus concrete)
+                {
+                    SetGlobalMessageBus(concrete);
+                }
+                else if (_previous != null)
+                {
+                    SetGlobalMessageBus(_previous);
+                }
+                else
+                {
+                    ResetGlobalMessageBus();
+                }
+
+                _disposed = true;
+            }
+        }
 
         /// <summary>
         /// Whether this MessageHandler will process messages.
@@ -367,11 +503,43 @@ namespace DxMessaging.Core
         /// Ideally, this would be something like a Dictionary[T, Handler[T]], but that can't be done with C#s type system.
         /// </note>
         private readonly List<MessageCache<object>> _handlersByTypeByMessageBus;
+        private IMessageBus _defaultMessageBus;
 
-        public MessageHandler(InstanceId owner)
+        /// <summary>
+        /// Gets the <see cref="IMessageBus"/> that will be used when a registration does not specify one explicitly.
+        /// </summary>
+        /// <remarks>
+        /// When no override has been provided via <see cref="SetDefaultMessageBus"/>, this value defers to the global
+        /// <see cref="MessageBus"/> singleton.
+        /// </remarks>
+        public IMessageBus DefaultMessageBus => _defaultMessageBus ?? MessageBus;
+
+        public MessageHandler(InstanceId owner, IMessageBus defaultMessageBus = null)
         {
             this.owner = owner;
             _handlersByTypeByMessageBus = new List<MessageCache<object>>();
+            _defaultMessageBus = defaultMessageBus;
+        }
+
+        /// <summary>
+        /// Assigns an <see cref="IMessageBus"/> for registrations that omit an explicit bus parameter.
+        /// </summary>
+        /// <param name="messageBus">
+        /// Bus to use; pass <see langword="null"/> to revert to the global <see cref="MessageBus"/> singleton.
+        /// </param>
+        /// <remarks>
+        /// This allows a handler to participate in dependency injection scenarios without forcing every caller to supply
+        /// a bus manually.
+        /// </remarks>
+        public void SetDefaultMessageBus(IMessageBus messageBus)
+        {
+            _defaultMessageBus = messageBus;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private IMessageBus ResolveMessageBus(IMessageBus messageBus)
+        {
+            return messageBus ?? _defaultMessageBus ?? MessageBus;
         }
 
         /// <summary>
@@ -864,7 +1032,7 @@ namespace DxMessaging.Core
             IMessageBus messageBus = null
         )
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterGlobalAcceptAll(this);
             TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
 
@@ -916,7 +1084,7 @@ namespace DxMessaging.Core
             IMessageBus messageBus = null
         )
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterGlobalAcceptAll(this);
             TypedHandler<IMessage> typedHandler = GetOrCreateHandlerForType<IMessage>(messageBus);
 
@@ -968,7 +1136,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterTargeted<T>(
                 target,
                 this,
@@ -1003,7 +1171,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterTargeted<T>(
                 target,
                 this,
@@ -1038,7 +1206,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterTargetedPostProcessor<T>(
                 target,
                 this,
@@ -1073,7 +1241,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterTargetedPostProcessor<T>(
                 target,
                 this,
@@ -1106,7 +1274,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration =
                 messageBus.RegisterTargetedWithoutTargetingPostProcessor<T>(
                     priority: priority,
@@ -1138,7 +1306,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration =
                 messageBus.RegisterTargetedWithoutTargetingPostProcessor<T>(
                     priority: priority,
@@ -1170,7 +1338,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterTargetedWithoutTargeting<T>(
                 this,
                 priority: priority
@@ -1201,7 +1369,7 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterTargetedWithoutTargeting<T>(
                 this,
                 priority: priority
@@ -1232,7 +1400,7 @@ namespace DxMessaging.Core
         )
             where T : IUntargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterUntargeted<T>(
                 this,
                 priority: priority
@@ -1263,7 +1431,7 @@ namespace DxMessaging.Core
         )
             where T : IUntargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterUntargeted<T>(
                 this,
                 priority: priority
@@ -1294,7 +1462,7 @@ namespace DxMessaging.Core
         )
             where T : IUntargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterUntargetedPostProcessor<T>(
                 priority: priority,
                 messageHandler: this
@@ -1325,7 +1493,7 @@ namespace DxMessaging.Core
         )
             where T : IUntargetedMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterUntargetedPostProcessor<T>(
                 priority: priority,
                 messageHandler: this
@@ -1358,7 +1526,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterSourcedBroadcast<T>(
                 source,
                 this,
@@ -1394,7 +1562,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterSourcedBroadcast<T>(
                 source,
                 this,
@@ -1427,7 +1595,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterSourcedBroadcastWithoutSource<T>(
                 this,
                 priority: priority
@@ -1458,7 +1626,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterSourcedBroadcastWithoutSource<T>(
                 this,
                 priority: priority
@@ -1491,7 +1659,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterBroadcastPostProcessor<T>(
                 source,
                 messageHandler: this,
@@ -1526,7 +1694,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration = messageBus.RegisterBroadcastPostProcessor<T>(
                 source,
                 priority: priority,
@@ -1559,7 +1727,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration =
                 messageBus.RegisterBroadcastWithoutSourcePostProcessor<T>(
                     priority: priority,
@@ -1591,7 +1759,7 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            messageBus ??= MessageBus;
+            messageBus = ResolveMessageBus(messageBus);
             Action messageBusDeregistration =
                 messageBus.RegisterBroadcastWithoutSourcePostProcessor<T>(
                     priority: priority,
@@ -1622,7 +1790,8 @@ namespace DxMessaging.Core
         )
             where T : IUntargetedMessage
         {
-            return (messageBus ?? MessageBus).RegisterUntargetedInterceptor(interceptor, priority);
+            messageBus = ResolveMessageBus(messageBus);
+            return messageBus.RegisterUntargetedInterceptor(interceptor, priority);
         }
 
         /// <summary>
@@ -1640,7 +1809,8 @@ namespace DxMessaging.Core
         )
             where T : IBroadcastMessage
         {
-            return (messageBus ?? MessageBus).RegisterBroadcastInterceptor(interceptor, priority);
+            messageBus = ResolveMessageBus(messageBus);
+            return messageBus.RegisterBroadcastInterceptor(interceptor, priority);
         }
 
         /// <summary>
@@ -1658,7 +1828,8 @@ namespace DxMessaging.Core
         )
             where T : ITargetedMessage
         {
-            return (messageBus ?? MessageBus).RegisterTargetedInterceptor(interceptor, priority);
+            messageBus = ResolveMessageBus(messageBus);
+            return messageBus.RegisterTargetedInterceptor(interceptor, priority);
         }
 
         public override bool Equals(object obj)

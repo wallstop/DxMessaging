@@ -355,7 +355,7 @@ using DxMessaging.Core.MessageBus;
 
 // Create isolated bus
 var testBus = new MessageBus();
-var handler = new MessageHandler(new InstanceId(1)) { active = true };
+var handler = new MessageHandler(new InstanceId(1), testBus) { active = true };
 var token = MessageRegistrationToken.Create(handler, testBus);
 
 // Register on isolated bus
