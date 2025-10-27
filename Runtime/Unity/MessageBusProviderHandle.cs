@@ -3,6 +3,7 @@ namespace DxMessaging.Unity
     using System;
     using DxMessaging.Core.MessageBus;
     using UnityEngine;
+    using UnityEngine.Serialization;
 
     /// <summary>
     /// Serializable handle that references a <see cref="ScriptableMessageBusProvider"/> or runtime provider.
@@ -10,11 +11,12 @@ namespace DxMessaging.Unity
     [Serializable]
     public struct MessageBusProviderHandle
     {
+        [FormerlySerializedAs("providerAsset")]
         [SerializeField]
-        private ScriptableMessageBusProvider providerAsset;
+        private ScriptableMessageBusProvider _provider;
 
         [NonSerialized]
-        private IMessageBusProvider runtimeProvider;
+        private IMessageBusProvider _runtimeProvider;
 
         /// <summary>
         /// Initializes a new instance referencing the supplied provider asset.
@@ -22,8 +24,8 @@ namespace DxMessaging.Unity
         /// <param name="provider">Serialized provider asset.</param>
         public MessageBusProviderHandle(ScriptableMessageBusProvider provider)
         {
-            providerAsset = provider;
-            runtimeProvider = provider;
+            _provider = provider;
+            _runtimeProvider = provider;
         }
 
         /// <summary>
@@ -39,7 +41,7 @@ namespace DxMessaging.Unity
         public static MessageBusProviderHandle FromProvider(IMessageBusProvider provider)
         {
             MessageBusProviderHandle handle = default;
-            handle.runtimeProvider = provider;
+            handle._runtimeProvider = provider;
             return handle;
         }
 
@@ -51,7 +53,7 @@ namespace DxMessaging.Unity
         public MessageBusProviderHandle WithRuntimeProvider(IMessageBusProvider provider)
         {
             MessageBusProviderHandle handle = this;
-            handle.runtimeProvider = provider;
+            handle._runtimeProvider = provider;
             return handle;
         }
 
@@ -62,15 +64,15 @@ namespace DxMessaging.Unity
         /// <returns><c>true</c> when a provider exists; otherwise <c>false</c>.</returns>
         public bool TryGetProvider(out IMessageBusProvider provider)
         {
-            if (runtimeProvider != null)
+            if (_runtimeProvider != null)
             {
-                provider = runtimeProvider;
+                provider = _runtimeProvider;
                 return true;
             }
 
-            if (providerAsset != null)
+            if (_provider != null)
             {
-                provider = providerAsset;
+                provider = _provider;
                 return true;
             }
 

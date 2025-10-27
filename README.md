@@ -155,6 +155,11 @@ public class PlayerService : IInitializable, IDisposable
 - [VContainer Integration Guide](Docs/Integrations/VContainer.md) — Scoped buses for scene isolation
 - [Reflex Integration Guide](Docs/Integrations/Reflex.md) — Minimal, lightweight patterns
 
+##### Core DI concepts
+
+- [Runtime Configuration](Docs/RuntimeConfiguration.md) — Setting message buses at runtime, re-binding registrations
+- [Message Bus Providers](Docs/MessageBusProviders.md) — Provider system for design-time and runtime bus configuration
+
 **Not using DI?** No problem! DxMessaging works perfectly standalone with zero dependencies.
 
 ---
@@ -573,6 +578,11 @@ DxMessaging works standalone (zero dependencies) or with any major DI framework.
 - **[Zenject Integration Guide](Docs/Integrations/Zenject.md)** — Full-featured DI with extensive Unity support
 - **[VContainer Integration Guide](Docs/Integrations/VContainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
 - **[Reflex Integration Guide](Docs/Integrations/Reflex.md)** — Minimal API, blazing-fast performance
+
+#### Core DI concepts
+
+- **[Runtime Configuration](Docs/RuntimeConfiguration.md)** — Setting and overriding message buses at runtime, re-binding registrations
+- **[Message Bus Providers](Docs/MessageBusProviders.md)** — Provider system and MessageBusProviderHandle for flexible bus configuration
 
 Each guide includes:
 

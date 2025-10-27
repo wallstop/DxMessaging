@@ -98,7 +98,8 @@ graph TD
 ### Tools & Utilities
 
 - **[Helpers](Helpers.md)** — Source generators, attributes, extensions
-- **[Message Bus Providers](MessageBusProviders.md)** — ScriptableObject providers for global bus selection
+- **[Message Bus Providers](MessageBusProviders.md)** — Provider system and MessageBusProviderHandle for flexible bus configuration
+- **[Runtime Configuration](RuntimeConfiguration.md)** — Setting message buses at runtime, re-binding registrations
 - **[Emit Shorthands](EmitShorthands.md)** — `Emit`/`EmitAt`/`EmitFrom` usage and pitfalls
 - **[String Messages](StringMessages.md)** — Prototyping and debugging
 - **[Compatibility](Compatibility.md)** — Unity versions and render pipelines
@@ -151,6 +152,8 @@ From [Common Patterns](Patterns.md):
 - **Optimize performance** → Read [Performance Tips](DesignAndArchitecture.md#performance-tuning-tips)
 - **Isolate tests** → Create [Local Bus Islands](DesignAndArchitecture.md#local-bus-islands)
 - **Use dependency injection** → [DxMessaging + Zenject](Integrations/Zenject.md), [DxMessaging + VContainer](Integrations/VContainer.md), [DxMessaging + Reflex](Integrations/Reflex.md)
+- **Configure buses at runtime** → See [Runtime Configuration](RuntimeConfiguration.md)
+- **Use message bus providers** → Learn [Message Bus Providers](MessageBusProviders.md)
 
 ## 📊 Visual: Message Pipeline
 
@@ -260,6 +263,14 @@ From [Comparisons](Comparisons.md):
 - [Helpers](Helpers.md)
 - [FAQ](FAQ.md)
 - [Troubleshooting](Troubleshooting.md)
+
+### Dependency Injection
+
+- [Runtime Configuration](RuntimeConfiguration.md) — Setting and overriding message buses, re-binding registrations
+- [Message Bus Providers](MessageBusProviders.md) — Provider system and MessageBusProviderHandle
+- [DxMessaging + Zenject](Integrations/Zenject.md) — Zenject integration guide
+- [DxMessaging + VContainer](Integrations/VContainer.md) — VContainer integration guide
+- [DxMessaging + Reflex](Integrations/Reflex.md) — Reflex integration guide
 
 ### Miscellaneous
 
