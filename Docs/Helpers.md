@@ -269,7 +269,7 @@ public readonly partial struct PlayerDamaged : IBroadcastMessage<PlayerDamaged>
 
 ## Advanced: Manual Implementation (When Attributes Aren't Enough)
 
-Attributes cover almost every scenario. If you intentionally drop `[DxTargetedMessage]`, `[DxUntargetedMessage]`, or `[DxBroadcastMessage]`, you'll need to hand-write the interface implementations and constructors shown in the “generated output” examples. Keep the attributes unless you have a very specific profiling-backed reason not to.
+Attributes cover almost every scenario. If you intentionally drop `[DxTargetedMessage]`, `[DxUntargetedMessage]`, or `[DxBroadcastMessage]`, you'll need to hand-write the interface implementations and constructors shown in the “generated output” examples. Keep the attributes unless you have a very specific data-backed reason not to.
 
 ### Generic Message Interfaces (Zero-Boxing for Structs)
 
@@ -286,7 +286,7 @@ public readonly partial struct Heal
 
 ### "Do I HAVE to use attributes?"
 
-Technically no—but without them you must write the constructor, interface implementation, and `MessageType` property yourself. Leaving the attributes on keeps everything consistent for the whole team.
+Technically no—but without them you must write the constructor, interface implementation, and `MessageType` property yourself (for speed, you can optionally leave this off, but it might box on certain call paths). Leaving the attributes on keeps everything consistent for the whole team.
 
 ```csharp
 [DxUntargetedMessage]
