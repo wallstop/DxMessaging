@@ -70,10 +70,10 @@ public sealed class ScoreReporter
 }
 
 [DxUntargetedMessage]
+[DxAutoConstructor]
 public readonly partial struct ScoreChanged
 {
     public readonly int Value;
-    public ScoreChanged(int value) => Value = value;
 }
 ```
 
