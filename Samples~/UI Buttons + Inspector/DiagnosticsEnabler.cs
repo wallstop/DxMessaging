@@ -11,7 +11,7 @@ public sealed class DiagnosticsEnabler : MonoBehaviour
     {
         if (enableOnStart)
         {
-            if (MessageHandler.MessageBus is MessageBus.MessageBus concreteBus)
+            if (MessageHandler.MessageBus is MessageBus concreteBus)
             {
                 concreteBus.DiagnosticsMode = true;
                 Debug.Log("DxMessaging global diagnostics enabled.");
