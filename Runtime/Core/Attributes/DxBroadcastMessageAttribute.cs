@@ -13,7 +13,7 @@ namespace DxMessaging.Core.Attributes
     /// <example>
     /// <code>
     /// [DxMessaging.Core.Attributes.DxBroadcastMessage]
-    /// public readonly struct TookDamage
+    /// public readonly partial struct TookDamage
     /// {
     ///     public readonly int amount;
     ///     public TookDamage(int amount) { this.amount = amount; }

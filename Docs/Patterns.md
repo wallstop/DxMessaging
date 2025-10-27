@@ -874,7 +874,7 @@ public class GameEvent : ScriptableObject
 
 // DxMessaging message (modern, type-safe)
 [DxUntargetedMessage]
-public readonly struct SceneTransitionRequested { }
+public readonly partial struct SceneTransitionRequested { }
 
 // Bridge: SOA Event → DxMessaging
 public class SOAEventBridge : MonoBehaviour

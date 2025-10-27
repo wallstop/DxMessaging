@@ -25,7 +25,7 @@ namespace DxMessaging.Core.Messages
     /// // Attribute + auto constructor
     /// [DxMessaging.Core.Attributes.DxBroadcastMessage]
     /// [DxMessaging.Core.Attributes.DxAutoConstructor]
-    /// public readonly struct PickedUpItem { public readonly int itemId; }
+    /// public readonly partial struct PickedUpItem { public readonly int itemId; }
     /// </code>
     /// </example>
     public interface IBroadcastMessage : IMessage { }

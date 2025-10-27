@@ -26,7 +26,7 @@ namespace DxMessaging.Core.Messages
     /// // Or with attribute + DxAutoConstructor
     /// [DxMessaging.Core.Attributes.DxUntargetedMessage]
     /// [DxMessaging.Core.Attributes.DxAutoConstructor]
-    /// public readonly struct WorldRegenerated { public readonly int seed; }
+    /// public readonly partial struct WorldRegenerated { public readonly int seed; }
     /// </code>
     /// </example>
     public interface IUntargetedMessage : IMessage { }

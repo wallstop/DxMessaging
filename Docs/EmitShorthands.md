@@ -70,7 +70,7 @@ public sealed class ScoreReporter
 }
 
 [DxUntargetedMessage]
-public readonly struct ScoreChanged
+public readonly partial struct ScoreChanged
 {
     public readonly int Value;
     public ScoreChanged(int value) => Value = value;

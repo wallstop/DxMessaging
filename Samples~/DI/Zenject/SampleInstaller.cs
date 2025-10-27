@@ -2,8 +2,8 @@
 namespace DxMessaging.Samples.DI.Zenject
 {
     using System;
-    using Core.Attributes;
-    using Core.MessageBus;
+    using DxMessaging.Core.Attributes;
+    using DxMessaging.Core.MessageBus;
     using UnityEngine;
     using Zenject;
 
@@ -20,14 +20,12 @@ namespace DxMessaging.Samples.DI.Zenject
         }
 
         [DxUntargetedMessage]
-        private readonly struct PlayerSpawned
+        [DxAutoConstructor]
+        private readonly partial struct PlayerSpawned
         {
-            public readonly string PlayerName;
+            public readonly string playerName;
 
-            public PlayerSpawned(string playerName)
-            {
-                PlayerName = playerName;
-            }
+            public string PlayerName => playerName;
         }
 
         private sealed class PlayerSpawnTracker : IInitializable, IDisposable

@@ -2,9 +2,9 @@
 namespace DxMessaging.Samples.DI.VContainer
 {
     using System;
-    using Core.Attributes;
-    using Core.Extensions;
-    using Core.MessageBus;
+    using DxMessaging.Core.Attributes;
+    using DxMessaging.Core.Extensions;
+    using DxMessaging.Core.MessageBus;
     using DxMessaging.Unity.Integrations.VContainer;
     using UnityEngine;
     using VContainer;
@@ -25,14 +25,12 @@ namespace DxMessaging.Samples.DI.VContainer
         }
 
         [DxUntargetedMessage]
-        private readonly struct ScoreUpdated
+        [DxAutoConstructor]
+        private readonly partial struct ScoreUpdated
         {
-            public readonly int Value;
+            public readonly int value;
 
-            public ScoreUpdated(int value)
-            {
-                Value = value;
-            }
+            public int Value => value;
         }
 
         private sealed class ScoreboardService : IStartable, ITickable, IDisposable

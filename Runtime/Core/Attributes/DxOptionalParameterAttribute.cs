@@ -12,7 +12,7 @@ namespace DxMessaging.Core.Attributes
     /// <example>
     /// <code>
     /// [DxAutoConstructor]
-    /// public readonly struct Example
+    /// public readonly partial struct Example
     /// {
     ///     public readonly int required;
     ///     [DxOptionalParameter] public readonly int optional; // defaults to 0

@@ -2,6 +2,7 @@
 namespace DxMessaging.Samples.DI.Reflex
 {
     using DxMessaging.Core;
+    using DxMessaging.Core.Attributes;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Core.Messages;
     using DxMessaging.Unity.Integrations.Reflex;
@@ -61,14 +62,13 @@ namespace DxMessaging.Samples.DI.Reflex
             }
         }
 
-        private readonly struct PlayerAlert : IBroadcastMessage
+        [DxBroadcastMessage]
+        [DxAutoConstructor]
+        private readonly partial struct PlayerAlert
         {
-            public PlayerAlert(InstanceId source)
-            {
-                Source = source;
-            }
+            public readonly InstanceId source;
 
-            public InstanceId Source { get; }
+            public InstanceId Source => source;
         }
     }
 }

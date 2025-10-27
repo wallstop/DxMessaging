@@ -14,7 +14,7 @@ namespace DxMessaging.Core.Attributes
     /// <example>
     /// <code>
     /// [DxMessaging.Core.Attributes.DxTargetedMessage]
-    /// public readonly struct HealRequest
+    /// public readonly partial struct HealRequest
     /// {
     ///     public readonly int amount;
     ///     public HealRequest(int amount) { this.amount = amount; }

@@ -14,7 +14,7 @@ namespace DxMessaging.Core.Attributes
     /// <example>
     /// <code>
     /// [DxMessaging.Core.Attributes.DxUntargetedMessage]
-    /// public readonly struct WorldRegenerated
+    /// public readonly partial struct WorldRegenerated
     /// {
     ///     public readonly int seed;
     ///     public WorldRegenerated(int seed) { this.seed = seed; }
