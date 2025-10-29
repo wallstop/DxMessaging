@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Unity.Integrations.Reflex
 {
 #if REFLEX_PRESENT
@@ -71,3 +72,4 @@ namespace DxMessaging.Unity.Integrations.Reflex
     }
 #endif
 }
+#endif

@@ -58,7 +58,7 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         public readonly RegistrationMethod registrationMethod;
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         /// <summary>
         /// Unity time of the registration
         /// </summary>
@@ -83,7 +83,7 @@ namespace DxMessaging.Core.MessageBus
             this.type = type;
             this.registrationType = registrationType;
             this.registrationMethod = registrationMethod;
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
             time = UnityEngine.Time.time;
 #endif
         }
@@ -92,7 +92,7 @@ namespace DxMessaging.Core.MessageBus
         {
             return new
             {
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
                 time,
 #endif
                 id,

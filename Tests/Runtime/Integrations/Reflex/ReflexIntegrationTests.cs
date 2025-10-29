@@ -93,7 +93,7 @@ namespace DxMessaging.Tests.Runtime.Reflex
 
             Container container = TrackDisposable(builder.Build());
 
-            var concrete =
+            DxMessagingRegistrationInstaller.ContainerMessageRegistrationBuilder concrete =
                 container.Resolve<DxMessagingRegistrationInstaller.ContainerMessageRegistrationBuilder>();
             Assert.IsNotNull(
                 concrete,

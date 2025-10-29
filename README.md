@@ -2,7 +2,7 @@
 
 [![Unity](https://img.shields.io/badge/Unity-2021.3+-black.svg)](https://unity.com/releases/editor)<br/>
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)<br/>
-[![Version](https://img.shields.io/badge/version-2.0.0--rc27-green.svg)](package.json)<br/>
+[![Version](https://img.shields.io/npm/v/com.wallstop-studios.dxmessaging.svg)](https://www.npmjs.com/package/com.wallstop-studios.dxmessaging)<br/>
 [![Performance: OS-Specific Benchmarks](https://img.shields.io/badge/Performance-OS--specific-blueviolet.svg)](Docs/Performance.md)<br/>
 [![Markdown Link Validity](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-validity.yml/badge.svg)](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-validity.yml)<br/>
 [![Markdown Link Text Check](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-text-check.yml/badge.svg)](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-text-check.yml)
@@ -10,6 +10,8 @@
 **DxMessaging is a high‑performance, type‑safe messaging system** that replaces sprawling C# events, brittle UnityEvents, and global static event buses with a clean, observable, and predictable communication pattern.
 
 Think of it as **the event system Unity should have built-in** — one that actually scales.
+
+Need install instructions for Git URLs, scoped registries, or tarballs? Jump to the [Install Guide](Docs/Install.md).
 
 ## Table of Contents
 
@@ -62,11 +64,13 @@ Think of it as **the event system Unity should have built-in** — one that actu
 
 ### 1. Install
 
-Via Unity Package Manager → Add package from git URL:
+Via Unity Package Manager → Add package from git URL (see the [Install Guide](Docs/Install.md) for scoped registry, tarball, and offline options):
 
 ```text
 https://github.com/wallstop/DxMessaging.git
 ```
+
+Prefer OpenUPM, scoped registries, or local tarballs? The [Install Guide](Docs/Install.md) covers every path in detail.
 
 ### 2. Define Your First Message
 
@@ -632,6 +636,7 @@ See [full comparison](Docs/Comparisons.md) for detailed analysis with code examp
 
 ### 📖 Reference
 
+- [Install Guide](Docs/Install.md) — All install options (Git URL, scoped registry, tarball, manual copy)
 - [Glossary](Docs/Glossary.md) — All terms explained in plain English
 - [Quick Reference](Docs/QuickReference.md) — Cheat sheet
 - [API Reference](Docs/Reference.md) — Complete API

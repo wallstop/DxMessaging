@@ -204,7 +204,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
 
             MessageHandler handler = new(new InstanceId(601), providerBus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, providerBus);
-            string? received = null;
+            string received = null;
             _ = token.RegisterTargeted(target, (ref StringMessage m) => received = m.message);
             token.Enable();
 
@@ -213,7 +213,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
                 globalHandler,
                 MessageHandler.MessageBus
             );
-            string? globalReceived = null;
+            string globalReceived = null;
             _ = globalToken.RegisterTargeted(
                 target,
                 (ref StringMessage m) => globalReceived = m.message

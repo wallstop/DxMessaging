@@ -12,7 +12,7 @@ namespace DxMessaging.Core.MessageBus
     using Helper;
     using Messages;
     using static IMessageBus;
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
     using UnityEngine;
 #endif
 
@@ -167,7 +167,7 @@ namespace DxMessaging.Core.MessageBus
             Dictionary<MethodSignatureKey, Action<MonoBehaviour, object[]>>
         > _methodCache = new();
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         private readonly HashSet<MonoBehaviour> _recipientCache = new();
         private readonly List<MonoBehaviour> _componentCache = new();
 #endif
@@ -1144,7 +1144,7 @@ namespace DxMessaging.Core.MessageBus
                         );
                     }
                 }
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
                 ref ReflexiveMessage reflexiveMessage = ref Unsafe.As<TMessage, ReflexiveMessage>(
                     ref typedMessage
                 );
@@ -4152,7 +4152,7 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         private static Action<MonoBehaviour, object[]> CompileMethodAction(MethodInfo methodInfo)
         {
             ParameterExpression componentParameter = Expression.Parameter(

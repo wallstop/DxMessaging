@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Unity
 {
     using System.Collections.Generic;
@@ -118,3 +119,4 @@ namespace DxMessaging.Unity
         }
     }
 }
+#endif

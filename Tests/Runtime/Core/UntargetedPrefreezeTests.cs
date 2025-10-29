@@ -58,7 +58,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 BindingFlags.NonPublic | BindingFlags.Instance
             );
             Assert.IsNotNull(handlersField);
-            var handlersByBus = (List<MessageCache<object>>)handlersField.GetValue(handler);
+            List<MessageCache<object>> handlersByBus =
+                (List<MessageCache<object>>)handlersField.GetValue(handler);
             Assert.IsNotNull(handlersByBus);
 
             MessageCache<object> cacheByType = handlersByBus[

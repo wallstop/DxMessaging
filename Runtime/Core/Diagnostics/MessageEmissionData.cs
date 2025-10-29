@@ -1,8 +1,10 @@
 namespace DxMessaging.Core.Diagnostics
 {
     using System;
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
     using UnityEngine;
+#else
+    using System.Diagnostics;
 #endif
 
     /// <summary>
@@ -45,7 +47,7 @@ namespace DxMessaging.Core.Diagnostics
         private static string GetAccurateStackTrace()
         {
             string fullStackTrace;
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
             fullStackTrace = StackTraceUtility.ExtractStackTrace();
 #else
             fullStackTrace = new StackTrace(true).ToString();

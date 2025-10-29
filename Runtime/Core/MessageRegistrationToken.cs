@@ -166,7 +166,7 @@ namespace DxMessaging.Core
             );
         }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         /// <summary>
         /// Stages a registration to accept targeted messages of type <typeparamref name="T"/> directed at the given GameObject.
         /// </summary>
@@ -1024,7 +1024,7 @@ namespace DxMessaging.Core
             );
         }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         /// <summary>
         /// Stages a registration to accept broadcast messages of type <typeparamref name="T"/> from a given source.
         /// </summary>

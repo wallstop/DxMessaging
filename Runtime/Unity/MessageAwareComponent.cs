@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Unity
 {
     using Core;
@@ -273,3 +274,4 @@ namespace DxMessaging.Unity
         }
     }
 }
+#endif

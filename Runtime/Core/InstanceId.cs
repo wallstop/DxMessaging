@@ -30,7 +30,7 @@ namespace DxMessaging.Core
 
         private readonly int _id;
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         // ReSharper disable once InconsistentNaming
         public readonly UnityEngine.Object Object;
 #endif
@@ -38,10 +38,12 @@ namespace DxMessaging.Core
         public InstanceId(int id)
         {
             _id = id;
+#if UNITY_2021_3_OR_NEWER
             Object = null;
+#endif
         }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         private InstanceId(UnityEngine.Object unityObject)
         {
             _id = unityObject.GetInstanceID();
@@ -81,7 +83,7 @@ namespace DxMessaging.Core
 
         public override string ToString()
         {
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
             UnityEngine.Object instance = Object;
             string objectName = instance == null ? string.Empty : instance.name;
             return new { Id = _id, Name = objectName }.ToString();

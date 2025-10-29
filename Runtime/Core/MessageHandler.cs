@@ -3673,7 +3673,12 @@ namespace DxMessaging.Core
                     {
                         List<TU> list = actionCache.cache;
                         list.Clear();
-                        foreach (var kvp in actionCache.entries)
+                        foreach (
+                            KeyValuePair<
+                                TU,
+                                HandlerActionCache<TU>.Entry
+                            > kvp in actionCache.entries
+                        )
                         {
                             list.Add(kvp.Value.handler);
                         }

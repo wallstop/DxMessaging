@@ -6,6 +6,7 @@ namespace DxMessaging.Editor
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Security.Cryptography;
     using UnityEditor;
     using UnityEngine;
     using Object = UnityEngine.Object;
@@ -98,28 +99,16 @@ namespace DxMessaging.Editor
                             Directory.CreateDirectory(pluginsDirectory);
                             AssetDatabase.Refresh();
                         }
-                        if (!File.Exists(outputAsset))
+                        bool needsCopy = FilesDiffer(sourceAsset, outputAsset);
+                        if (needsCopy)
                         {
-                            File.Copy(sourceAsset, outputAsset);
+                            File.Copy(sourceAsset, outputAsset, true);
                             AssetDatabase.ImportAsset(outputAsset);
                             found = true;
                         }
                         else
                         {
-                            FileInfo sourceInfo = new(sourceAsset);
-                            FileInfo destInfo = new(outputAsset);
-
-                            if (destInfo.LastWriteTime < sourceInfo.LastWriteTime)
-                            {
-                                // Source file is newer, so copy the file (overwrite destination)
-                                File.Copy(sourceAsset, outputAsset, true);
-                                AssetDatabase.ImportAsset(outputAsset);
-                                found = true;
-                            }
-                            else
-                            {
-                                continue;
-                            }
+                            found = true;
                         }
 
                         if (requiredDllName == SourceGeneratorDllName)
@@ -128,9 +117,10 @@ namespace DxMessaging.Editor
                             AssetDatabase.SetLabels(loadedDll, new[] { "RoslynAnalyzer" });
                         }
 
-                        PluginImporter importer =
-                            AssetImporter.GetAtPath(outputAsset) as PluginImporter;
-                        if (importer != null)
+                        if (
+                            needsCopy
+                            && AssetImporter.GetAtPath(outputAsset) is PluginImporter importer
+                        )
                         {
                             importer.SetCompatibleWithAnyPlatform(false);
                             importer.SetExcludeFromAnyPlatform("Editor", false);
@@ -155,6 +145,28 @@ namespace DxMessaging.Editor
             {
                 AssetDatabase.Refresh();
             }
+        }
+
+        private static bool FilesDiffer(string sourcePath, string destinationPath)
+        {
+            if (!File.Exists(destinationPath))
+            {
+                return true;
+            }
+
+            FileInfo sourceInfo = new(sourcePath);
+            FileInfo destinationInfo = new(destinationPath);
+            if (sourceInfo.Length != destinationInfo.Length)
+            {
+                return true;
+            }
+
+            using FileStream sourceStream = File.OpenRead(sourcePath);
+            using FileStream destinationStream = File.OpenRead(destinationPath);
+            using SHA256 sha256 = SHA256.Create();
+            byte[] sourceHash = sha256.ComputeHash(sourceStream);
+            byte[] destinationHash = sha256.ComputeHash(destinationStream);
+            return !sourceHash.AsSpan().SequenceEqual(destinationHash);
         }
 
         private static void EnsureCscRsp()

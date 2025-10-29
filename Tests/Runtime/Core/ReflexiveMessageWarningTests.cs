@@ -18,7 +18,7 @@ namespace DxMessaging.Tests.Runtime.Core
         public IEnumerator LogsWarningOncePerBus()
         {
             List<(LogLevel level, string message)> logs = new();
-            var previousLogFunction = MessagingDebug.LogFunction;
+            Action<LogLevel, string> previousLogFunction = MessagingDebug.LogFunction;
             try
             {
                 MessagingDebug.LogFunction = (level, message) => logs.Add((level, message));
