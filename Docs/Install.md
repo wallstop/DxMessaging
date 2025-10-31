@@ -9,7 +9,8 @@ This page helps you install DxMessaging into a Unity 2021.3+ project using the U
 - Unity Package Manager > Add package from git URL...
 - Paste:
 
-```text
+```bash
+# Unity UPM: Add package from git URL...
 https://github.com/wallstop/DxMessaging.git
 ```
 

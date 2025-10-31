@@ -23,8 +23,51 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
+      - name: Install reportgenerator tool
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
       - name: Restore
         run: dotnet restore SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/WallstopStudios.DxMessaging.SourceGenerators.Tests.csproj
 
       - name: Run generator diagnostics tests
-        run: dotnet test SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/WallstopStudios.DxMessaging.SourceGenerators.Tests.csproj --configuration Release --no-build
+        run: >
+          dotnet test SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/WallstopStudios.DxMessaging.SourceGenerators.Tests.csproj
+          --configuration Release
+          --no-build
+          --collect:"XPlat Code Coverage"
+
+      - name: Generate coverage summary
+        run: |
+          mkdir -p artifacts/coverage
+          reportgenerator \
+            -reports:"SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"artifacts/coverage" \
+            -reporttypes:"TextSummary;HtmlSummary;Cobertura"
+          cat artifacts/coverage/Summary.txt
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: generator-coverage
+          path: artifacts/coverage
+
+      - name: Check for TODO/FIXME markers
+        shell: bash
+        run: |
+          set -uo pipefail
+          if rg --files-with-matches "(TODO|FIXME)" \
+                --hidden \
+                --no-ignore \
+                -g '!.git/**' \
+                -g '!.artifacts/**' \
+                -g '!node_modules/**' \
+                -g '!Tests/**/TestResults/**' \
+                -g '!PLAN.md' \
+                -g '!.vs/**'; then
+            echo "::error::Found TODO/FIXME markers in the repository. Please resolve or suppress them."
+            exit 1
+          else
+            echo "No TODO/FIXME markers detected."
+          fi

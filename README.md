@@ -66,7 +66,8 @@ Need install instructions for Git URLs, scoped registries, or tarballs? Jump to 
 
 Via Unity Package Manager → Add package from git URL (see the [Install Guide](Docs/Install.md) for scoped registry, tarball, and offline options):
 
-```text
+```bash
+# Unity Package Manager > Add package from git URL...
 https://github.com/wallstop/DxMessaging.git
 ```
 
