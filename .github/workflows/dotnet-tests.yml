@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p artifacts/coverage
           reportgenerator \
-            -reports:"SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/TestResults/**/coverage.cobertura.xml" \
+            -reports:".artifacts/SourceGenerators.Tests/TestResults/**/coverage.cobertura.xml" \
             -targetdir:"artifacts/coverage" \
             -reporttypes:"TextSummary;HtmlSummary;Cobertura"
           cat artifacts/coverage/Summary.txt
