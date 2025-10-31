@@ -208,7 +208,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                         // Location-specific suggestions on each non-partial container
                         foreach (INamedTypeSymbol container in nonPartial)
                         {
-                            SyntaxReference? sr =
+                            SyntaxReference sr =
                                 container.DeclaringSyntaxReferences.FirstOrDefault();
                             if (sr != null && sr.GetSyntax() is TypeDeclarationSyntax tds)
                             {
@@ -258,11 +258,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 ? string.Empty
                 : $"namespace {namespaceName}\n{{";
             string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
-            const string indent = "    ";
+            const string Indent = "    ";
 
             // Build container wrappers for nested types so the partial can merge correctly
             var containers = new Stack<INamedTypeSymbol>();
-            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            INamedTypeSymbol current = typeSymbol.ContainingType;
             while (current is not null)
             {
                 containers.Push(current);
@@ -271,7 +271,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
             var containersOpen = new StringBuilder();
             var containersClose = new StringBuilder();
-            string currentIndent = indent; // one level inside namespace (or top-level)
+            string currentIndent = Indent; // one level inside namespace (or top-level)
 
             foreach (INamedTypeSymbol container in containers)
             {
@@ -306,7 +306,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     $"{currentIndent}{containerAccessibility} partial {containerKind} {container.Name}{containerTypeParams}"
                 );
                 containersOpen.Append(currentIndent).AppendLine("{");
-                currentIndent += indent;
+                currentIndent += Indent;
             }
 
             string innerIndent = currentIndent; // indent level for the target (innermost) type
@@ -350,13 +350,8 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
                 );
 
-            List<(
-                string Type,
-                string Name,
-                bool IsOptional,
-                string? DefaultExpr
-            )> parameterDetails =
-                new List<(string Type, string Name, bool IsOptional, string? DefaultExpr)>();
+            List<(string Type, string Name, bool IsOptional, string DefaultExpr)> parameterDetails =
+                new List<(string Type, string Name, bool IsOptional, string DefaultExpr)>();
 
             // For validating expressions, use the semantic model for this type's tree
             SemanticModel semanticModel = compilation.GetSemanticModel(
@@ -368,7 +363,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             {
                 string fieldType = field.Type.ToDisplayString(fieldTypeFormat);
                 string fieldName = field.Name;
-                string? defaultExpr = null;
+                string defaultExpr = null;
                 bool isOptional = false;
 
                 foreach (AttributeData attr in field.GetAttributes())
@@ -455,10 +450,10 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                         }
                         else if (arg.Kind == TypedConstantKind.Primitive)
                         {
-                            object? val = arg.Value;
+                            object val = arg.Value;
                             defaultExpr = FormatLiteral(val, arg.Type);
                             // Validate primitive conversion to field type
-                            ITypeSymbol? sourceType = arg.Type;
+                            ITypeSymbol sourceType = arg.Type;
                             if (sourceType != null)
                             {
                                 Conversion conv = compilation.ClassifyConversion(
@@ -489,12 +484,12 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 }
 
                 parameterDetails.Add((fieldType, fieldName, isOptional, defaultExpr));
-                constructorBody.AppendLine($"{indent}{indent}    this.{fieldName} = {fieldName};");
+                constructorBody.AppendLine($"{Indent}{Indent}    this.{fieldName} = {fieldName};");
             }
 
             for (int i = 0; i < parameterDetails.Count; i++)
             {
-                (string Type, string Name, bool IsOptional, string? DefaultExpr) p =
+                (string Type, string Name, bool IsOptional, string DefaultExpr) p =
                     parameterDetails[i];
                 constructorParams.Append($"{p.Type} {p.Name}");
                 if (p.IsOptional)
@@ -520,7 +515,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             {
                 currentIndent = currentIndent.Substring(
                     0,
-                    Math.Max(0, currentIndent.Length - indent.Length)
+                    Math.Max(0, currentIndent.Length - Indent.Length)
                 );
                 containersClose.Append(currentIndent).AppendLine("}");
             }
@@ -533,9 +528,9 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 {{namespaceBlockOpen}}
                 {{containersOpen}}{{innerIndent}}{{typeAccessibility}} partial {{typeKind}} {{typeName}}
                 {{innerIndent}}{
-                {{indent}}    /// <summary>
-                {{indent}}    /// Auto-generated constructor by DxAutoGenConstructorGenerator.
-                {{indent}}    /// </summary>
+                {{Indent}}    /// <summary>
+                {{Indent}}    /// Auto-generated constructor by DxAutoGenConstructorGenerator.
+                {{Indent}}    /// </summary>
                 {{innerIndent}}    {{constructorAccessibility}} {{typeSymbol.Name}}({{constructorParams}})
                 {{innerIndent}}    {
                 {{constructorBody}}
@@ -546,7 +541,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 """;
         }
 
-        private static string FormatLiteral(object? value, ITypeSymbol? type)
+        private static string FormatLiteral(object value, ITypeSymbol type)
         {
             if (value == null)
             {
@@ -635,7 +630,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     SpeculativeBindingOption.BindAsExpression
                 );
 
-                ITypeSymbol? sourceType = typeInfo.Type;
+                ITypeSymbol sourceType = typeInfo.Type;
                 if (sourceType == null)
                 {
                     // Could not bind; let the compiler decide but report as invalid here
@@ -655,7 +650,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         private static List<INamedTypeSymbol> GetNonPartialContainers(INamedTypeSymbol typeSymbol)
         {
             List<INamedTypeSymbol> result = new();
-            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            INamedTypeSymbol current = typeSymbol.ContainingType;
             while (current is not null)
             {
                 if (!IsDeclaredFullyPartial(current))

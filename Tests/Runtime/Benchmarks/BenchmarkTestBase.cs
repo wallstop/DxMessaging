@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
@@ -92,3 +93,5 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         }
     }
 }
+
+#endif

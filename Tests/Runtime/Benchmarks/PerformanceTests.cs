@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
@@ -64,6 +65,12 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                     SimpleUntargetedMessage untargetedMessage = new();
                     RunWithComponent(component =>
                         NoCopyUntargeted(timer, timeout, component, untargetedMessage)
+                    );
+                    RunWithComponent(component =>
+                        InterceptorHeavyUntargeted(timer, timeout, component, untargetedMessage)
+                    );
+                    RunWithComponent(component =>
+                        PostProcessorHeavyUntargeted(timer, timeout, component, untargetedMessage)
                     );
                     RunWithComponent(component =>
                         ReflexiveOneArgument(timer, timeout, component.gameObject, reflexiveMessage)
@@ -482,5 +489,135 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 ++count;
             }
         }
+
+        private void InterceptorHeavyUntargeted(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            SimpleUntargetedMessage message
+        )
+        {
+            int handlerInvocationCount = 0;
+            int interceptorInvocationCount = 0;
+            MessageRegistrationToken token = GetToken(component);
+
+            const int InterceptorCount = 8;
+            for (int i = 0; i < InterceptorCount; ++i)
+            {
+                token.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                    (ref SimpleUntargetedMessage _) =>
+                    {
+                        ++interceptorInvocationCount;
+                        return true;
+                    }
+                );
+            }
+
+            token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
+            message.EmitUntargeted();
+
+            timer.Restart();
+            do
+            {
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitUntargeted();
+                }
+            } while (timer.Elapsed < timeout);
+
+            bool allocating;
+            try
+            {
+                Assert.That(() => message.EmitUntargeted(), Is.Not.AllocatingGCMemory());
+                allocating = false;
+            }
+            catch
+            {
+                allocating = true;
+            }
+
+            Assert.Greater(
+                interceptorInvocationCount,
+                0,
+                "Interceptor-heavy benchmark should invoke registered interceptors."
+            );
+
+            DisplayCount(
+                "DxMessaging (Untargeted) - Interceptors",
+                handlerInvocationCount,
+                timeout,
+                allocating
+            );
+            return;
+
+            void Handle(ref SimpleUntargetedMessage _)
+            {
+                ++handlerInvocationCount;
+            }
+        }
+
+        private void PostProcessorHeavyUntargeted(
+            Stopwatch timer,
+            TimeSpan timeout,
+            EmptyMessageAwareComponent component,
+            SimpleUntargetedMessage message
+        )
+        {
+            int handlerInvocationCount = 0;
+            int postProcessorInvocationCount = 0;
+            MessageRegistrationToken token = GetToken(component);
+
+            const int PostProcessorCount = 8;
+            for (int i = 0; i < PostProcessorCount; ++i)
+            {
+                token.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+                    (ref SimpleUntargetedMessage _) => ++postProcessorInvocationCount
+                );
+            }
+
+            token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
+            message.EmitUntargeted();
+
+            timer.Restart();
+            do
+            {
+                for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                {
+                    message.EmitUntargeted();
+                }
+            } while (timer.Elapsed < timeout);
+
+            bool allocating;
+            try
+            {
+                Assert.That(() => message.EmitUntargeted(), Is.Not.AllocatingGCMemory());
+                allocating = false;
+            }
+            catch
+            {
+                allocating = true;
+            }
+
+            Assert.Greater(
+                postProcessorInvocationCount,
+                0,
+                "Post-processor benchmark should invoke registered post-processors."
+            );
+
+            DisplayCount(
+                "DxMessaging (Untargeted) - Post-Processors",
+                handlerInvocationCount,
+                timeout,
+                allocating
+            );
+            return;
+
+            void Handle(ref SimpleUntargetedMessage _)
+            {
+                ++handlerInvocationCount;
+            }
+        }
     }
 }
+
+#endif

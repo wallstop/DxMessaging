@@ -4,7 +4,7 @@ namespace DxMessaging.Core.Extensions
     using DxMessaging.Core;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Core.Messages;
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
     using UnityEngine;
 #endif
 
@@ -98,7 +98,7 @@ namespace DxMessaging.Core.Extensions
             message.EmitBroadcast(source, messageBus);
         }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         public static void EmitGameObjectTargeted<TMessage>(
             this IMessageBus messageBus,
             GameObject target,

@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Unity.Integrations.Zenject
 {
 #if ZENJECT_PRESENT
@@ -53,3 +54,4 @@ namespace DxMessaging.Unity.Integrations.Zenject
     }
 #endif
 }
+#endif

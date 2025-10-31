@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Unity
 {
     using DxMessaging.Core.MessageBus;
@@ -12,3 +13,4 @@ namespace DxMessaging.Unity
         public abstract IMessageBus Resolve();
     }
 }
+#endif

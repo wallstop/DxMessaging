@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
     using System;
@@ -18,7 +19,7 @@ namespace DxMessaging.Tests.Runtime.Core
         public IEnumerator LogsWarningOncePerBus()
         {
             List<(LogLevel level, string message)> logs = new();
-            var previousLogFunction = MessagingDebug.LogFunction;
+            Action<LogLevel, string> previousLogFunction = MessagingDebug.LogFunction;
             try
             {
                 MessagingDebug.LogFunction = (level, message) => logs.Add((level, message));
@@ -84,3 +85,5 @@ namespace DxMessaging.Tests.Runtime.Core
         }
     }
 }
+
+#endif

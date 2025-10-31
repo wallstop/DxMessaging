@@ -29,6 +29,8 @@ Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.pdb*
 # Uncomment if you have tasks that create the project's static files in wwwroot
 #wwwroot/
 
+.artifacts/
+
 # MSTest test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
@@ -305,9 +307,14 @@ __pycache__/
 
 SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/bin*
 SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/obj*
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/bin*
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/obj*
 
 node_modules/*
 node_modules.meta
 
 package-lock.json
 package-lock.json.meta
+Editor/Analyzers/*.pdb
+Tests/Runtime/bin.meta
+Tests/Runtime/obj.meta

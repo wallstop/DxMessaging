@@ -17,10 +17,12 @@ accept = ["200..=299", 429]
 # Only check web links
 scheme = ["https", "http"]
 
-# Ignore common local/test URLs
+# Ignore endpoints that block automated clients (local hosts, CF challenges)
 exclude = [
   "^https?://localhost",
   "^http://127\\.0\\.0\\.1",
   "^https?://0\\.0\\.0\\.0",
-  "^file://"
+  "^file://",
+  # NPM package page serves a Cloudflare JS challenge to non-browser clients; registry endpoint remains covered.
+  "^https://www\\.npmjs\\.com/package/com\\.wallstop-studios\\.dxmessaging$"
 ]

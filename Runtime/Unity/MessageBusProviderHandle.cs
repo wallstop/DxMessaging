@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Unity
 {
     using System;
@@ -17,6 +18,8 @@ namespace DxMessaging.Unity
 
         [NonSerialized]
         private IMessageBusProvider _runtimeProvider;
+
+        internal ScriptableMessageBusProvider SerializedProvider => _provider;
 
         /// <summary>
         /// Initializes a new instance referencing the supplied provider asset.
@@ -95,3 +98,4 @@ namespace DxMessaging.Unity
         }
     }
 }
+#endif

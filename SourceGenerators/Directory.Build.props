@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'WallstopStudios.DxMessaging.SourceGenerators.Tests'">
+    <SolutionDir Condition="'$(SolutionDir)' == ''">$(MSBuildThisFileDirectory)..\</SolutionDir>
+    <ArtifactsRoot>$(SolutionDir).artifacts/SourceGenerators.Tests/</ArtifactsRoot>
+    <IntermediateOutputPath>$(ArtifactsRoot)obj/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>$(ArtifactsRoot)bin/$(Configuration)/</OutputPath>
+    <VSTestResultsDirectory>$(ArtifactsRoot)TestResults/</VSTestResultsDirectory>
+  </PropertyGroup>
+</Project>

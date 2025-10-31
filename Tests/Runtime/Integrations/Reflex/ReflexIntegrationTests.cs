@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Reflex
 {
 #if REFLEX_PRESENT
@@ -93,7 +94,7 @@ namespace DxMessaging.Tests.Runtime.Reflex
 
             Container container = TrackDisposable(builder.Build());
 
-            var concrete =
+            DxMessagingRegistrationInstaller.ContainerMessageRegistrationBuilder concrete =
                 container.Resolve<DxMessagingRegistrationInstaller.ContainerMessageRegistrationBuilder>();
             Assert.IsNotNull(
                 concrete,
@@ -160,3 +161,5 @@ namespace DxMessaging.Tests.Runtime.Reflex
     }
 #endif
 }
+
+#endif

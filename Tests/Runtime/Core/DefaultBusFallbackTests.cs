@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
     using System.Collections;
@@ -20,9 +21,9 @@ namespace DxMessaging.Tests.Runtime.Core
         [TearDown]
         public void TearDown()
         {
-            foreach (var token in _tokens)
+            foreach (MessageRegistrationToken token in _tokens)
             {
-                foreach (var handle in _handles)
+                foreach (MessageRegistrationHandle handle in _handles)
                 {
                     token.RemoveRegistration(handle);
                 }
@@ -331,3 +332,5 @@ namespace DxMessaging.Tests.Runtime.Core
         }
     }
 }
+
+#endif

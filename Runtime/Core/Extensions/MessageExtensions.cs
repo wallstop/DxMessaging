@@ -37,7 +37,7 @@ namespace DxMessaging.Core.Extensions
     /// </example>
     public static class MessageExtensions
     {
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         /// <summary>
         /// Emits a TargetedMessage of the given type.
         /// </summary>
@@ -395,7 +395,7 @@ namespace DxMessaging.Core.Extensions
             resolvedBus.SourcedBroadcast(ref source, ref message);
         }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         /// <summary>
         /// Emits a BroadcastMessage of the given type.
         /// </summary>

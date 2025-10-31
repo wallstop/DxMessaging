@@ -66,7 +66,8 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         private record struct MessageToGenerateInfo(
             INamedTypeSymbol TypeSymbol,
             TypeDeclarationSyntax DeclarationSyntax,
-            string TargetInterfaceFullName // The specific interface like IBroadcastMessage
+            string TargetInterfaceFullName,
+            bool HasConflictingMessageAttributes
         );
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -143,15 +144,15 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 return null; // Cannot be a concrete message type
             }
 
-            string? foundTargetInterface = null;
+            string foundTargetInterface = null;
             bool multipleAttributes = false;
 
             // Check attributes to find the specific message type (Broadcast, Targeted, etc.)
             foreach (AttributeData attributeData in typeSymbol.GetAttributes())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string? currentAttributeFullName = attributeData.AttributeClass?.ToDisplayString();
-                string? targetInterfaceForThisAttribute = null;
+                string currentAttributeFullName = attributeData.AttributeClass?.ToDisplayString();
+                string targetInterfaceForThisAttribute = null;
 
                 switch (currentAttributeFullName)
                 {
@@ -180,17 +181,21 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 }
             }
 
-            if (multipleAttributes || foundTargetInterface == null)
+            if (multipleAttributes)
             {
-                // Don't return info if multiple different message attrs or none found.
-                // The Execute method will report the error for multiple attributes later.
+                foundTargetInterface = null;
+            }
+
+            if (foundTargetInterface == null && !multipleAttributes)
+            {
                 return null;
             }
 
             return new MessageToGenerateInfo(
                 typeSymbol,
                 typeDeclarationSyntax,
-                foundTargetInterface
+                foundTargetInterface,
+                multipleAttributes
             );
         }
 
@@ -206,18 +211,19 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             }
 
             // --- Step 1: Filter out types with multiple attributes applied ---
-            Dictionary<ISymbol, MessageToGenerateInfo> uniqueTypes = new(
+            Dictionary<ISymbol, MessageToGenerateInfo> uniqueTypes = new Dictionary<
+                ISymbol,
+                MessageToGenerateInfo
+            >(SymbolEqualityComparer.Default);
+            HashSet<ISymbol> conflictingTypes = new HashSet<ISymbol>(
                 SymbolEqualityComparer.Default
             );
-            HashSet<ISymbol> typesWithMultipleAttributes = new(SymbolEqualityComparer.Default);
 
             foreach (MessageToGenerateInfo typeInfo in typesToGenerate)
             {
-                if (uniqueTypes.ContainsKey(typeInfo.TypeSymbol))
+                if (typeInfo.HasConflictingMessageAttributes)
                 {
-                    // If adding fails, it means the same TypeSymbol appeared multiple times.
-                    // This implies multiple different valid attributes were found, report error.
-                    if (typesWithMultipleAttributes.Add(typeInfo.TypeSymbol)) // Report only once
+                    if (conflictingTypes.Add(typeInfo.TypeSymbol))
                     {
                         context.ReportDiagnostic(
                             Diagnostic.Create(
@@ -226,7 +232,44 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                                 typeInfo.TypeSymbol.ToDisplayString()
                             )
                         );
-                        // Also report for the one already in the dictionary if needed, but one report per type is usually sufficient.
+                    }
+
+                    continue;
+                }
+
+                if (conflictingTypes.Contains(typeInfo.TypeSymbol))
+                {
+                    continue;
+                }
+
+                if (typeInfo.TargetInterfaceFullName is null)
+                {
+                    continue;
+                }
+
+                if (
+                    uniqueTypes.TryGetValue(
+                        typeInfo.TypeSymbol,
+                        out MessageToGenerateInfo existingInfo
+                    )
+                )
+                {
+                    if (
+                        !string.Equals(
+                            existingInfo.TargetInterfaceFullName,
+                            typeInfo.TargetInterfaceFullName,
+                            StringComparison.Ordinal
+                        ) && conflictingTypes.Add(typeInfo.TypeSymbol)
+                    )
+                    {
+                        context.ReportDiagnostic(
+                            Diagnostic.Create(
+                                MultipleAttributesError,
+                                typeInfo.DeclarationSyntax.Identifier.GetLocation(),
+                                typeInfo.TypeSymbol.ToDisplayString()
+                            )
+                        );
+                        uniqueTypes.Remove(typeInfo.TypeSymbol);
                     }
                 }
                 else
@@ -235,10 +278,21 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 }
             }
 
-            List<MessageToGenerateInfo> validSingleAttrTypes = uniqueTypes
-                .Where(kvp => !typesWithMultipleAttributes.Contains(kvp.Key))
-                .Select(kvp => kvp.Value)
-                .ToList();
+            if (uniqueTypes.Count == 0)
+            {
+                return;
+            }
+
+            List<MessageToGenerateInfo> validSingleAttrTypes = new List<MessageToGenerateInfo>();
+            foreach (KeyValuePair<ISymbol, MessageToGenerateInfo> entry in uniqueTypes)
+            {
+                if (conflictingTypes.Contains(entry.Key))
+                {
+                    continue;
+                }
+
+                validSingleAttrTypes.Add(entry.Value);
+            }
 
             if (validSingleAttrTypes.Count == 0)
             {
@@ -249,6 +303,12 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             foreach (MessageToGenerateInfo messageInfo in validSingleAttrTypes)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
+
+                string targetInterfaceFullName = messageInfo.TargetInterfaceFullName;
+                if (targetInterfaceFullName is null)
+                {
+                    continue;
+                }
 
                 // If nested, ensure all containers are declared partial; otherwise report diagnostic and skip
                 if (messageInfo.TypeSymbol.ContainingType is not null)
@@ -276,7 +336,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                         );
                         foreach (INamedTypeSymbol container in nonPartial)
                         {
-                            SyntaxReference? sr =
+                            SyntaxReference sr =
                                 container.DeclaringSyntaxReferences.FirstOrDefault();
                             if (sr != null && sr.GetSyntax() is TypeDeclarationSyntax tds)
                             {
@@ -300,7 +360,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
                 // Generate the partial IMessage implementation source
                 string implSource = GenerateImplementationSource(
-                    messageInfo.TargetInterfaceFullName,
+                    targetInterfaceFullName,
                     messageInfo.TypeSymbol
                 );
                 string implHintName =
@@ -327,11 +387,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 ? string.Empty
                 : $"namespace {namespaceName}\n{{";
             string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
-            const string indent = "    ";
+            const string Indent = "    ";
 
             // Build container wrappers so partial can merge nested types correctly
             var containers = new Stack<INamedTypeSymbol>();
-            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            INamedTypeSymbol current = typeSymbol.ContainingType;
             while (current is not null)
             {
                 containers.Push(current);
@@ -340,7 +400,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
             var containersOpen = new StringBuilder();
             var containersClose = new StringBuilder();
-            string currentIndent = indent;
+            string currentIndent = Indent;
             foreach (INamedTypeSymbol container in containers)
             {
                 string containerAccessibility = container.DeclaredAccessibility switch
@@ -373,7 +433,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     $"{currentIndent}{containerAccessibility} partial {containerKind} {container.Name}{containerTypeParams}"
                 );
                 containersOpen.Append(currentIndent).AppendLine("{");
-                currentIndent += indent;
+                currentIndent += Indent;
             }
 
             string innerIndent = currentIndent;
@@ -415,7 +475,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             {
                 currentIndent = currentIndent.Substring(
                     0,
-                    Math.Max(0, currentIndent.Length - indent.Length)
+                    Math.Max(0, currentIndent.Length - Indent.Length)
                 );
                 containersClose.Append(currentIndent).AppendLine("}");
             }
@@ -440,7 +500,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         private static List<INamedTypeSymbol> GetNonPartialContainers(INamedTypeSymbol typeSymbol)
         {
             List<INamedTypeSymbol> result = new();
-            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            INamedTypeSymbol current = typeSymbol.ContainingType;
             while (current is not null)
             {
                 if (!IsDeclaredFullyPartial(current))

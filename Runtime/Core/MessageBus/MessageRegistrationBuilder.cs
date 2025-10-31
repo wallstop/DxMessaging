@@ -41,7 +41,7 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         public InstanceId? Owner { get; set; }
 
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
         /// <summary>
         /// Unity object to treat as the owner. Overrides <see cref="Owner"/> when supplied.
         /// </summary>
@@ -314,7 +314,7 @@ namespace DxMessaging.Core.MessageBus
 
         private static InstanceId ResolveOwner(MessageRegistrationBuildOptions options)
         {
-#if UNITY_2017_1_OR_NEWER
+#if UNITY_2021_3_OR_NEWER
             if (options.UnityOwner != null)
             {
                 if (options.UnityOwner is UnityEngine.GameObject gameObject)

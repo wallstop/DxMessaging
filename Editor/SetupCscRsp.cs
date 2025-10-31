@@ -6,6 +6,7 @@ namespace DxMessaging.Editor
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Security.Cryptography;
     using UnityEditor;
     using UnityEngine;
     using Object = UnityEngine.Object;
@@ -20,11 +21,11 @@ namespace DxMessaging.Editor
             )
             .Replace("\\", "/");
 
-        private static readonly string AnalyzerPathRelative =
-            "Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/";
-
-        private static readonly string LibraryPathRelative =
-            "Library/PackageCache/com.wallstop-studios.dxmessaging/Editor/Analyzers/";
+        private static readonly string[] AnalyzerDirectories =
+        {
+            "Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/",
+            "Library/PackageCache/com.wallstop-studios.dxmessaging/Editor/Analyzers/",
+        };
 
         private static readonly string SourceGeneratorDllName =
             "WallstopStudios.DxMessaging.SourceGenerators.dll";
@@ -34,12 +35,17 @@ namespace DxMessaging.Editor
             SourceGeneratorDllName,
             "Microsoft.CodeAnalysis.dll",
             "Microsoft.CodeAnalysis.CSharp.dll",
+            "System.Text.Encodings.Web.dll",
             "System.Reflection.Metadata.dll",
             "System.Runtime.CompilerServices.Unsafe.dll",
             "System.Collections.Immutable.dll",
+            "System.Memory.dll",
+            "System.Buffers.dll",
+            "System.Threading.Tasks.Extensions.dll",
+            "System.Numerics.Vectors.dll",
+            "System.Text.Encoding.CodePages.dll",
+            "Microsoft.Bcl.AsyncInterfaces.dll",
         };
-
-        private static readonly string LibraryArgument = $"-a:\"{LibraryPathRelative}\"";
 
         private static readonly HashSet<string> DllNames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -69,17 +75,14 @@ namespace DxMessaging.Editor
                 }
             }
 
-            string[] dllRelativeDirectories = { LibraryPathRelative, AnalyzerPathRelative };
-
-            bool anyFound = false;
-            foreach (
-                string requiredDllName in RequiredDllNames.Where(dllName =>
-                    !DllNames.Contains(dllName)
-                )
-            )
+            foreach (string requiredDllName in RequiredDllNames)
             {
-                bool found = false;
-                foreach (string relativeDirectory in dllRelativeDirectories)
+                if (DllNames.Contains(requiredDllName))
+                {
+                    continue;
+                }
+
+                foreach (string relativeDirectory in AnalyzerDirectories)
                 {
                     try
                     {
@@ -92,52 +95,62 @@ namespace DxMessaging.Editor
                         const string pluginsDirectory =
                             "Assets/Plugins/Editor/WallstopStudios.DxMessaging/";
                         string outputAsset = $"{pluginsDirectory}{requiredDllName}";
-                        string sourceAsset = $"{relativeDirectory}{requiredDllName}";
                         if (!Directory.Exists(pluginsDirectory))
                         {
                             Directory.CreateDirectory(pluginsDirectory);
                             AssetDatabase.Refresh();
                         }
-                        if (!File.Exists(outputAsset))
+                        bool needsCopy = FilesDiffer(sourceFile, outputAsset);
+                        if (needsCopy)
                         {
-                            File.Copy(sourceAsset, outputAsset);
+                            File.Copy(sourceFile, outputAsset, true);
                             AssetDatabase.ImportAsset(outputAsset);
-                            found = true;
-                        }
-                        else
-                        {
-                            FileInfo sourceInfo = new(sourceAsset);
-                            FileInfo destInfo = new(outputAsset);
-
-                            if (destInfo.LastWriteTime < sourceInfo.LastWriteTime)
-                            {
-                                // Source file is newer, so copy the file (overwrite destination)
-                                File.Copy(sourceAsset, outputAsset, true);
-                                AssetDatabase.ImportAsset(outputAsset);
-                                found = true;
-                            }
-                            else
-                            {
-                                continue;
-                            }
                         }
 
                         if (requiredDllName == SourceGeneratorDllName)
                         {
                             Object loadedDll = AssetDatabase.LoadMainAssetAtPath(outputAsset);
-                            AssetDatabase.SetLabels(loadedDll, new[] { "RoslynAnalyzer" });
+                            if (loadedDll != null)
+                            {
+                                string[] existingLabels = AssetDatabase.GetLabels(loadedDll);
+                                if (!existingLabels.Contains("RoslynAnalyzer"))
+                                {
+                                    List<string> newLabels = existingLabels.ToList();
+                                    newLabels.Add("RoslynAnalyzer");
+                                    AssetDatabase.SetLabels(loadedDll, newLabels.ToArray());
+                                }
+                            }
                         }
 
-                        PluginImporter importer =
-                            AssetImporter.GetAtPath(outputAsset) as PluginImporter;
-                        if (importer != null)
+                        if (AssetImporter.GetAtPath(outputAsset) is PluginImporter importer)
                         {
-                            importer.SetCompatibleWithAnyPlatform(false);
-                            importer.SetExcludeFromAnyPlatform("Editor", false);
-                            importer.SetExcludeFromAnyPlatform("Standalone", false);
-                            importer.SaveAndReimport();
+                            bool importerDirty = false;
+
+                            if (importer.GetCompatibleWithAnyPlatform())
+                            {
+                                importer.SetCompatibleWithAnyPlatform(false);
+                                importerDirty = true;
+                            }
+
+                            if (importer.GetExcludeFromAnyPlatform("Editor"))
+                            {
+                                importer.SetExcludeFromAnyPlatform("Editor", false);
+                                importerDirty = true;
+                            }
+
+                            if (!importer.GetExcludeFromAnyPlatform("Standalone"))
+                            {
+                                importer.SetExcludeFromAnyPlatform("Standalone", true);
+                                importerDirty = true;
+                            }
+
+                            if (importerDirty || needsCopy)
+                            {
+                                importer.SaveAndReimport();
+                            }
                         }
 
+                        DllNames.Add(requiredDllName);
                         break;
                     }
                     catch (Exception e)
@@ -147,14 +160,34 @@ namespace DxMessaging.Editor
                         );
                     }
                 }
-
-                anyFound |= found;
             }
 
-            if (anyFound)
+            if (DllNames.Count > 0)
             {
                 AssetDatabase.Refresh();
             }
+        }
+
+        private static bool FilesDiffer(string sourcePath, string destinationPath)
+        {
+            if (!File.Exists(destinationPath))
+            {
+                return true;
+            }
+
+            FileInfo sourceInfo = new(sourcePath);
+            FileInfo destinationInfo = new(destinationPath);
+            if (sourceInfo.Length != destinationInfo.Length)
+            {
+                return true;
+            }
+
+            using FileStream sourceStream = File.OpenRead(sourcePath);
+            using FileStream destinationStream = File.OpenRead(destinationPath);
+            using SHA256 sha256 = SHA256.Create();
+            byte[] sourceHash = sha256.ComputeHash(sourceStream);
+            byte[] destinationHash = sha256.ComputeHash(destinationStream);
+            return !sourceHash.AsSpan().SequenceEqual(destinationHash);
         }
 
         private static void EnsureCscRsp()
@@ -168,18 +201,65 @@ namespace DxMessaging.Editor
                 }
 
                 string rspContent = File.ReadAllText(RspFilePath);
-                if (rspContent.Contains(LibraryArgument, StringComparison.OrdinalIgnoreCase))
+                bool modified = false;
+                foreach (string analyzerArgument in GetAnalyzerArguments())
                 {
-                    return;
+                    if (rspContent.Contains(analyzerArgument, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    File.AppendAllText(RspFilePath, analyzerArgument + Environment.NewLine);
+                    modified = true;
                 }
 
-                File.AppendAllText(RspFilePath, $"{LibraryArgument}{Environment.NewLine}");
-                AssetDatabase.ImportAsset("csc.rsp");
-                Debug.Log("Updated csc.rsp.");
+                if (modified)
+                {
+                    AssetDatabase.ImportAsset("csc.rsp");
+                    Debug.Log("Updated csc.rsp.");
+                }
             }
             catch (IOException ex)
             {
                 Debug.LogError($"Failed to modify csc.rsp: {ex}");
+            }
+        }
+
+        private static IEnumerable<string> GetAnalyzerArguments()
+        {
+            HashSet<string> yielded = new(StringComparer.OrdinalIgnoreCase);
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            foreach (string directory in AnalyzerDirectories)
+            {
+                foreach (string dllName in RequiredDllNames)
+                {
+                    string absoluteDirectory = Path.IsPathRooted(directory)
+                        ? directory
+                        : Path.GetFullPath(Path.Combine(projectRoot, directory));
+
+                    string absoluteAnalyzerPath = Path.Combine(absoluteDirectory, dllName);
+                    if (!File.Exists(absoluteAnalyzerPath))
+                    {
+                        continue;
+                    }
+
+                    string projectRelativePath = FileUtil.GetProjectRelativePath(
+                        absoluteAnalyzerPath
+                    );
+                    if (string.IsNullOrEmpty(projectRelativePath))
+                    {
+                        continue;
+                    }
+
+                    string normalizedRelativePath = projectRelativePath.Replace("\\", "/");
+                    if (!yielded.Add(normalizedRelativePath))
+                    {
+                        continue;
+                    }
+
+                    yield return $"-a:\"{normalizedRelativePath}\"";
+                }
             }
         }
     }

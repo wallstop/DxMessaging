@@ -34,10 +34,10 @@ These sections are auto-updated by the PlayMode comparison benchmarks in `Tests/
 
 | Message Tech                       | Operations / Second | Allocations? |
 | ---------------------------------- | ------------------- | ------------ |
-| DxMessaging (Untargeted) - No-Copy | 14,740,000          | No           |
-| UniRx MessageBroker                | 17,858,000          | No           |
-| MessagePipe (Global)               | 96,052,000          | No           |
-| Zenject SignalBus                  | 2,632,000           | Yes          |
+| DxMessaging (Untargeted) - No-Copy | 14,734,000          | No           |
+| UniRx MessageBroker                | 18,044,000          | No           |
+| MessagePipe (Global)               | 97,774,000          | No           |
+| Zenject SignalBus                  | 2,600,000           | Yes          |
 
 ### Comparisons (macOS)
 
