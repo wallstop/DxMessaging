@@ -13,18 +13,18 @@ These snippets illustrate how to consume `IMessageRegistrationBuilder` inside co
 
 Each sample shows:
 
-- Registering `IMessageRegistrationBuilder` via the provided shim under `Runtime/Unity/Integrations/`.
+- Registering `IMessageRegistrationBuilder` via the provided shim under [Runtime/Unity/Integrations](../../Runtime/Unity/Integrations/).
 - Constructing a `MessageRegistrationLease` in a container-managed service.
 - Activating/deactivating the lease using the container lifecycle.
 
 ### Structure
 
-- `Zenject/SampleInstaller.cs`
-- `VContainer/SampleLifetimeScope.cs`
-- `Reflex/SampleInstaller.cs`
-- `Providers/CurrentGlobalMessageBusProvider.asset` — ScriptableObject that resolves whichever bus is currently configured as global.
-- `Providers/InitialGlobalMessageBusProvider.asset` — ScriptableObject that always returns the original startup global bus, ignoring later overrides.
-- `Prefabs/MessagingInstallerSample.prefab` — ready-to-use hierarchy with `MessagingComponentInstaller` configuring a child `MessagingComponent` using the provider asset. Drop it into a scene to see provider-driven wiring without writing setup code.
+- Zenject sample installer: [SampleInstaller.cs](./Zenject/SampleInstaller.cs)
+- VContainer sample lifetime scope: [SampleLifetimeScope.cs](./VContainer/SampleLifetimeScope.cs)
+- Reflex sample installer: [SampleInstaller.cs](./Reflex/SampleInstaller.cs)
+- Current global message bus provider asset: [CurrentGlobalMessageBusProvider.asset](./Providers/CurrentGlobalMessageBusProvider.asset) — ScriptableObject that resolves whichever bus is currently configured as global.
+- Initial global message bus provider asset: [InitialGlobalMessageBusProvider.asset](./Providers/InitialGlobalMessageBusProvider.asset) — ScriptableObject that always returns the original startup global bus, ignoring later overrides.
+- Prefab setup: [MessagingInstallerSample.prefab](./Prefabs/MessagingInstallerSample.prefab) — ready-to-use hierarchy with `MessagingComponentInstaller` configuring a child `MessagingComponent` using the provider asset. Drop it into a scene to see provider-driven wiring without writing setup code.
 
 ## Walkthrough
 
@@ -33,19 +33,19 @@ Each sample shows:
 
 2. **Hook up the container**  
    - **Zenject**:  
-     - Add `DxMessagingRegistrationInstaller` (from `Runtime/Unity/Integrations/`) to your ProjectContext or scene installer list.  
-     - Drop `Zenject/SampleInstaller.cs` into your project and register it alongside other installers. When the scene runs, the installer resolves `IMessageRegistrationBuilder`, stages a `PlayerSpawned` listener, and activates via the Zenject lifecycle.
+     - Add `DxMessagingRegistrationInstaller` (from [Runtime/Unity/Integrations](../../Runtime/Unity/Integrations/)) to your ProjectContext or scene installer list.  
+     - Drop [SampleInstaller.cs](./Zenject/SampleInstaller.cs) into your project and register it alongside other installers. When the scene runs, the installer resolves `IMessageRegistrationBuilder`, stages a `PlayerSpawned` listener, and activates via the Zenject lifecycle.
    - **VContainer**:  
-     - Define `VCONTAINER_PRESENT` and reference the optional extension under `Runtime/Unity/Integrations/VContainerRegistrationExtensions.cs`.  
-     - Add `VContainer/SampleLifetimeScope` to the scene (or derive from it); the sample scope registers the builder and an entry point that emits/consumes `ScoreUpdated` messages each tick.
+     - Define `VCONTAINER_PRESENT` and reference the optional extension under [VContainerRegistrationExtensions.cs](../../Runtime/Unity/Integrations/VContainerRegistrationExtensions.cs).  
+     - Add [SampleLifetimeScope.cs](./VContainer/SampleLifetimeScope.cs) to the scene (or derive from it); the sample scope registers the builder and an entry point that emits/consumes `ScoreUpdated` messages each tick.
    - **Reflex**:  
      - Enable `REFLEX_PRESENT` and install `DxMessagingRegistrationInstaller` into your container bootstrap.  
-     - Include `Reflex/SampleInstaller` in your installer chain. The sample service resolves `IMessageRegistrationBuilder`, subscribes to `PlayerAlert`, and can emit alerts via `EmitAlertFor`.
+     - Include [SampleInstaller.cs](./Reflex/SampleInstaller.cs) in your installer chain. The sample service resolves `IMessageRegistrationBuilder`, subscribes to `PlayerAlert`, and can emit alerts via `EmitAlertFor`.
 
 3. **Emit a message**  
    Use the service exposed by the container (e.g., call into `ScoreboardService` or `PlayerAlertService`) to emit a message. Because the prefab already configured `MessagingComponent` instances via the installer, the listeners run immediately.
 
 4. **Swap providers** (optional)  
-   Duplicate `Providers/CurrentGlobalMessageBusProvider.asset`, modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
+   Duplicate [CurrentGlobalMessageBusProvider.asset](./Providers/CurrentGlobalMessageBusProvider.asset), modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
 
 Feel free to duplicate these scripts into your own project and adjust lifecycles or message types as needed.

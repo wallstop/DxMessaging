@@ -36,7 +36,7 @@ new GameEvent().Emit();  // Both DoWork() and ProcessLater() execute
 - Ensures all listeners see a consistent view of the registration state
 - Makes debugging and reasoning about message flow easier
 
-This snapshot behavior is extensively tested in `MutationDuringEmissionTests.cs`.
+This snapshot behavior is extensively tested in the [Mutation During Emission tests](../Tests/Runtime/Core/MutationDuringEmissionTests.cs).
 
 ---
 

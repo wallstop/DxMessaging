@@ -17,7 +17,7 @@
 After reading this walkthrough, you'll know:
 
 1. **Why each message type was chosen** - the reasoning behind Untargeted vs Targeted vs Broadcast
-2. **How the code flows** - step-by-step from Boot.cs through every script
+2. **How the code flows** - step-by-step from [Boot.cs](./Boot.cs) through every script
 3. **Common patterns** - Observer, Broadcaster, Orchestrator, and more
 4. **Debugging strategies** - how to find and fix issues
 5. **How to extend it** - add your own messages and handlers
@@ -43,7 +43,7 @@ After reading this walkthrough, you'll know:
 
 Let's understand what each script does:
 
-### Messages.cs
+### [Messages.cs](./Messages.cs)
 
 **Purpose**: Defines all message types used in the sample
 
@@ -56,7 +56,7 @@ Let's understand what each script does:
 
 **Why separate file?** Keeping messages in one place makes them easy to find and prevents circular dependencies.
 
-### Player.cs
+### [Player.cs](./Player.cs)
 
 **What it does**: Listens for healing messages targeted specifically at this player
 
@@ -68,7 +68,7 @@ Let's understand what each script does:
 
 **Real-world analogy**: Like having your name called in a doctor's office—only you respond.
 
-### Enemy.cs
+### [Enemy.cs](./Enemy.cs)
 
 **What it does**: Broadcasts when it takes damage
 
@@ -80,7 +80,7 @@ Let's understand what each script does:
 
 **Real-world analogy**: Like ringing a bell—anyone nearby can hear it.
 
-### UIOverlay.cs
+### [UIOverlay.cs](./UIOverlay.cs)
 
 **What it does**: Monitors game events and updates the UI
 
@@ -92,7 +92,7 @@ Let's understand what each script does:
 
 **Real-world analogy**: Like a news reporter watching everything and reporting it.
 
-### Boot.cs
+### [Boot.cs](./Boot.cs)
 
 **What it does**: Starts the demo by simulating a sequence of events
 
@@ -141,8 +141,8 @@ Settings changes are **global events**—they don't target anyone specifically. 
 
 ### The Code Flow
 
-1. **Boot.cs** calls: `MessageHub.Publish(new VideoSettingsChanged())`
-1. **UIOverlay.cs** receives it through its registered handler
+1. **[Boot.cs](./Boot.cs)** calls: `MessageHub.Publish(new VideoSettingsChanged())`
+1. **[UIOverlay.cs](./UIOverlay.cs)** receives it through its registered handler
 1. **UIOverlay** rebuilds the UI with new settings
 
 ### Developer Notes
@@ -178,9 +178,9 @@ We want to heal **one specific player**, not all players in the scene.
 
 ### The Code Flow
 
-1. **Boot.cs** finds the Player Component reference
-1. **Boot.cs** calls: `MessageHub.Publish(new Heal(amount), targetComponent)`
-1. **Only the targeted Player.cs** receives it through its handler
+1. **[Boot.cs](./Boot.cs)** finds the Player Component reference
+1. **[Boot.cs](./Boot.cs)** calls: `MessageHub.Publish(new Heal(amount), targetComponent)`
+1. **Only the targeted [Player.cs](./Player.cs)** receives it through its handler
 1. **Player** increases its HP
 
 ### Developer Notes
@@ -216,7 +216,7 @@ The Enemy doesn't know (or care) who needs to know about the damage. It just ann
 
 ### The Code Flow
 
-1. **Enemy.cs** detects it took damage
+1. **[Enemy.cs](./Enemy.cs)** detects it took damage
 1. **Enemy** calls: `this.EmitBroadcast(new TookDamage(amount))`
 1. **UIOverlay** receives it via `RegisterBroadcastWithoutSource`
 1. **UIOverlay** displays the damage event
