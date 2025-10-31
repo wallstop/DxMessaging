@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Scripts.Components
 {
     using DxMessaging.Unity;
@@ -16,3 +17,5 @@ namespace DxMessaging.Tests.Runtime.Scripts.Components
         }
     }
 }
+
+#endif

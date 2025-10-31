@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.VContainer
 {
 #if VCONTAINER_PRESENT
@@ -138,3 +139,5 @@ namespace DxMessaging.Tests.Runtime.VContainer
     }
 #endif
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Unity
 {
     using System.Collections;
@@ -347,3 +348,5 @@ namespace DxMessaging.Tests.Runtime.Unity
         }
     }
 }
+
+#endif

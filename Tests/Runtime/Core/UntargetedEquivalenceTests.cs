@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 // ReSharper disable AccessToModifiedClosure
 namespace DxMessaging.Tests.Runtime.Core
 {
@@ -168,3 +169,5 @@ namespace DxMessaging.Tests.Runtime.Core
         }
     }
 }
+
+#endif

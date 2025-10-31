@@ -502,7 +502,7 @@ namespace DxMessaging.Core
         /// <note>
         /// Ideally, this would be something like a Dictionary[T, Handler[T]], but that can't be done with C#s type system.
         /// </note>
-        private readonly List<MessageCache<object>> _handlersByTypeByMessageBus;
+        internal readonly List<MessageCache<object>> _handlersByTypeByMessageBus;
         private IMessageBus _defaultMessageBus;
 
         /// <summary>
@@ -1932,6 +1932,33 @@ namespace DxMessaging.Core
 
             existingTypedHandler = default;
             return false;
+        }
+
+        internal int GetUntargetedPostProcessingPrefreezeCount<T>(
+            IMessageBus messageBus,
+            int priority
+        )
+            where T : IMessage
+        {
+            if (
+                !GetHandlerForType(messageBus, out TypedHandler<T> handler)
+                || handler._untargetedPostProcessingFastHandlers == null
+            )
+            {
+                return 0;
+            }
+
+            if (
+                handler._untargetedPostProcessingFastHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> cache
+                )
+            )
+            {
+                return cache.prefreezeInvocationCount;
+            }
+
+            return 0;
         }
 
         private sealed class HandlerActionCache<T>

@@ -1,3 +1,4 @@
+#if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Reflex
 {
 #if REFLEX_PRESENT
@@ -160,3 +161,5 @@ namespace DxMessaging.Tests.Runtime.Reflex
     }
 #endif
 }
+
+#endif
