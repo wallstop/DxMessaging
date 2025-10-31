@@ -4,8 +4,9 @@
     <LangVersion>latest</LangVersion>
     <MicrosoftCodeAnalysisVersion>4.2.0</MicrosoftCodeAnalysisVersion>
     <SystemCollectionsImmutableVersion>5.0.0</SystemCollectionsImmutableVersion>
-    <SystemReflectionMetadataVersion>6.0.0</SystemReflectionMetadataVersion>
+    <SystemReflectionMetadataVersion>9.0.0</SystemReflectionMetadataVersion>
     <SystemRuntimeCompilerServicesUnsafeVersion>6.0.0</SystemRuntimeCompilerServicesUnsafeVersion>
+    <SystemTextEncodingsWebVersion>6.0.0</SystemTextEncodingsWebVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.3">
@@ -33,18 +34,26 @@
       <UnityAssetsEditorWallstopStudiosDir>$([System.IO.Path]::Combine('$(UnityAssetsEditorDir)', 'Wallstop Studios'))</UnityAssetsEditorWallstopStudiosDir>
       <UnityAssetsPluginsEditorWallstopDir>$([System.IO.Path]::Combine('$(UnityAssetsDir)', 'Plugins', 'Editor', 'WallstopStudios.DxMessaging'))</UnityAssetsPluginsEditorWallstopDir>
       <AnalyzerDll>$(TargetPath)</AnalyzerDll>
-      <AnalyzerPdb>$(TargetDir)$(TargetName).pdb</AnalyzerPdb>
     </PropertyGroup>
     <ItemGroup>
       <AnalyzerOutput Include="$(AnalyzerDll)" />
       <AnalyzerDependency Include="$(NuGetPackageRoot)microsoft.codeanalysis.common\$(MicrosoftCodeAnalysisVersion)\lib\netstandard2.0\Microsoft.CodeAnalysis.dll" />
       <AnalyzerDependency Include="$(NuGetPackageRoot)microsoft.codeanalysis.csharp\$(MicrosoftCodeAnalysisVersion)\lib\netstandard2.0\Microsoft.CodeAnalysis.CSharp.dll" />
       <AnalyzerDependency Include="$(NuGetPackageRoot)system.collections.immutable\$(SystemCollectionsImmutableVersion)\lib\netstandard2.0\System.Collections.Immutable.dll" />
-      <AnalyzerDependency Include="$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\net6.0\System.Reflection.Metadata.dll" Condition="Exists('$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\net6.0\System.Reflection.Metadata.dll')" />
-      <AnalyzerDependency Include="$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\netstandard2.0\System.Reflection.Metadata.dll" Condition="Exists('$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\netstandard2.0\System.Reflection.Metadata.dll')" />
+      <AnalyzerDependency
+        Include="$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\net6.0\System.Reflection.Metadata.dll"
+        Condition="Exists('$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\net6.0\System.Reflection.Metadata.dll')"
+      />
+      <AnalyzerDependency
+        Include="$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\netstandard2.0\System.Reflection.Metadata.dll"
+        Condition="Exists('$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\netstandard2.0\System.Reflection.Metadata.dll')"
+      />
       <AnalyzerDependency Include="$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\$(SystemRuntimeCompilerServicesUnsafeVersion)\lib\netstandard2.0\System.Runtime.CompilerServices.Unsafe.dll" />
       <AllAnalyzerFiles Include="@(AnalyzerOutput)" />
-      <AllAnalyzerFiles Include="@(AnalyzerDependency)" Condition="Exists('%(AnalyzerDependency.Identity)')" />
+      <AllAnalyzerFiles
+        Include="@(AnalyzerDependency)"
+        Condition="Exists('%(AnalyzerDependency.Identity)')"
+      />
     </ItemGroup>
     <!-- Copy into package Editor/Analyzers (used by SetupCscRsp and package consumers) -->
     <MakeDir Directories="$(EditorAnalyzersDir)" Condition="!Exists('$(EditorAnalyzersDir)')" />

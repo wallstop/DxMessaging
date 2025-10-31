@@ -305,11 +305,12 @@ __pycache__/
 
 SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/bin*
 SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/obj*
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/bin*
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/obj*
 
 node_modules/*
 node_modules.meta
 
 package-lock.json
-package-lock.json.metaEditor/Analyzers/*.dll
+package-lock.json.meta
 Editor/Analyzers/*.pdb
-

@@ -143,15 +143,15 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 return null; // Cannot be a concrete message type
             }
 
-            string? foundTargetInterface = null;
+            string foundTargetInterface = null;
             bool multipleAttributes = false;
 
             // Check attributes to find the specific message type (Broadcast, Targeted, etc.)
             foreach (AttributeData attributeData in typeSymbol.GetAttributes())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string? currentAttributeFullName = attributeData.AttributeClass?.ToDisplayString();
-                string? targetInterfaceForThisAttribute = null;
+                string currentAttributeFullName = attributeData.AttributeClass?.ToDisplayString();
+                string targetInterfaceForThisAttribute = null;
 
                 switch (currentAttributeFullName)
                 {
@@ -276,7 +276,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                         );
                         foreach (INamedTypeSymbol container in nonPartial)
                         {
-                            SyntaxReference? sr =
+                            SyntaxReference sr =
                                 container.DeclaringSyntaxReferences.FirstOrDefault();
                             if (sr != null && sr.GetSyntax() is TypeDeclarationSyntax tds)
                             {
@@ -327,11 +327,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 ? string.Empty
                 : $"namespace {namespaceName}\n{{";
             string namespaceBlockClose = string.IsNullOrEmpty(namespaceName) ? string.Empty : "}";
-            const string indent = "    ";
+            const string Indent = "    ";
 
             // Build container wrappers so partial can merge nested types correctly
             var containers = new Stack<INamedTypeSymbol>();
-            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            INamedTypeSymbol current = typeSymbol.ContainingType;
             while (current is not null)
             {
                 containers.Push(current);
@@ -340,7 +340,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
             var containersOpen = new StringBuilder();
             var containersClose = new StringBuilder();
-            string currentIndent = indent;
+            string currentIndent = Indent;
             foreach (INamedTypeSymbol container in containers)
             {
                 string containerAccessibility = container.DeclaredAccessibility switch
@@ -373,7 +373,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     $"{currentIndent}{containerAccessibility} partial {containerKind} {container.Name}{containerTypeParams}"
                 );
                 containersOpen.Append(currentIndent).AppendLine("{");
-                currentIndent += indent;
+                currentIndent += Indent;
             }
 
             string innerIndent = currentIndent;
@@ -415,7 +415,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             {
                 currentIndent = currentIndent.Substring(
                     0,
-                    Math.Max(0, currentIndent.Length - indent.Length)
+                    Math.Max(0, currentIndent.Length - Indent.Length)
                 );
                 containersClose.Append(currentIndent).AppendLine("}");
             }
@@ -440,7 +440,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         private static List<INamedTypeSymbol> GetNonPartialContainers(INamedTypeSymbol typeSymbol)
         {
             List<INamedTypeSymbol> result = new();
-            INamedTypeSymbol? current = typeSymbol.ContainingType;
+            INamedTypeSymbol current = typeSymbol.ContainingType;
             while (current is not null)
             {
                 if (!IsDeclaredFullyPartial(current))
