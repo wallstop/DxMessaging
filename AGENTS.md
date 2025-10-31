@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-- `Runtime/` — core library (`DxMessaging.Core`) and Unity components (`DxMessaging.Unity`).
-- `Editor/` — editor utilities, analyzers, and setup (`DxMessaging.Editor`).
-- `SourceGenerators/` — Roslyn source generators (`netstandard2.0`).
-- `Tests/Runtime/` — NUnit/Unity Test Framework tests (e.g., `Core/NominalTests.cs`).
-- `Docs/` — usage patterns and examples.
-- Package manifest: `package.json` (published to NPM/UPM).
+- [Runtime](Runtime/) — core library (`DxMessaging.Core`) and Unity components (`DxMessaging.Unity`).
+- [Editor](Editor/) — editor utilities, analyzers, and setup (`DxMessaging.Editor`).
+- [SourceGenerators](SourceGenerators/) — Roslyn source generators (`netstandard2.0`).
+- [Tests/Runtime](Tests/Runtime/) — NUnit/Unity Test Framework tests (e.g., [Core Nominal tests](Tests/Runtime/Core/NominalTests.cs)).
+- [Docs](Docs/) — usage patterns and examples.
+- Package manifest: [package.json](package.json) (published to NPM/UPM).
 
 ## Build, Test, and Development Commands
 
@@ -17,9 +17,9 @@
 
 ## Coding Style & Naming Conventions
 
-- Indent with 4 spaces for `.cs` (JSON/YAML: 2). CRLF, UTF‑8 BOM (see `.editorconfig`).
+- Indent with 4 spaces for `.cs` (JSON/YAML: 2). CRLF, UTF‑8 BOM (see [.editorconfig](.editorconfig)).
 - Prefer explicit types over `var`. Braces required. `using` directives inside the namespace.
-- Naming: `PascalCase` for types/methods/properties; interfaces `I*`; type parameters `T*`; events prefixed `On*`; public fields lowerCamelCase (matches examples in `README.md`).
+- Naming: `PascalCase` for types/methods/properties; interfaces `I*`; type parameters `T*`; events prefixed `On*`; public fields lowerCamelCase (matches examples in the [README](README.md)).
 - Place code under `DxMessaging.Core`, `DxMessaging.Unity`, or `DxMessaging.Editor` as appropriate.
 - Do not use underscores in function names, especially test function names.
 - Do not use regions, anywhere, ever.
@@ -29,7 +29,7 @@
 ## Testing Guidelines
 
 - Frameworks: NUnit + Unity Test Framework. Use `[Test]`/`[UnityTest]` as needed.
-- Location: add files under `Tests/Runtime/<Area>/` named `*Tests.cs` with classes `*Tests`.
+- Location: add files under [Tests/Runtime](Tests/Runtime/) `<Area>/` named `*Tests.cs` with classes `*Tests`.
 - Keep tests independent: prefer a local `MessageBus` and explicit `MessageRegistrationToken` lifecycles.
 - Do not use underscores in test function names.
 - Prefer expressive assertions and failure messages so it is clear what exactly is failing when a test fails.
@@ -43,10 +43,10 @@
 ## Commit & Pull Request Guidelines
 
 - Commits: short, imperative subject; group related changes; reference issues/PRs (e.g., “Fix registration dedupe (#123)”).
-- PRs: include a clear description, linked issues, before/after notes for performance changes (see `Tests/Runtime/Benchmarks`), and tests for bug fixes/features.
-- Releasing: changes to `package.json` on `master` may trigger the NPM publish workflow.
+- PRs: include a clear description, linked issues, before/after notes for performance changes (see [Tests/Runtime/Benchmarks](Tests/Runtime/Benchmarks/)), and tests for bug fixes/features.
+- Releasing: changes to [package.json](package.json) on `master` may trigger the NPM publish workflow.
 
 ## Security & Configuration Tips
 
-- Editor analyzer DLLs are copied into the Unity project by `Editor/SetupCscRsp.cs`; do not commit generated DLLs into this repo.
+- Editor analyzer DLLs are copied into the Unity project by [SetupCscRsp.cs](Editor/SetupCscRsp.cs); do not commit generated DLLs into this repo.
 - Keep public APIs minimal and consistent; avoid breaking changes without a major version bump.

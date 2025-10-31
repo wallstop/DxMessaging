@@ -1,6 +1,6 @@
 # Performance Benchmarks
 
-This page is auto-updated by the Unity PlayMode benchmark tests in `Tests/Runtime/Benchmarks/PerformanceTests.cs`.
+This page is auto-updated by the Unity PlayMode benchmark tests in the [Performance PlayMode benchmark suite](../Tests/Runtime/Benchmarks/PerformanceTests.cs).
 
 How it works:
 
@@ -8,7 +8,7 @@ How it works:
 - The benchmark test writes an OS-specific section below with a markdown table.
 - CI runs skip writing to avoid noisy diffs.
 
-See also: `Docs/DesignAndArchitecture.md#performance-optimizations` for design details.
+See also: [Performance optimizations](./DesignAndArchitecture.md#performance-optimizations) for design details.
 
 ## Windows
 

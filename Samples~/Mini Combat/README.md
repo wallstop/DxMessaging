@@ -83,11 +83,11 @@ Here's what each script does:
 
 | File | Purpose | Message Type |
 |------|---------|--------------|
-| **Messages.cs** | Defines all message types | Contains `VideoSettingsChanged`, `Heal`, and `TookDamage` |
-| **Player.cs** | Handles receiving healing | Listens for `Heal` (Targeted) |
-| **Enemy.cs** | Announces when damaged | Emits `TookDamage` (Broadcast) |
-| **UIOverlay.cs** | Updates UI based on events | Listens to settings and `TookDamage` (Broadcast) |
-| **Boot.cs** | Starts the demo | Simulates message flow |
+| **[Messages.cs](./Messages.cs)** | Defines all message types | Contains `VideoSettingsChanged`, `Heal`, and `TookDamage` |
+| **[Player.cs](./Player.cs)** | Handles receiving healing | Listens for `Heal` (Targeted) |
+| **[Enemy.cs](./Enemy.cs)** | Announces when damaged | Emits `TookDamage` (Broadcast) |
+| **[UIOverlay.cs](./UIOverlay.cs)** | Updates UI based on events | Listens to settings and `TookDamage` (Broadcast) |
+| **[Boot.cs](./Boot.cs)** | Starts the demo | Simulates message flow |
 
 ---
 
@@ -126,10 +126,10 @@ For **each GameObject**, you need TWO components:
    - Click GameObject → Add Component → "MessagingComponent"
 
 1. **Add the sample script**:
-   - **Player** GameObject → Add `Player.cs` script
-   - **Enemy** GameObject → Add `Enemy.cs` script
-   - **UIOverlay** GameObject → Add `UIOverlay.cs` script
-   - **Boot** GameObject → Add `Boot.cs` script
+   - **Player** GameObject → Add [Player.cs](./Player.cs) script
+   - **Enemy** GameObject → Add [Enemy.cs](./Enemy.cs) script
+   - **UIOverlay** GameObject → Add [UIOverlay.cs](./UIOverlay.cs) script
+   - **Boot** GameObject → Add [Boot.cs](./Boot.cs) script
 
 #### Step 3: Run and Observe
 
@@ -147,11 +147,11 @@ Press Play! The Boot script will automatically:
 
 ### The Message Flow
 
-#### Boot.cs sends messages:
+#### [Boot.cs](./Boot.cs) sends messages:
 
-1. `VideoSettingsChanged` (Untargeted) → UIOverlay.cs receives
-2. `Heal` (Targeted to Player) → Player.cs receives
-3. `TookDamage` (Broadcast from Enemy) → UIOverlay.cs receives
+1. `VideoSettingsChanged` (Untargeted) → [UIOverlay.cs](./UIOverlay.cs) receives
+2. `Heal` (Targeted to Player) → [Player.cs](./Player.cs) receives
+3. `TookDamage` (Broadcast from Enemy) → [UIOverlay.cs](./UIOverlay.cs) receives
 
 ### Understanding Message Types
 
@@ -318,6 +318,6 @@ protected override void OnEnable() {
 ## Quick Reference
 
 **Enable Diagnostics**: Select MessagingComponent in Inspector → Enable Diagnostics
-**Message Types**: See `Messages.cs` for all available messages
-**Modify Behavior**: Edit handler methods in Player.cs, Enemy.cs, or UIOverlay.cs
+**Message Types**: See [Messages.cs](./Messages.cs) for all available messages
+**Modify Behavior**: Edit handler methods in [Player.cs](./Player.cs), [Enemy.cs](./Enemy.cs), or [UIOverlay.cs](./UIOverlay.cs)
 **Extend Scripts**: Always call `base.RegisterMessageHandlers()` and other `base.*` methods

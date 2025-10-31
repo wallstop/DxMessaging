@@ -120,7 +120,7 @@ MessageHandler.MessageBus.DiagnosticsMode = true;
 
 - Multiple buttons: Add more UI Buttons, add more `UIButtonEmitter`s, and give each a unique `buttonId`.
 - Targeted vs. untargeted: Notice the sample also sends a targeted `StringMessage` to the emitter’s `gameObject`.
-- Your own message type: Open `Messages.cs` to see how `ButtonClicked` is declared using attributes:
+- Your own message type: Open [Messages.cs](./Messages.cs) to see how `ButtonClicked` is declared using attributes:
 
 ```csharp
 [DxUntargetedMessage]
@@ -202,8 +202,8 @@ public class MyObserver : MessageAwareComponent {
 
 ## Next Steps
 
-- Quick tour: `Docs/GettingStarted.md`
-- Patterns and recipes: `Docs/Patterns.md`
-- Explore another sample: `../Mini%20Combat/README.md`
+- Quick tour: [Getting Started guide](../../Docs/GettingStarted.md)
+- Patterns and recipes: [Common Patterns](../../Docs/Patterns.md)
+- Explore another sample: [Mini Combat sample](../Mini%20Combat/README.md)
 
 You now have an easy, inspector-first way to publish and observe messages. Build up from here by swapping in your own message types and listeners.

@@ -64,11 +64,11 @@ Unity bridge types
 
 Source files (for exploration)
 
-- Message bus interface: Runtime/Core/MessageBus/IMessageBus.cs
-- Message bus: Runtime/Core/MessageBus/MessageBus.cs
-- Message handler/token: Runtime/Core/MessageHandler.cs, Runtime/Core/MessageRegistrationToken.cs
-- Emit helpers: Runtime/Core/Extensions/MessageExtensions.cs
-- Attributes: Runtime/Core/Attributes/\*.cs
+- Message bus interface: [IMessageBus](../Runtime/Core/MessageBus/IMessageBus.cs)
+- Message bus: [MessageBus](../Runtime/Core/MessageBus/MessageBus.cs)
+- Message handler/token: [MessageHandler](../Runtime/Core/MessageHandler.cs), [MessageRegistrationToken](../Runtime/Core/MessageRegistrationToken.cs)
+- Emit helpers: [MessageExtensions](../Runtime/Core/Extensions/MessageExtensions.cs)
+- Attributes: [Attributes directory](../Runtime/Core/Attributes/)
 
 API tables (quick view)
 

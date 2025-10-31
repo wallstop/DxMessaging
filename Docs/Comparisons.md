@@ -28,7 +28,7 @@
 
 ## Performance Benchmarks
 
-These sections are auto-updated by the PlayMode comparison benchmarks in `Tests/Runtime/Benchmarks/ComparisonPerformanceTests.cs`. Run the suite locally to refresh the tables.
+These sections are auto-updated by the PlayMode comparison benchmarks in the [Comparison Performance PlayMode tests](../Tests/Runtime/Benchmarks/ComparisonPerformanceTests.cs). Run the suite locally to refresh the tables.
 
 ### Comparisons (Windows)
 
