@@ -9,7 +9,6 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <NoWarn>1701;1702</NoWarn>
   </PropertyGroup>
-
   <ItemGroup>
     <None Include="Benchmarks\**\*.cs" LinkBase="Benchmarks" />
     <None Include="Core\**\*.cs" LinkBase="Core" />
