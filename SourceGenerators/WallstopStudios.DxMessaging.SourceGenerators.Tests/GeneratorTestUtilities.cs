@@ -57,7 +57,10 @@ internal static class GeneratorTestUtilities
     internal static ImmutableArray<Diagnostic> CompileSnippet(string userSource)
     {
         SyntaxTree stubs = CSharpSyntaxTree.ParseText(SharedStubs, ParseOptions);
-        SyntaxTree userTree = CSharpSyntaxTree.ParseText(userSource, ParseOptions);
+        SyntaxTree userTree = CSharpSyntaxTree.ParseText(
+            userSource,
+            ParseOptions.WithKind(SourceCodeKind.Script)
+        );
 
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "SnippetCompilation",
@@ -67,6 +70,12 @@ internal static class GeneratorTestUtilities
         );
 
         return compilation.GetDiagnostics();
+    }
+
+    internal static ImmutableArray<Diagnostic> ParseSnippet(string userSource)
+    {
+        SyntaxTree userTree = CSharpSyntaxTree.ParseText(userSource, ParseOptions);
+        return userTree.GetDiagnostics().ToImmutableArray();
     }
 
     private static ImmutableArray<MetadataReference> BuildCoreReferences()

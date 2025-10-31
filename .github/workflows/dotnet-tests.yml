@@ -35,7 +35,6 @@ jobs:
         run: >
           dotnet test SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/WallstopStudios.DxMessaging.SourceGenerators.Tests.csproj
           --configuration Release
-          --no-build
           --collect:"XPlat Code Coverage"
 
       - name: Generate coverage summary
