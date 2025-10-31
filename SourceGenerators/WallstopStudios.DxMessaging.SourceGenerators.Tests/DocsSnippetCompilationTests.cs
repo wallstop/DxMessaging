@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
@@ -10,7 +11,8 @@ public sealed class DocsSnippetCompilationTests
     [Test]
     public void QuickStartStep1Compiles()
     {
-        string quickStartPath = ResolveQuickStartPath();
+        string docsRoot = ResolveDocsRoot();
+        string quickStartPath = Path.Combine(docsRoot, "QuickStart.md");
         Assert.That(File.Exists(quickStartPath), Is.True, $"Unable to locate {quickStartPath}.");
 
         string snippet = ExtractFirstCodeBlock(quickStartPath, "csharp");
@@ -41,7 +43,54 @@ using UnityEngine;
         }
     }
 
+    [TestCaseSource(nameof(GetDocumentationSnippets))]
+    public void DocumentationSnippetsCompile(string markdownPath, string snippet)
+    {
+        Assert.That(
+            snippet,
+            Is.Not.Empty,
+            $"Snippet extracted from {markdownPath} should not be empty."
+        );
+
+        var diagnostics = GeneratorTestUtilities
+            .CompileSnippet(snippet)
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .ToArray();
+
+        if (diagnostics.Length > 0)
+        {
+            string message = string.Join(
+                System.Environment.NewLine,
+                diagnostics.Select(d => d.ToString())
+            );
+            Assert.Fail(
+                $"Documentation snippet in {markdownPath} failed to compile:{System.Environment.NewLine}{message}"
+            );
+        }
+    }
+
+    private static IEnumerable<TestCaseData> GetDocumentationSnippets()
+    {
+        string docsRoot = ResolveDocsRoot();
+        foreach (
+            string markdownPath in Directory.GetFiles(docsRoot, "*.md", SearchOption.AllDirectories)
+        )
+        {
+            foreach (string snippet in ExtractCodeBlocks(markdownPath, "csharp"))
+            {
+                yield return new TestCaseData(markdownPath, snippet).SetName(
+                    $"{Path.GetFileName(markdownPath)} compiles"
+                );
+            }
+        }
+    }
+
     private static string ExtractFirstCodeBlock(string markdownPath, string infoString)
+    {
+        return ExtractCodeBlocks(markdownPath, infoString).FirstOrDefault() ?? string.Empty;
+    }
+
+    private static IEnumerable<string> ExtractCodeBlocks(string markdownPath, string infoString)
     {
         string[] lines = File.ReadAllLines(markdownPath);
         bool inBlock = false;
@@ -54,22 +103,27 @@ using UnityEngine;
                 if (line.StartsWith("```") && line.Length > 3 && line[3..].StartsWith(infoString))
                 {
                     inBlock = true;
+                    builder.Clear();
                 }
                 continue;
             }
 
             if (line.StartsWith("```"))
             {
-                break;
+                inBlock = false;
+                string snippet = builder.ToString();
+                if (!string.IsNullOrWhiteSpace(snippet))
+                {
+                    yield return snippet;
+                }
+                continue;
             }
 
             builder.AppendLine(rawLine);
         }
-
-        return builder.ToString();
     }
 
-    private static string ResolveQuickStartPath()
+    private static string ResolveDocsRoot()
     {
         string currentDirectoryPath = TestContext.CurrentContext.TestDirectory;
         while (!string.IsNullOrEmpty(currentDirectoryPath))
@@ -78,7 +132,7 @@ using UnityEngine;
             string candidate = Path.Combine(docsDirectory, "QuickStart.md");
             if (File.Exists(candidate))
             {
-                return candidate;
+                return docsDirectory;
             }
 
             string parentDirectoryPath =
