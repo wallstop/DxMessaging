@@ -45,6 +45,20 @@ namespace DxMessaging.Unity
         internal readonly Dictionary<MonoBehaviour, MessageRegistrationToken> _registeredListeners =
             new();
 
+        internal bool AutoConfigureSerializedProviderOnAwake =>
+            autoConfigureSerializedProviderOnAwake;
+
+        internal bool HasRuntimeProvider => _messageBusProvider != null;
+
+        internal bool HasMessageBusOverride => _messageBusOverride != null;
+
+        internal bool HasSerializedProvider => _serializedProviderHandle.TryGetProvider(out _);
+
+        internal MessageBusProviderHandle SerializedProviderHandle => _serializedProviderHandle;
+
+        internal ScriptableMessageBusProvider SerializedProviderAsset =>
+            _serializedProviderHandle.SerializedProvider;
+
         /// <summary>
         /// Creates a <see cref="IMessageRegistrationBuilder"/> aligned with this component's configured bus or provider.
         /// </summary>

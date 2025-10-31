@@ -43,10 +43,13 @@ namespace DxMessaging.Editor.Testing
                 .Select(pair => CreateListenerView(pair.Key, pair.Value))
                 .ToList();
 
+            ProviderDiagnosticsView providerDiagnostics = CreateProviderDiagnostics(component);
+
             return new MessagingComponentInspectorState(
                 globalDiagnosticsEnabled,
                 globalHistory,
-                listenerViews
+                listenerViews,
+                providerDiagnostics
             );
         }
 
@@ -75,6 +78,34 @@ namespace DxMessaging.Editor.Testing
                 emissionHistory
             );
         }
+
+        internal static ProviderDiagnosticsView CreateProviderDiagnostics(
+            MessagingComponent component
+        )
+        {
+            bool autoConfigure = component.AutoConfigureSerializedProviderOnAwake;
+            bool hasSerializedProvider =
+                component.SerializedProviderAsset != null || component.HasSerializedProvider;
+            bool hasRuntimeProvider = component.HasRuntimeProvider;
+            bool hasMessageBusOverride = component.HasMessageBusOverride;
+            bool serializedProviderMissingWarning = autoConfigure && !hasSerializedProvider;
+
+            bool serializedProviderNullBusWarning = false;
+            if (hasSerializedProvider)
+            {
+                IMessageBus resolvedBus = component.SerializedProviderHandle.ResolveBus();
+                serializedProviderNullBusWarning = resolvedBus == null;
+            }
+
+            return new ProviderDiagnosticsView(
+                autoConfigure,
+                hasSerializedProvider,
+                hasRuntimeProvider,
+                hasMessageBusOverride,
+                serializedProviderMissingWarning,
+                serializedProviderNullBusWarning
+            );
+        }
     }
 
     internal sealed class MessagingComponentInspectorState
@@ -82,7 +113,8 @@ namespace DxMessaging.Editor.Testing
         internal MessagingComponentInspectorState(
             bool globalDiagnosticsEnabled,
             IReadOnlyList<MessageEmissionData> globalEmissionHistory,
-            IReadOnlyList<ListenerDiagnosticsView> listeners
+            IReadOnlyList<ListenerDiagnosticsView> listeners,
+            ProviderDiagnosticsView providerDiagnostics
         )
         {
             GlobalDiagnosticsEnabled = globalDiagnosticsEnabled;
@@ -90,6 +122,7 @@ namespace DxMessaging.Editor.Testing
                 globalEmissionHistory
                 ?? throw new ArgumentNullException(nameof(globalEmissionHistory));
             Listeners = listeners ?? throw new ArgumentNullException(nameof(listeners));
+            ProviderDiagnostics = providerDiagnostics;
         }
 
         internal bool GlobalDiagnosticsEnabled { get; }
@@ -97,6 +130,8 @@ namespace DxMessaging.Editor.Testing
         internal IReadOnlyList<MessageEmissionData> GlobalEmissionHistory { get; }
 
         internal IReadOnlyList<ListenerDiagnosticsView> Listeners { get; }
+
+        internal ProviderDiagnosticsView ProviderDiagnostics { get; }
     }
 
     internal sealed class ListenerDiagnosticsView
@@ -146,6 +181,38 @@ namespace DxMessaging.Editor.Testing
         internal MessageRegistrationMetadata Metadata { get; }
 
         internal int CallCount { get; }
+    }
+
+    internal readonly struct ProviderDiagnosticsView
+    {
+        internal ProviderDiagnosticsView(
+            bool autoConfigureSerializedProviderOnAwake,
+            bool hasSerializedProvider,
+            bool hasRuntimeProvider,
+            bool hasMessageBusOverride,
+            bool serializedProviderMissingWarning,
+            bool serializedProviderNullBusWarning
+        )
+        {
+            AutoConfigureSerializedProviderOnAwake = autoConfigureSerializedProviderOnAwake;
+            HasSerializedProvider = hasSerializedProvider;
+            HasRuntimeProvider = hasRuntimeProvider;
+            HasMessageBusOverride = hasMessageBusOverride;
+            SerializedProviderMissingWarning = serializedProviderMissingWarning;
+            SerializedProviderNullBusWarning = serializedProviderNullBusWarning;
+        }
+
+        internal bool AutoConfigureSerializedProviderOnAwake { get; }
+
+        internal bool HasSerializedProvider { get; }
+
+        internal bool HasRuntimeProvider { get; }
+
+        internal bool HasMessageBusOverride { get; }
+
+        internal bool SerializedProviderMissingWarning { get; }
+
+        internal bool SerializedProviderNullBusWarning { get; }
     }
 }
 #endif

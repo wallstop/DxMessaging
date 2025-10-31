@@ -7,6 +7,7 @@ namespace DxMessaging.Editor.CustomEditors
     using Core.Diagnostics;
     using Core.MessageBus;
     using Core.Messages;
+    using DxMessaging.Editor.Testing;
     using Unity;
     using UnityEditor;
     using UnityEngine;
@@ -64,6 +65,26 @@ namespace DxMessaging.Editor.CustomEditors
             if (component == null)
             {
                 return;
+            }
+
+            MessagingComponentInspectorState inspectorState =
+                MessagingComponentEditorHarness.Capture(component);
+            ProviderDiagnosticsView providerDiagnostics = inspectorState.ProviderDiagnostics;
+
+            if (providerDiagnostics.SerializedProviderMissingWarning)
+            {
+                EditorGUILayout.HelpBox(
+                    "Auto-configure serialized provider is enabled, but no provider asset is assigned.",
+                    MessageType.Warning
+                );
+            }
+
+            if (providerDiagnostics.SerializedProviderNullBusWarning)
+            {
+                EditorGUILayout.HelpBox(
+                    "The serialized provider resolved without returning a message bus. Verify the provider implementation.",
+                    MessageType.Warning
+                );
             }
 
             if (component._registeredListeners.Count == 0)

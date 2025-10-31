@@ -8,25 +8,26 @@ namespace DxMessaging.Tests.Editor
     using DxMessaging.Editor.Testing;
     using DxMessaging.Unity;
     using NUnit.Framework;
+    using UnityEditor;
     using UnityEngine;
     using Object = UnityEngine.Object;
 
     [TestFixture]
     public sealed class MessagingComponentEditorHarnessTests
     {
-        private readonly List<GameObject> _createdGameObjects = new();
+        private readonly List<Object> _createdObjects = new();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (GameObject gameObject in _createdGameObjects)
+            foreach (Object instance in _createdObjects)
             {
-                if (gameObject != null)
+                if (instance != null)
                 {
-                    Object.DestroyImmediate(gameObject);
+                    Object.DestroyImmediate(instance);
                 }
             }
-            _createdGameObjects.Clear();
+            _createdObjects.Clear();
 
             if (MessageHandler.MessageBus is MessageBus messageBus)
             {
@@ -88,11 +89,124 @@ namespace DxMessaging.Tests.Editor
             }
         }
 
+        [Test]
+        public void AutoConfigureWithoutSerializedProviderEmitsWarning()
+        {
+            GameObject host = CreateTrackedObject("ProviderWarningHost");
+            MessagingComponent messagingComponent = host.AddComponent<MessagingComponent>();
+
+            SerializedObject serializedObject = new(messagingComponent);
+            SerializedProperty autoConfigureProperty = serializedObject.FindProperty(
+                "autoConfigureSerializedProviderOnAwake"
+            );
+            Assert.That(autoConfigureProperty, Is.Not.Null);
+            autoConfigureProperty.boolValue = true;
+            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            MessagingComponentInspectorState state = MessagingComponentEditorHarness.Capture(
+                messagingComponent
+            );
+
+            Assert.That(
+                state.ProviderDiagnostics.SerializedProviderMissingWarning,
+                Is.True,
+                "Inspector should warn when auto-configure is enabled without a serialized provider."
+            );
+        }
+
+        [Test]
+        public void AssignedSerializedProviderClearsWarning()
+        {
+            MessageBus messageBus = new();
+            TestScriptableMessageBusProvider provider = CreateTrackedObject(
+                ScriptableObject.CreateInstance<TestScriptableMessageBusProvider>()
+            );
+            provider.Configure(messageBus);
+
+            GameObject host = CreateTrackedObject("ProviderAssignedHost");
+            MessagingComponent messagingComponent = host.AddComponent<MessagingComponent>();
+            messagingComponent.Configure(
+                new MessageBusProviderHandle(provider),
+                MessageBusRebindMode.RebindActive
+            );
+
+            SerializedObject serializedObject = new(messagingComponent);
+            SerializedProperty autoConfigureProperty = serializedObject.FindProperty(
+                "autoConfigureSerializedProviderOnAwake"
+            );
+            Assert.That(autoConfigureProperty, Is.Not.Null);
+            autoConfigureProperty.boolValue = true;
+            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            MessagingComponentInspectorState state = MessagingComponentEditorHarness.Capture(
+                messagingComponent
+            );
+
+            Assert.That(
+                state.ProviderDiagnostics.SerializedProviderMissingWarning,
+                Is.False,
+                "Inspector warning should clear when a serialized provider is assigned."
+            );
+            Assert.That(
+                state.ProviderDiagnostics.SerializedProviderNullBusWarning,
+                Is.False,
+                "Provider should resolve a message bus without triggering the null-bus warning."
+            );
+        }
+
+        [Test]
+        public void NullResolvingSerializedProviderEmitsWarning()
+        {
+            GameObject host = CreateTrackedObject("NullProviderHost");
+            MessagingComponent messagingComponent = host.AddComponent<MessagingComponent>();
+
+            NullBusProvider provider = CreateTrackedObject(
+                ScriptableObject.CreateInstance<NullBusProvider>()
+            );
+            messagingComponent.Configure(
+                new MessageBusProviderHandle(provider),
+                MessageBusRebindMode.RebindActive
+            );
+
+            SerializedObject serializedObject = new(messagingComponent);
+            SerializedProperty autoConfigureProperty = serializedObject.FindProperty(
+                "autoConfigureSerializedProviderOnAwake"
+            );
+            Assert.That(autoConfigureProperty, Is.Not.Null);
+            autoConfigureProperty.boolValue = true;
+            serializedObject.ApplyModifiedPropertiesWithoutUndo();
+
+            MessagingComponentInspectorState state = MessagingComponentEditorHarness.Capture(
+                messagingComponent
+            );
+
+            Assert.That(
+                state.ProviderDiagnostics.SerializedProviderMissingWarning,
+                Is.False,
+                "Warning should not claim the provider asset is missing when assigned."
+            );
+            Assert.That(
+                state.ProviderDiagnostics.SerializedProviderNullBusWarning,
+                Is.True,
+                "Inspector should warn when the serialized provider does not resolve a message bus."
+            );
+        }
+
         private GameObject CreateTrackedObject(string name)
         {
             GameObject gameObject = new(name);
-            _createdGameObjects.Add(gameObject);
+            _createdObjects.Add(gameObject);
             return gameObject;
+        }
+
+        private T CreateTrackedObject<T>(T unityObject)
+            where T : Object
+        {
+            if (unityObject != null)
+            {
+                _createdObjects.Add(unityObject);
+            }
+            return unityObject;
         }
 
         private sealed class TestListener : MonoBehaviour
@@ -101,6 +215,29 @@ namespace DxMessaging.Tests.Editor
         }
 
         private readonly struct TestHarnessMessage : IUntargetedMessage { }
+
+        private sealed class TestScriptableMessageBusProvider : ScriptableMessageBusProvider
+        {
+            private IMessageBus _bus;
+
+            public void Configure(IMessageBus bus)
+            {
+                _bus = bus;
+            }
+
+            public override IMessageBus Resolve()
+            {
+                return _bus;
+            }
+        }
+
+        private sealed class NullBusProvider : ScriptableMessageBusProvider
+        {
+            public override IMessageBus Resolve()
+            {
+                return null;
+            }
+        }
     }
 }
 #endif
