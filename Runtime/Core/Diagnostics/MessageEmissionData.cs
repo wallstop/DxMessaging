@@ -1,6 +1,7 @@
 namespace DxMessaging.Core.Diagnostics
 {
     using System;
+    using System.Linq;
 #if UNITY_2021_3_OR_NEWER
     using UnityEngine;
 #else
@@ -59,18 +60,30 @@ namespace DxMessaging.Core.Diagnostics
 
             string[] lines = fullStackTrace.Split(NewlineSeparators, StringSplitOptions.None);
 
-            int startIndex = 1;
-            while (
-                startIndex < lines.Length
-                && lines[startIndex].Contains("DxMessaging", StringComparison.OrdinalIgnoreCase)
-            )
+            string[] trimmedLines = lines
+                .Where(line => !string.IsNullOrWhiteSpace(line) && !IsInternalFrame(line))
+                .ToArray();
+
+            return trimmedLines.Length == 0
+                ? string.Empty
+                : string.Join(JoinSeparator, trimmedLines);
+        }
+
+        private static bool IsInternalFrame(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
             {
-                ++startIndex;
+                return false;
             }
 
-            return lines.Length <= startIndex
-                ? string.Empty
-                : string.Join(JoinSeparator, lines, startIndex, lines.Length - startIndex);
+            if (!line.Contains("DxMessaging.", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return line.Contains("DxMessaging.Core.", StringComparison.Ordinal)
+                || line.Contains("DxMessaging.Unity.", StringComparison.Ordinal)
+                || line.Contains("DxMessaging.Editor.", StringComparison.Ordinal);
         }
     }
 }

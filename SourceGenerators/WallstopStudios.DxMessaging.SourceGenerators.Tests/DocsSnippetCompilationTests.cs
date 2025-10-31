@@ -10,18 +10,7 @@ public sealed class DocsSnippetCompilationTests
     [Test]
     public void QuickStartStep1Compiles()
     {
-        string docsRoot = Path.GetFullPath(
-            Path.Combine(
-                TestContext.CurrentContext.TestDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
-                "..",
-                "Docs"
-            )
-        );
-        string quickStartPath = Path.Combine(docsRoot, "QuickStart.md");
+        string quickStartPath = ResolveQuickStartPath();
         Assert.That(File.Exists(quickStartPath), Is.True, $"Unable to locate {quickStartPath}.");
 
         string snippet = ExtractFirstCodeBlock(quickStartPath, "csharp");
@@ -78,5 +67,32 @@ using UnityEngine;
         }
 
         return builder.ToString();
+    }
+
+    private static string ResolveQuickStartPath()
+    {
+        string currentDirectoryPath = TestContext.CurrentContext.TestDirectory;
+        while (!string.IsNullOrEmpty(currentDirectoryPath))
+        {
+            string docsDirectory = Path.Combine(currentDirectoryPath, "Docs");
+            string candidate = Path.Combine(docsDirectory, "QuickStart.md");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            string parentDirectoryPath =
+                Path.GetDirectoryName(currentDirectoryPath) ?? string.Empty;
+            if (string.IsNullOrEmpty(parentDirectoryPath))
+            {
+                break;
+            }
+
+            currentDirectoryPath = parentDirectoryPath;
+        }
+
+        throw new FileNotFoundException(
+            "Unable to locate Docs/QuickStart.md from the current test directory."
+        );
     }
 }

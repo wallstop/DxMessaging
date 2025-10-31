@@ -24,15 +24,26 @@ namespace DxMessaging.Tests.Runtime.Core
                 StringSplitOptions.RemoveEmptyEntries
             );
 
-            Assert.That(
-                lines.All(line => !line.Contains("DxMessaging.Core.Diagnostics")),
-                "Stack trace should omit DxMessaging internal frames."
+            bool containsInternalFrame = lines.Any(line =>
+                line.Contains("DxMessaging.Core.", StringComparison.Ordinal)
+                || line.Contains("DxMessaging.Unity.", StringComparison.Ordinal)
             );
+            if (containsInternalFrame)
+            {
+                Assert.Fail(
+                    $"Stack trace should omit DxMessaging internal frames.{Environment.NewLine}{data.stackTrace}"
+                );
+            }
 
-            Assert.That(
-                lines.Any(line => line.Contains(nameof(StackTraceOmitsDxMessagingFrames))),
-                "Stack trace should include calling test method for debugging context."
+            bool containsTestMethod = lines.Any(line =>
+                line.Contains(nameof(StackTraceOmitsDxMessagingFrames), StringComparison.Ordinal)
             );
+            if (!containsTestMethod)
+            {
+                Assert.Fail(
+                    $"Stack trace should include calling test method for debugging context.{Environment.NewLine}{data.stackTrace}"
+                );
+            }
         }
 
         [Test]
@@ -51,12 +62,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
         private static MessageEmissionData CaptureMessageEmission()
         {
-            return CreateEmissionData();
-
-            static MessageEmissionData CreateEmissionData()
-            {
-                return new MessageEmissionData(new TestUntargetedMessage());
-            }
+            return new MessageEmissionData(new TestUntargetedMessage());
         }
 
         private readonly struct TestUntargetedMessage : IUntargetedMessage { }

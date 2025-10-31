@@ -1,7 +1,21 @@
-<wpf:ResourceDictionary
-  xml:space="preserve"
-  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-  xmlns:s="clr-namespace:System;assembly=mscorlib"
-  xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml"
-  xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-/>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <IsPackable>false</IsPackable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>1701;1702</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Benchmarks\**\*.cs" LinkBase="Benchmarks" />
+    <None Include="Core\**\*.cs" LinkBase="Core" />
+    <None Include="Integrations\**\*.cs" LinkBase="Integrations" />
+    <None Include="Scripts\**\*.cs" LinkBase="Scripts" />
+    <None Include="TestUtilities\**\*.cs" LinkBase="TestUtilities" />
+    <None Include="Unity\**\*.cs" LinkBase="Unity" />
+  </ItemGroup>
+</Project>

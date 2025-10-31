@@ -66,7 +66,8 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         private record struct MessageToGenerateInfo(
             INamedTypeSymbol TypeSymbol,
             TypeDeclarationSyntax DeclarationSyntax,
-            string TargetInterfaceFullName // The specific interface like IBroadcastMessage
+            string TargetInterfaceFullName,
+            bool HasConflictingMessageAttributes
         );
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -180,17 +181,21 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 }
             }
 
-            if (multipleAttributes || foundTargetInterface == null)
+            if (multipleAttributes)
             {
-                // Don't return info if multiple different message attrs or none found.
-                // The Execute method will report the error for multiple attributes later.
+                foundTargetInterface = null;
+            }
+
+            if (foundTargetInterface == null && !multipleAttributes)
+            {
                 return null;
             }
 
             return new MessageToGenerateInfo(
                 typeSymbol,
                 typeDeclarationSyntax,
-                foundTargetInterface
+                foundTargetInterface,
+                multipleAttributes
             );
         }
 
@@ -206,18 +211,19 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             }
 
             // --- Step 1: Filter out types with multiple attributes applied ---
-            Dictionary<ISymbol, MessageToGenerateInfo> uniqueTypes = new(
+            Dictionary<ISymbol, MessageToGenerateInfo> uniqueTypes = new Dictionary<
+                ISymbol,
+                MessageToGenerateInfo
+            >(SymbolEqualityComparer.Default);
+            HashSet<ISymbol> conflictingTypes = new HashSet<ISymbol>(
                 SymbolEqualityComparer.Default
             );
-            HashSet<ISymbol> typesWithMultipleAttributes = new(SymbolEqualityComparer.Default);
 
             foreach (MessageToGenerateInfo typeInfo in typesToGenerate)
             {
-                if (uniqueTypes.ContainsKey(typeInfo.TypeSymbol))
+                if (typeInfo.HasConflictingMessageAttributes)
                 {
-                    // If adding fails, it means the same TypeSymbol appeared multiple times.
-                    // This implies multiple different valid attributes were found, report error.
-                    if (typesWithMultipleAttributes.Add(typeInfo.TypeSymbol)) // Report only once
+                    if (conflictingTypes.Add(typeInfo.TypeSymbol))
                     {
                         context.ReportDiagnostic(
                             Diagnostic.Create(
@@ -226,7 +232,44 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                                 typeInfo.TypeSymbol.ToDisplayString()
                             )
                         );
-                        // Also report for the one already in the dictionary if needed, but one report per type is usually sufficient.
+                    }
+
+                    continue;
+                }
+
+                if (conflictingTypes.Contains(typeInfo.TypeSymbol))
+                {
+                    continue;
+                }
+
+                if (typeInfo.TargetInterfaceFullName is null)
+                {
+                    continue;
+                }
+
+                if (
+                    uniqueTypes.TryGetValue(
+                        typeInfo.TypeSymbol,
+                        out MessageToGenerateInfo existingInfo
+                    )
+                )
+                {
+                    if (
+                        !string.Equals(
+                            existingInfo.TargetInterfaceFullName,
+                            typeInfo.TargetInterfaceFullName,
+                            StringComparison.Ordinal
+                        ) && conflictingTypes.Add(typeInfo.TypeSymbol)
+                    )
+                    {
+                        context.ReportDiagnostic(
+                            Diagnostic.Create(
+                                MultipleAttributesError,
+                                typeInfo.DeclarationSyntax.Identifier.GetLocation(),
+                                typeInfo.TypeSymbol.ToDisplayString()
+                            )
+                        );
+                        uniqueTypes.Remove(typeInfo.TypeSymbol);
                     }
                 }
                 else
@@ -235,10 +278,21 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 }
             }
 
-            List<MessageToGenerateInfo> validSingleAttrTypes = uniqueTypes
-                .Where(kvp => !typesWithMultipleAttributes.Contains(kvp.Key))
-                .Select(kvp => kvp.Value)
-                .ToList();
+            if (uniqueTypes.Count == 0)
+            {
+                return;
+            }
+
+            List<MessageToGenerateInfo> validSingleAttrTypes = new List<MessageToGenerateInfo>();
+            foreach (KeyValuePair<ISymbol, MessageToGenerateInfo> entry in uniqueTypes)
+            {
+                if (conflictingTypes.Contains(entry.Key))
+                {
+                    continue;
+                }
+
+                validSingleAttrTypes.Add(entry.Value);
+            }
 
             if (validSingleAttrTypes.Count == 0)
             {
@@ -249,6 +303,12 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             foreach (MessageToGenerateInfo messageInfo in validSingleAttrTypes)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
+
+                string targetInterfaceFullName = messageInfo.TargetInterfaceFullName;
+                if (targetInterfaceFullName is null)
+                {
+                    continue;
+                }
 
                 // If nested, ensure all containers are declared partial; otherwise report diagnostic and skip
                 if (messageInfo.TypeSymbol.ContainingType is not null)
@@ -300,7 +360,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
 
                 // Generate the partial IMessage implementation source
                 string implSource = GenerateImplementationSource(
-                    messageInfo.TargetInterfaceFullName,
+                    targetInterfaceFullName,
                     messageInfo.TypeSymbol
                 );
                 string implHintName =

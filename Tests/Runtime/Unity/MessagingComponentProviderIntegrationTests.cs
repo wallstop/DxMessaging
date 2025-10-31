@@ -202,8 +202,7 @@ namespace DxMessaging.Tests.Runtime.Unity
                 "Existing listener should not observe messages on the new bus when preserving registrations."
             );
 
-            GameObject additional = Track(new GameObject("PreserveAdditionalListener"));
-            TestListener newListener = additional.AddComponent<TestListener>();
+            TestListener newListener = owner.AddComponent<TestListener>();
             newListener.Initialize(messagingComponent);
 
             yield return null;
