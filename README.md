@@ -52,7 +52,7 @@ Need install instructions for Git URLs, scoped registries, or tarballs? Jump to 
 
 1. **Untargeted** - "Everyone listen!" (pause game, settings changed)
 1. **Targeted** - "Tell Player to heal" (commands to specific entities)
-1. **Broadcast** - "Enemy took damage" (events others can observe)
+1. **Broadcast** - "I took damage" (things that happen to _you_ that others can observe)
 
 **One line:** It's the event system Unity should have shipped with - type-safe, leak-proof, and actually debuggable. 🚀
 
