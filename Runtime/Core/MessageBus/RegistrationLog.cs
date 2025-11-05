@@ -26,6 +26,12 @@ namespace DxMessaging.Core.MessageBus
 
         private bool _enabled;
 
+        /// <summary>
+        /// Creates a new registration log.
+        /// </summary>
+        /// <param name="enabled">
+        /// When <c>true</c>, logging starts immediately; otherwise call <see cref="Enabled"/> to enable later.
+        /// </param>
         public RegistrationLog(bool enabled = false)
         {
             _enabled = enabled;
@@ -92,6 +98,10 @@ namespace DxMessaging.Core.MessageBus
             return registrations.ToString();
         }
 
+        /// <summary>
+        /// Serializes the log using the default formatter (<see cref="MessagingRegistration.ToString"/>).
+        /// </summary>
+        /// <returns>String containing all recorded registrations.</returns>
         public override string ToString()
         {
             return ToString(null);

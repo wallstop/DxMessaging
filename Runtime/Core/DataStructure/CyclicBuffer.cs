@@ -29,6 +29,10 @@ namespace DxMessaging.Core.DataStructure
                 _current = default;
             }
 
+            /// <summary>
+            /// Advances the enumerator to the next element in chronological order.
+            /// </summary>
+            /// <returns><c>true</c> when another element is available; otherwise <c>false</c>.</returns>
             public bool MoveNext()
             {
                 if (++_index < _buffer.Count)
@@ -41,16 +45,25 @@ namespace DxMessaging.Core.DataStructure
                 return false;
             }
 
+            /// <summary>
+            /// Gets the element at the current enumerator position.
+            /// </summary>
             public T Current => _current;
 
             object IEnumerator.Current => Current;
 
+            /// <summary>
+            /// Resets the enumerator to its initial position before the first element.
+            /// </summary>
             public void Reset()
             {
                 _index = -1;
                 _current = default;
             }
 
+            /// <summary>
+            /// Releases resources held by the enumerator.
+            /// </summary>
             public void Dispose() { }
         }
 
@@ -107,6 +120,9 @@ namespace DxMessaging.Core.DataStructure
             }
         }
 
+        /// <summary>
+        /// Creates an enumerator that iterates from the oldest element to the most recently added.
+        /// </summary>
         public CyclicBufferEnumerator GetEnumerator()
         {
             return new CyclicBufferEnumerator(this);

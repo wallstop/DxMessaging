@@ -3,13 +3,28 @@ namespace DxMessaging.Core
     using System;
 
     /// <summary>
-    /// Severity of the log message
+    /// Severity of the log message.
     /// </summary>
     public enum LogLevel
     {
+        /// <summary>
+        /// Verbose diagnostic information useful while developing or debugging.
+        /// </summary>
         Debug = 0,
+
+        /// <summary>
+        /// Informational messages that describe normal operation.
+        /// </summary>
         Info = 1,
+
+        /// <summary>
+        /// Non-fatal issues that should be investigated.
+        /// </summary>
         Warn = 2,
+
+        /// <summary>
+        /// Errors indicating messaging failed or data may be lost.
+        /// </summary>
         Error = 3,
     }
 

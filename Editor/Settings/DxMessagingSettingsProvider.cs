@@ -22,6 +22,11 @@ namespace DxMessaging.Editor.Settings
         )
             : base(path, scope) { }
 
+        /// <summary>
+        /// Initializes the serialized settings backing store when the settings page is opened.
+        /// </summary>
+        /// <param name="searchContext">Search text provided by the Project Settings window.</param>
+        /// <param name="rootElement">Root visual element for UI Toolkit-based providers.</param>
         public override void OnActivate(
             string searchContext,
             UnityEngine.UIElements.VisualElement rootElement
@@ -30,6 +35,10 @@ namespace DxMessaging.Editor.Settings
             _messagingSettings = DxMessagingSettings.GetSerializedSettings();
         }
 
+        /// <summary>
+        /// Renders the DxMessaging settings UI and persists any modifications.
+        /// </summary>
+        /// <param name="searchContext">Search text provided by the Project Settings window.</param>
         public override void OnGUI(string searchContext)
         {
             SerializedProperty targetsProp = _messagingSettings.FindProperty(
@@ -69,6 +78,10 @@ namespace DxMessaging.Editor.Settings
         }
 
         [SettingsProvider]
+        /// <summary>
+        /// Factory used by Unity to register the DxMessaging project settings page.
+        /// </summary>
+        /// <returns>Configured settings provider instance.</returns>
         public static SettingsProvider CreateDxMessagingSettingsProvider()
         {
             DxMessagingSettingsProvider provider = new("Project/DxMessaging")

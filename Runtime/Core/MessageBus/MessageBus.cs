@@ -33,6 +33,9 @@ namespace DxMessaging.Core.MessageBus
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
 
+            /// <summary>
+            /// Clears all cached handler references and resets the version tracking metadata.
+            /// </summary>
             public void Clear()
             {
                 handlers.Clear();
@@ -52,6 +55,9 @@ namespace DxMessaging.Core.MessageBus
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
 
+            /// <summary>
+            /// Clears all cached handler references and resets the version tracking metadata.
+            /// </summary>
             public void Clear()
             {
                 handlers.Clear();
@@ -225,6 +231,7 @@ namespace DxMessaging.Core.MessageBus
             _emissionBuffer.Clear();
         }
 
+        /// <inheritdoc />
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
         {
@@ -236,6 +243,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargeted<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -252,6 +260,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterSourcedBroadcast<T>(
             InstanceId source,
             MessageHandler messageHandler,
@@ -268,6 +277,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterSourcedBroadcastWithoutSource<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -282,6 +292,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedWithoutTargeting<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -296,6 +307,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterGlobalAcceptAll(MessageHandler messageHandler)
         {
             _globalSinks.version++;
@@ -348,6 +360,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterUntargetedInterceptor<T>(
             UntargetedInterceptor<T> interceptor,
             int priority = 0
@@ -481,6 +494,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedInterceptor<T>(
             TargetedInterceptor<T> interceptor,
             int priority = 0
@@ -614,6 +628,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterBroadcastInterceptor<T>(
             BroadcastInterceptor<T> interceptor,
             int priority = 0
@@ -747,6 +762,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterUntargetedPostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -761,6 +777,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedPostProcessor<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -777,6 +794,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedWithoutTargetingPostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -791,6 +809,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterBroadcastPostProcessor<T>(
             InstanceId source,
             MessageHandler messageHandler,
@@ -807,6 +826,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterBroadcastWithoutSourcePostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -823,6 +843,7 @@ namespace DxMessaging.Core.MessageBus
 
         // Legacy RegisterInterceptor removed in favor of split implementations above
 
+        /// <inheritdoc />
         public void UntypedUntargetedBroadcast(IUntargetedMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -852,6 +873,7 @@ namespace DxMessaging.Core.MessageBus
             broadcast.Invoke(typedMessage);
         }
 
+        /// <inheritdoc />
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage
         {
@@ -1055,6 +1077,7 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
+        /// <inheritdoc />
         public void UntypedTargetedBroadcast(InstanceId target, ITargetedMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -1084,6 +1107,7 @@ namespace DxMessaging.Core.MessageBus
             broadcast.Invoke(target, typedMessage);
         }
 
+        /// <inheritdoc />
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
             where TMessage : ITargetedMessage
         {
@@ -2092,6 +2116,7 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
+        /// <inheritdoc />
         public void UntypedSourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -2124,6 +2149,7 @@ namespace DxMessaging.Core.MessageBus
             broadcast.Invoke(source, typedMessage);
         }
 
+        /// <inheritdoc />
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
             where TMessage : IBroadcastMessage
         {

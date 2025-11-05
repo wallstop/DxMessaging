@@ -15,6 +15,11 @@ namespace DxMessaging.Editor
     {
         public int callbackOrder => int.MaxValue;
 
+        /// <summary>
+        /// Strips runtime-only messaging state from the scene before it is serialized into the build.
+        /// </summary>
+        /// <param name="scene">Scene currently being processed.</param>
+        /// <param name="report">Build report associated with the scene export.</param>
         public void OnProcessScene(Scene scene, BuildReport report)
         {
             if (!scene.IsValid() || !scene.isLoaded)
