@@ -2,6 +2,7 @@ namespace DxMessaging.Editor.Settings
 {
 #if UNITY_EDITOR
     using System.Collections.Generic;
+    using Core.MessageBus;
     using UnityEditor;
     using UnityEngine;
 
@@ -31,15 +32,22 @@ namespace DxMessaging.Editor.Settings
 
         public override void OnGUI(string searchContext)
         {
-            EditorGUILayout.PropertyField(
-                _messagingSettings.FindProperty(
-                    nameof(DxMessagingSettings._enableDiagnosticsInEditor)
-                ),
-                new GUIContent(
-                    "Global Diagnostics Mode",
-                    "When enabled, every new MessageBus records diagnostic history. Recommended only for debugging."
-                )
+            SerializedProperty targetsProp = _messagingSettings.FindProperty(
+                nameof(DxMessagingSettings._diagnosticsTargets)
             );
+            DiagnosticsTarget currentTargets = (DiagnosticsTarget)targetsProp.enumValueFlag;
+            DiagnosticsTarget updatedTargets = (DiagnosticsTarget)
+                EditorGUILayout.EnumFlagsField(
+                    new GUIContent(
+                        "Diagnostics Targets",
+                        "Select where global diagnostics should be enabled by default. Combine flags for multiple targets."
+                    ),
+                    currentTargets
+                );
+            if (updatedTargets != currentTargets)
+            {
+                targetsProp.enumValueFlag = (int)updatedTargets;
+            }
             EditorGUILayout.PropertyField(
                 _messagingSettings.FindProperty(nameof(DxMessagingSettings._messageBufferSize)),
                 new GUIContent(
@@ -65,7 +73,9 @@ namespace DxMessaging.Editor.Settings
         {
             DxMessagingSettingsProvider provider = new("Project/DxMessaging")
             {
-                keywords = new HashSet<string>(new[] { "DxMessaging", "Diagnostics" }),
+                keywords = new HashSet<string>(
+                    new[] { "DxMessaging", "Diagnostics", "MessageBus", "Targets" }
+                ),
             };
 
             return provider;

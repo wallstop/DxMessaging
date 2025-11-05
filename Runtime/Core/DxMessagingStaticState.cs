@@ -27,7 +27,7 @@ namespace DxMessaging.Core
                 MessagingDebug.enabled = Baseline.MessagingDebugEnabled;
                 MessagingDebug.LogFunction = Baseline.MessagingDebugLogFunction;
 
-                IMessageBus.GlobalDiagnosticsMode = Baseline.GlobalDiagnosticsMode;
+                IMessageBus.GlobalDiagnosticsTargets = Baseline.GlobalDiagnosticsTargets;
                 IMessageBus.GlobalMessageBufferSize = Baseline.GlobalMessageBufferSize;
                 IMessageBus.GlobalSequentialIndex = Baseline.GlobalSequentialIndex;
 
@@ -45,7 +45,7 @@ namespace DxMessaging.Core
         {
             bool messagingDebugEnabled = MessagingDebug.enabled;
             Action<LogLevel, string> messagingDebugLogFunction = MessagingDebug.LogFunction;
-            bool globalDiagnosticsMode = IMessageBus.GlobalDiagnosticsMode;
+            DiagnosticsTarget globalDiagnosticsTargets = IMessageBus.GlobalDiagnosticsTargets;
             int globalMessageBufferSize = IMessageBus.GlobalMessageBufferSize;
             int globalSequentialIndex = IMessageBus.GlobalSequentialIndex;
             long messageRegistrationHandleSeed = MessageRegistrationHandle.GetCurrentIdSeed();
@@ -56,7 +56,7 @@ namespace DxMessaging.Core
             return new BaselineState(
                 messagingDebugEnabled,
                 messagingDebugLogFunction,
-                globalDiagnosticsMode,
+                globalDiagnosticsTargets,
                 globalMessageBufferSize,
                 globalSequentialIndex,
                 messageRegistrationHandleSeed,
@@ -70,7 +70,7 @@ namespace DxMessaging.Core
             internal BaselineState(
                 bool messagingDebugEnabled,
                 Action<LogLevel, string> messagingDebugLogFunction,
-                bool globalDiagnosticsMode,
+                DiagnosticsTarget globalDiagnosticsTargets,
                 int globalMessageBufferSize,
                 int globalSequentialIndex,
                 long messageRegistrationHandleSeed,
@@ -80,7 +80,7 @@ namespace DxMessaging.Core
             {
                 MessagingDebugEnabled = messagingDebugEnabled;
                 MessagingDebugLogFunction = messagingDebugLogFunction;
-                GlobalDiagnosticsMode = globalDiagnosticsMode;
+                GlobalDiagnosticsTargets = globalDiagnosticsTargets;
                 GlobalMessageBufferSize = globalMessageBufferSize;
                 GlobalSequentialIndex = globalSequentialIndex;
                 MessageRegistrationHandleSeed = messageRegistrationHandleSeed;
@@ -92,7 +92,7 @@ namespace DxMessaging.Core
 
             internal Action<LogLevel, string> MessagingDebugLogFunction { get; }
 
-            internal bool GlobalDiagnosticsMode { get; }
+            internal DiagnosticsTarget GlobalDiagnosticsTargets { get; }
 
             internal int GlobalMessageBufferSize { get; }
 

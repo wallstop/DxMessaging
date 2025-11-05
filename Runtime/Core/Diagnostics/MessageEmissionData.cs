@@ -12,7 +12,7 @@ namespace DxMessaging.Core.Diagnostics
     /// Captures a snapshot of a message emission for diagnostics.
     /// </summary>
     /// <remarks>
-    /// When diagnostics are enabled (see <see cref="MessageBus.IMessageBus.GlobalDiagnosticsMode"/>),
+    /// When diagnostics are enabled (see <see cref="MessageBus.IMessageBus.GlobalDiagnosticsTargets"/>),
     /// the bus and tokens record recent emissions in ring buffers along with a trimmed stack trace
     /// that excludes DxMessaging internals for easier debugging.
     ///

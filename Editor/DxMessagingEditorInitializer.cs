@@ -49,7 +49,7 @@ namespace DxMessaging.Editor
         {
             DxMessagingStaticState.Reset();
             DxMessagingSettings settings = DxMessagingSettings.GetOrCreateSettings();
-            IMessageBus.GlobalDiagnosticsMode = settings.EnableDiagnosticsInEditor;
+            IMessageBus.GlobalDiagnosticsTargets = settings.DiagnosticsTargets;
             IMessageBus.GlobalMessageBufferSize = settings.MessageBufferSize;
         }
 

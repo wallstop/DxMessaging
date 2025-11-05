@@ -186,13 +186,13 @@ namespace DxMessaging.Core.MessageBus
             GlobalMessageBufferSize
         );
 
-        private bool _diagnosticsMode = GlobalDiagnosticsMode;
+        private bool _diagnosticsMode = IMessageBus.ShouldEnableDiagnostics();
         private bool _loggedReflexiveWarning;
 
         internal void ResetState()
         {
             _emissionId = 0;
-            _diagnosticsMode = GlobalDiagnosticsMode;
+            _diagnosticsMode = IMessageBus.ShouldEnableDiagnostics();
             _loggedReflexiveWarning = false;
 
             _sinks.Clear();

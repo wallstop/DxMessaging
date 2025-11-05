@@ -2,8 +2,10 @@ namespace DxMessaging.Editor.Settings
 {
 #if UNITY_EDITOR
     using System.Linq;
+    using Core.MessageBus;
     using UnityEditor;
     using UnityEngine;
+    using UnityEngine.Serialization;
 
     /// <summary>
     /// Project-wide DxMessaging settings asset (Editor-only).
@@ -18,7 +20,12 @@ namespace DxMessaging.Editor.Settings
         private const string SettingsPath = "Assets/Editor/DxMessagingSettings.asset";
 
         [SerializeField]
-        internal bool _enableDiagnosticsInEditor;
+        internal DiagnosticsTarget _diagnosticsTargets = DiagnosticsTarget.Off;
+
+        [SerializeField]
+        [HideInInspector]
+        [FormerlySerializedAs("_enableDiagnosticsInEditor")]
+        private bool _legacyEnableDiagnosticsInEditor;
 
         [SerializeField]
         internal int _messageBufferSize = DefaultBufferSize;
@@ -27,12 +34,12 @@ namespace DxMessaging.Editor.Settings
         internal bool _suppressDomainReloadWarning = true;
 
         /// <summary>
-        /// Enables <see cref="Core.MessageBus.IMessageBus.GlobalDiagnosticsMode"/> in the Editor.
+        /// Controls <see cref="DiagnosticsTarget"/> values applied to <see cref="IMessageBus.GlobalDiagnosticsTargets"/>.
         /// </summary>
-        public bool EnableDiagnosticsInEditor
+        public DiagnosticsTarget DiagnosticsTargets
         {
-            get => _enableDiagnosticsInEditor;
-            set => _enableDiagnosticsInEditor = value;
+            get => _diagnosticsTargets;
+            set => _diagnosticsTargets = value;
         }
 
         /// <summary>
@@ -74,7 +81,7 @@ namespace DxMessaging.Editor.Settings
             if (settings == null)
             {
                 settings = CreateInstance<DxMessagingSettings>();
-                settings._enableDiagnosticsInEditor = false;
+                settings._diagnosticsTargets = DiagnosticsTarget.Off;
                 settings._messageBufferSize = DefaultBufferSize;
                 settings._suppressDomainReloadWarning = true;
                 if (!AssetDatabase.IsValidFolder("Assets/Editor"))
@@ -82,6 +89,17 @@ namespace DxMessaging.Editor.Settings
                     AssetDatabase.CreateFolder("Assets", "Editor");
                 }
                 AssetDatabase.CreateAsset(settings, SettingsPath);
+                AssetDatabase.SaveAssets();
+            }
+
+            if (
+                settings._diagnosticsTargets == DiagnosticsTarget.Off
+                && settings._legacyEnableDiagnosticsInEditor
+            )
+            {
+                settings._diagnosticsTargets = DiagnosticsTarget.Editor;
+                settings._legacyEnableDiagnosticsInEditor = false;
+                EditorUtility.SetDirty(settings);
                 AssetDatabase.SaveAssets();
             }
 

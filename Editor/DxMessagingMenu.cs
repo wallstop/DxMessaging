@@ -2,6 +2,7 @@ namespace DxMessaging.Editor
 {
 #if UNITY_EDITOR
     using Core;
+    using Core.MessageBus;
     using UnityEditor;
     using UnityEngine;
 
@@ -19,12 +20,18 @@ namespace DxMessaging.Editor
         [MenuItem(Root + "Toggle Global Diagnostics")]
         private static void ToggleGlobalDiagnostics()
         {
-            Core.MessageBus.IMessageBus.GlobalDiagnosticsMode = !Core.MessageBus
-                .IMessageBus
-                .GlobalDiagnosticsMode;
-            Debug.Log(
-                $"[DxMessaging] Global diagnostics mode set to {Core.MessageBus.IMessageBus.GlobalDiagnosticsMode}."
-            );
+            DiagnosticsTarget current = IMessageBus.GlobalDiagnosticsTargets;
+            DiagnosticsTarget next = current switch
+            {
+                DiagnosticsTarget.Off => DiagnosticsTarget.Editor,
+                DiagnosticsTarget.Editor => DiagnosticsTarget.Runtime,
+                DiagnosticsTarget.Runtime => DiagnosticsTarget.All,
+                DiagnosticsTarget.All => DiagnosticsTarget.Off,
+                _ => DiagnosticsTarget.Off,
+            };
+
+            IMessageBus.GlobalDiagnosticsTargets = next;
+            Debug.Log($"[DxMessaging] Global diagnostics targets set to {next}.");
         }
     }
 #endif

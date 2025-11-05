@@ -71,7 +71,7 @@ namespace DxMessaging.Core
 
         private IMessageBus _messageBus;
         private bool _enabled;
-        private bool _diagnosticMode = IMessageBus.GlobalDiagnosticsMode;
+        private bool _diagnosticMode = IMessageBus.ShouldEnableDiagnostics();
 
         private MessageRegistrationToken(MessageHandler messageHandler, IMessageBus messageBus)
         {

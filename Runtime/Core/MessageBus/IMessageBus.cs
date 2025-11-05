@@ -3,7 +3,11 @@ namespace DxMessaging.Core.MessageBus
     using System;
     using System.Threading;
     using Core;
+    using Extensions;
     using Messages;
+#if UNITY_2021_3_OR_NEWER
+    using UnityEngine;
+#endif
 
     /// <summary>
     /// Contract for a general-purpose message bus handling registration and dispatch.
@@ -41,31 +45,59 @@ namespace DxMessaging.Core.MessageBus
         /// <summary>
         /// Default diagnostics mode for newly created buses and tokens.
         /// </summary>
-        public static bool GlobalDiagnosticsMode { get; set; }
+        static DiagnosticsTarget GlobalDiagnosticsTargets { get; set; } = DiagnosticsTarget.Off;
+
+        [Obsolete("Use GlobalDiagnosticsTargets instead.")]
+        static bool GlobalDiagnosticsMode
+        {
+            get => GlobalDiagnosticsTargets != DiagnosticsTarget.Off;
+            set => GlobalDiagnosticsTargets = value ? DiagnosticsTarget.All : DiagnosticsTarget.Off;
+        }
 
         long EmissionId { get; }
 
         /// <summary>
         /// Default ring buffer size for emission history when diagnostics are enabled.
         /// </summary>
-        public static int GlobalMessageBufferSize { get; set; }
+        static int GlobalMessageBufferSize { get; set; }
 
         internal static int GlobalSequentialIndex = -1;
 
         protected static int GenerateNewGlobalSequentialIndex() =>
             Interlocked.Increment(ref GlobalSequentialIndex);
 
+        internal static bool ShouldEnableDiagnostics()
+        {
+            DiagnosticsTarget targets = GlobalDiagnosticsTargets;
+            if (targets == DiagnosticsTarget.Off)
+            {
+                return false;
+            }
+
+#if UNITY_2021_3_OR_NEWER
+            if (Application.isEditor)
+            {
+                return targets.HasFlagNoAlloc(DiagnosticsTarget.Editor)
+                    || targets.HasFlagNoAlloc(DiagnosticsTarget.Runtime);
+            }
+
+            return targets.HasFlagNoAlloc(DiagnosticsTarget.Editor);
+#else
+            return targets.HasFlagNoAlloc(DiagnosticsTarget.Runtime);
+#endif
+        }
+
         /// <summary>
         /// Whether diagnostics are recorded for this bus instance.
         /// </summary>
-        public bool DiagnosticsMode { get; }
+        bool DiagnosticsMode { get; }
 
-        public int RegisteredGlobalSequentialIndex { get; }
-        public int RegisteredBroadcast { get; }
+        int RegisteredGlobalSequentialIndex { get; }
+        int RegisteredBroadcast { get; }
 
-        public int RegisteredTargeted { get; }
+        int RegisteredTargeted { get; }
 
-        public int RegisteredUntargeted { get; }
+        int RegisteredUntargeted { get; }
 
         /// <summary>
         /// Interceptor delegate for untargeted messages to transform or cancel them.
@@ -73,7 +105,7 @@ namespace DxMessaging.Core.MessageBus
         /// <typeparam name="TMessage">Specific type of message.</typeparam>
         /// <param name="message">Message to consider.</param>
         /// <returns>True if the message should be processed, false if it should be skipped.</returns>
-        public delegate bool UntargetedInterceptor<TMessage>(ref TMessage message)
+        delegate bool UntargetedInterceptor<TMessage>(ref TMessage message)
             where TMessage : IUntargetedMessage;
 
         /// <summary>
@@ -83,10 +115,7 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="target">Target of the message.</param>
         /// <param name="message">Message to consider.</param>
         /// <returns>True if the message should be processed, false if it should be skipped.</returns>
-        public delegate bool TargetedInterceptor<TMessage>(
-            ref InstanceId target,
-            ref TMessage message
-        )
+        delegate bool TargetedInterceptor<TMessage>(ref InstanceId target, ref TMessage message)
             where TMessage : ITargetedMessage;
 
         /// <summary>
@@ -96,10 +125,7 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="source">Source of the message.</param>
         /// <param name="message">Message to consider.</param>
         /// <returns>True if the message should be processed, false if it should be skipped.</returns>
-        public delegate bool BroadcastInterceptor<TMessage>(
-            ref InstanceId source,
-            ref TMessage message
-        )
+        delegate bool BroadcastInterceptor<TMessage>(ref InstanceId source, ref TMessage message)
             where TMessage : IBroadcastMessage;
 
         /// <summary>
@@ -149,6 +175,7 @@ namespace DxMessaging.Core.MessageBus
         /// <typeparam name="T">Type of the BroadcastMessage to register.</typeparam>
         /// <param name="source">InstanceId of the source for BroadcastMessages to listen to.</param>
         /// <param name="messageHandler">MessageHandler to register to accept BroadcastMessages.</param>
+        /// <param name="priority"></param>
         /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterSourcedBroadcast<T>(
             InstanceId source,
@@ -163,6 +190,7 @@ namespace DxMessaging.Core.MessageBus
         /// </summary>
         /// <typeparam name="T">Type of the BroadcastMessage to register.</typeparam>
         /// <param name="messageHandler">MessageHandler to register to accept BroadcastMessages.</param>
+        /// <param name="priority"></param>
         /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
         Action RegisterSourcedBroadcastWithoutSource<T>(
             MessageHandler messageHandler,
