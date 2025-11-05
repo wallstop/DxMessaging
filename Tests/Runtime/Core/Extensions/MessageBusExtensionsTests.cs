@@ -33,9 +33,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             MessageHandler handler = new MessageHandler(new InstanceId(10), bus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
             int count = 0;
-            _ = token.RegisterUntargeted<ClassUntargetedMessage>(
-                (ref ClassUntargetedMessage _) => count++
-            );
+            _ = token.RegisterUntargeted((ref ClassUntargetedMessage _) => count++);
             token.Enable();
 
             ClassUntargetedMessage message = new ClassUntargetedMessage();
@@ -52,9 +50,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             MessageHandler handler = new MessageHandler(new InstanceId(20), bus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
             int count = 0;
-            _ = token.RegisterUntargeted<StructUntargetedMessage>(
-                (ref StructUntargetedMessage _) => count++
-            );
+            _ = token.RegisterUntargeted((ref StructUntargetedMessage _) => count++);
             token.Enable();
 
             StructUntargetedMessage message = new StructUntargetedMessage(1);
@@ -73,7 +69,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             StructInterceptedMessage intercepted = default;
             int postProcessCount = 0;
 
-            _ = bus.RegisterUntargetedInterceptor<StructInterceptedMessage>(
+            _ = bus.RegisterUntargetedInterceptor(
                 (ref StructInterceptedMessage msg) =>
                 {
                     msg.Value += 10;
@@ -81,11 +77,9 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
                 }
             );
 
-            _ = token.RegisterUntargeted<StructInterceptedMessage>(
-                (ref StructInterceptedMessage msg) => intercepted = msg
-            );
+            _ = token.RegisterUntargeted((ref StructInterceptedMessage msg) => intercepted = msg);
 
-            _ = token.RegisterUntargetedPostProcessor<StructInterceptedMessage>(
+            _ = token.RegisterUntargetedPostProcessor(
                 (ref StructInterceptedMessage _) => postProcessCount++
             );
 
@@ -108,9 +102,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
             int busSum = 0;
 
-            _ = token.RegisterUntargeted<StructUntargetedMessage>(
-                (ref StructUntargetedMessage msg) => busSum += msg.Value
-            );
+            _ = token.RegisterUntargeted((ref StructUntargetedMessage msg) => busSum += msg.Value);
 
             token.Enable();
 
@@ -132,7 +124,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             MessageRegistrationToken token2 = MessageRegistrationToken.Create(handler2, bus);
             int messageSum = 0;
 
-            _ = token2.RegisterUntargeted<StructUntargetedMessage>(
+            _ = token2.RegisterUntargeted(
                 (ref StructUntargetedMessage msg) => messageSum += msg.Value
             );
 
@@ -158,10 +150,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             MessageHandler handler = new MessageHandler(new InstanceId(30), bus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
             int count = 0;
-            _ = token.RegisterTargeted<StructTargetedMessage>(
-                target,
-                (ref StructTargetedMessage _) => count++
-            );
+            _ = token.RegisterTargeted(target, (ref StructTargetedMessage _) => count++);
             token.Enable();
 
             StructTargetedMessage message = new StructTargetedMessage(5);
@@ -180,10 +169,7 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             MessageHandler handler = new MessageHandler(new InstanceId(40), bus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
             int count = 0;
-            _ = token.RegisterBroadcast<StructBroadcastMessage>(
-                source,
-                (ref StructBroadcastMessage _) => count++
-            );
+            _ = token.RegisterBroadcast(source, (ref StructBroadcastMessage _) => count++);
             token.Enable();
 
             StructBroadcastMessage message = new StructBroadcastMessage(7);
@@ -206,19 +192,14 @@ namespace DxMessaging.Tests.Runtime.Core.Extensions
             string broadcast = null;
             string untargeted = null;
 
-            _ = token.RegisterTargeted<StringMessage>(
-                target,
-                (ref StringMessage m) => targeted = m.message
-            );
+            _ = token.RegisterTargeted(target, (ref StringMessage m) => targeted = m.message);
 
-            _ = token.RegisterBroadcast<SourcedStringMessage>(
+            _ = token.RegisterBroadcast(
                 source,
                 (ref SourcedStringMessage m) => broadcast = m.message
             );
 
-            _ = token.RegisterUntargeted<GlobalStringMessage>(
-                (ref GlobalStringMessage m) => untargeted = m.message
-            );
+            _ = token.RegisterUntargeted((ref GlobalStringMessage m) => untargeted = m.message);
 
             token.Enable();
 

@@ -57,6 +57,17 @@ repos:
 
   - repo: local
     hooks:
+      - id: fix-eol
+        name: Normalize CRLF and strip BOM
+        entry: node scripts/fix-eol.js
+        language: system
+        stages:
+          - pre-commit
+        pass_filenames: true
+        description: Automatically rewrite text files to match CI EOL/BOM policy.
+
+  - repo: local
+    hooks:
       - id: eol-bom-check
         name: Enforce CRLF and no BOM
         entry: node scripts/check-eol.js
