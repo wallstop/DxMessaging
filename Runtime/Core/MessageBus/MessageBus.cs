@@ -47,6 +47,18 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
+        private sealed class InterceptorCache<TValue>
+        {
+            public readonly SortedList<int, List<TValue>> handlers = new();
+            public long lastSeenEmissionId;
+
+            public void Clear()
+            {
+                handlers.Clear();
+                lastSeenEmissionId = 0;
+            }
+        }
+
         private sealed class HandlerCache
         {
             public readonly Dictionary<MessageHandler, int> handlers = new();
@@ -165,12 +177,9 @@ namespace DxMessaging.Core.MessageBus
         private readonly HandlerCache _globalSinks = new();
 
         // Interceptors split by category to avoid mixing types
-        private readonly MessageCache<HandlerCache<int, List<object>>> _untargetedInterceptsByType =
-            new();
-        private readonly MessageCache<HandlerCache<int, List<object>>> _targetedInterceptsByType =
-            new();
-        private readonly MessageCache<HandlerCache<int, List<object>>> _broadcastInterceptsByType =
-            new();
+        private readonly MessageCache<InterceptorCache<object>> _untargetedInterceptsByType = new();
+        private readonly MessageCache<InterceptorCache<object>> _targetedInterceptsByType = new();
+        private readonly MessageCache<InterceptorCache<object>> _broadcastInterceptsByType = new();
         private readonly Dictionary<object, Dictionary<int, int>> _uniqueInterceptorsAndPriorities =
             new();
 
@@ -367,28 +376,8 @@ namespace DxMessaging.Core.MessageBus
         )
             where T : IUntargetedMessage
         {
-            HandlerCache<int, List<object>> prioritizedInterceptors =
+            InterceptorCache<object> prioritizedInterceptors =
                 _untargetedInterceptsByType.GetOrAdd<T>();
-
-            if (
-                !prioritizedInterceptors.handlers.TryGetValue(
-                    priority,
-                    out List<object> interceptors
-                )
-            )
-            {
-                prioritizedInterceptors.version++;
-                interceptors = new List<object>();
-                prioritizedInterceptors.handlers[priority] = interceptors;
-                // maintain sorted order
-                List<int> order = prioritizedInterceptors.order;
-                int idx = 0;
-                while (idx < order.Count && order[idx] < priority)
-                {
-                    idx++;
-                }
-                order.Insert(idx, priority);
-            }
 
             if (
                 !_uniqueInterceptorsAndPriorities.TryGetValue(
@@ -399,6 +388,13 @@ namespace DxMessaging.Core.MessageBus
             {
                 priorityCount = new Dictionary<int, int>();
                 _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
+            }
+
+            List<object> interceptors;
+            if (!prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors))
+            {
+                interceptors = new List<object>();
+                prioritizedInterceptors.handlers.Add(priority, interceptors);
             }
 
             if (!priorityCount.TryGetValue(priority, out int count))
@@ -464,20 +460,17 @@ namespace DxMessaging.Core.MessageBus
                 {
                     if (_untargetedInterceptsByType.TryGetValue<T>(out prioritizedInterceptors))
                     {
-                        prioritizedInterceptors.version++;
                         if (
-                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                            prioritizedInterceptors.handlers.TryGetValue(
+                                priority,
+                                out List<object> interceptors
+                            )
                         )
                         {
                             complete = interceptors.Remove(interceptor);
                             if (interceptors.Count == 0)
                             {
                                 _ = prioritizedInterceptors.handlers.Remove(priority);
-                                int removeIdx = prioritizedInterceptors.order.IndexOf(priority);
-                                if (removeIdx >= 0)
-                                {
-                                    prioritizedInterceptors.order.RemoveAt(removeIdx);
-                                }
                             }
                         }
                     }
@@ -501,28 +494,8 @@ namespace DxMessaging.Core.MessageBus
         )
             where T : ITargetedMessage
         {
-            HandlerCache<int, List<object>> prioritizedInterceptors =
+            InterceptorCache<object> prioritizedInterceptors =
                 _targetedInterceptsByType.GetOrAdd<T>();
-
-            if (
-                !prioritizedInterceptors.handlers.TryGetValue(
-                    priority,
-                    out List<object> interceptors
-                )
-            )
-            {
-                prioritizedInterceptors.version++;
-                interceptors = new List<object>();
-                prioritizedInterceptors.handlers[priority] = interceptors;
-                // maintain sorted order
-                List<int> order = prioritizedInterceptors.order;
-                int idx = 0;
-                while (idx < order.Count && order[idx] < priority)
-                {
-                    idx++;
-                }
-                order.Insert(idx, priority);
-            }
 
             if (
                 !_uniqueInterceptorsAndPriorities.TryGetValue(
@@ -533,6 +506,13 @@ namespace DxMessaging.Core.MessageBus
             {
                 priorityCount = new Dictionary<int, int>();
                 _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
+            }
+
+            List<object> interceptors;
+            if (!prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors))
+            {
+                interceptors = new List<object>();
+                prioritizedInterceptors.handlers.Add(priority, interceptors);
             }
 
             if (!priorityCount.TryGetValue(priority, out int count))
@@ -598,20 +578,17 @@ namespace DxMessaging.Core.MessageBus
                 {
                     if (_targetedInterceptsByType.TryGetValue<T>(out prioritizedInterceptors))
                     {
-                        prioritizedInterceptors.version++;
                         if (
-                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                            prioritizedInterceptors.handlers.TryGetValue(
+                                priority,
+                                out List<object> interceptors
+                            )
                         )
                         {
                             complete = interceptors.Remove(interceptor);
                             if (interceptors.Count == 0)
                             {
                                 _ = prioritizedInterceptors.handlers.Remove(priority);
-                                int removeIdx = prioritizedInterceptors.order.IndexOf(priority);
-                                if (removeIdx >= 0)
-                                {
-                                    prioritizedInterceptors.order.RemoveAt(removeIdx);
-                                }
                             }
                         }
                     }
@@ -635,28 +612,8 @@ namespace DxMessaging.Core.MessageBus
         )
             where T : IBroadcastMessage
         {
-            HandlerCache<int, List<object>> prioritizedInterceptors =
+            InterceptorCache<object> prioritizedInterceptors =
                 _broadcastInterceptsByType.GetOrAdd<T>();
-
-            if (
-                !prioritizedInterceptors.handlers.TryGetValue(
-                    priority,
-                    out List<object> interceptors
-                )
-            )
-            {
-                prioritizedInterceptors.version++;
-                interceptors = new List<object>();
-                prioritizedInterceptors.handlers[priority] = interceptors;
-                // maintain sorted order
-                List<int> order = prioritizedInterceptors.order;
-                int idx = 0;
-                while (idx < order.Count && order[idx] < priority)
-                {
-                    idx++;
-                }
-                order.Insert(idx, priority);
-            }
 
             if (
                 !_uniqueInterceptorsAndPriorities.TryGetValue(
@@ -667,6 +624,13 @@ namespace DxMessaging.Core.MessageBus
             {
                 priorityCount = new Dictionary<int, int>();
                 _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
+            }
+
+            List<object> interceptors;
+            if (!prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors))
+            {
+                interceptors = new List<object>();
+                prioritizedInterceptors.handlers.Add(priority, interceptors);
             }
 
             if (!priorityCount.TryGetValue(priority, out int count))
@@ -732,20 +696,17 @@ namespace DxMessaging.Core.MessageBus
                 {
                     if (_broadcastInterceptsByType.TryGetValue<T>(out prioritizedInterceptors))
                     {
-                        prioritizedInterceptors.version++;
                         if (
-                            prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors)
+                            prioritizedInterceptors.handlers.TryGetValue(
+                                priority,
+                                out List<object> interceptors
+                            )
                         )
                         {
                             complete = interceptors.Remove(interceptor);
                             if (interceptors.Count == 0)
                             {
                                 _ = prioritizedInterceptors.handlers.Remove(priority);
-                                int removeIdx = prioritizedInterceptors.order.IndexOf(priority);
-                                if (removeIdx >= 0)
-                                {
-                                    prioritizedInterceptors.order.RemoveAt(removeIdx);
-                                }
                             }
                         }
                     }
@@ -3010,39 +2971,24 @@ namespace DxMessaging.Core.MessageBus
         }
 
         private bool TryGetUntargetedInterceptorCaches<TMessage>(
-            out List<KeyValuePair<int, List<object>>> interceptorStack,
+            out SortedList<int, List<object>> interceptorHandlers,
             out List<object> interceptorObjects
         )
             where TMessage : IUntargetedMessage
         {
             if (
                 !_untargetedInterceptsByType.TryGetValue<TMessage>(
-                    out HandlerCache<int, List<object>> interceptors
+                    out InterceptorCache<object> interceptors
                 )
                 || interceptors.handlers.Count == 0
             )
             {
-                interceptorStack = default;
+                interceptorHandlers = default;
                 interceptorObjects = default;
                 return false;
             }
 
-            interceptorStack = interceptors.cache;
-            if (interceptors.version != interceptors.lastSeenVersion)
-            {
-                interceptorStack.Clear();
-                List<int> keys = interceptors.order;
-                for (int i = 0; i < keys.Count; ++i)
-                {
-                    int key = keys[i];
-                    if (interceptors.handlers.TryGetValue(key, out List<object> values))
-                    {
-                        interceptorStack.Add(new KeyValuePair<int, List<object>>(key, values));
-                    }
-                }
-
-                interceptors.lastSeenVersion = interceptors.version;
-            }
+            interceptorHandlers = interceptors.handlers;
 
             if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
             {
@@ -3053,39 +2999,24 @@ namespace DxMessaging.Core.MessageBus
         }
 
         private bool TryGetTargetedInterceptorCaches<TMessage>(
-            out List<KeyValuePair<int, List<object>>> interceptorStack,
+            out SortedList<int, List<object>> interceptorHandlers,
             out List<object> interceptorObjects
         )
             where TMessage : ITargetedMessage
         {
             if (
                 !_targetedInterceptsByType.TryGetValue<TMessage>(
-                    out HandlerCache<int, List<object>> interceptors
+                    out InterceptorCache<object> interceptors
                 )
                 || interceptors.handlers.Count == 0
             )
             {
-                interceptorStack = default;
+                interceptorHandlers = default;
                 interceptorObjects = default;
                 return false;
             }
 
-            interceptorStack = interceptors.cache;
-            if (interceptors.version != interceptors.lastSeenVersion)
-            {
-                interceptorStack.Clear();
-                List<int> keys = interceptors.order;
-                for (int i = 0; i < keys.Count; ++i)
-                {
-                    int key = keys[i];
-                    if (interceptors.handlers.TryGetValue(key, out List<object> values))
-                    {
-                        interceptorStack.Add(new KeyValuePair<int, List<object>>(key, values));
-                    }
-                }
-
-                interceptors.lastSeenVersion = interceptors.version;
-            }
+            interceptorHandlers = interceptors.handlers;
 
             if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
             {
@@ -3096,39 +3027,24 @@ namespace DxMessaging.Core.MessageBus
         }
 
         private bool TryGetBroadcastInterceptorCaches<TMessage>(
-            out List<KeyValuePair<int, List<object>>> interceptorStack,
+            out SortedList<int, List<object>> interceptorHandlers,
             out List<object> interceptorObjects
         )
             where TMessage : IBroadcastMessage
         {
             if (
                 !_broadcastInterceptsByType.TryGetValue<TMessage>(
-                    out HandlerCache<int, List<object>> interceptors
+                    out InterceptorCache<object> interceptors
                 )
                 || interceptors.handlers.Count == 0
             )
             {
-                interceptorStack = default;
+                interceptorHandlers = default;
                 interceptorObjects = default;
                 return false;
             }
 
-            interceptorStack = interceptors.cache;
-            if (interceptors.version != interceptors.lastSeenVersion)
-            {
-                interceptorStack.Clear();
-                List<int> keys = interceptors.order;
-                for (int i = 0; i < keys.Count; ++i)
-                {
-                    int key = keys[i];
-                    if (interceptors.handlers.TryGetValue(key, out List<object> values))
-                    {
-                        interceptorStack.Add(new KeyValuePair<int, List<object>>(key, values));
-                    }
-                }
-
-                interceptors.lastSeenVersion = interceptors.version;
-            }
+            interceptorHandlers = interceptors.handlers;
 
             if (!_innerInterceptorsStack.TryPop(out interceptorObjects))
             {
@@ -3143,7 +3059,7 @@ namespace DxMessaging.Core.MessageBus
         {
             if (
                 !TryGetUntargetedInterceptorCaches<T>(
-                    out List<KeyValuePair<int, List<object>>> interceptorStack,
+                    out SortedList<int, List<object>> interceptorHandlers,
                     out List<object> interceptorObjects
                 )
             )
@@ -3153,11 +3069,11 @@ namespace DxMessaging.Core.MessageBus
 
             try
             {
-                for (int s = 0; s < interceptorStack.Count; ++s)
+                IList<List<object>> prioritizedInterceptors = interceptorHandlers.Values;
+                for (int s = 0; s < prioritizedInterceptors.Count; ++s)
                 {
-                    KeyValuePair<int, List<object>> entry = interceptorStack[s];
                     interceptorObjects.Clear();
-                    List<object> interceptors = entry.Value;
+                    List<object> interceptors = prioritizedInterceptors[s];
                     interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
@@ -3185,7 +3101,7 @@ namespace DxMessaging.Core.MessageBus
         {
             if (
                 !TryGetTargetedInterceptorCaches<T>(
-                    out List<KeyValuePair<int, List<object>>> interceptorStack,
+                    out SortedList<int, List<object>> interceptorHandlers,
                     out List<object> interceptorObjects
                 )
             )
@@ -3195,11 +3111,11 @@ namespace DxMessaging.Core.MessageBus
 
             try
             {
-                for (int s = 0; s < interceptorStack.Count; ++s)
+                IList<List<object>> prioritizedInterceptors = interceptorHandlers.Values;
+                for (int s = 0; s < prioritizedInterceptors.Count; ++s)
                 {
-                    KeyValuePair<int, List<object>> entry = interceptorStack[s];
                     interceptorObjects.Clear();
-                    List<object> interceptors = entry.Value;
+                    List<object> interceptors = prioritizedInterceptors[s];
                     interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
@@ -3227,7 +3143,7 @@ namespace DxMessaging.Core.MessageBus
         {
             if (
                 !TryGetBroadcastInterceptorCaches<T>(
-                    out List<KeyValuePair<int, List<object>>> interceptorStack,
+                    out SortedList<int, List<object>> interceptorHandlers,
                     out List<object> interceptorObjects
                 )
             )
@@ -3237,11 +3153,11 @@ namespace DxMessaging.Core.MessageBus
 
             try
             {
-                for (int s = 0; s < interceptorStack.Count; ++s)
+                IList<List<object>> prioritizedInterceptors = interceptorHandlers.Values;
+                for (int s = 0; s < prioritizedInterceptors.Count; ++s)
                 {
-                    KeyValuePair<int, List<object>> entry = interceptorStack[s];
                     interceptorObjects.Clear();
-                    List<object> interceptors = entry.Value;
+                    List<object> interceptors = prioritizedInterceptors[s];
                     interceptorObjects.AddRange(interceptors);
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)

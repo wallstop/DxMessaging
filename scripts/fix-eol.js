@@ -7,7 +7,10 @@ const fs = require('fs');
 const path = require('path');
 
 const repoRoot = process.cwd();
-const verbose = process.argv.includes('-v') || process.argv.includes('--verbose');
+const argv = process.argv.slice(2);
+const verbose = argv.includes('-v') || argv.includes('--verbose');
+const flagArgs = new Set(['-v', '--verbose']);
+const targetArgs = argv.filter((arg) => !flagArgs.has(arg));
 
 // Exclude directory patterns (match anywhere in path)
 const excludeRegexes = [
@@ -63,7 +66,40 @@ function toCrlf(txt) {
   return normalized.replace(/\n/g, '\r\n');
 }
 
-const allFiles = walk(repoRoot);
+function resolveTargets(targets) {
+  if (targets.length === 0) {
+    return walk(repoRoot);
+  }
+
+  const seen = new Set();
+  const resolvedFiles = [];
+
+  for (const rawTarget of targets) {
+    const targetPath = path.resolve(repoRoot, rawTarget);
+    if (!fs.existsSync(targetPath)) {
+      continue;
+    }
+
+    const stats = fs.statSync(targetPath);
+    if (stats.isDirectory()) {
+      for (const file of walk(targetPath)) {
+        if (!seen.has(file)) {
+          resolvedFiles.push(file);
+          seen.add(file);
+        }
+      }
+    } else if (stats.isFile()) {
+      if (!seen.has(targetPath)) {
+        resolvedFiles.push(targetPath);
+        seen.add(targetPath);
+      }
+    }
+  }
+
+  return resolvedFiles;
+}
+
+const allFiles = resolveTargets(targetArgs);
 let changed = 0;
 let scanned = 0;
 
@@ -94,4 +130,3 @@ console.log(`Scanned ${scanned} text files. Updated ${changed}.`);
 if (changed > 0) {
   console.log('All changes written with CRLF and no BOM.');
 }
-
