@@ -46,10 +46,6 @@ jobs:
         if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: npx --yes markdownlint-cli@0.40.0 "**/*.md" "**/*.markdown" --config .markdownlint.json --ignore-path .markdownlintignore --fix
 
-      - name: Fix EOL/BOM (Dependabot only)
-        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
-        run: node scripts/fix-eol.js -v
-
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
         uses: stefanzweifel/git-auto-commit-action@v7
@@ -117,9 +113,6 @@ jobs:
 
       - name: Markdownlint (auto-fix)
         run: npx --yes markdownlint-cli@0.40.0 "**/*.md" "**/*.markdown" --config .markdownlint.json --ignore-path .markdownlintignore --fix
-
-      - name: Fix EOL/BOM
-        run: node scripts/fix-eol.js -v
 
       - name: Detect changes
         id: changes

@@ -57,14 +57,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: eol-bom-fix
-        name: Auto-fix CRLF and remove BOM
-        entry: node scripts/fix-eol.js -v
-        language: system
-        pass_filenames: false
-        stages:
-          - pre-commit
-        description: Convert line endings to CRLF and strip UTF-8 BOM on text files.
       - id: eol-bom-check
         name: Enforce CRLF and no BOM
         entry: node scripts/check-eol.js
