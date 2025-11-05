@@ -3,6 +3,7 @@ namespace DxMessaging.Unity
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using Core;
     using Core.MessageBus;
     using UnityEngine;
@@ -326,6 +327,98 @@ namespace DxMessaging.Unity
 
             return null;
         }
+
+#if UNITY_EDITOR
+        [ContextMenu("DxMessaging/Dump Registrations")]
+        private void ContextDumpRegistrations()
+        {
+            DumpRegistrations();
+        }
+
+        internal void DumpRegistrations()
+        {
+            if (_registeredListeners.Count == 0)
+            {
+                Debug.Log($"[DxMessaging] {name} has no registered listeners.");
+                return;
+            }
+
+            foreach (
+                KeyValuePair<MonoBehaviour, MessageRegistrationToken> pair in _registeredListeners
+            )
+            {
+                MonoBehaviour listener = pair.Key;
+                MessageRegistrationToken token = pair.Value;
+                Debug.Log(
+                    $"[DxMessaging] Listener '{listener}' (Enabled: {token.Enabled}, Diagnostic: {token.DiagnosticMode}) "
+                        + $"with {token._metadata.Count} registrations on '{name}'."
+                );
+            }
+        }
+
+        [ContextMenu("DxMessaging/Reset Runtime State")]
+        private void ContextResetRuntimeState()
+        {
+            if (EditorResetRuntimeState())
+            {
+                Debug.Log($"[DxMessaging] Cleared runtime state for '{name}'.");
+            }
+            else
+            {
+                Debug.Log($"[DxMessaging] No runtime state to clear on '{name}'.");
+            }
+        }
+
+        internal bool EditorResetRuntimeState()
+        {
+            bool cleared = false;
+
+            if (_registeredListeners.Count > 0)
+            {
+                foreach (MessageRegistrationToken token in _registeredListeners.Values.ToArray())
+                {
+                    try
+                    {
+                        if (token.Enabled)
+                        {
+                            token.Disable();
+                        }
+
+                        token.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogWarning(
+                            $"[DxMessaging] Disposing stale token on {name} failed. {exception}"
+                        );
+                    }
+                }
+
+                _registeredListeners.Clear();
+                cleared = true;
+            }
+
+            if (_messageHandler != null)
+            {
+                _messageHandler = null;
+                cleared = true;
+            }
+
+            if (_messageBusOverride != null)
+            {
+                _messageBusOverride = null;
+                cleared = true;
+            }
+
+            if (_messageBusProvider != null)
+            {
+                _messageBusProvider = null;
+                cleared = true;
+            }
+
+            return cleared;
+        }
+#endif
     }
 }
 #endif

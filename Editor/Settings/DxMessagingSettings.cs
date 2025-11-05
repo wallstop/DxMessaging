@@ -23,6 +23,9 @@ namespace DxMessaging.Editor.Settings
         [SerializeField]
         internal int _messageBufferSize = DefaultBufferSize;
 
+        [SerializeField]
+        internal bool _suppressDomainReloadWarning = true;
+
         /// <summary>
         /// Enables <see cref="Core.MessageBus.IMessageBus.GlobalDiagnosticsMode"/> in the Editor.
         /// </summary>
@@ -39,6 +42,15 @@ namespace DxMessaging.Editor.Settings
         {
             get => _messageBufferSize;
             set => _messageBufferSize = value;
+        }
+
+        /// <summary>
+        /// When true, suppresses the Enter Play Mode Options domain reload warning in the Editor.
+        /// </summary>
+        public bool SuppressDomainReloadWarning
+        {
+            get => _suppressDomainReloadWarning;
+            set => _suppressDomainReloadWarning = value;
         }
 
         /// <summary>
@@ -64,6 +76,7 @@ namespace DxMessaging.Editor.Settings
                 settings = CreateInstance<DxMessagingSettings>();
                 settings._enableDiagnosticsInEditor = false;
                 settings._messageBufferSize = DefaultBufferSize;
+                settings._suppressDomainReloadWarning = true;
                 if (!AssetDatabase.IsValidFolder("Assets/Editor"))
                 {
                     AssetDatabase.CreateFolder("Assets", "Editor");

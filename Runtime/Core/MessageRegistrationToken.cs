@@ -39,7 +39,7 @@ namespace DxMessaging.Core
     /// }
     /// </code>
     /// </example>
-    public sealed class MessageRegistrationToken
+    public sealed class MessageRegistrationToken : IDisposable
     {
         /// <summary>
         /// Whether the token is currently enabled (registrations are active).
@@ -2034,6 +2034,11 @@ namespace DxMessaging.Core
             }
 
             return new MessageRegistrationToken(messageHandler, messageBus);
+        }
+
+        public void Dispose()
+        {
+            UnregisterAll();
         }
     }
 }

@@ -35,11 +35,26 @@ namespace DxMessaging.Editor.Settings
                 _messagingSettings.FindProperty(
                     nameof(DxMessagingSettings._enableDiagnosticsInEditor)
                 ),
-                new GUIContent("Global Diagnostics Mode")
+                new GUIContent(
+                    "Global Diagnostics Mode",
+                    "When enabled, every new MessageBus records diagnostic history. Recommended only for debugging."
+                )
             );
             EditorGUILayout.PropertyField(
                 _messagingSettings.FindProperty(nameof(DxMessagingSettings._messageBufferSize)),
-                new GUIContent("Message Buffer Size")
+                new GUIContent(
+                    "Message Buffer Size",
+                    "Number of emissions kept per bus/token when diagnostics mode is active."
+                )
+            );
+            EditorGUILayout.PropertyField(
+                _messagingSettings.FindProperty(
+                    nameof(DxMessagingSettings._suppressDomainReloadWarning)
+                ),
+                new GUIContent(
+                    "Suppress Domain Reload Warning",
+                    "Disable the warning shown when Enter Play Mode Options skips domain reload; DxMessaging still resets its statics."
+                )
             );
 
             _messagingSettings.ApplyModifiedProperties();
