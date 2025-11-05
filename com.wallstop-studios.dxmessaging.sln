@@ -4,13 +4,9 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SourceGenerators", "SourceGenerators", "{C03C8CAA-D0B1-310A-0C7E-67BC14B87CB1}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WallstopStudios.DxMessaging.SourceGenerators", "SourceGenerators\WallstopStudios.DxMessaging.SourceGenerators\WallstopStudios.DxMessaging.SourceGenerators.csproj", "{50C6E19D-8B21-919A-A9BB-1AAFAE92D548}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WallstopStudios.DxMessaging.SourceGenerators.Tests", "SourceGenerators\WallstopStudios.DxMessaging.SourceGenerators.Tests\WallstopStudios.DxMessaging.SourceGenerators.Tests.csproj", "{8B884BA3-4017-4F4A-9D47-96CFD3E8ED21}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WallstopStudios.DxMessaging.Tests.Runtime", "Tests\Runtime\WallstopStudios.DxMessaging.Tests.Runtime.csproj", "{467C8A3B-F6D1-669A-DB63-6B551940C32E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,10 +22,6 @@ Global
 		{8B884BA3-4017-4F4A-9D47-96CFD3E8ED21}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B884BA3-4017-4F4A-9D47-96CFD3E8ED21}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B884BA3-4017-4F4A-9D47-96CFD3E8ED21}.Release|Any CPU.Build.0 = Release|Any CPU
-		{467C8A3B-F6D1-669A-DB63-6B551940C32E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{467C8A3B-F6D1-669A-DB63-6B551940C32E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{467C8A3B-F6D1-669A-DB63-6B551940C32E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{467C8A3B-F6D1-669A-DB63-6B551940C32E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -37,7 +29,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{50C6E19D-8B21-919A-A9BB-1AAFAE92D548} = {C03C8CAA-D0B1-310A-0C7E-67BC14B87CB1}
 		{8B884BA3-4017-4F4A-9D47-96CFD3E8ED21} = {C03C8CAA-D0B1-310A-0C7E-67BC14B87CB1}
-		{467C8A3B-F6D1-669A-DB63-6B551940C32E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AF2EA467-188D-4BA6-806F-3B26A1A4B688}
