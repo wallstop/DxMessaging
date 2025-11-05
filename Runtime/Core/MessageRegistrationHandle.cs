@@ -19,6 +19,21 @@ namespace DxMessaging.Core
         private readonly long _id;
         private readonly int _hashCode;
 
+        internal static long GetCurrentIdSeed()
+        {
+            return Interlocked.Read(ref StaticIdCount);
+        }
+
+        internal static void SetIdSeed(long value)
+        {
+            _ = Interlocked.Exchange(ref StaticIdCount, value);
+        }
+
+        internal static void ResetIdSeed()
+        {
+            SetIdSeed(0);
+        }
+
         /// <summary>
         /// Creates a new unique handle.
         /// </summary>

@@ -32,6 +32,16 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+
+            public void Clear()
+            {
+                handlers.Clear();
+                order.Clear();
+                cache.Clear();
+                version = 0;
+                lastSeenVersion = -1;
+                lastSeenEmissionId = 0;
+            }
         }
 
         private sealed class HandlerCache
@@ -41,6 +51,15 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+
+            public void Clear()
+            {
+                handlers.Clear();
+                cache.Clear();
+                version = 0;
+                lastSeenVersion = -1;
+                lastSeenEmissionId = 0;
+            }
         }
 
         public int RegisteredTargeted
@@ -48,14 +67,11 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                using MessageCache<
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-                >.MessageCacheEnumerator enumeratorT = _targetedSinks.GetEnumerator();
-                while (enumeratorT.MoveNext())
+                foreach (
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _targetedSinks
+                )
                 {
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry =
-                        enumeratorT.Current;
-                    count += entry.Count;
+                    count += entry?.Count ?? 0;
                 }
 
                 return count;
@@ -69,14 +85,11 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                using MessageCache<
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-                >.MessageCacheEnumerator enumeratorB = _broadcastSinks.GetEnumerator();
-                while (enumeratorB.MoveNext())
+                foreach (
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _broadcastSinks
+                )
                 {
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry =
-                        enumeratorB.Current;
-                    count += entry.Count;
+                    count += entry?.Count ?? 0;
                 }
 
                 return count;
@@ -88,13 +101,9 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                using MessageCache<
-                    HandlerCache<int, HandlerCache>
-                >.MessageCacheEnumerator enumeratorU = _sinks.GetEnumerator();
-                while (enumeratorU.MoveNext())
+                foreach (HandlerCache<int, HandlerCache> entry in _sinks)
                 {
-                    HandlerCache<int, HandlerCache> entry = enumeratorU.Current;
-                    count += entry.handlers.Count;
+                    count += entry?.handlers?.Count ?? 0;
                 }
 
                 return count;
@@ -179,6 +188,41 @@ namespace DxMessaging.Core.MessageBus
 
         private bool _diagnosticsMode = GlobalDiagnosticsMode;
         private bool _loggedReflexiveWarning;
+
+        internal void ResetState()
+        {
+            _emissionId = 0;
+            _diagnosticsMode = GlobalDiagnosticsMode;
+            _loggedReflexiveWarning = false;
+
+            _sinks.Clear();
+            _targetedSinks.Clear();
+            _broadcastSinks.Clear();
+            _postProcessingSinks.Clear();
+            _postProcessingTargetedSinks.Clear();
+            _postProcessingBroadcastSinks.Clear();
+            _postProcessingTargetedWithoutTargetingSinks.Clear();
+            _postProcessingBroadcastWithoutSourceSinks.Clear();
+            _globalSinks.Clear();
+
+            _untargetedInterceptsByType.Clear();
+            _targetedInterceptsByType.Clear();
+            _broadcastInterceptsByType.Clear();
+            _uniqueInterceptorsAndPriorities.Clear();
+            _broadcastMethodsByType.Clear();
+            _innerInterceptorsStack.Clear();
+            _methodCache.Clear();
+
+#if UNITY_2021_3_OR_NEWER
+            _recipientCache.Clear();
+            _componentCache.Clear();
+#endif
+
+            _log.Clear();
+            _log.Enabled = false;
+            _emissionBuffer.Resize(GlobalMessageBufferSize);
+            _emissionBuffer.Clear();
+        }
 
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage

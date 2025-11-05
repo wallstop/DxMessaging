@@ -259,6 +259,21 @@ namespace DxMessaging.Core.MessageBus
         private readonly IMessageBusProvider _messageBusProvider;
         private static int _syntheticOwnerCounter;
 
+        internal static int GetSyntheticOwnerCounter()
+        {
+            return Volatile.Read(ref _syntheticOwnerCounter);
+        }
+
+        internal static void SetSyntheticOwnerCounter(int value)
+        {
+            _ = Interlocked.Exchange(ref _syntheticOwnerCounter, value);
+        }
+
+        internal static void ResetSyntheticOwnerCounter()
+        {
+            SetSyntheticOwnerCounter(0);
+        }
+
         public MessageRegistrationBuilder()
         {
             _messageBusProvider = null;

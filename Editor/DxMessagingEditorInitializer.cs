@@ -1,6 +1,7 @@
 namespace DxMessaging.Editor
 {
 #if UNITY_EDITOR
+    using Core;
     using Core.MessageBus;
     using Settings;
     using UnityEditor;
@@ -13,6 +14,24 @@ namespace DxMessaging.Editor
     {
         static DxMessagingEditorInitializer()
         {
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            ApplySettingsWithReset();
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange stateChange)
+        {
+            if (
+                stateChange == PlayModeStateChange.EnteredEditMode
+                || stateChange == PlayModeStateChange.EnteredPlayMode
+            )
+            {
+                ApplySettingsWithReset();
+            }
+        }
+
+        private static void ApplySettingsWithReset()
+        {
+            DxMessagingStaticState.Reset();
             DxMessagingSettings settings = DxMessagingSettings.GetOrCreateSettings();
             IMessageBus.GlobalDiagnosticsMode = settings.EnableDiagnosticsInEditor;
             IMessageBus.GlobalMessageBufferSize = settings.MessageBufferSize;

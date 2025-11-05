@@ -180,6 +180,12 @@ namespace DxMessaging.Core.Helper
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Clear()
+        {
+            _values.Clear();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void FillToIndex(int index)
         {
             int count = _values.Count;

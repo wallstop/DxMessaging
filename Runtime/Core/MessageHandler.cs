@@ -345,12 +345,14 @@ namespace DxMessaging.Core
         )
             where TMessage : IMessage;
 
+        private static readonly object GlobalResetLock = new object();
+
         /// <summary>
         /// Global message bus used when no explicit bus is provided.
         /// </summary>
         private static IMessageBus _globalMessageBus;
 
-        private static readonly MessageBus.MessageBus _defaultGlobalMessageBus = new();
+        private static MessageBus.MessageBus _defaultGlobalMessageBus = new MessageBus.MessageBus();
 
         /// <summary>
         /// Gets the process-wide <see cref="IMessageBus"/> used when no explicit bus is supplied.
@@ -363,16 +365,17 @@ namespace DxMessaging.Core
         public static IMessageBus MessageBus => _globalMessageBus;
 
         /// <summary>
-        /// Gets the original global <see cref="IMessageBus"/> instance created during static initialisation.
+        /// Gets the baseline global <see cref="IMessageBus"/> instance used when no custom bus is configured.
         /// </summary>
         /// <remarks>
-        /// This reference never changes even when <see cref="SetGlobalMessageBus(IMessageBus)"/> is invoked.
+        /// The instance is recreated when <see cref="DxMessagingStaticState.Reset"/> runs so that domain-reload-disabled
+        /// environments can obtain a clean slate.
         /// </remarks>
         public static IMessageBus InitialGlobalMessageBus => _defaultGlobalMessageBus;
 
         static MessageHandler()
         {
-            _globalMessageBus = _defaultGlobalMessageBus;
+            ResetStatics();
         }
 
         /// <summary>
@@ -417,11 +420,14 @@ namespace DxMessaging.Core
         /// Restores the global <see cref="MessageBus.MessageBus"/> to the built-in default instance.
         /// </summary>
         /// <remarks>
-        /// The default instance is created during static initialisation and reused across resets to minimise allocations.
+        /// The default instance is recreated by <see cref="ResetStatics"/> when the static state reset utility runs.
         /// </remarks>
         public static void ResetGlobalMessageBus()
         {
-            _globalMessageBus = _defaultGlobalMessageBus;
+            lock (GlobalResetLock)
+            {
+                _globalMessageBus = _defaultGlobalMessageBus;
+            }
         }
 
         /// <summary>
@@ -432,6 +438,21 @@ namespace DxMessaging.Core
         public static GlobalMessageBusScope OverrideGlobalMessageBus(IMessageBus messageBus)
         {
             return new GlobalMessageBusScope(messageBus);
+        }
+
+        /// <summary>
+        /// Recreates the built-in global <see cref="MessageBus.MessageBus"/> and assigns it as the active global bus.
+        /// </summary>
+        /// <remarks>
+        /// Invoked by <see cref="DxMessagingStaticState.Reset"/> to provide a clean slate when domain reloads are disabled.
+        /// </remarks>
+        internal static void ResetStatics()
+        {
+            lock (GlobalResetLock)
+            {
+                _defaultGlobalMessageBus = new MessageBus.MessageBus();
+                _globalMessageBus = _defaultGlobalMessageBus;
+            }
         }
 
         /// <summary>
