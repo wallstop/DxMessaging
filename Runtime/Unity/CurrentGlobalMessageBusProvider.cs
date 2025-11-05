@@ -24,6 +24,10 @@ namespace DxMessaging.Unity
     )]
     public sealed class CurrentGlobalMessageBusProvider : ScriptableMessageBusProvider
     {
+        /// <summary>
+        /// Resolves the message bus currently set as the global bus via <see cref="MessageHandler.SetGlobalMessageBus(IMessageBus)"/>.
+        /// </summary>
+        /// <returns>The active global <see cref="IMessageBus"/> instance.</returns>
         public override IMessageBus Resolve()
         {
             return MessageHandler.MessageBus;

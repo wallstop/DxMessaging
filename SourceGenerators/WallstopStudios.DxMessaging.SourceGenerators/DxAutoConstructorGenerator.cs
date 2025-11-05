@@ -56,6 +56,10 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             ImmutableArray<IFieldSymbol> FieldsToInject // Public readonly non-static fields
         );
 
+        /// <summary>
+        /// Configures the incremental generator pipeline that discovers annotated types and emits constructors.
+        /// </summary>
+        /// <param name="context">Initialization context provided by Roslyn.</param>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             // Find all class/struct/record declarations that have attribute lists

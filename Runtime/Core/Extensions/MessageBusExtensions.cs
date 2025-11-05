@@ -13,6 +13,13 @@ namespace DxMessaging.Core.Extensions
     /// </summary>
     public static class MessageBusExtensions
     {
+        /// <summary>
+        /// Emits an untargeted message instance through the provided message bus.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IUntargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="message">Message instance to send.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitUntargeted<TMessage>(this IMessageBus messageBus, TMessage message)
             where TMessage : class, IUntargetedMessage
         {
@@ -24,6 +31,13 @@ namespace DxMessaging.Core.Extensions
             message.EmitUntargeted(messageBus);
         }
 
+        /// <summary>
+        /// Emits an untargeted struct message through the provided message bus without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IUntargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="message">Reference to the struct message to send.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitUntargeted<TMessage>(
             this IMessageBus messageBus,
             ref TMessage message
@@ -38,6 +52,21 @@ namespace DxMessaging.Core.Extensions
             message.EmitUntargeted(messageBus);
         }
 
+        /// <summary>
+        /// Emits a targeted message to the specified recipient.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="ITargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Recipient of the message.</param>
+        /// <param name="message">Message instance to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
+        /// <example>
+        /// <code>
+        /// InstanceId playerId = GetPlayerId();
+        /// var change = new HealthChanged(5);
+        /// bus.EmitTargeted(playerId, change);
+        /// </code>
+        /// </example>
         public static void EmitTargeted<TMessage>(
             this IMessageBus messageBus,
             InstanceId target,
@@ -53,6 +82,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitTargeted(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a targeted struct message to the specified recipient without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="ITargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Recipient of the message.</param>
+        /// <param name="message">Reference to the struct message to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitTargeted<TMessage>(
             this IMessageBus messageBus,
             InstanceId target,
@@ -68,6 +105,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitTargeted(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a broadcast message sourced from the specified instance.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IBroadcastMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Originating instance for the broadcast.</param>
+        /// <param name="message">Message instance to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitBroadcast<TMessage>(
             this IMessageBus messageBus,
             InstanceId source,
@@ -83,6 +128,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitBroadcast(source, messageBus);
         }
 
+        /// <summary>
+        /// Emits a broadcast struct message sourced from the specified instance without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IBroadcastMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Originating instance for the broadcast.</param>
+        /// <param name="message">Reference to the struct message to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitBroadcast<TMessage>(
             this IMessageBus messageBus,
             InstanceId source,
@@ -99,6 +152,14 @@ namespace DxMessaging.Core.Extensions
         }
 
 #if UNITY_2021_3_OR_NEWER
+        /// <summary>
+        /// Emits a targeted message to the specified Unity <see cref="GameObject"/>.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="ITargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Unity object that will receive the message.</param>
+        /// <param name="message">Message instance to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitGameObjectTargeted<TMessage>(
             this IMessageBus messageBus,
             GameObject target,
@@ -114,6 +175,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitGameObjectTargeted(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a targeted struct message to the specified Unity <see cref="GameObject"/> without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="ITargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Unity object that will receive the message.</param>
+        /// <param name="message">Reference to the struct message to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitGameObjectTargeted<TMessage>(
             this IMessageBus messageBus,
             GameObject target,
@@ -129,6 +198,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitGameObjectTargeted(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a targeted message to the specified Unity <see cref="Component"/>.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="ITargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Unity component that will receive the message.</param>
+        /// <param name="message">Message instance to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitComponentTargeted<TMessage>(
             this IMessageBus messageBus,
             Component target,
@@ -144,6 +221,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitComponentTargeted(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a targeted struct message to the specified Unity <see cref="Component"/> without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="ITargetedMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Unity component that will receive the message.</param>
+        /// <param name="message">Reference to the struct message to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitComponentTargeted<TMessage>(
             this IMessageBus messageBus,
             Component target,
@@ -159,6 +244,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitComponentTargeted(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a broadcast message from the specified Unity <see cref="GameObject"/>.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IBroadcastMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Unity object that is broadcasting the message.</param>
+        /// <param name="message">Message instance to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitGameObjectBroadcast<TMessage>(
             this IMessageBus messageBus,
             GameObject source,
@@ -174,6 +267,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitGameObjectBroadcast(source, messageBus);
         }
 
+        /// <summary>
+        /// Emits a broadcast struct message from the specified Unity <see cref="GameObject"/> without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IBroadcastMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Unity object that is broadcasting the message.</param>
+        /// <param name="message">Reference to the struct message to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitGameObjectBroadcast<TMessage>(
             this IMessageBus messageBus,
             GameObject source,
@@ -189,6 +290,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitGameObjectBroadcast(source, messageBus);
         }
 
+        /// <summary>
+        /// Emits a broadcast message from the specified Unity <see cref="Component"/>.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IBroadcastMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Unity component that is broadcasting the message.</param>
+        /// <param name="message">Message instance to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitComponentBroadcast<TMessage>(
             this IMessageBus messageBus,
             Component source,
@@ -204,6 +313,14 @@ namespace DxMessaging.Core.Extensions
             message.EmitComponentBroadcast(source, messageBus);
         }
 
+        /// <summary>
+        /// Emits a broadcast struct message from the specified Unity <see cref="Component"/> without copying the payload.
+        /// </summary>
+        /// <typeparam name="TMessage">Concrete message type implementing <see cref="IBroadcastMessage"/>.</typeparam>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Unity component that is broadcasting the message.</param>
+        /// <param name="message">Reference to the struct message to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitComponentBroadcast<TMessage>(
             this IMessageBus messageBus,
             Component source,
@@ -220,6 +337,17 @@ namespace DxMessaging.Core.Extensions
         }
 #endif
 
+        /// <summary>
+        /// Emits a string payload using the string-message utility channel.
+        /// </summary>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="payload">Message text to broadcast globally.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
+        /// <example>
+        /// <code>
+        /// bus.Emit("PlayerJoined");
+        /// </code>
+        /// </example>
         public static void Emit(this IMessageBus messageBus, string payload)
         {
             if (messageBus == null)
@@ -230,6 +358,13 @@ namespace DxMessaging.Core.Extensions
             payload.Emit(messageBus);
         }
 
+        /// <summary>
+        /// Emits a string payload targeted at the specified instance.
+        /// </summary>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="target">Intended recipient of the payload.</param>
+        /// <param name="payload">Message text to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitAt(this IMessageBus messageBus, InstanceId target, string payload)
         {
             if (messageBus == null)
@@ -240,6 +375,13 @@ namespace DxMessaging.Core.Extensions
             payload.Emit(target, messageBus);
         }
 
+        /// <summary>
+        /// Emits a string payload broadcast from the specified instance.
+        /// </summary>
+        /// <param name="messageBus">Bus that should dispatch the message.</param>
+        /// <param name="source">Origin of the payload.</param>
+        /// <param name="payload">Message text to deliver.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public static void EmitFrom(this IMessageBus messageBus, InstanceId source, string payload)
         {
             if (messageBus == null)

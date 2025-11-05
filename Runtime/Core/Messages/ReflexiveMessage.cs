@@ -17,10 +17,29 @@ namespace DxMessaging.Core.Messages
     public enum ReflexiveSendMode
     {
         [Obsolete("Please use a valid Send Mode")]
+        /// <summary>
+        /// Legacy sentinel indicating no traversal; not supported.
+        /// </summary>
         None = 0,
+
+        /// <summary>
+        /// Invoke matching methods only on the immediate GameObject.
+        /// </summary>
         Flat = 1 << 0,
+
+        /// <summary>
+        /// Traverse into child GameObjects when invoking methods.
+        /// </summary>
         Downwards = 1 << 1,
+
+        /// <summary>
+        /// Traverse up the parent chain when invoking methods.
+        /// </summary>
         Upwards = 1 << 2,
+
+        /// <summary>
+        /// Skip disabled components during traversal.
+        /// </summary>
         OnlyIncludeActive = 1 << 3,
     }
 
@@ -34,6 +53,11 @@ namespace DxMessaging.Core.Messages
 
         private readonly int _hashCode;
 
+        /// <summary>
+        /// Creates a lookup key for a reflected method signature.
+        /// </summary>
+        /// <param name="methodName">Name of the method.</param>
+        /// <param name="parameterTypes">Ordered parameter list expected by the method.</param>
         public MethodSignatureKey(string methodName, Type[] parameterTypes)
             : this()
         {
@@ -54,16 +78,30 @@ namespace DxMessaging.Core.Messages
             return hashCode;
         }
 
+        /// <summary>
+        /// Gets a stable hash code for the method signature.
+        /// </summary>
+        /// <returns>Hash code derived from the name and parameter types.</returns>
         public override int GetHashCode()
         {
             return _hashCode;
         }
 
+        /// <summary>
+        /// Checks equality against an arbitrary object.
+        /// </summary>
+        /// <param name="obj">Object to compare.</param>
+        /// <returns><c>true</c> when <paramref name="obj"/> represents the same signature.</returns>
         public override bool Equals(object obj)
         {
             return obj is MethodSignatureKey other && Equals(other);
         }
 
+        /// <summary>
+        /// Checks equality against another method signature key.
+        /// </summary>
+        /// <param name="other">Signature key to compare with.</param>
+        /// <returns><c>true</c> when both keys describe the same method.</returns>
         public bool Equals(MethodSignatureKey other)
         {
             if (

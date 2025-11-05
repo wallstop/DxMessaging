@@ -37,6 +37,9 @@ namespace DxMessaging.Editor.CustomEditors
             _listenerFoldouts.Clear();
         }
 
+        /// <summary>
+        /// Draws the custom inspector, including diagnostics summaries and listener management controls.
+        /// </summary>
         public override void OnInspectorGUI()
         {
             base.OnInspectorGUI();

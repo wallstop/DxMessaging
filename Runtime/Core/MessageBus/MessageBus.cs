@@ -32,6 +32,19 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+
+            /// <summary>
+            /// Clears all cached handler references and resets the version tracking metadata.
+            /// </summary>
+            public void Clear()
+            {
+                handlers.Clear();
+                order.Clear();
+                cache.Clear();
+                version = 0;
+                lastSeenVersion = -1;
+                lastSeenEmissionId = 0;
+            }
         }
 
         private sealed class HandlerCache
@@ -41,6 +54,18 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+
+            /// <summary>
+            /// Clears all cached handler references and resets the version tracking metadata.
+            /// </summary>
+            public void Clear()
+            {
+                handlers.Clear();
+                cache.Clear();
+                version = 0;
+                lastSeenVersion = -1;
+                lastSeenEmissionId = 0;
+            }
         }
 
         public int RegisteredTargeted
@@ -48,14 +73,11 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                using MessageCache<
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-                >.MessageCacheEnumerator enumeratorT = _targetedSinks.GetEnumerator();
-                while (enumeratorT.MoveNext())
+                foreach (
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _targetedSinks
+                )
                 {
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry =
-                        enumeratorT.Current;
-                    count += entry.Count;
+                    count += entry?.Count ?? 0;
                 }
 
                 return count;
@@ -69,14 +91,11 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                using MessageCache<
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
-                >.MessageCacheEnumerator enumeratorB = _broadcastSinks.GetEnumerator();
-                while (enumeratorB.MoveNext())
+                foreach (
+                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in _broadcastSinks
+                )
                 {
-                    Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry =
-                        enumeratorB.Current;
-                    count += entry.Count;
+                    count += entry?.Count ?? 0;
                 }
 
                 return count;
@@ -88,13 +107,9 @@ namespace DxMessaging.Core.MessageBus
             get
             {
                 int count = 0;
-                using MessageCache<
-                    HandlerCache<int, HandlerCache>
-                >.MessageCacheEnumerator enumeratorU = _sinks.GetEnumerator();
-                while (enumeratorU.MoveNext())
+                foreach (HandlerCache<int, HandlerCache> entry in _sinks)
                 {
-                    HandlerCache<int, HandlerCache> entry = enumeratorU.Current;
-                    count += entry.handlers.Count;
+                    count += entry?.handlers?.Count ?? 0;
                 }
 
                 return count;
@@ -177,9 +192,46 @@ namespace DxMessaging.Core.MessageBus
             GlobalMessageBufferSize
         );
 
-        private bool _diagnosticsMode = GlobalDiagnosticsMode;
+        private bool _diagnosticsMode = IMessageBus.ShouldEnableDiagnostics();
         private bool _loggedReflexiveWarning;
 
+        internal void ResetState()
+        {
+            _emissionId = 0;
+            _diagnosticsMode = IMessageBus.ShouldEnableDiagnostics();
+            _loggedReflexiveWarning = false;
+
+            _sinks.Clear();
+            _targetedSinks.Clear();
+            _broadcastSinks.Clear();
+            _postProcessingSinks.Clear();
+            _postProcessingTargetedSinks.Clear();
+            _postProcessingBroadcastSinks.Clear();
+            _postProcessingTargetedWithoutTargetingSinks.Clear();
+            _postProcessingBroadcastWithoutSourceSinks.Clear();
+            _globalSinks.Clear();
+
+            _untargetedInterceptsByType.Clear();
+            _targetedInterceptsByType.Clear();
+            _broadcastInterceptsByType.Clear();
+            _uniqueInterceptorsAndPriorities.Clear();
+            _broadcastMethodsByType.Clear();
+            _innerInterceptorsStack.Clear();
+            _methodCache.Clear();
+
+#if UNITY_2021_3_OR_NEWER
+            _recipientCache.Clear();
+            _componentCache.Clear();
+#endif
+
+            bool enabled = _log.Enabled;
+            _log.Clear();
+            _log.Enabled = enabled;
+            _emissionBuffer.Resize(GlobalMessageBufferSize);
+            _emissionBuffer.Clear();
+        }
+
+        /// <inheritdoc />
         public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
             where T : IUntargetedMessage
         {
@@ -191,6 +243,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargeted<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -207,6 +260,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterSourcedBroadcast<T>(
             InstanceId source,
             MessageHandler messageHandler,
@@ -223,6 +277,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterSourcedBroadcastWithoutSource<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -237,6 +292,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedWithoutTargeting<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -251,6 +307,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterGlobalAcceptAll(MessageHandler messageHandler)
         {
             _globalSinks.version++;
@@ -303,6 +360,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterUntargetedInterceptor<T>(
             UntargetedInterceptor<T> interceptor,
             int priority = 0
@@ -436,6 +494,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedInterceptor<T>(
             TargetedInterceptor<T> interceptor,
             int priority = 0
@@ -569,6 +628,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterBroadcastInterceptor<T>(
             BroadcastInterceptor<T> interceptor,
             int priority = 0
@@ -702,6 +762,7 @@ namespace DxMessaging.Core.MessageBus
             };
         }
 
+        /// <inheritdoc />
         public Action RegisterUntargetedPostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -716,6 +777,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedPostProcessor<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -732,6 +794,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterTargetedWithoutTargetingPostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -746,6 +809,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterBroadcastPostProcessor<T>(
             InstanceId source,
             MessageHandler messageHandler,
@@ -762,6 +826,7 @@ namespace DxMessaging.Core.MessageBus
             );
         }
 
+        /// <inheritdoc />
         public Action RegisterBroadcastWithoutSourcePostProcessor<T>(
             MessageHandler messageHandler,
             int priority = 0
@@ -778,6 +843,7 @@ namespace DxMessaging.Core.MessageBus
 
         // Legacy RegisterInterceptor removed in favor of split implementations above
 
+        /// <inheritdoc />
         public void UntypedUntargetedBroadcast(IUntargetedMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -807,6 +873,7 @@ namespace DxMessaging.Core.MessageBus
             broadcast.Invoke(typedMessage);
         }
 
+        /// <inheritdoc />
         public void UntargetedBroadcast<TMessage>(ref TMessage typedMessage)
             where TMessage : IUntargetedMessage
         {
@@ -1010,6 +1077,7 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
+        /// <inheritdoc />
         public void UntypedTargetedBroadcast(InstanceId target, ITargetedMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -1039,6 +1107,7 @@ namespace DxMessaging.Core.MessageBus
             broadcast.Invoke(target, typedMessage);
         }
 
+        /// <inheritdoc />
         public void TargetedBroadcast<TMessage>(ref InstanceId target, ref TMessage typedMessage)
             where TMessage : ITargetedMessage
         {
@@ -2047,6 +2116,7 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
+        /// <inheritdoc />
         public void UntypedSourcedBroadcast(InstanceId source, IBroadcastMessage typedMessage)
         {
             Type messageType = typedMessage.MessageType;
@@ -2079,6 +2149,7 @@ namespace DxMessaging.Core.MessageBus
             broadcast.Invoke(source, typedMessage);
         }
 
+        /// <inheritdoc />
         public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
             where TMessage : IBroadcastMessage
         {

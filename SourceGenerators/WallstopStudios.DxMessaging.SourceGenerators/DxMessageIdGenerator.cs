@@ -70,6 +70,10 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             bool HasConflictingMessageAttributes
         );
 
+        /// <summary>
+        /// Configures the incremental generator pipeline that assigns deterministic message identifiers.
+        /// </summary>
+        /// <param name="context">Initialization context provided by Roslyn.</param>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
             // Find all class/struct/record declarations with attributes

@@ -33,6 +33,10 @@ namespace DxMessaging.Core.Helper
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            /// <summary>
+            /// Advances the enumerator to the next cached value.
+            /// </summary>
+            /// <returns><c>true</c> if another non-null value exists; otherwise <c>false</c>.</returns>
             public bool MoveNext()
             {
                 List<TValue> values = _cache._values;
@@ -55,12 +59,18 @@ namespace DxMessaging.Core.Helper
             object IEnumerator.Current => Current;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            /// <summary>
+            /// Resets the enumerator to the position before the first element.
+            /// </summary>
             public void Reset()
             {
                 _index = -1;
                 _current = default;
             }
 
+            /// <summary>
+            /// Releases resources held by the enumerator.
+            /// </summary>
             public void Dispose() { }
         }
 
@@ -177,6 +187,12 @@ namespace DxMessaging.Core.Helper
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Clear()
+        {
+            _values.Clear();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

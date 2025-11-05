@@ -39,7 +39,7 @@ namespace DxMessaging.Core
     /// }
     /// </code>
     /// </example>
-    public sealed class MessageRegistrationToken
+    public sealed class MessageRegistrationToken : IDisposable
     {
         /// <summary>
         /// Whether the token is currently enabled (registrations are active).
@@ -71,7 +71,7 @@ namespace DxMessaging.Core
 
         private IMessageBus _messageBus;
         private bool _enabled;
-        private bool _diagnosticMode = IMessageBus.GlobalDiagnosticsMode;
+        private bool _diagnosticMode = IMessageBus.ShouldEnableDiagnostics();
 
         private MessageRegistrationToken(MessageHandler messageHandler, IMessageBus messageBus)
         {
@@ -1995,6 +1995,11 @@ namespace DxMessaging.Core
             private readonly MessageRegistrationHandle _handle;
             private bool _valid;
 
+            /// <summary>
+            /// Creates a disposable wrapper that removes a registration when disposed.
+            /// </summary>
+            /// <param name="token">Token that owns the registration.</param>
+            /// <param name="handle">Handle to remove when disposed.</param>
             public RegistrationDisposable(
                 MessageRegistrationToken token,
                 MessageRegistrationHandle handle
@@ -2005,6 +2010,9 @@ namespace DxMessaging.Core
                 _valid = true;
             }
 
+            /// <summary>
+            /// Removes the wrapped registration the first time it is invoked.
+            /// </summary>
             public void Dispose()
             {
                 // Best-effort idempotence; AsDisposable instances are short-lived and immutable
@@ -2034,6 +2042,14 @@ namespace DxMessaging.Core
             }
 
             return new MessageRegistrationToken(messageHandler, messageBus);
+        }
+
+        /// <summary>
+        /// Removes all staged registrations and releases references to the handler.
+        /// </summary>
+        public void Dispose()
+        {
+            UnregisterAll();
         }
     }
 }

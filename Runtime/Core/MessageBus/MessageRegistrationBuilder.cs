@@ -99,6 +99,13 @@ namespace DxMessaging.Core.MessageBus
     /// </remarks>
     public readonly struct MessageRegistrationLifecycle
     {
+        /// <summary>
+        /// Creates a lifecycle definition with the supplied callbacks.
+        /// </summary>
+        /// <param name="onBuild">Invoked immediately after the lease is constructed.</param>
+        /// <param name="onActivate">Invoked when the lease becomes active.</param>
+        /// <param name="onDeactivate">Invoked when the lease transitions from active to inactive.</param>
+        /// <param name="onDispose">Invoked during lease disposal.</param>
         public MessageRegistrationLifecycle(
             Action<MessageRegistrationToken> onBuild,
             Action<MessageRegistrationToken> onActivate,
@@ -201,6 +208,9 @@ namespace DxMessaging.Core.MessageBus
             _isActive = true;
         }
 
+        /// <summary>
+        /// Deactivates the lease, unregistering staged handlers and invoking lifecycle hooks.
+        /// </summary>
         public void Deactivate()
         {
             if (_disposed || !_isActive)
@@ -218,6 +228,9 @@ namespace DxMessaging.Core.MessageBus
             _isActive = false;
         }
 
+        /// <summary>
+        /// Disposes the lease, unregistering handlers and executing lifecycle callbacks once.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -259,11 +272,33 @@ namespace DxMessaging.Core.MessageBus
         private readonly IMessageBusProvider _messageBusProvider;
         private static int _syntheticOwnerCounter;
 
+        internal static int GetSyntheticOwnerCounter()
+        {
+            return Volatile.Read(ref _syntheticOwnerCounter);
+        }
+
+        internal static void SetSyntheticOwnerCounter(int value)
+        {
+            _ = Interlocked.Exchange(ref _syntheticOwnerCounter, value);
+        }
+
+        internal static void ResetSyntheticOwnerCounter()
+        {
+            SetSyntheticOwnerCounter(0);
+        }
+
+        /// <summary>
+        /// Initializes a builder that resolves buses from global state.
+        /// </summary>
         public MessageRegistrationBuilder()
         {
             _messageBusProvider = null;
         }
 
+        /// <summary>
+        /// Initializes a builder that uses a custom bus provider.
+        /// </summary>
+        /// <param name="messageBusProvider">Provider used to resolve message buses for new leases.</param>
         public MessageRegistrationBuilder(IMessageBusProvider messageBusProvider)
         {
             _messageBusProvider = messageBusProvider;
@@ -370,11 +405,20 @@ namespace DxMessaging.Core.MessageBus
     {
         private readonly IMessageBus _messageBus;
 
+        /// <summary>
+        /// Creates a provider that always returns the supplied bus instance.
+        /// </summary>
+        /// <param name="messageBus">Bus instance to return when <see cref="Resolve"/> is invoked.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="messageBus"/> is null.</exception>
         public FixedMessageBusProvider(IMessageBus messageBus)
         {
             _messageBus = messageBus ?? throw new ArgumentNullException(nameof(messageBus));
         }
 
+        /// <summary>
+        /// Resolves the configured message bus.
+        /// </summary>
+        /// <returns>The bus supplied during construction.</returns>
         public IMessageBus Resolve()
         {
             return _messageBus;

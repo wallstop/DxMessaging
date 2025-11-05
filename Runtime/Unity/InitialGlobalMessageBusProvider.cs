@@ -31,6 +31,10 @@ namespace DxMessaging.Unity
     )]
     public sealed class InitialGlobalMessageBusProvider : ScriptableMessageBusProvider
     {
+        /// <summary>
+        /// Resolves the message bus captured during static initialization before any runtime overrides occur.
+        /// </summary>
+        /// <returns>The initial global <see cref="IMessageBus"/> instance.</returns>
         public override IMessageBus Resolve()
         {
             return MessageHandler.InitialGlobalMessageBus;

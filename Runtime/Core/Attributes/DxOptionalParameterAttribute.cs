@@ -31,30 +31,82 @@ namespace DxMessaging.Core.Attributes
         /// Optional default value overloads. Values must be compile-time constants and
         /// will be validated by the source generator against the field type.
         /// </summary>
+        /// <summary>
+        /// Initializes the attribute with the specified default boolean value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(bool value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default character value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(char value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default string value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(string value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default byte value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(byte value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default signed byte value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(sbyte value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default short value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(short value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default unsigned short value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(ushort value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default integer value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(int value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default unsigned integer value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(uint value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default long value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(long value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default unsigned long value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(ulong value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default single-precision floating point value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(float value) { }
 
+        /// <summary>
+        /// Initializes the attribute with the specified default double-precision floating point value.
+        /// </summary>
+        /// <param name="value">Default value used when the constructor parameter is omitted.</param>
         public DxOptionalParameterAttribute(double value) { }
 
         /// <summary>

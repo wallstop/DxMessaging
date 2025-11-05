@@ -16,6 +16,9 @@ namespace DxMessaging.Unity.Integrations.Zenject
             InstallBindings();
         }
 
+        /// <summary>
+        /// Registers the DxMessaging builder within the Zenject container.
+        /// </summary>
         public override void InstallBindings()
         {
             Container.Bind<IMessageRegistrationBuilder>().FromMethod(CreateBuilder).AsTransient();
@@ -40,12 +43,21 @@ namespace DxMessaging.Unity.Integrations.Zenject
             private readonly DiContainer _container;
             private readonly IMessageBus _cachedBus;
 
+            /// <summary>
+            /// Creates a provider that uses the container-supplied bus, falling back to resolving on demand.
+            /// </summary>
+            /// <param name="container">Zenject container used to resolve services.</param>
+            /// <param name="cachedBus">Cached bus instance to return if available.</param>
             public ContainerMessageBusProvider(DiContainer container, IMessageBus cachedBus)
             {
                 _container = container;
                 _cachedBus = cachedBus;
             }
 
+            /// <summary>
+            /// Resolves the message bus for the current scope.
+            /// </summary>
+            /// <returns>Cached bus if provided; otherwise resolves from the container.</returns>
             public IMessageBus Resolve()
             {
                 return _cachedBus ?? _container.Resolve<IMessageBus>();

@@ -345,12 +345,14 @@ namespace DxMessaging.Core
         )
             where TMessage : IMessage;
 
+        private static readonly object GlobalResetLock = new object();
+
         /// <summary>
         /// Global message bus used when no explicit bus is provided.
         /// </summary>
         private static IMessageBus _globalMessageBus;
 
-        private static readonly MessageBus.MessageBus _defaultGlobalMessageBus = new();
+        private static MessageBus.MessageBus _defaultGlobalMessageBus = new MessageBus.MessageBus();
 
         /// <summary>
         /// Gets the process-wide <see cref="IMessageBus"/> used when no explicit bus is supplied.
@@ -363,16 +365,17 @@ namespace DxMessaging.Core
         public static IMessageBus MessageBus => _globalMessageBus;
 
         /// <summary>
-        /// Gets the original global <see cref="IMessageBus"/> instance created during static initialisation.
+        /// Gets the baseline global <see cref="IMessageBus"/> instance used when no custom bus is configured.
         /// </summary>
         /// <remarks>
-        /// This reference never changes even when <see cref="SetGlobalMessageBus(IMessageBus)"/> is invoked.
+        /// The instance is recreated when <see cref="DxMessagingStaticState.Reset"/> runs so that domain-reload-disabled
+        /// environments can obtain a clean slate.
         /// </remarks>
         public static IMessageBus InitialGlobalMessageBus => _defaultGlobalMessageBus;
 
         static MessageHandler()
         {
-            _globalMessageBus = _defaultGlobalMessageBus;
+            ResetStatics();
         }
 
         /// <summary>
@@ -417,11 +420,14 @@ namespace DxMessaging.Core
         /// Restores the global <see cref="MessageBus.MessageBus"/> to the built-in default instance.
         /// </summary>
         /// <remarks>
-        /// The default instance is created during static initialisation and reused across resets to minimise allocations.
+        /// The default instance is recreated by <see cref="ResetStatics"/> when the static state reset utility runs.
         /// </remarks>
         public static void ResetGlobalMessageBus()
         {
-            _globalMessageBus = _defaultGlobalMessageBus;
+            lock (GlobalResetLock)
+            {
+                _globalMessageBus = _defaultGlobalMessageBus;
+            }
         }
 
         /// <summary>
@@ -432,6 +438,21 @@ namespace DxMessaging.Core
         public static GlobalMessageBusScope OverrideGlobalMessageBus(IMessageBus messageBus)
         {
             return new GlobalMessageBusScope(messageBus);
+        }
+
+        /// <summary>
+        /// Recreates the built-in global <see cref="MessageBus.MessageBus"/> and assigns it as the active global bus.
+        /// </summary>
+        /// <remarks>
+        /// Invoked by <see cref="DxMessagingStaticState.Reset"/> to provide a clean slate when domain reloads are disabled.
+        /// </remarks>
+        internal static void ResetStatics()
+        {
+            lock (GlobalResetLock)
+            {
+                _defaultGlobalMessageBus.ResetState();
+                _globalMessageBus = _defaultGlobalMessageBus;
+            }
         }
 
         /// <summary>
@@ -462,6 +483,9 @@ namespace DxMessaging.Core
                 }
             }
 
+            /// <summary>
+            /// Restores the previously active global message bus when the scope ends.
+            /// </summary>
             public void Dispose()
             {
                 if (_disposed)
@@ -514,6 +538,14 @@ namespace DxMessaging.Core
         /// </remarks>
         public IMessageBus DefaultMessageBus => _defaultMessageBus ?? MessageBus;
 
+        /// <summary>
+        /// Initializes a message handler bound to the specified owner and optional default bus.
+        /// </summary>
+        /// <param name="owner">Identity of the object that owns this handler.</param>
+        /// <param name="defaultMessageBus">
+        /// Preferred bus to use when registrations do not specify one. Falls back to
+        /// <see cref="MessageBus"/> if omitted.
+        /// </param>
         public MessageHandler(InstanceId owner, IMessageBus defaultMessageBus = null)
         {
             this.owner = owner;
@@ -1832,11 +1864,21 @@ namespace DxMessaging.Core
             return messageBus.RegisterTargetedInterceptor(interceptor, priority);
         }
 
+        /// <summary>
+        /// Checks equality against another object.
+        /// </summary>
+        /// <param name="obj">Object to compare.</param>
+        /// <returns><c>true</c> when <paramref name="obj"/> is a <see cref="MessageHandler"/> with the same owner.</returns>
         public override bool Equals(object obj)
         {
             return Equals(obj as MessageHandler);
         }
 
+        /// <summary>
+        /// Checks equality against another handler instance.
+        /// </summary>
+        /// <param name="other">Handler to compare.</param>
+        /// <returns><c>true</c> when both handlers share the same <see cref="owner"/>.</returns>
         public bool Equals(MessageHandler other)
         {
             if (other == null)
@@ -1852,11 +1894,20 @@ namespace DxMessaging.Core
             return owner.Equals(other.owner);
         }
 
+        /// <summary>
+        /// Produces a hash code based on the owning instance.
+        /// </summary>
+        /// <returns>Hash code derived from <see cref="owner"/>.</returns>
         public override int GetHashCode()
         {
             return owner.GetHashCode();
         }
 
+        /// <summary>
+        /// Compares this handler with another handler for ordering.
+        /// </summary>
+        /// <param name="other">Handler to compare.</param>
+        /// <returns>Relative ordering based on <see cref="owner"/>.</returns>
         public int CompareTo(MessageHandler other)
         {
             if (other == null)
@@ -1867,11 +1918,22 @@ namespace DxMessaging.Core
             return owner.CompareTo(other.owner);
         }
 
+        /// <summary>
+        /// Compares this handler with an arbitrary object.
+        /// </summary>
+        /// <param name="obj">Object to compare.</param>
+        /// <returns>
+        /// Relative ordering when <paramref name="obj"/> is a <see cref="MessageHandler"/>; otherwise <c>-1</c>.
+        /// </returns>
         public int CompareTo(object obj)
         {
             return CompareTo(obj as MessageHandler);
         }
 
+        /// <summary>
+        /// Returns a human-readable representation containing the owner identifier.
+        /// </summary>
+        /// <returns>String describing the handler.</returns>
         public override string ToString()
         {
             return new { OwnerId = owner }.ToString();
@@ -1965,6 +2027,11 @@ namespace DxMessaging.Core
         {
             internal readonly struct Entry
             {
+                /// <summary>
+                /// Initializes an entry used to track handler invocation counts.
+                /// </summary>
+                /// <param name="handler">Handler delegate being tracked.</param>
+                /// <param name="count">Number of times the handler has been cached.</param>
                 public Entry(T handler, int count)
                 {
                     this.handler = handler;
@@ -2345,6 +2412,12 @@ namespace DxMessaging.Core
                 }
             }
 
+            /// <summary>
+            /// Runs untargeted post-processing handlers for the supplied message.
+            /// </summary>
+            /// <param name="message">Message being processed.</param>
+            /// <param name="priority">Priority bucket currently executing.</param>
+            /// <param name="emissionId">Emission identifier used to cache handler stacks.</param>
             public void HandleUntargetedPostProcessing(ref T message, int priority, long emissionId)
             {
                 RunFastHandlers(
@@ -2356,6 +2429,13 @@ namespace DxMessaging.Core
                 RunHandlers(_untargetedPostProcessingHandlers, ref message, priority, emissionId);
             }
 
+            /// <summary>
+            /// Runs targeted post-processing handlers for the supplied message and recipient.
+            /// </summary>
+            /// <param name="target">Recipient of the message.</param>
+            /// <param name="message">Message being processed.</param>
+            /// <param name="priority">Priority bucket currently executing.</param>
+            /// <param name="emissionId">Emission identifier used to cache handler stacks.</param>
             public void HandleTargetedPostProcessing(
                 ref InstanceId target,
                 ref T message,
@@ -2379,6 +2459,13 @@ namespace DxMessaging.Core
                 );
             }
 
+            /// <summary>
+            /// Runs targeted post-processing handlers that do not require a <see cref="InstanceId"/> target binding.
+            /// </summary>
+            /// <param name="target">Recipient of the message.</param>
+            /// <param name="message">Message being processed.</param>
+            /// <param name="priority">Priority bucket currently executing.</param>
+            /// <param name="emissionId">Emission identifier used to cache handler stacks.</param>
             public void HandleTargetedWithoutTargetingPostProcessing(
                 ref InstanceId target,
                 ref T message,
@@ -2402,6 +2489,13 @@ namespace DxMessaging.Core
                 );
             }
 
+            /// <summary>
+            /// Runs broadcast post-processing handlers that expect a concrete source identifier.
+            /// </summary>
+            /// <param name="source">Origin of the message.</param>
+            /// <param name="message">Message being processed.</param>
+            /// <param name="priority">Priority bucket currently executing.</param>
+            /// <param name="emissionId">Emission identifier used to cache handler stacks.</param>
             public void HandleSourcedBroadcastPostProcessing(
                 ref InstanceId source,
                 ref T message,
@@ -2425,6 +2519,13 @@ namespace DxMessaging.Core
                 );
             }
 
+            /// <summary>
+            /// Runs broadcast post-processing handlers that do not rely on a specific source identifier.
+            /// </summary>
+            /// <param name="source">Origin of the message.</param>
+            /// <param name="message">Message being processed.</param>
+            /// <param name="priority">Priority bucket currently executing.</param>
+            /// <param name="emissionId">Emission identifier used to cache handler stacks.</param>
             public void HandleBroadcastWithoutSourcePostProcessing(
                 ref InstanceId source,
                 ref T message,

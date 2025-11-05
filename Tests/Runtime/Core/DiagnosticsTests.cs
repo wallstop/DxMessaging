@@ -51,11 +51,11 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator MessageBusDiagnosticsRespectBufferSize()
         {
-            bool originalDiagnostics = IMessageBus.GlobalDiagnosticsMode;
+            DiagnosticsTarget originalDiagnostics = IMessageBus.GlobalDiagnosticsTargets;
             int originalBufferSize = IMessageBus.GlobalMessageBufferSize;
             try
             {
-                IMessageBus.GlobalDiagnosticsMode = true;
+                IMessageBus.GlobalDiagnosticsTargets = DiagnosticsTarget.All;
                 IMessageBus.GlobalMessageBufferSize = 2;
 
                 GameObject host = new(nameof(MessageBusDiagnosticsRespectBufferSize));
@@ -90,7 +90,7 @@ namespace DxMessaging.Tests.Runtime.Core
             }
             finally
             {
-                IMessageBus.GlobalDiagnosticsMode = originalDiagnostics;
+                IMessageBus.GlobalDiagnosticsTargets = originalDiagnostics;
                 IMessageBus.GlobalMessageBufferSize = originalBufferSize;
             }
 

@@ -11,6 +11,10 @@ namespace DxMessaging.Unity.Integrations.Reflex
     /// </summary>
     public sealed class DxMessagingRegistrationInstaller : IInstaller
     {
+        /// <summary>
+        /// Registers the DxMessaging builder services within the Reflex container.
+        /// </summary>
+        /// <param name="containerBuilder">Container builder receiving the registrations.</param>
         public void InstallBindings(ContainerBuilder containerBuilder)
         {
             containerBuilder.AddSingleton(
@@ -25,6 +29,11 @@ namespace DxMessaging.Unity.Integrations.Reflex
             [Inject]
             private Container _container;
 
+            /// <summary>
+            /// Builds a leasing wrapper using the container-aware provider resolution logic.
+            /// </summary>
+            /// <param name="options">Build options provided by the caller.</param>
+            /// <returns>Lease produced by the underlying <see cref="MessageRegistrationBuilder"/>.</returns>
             public MessageRegistrationLease Build(MessageRegistrationBuildOptions options)
             {
                 MessageRegistrationBuilder innerBuilder = ResolveInnerBuilder();
@@ -59,11 +68,19 @@ namespace DxMessaging.Unity.Integrations.Reflex
         {
             private readonly Container _container;
 
+            /// <summary>
+            /// Wraps a Reflex container as an <see cref="IMessageBusProvider"/>.
+            /// </summary>
+            /// <param name="container">Container used to resolve <see cref="IMessageBus"/> instances.</param>
             public ContainerMessageBusProvider(Container container)
             {
                 _container = container;
             }
 
+            /// <summary>
+            /// Resolves an <see cref="IMessageBus"/> from the underlying container.
+            /// </summary>
+            /// <returns>Message bus resolved from Reflex.</returns>
             public IMessageBus Resolve()
             {
                 return _container.Resolve<IMessageBus>();

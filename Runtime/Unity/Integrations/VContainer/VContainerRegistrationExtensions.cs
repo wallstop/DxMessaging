@@ -32,11 +32,19 @@ namespace DxMessaging.Unity.Integrations.VContainer
         {
             private readonly IObjectResolver _resolver;
 
+            /// <summary>
+            /// Wraps a VContainer resolver as an <see cref="IMessageBusProvider"/>.
+            /// </summary>
+            /// <param name="resolver">Resolver used to obtain <see cref="IMessageBus"/> instances.</param>
             public ResolverMessageBusProvider(IObjectResolver resolver)
             {
                 _resolver = resolver;
             }
 
+            /// <summary>
+            /// Resolves an <see cref="IMessageBus"/> from the current VContainer scope.
+            /// </summary>
+            /// <returns>Scoped message bus.</returns>
             public IMessageBus Resolve()
             {
                 return _resolver.Resolve<IMessageBus>();
