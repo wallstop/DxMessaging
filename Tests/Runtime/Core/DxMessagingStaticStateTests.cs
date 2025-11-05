@@ -58,7 +58,7 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(0, MessageHelperIndexer.TotalMessages);
             Assert.AreEqual(-1, MessageHelperIndexer<DummyUntargetedMessage>.SequentialId);
             Assert.AreSame(MessageHandler.InitialGlobalMessageBus, MessageHandler.MessageBus);
-            Assert.AreNotSame(baselineBus, MessageHandler.MessageBus);
+            Assert.AreSame(baselineBus, MessageHandler.MessageBus);
 
             DxMessagingStaticState.Reset();
         }

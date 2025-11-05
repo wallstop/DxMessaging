@@ -450,7 +450,7 @@ namespace DxMessaging.Core
         {
             lock (GlobalResetLock)
             {
-                _defaultGlobalMessageBus = new MessageBus.MessageBus();
+                _defaultGlobalMessageBus.ResetState();
                 _globalMessageBus = _defaultGlobalMessageBus;
             }
         }

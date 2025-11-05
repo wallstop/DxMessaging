@@ -218,8 +218,9 @@ namespace DxMessaging.Core.MessageBus
             _componentCache.Clear();
 #endif
 
+            bool enabled = _log.Enabled;
             _log.Clear();
-            _log.Enabled = false;
+            _log.Enabled = enabled;
             _emissionBuffer.Resize(GlobalMessageBufferSize);
             _emissionBuffer.Clear();
         }
