@@ -1,6 +1,7 @@
 namespace DxMessaging.Core.MessageBus
 {
     using System;
+    using System.Buffers;
     using System.Collections.Generic;
     using System.Linq.Expressions;
     using System.Reflection;
@@ -56,6 +57,11 @@ namespace DxMessaging.Core.MessageBus
         private const byte PrefreezeKindTargetedWithoutTargetingHandlers = 1;
         private const byte PrefreezeKindBroadcastWithoutSourceHandlers = 2;
 
+        private static readonly ArrayPool<DispatchBucket> DispatchBucketPool =
+            ArrayPool<DispatchBucket>.Shared;
+        private static readonly ArrayPool<DispatchEntry> DispatchEntryPool =
+            ArrayPool<DispatchEntry>.Shared;
+
         private readonly struct DispatchEntry
         {
             public DispatchEntry(
@@ -74,30 +80,87 @@ namespace DxMessaging.Core.MessageBus
             public readonly PrefreezeDescriptor prefreeze;
         }
 
-        private readonly struct DispatchBucket
+        private struct DispatchBucket
         {
-            public DispatchBucket(int priority, DispatchEntry[] entries)
+            public DispatchBucket(
+                int priority,
+                DispatchEntry[] entries,
+                int entryCount,
+                bool pooledEntries
+            )
             {
                 this.priority = priority;
                 this.entries = entries;
+                this.entryCount = entryCount;
+                this.pooledEntries = pooledEntries;
             }
 
-            public readonly int priority;
-            public readonly DispatchEntry[] entries;
+            public int priority;
+            public DispatchEntry[] entries;
+            public int entryCount;
+            public bool pooledEntries;
+
+            public static DispatchBucket CreateEmpty(int priority)
+            {
+                return new DispatchBucket(priority, Array.Empty<DispatchEntry>(), 0, false);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void ReleaseEntries()
+            {
+                if (!pooledEntries || entries == null)
+                {
+                    return;
+                }
+
+                Array.Clear(entries, 0, entryCount);
+                DispatchEntryPool.Return(entries);
+                entries = Array.Empty<DispatchEntry>();
+                entryCount = 0;
+                pooledEntries = false;
+            }
         }
 
         private sealed class DispatchSnapshot
         {
             public static readonly DispatchSnapshot Empty = new DispatchSnapshot(
-                Array.Empty<DispatchBucket>()
+                Array.Empty<DispatchBucket>(),
+                0,
+                false
             );
 
-            public DispatchSnapshot(DispatchBucket[] buckets)
+            public DispatchSnapshot(DispatchBucket[] buckets, int count, bool pooled)
             {
                 this.buckets = buckets;
+                bucketCount = count;
+                this.pooled = pooled;
             }
 
-            public readonly DispatchBucket[] buckets;
+            public DispatchBucket[] buckets;
+            public int bucketCount;
+            private bool pooled;
+
+            public bool IsEmpty => bucketCount == 0;
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Release()
+            {
+                if (!pooled || buckets == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < bucketCount; ++i)
+                {
+                    buckets[i].ReleaseEntries();
+                }
+
+                Array.Clear(buckets, 0, bucketCount);
+                DispatchBucketPool.Return(buckets);
+                buckets = Array.Empty<DispatchBucket>();
+                bucketCount = 0;
+                pooled = false;
+            }
         }
 
         private sealed class HandlerCache<TKey, TValue>
@@ -105,9 +168,18 @@ namespace DxMessaging.Core.MessageBus
             internal sealed class DispatchState
             {
                 public DispatchSnapshot active = DispatchSnapshot.Empty;
-                public DispatchSnapshot pending;
+                public DispatchSnapshot pending = DispatchSnapshot.Empty;
                 public bool hasPending;
                 public long snapshotEmissionId = -1;
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public void Reset()
+                {
+                    ReleaseSnapshot(ref active);
+                    ReleaseSnapshot(ref pending);
+                    hasPending = false;
+                    snapshotEmissionId = -1;
+                }
             }
 
             public readonly Dictionary<TKey, TValue> handlers = new();
@@ -129,7 +201,14 @@ namespace DxMessaging.Core.MessageBus
                 version = 0;
                 lastSeenVersion = -1;
                 lastSeenEmissionId = 0;
-                dispatchStates.Clear();
+                if (dispatchStates.Count > 0)
+                {
+                    foreach (DispatchState state in dispatchStates.Values)
+                    {
+                        state.Reset();
+                    }
+                    dispatchStates.Clear();
+                }
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1485,11 +1564,12 @@ namespace DxMessaging.Core.MessageBus
                     _emissionId
                 );
                 DispatchBucket[] buckets = snapshot.buckets;
-                for (int bucketIndex = 0; bucketIndex < buckets.Length; ++bucketIndex)
+                int bucketCount = snapshot.bucketCount;
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
                 {
                     DispatchBucket bucket = buckets[bucketIndex];
                     DispatchEntry[] entries = bucket.entries;
-                    int entryCount = entries.Length;
+                    int entryCount = bucket.entryCount;
                     if (entryCount == 0)
                     {
                         continue;
@@ -1566,11 +1646,12 @@ namespace DxMessaging.Core.MessageBus
                     _emissionId
                 );
                 DispatchBucket[] buckets = snapshot.buckets;
-                for (int bucketIndex = 0; bucketIndex < buckets.Length; ++bucketIndex)
+                int bucketCount = snapshot.bucketCount;
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
                 {
                     DispatchBucket bucket = buckets[bucketIndex];
                     DispatchEntry[] entries = bucket.entries;
-                    int entryCount = entries.Length;
+                    int entryCount = bucket.entryCount;
                     if (entryCount == 0)
                     {
                         continue;
@@ -1718,11 +1799,12 @@ namespace DxMessaging.Core.MessageBus
                     _emissionId
                 );
                 DispatchBucket[] buckets = snapshot.buckets;
-                for (int bucketIndex = 0; bucketIndex < buckets.Length; ++bucketIndex)
+                int bucketCount = snapshot.bucketCount;
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
                 {
                     DispatchBucket bucket = buckets[bucketIndex];
                     DispatchEntry[] entries = bucket.entries;
-                    int entryCount = entries.Length;
+                    int entryCount = bucket.entryCount;
                     if (entryCount == 0)
                     {
                         continue;
@@ -3281,7 +3363,7 @@ namespace DxMessaging.Core.MessageBus
                 _emissionId
             );
             DispatchBucket[] buckets = snapshot.buckets;
-            int bucketCount = buckets.Length;
+            int bucketCount = snapshot.bucketCount;
 
             if (bucketCount == 0)
             {
@@ -3294,7 +3376,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 DispatchBucket bucket = buckets[i];
                 DispatchEntry[] entries = bucket.entries;
-                int entryCount = entries.Length;
+                int entryCount = bucket.entryCount;
                 if (entryCount == 0)
                 {
                     continue;
@@ -3390,13 +3472,14 @@ namespace DxMessaging.Core.MessageBus
                 _emissionId
             );
             DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
             bool invoked = false;
 
-            for (int bucketIndex = 0; bucketIndex < buckets.Length; ++bucketIndex)
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
             {
                 DispatchBucket bucket = buckets[bucketIndex];
                 DispatchEntry[] entries = bucket.entries;
-                int entryCount = entries.Length;
+                int entryCount = bucket.entryCount;
                 if (entryCount == 0)
                 {
                     continue;
@@ -3406,7 +3489,11 @@ namespace DxMessaging.Core.MessageBus
                 int priority = bucket.priority;
                 if (entries[0].prefreeze.kind == PrefreezeKindTargetedWithoutTargetingHandlers)
                 {
-                    PrefreezeTargetedWithoutTargetingEntries<TMessage>(entries, priority);
+                    PrefreezeTargetedWithoutTargetingEntries<TMessage>(
+                        entries,
+                        entryCount,
+                        priority
+                    );
                 }
                 switch (entryCount)
                 {
@@ -4147,8 +4234,21 @@ namespace DxMessaging.Core.MessageBus
             HandlerCache<int, HandlerCache>.DispatchState state = handlers.GetOrCreateDispatchState(
                 category
             );
+            ReleaseSnapshot(ref state.pending);
             state.pending = BuildDispatchSnapshot<TMessage>(messageBus, handlers, category);
             state.hasPending = true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void ReleaseSnapshot(ref DispatchSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            snapshot.Release();
+            snapshot = DispatchSnapshot.Empty;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -4174,12 +4274,9 @@ namespace DxMessaging.Core.MessageBus
                 category
             );
 
-            if (
-                !state.hasPending
-                && state.active.buckets.Length == 0
-                && handlers.handlers.Count > 0
-            )
+            if (!state.hasPending && state.active.IsEmpty && handlers.handlers.Count > 0)
             {
+                ReleaseSnapshot(ref state.pending);
                 state.pending = BuildDispatchSnapshot<TMessage>(messageBus, handlers, category);
                 state.hasPending = true;
             }
@@ -4188,9 +4285,15 @@ namespace DxMessaging.Core.MessageBus
             {
                 if (state.hasPending)
                 {
+                    ReleaseSnapshot(ref state.active);
                     state.active = state.pending ?? DispatchSnapshot.Empty;
-                    state.pending = null;
+                    state.pending = DispatchSnapshot.Empty;
                     state.hasPending = false;
+                }
+                else if (handlers.handlers.Count == 0 && !state.active.IsEmpty)
+                {
+                    ReleaseSnapshot(ref state.active);
+                    state.active = DispatchSnapshot.Empty;
                 }
 
                 state.snapshotEmissionId = emissionId;
@@ -4213,7 +4316,7 @@ namespace DxMessaging.Core.MessageBus
 
             List<int> orderedPriorities = handlers.order;
             int priorityCount = orderedPriorities.Count;
-            DispatchBucket[] buckets = new DispatchBucket[priorityCount];
+            DispatchBucket[] buckets = DispatchBucketPool.Rent(priorityCount);
 
             for (int i = 0; i < priorityCount; ++i)
             {
@@ -4223,35 +4326,46 @@ namespace DxMessaging.Core.MessageBus
                     || cache == null
                 )
                 {
-                    buckets[i] = new DispatchBucket(priority, Array.Empty<DispatchEntry>());
+                    buckets[i] = DispatchBucket.CreateEmpty(priority);
                     continue;
                 }
 
-                buckets[i] = new DispatchBucket(
+                Dictionary<MessageHandler, int> handlerLookup = cache.handlers;
+                if (handlerLookup == null || handlerLookup.Count == 0)
+                {
+                    buckets[i] = DispatchBucket.CreateEmpty(priority);
+                    continue;
+                }
+
+                int entryCount = handlerLookup.Count;
+                DispatchEntry[] entries = DispatchEntryPool.Rent(entryCount);
+                FillDispatchEntries<TMessage>(
+                    messageBus,
+                    handlerLookup,
+                    category,
                     priority,
-                    BuildDispatchEntries<TMessage>(messageBus, cache, category, priority)
+                    entries
                 );
+                buckets[i] = new DispatchBucket(priority, entries, entryCount, pooledEntries: true);
             }
 
-            return new DispatchSnapshot(buckets);
+            return new DispatchSnapshot(buckets, priorityCount, pooled: true);
         }
 
-        private static DispatchEntry[] BuildDispatchEntries<TMessage>(
+        private static void FillDispatchEntries<TMessage>(
             MessageBus messageBus,
-            HandlerCache cache,
+            Dictionary<MessageHandler, int> handlerLookup,
             DispatchCategory category,
-            int priority
+            int priority,
+            DispatchEntry[] entries
         )
             where TMessage : IMessage
         {
-            Dictionary<MessageHandler, int> handlerLookup = cache?.handlers;
-            if (handlerLookup == null || handlerLookup.Count == 0)
+            if (handlerLookup == null)
             {
-                return Array.Empty<DispatchEntry>();
+                return;
             }
 
-            int entryCount = handlerLookup.Count;
-            DispatchEntry[] entries = new DispatchEntry[entryCount];
             PrefreezeDescriptor prefreeze = CreatePrefreezeDescriptor(category, priority);
             int index = 0;
             foreach (KeyValuePair<MessageHandler, int> kvp in handlerLookup)
@@ -4260,8 +4374,10 @@ namespace DxMessaging.Core.MessageBus
                 object dispatch = GetDispatchLink<TMessage>(messageBus, messageHandler, category);
                 entries[index++] = new DispatchEntry(messageHandler, dispatch, prefreeze);
             }
-
-            return entries;
+            if (index < entries.Length)
+            {
+                Array.Clear(entries, index, entries.Length - index);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -4398,11 +4514,12 @@ namespace DxMessaging.Core.MessageBus
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void PrefreezeTargetedWithoutTargetingEntries<TMessage>(
             DispatchEntry[] entries,
+            int entryCount,
             int priority
         )
             where TMessage : ITargetedMessage
         {
-            for (int entryIndex = 0; entryIndex < entries.Length; ++entryIndex)
+            for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
             {
                 entries[entryIndex]
                     .handler.PrefreezeTargetedWithoutTargetingHandlersForEmission<TMessage>(
