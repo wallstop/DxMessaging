@@ -2023,7 +2023,17 @@ namespace DxMessaging.Core
             return 0;
         }
 
-        private sealed class HandlerActionCache<T>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal UntargetedDispatchLink<T> GetOrCreateUntargetedDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateUntargetedLink();
+        }
+
+        internal sealed class HandlerActionCache<T>
         {
             internal readonly struct Entry
             {
@@ -2050,11 +2060,38 @@ namespace DxMessaging.Core
             internal int prefreezeInvocationCount;
         }
 
+        internal sealed class UntargetedDispatchLink<T>
+            where T : IMessage
+        {
+            private readonly TypedHandler<T> typedHandler;
+
+            internal UntargetedDispatchLink(TypedHandler<T> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref T message,
+                int priority,
+                long emissionId
+            )
+            {
+                if (!messageHandler.active)
+                {
+                    return;
+                }
+
+                typedHandler.HandleUntargeted(ref message, priority, emissionId);
+            }
+        }
+
         /// <summary>
         /// One-size-fits-all wrapper around all possible Messaging sinks for a particular MessageHandler & MessageType.
         /// </summary>
         /// <typeparam name="T">Message type that this Handler exists to serve.</typeparam>
-        private sealed class TypedHandler<T>
+        internal sealed class TypedHandler<T>
             where T : IMessage
         {
             internal Dictionary<
@@ -2153,6 +2190,20 @@ namespace DxMessaging.Core
                 int,
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourcePostProcessingHandlers;
+            private UntargetedDispatchLink<T> _untargetedLink;
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal UntargetedDispatchLink<T> GetOrCreateUntargetedLink()
+            {
+                UntargetedDispatchLink<T> link = _untargetedLink;
+                if (link == null)
+                {
+                    link = new UntargetedDispatchLink<T>(this);
+                    _untargetedLink = link;
+                }
+
+                return link;
+            }
 
             /// <summary>
             /// Emits the UntargetedMessage to all subscribed listeners.
