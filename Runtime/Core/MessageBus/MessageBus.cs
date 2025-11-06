@@ -24,6 +24,49 @@ namespace DxMessaging.Core.MessageBus
         private long _emissionId;
         public long EmissionId => _emissionId;
 
+        private readonly struct PrefreezeDescriptor
+        {
+            public static readonly PrefreezeDescriptor Empty = default;
+        }
+
+        private readonly struct DispatchEntry
+        {
+            public DispatchEntry(MessageHandler handler, PrefreezeDescriptor prefreeze)
+            {
+                Handler = handler;
+                Prefreeze = prefreeze;
+            }
+
+            public MessageHandler Handler { get; }
+            public PrefreezeDescriptor Prefreeze { get; }
+        }
+
+        private readonly struct DispatchBucket
+        {
+            public DispatchBucket(int priority, DispatchEntry[] entries)
+            {
+                Priority = priority;
+                Entries = entries;
+            }
+
+            public int Priority { get; }
+            public DispatchEntry[] Entries { get; }
+        }
+
+        private sealed class DispatchSnapshot
+        {
+            public static readonly DispatchSnapshot Empty = new DispatchSnapshot(
+                Array.Empty<DispatchBucket>()
+            );
+
+            public DispatchSnapshot(DispatchBucket[] buckets)
+            {
+                Buckets = buckets;
+            }
+
+            public DispatchBucket[] Buckets { get; }
+        }
+
         private sealed class HandlerCache<TKey, TValue>
         {
             public readonly Dictionary<TKey, TValue> handlers = new();
@@ -32,6 +75,10 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+            public DispatchSnapshot activeSnapshot = DispatchSnapshot.Empty;
+            public DispatchSnapshot pendingSnapshot;
+            public bool hasPendingSnapshot;
+            public long snapshotEmissionId = -1;
 
             /// <summary>
             /// Clears all cached handler references and resets the version tracking metadata.
@@ -44,6 +91,10 @@ namespace DxMessaging.Core.MessageBus
                 version = 0;
                 lastSeenVersion = -1;
                 lastSeenEmissionId = 0;
+                activeSnapshot = DispatchSnapshot.Empty;
+                pendingSnapshot = null;
+                hasPendingSnapshot = false;
+                snapshotEmissionId = -1;
             }
         }
 
@@ -3191,72 +3242,79 @@ namespace DxMessaging.Core.MessageBus
                 return false;
             }
 
-            List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+            DispatchSnapshot snapshot = AcquireUntargetedDispatchSnapshot(
                 sortedHandlers,
                 _emissionId
             );
+            DispatchBucket[] buckets = snapshot.Buckets;
+            int bucketCount = buckets.Length;
 
-            int handlerListCount = handlerList.Count;
-            switch (handlerListCount)
+            if (bucketCount == 0)
             {
-                case 1:
+                return false;
+            }
+
+            bool invoked = false;
+
+            for (int i = 0; i < bucketCount; ++i)
+            {
+                DispatchBucket bucket = buckets[i];
+                DispatchEntry[] entries = bucket.Entries;
+                int entryCount = entries.Length;
+                if (entryCount == 0)
                 {
-                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    return true;
+                    continue;
                 }
-                case 2:
+
+                invoked = true;
+                int priority = bucket.Priority;
+                switch (entryCount)
                 {
-                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[1];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    return true;
+                    case 1:
+                    {
+                        entries[0].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        continue;
+                    }
+                    case 2:
+                    {
+                        entries[0].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[1].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        continue;
+                    }
+                    case 3:
+                    {
+                        entries[0].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[1].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[2].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        continue;
+                    }
+                    case 4:
+                    {
+                        entries[0].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[1].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[2].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[3].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        continue;
+                    }
+                    case 5:
+                    {
+                        entries[0].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[1].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[2].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[3].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        entries[4].Handler.HandleUntargetedMessage(ref message, this, priority);
+                        continue;
+                    }
                 }
-                case 3:
+
+                for (int handlerIndex = 0; handlerIndex < entryCount; ++handlerIndex)
                 {
-                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[1];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[2];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    return true;
-                }
-                case 4:
-                {
-                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[1];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[2];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[3];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    return true;
-                }
-                case 5:
-                {
-                    KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[1];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[2];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[3];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    entry = handlerList[4];
-                    RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-                    return true;
+                    entries[handlerIndex]
+                        .Handler.HandleUntargetedMessage(ref message, this, priority);
                 }
             }
 
-            for (int i = 0; i < handlerListCount; ++i)
-            {
-                KeyValuePair<int, HandlerCache> entry = handlerList[i];
-                RunUntargetedBroadcast(ref message, entry.Key, entry.Value);
-            }
-            return true;
+            return invoked;
         }
 
         private void RunUntargetedBroadcast<TMessage>(
@@ -3754,6 +3812,7 @@ namespace DxMessaging.Core.MessageBus
 
             InstanceId handlerOwnerId = messageHandler.owner;
             HandlerCache<int, HandlerCache> handlers = sinks.GetOrAdd<T>();
+            HandlerCache<int, HandlerCache> capturedHandlers = handlers;
 
             if (!handlers.handlers.TryGetValue(priority, out HandlerCache cache))
             {
@@ -3775,6 +3834,7 @@ namespace DxMessaging.Core.MessageBus
             int count = handler.GetValueOrDefault(messageHandler, 0);
 
             handler[messageHandler] = count + 1;
+            StageUntargetedDispatchSnapshot(capturedHandlers);
             Type type = typeof(T);
             _log.Log(
                 new MessagingRegistration(
@@ -3854,6 +3914,7 @@ namespace DxMessaging.Core.MessageBus
                 {
                     handler[messageHandler] = count - 1;
                 }
+                StageUntargetedDispatchSnapshot(handlers);
             };
         }
 
@@ -3991,6 +4052,106 @@ namespace DxMessaging.Core.MessageBus
                     handler[messageHandler] = count - 1;
                 }
             };
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void StageUntargetedDispatchSnapshot(
+            HandlerCache<int, HandlerCache> handlers
+        )
+        {
+            if (handlers == null)
+            {
+                return;
+            }
+
+            handlers.pendingSnapshot = BuildUntargetedDispatchSnapshot(handlers);
+            handlers.hasPendingSnapshot = true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static DispatchSnapshot AcquireUntargetedDispatchSnapshot(
+            HandlerCache<int, HandlerCache> handlers,
+            long emissionId
+        )
+        {
+            if (handlers == null)
+            {
+                return DispatchSnapshot.Empty;
+            }
+
+            if (
+                !handlers.hasPendingSnapshot
+                && handlers.activeSnapshot.Buckets.Length == 0
+                && handlers.handlers.Count > 0
+            )
+            {
+                handlers.pendingSnapshot = BuildUntargetedDispatchSnapshot(handlers);
+                handlers.hasPendingSnapshot = true;
+            }
+
+            if (handlers.snapshotEmissionId != emissionId)
+            {
+                if (handlers.hasPendingSnapshot)
+                {
+                    handlers.activeSnapshot = handlers.pendingSnapshot ?? DispatchSnapshot.Empty;
+                    handlers.pendingSnapshot = null;
+                    handlers.hasPendingSnapshot = false;
+                }
+
+                handlers.snapshotEmissionId = emissionId;
+            }
+
+            return handlers.activeSnapshot;
+        }
+
+        private static DispatchSnapshot BuildUntargetedDispatchSnapshot(
+            HandlerCache<int, HandlerCache> handlers
+        )
+        {
+            if (handlers == null || handlers.order.Count == 0)
+            {
+                return DispatchSnapshot.Empty;
+            }
+
+            List<int> orderedPriorities = handlers.order;
+            int priorityCount = orderedPriorities.Count;
+            DispatchBucket[] buckets = new DispatchBucket[priorityCount];
+
+            for (int i = 0; i < priorityCount; ++i)
+            {
+                int priority = orderedPriorities[i];
+                if (
+                    !handlers.handlers.TryGetValue(priority, out HandlerCache cache)
+                    || cache == null
+                )
+                {
+                    buckets[i] = new DispatchBucket(priority, Array.Empty<DispatchEntry>());
+                    continue;
+                }
+
+                buckets[i] = new DispatchBucket(priority, BuildDispatchEntries(cache));
+            }
+
+            return new DispatchSnapshot(buckets);
+        }
+
+        private static DispatchEntry[] BuildDispatchEntries(HandlerCache cache)
+        {
+            Dictionary<MessageHandler, int> handlerLookup = cache?.handlers;
+            if (handlerLookup == null || handlerLookup.Count == 0)
+            {
+                return Array.Empty<DispatchEntry>();
+            }
+
+            int entryCount = handlerLookup.Count;
+            DispatchEntry[] entries = new DispatchEntry[entryCount];
+            int index = 0;
+            foreach (KeyValuePair<MessageHandler, int> kvp in handlerLookup)
+            {
+                entries[index++] = new DispatchEntry(kvp.Key, PrefreezeDescriptor.Empty);
+            }
+
+            return entries;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

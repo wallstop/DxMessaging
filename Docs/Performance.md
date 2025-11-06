@@ -14,17 +14,17 @@ See also: [Performance optimizations](./DesignAndArchitecture.md#performance-opt
 
 | Message Tech                               | Operations / Second | Allocations? |
 | ------------------------------------------ | ------------------- | ------------ |
-| Unity                                      | 2,522,000           | Yes          |
+| Unity                                      | 2,594,000           | Yes          |
 | DxMessaging (GameObject) - Normal          | 8,606,000           | No           |
-| DxMessaging (Component) - Normal           | 8,608,000           | No           |
-| DxMessaging (GameObject) - No-Copy         | 9,534,000           | No           |
-| DxMessaging (Component) - No-Copy          | 9,658,000           | No           |
-| DxMessaging (Untargeted) - No-Copy         | 15,008,000          | No           |
-| DxMessaging (Untargeted) - Interceptors    | 6,944,000           | No           |
-| DxMessaging (Untargeted) - Post-Processors | 5,146,000           | No           |
-| Reflexive (One Argument)                   | 2,822,000           | No           |
-| Reflexive (Two Arguments)                  | 2,370,000           | No           |
-| Reflexive (Three Arguments)                | 2,342,000           | No           |
+| DxMessaging (Component) - Normal           | 8,584,000           | No           |
+| DxMessaging (GameObject) - No-Copy         | 9,496,000           | No           |
+| DxMessaging (Component) - No-Copy          | 9,574,000           | No           |
+| DxMessaging (Untargeted) - No-Copy         | 15,828,000          | No           |
+| DxMessaging (Untargeted) - Interceptors    | 7,428,000           | No           |
+| DxMessaging (Untargeted) - Post-Processors | 5,400,000           | No           |
+| Reflexive (One Argument)                   | 2,848,000           | No           |
+| Reflexive (Two Arguments)                  | 2,328,000           | No           |
+| Reflexive (Three Arguments)                | 2,346,000           | No           |
 
 ## macOS
 
