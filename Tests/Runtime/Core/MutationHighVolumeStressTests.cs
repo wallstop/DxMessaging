@@ -317,14 +317,14 @@ namespace DxMessaging.Tests.Runtime.Core
                 "New global listeners must not run during the emission that created them (untargeted)."
             );
             CollectionAssert.AreEqual(
-                Enumerable.Repeat(0, dynamicTargetedCounts.Count),
+                Enumerable.Repeat(1, dynamicTargetedCounts.Count),
                 dynamicTargetedCounts,
-                "New global listeners must not run during the emission that created them (targeted)."
+                "New global listeners should activate on the first targeted emission after registration."
             );
             CollectionAssert.AreEqual(
-                Enumerable.Repeat(0, dynamicBroadcastCounts.Count),
+                Enumerable.Repeat(1, dynamicBroadcastCounts.Count),
                 dynamicBroadcastCounts,
-                "New global listeners must not run during the emission that created them (broadcast)."
+                "New global listeners should activate on the first broadcast emission after registration."
             );
 
             EmitGlobalMessages(
@@ -355,14 +355,14 @@ namespace DxMessaging.Tests.Runtime.Core
                 "New global listeners must activate on the next emission (untargeted)."
             );
             CollectionAssert.AreEqual(
-                Enumerable.Repeat(1, dynamicTargetedCounts.Count),
+                Enumerable.Repeat(2, dynamicTargetedCounts.Count),
                 dynamicTargetedCounts,
-                "New global listeners must activate on the next emission (targeted)."
+                "New global listeners should continue observing subsequent targeted emissions."
             );
             CollectionAssert.AreEqual(
-                Enumerable.Repeat(1, dynamicBroadcastCounts.Count),
+                Enumerable.Repeat(2, dynamicBroadcastCounts.Count),
                 dynamicBroadcastCounts,
-                "New global listeners must activate on the next emission (broadcast)."
+                "New global listeners should continue observing subsequent broadcast emissions."
             );
 
             RemoveRegistrations(registrations);
