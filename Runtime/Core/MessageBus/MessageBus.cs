@@ -170,6 +170,7 @@ namespace DxMessaging.Core.MessageBus
                 public DispatchSnapshot active = DispatchSnapshot.Empty;
                 public DispatchSnapshot pending = DispatchSnapshot.Empty;
                 public bool hasPending;
+                public bool pendingDirty;
                 public long snapshotEmissionId = -1;
 
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -178,6 +179,7 @@ namespace DxMessaging.Core.MessageBus
                     ReleaseSnapshot(ref active);
                     ReleaseSnapshot(ref pending);
                     hasPending = false;
+                    pendingDirty = false;
                     snapshotEmissionId = -1;
                 }
             }
@@ -4234,9 +4236,12 @@ namespace DxMessaging.Core.MessageBus
             HandlerCache<int, HandlerCache>.DispatchState state = handlers.GetOrCreateDispatchState(
                 category
             );
-            ReleaseSnapshot(ref state.pending);
-            state.pending = BuildDispatchSnapshot<TMessage>(messageBus, handlers, category);
+            if (state.hasPending)
+            {
+                ReleaseSnapshot(ref state.pending);
+            }
             state.hasPending = true;
+            state.pendingDirty = true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -4274,11 +4279,35 @@ namespace DxMessaging.Core.MessageBus
                 category
             );
 
-            if (!state.hasPending && state.active.IsEmpty && handlers.handlers.Count > 0)
+            bool hasHandlers = handlers.handlers.Count > 0;
+
+            if (state.hasPending)
+            {
+                if (state.pendingDirty || (hasHandlers && state.pending.IsEmpty))
+                {
+                    ReleaseSnapshot(ref state.pending);
+                    if (hasHandlers)
+                    {
+                        state.pending = BuildDispatchSnapshot<TMessage>(
+                            messageBus,
+                            handlers,
+                            category
+                        );
+                    }
+                    else
+                    {
+                        state.pending = DispatchSnapshot.Empty;
+                    }
+
+                    state.pendingDirty = false;
+                }
+            }
+            else if (state.active.IsEmpty && hasHandlers)
             {
                 ReleaseSnapshot(ref state.pending);
                 state.pending = BuildDispatchSnapshot<TMessage>(messageBus, handlers, category);
                 state.hasPending = true;
+                state.pendingDirty = false;
             }
 
             if (state.snapshotEmissionId != emissionId)
@@ -4286,11 +4315,31 @@ namespace DxMessaging.Core.MessageBus
                 if (state.hasPending)
                 {
                     ReleaseSnapshot(ref state.active);
+                    if (state.pendingDirty || (hasHandlers && state.pending.IsEmpty))
+                    {
+                        ReleaseSnapshot(ref state.pending);
+                        if (hasHandlers)
+                        {
+                            state.pending = BuildDispatchSnapshot<TMessage>(
+                                messageBus,
+                                handlers,
+                                category
+                            );
+                        }
+                        else
+                        {
+                            state.pending = DispatchSnapshot.Empty;
+                        }
+
+                        state.pendingDirty = false;
+                    }
+
                     state.active = state.pending ?? DispatchSnapshot.Empty;
                     state.pending = DispatchSnapshot.Empty;
                     state.hasPending = false;
+                    state.pendingDirty = false;
                 }
-                else if (handlers.handlers.Count == 0 && !state.active.IsEmpty)
+                else if (!hasHandlers && !state.active.IsEmpty)
                 {
                     ReleaseSnapshot(ref state.active);
                     state.active = DispatchSnapshot.Empty;
