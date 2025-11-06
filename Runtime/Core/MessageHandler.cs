@@ -2033,6 +2033,84 @@ namespace DxMessaging.Core
             return typedHandler.GetOrCreateUntargetedLink();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal TargetedDispatchLink<T> GetOrCreateTargetedDispatchLink<T>(IMessageBus messageBus)
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateTargetedLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal TargetedPostDispatchLink<T> GetOrCreateTargetedPostDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateTargetedPostLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal TargetedWithoutTargetingDispatchLink<T> GetOrCreateTargetedWithoutTargetingDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateTargetedWithoutTargetingLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal TargetedWithoutTargetingPostDispatchLink<T> GetOrCreateTargetedWithoutTargetingPostDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateTargetedWithoutTargetingPostLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal BroadcastDispatchLink<T> GetOrCreateBroadcastDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateBroadcastLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal BroadcastPostDispatchLink<T> GetOrCreateBroadcastPostDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateBroadcastPostLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal BroadcastWithoutSourceDispatchLink<T> GetOrCreateBroadcastWithoutSourceDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateBroadcastWithoutSourceLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal BroadcastWithoutSourcePostDispatchLink<T> GetOrCreateBroadcastWithoutSourcePostDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateBroadcastWithoutSourcePostLink();
+        }
+
         internal sealed class HandlerActionCache<T>
         {
             internal readonly struct Entry
@@ -2084,6 +2162,220 @@ namespace DxMessaging.Core
                 }
 
                 typedHandler.HandleUntargeted(ref message, priority, emissionId);
+            }
+        }
+
+        internal sealed class TargetedDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal TargetedDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId target,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleTargeted(ref target, ref message, priority, emissionId);
+            }
+        }
+
+        internal sealed class TargetedPostDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal TargetedPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId target,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleTargetedPostProcessing(
+                    ref target,
+                    ref message,
+                    priority,
+                    emissionId
+                );
+            }
+        }
+
+        internal sealed class TargetedWithoutTargetingDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal TargetedWithoutTargetingDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId target,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleTargetedWithoutTargeting(
+                    ref target,
+                    ref message,
+                    priority,
+                    emissionId
+                );
+            }
+        }
+
+        internal sealed class TargetedWithoutTargetingPostDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal TargetedWithoutTargetingPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId target,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleTargetedWithoutTargetingPostProcessing(
+                    ref target,
+                    ref message,
+                    priority,
+                    emissionId
+                );
+            }
+        }
+
+        internal sealed class BroadcastDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal BroadcastDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId source,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleSourcedBroadcast(ref source, ref message, priority, emissionId);
+            }
+        }
+
+        internal sealed class BroadcastPostDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal BroadcastPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId source,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleSourcedBroadcastPostProcessing(
+                    ref source,
+                    ref message,
+                    priority,
+                    emissionId
+                );
+            }
+        }
+
+        internal sealed class BroadcastWithoutSourceDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal BroadcastWithoutSourceDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId source,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleSourcedBroadcastWithoutSource(
+                    ref source,
+                    ref message,
+                    priority,
+                    emissionId
+                );
+            }
+        }
+
+        internal sealed class BroadcastWithoutSourcePostDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal BroadcastWithoutSourcePostDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref InstanceId source,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                typedHandler.HandleBroadcastWithoutSourcePostProcessing(
+                    ref source,
+                    ref message,
+                    priority,
+                    emissionId
+                );
             }
         }
 
@@ -2191,6 +2483,14 @@ namespace DxMessaging.Core
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourcePostProcessingHandlers;
             private UntargetedDispatchLink<T> _untargetedLink;
+            private object _targetedLink;
+            private object _targetedPostLink;
+            private object _targetedWithoutTargetingLink;
+            private object _targetedWithoutTargetingPostLink;
+            private object _broadcastLink;
+            private object _broadcastPostLink;
+            private object _broadcastWithoutSourceLink;
+            private object _broadcastWithoutSourcePostLink;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal UntargetedDispatchLink<T> GetOrCreateUntargetedLink()
@@ -2200,6 +2500,116 @@ namespace DxMessaging.Core
                 {
                     link = new UntargetedDispatchLink<T>(this);
                     _untargetedLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal TargetedDispatchLink<T> GetOrCreateTargetedLink()
+            {
+                TargetedDispatchLink<T> link = _targetedLink as TargetedDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new TargetedDispatchLink<T>(this);
+                    _targetedLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal TargetedPostDispatchLink<T> GetOrCreateTargetedPostLink()
+            {
+                TargetedPostDispatchLink<T> link = _targetedPostLink as TargetedPostDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new TargetedPostDispatchLink<T>(this);
+                    _targetedPostLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal TargetedWithoutTargetingDispatchLink<T> GetOrCreateTargetedWithoutTargetingLink()
+            {
+                TargetedWithoutTargetingDispatchLink<T> link =
+                    _targetedWithoutTargetingLink as TargetedWithoutTargetingDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new TargetedWithoutTargetingDispatchLink<T>(this);
+                    _targetedWithoutTargetingLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal TargetedWithoutTargetingPostDispatchLink<T> GetOrCreateTargetedWithoutTargetingPostLink()
+            {
+                TargetedWithoutTargetingPostDispatchLink<T> link =
+                    _targetedWithoutTargetingPostLink
+                    as TargetedWithoutTargetingPostDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new TargetedWithoutTargetingPostDispatchLink<T>(this);
+                    _targetedWithoutTargetingPostLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal BroadcastDispatchLink<T> GetOrCreateBroadcastLink()
+            {
+                BroadcastDispatchLink<T> link = _broadcastLink as BroadcastDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new BroadcastDispatchLink<T>(this);
+                    _broadcastLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal BroadcastPostDispatchLink<T> GetOrCreateBroadcastPostLink()
+            {
+                BroadcastPostDispatchLink<T> link =
+                    _broadcastPostLink as BroadcastPostDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new BroadcastPostDispatchLink<T>(this);
+                    _broadcastPostLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal BroadcastWithoutSourceDispatchLink<T> GetOrCreateBroadcastWithoutSourceLink()
+            {
+                BroadcastWithoutSourceDispatchLink<T> link =
+                    _broadcastWithoutSourceLink as BroadcastWithoutSourceDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new BroadcastWithoutSourceDispatchLink<T>(this);
+                    _broadcastWithoutSourceLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal BroadcastWithoutSourcePostDispatchLink<T> GetOrCreateBroadcastWithoutSourcePostLink()
+            {
+                BroadcastWithoutSourcePostDispatchLink<T> link =
+                    _broadcastWithoutSourcePostLink as BroadcastWithoutSourcePostDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new BroadcastWithoutSourcePostDispatchLink<T>(this);
+                    _broadcastWithoutSourcePostLink = link;
                 }
 
                 return link;
