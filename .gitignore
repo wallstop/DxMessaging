@@ -318,3 +318,6 @@ package-lock.json.meta
 Editor/Analyzers/*.pdb
 Tests/Runtime/bin.meta
 Tests/Runtime/obj.meta
+
+PLAN.md
+PLAN.md.meta

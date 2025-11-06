@@ -5,8 +5,20 @@
 */
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const repoRoot = process.cwd();
+const argv = process.argv.slice(2);
+let checkEntireRepo = false;
+const targetArgs = [];
+
+for (const arg of argv) {
+  if (arg === '--all') {
+    checkEntireRepo = true;
+    continue;
+  }
+  targetArgs.push(arg);
+}
 
 // Exclude directory patterns (match anywhere in path)
 const excludeRegexes = [
@@ -48,6 +60,60 @@ function walk(dir, files = []) {
   return files;
 }
 
+function resolveTargets(targets) {
+  if (!targets || targets.length === 0) {
+    return [];
+  }
+
+  const seen = new Set();
+  const resolved = [];
+
+  for (const rawTarget of targets) {
+    const targetPath = path.resolve(repoRoot, rawTarget);
+    if (!fs.existsSync(targetPath)) {
+      continue;
+    }
+
+    const isExcluded = excludeRegexes.some((re) => re.test(targetPath));
+    if (isExcluded) {
+      continue;
+    }
+
+    const stats = fs.statSync(targetPath);
+    if (stats.isDirectory()) {
+      for (const file of walk(targetPath)) {
+        if (!seen.has(file)) {
+          resolved.push(file);
+          seen.add(file);
+        }
+      }
+    } else if (stats.isFile()) {
+      if (!seen.has(targetPath)) {
+        resolved.push(targetPath);
+        seen.add(targetPath);
+      }
+    }
+  }
+
+  return resolved;
+}
+
+function getStagedFiles() {
+  const result = spawnSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  });
+
+  if (result.status !== 0) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function hasBom(buf) {
   return buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
 }
@@ -59,13 +125,37 @@ function hasNonCrlfEol(buf) {
   return stripped.includes('\n') || stripped.includes('\r');
 }
 
-const allFiles = walk(repoRoot);
+const candidateFiles = checkEntireRepo
+  ? walk(repoRoot)
+  : resolveTargets(targetArgs.length > 0 ? targetArgs : getStagedFiles());
+
+const textFiles = [];
+const seenFiles = new Set();
+
+for (const file of candidateFiles) {
+  const ext = path.extname(file).toLowerCase();
+  if (!exts.has(ext)) {
+    continue;
+  }
+
+  const absolute = path.resolve(repoRoot, file);
+  if (seenFiles.has(absolute)) {
+    continue;
+  }
+
+  seenFiles.add(absolute);
+  textFiles.push(absolute);
+}
+
+if (textFiles.length === 0) {
+  console.log('EOL check skipped: no matching files to verify.');
+  process.exit(0);
+}
+
 const bomFiles = [];
 const badEolFiles = [];
 
-for (const file of allFiles) {
-  const ext = path.extname(file).toLowerCase();
-  if (!exts.has(ext)) continue;
+for (const file of textFiles) {
   let buf;
   try {
     buf = fs.readFileSync(file);
@@ -91,4 +181,3 @@ if (badEolFiles.length) {
 }
 console.error('EOL/BOM policy violations detected.');
 process.exit(1);
-
