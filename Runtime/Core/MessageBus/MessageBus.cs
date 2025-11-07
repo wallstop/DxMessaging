@@ -51,11 +51,17 @@ namespace DxMessaging.Core.MessageBus
             BroadcastPost = 8,
             BroadcastWithoutSource = 9,
             BroadcastWithoutSourcePost = 10,
+            GlobalUntargeted = 11,
+            GlobalTargeted = 12,
+            GlobalBroadcast = 13,
         }
 
         private const byte PrefreezeKindNone = 0;
         private const byte PrefreezeKindTargetedWithoutTargetingHandlers = 1;
         private const byte PrefreezeKindBroadcastWithoutSourceHandlers = 2;
+        private const byte PrefreezeKindGlobalUntargetedHandlers = 3;
+        private const byte PrefreezeKindGlobalTargetedHandlers = 4;
+        private const byte PrefreezeKindGlobalBroadcastHandlers = 5;
 
         private static readonly ArrayPool<DispatchBucket> DispatchBucketPool =
             ArrayPool<DispatchBucket>.Shared;
@@ -240,11 +246,31 @@ namespace DxMessaging.Core.MessageBus
 
         private sealed class HandlerCache
         {
+            internal sealed class DispatchState
+            {
+                public DispatchSnapshot active = DispatchSnapshot.Empty;
+                public DispatchSnapshot pending = DispatchSnapshot.Empty;
+                public bool hasPending;
+                public bool pendingDirty;
+                public long snapshotEmissionId = -1;
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public void Reset()
+                {
+                    ReleaseSnapshot(ref active);
+                    ReleaseSnapshot(ref pending);
+                    hasPending = false;
+                    pendingDirty = false;
+                    snapshotEmissionId = -1;
+                }
+            }
+
             public readonly Dictionary<MessageHandler, int> handlers = new();
             public readonly List<MessageHandler> cache = new();
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
+            private readonly Dictionary<DispatchCategory, DispatchState> dispatchStates = new();
 
             /// <summary>
             /// Clears all cached handler references and resets the version tracking metadata.
@@ -256,6 +282,26 @@ namespace DxMessaging.Core.MessageBus
                 version = 0;
                 lastSeenVersion = -1;
                 lastSeenEmissionId = 0;
+                if (dispatchStates.Count > 0)
+                {
+                    foreach (DispatchState state in dispatchStates.Values)
+                    {
+                        state.Reset();
+                    }
+                    dispatchStates.Clear();
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public DispatchState GetOrCreateDispatchState(DispatchCategory category)
+            {
+                if (!dispatchStates.TryGetValue(category, out DispatchState state))
+                {
+                    state = new DispatchState();
+                    dispatchStates[category] = state;
+                }
+
+                return state;
             }
         }
 
@@ -512,6 +558,22 @@ namespace DxMessaging.Core.MessageBus
                 )
             );
 
+            StageGlobalDispatchSnapshot<IUntargetedMessage>(
+                this,
+                _globalSinks,
+                DispatchCategory.GlobalUntargeted
+            );
+            StageGlobalDispatchSnapshot<ITargetedMessage>(
+                this,
+                _globalSinks,
+                DispatchCategory.GlobalTargeted
+            );
+            StageGlobalDispatchSnapshot<IBroadcastMessage>(
+                this,
+                _globalSinks,
+                DispatchCategory.GlobalBroadcast
+            );
+
             return () =>
             {
                 _globalSinks.version++;
@@ -545,6 +607,22 @@ namespace DxMessaging.Core.MessageBus
                 {
                     _globalSinks.handlers[messageHandler] = count - 1;
                 }
+
+                StageGlobalDispatchSnapshot<IUntargetedMessage>(
+                    this,
+                    _globalSinks,
+                    DispatchCategory.GlobalUntargeted
+                );
+                StageGlobalDispatchSnapshot<ITargetedMessage>(
+                    this,
+                    _globalSinks,
+                    DispatchCategory.GlobalTargeted
+                );
+                StageGlobalDispatchSnapshot<IBroadcastMessage>(
+                    this,
+                    _globalSinks,
+                    DispatchCategory.GlobalBroadcast
+                );
             };
         }
 
@@ -569,8 +647,12 @@ namespace DxMessaging.Core.MessageBus
                 _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
             }
 
-            List<object> interceptors;
-            if (!prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors))
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
             {
                 interceptors = new List<object>();
                 prioritizedInterceptors.handlers.Add(priority, interceptors);
@@ -687,8 +769,12 @@ namespace DxMessaging.Core.MessageBus
                 _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
             }
 
-            List<object> interceptors;
-            if (!prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors))
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
             {
                 interceptors = new List<object>();
                 prioritizedInterceptors.handlers.Add(priority, interceptors);
@@ -805,8 +891,12 @@ namespace DxMessaging.Core.MessageBus
                 _uniqueInterceptorsAndPriorities[interceptor] = priorityCount;
             }
 
-            List<object> interceptors;
-            if (!prioritizedInterceptors.handlers.TryGetValue(priority, out interceptors))
+            if (
+                !prioritizedInterceptors.handlers.TryGetValue(
+                    priority,
+                    out List<object> interceptors
+                )
+            )
             {
                 interceptors = new List<object>();
                 prioritizedInterceptors.handlers.Add(priority, interceptors);
@@ -1079,71 +1169,68 @@ namespace DxMessaging.Core.MessageBus
                 && 0 < sortedHandlers.handlers.Count
             )
             {
-                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                DispatchSnapshot snapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
                     sortedHandlers,
+                    DispatchCategory.UntargetedPost,
                     _emissionId
                 );
-                int handlerListCount = handlerList.Count;
-                switch (handlerListCount)
+                DispatchBucket[] buckets = snapshot.buckets;
+                int bucketCount = snapshot.bucketCount;
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
                 {
-                    case 1:
+                    DispatchBucket bucket = buckets[bucketIndex];
+                    DispatchEntry[] entries = bucket.entries;
+                    int entryCount = bucket.entryCount;
+                    if (entryCount == 0)
                     {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        break;
+                        continue;
                     }
-                    case 2:
+
+                    foundAnyHandlers = true;
+                    int priority = bucket.priority;
+                    switch (entryCount)
                     {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[1];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        break;
-                    }
-                    case 3:
-                    {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[1];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[2];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        break;
-                    }
-                    case 4:
-                    {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[1];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[2];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[3];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        break;
-                    }
-                    case 5:
-                    {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[1];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[2];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[3];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        entry = handlerList[4];
-                        RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
-                        break;
-                    }
-                    default:
-                    {
-                        for (int i = 0; i < handlerListCount; ++i)
+                        case 1:
                         {
-                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
-                            RunUntargetedPostProcessing(ref typedMessage, entry.Key, entry.Value);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[0]);
+                            continue;
                         }
-                        break;
+                        case 2:
+                        {
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[0]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[1]);
+                            continue;
+                        }
+                        case 3:
+                        {
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[0]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[1]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[2]);
+                            continue;
+                        }
+                        case 4:
+                        {
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[0]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[1]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[2]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[3]);
+                            continue;
+                        }
+                        case 5:
+                        {
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[0]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[1]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[2]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[3]);
+                            InvokeUntargetedPostEntry(ref typedMessage, priority, entries[4]);
+                            continue;
+                        }
+                    }
+
+                    for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                    {
+                        InvokeUntargetedPostEntry(ref typedMessage, priority, entries[entryIndex]);
                     }
                 }
             }
@@ -1155,65 +1242,6 @@ namespace DxMessaging.Core.MessageBus
                     "Could not find a matching untargeted broadcast handler for Message: {0}.",
                     typedMessage
                 );
-            }
-        }
-
-        private void RunUntargetedPostProcessing<TMessage>(
-            ref TMessage typedMessage,
-            int priority,
-            HandlerCache cache
-        )
-            where TMessage : IUntargetedMessage
-        {
-            if (cache.handlers.Count == 0)
-            {
-                return;
-            }
-
-            List<MessageHandler> list = GetOrAddMessageHandlerStack(cache, _emissionId);
-            switch (list.Count)
-            {
-                case 1:
-                {
-                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    return;
-                }
-                case 2:
-                {
-                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    return;
-                }
-                case 3:
-                {
-                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[2].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    return;
-                }
-                case 4:
-                {
-                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[2].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[3].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    return;
-                }
-                case 5:
-                {
-                    list[0].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[1].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[2].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[3].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    list[4].HandleUntargetedPostProcessing(ref typedMessage, this, priority);
-                    return;
-                }
-            }
-
-            for (int i = 0; i < cache.cache.Count; ++i)
-            {
-                MessageHandler handler = cache.cache[i];
-                handler.HandleUntargetedPostProcessing(ref typedMessage, this, priority);
             }
         }
 
@@ -2399,8 +2427,9 @@ namespace DxMessaging.Core.MessageBus
             }
 
             bool foundAnyHandlers = false;
-            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers;
-            _ = _broadcastSinks.TryGetValue<TMessage>(out broadcastHandlers);
+            _ = _broadcastSinks.TryGetValue<TMessage>(
+                out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers
+            );
             if (
                 broadcastHandlers != null
                 && broadcastHandlers.TryGetValue(
@@ -2490,152 +2519,148 @@ namespace DxMessaging.Core.MessageBus
             )
             {
                 foundAnyHandlers = true;
-                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                DispatchSnapshot snapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
                     sortedHandlers,
+                    DispatchCategory.BroadcastPost,
                     _emissionId
                 );
-                int handlerListCount = handlerList.Count;
-                switch (handlerListCount)
+                DispatchBucket[] buckets = snapshot.buckets;
+                int bucketCount = snapshot.bucketCount;
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
                 {
-                    case 1:
+                    DispatchBucket bucket = buckets[bucketIndex];
+                    DispatchEntry[] entries = bucket.entries;
+                    int entryCount = bucket.entryCount;
+                    if (entryCount == 0)
                     {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        break;
+                        continue;
                     }
-                    case 2:
+
+                    foundAnyHandlers = true;
+                    int priority = bucket.priority;
+                    switch (entryCount)
                     {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[1];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        break;
-                    }
-                    case 3:
-                    {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[1];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[2];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        break;
-                    }
-                    case 4:
-                    {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[1];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[2];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[3];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        break;
-                    }
-                    case 5:
-                    {
-                        KeyValuePair<int, HandlerCache> entry = handlerList[0];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[1];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[2];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[3];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        entry = handlerList[4];
-                        RunBroadcastPostProcessing(
-                            ref source,
-                            ref typedMessage,
-                            entry.Key,
-                            entry.Value
-                        );
-                        break;
-                    }
-                    default:
-                    {
-                        for (int i = 0; i < handlerListCount; ++i)
+                        case 1:
                         {
-                            KeyValuePair<int, HandlerCache> entry = handlerList[i];
-                            RunBroadcastPostProcessing(
+                            InvokeBroadcastPostEntry(
                                 ref source,
                                 ref typedMessage,
-                                entry.Key,
-                                entry.Value
+                                priority,
+                                entries[0]
                             );
+                            continue;
                         }
+                        case 2:
+                        {
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            continue;
+                        }
+                        case 3:
+                        {
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[2]
+                            );
+                            continue;
+                        }
+                        case 4:
+                        {
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[2]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[3]
+                            );
+                            continue;
+                        }
+                        case 5:
+                        {
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[2]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[3]
+                            );
+                            InvokeBroadcastPostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[4]
+                            );
+                            continue;
+                        }
+                    }
 
-                        break;
+                    for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                    {
+                        InvokeBroadcastPostEntry(
+                            ref source,
+                            ref typedMessage,
+                            priority,
+                            entries[entryIndex]
+                        );
                     }
                 }
             }
@@ -2645,20 +2670,149 @@ namespace DxMessaging.Core.MessageBus
                 && 0 < sortedHandlers.handlers.Count
             )
             {
-                List<KeyValuePair<int, HandlerCache>> handlerList = GetOrAddMessageHandlerStack(
+                DispatchSnapshot snapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
                     sortedHandlers,
+                    DispatchCategory.BroadcastWithoutSourcePost,
                     _emissionId
                 );
-                int handlerListCount = handlerList.Count;
-                for (int i = 0; i < handlerListCount; ++i)
+                DispatchBucket[] buckets = snapshot.buckets;
+                int bucketCount = snapshot.bucketCount;
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
                 {
-                    KeyValuePair<int, HandlerCache> entry = handlerList[i];
-                    RunBroadcastWithoutSourcePostProcessing(
-                        ref source,
-                        ref typedMessage,
-                        entry.Key,
-                        entry.Value
-                    );
+                    DispatchBucket bucket = buckets[bucketIndex];
+                    DispatchEntry[] entries = bucket.entries;
+                    int entryCount = bucket.entryCount;
+                    if (entryCount == 0)
+                    {
+                        continue;
+                    }
+
+                    bwsFound = true;
+                    int priority = bucket.priority;
+                    switch (entryCount)
+                    {
+                        case 1:
+                        {
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            continue;
+                        }
+                        case 2:
+                        {
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            continue;
+                        }
+                        case 3:
+                        {
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[2]
+                            );
+                            continue;
+                        }
+                        case 4:
+                        {
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[2]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[3]
+                            );
+                            continue;
+                        }
+                        case 5:
+                        {
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[0]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[1]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[2]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[3]
+                            );
+                            InvokeBroadcastWithoutSourcePostEntry(
+                                ref source,
+                                ref typedMessage,
+                                priority,
+                                entries[4]
+                            );
+                            continue;
+                        }
+                    }
+
+                    for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                    {
+                        InvokeBroadcastWithoutSourcePostEntry(
+                            ref source,
+                            ref typedMessage,
+                            priority,
+                            entries[entryIndex]
+                        );
+                    }
                 }
             }
 
@@ -2669,32 +2823,6 @@ namespace DxMessaging.Core.MessageBus
                     "Could not find a matching sourced broadcast handler for Id: {0}, Message: {1}.",
                     source,
                     typedMessage
-                );
-            }
-        }
-
-        private void RunBroadcastWithoutSourcePostProcessing<TMessage>(
-            ref InstanceId source,
-            ref TMessage typedMessage,
-            int priority,
-            HandlerCache cache
-        )
-            where TMessage : IBroadcastMessage
-        {
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
-            if (messageHandlersCount == 0)
-            {
-                return;
-            }
-            for (int i = 0; i < messageHandlersCount; ++i)
-            {
-                MessageHandler handler = messageHandlers[i];
-                handler.HandleSourcedBroadcastWithoutSourcePostProcessing(
-                    ref source,
-                    ref typedMessage,
-                    this,
-                    priority
                 );
             }
         }
@@ -2932,127 +3060,143 @@ namespace DxMessaging.Core.MessageBus
 
         private void BroadcastGlobalUntargeted(ref IUntargetedMessage message)
         {
-            if (_globalSinks.handlers.Count == 0)
+            DispatchSnapshot snapshot = AcquireGlobalDispatchSnapshot<IUntargetedMessage>(
+                this,
+                _globalSinks,
+                DispatchCategory.GlobalUntargeted,
+                _emissionId
+            );
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            if (bucketCount == 0)
             {
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                _globalSinks,
-                _emissionId
-            );
-            // Freeze each handler's global untargeted caches for this emission
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
             {
-                messageHandlers[i].PrefreezeGlobalUntargetedForEmission(_emissionId, this);
-            }
-            int messageHandlersCount = messageHandlers.Count;
-            switch (messageHandlersCount)
-            {
-                case 1:
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
                 {
-                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
-                    return;
+                    continue;
                 }
-                case 2:
-                {
-                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
-                    return;
-                }
-                case 3:
-                {
-                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[2].HandleGlobalUntargetedMessage(ref message, this);
-                    return;
-                }
-                case 4:
-                {
-                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[2].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[3].HandleGlobalUntargetedMessage(ref message, this);
-                    return;
-                }
-                case 5:
-                {
-                    messageHandlers[0].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[1].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[2].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[3].HandleGlobalUntargetedMessage(ref message, this);
-                    messageHandlers[4].HandleGlobalUntargetedMessage(ref message, this);
-                    return;
-                }
-            }
 
-            for (int i = 0; i < messageHandlersCount; ++i)
-            {
-                MessageHandler handler = messageHandlers[i];
-                handler.HandleGlobalUntargetedMessage(ref message, this);
+                switch (entryCount)
+                {
+                    case 1:
+                    {
+                        InvokeGlobalUntargetedEntry(ref message, entries[0]);
+                        continue;
+                    }
+                    case 2:
+                    {
+                        InvokeGlobalUntargetedEntry(ref message, entries[0]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[1]);
+                        continue;
+                    }
+                    case 3:
+                    {
+                        InvokeGlobalUntargetedEntry(ref message, entries[0]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[1]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[2]);
+                        continue;
+                    }
+                    case 4:
+                    {
+                        InvokeGlobalUntargetedEntry(ref message, entries[0]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[1]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[2]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[3]);
+                        continue;
+                    }
+                    case 5:
+                    {
+                        InvokeGlobalUntargetedEntry(ref message, entries[0]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[1]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[2]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[3]);
+                        InvokeGlobalUntargetedEntry(ref message, entries[4]);
+                        continue;
+                    }
+                }
+
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    InvokeGlobalUntargetedEntry(ref message, entries[entryIndex]);
+                }
             }
         }
 
         private void BroadcastGlobalTargeted(ref InstanceId target, ref ITargetedMessage message)
         {
-            if (_globalSinks.handlers.Count == 0)
+            DispatchSnapshot snapshot = AcquireGlobalDispatchSnapshot<ITargetedMessage>(
+                this,
+                _globalSinks,
+                DispatchCategory.GlobalTargeted,
+                _emissionId
+            );
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            if (bucketCount == 0)
             {
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                _globalSinks,
-                _emissionId
-            );
-            // Freeze each handler's global targeted caches for this emission
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
             {
-                messageHandlers[i].PrefreezeGlobalTargetedForEmission(_emissionId, this);
-            }
-            int messageHandlersCount = messageHandlers.Count;
-            switch (messageHandlersCount)
-            {
-                case 1:
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
                 {
-                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    return;
+                    continue;
                 }
-                case 2:
-                {
-                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    return;
-                }
-                case 3:
-                {
-                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[2].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    return;
-                }
-                case 4:
-                {
-                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[2].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[3].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    return;
-                }
-                case 5:
-                {
-                    messageHandlers[0].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[1].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[2].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[3].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    messageHandlers[4].HandleGlobalTargetedMessage(ref target, ref message, this);
-                    return;
-                }
-            }
 
-            for (int i = 0; i < messageHandlersCount; ++i)
-            {
-                MessageHandler handler = messageHandlers[i];
-                handler.HandleGlobalTargetedMessage(ref target, ref message, this);
+                switch (entryCount)
+                {
+                    case 1:
+                    {
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[0]);
+                        continue;
+                    }
+                    case 2:
+                    {
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[0]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[1]);
+                        continue;
+                    }
+                    case 3:
+                    {
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[0]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[1]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[2]);
+                        continue;
+                    }
+                    case 4:
+                    {
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[0]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[1]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[2]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[3]);
+                        continue;
+                    }
+                    case 5:
+                    {
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[0]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[1]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[2]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[3]);
+                        InvokeGlobalTargetedEntry(ref target, ref message, entries[4]);
+                        continue;
+                    }
+                }
+
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    InvokeGlobalTargetedEntry(ref target, ref message, entries[entryIndex]);
+                }
             }
         }
 
@@ -3061,79 +3205,72 @@ namespace DxMessaging.Core.MessageBus
             ref IBroadcastMessage message
         )
         {
-            if (_globalSinks.handlers.Count == 0)
+            DispatchSnapshot snapshot = AcquireGlobalDispatchSnapshot<IBroadcastMessage>(
+                this,
+                _globalSinks,
+                DispatchCategory.GlobalBroadcast,
+                _emissionId
+            );
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            if (bucketCount == 0)
             {
                 return;
             }
 
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(
-                _globalSinks,
-                _emissionId
-            );
-            // Freeze each handler's global broadcast caches for this emission
-            for (int i = 0; i < messageHandlers.Count; ++i)
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
             {
-                messageHandlers[i].PrefreezeGlobalBroadcastForEmission(_emissionId, this);
-            }
-            int messageHandlersCount = messageHandlers.Count;
-            switch (messageHandlersCount)
-            {
-                case 1:
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
                 {
-                    messageHandlers[0]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    return;
+                    continue;
                 }
-                case 2:
-                {
-                    messageHandlers[0]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[1]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    return;
-                }
-                case 3:
-                {
-                    messageHandlers[0]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[1]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[2]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    return;
-                }
-                case 4:
-                {
-                    messageHandlers[0]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[1]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[2]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[3]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    return;
-                }
-                case 5:
-                {
-                    messageHandlers[0]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[1]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[2]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[3]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    messageHandlers[4]
-                        .HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
-                    return;
-                }
-            }
 
-            for (int i = 0; i < messageHandlersCount; ++i)
-            {
-                MessageHandler handler = messageHandlers[i];
-                handler.HandleGlobalSourcedBroadcastMessage(ref source, ref message, this);
+                switch (entryCount)
+                {
+                    case 1:
+                    {
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[0]);
+                        continue;
+                    }
+                    case 2:
+                    {
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[0]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[1]);
+                        continue;
+                    }
+                    case 3:
+                    {
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[0]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[1]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[2]);
+                        continue;
+                    }
+                    case 4:
+                    {
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[0]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[1]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[2]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[3]);
+                        continue;
+                    }
+                    case 5:
+                    {
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[0]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[1]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[2]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[3]);
+                        InvokeGlobalBroadcastEntry(ref source, ref message, entries[4]);
+                        continue;
+                    }
+                }
+
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    InvokeGlobalBroadcastEntry(ref source, ref message, entries[entryIndex]);
+                }
             }
         }
 
@@ -3451,6 +3588,25 @@ namespace DxMessaging.Core.MessageBus
             MessageHandler.UntargetedDispatchLink<TMessage> link =
                 Unsafe.As<MessageHandler.UntargetedDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(messageHandler, ref message, priority, _emissionId);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InvokeUntargetedPostEntry<TMessage>(
+            ref TMessage message,
+            int priority,
+            DispatchEntry entry
+        )
+            where TMessage : IUntargetedMessage
+        {
+            MessageHandler handler = entry.handler;
+            if (!handler.active)
+            {
+                return;
+            }
+
+            MessageHandler.UntargetedPostDispatchLink<TMessage> link =
+                Unsafe.As<MessageHandler.UntargetedPostDispatchLink<TMessage>>(entry.dispatch);
+            link.Invoke(handler, ref message, priority, _emissionId);
         }
 
         private bool InternalTargetedWithoutTargetingBroadcast<TMessage>(
@@ -4245,6 +4401,29 @@ namespace DxMessaging.Core.MessageBus
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void StageGlobalDispatchSnapshot<TMessage>(
+            MessageBus messageBus,
+            HandlerCache handlers,
+            DispatchCategory category
+        )
+            where TMessage : IMessage
+        {
+            if (handlers == null || category == DispatchCategory.None)
+            {
+                return;
+            }
+
+            HandlerCache.DispatchState state = handlers.GetOrCreateDispatchState(category);
+            if (state.hasPending)
+            {
+                ReleaseSnapshot(ref state.pending);
+            }
+
+            state.hasPending = true;
+            state.pendingDirty = true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ReleaseSnapshot(ref DispatchSnapshot snapshot)
         {
             if (snapshot == null)
@@ -4430,6 +4609,126 @@ namespace DxMessaging.Core.MessageBus
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static DispatchSnapshot AcquireGlobalDispatchSnapshot<TMessage>(
+            MessageBus messageBus,
+            HandlerCache handlers,
+            DispatchCategory category,
+            long emissionId
+        )
+            where TMessage : IMessage
+        {
+            if (handlers == null || category == DispatchCategory.None)
+            {
+                return DispatchSnapshot.Empty;
+            }
+
+            HandlerCache.DispatchState state = handlers.GetOrCreateDispatchState(category);
+            bool hasHandlers = handlers.handlers.Count > 0;
+
+            if (state.hasPending)
+            {
+                if (state.pendingDirty || (hasHandlers && state.pending.IsEmpty))
+                {
+                    ReleaseSnapshot(ref state.pending);
+                    if (hasHandlers)
+                    {
+                        state.pending = BuildGlobalDispatchSnapshot<TMessage>(
+                            messageBus,
+                            handlers,
+                            category
+                        );
+                    }
+                    else
+                    {
+                        state.pending = DispatchSnapshot.Empty;
+                    }
+
+                    state.pendingDirty = false;
+                }
+            }
+            else if (state.active.IsEmpty && hasHandlers)
+            {
+                ReleaseSnapshot(ref state.pending);
+                state.pending = BuildGlobalDispatchSnapshot<TMessage>(
+                    messageBus,
+                    handlers,
+                    category
+                );
+                state.hasPending = true;
+                state.pendingDirty = false;
+            }
+
+            if (state.snapshotEmissionId != emissionId)
+            {
+                if (state.hasPending)
+                {
+                    ReleaseSnapshot(ref state.active);
+                    if (state.pendingDirty || (hasHandlers && state.pending.IsEmpty))
+                    {
+                        ReleaseSnapshot(ref state.pending);
+                        if (hasHandlers)
+                        {
+                            state.pending = BuildGlobalDispatchSnapshot<TMessage>(
+                                messageBus,
+                                handlers,
+                                category
+                            );
+                        }
+                        else
+                        {
+                            state.pending = DispatchSnapshot.Empty;
+                        }
+
+                        state.pendingDirty = false;
+                    }
+
+                    state.active = state.pending ?? DispatchSnapshot.Empty;
+                    state.pending = DispatchSnapshot.Empty;
+                    state.hasPending = false;
+                    state.pendingDirty = false;
+                }
+                else if (!hasHandlers && !state.active.IsEmpty)
+                {
+                    ReleaseSnapshot(ref state.active);
+                    state.active = DispatchSnapshot.Empty;
+                }
+
+                state.snapshotEmissionId = emissionId;
+            }
+
+            return state.active;
+        }
+
+        private static DispatchSnapshot BuildGlobalDispatchSnapshot<TMessage>(
+            MessageBus messageBus,
+            HandlerCache handlers,
+            DispatchCategory category
+        )
+            where TMessage : IMessage
+        {
+            if (handlers == null || handlers.handlers.Count == 0)
+            {
+                return DispatchSnapshot.Empty;
+            }
+
+            DispatchBucket[] buckets = DispatchBucketPool.Rent(1);
+            Dictionary<MessageHandler, int> handlerLookup = handlers.handlers;
+            int entryCount = handlerLookup.Count;
+            DispatchEntry[] entries = DispatchEntryPool.Rent(entryCount);
+            PrefreezeDescriptor prefreeze = CreatePrefreezeDescriptor(category, 0);
+            int index = 0;
+            foreach (KeyValuePair<MessageHandler, int> kvp in handlerLookup)
+            {
+                MessageHandler messageHandler = kvp.Key;
+                object dispatch = GetDispatchLink<TMessage>(messageBus, messageHandler, category);
+                entries[index++] = new DispatchEntry(messageHandler, dispatch, prefreeze);
+            }
+
+            buckets[0] = new DispatchBucket(0, entries, entryCount, pooledEntries: true);
+            return new DispatchSnapshot(buckets, 1, pooled: true);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static PrefreezeDescriptor CreatePrefreezeDescriptor(
             DispatchCategory category,
             int priority
@@ -4447,6 +4746,12 @@ namespace DxMessaging.Core.MessageBus
                         PrefreezeKindBroadcastWithoutSourceHandlers,
                         priority
                     );
+                case DispatchCategory.GlobalUntargeted:
+                    return new PrefreezeDescriptor(PrefreezeKindGlobalUntargetedHandlers, priority);
+                case DispatchCategory.GlobalTargeted:
+                    return new PrefreezeDescriptor(PrefreezeKindGlobalTargetedHandlers, priority);
+                case DispatchCategory.GlobalBroadcast:
+                    return new PrefreezeDescriptor(PrefreezeKindGlobalBroadcastHandlers, priority);
                 default:
                     return PrefreezeDescriptor.Empty;
             }
@@ -4463,6 +4768,8 @@ namespace DxMessaging.Core.MessageBus
             {
                 case DispatchCategory.Untargeted:
                     return handler.GetOrCreateUntargetedDispatchLink<TMessage>(messageBus);
+                case DispatchCategory.UntargetedPost:
+                    return handler.GetOrCreateUntargetedPostDispatchLink<TMessage>(messageBus);
                 case DispatchCategory.Targeted:
                     return handler.GetOrCreateTargetedDispatchLink<TMessage>(messageBus);
                 case DispatchCategory.TargetedPost:
@@ -4487,6 +4794,10 @@ namespace DxMessaging.Core.MessageBus
                     return handler.GetOrCreateBroadcastWithoutSourcePostDispatchLink<TMessage>(
                         messageBus
                     );
+                case DispatchCategory.GlobalUntargeted:
+                case DispatchCategory.GlobalTargeted:
+                case DispatchCategory.GlobalBroadcast:
+                    return null;
                 default:
                     return handler.GetOrCreateUntargetedDispatchLink<TMessage>(messageBus);
             }
@@ -4499,6 +4810,8 @@ namespace DxMessaging.Core.MessageBus
             {
                 case RegistrationMethod.Untargeted:
                     return DispatchCategory.Untargeted;
+                case RegistrationMethod.UntargetedPostProcessor:
+                    return DispatchCategory.UntargetedPost;
                 case RegistrationMethod.Targeted:
                     return DispatchCategory.Targeted;
                 case RegistrationMethod.TargetedPostProcessor:
@@ -4558,6 +4871,80 @@ namespace DxMessaging.Core.MessageBus
             MessageHandler.TargetedPostDispatchLink<TMessage> link =
                 Unsafe.As<MessageHandler.TargetedPostDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref target, ref message, priority, _emissionId);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InvokeGlobalUntargetedEntry<TMessage>(
+            ref TMessage message,
+            DispatchEntry entry
+        )
+            where TMessage : IUntargetedMessage
+        {
+            MessageHandler handler = entry.handler;
+            if (entry.prefreeze.kind == PrefreezeKindGlobalUntargetedHandlers)
+            {
+                handler.PrefreezeGlobalUntargetedForEmission(_emissionId, this);
+            }
+
+            if (!handler.active)
+            {
+                return;
+            }
+
+            ref IUntargetedMessage interfaceMessage = ref Unsafe.As<TMessage, IUntargetedMessage>(
+                ref message
+            );
+            handler.HandleGlobalUntargetedMessage(ref interfaceMessage, this);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InvokeGlobalTargetedEntry<TMessage>(
+            ref InstanceId target,
+            ref TMessage message,
+            DispatchEntry entry
+        )
+            where TMessage : ITargetedMessage
+        {
+            MessageHandler handler = entry.handler;
+            if (entry.prefreeze.kind == PrefreezeKindGlobalTargetedHandlers)
+            {
+                handler.PrefreezeGlobalTargetedForEmission(_emissionId, this);
+            }
+
+            if (!handler.active)
+            {
+                return;
+            }
+
+            ref ITargetedMessage interfaceMessage = ref Unsafe.As<TMessage, ITargetedMessage>(
+                ref message
+            );
+            handler.HandleGlobalTargetedMessage(ref target, ref interfaceMessage, this);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InvokeGlobalBroadcastEntry<TMessage>(
+            ref InstanceId source,
+            ref TMessage message,
+            DispatchEntry entry
+        )
+            where TMessage : IBroadcastMessage
+        {
+            MessageHandler handler = entry.handler;
+            if (entry.prefreeze.kind == PrefreezeKindGlobalBroadcastHandlers)
+            {
+                handler.PrefreezeGlobalBroadcastForEmission(_emissionId, this);
+            }
+
+            if (!handler.active)
+            {
+                return;
+            }
+
+            ref IBroadcastMessage interfaceMessage = ref Unsafe.As<TMessage, IBroadcastMessage>(
+                ref message
+            );
+            handler.HandleGlobalSourcedBroadcastMessage(ref source, ref interfaceMessage, this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

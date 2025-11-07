@@ -2034,6 +2034,16 @@ namespace DxMessaging.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal UntargetedPostDispatchLink<T> GetOrCreateUntargetedPostDispatchLink<T>(
+            IMessageBus messageBus
+        )
+            where T : IMessage
+        {
+            TypedHandler<T> typedHandler = GetOrCreateHandlerForType<T>(messageBus);
+            return typedHandler.GetOrCreateUntargetedPostLink();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal TargetedDispatchLink<T> GetOrCreateTargetedDispatchLink<T>(IMessageBus messageBus)
             where T : IMessage
         {
@@ -2162,6 +2172,33 @@ namespace DxMessaging.Core
                 }
 
                 typedHandler.HandleUntargeted(ref message, priority, emissionId);
+            }
+        }
+
+        internal sealed class UntargetedPostDispatchLink<TMessage>
+            where TMessage : IMessage
+        {
+            private readonly TypedHandler<TMessage> typedHandler;
+
+            internal UntargetedPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            {
+                this.typedHandler = typedHandler;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal void Invoke(
+                MessageHandler messageHandler,
+                ref TMessage message,
+                int priority,
+                long emissionId
+            )
+            {
+                if (!messageHandler.active)
+                {
+                    return;
+                }
+
+                typedHandler.HandleUntargetedPostProcessing(ref message, priority, emissionId);
             }
         }
 
@@ -2483,6 +2520,7 @@ namespace DxMessaging.Core
                 HandlerActionCache<FastHandlerWithContext<T>>
             > _fastBroadcastWithoutSourcePostProcessingHandlers;
             private UntargetedDispatchLink<T> _untargetedLink;
+            private object _untargetedPostLink;
             private object _targetedLink;
             private object _targetedPostLink;
             private object _targetedWithoutTargetingLink;
@@ -2500,6 +2538,20 @@ namespace DxMessaging.Core
                 {
                     link = new UntargetedDispatchLink<T>(this);
                     _untargetedLink = link;
+                }
+
+                return link;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            internal UntargetedPostDispatchLink<T> GetOrCreateUntargetedPostLink()
+            {
+                UntargetedPostDispatchLink<T> link =
+                    _untargetedPostLink as UntargetedPostDispatchLink<T>;
+                if (link == null)
+                {
+                    link = new UntargetedPostDispatchLink<T>(this);
+                    _untargetedPostLink = link;
                 }
 
                 return link;
