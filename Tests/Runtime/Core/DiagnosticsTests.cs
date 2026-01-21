@@ -115,6 +115,78 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             return bus._emissionBuffer;
         }
+
+        [Test]
+        public void GlobalMessageBufferSizeDefaultMatchesConstant()
+        {
+            // Verify the default GlobalMessageBufferSize matches the DefaultMessageBufferSize constant
+            // to ensure consistency between the static property and the constant.
+            Assert.AreEqual(
+                IMessageBus.DefaultMessageBufferSize,
+                100,
+                "DefaultMessageBufferSize constant should be 100."
+            );
+        }
+
+        [UnityTest]
+        public IEnumerator ZeroBufferSizeDiscardsEmissions()
+        {
+            DiagnosticsTarget originalDiagnostics = IMessageBus.GlobalDiagnosticsTargets;
+            int originalBufferSize = IMessageBus.GlobalMessageBufferSize;
+            try
+            {
+                IMessageBus.GlobalDiagnosticsTargets = DiagnosticsTarget.All;
+                IMessageBus.GlobalMessageBufferSize = 0;
+
+                GameObject host = new(nameof(ZeroBufferSizeDiscardsEmissions));
+                _spawned.Add(host);
+                MessageHandler handler = new(host) { active = true };
+                MessageBus customBus = new() { DiagnosticsMode = true };
+
+                MessageRegistrationToken token = MessageRegistrationToken.Create(
+                    handler,
+                    customBus
+                );
+                token.DiagnosticMode = true;
+                token.Enable();
+
+                int count = 0;
+                MessageRegistrationHandle handle =
+                    token.RegisterUntargeted<SimpleUntargetedMessage>(_ => ++count);
+
+                SimpleUntargetedMessage message = new();
+                for (int i = 0; i < 5; ++i)
+                {
+                    message.EmitUntargeted(customBus);
+                }
+
+                // Messages should still be delivered to handlers
+                Assert.AreEqual(
+                    5,
+                    count,
+                    "Messages should still be delivered even with zero buffer size."
+                );
+
+                // But the emission buffer should remain empty (emissions are silently discarded)
+                CyclicBuffer<MessageEmissionData> busBuffer = GetEmissionBuffer(customBus);
+                Assert.AreEqual(
+                    0,
+                    busBuffer.Count,
+                    "Zero buffer size should discard all emissions."
+                );
+
+                token.RemoveRegistration(handle);
+                token.Disable();
+                handler.active = false;
+            }
+            finally
+            {
+                IMessageBus.GlobalDiagnosticsTargets = originalDiagnostics;
+                IMessageBus.GlobalMessageBufferSize = originalBufferSize;
+            }
+
+            yield break;
+        }
     }
 }
 

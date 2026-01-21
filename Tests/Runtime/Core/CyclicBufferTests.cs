@@ -1,7 +1,10 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
+    using System.Collections.Generic;
+    using System.Linq;
     using DxMessaging.Core.DataStructure;
     using NUnit.Framework;
     using UnityEngine.TestTools;
@@ -63,6 +66,280 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(3, buf[1], "Growing capacity should not alter order (second).");
             Assert.AreEqual(4, buf[2], "Growing capacity should not alter order (third).");
             yield break;
+        }
+
+        [Test]
+        [TestCase(0, 5, 0, Description = "Zero capacity discards all items")]
+        [TestCase(1, 5, 1, Description = "Capacity 1 keeps only most recent")]
+        [TestCase(3, 5, 3, Description = "Capacity 3 keeps 3 most recent of 5")]
+        [TestCase(5, 5, 5, Description = "Capacity equals item count")]
+        [TestCase(10, 5, 5, Description = "Capacity larger than items")]
+        public void CapacityBehaviorDataDriven(int capacity, int itemsToAdd, int expectedCount)
+        {
+            CyclicBuffer<int> buffer = new(capacity);
+            for (int i = 0; i < itemsToAdd; ++i)
+            {
+                buffer.Add(i);
+            }
+
+            Assert.AreEqual(
+                expectedCount,
+                buffer.Count,
+                $"Buffer with capacity {capacity} after adding {itemsToAdd} items."
+            );
+
+            // Verify the most recent items are retained (if any)
+            if (expectedCount > 0)
+            {
+                int expectedNewest = itemsToAdd - 1;
+                Assert.AreEqual(
+                    expectedNewest,
+                    buffer[expectedCount - 1],
+                    "Most recent item should be preserved."
+                );
+            }
+        }
+
+        [Test]
+        [TestCase(
+            new[] { 1, 2, 3 },
+            1,
+            new[] { 2, 3 },
+            Description = "Remove first element by value"
+        )]
+        [TestCase(
+            new[] { 1, 2, 3 },
+            2,
+            new[] { 1, 3 },
+            Description = "Remove middle element by value"
+        )]
+        [TestCase(
+            new[] { 1, 2, 3 },
+            3,
+            new[] { 1, 2 },
+            Description = "Remove last element by value"
+        )]
+        [TestCase(
+            new[] { 1, 2, 3 },
+            99,
+            new[] { 1, 2, 3 },
+            Description = "Remove non-existent element"
+        )]
+        [TestCase(new[] { 1 }, 1, new int[0], Description = "Remove only element")]
+        public void RemoveBehaviorDataDriven(int[] initial, int toRemove, int[] expected)
+        {
+            CyclicBuffer<int> buffer = new(initial.Length, initial);
+            bool wasRemoved = buffer.Remove(toRemove);
+
+            bool shouldHaveBeenRemoved = initial.Contains(toRemove);
+            Assert.AreEqual(
+                shouldHaveBeenRemoved,
+                wasRemoved,
+                $"Remove({toRemove}) should return {shouldHaveBeenRemoved} for initial buffer [{string.Join(", ", initial)}]."
+            );
+
+            Assert.AreEqual(
+                expected.Length,
+                buffer.Count,
+                $"Count after Remove({toRemove}) from [{string.Join(", ", initial)}] should be {expected.Length}, but was {buffer.Count}."
+            );
+
+            int[] actual = buffer.ToArray();
+            CollectionAssert.AreEqual(
+                expected,
+                actual,
+                $"After Remove({toRemove}) from [{string.Join(", ", initial)}], expected [{string.Join(", ", expected)}] but got [{string.Join(", ", actual)}]."
+            );
+        }
+
+        [Test]
+        [TestCase(
+            new[] { 1, 2, 2, 3 },
+            2,
+            new[] { 1, 2, 3 },
+            Description = "Remove first occurrence of duplicate"
+        )]
+        [TestCase(
+            new[] { 2, 2, 2 },
+            2,
+            new[] { 2, 2 },
+            Description = "Remove first of all duplicates"
+        )]
+        [TestCase(
+            new[] { 1, 1, 1 },
+            1,
+            new[] { 1, 1 },
+            Description = "Remove first of identical elements"
+        )]
+        public void RemoveDuplicatesBehavior(int[] initial, int toRemove, int[] expected)
+        {
+            CyclicBuffer<int> buffer = new(initial.Length, initial);
+            bool wasRemoved = buffer.Remove(toRemove);
+
+            Assert.IsTrue(
+                wasRemoved,
+                $"Remove({toRemove}) should return true when element exists in [{string.Join(", ", initial)}]."
+            );
+
+            Assert.AreEqual(
+                expected.Length,
+                buffer.Count,
+                $"Count after Remove({toRemove}) from [{string.Join(", ", initial)}] should be {expected.Length}, but was {buffer.Count}."
+            );
+
+            int[] actual = buffer.ToArray();
+            CollectionAssert.AreEqual(
+                expected,
+                actual,
+                $"After Remove({toRemove}) from [{string.Join(", ", initial)}], expected [{string.Join(", ", expected)}] but got [{string.Join(", ", actual)}]."
+            );
+        }
+
+        [Test]
+        public void RemoveFromEmptyBuffer()
+        {
+            CyclicBuffer<int> buffer = new(5);
+            bool wasRemoved = buffer.Remove(1);
+            Assert.IsFalse(wasRemoved, "Remove from empty buffer should return false");
+            Assert.AreEqual(0, buffer.Count, "Count should remain 0");
+        }
+
+        [Test]
+        [TestCase(2, new[] { 3, 4 }, Description = "Remove first element from wrapped buffer")]
+        [TestCase(3, new[] { 2, 4 }, Description = "Remove middle element from wrapped buffer")]
+        [TestCase(4, new[] { 2, 3 }, Description = "Remove last element from wrapped buffer")]
+        public void RemoveFromWrappedBuffer(int toRemove, int[] expected)
+        {
+            // Create a buffer that has wrapped around
+            CyclicBuffer<int> buffer = new(3);
+            buffer.Add(1);
+            buffer.Add(2);
+            buffer.Add(3);
+            // Buffer is now [1, 2, 3], full
+            buffer.Add(4);
+            // Buffer has wrapped, now contains [2, 3, 4] logically
+
+            int[] beforeRemove = buffer.ToArray();
+            Assert.AreEqual(
+                new[] { 2, 3, 4 },
+                beforeRemove,
+                $"Before remove, wrapped buffer should be [2, 3, 4] but was [{string.Join(", ", beforeRemove)}]."
+            );
+
+            bool wasRemoved = buffer.Remove(toRemove);
+            Assert.IsTrue(
+                wasRemoved,
+                $"Remove({toRemove}) should return true for wrapped buffer containing {toRemove}."
+            );
+
+            int[] afterRemove = buffer.ToArray();
+            Assert.AreEqual(
+                expected.Length,
+                buffer.Count,
+                $"Count after Remove({toRemove}) from wrapped buffer should be {expected.Length}, but was {buffer.Count}."
+            );
+            CollectionAssert.AreEqual(
+                expected,
+                afterRemove,
+                $"After Remove({toRemove}) from wrapped buffer [2, 3, 4], expected [{string.Join(", ", expected)}] but got [{string.Join(", ", afterRemove)}]."
+            );
+        }
+
+        [Test]
+        public void RemoveWithCustomComparer()
+        {
+            // Case-insensitive string comparer
+            CyclicBuffer<string> buffer = new(5);
+            buffer.Add("Apple");
+            buffer.Add("Banana");
+            buffer.Add("Cherry");
+
+            // Should find and remove "BANANA" using case-insensitive comparison
+            bool wasRemoved = buffer.Remove("BANANA", StringComparer.OrdinalIgnoreCase);
+            Assert.IsTrue(
+                wasRemoved,
+                "Remove with case-insensitive comparer should find 'BANANA' matching 'Banana'."
+            );
+
+            string[] afterRemove = buffer.ToArray();
+            Assert.AreEqual(2, buffer.Count, "Count should be 2 after removal.");
+            CollectionAssert.AreEqual(
+                new[] { "Apple", "Cherry" },
+                afterRemove,
+                $"After Remove('BANANA') with case-insensitive comparer, expected ['Apple', 'Cherry'] but got [{string.Join(", ", afterRemove)}]."
+            );
+
+            // Should NOT find "banana" using default (case-sensitive) comparison
+            buffer.Add("Durian");
+            wasRemoved = buffer.Remove("APPLE"); // default comparer is case-sensitive
+            Assert.IsFalse(
+                wasRemoved,
+                "Remove with default comparer should NOT find 'APPLE' when buffer contains 'Apple'."
+            );
+            Assert.AreEqual(3, buffer.Count, "Count should remain 3 when element not found.");
+        }
+
+        [Test]
+        public void SequentialRemoves()
+        {
+            CyclicBuffer<int> buffer = new(5, new[] { 1, 2, 3, 4, 5 });
+
+            Assert.IsTrue(buffer.Remove(2), "First remove should succeed");
+            CollectionAssert.AreEqual(new[] { 1, 3, 4, 5 }, buffer.ToArray(), "After first remove");
+
+            Assert.IsTrue(buffer.Remove(4), "Second remove should succeed");
+            CollectionAssert.AreEqual(new[] { 1, 3, 5 }, buffer.ToArray(), "After second remove");
+
+            Assert.IsTrue(buffer.Remove(1), "Third remove should succeed");
+            CollectionAssert.AreEqual(new[] { 3, 5 }, buffer.ToArray(), "After third remove");
+
+            Assert.AreEqual(2, buffer.Count, "Final count should be 2");
+        }
+
+        [Test]
+        public void WrappedBufferEnumerationConsistencyAfterRemove()
+        {
+            // Create a wrapped buffer
+            CyclicBuffer<int> buffer = new(3);
+            buffer.Add(1);
+            buffer.Add(2);
+            buffer.Add(3);
+            buffer.Add(4); // Now wrapped: [2, 3, 4]
+
+            buffer.Remove(3); // Remove middle: should be [2, 4]
+
+            // Verify ToArray() and foreach enumeration give same results
+            int[] fromToArray = buffer.ToArray();
+            List<int> fromEnumeration = new();
+            foreach (int item in buffer)
+            {
+                fromEnumeration.Add(item);
+            }
+
+            CollectionAssert.AreEqual(
+                new[] { 2, 4 },
+                fromToArray,
+                "ToArray() should return [2, 4]"
+            );
+            CollectionAssert.AreEqual(
+                fromToArray,
+                fromEnumeration.ToArray(),
+                "Enumeration should match ToArray()"
+            );
+        }
+
+        [Test]
+        public void ZeroCapacityBufferIsEmpty()
+        {
+            CyclicBuffer<int> buffer = new(0);
+
+            // Add multiple items - all should be silently discarded
+            buffer.Add(1);
+            buffer.Add(2);
+            buffer.Add(3);
+
+            Assert.AreEqual(0, buffer.Capacity, "Capacity should remain 0.");
+            Assert.AreEqual(0, buffer.Count, "Count should remain 0.");
         }
     }
 }

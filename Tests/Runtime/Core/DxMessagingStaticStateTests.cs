@@ -45,7 +45,7 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.IsFalse(MessagingDebug.enabled);
             Assert.IsNull(MessagingDebug.LogFunction);
             Assert.AreEqual(DiagnosticsTarget.Off, IMessageBus.GlobalDiagnosticsTargets);
-            Assert.AreEqual(0, IMessageBus.GlobalMessageBufferSize);
+            Assert.AreEqual(100, IMessageBus.GlobalMessageBufferSize);
             Assert.AreEqual(-1, IMessageBus.GlobalSequentialIndex);
 
             MessageRegistrationHandle resetHandle =

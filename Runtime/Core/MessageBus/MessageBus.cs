@@ -101,7 +101,7 @@ namespace DxMessaging.Core.MessageBus
                 this.pooledEntries = pooledEntries;
             }
 
-            public int priority;
+            public readonly int priority;
             public DispatchEntry[] entries;
             public int entryCount;
             public bool pooledEntries;
@@ -139,19 +139,19 @@ namespace DxMessaging.Core.MessageBus
             {
                 this.buckets = buckets;
                 bucketCount = count;
-                this.pooled = pooled;
+                _pooled = pooled;
             }
 
             public DispatchBucket[] buckets;
             public int bucketCount;
-            private bool pooled;
+            private bool _pooled;
 
             public bool IsEmpty => bucketCount == 0;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public void Release()
             {
-                if (!pooled || buckets == null)
+                if (!_pooled || buckets == null)
                 {
                     return;
                 }
@@ -165,7 +165,7 @@ namespace DxMessaging.Core.MessageBus
                 DispatchBucketPool.Return(buckets);
                 buckets = Array.Empty<DispatchBucket>();
                 bucketCount = 0;
-                pooled = false;
+                _pooled = false;
             }
         }
 
@@ -196,7 +196,7 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
-            private readonly Dictionary<DispatchCategory, DispatchState> dispatchStates = new();
+            private readonly Dictionary<DispatchCategory, DispatchState> _dispatchStates = new();
 
             /// <summary>
             /// Clears all cached handler references and resets the version tracking metadata.
@@ -209,23 +209,23 @@ namespace DxMessaging.Core.MessageBus
                 version = 0;
                 lastSeenVersion = -1;
                 lastSeenEmissionId = 0;
-                if (dispatchStates.Count > 0)
+                if (_dispatchStates.Count > 0)
                 {
-                    foreach (DispatchState state in dispatchStates.Values)
+                    foreach (DispatchState state in _dispatchStates.Values)
                     {
                         state.Reset();
                     }
-                    dispatchStates.Clear();
+                    _dispatchStates.Clear();
                 }
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public DispatchState GetOrCreateDispatchState(DispatchCategory category)
             {
-                if (!dispatchStates.TryGetValue(category, out DispatchState state))
+                if (!_dispatchStates.TryGetValue(category, out DispatchState state))
                 {
                     state = new DispatchState();
-                    dispatchStates[category] = state;
+                    _dispatchStates[category] = state;
                 }
 
                 return state;
@@ -270,7 +270,7 @@ namespace DxMessaging.Core.MessageBus
             public long version;
             public long lastSeenVersion = -1;
             public long lastSeenEmissionId;
-            private readonly Dictionary<DispatchCategory, DispatchState> dispatchStates = new();
+            private readonly Dictionary<DispatchCategory, DispatchState> _dispatchStates = new();
 
             /// <summary>
             /// Clears all cached handler references and resets the version tracking metadata.
@@ -282,23 +282,23 @@ namespace DxMessaging.Core.MessageBus
                 version = 0;
                 lastSeenVersion = -1;
                 lastSeenEmissionId = 0;
-                if (dispatchStates.Count > 0)
+                if (_dispatchStates.Count > 0)
                 {
-                    foreach (DispatchState state in dispatchStates.Values)
+                    foreach (DispatchState state in _dispatchStates.Values)
                     {
                         state.Reset();
                     }
-                    dispatchStates.Clear();
+                    _dispatchStates.Clear();
                 }
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public DispatchState GetOrCreateDispatchState(DispatchCategory category)
             {
-                if (!dispatchStates.TryGetValue(category, out DispatchState state))
+                if (!_dispatchStates.TryGetValue(category, out DispatchState state))
                 {
                     state = new DispatchState();
-                    dispatchStates[category] = state;
+                    _dispatchStates[category] = state;
                 }
 
                 return state;
@@ -4441,11 +4441,7 @@ namespace DxMessaging.Core.MessageBus
                 {
                     ReleaseSnapshot(ref state.pending);
                     state.pending = hasHandlers
-                        ? BuildDispatchSnapshot<TMessage>(
-                            messageBus,
-                            handlers,
-                            category
-                        )
+                        ? BuildDispatchSnapshot<TMessage>(messageBus, handlers, category)
                         : DispatchSnapshot.Empty;
 
                     state.pendingDirty = false;
@@ -4468,11 +4464,7 @@ namespace DxMessaging.Core.MessageBus
                     {
                         ReleaseSnapshot(ref state.pending);
                         state.pending = hasHandlers
-                            ? BuildDispatchSnapshot<TMessage>(
-                                messageBus,
-                                handlers,
-                                category
-                              )
+                            ? BuildDispatchSnapshot<TMessage>(messageBus, handlers, category)
                             : DispatchSnapshot.Empty;
 
                         state.pendingDirty = false;
@@ -4632,11 +4624,7 @@ namespace DxMessaging.Core.MessageBus
                     {
                         ReleaseSnapshot(ref state.pending);
                         state.pending = hasHandlers
-                            ? BuildGlobalDispatchSnapshot<TMessage>(
-                                messageBus,
-                                handlers,
-                                category
-                            )
+                            ? BuildGlobalDispatchSnapshot<TMessage>(messageBus, handlers, category)
                             : DispatchSnapshot.Empty;
 
                         state.pendingDirty = false;
