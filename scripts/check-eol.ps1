@@ -42,9 +42,14 @@ function Get-GitIndexEolIssues {
         $relPath = $parts[1].Trim()
         $ext = [System.IO.Path]::GetExtension($relPath).ToLowerInvariant()
         if ($Extensions -notcontains $ext) { continue }
-        if ($meta -match 'attr/-text') { continue }
 
-        $indexToken = ($meta -split '\s+')[0]
+        # git ls-files --eol output format: i/[eol] w/[eol] attr/[attrs] [path]
+        $tokens = $meta -split '\s+'
+        $attrToken = $tokens | Where-Object { $_ -like 'attr/*' } | Select-Object -First 1
+        if ($attrToken -eq 'attr/-text') { continue }
+        
+        $indexToken = $tokens | Where-Object { $_ -like 'i/*' } | Select-Object -First 1
+        if (-not $indexToken) { continue }
         if ($indexToken -ne 'i/lf' -and $indexToken -ne 'i/none') {
             $issues.Add("$relPath ($indexToken)")
         }

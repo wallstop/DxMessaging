@@ -189,6 +189,7 @@ function getIndexEolIssues(files) {
       continue;
     }
 
+    // git ls-files --eol output format: i/[eol] w/[eol] attr/[attrs] [path]
     const parts = meta.split(/\s+/);
     const indexToken = parts.find((part) => part.startsWith('i/'));
     const attrToken = parts.find((part) => part.startsWith('attr/'));
