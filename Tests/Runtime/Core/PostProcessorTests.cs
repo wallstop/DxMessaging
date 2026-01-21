@@ -26,19 +26,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref SimpleUntargetedMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -126,6 +115,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref SimpleUntargetedMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -141,19 +142,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref SimpleTargetedMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -273,6 +263,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -291,19 +293,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref InstanceId target, ref SimpleTargetedMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -391,6 +382,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -406,19 +409,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref SimpleTargetedMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -541,6 +533,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -559,19 +563,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref InstanceId target, ref SimpleTargetedMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -664,6 +657,18 @@ namespace DxMessaging.Tests.Runtime.Core
             ResetCount();
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -679,19 +684,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref SimpleBroadcastMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -827,6 +821,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref SimpleBroadcastMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -845,19 +851,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref InstanceId target, ref SimpleBroadcastMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -961,6 +956,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref InstanceId target, ref SimpleBroadcastMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -976,19 +983,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref SimpleBroadcastMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -1111,6 +1107,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref SimpleBroadcastMessage message)
+            {
+                assertion.Invoke();
+            }
         }
 
         [UnityTest]
@@ -1129,19 +1137,8 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
 
             int finalCount = 0;
-            void ResetCount()
-            {
-                lastSeenCount = 0;
-                count = 0;
-                finalCount = 0;
-            }
 
             Action assertion;
-
-            void PostProcessor(ref InstanceId source, ref SimpleBroadcastMessage message)
-            {
-                assertion.Invoke();
-            }
 
             count = 1;
             assertion = () =>
@@ -1232,6 +1229,18 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void ResetCount()
+            {
+                lastSeenCount = 0;
+                count = 0;
+                finalCount = 0;
+            }
+
+            void PostProcessor(ref InstanceId source, ref SimpleBroadcastMessage message)
+            {
+                assertion.Invoke();
+            }
         }
     }
 }

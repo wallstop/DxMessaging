@@ -101,16 +101,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
@@ -149,6 +141,16 @@ namespace DxMessaging.Tests.Runtime.Core
                 Assert.AreEqual(2 + i, test2ReceiveCount);
             }
             yield break;
+
+            void Test1Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -170,16 +172,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
@@ -229,6 +223,16 @@ namespace DxMessaging.Tests.Runtime.Core
                 Assert.AreEqual(2 + i, test2ReceiveCount);
             }
             yield break;
+
+            void Test1Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -318,16 +322,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
@@ -368,6 +364,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Test1Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -389,16 +395,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(ref SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
@@ -443,6 +441,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Test1Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(ref SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -464,16 +472,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(InstanceId id, SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(InstanceId id, SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
@@ -514,6 +514,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Test1Receive(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -535,16 +545,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             MessageRegistrationToken token1 = GetToken(component1);
             MessageRegistrationToken token2 = GetToken(component2);
@@ -585,6 +587,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Test1Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -606,16 +618,8 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int test1ReceiveCount = 0;
-            void Test1Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
-            {
-                ++test1ReceiveCount;
-            }
 
             int test2ReceiveCount = 0;
-            void Test2Receive(InstanceId id, SimpleBroadcastMessage message)
-            {
-                ++test2ReceiveCount;
-            }
 
             // Assign them to the same token for simplicity
             MessageRegistrationToken token1 = GetToken(component1);
@@ -656,6 +660,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Test1Receive(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++test1ReceiveCount;
+            }
+
+            void Test2Receive(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++test2ReceiveCount;
+            }
         }
 
         [UnityTest]
@@ -669,16 +683,6 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int gameObjectCount = 0;
             int componentCount = 0;
-
-            void ReceiveGameObject(ref SimpleBroadcastMessage message)
-            {
-                ++gameObjectCount;
-            }
-
-            void ReceiveComponent(ref SimpleBroadcastMessage message)
-            {
-                ++componentCount;
-            }
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
@@ -700,6 +704,16 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(2, gameObjectCount);
 
             yield break;
+
+            void ReceiveGameObject(ref SimpleBroadcastMessage message)
+            {
+                ++gameObjectCount;
+            }
+
+            void ReceiveComponent(ref SimpleBroadcastMessage message)
+            {
+                ++componentCount;
+            }
         }
 
         [UnityTest]

@@ -58,7 +58,10 @@ namespace DxMessaging.Tests.Runtime.Core
             int expected = ManyCount;
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(expected, total, "All baseline handlers should run on first emission.");
             Assert.AreEqual(
                 0,
@@ -69,7 +72,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 expected + ManyCount,
                 total,
@@ -122,7 +128,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -132,7 +141,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -193,7 +205,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -208,7 +223,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -269,7 +287,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(host);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -284,7 +305,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(host);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -347,7 +371,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectBroadcast(source);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -362,7 +389,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectBroadcast(source);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -422,7 +452,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(host);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -437,7 +470,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(host);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -497,7 +533,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitComponentBroadcast(component);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -512,7 +551,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitComponentBroadcast(component);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -591,7 +633,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -606,7 +651,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -733,7 +781,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int handlerTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 handlerTotal += handlerCounts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 handlerTotal,
@@ -742,7 +793,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 ppTotal += ppCounts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 ppTotal,
@@ -757,7 +811,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 ppTotal += ppCounts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 ppTotal,
@@ -822,7 +879,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += ppCounts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount,
                 total,
@@ -837,7 +897,10 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitUntargeted();
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += ppCounts[i];
+            }
+
             Assert.AreEqual(
                 ManyCount * 2,
                 total,
@@ -917,14 +980,20 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(target);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount, total);
             Assert.AreEqual(0, counts[ManyCount]);
 
             msg.EmitGameObjectTargeted(target);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, total);
             Assert.AreEqual(1, counts[ManyCount]);
 
@@ -994,14 +1063,20 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectBroadcast(source);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount, total);
             Assert.AreEqual(0, counts[ManyCount]);
 
             msg.EmitGameObjectBroadcast(source);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, total);
             Assert.AreEqual(1, counts[ManyCount]);
 
@@ -1069,14 +1144,20 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(target);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount, total);
             Assert.AreEqual(0, counts[ManyCount]);
 
             msg.EmitGameObjectTargeted(target);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, total);
             Assert.AreEqual(1, counts[ManyCount]);
 
@@ -1141,14 +1222,20 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitComponentBroadcast(listeners[0].comp);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount, total);
             Assert.AreEqual(0, counts[ManyCount]);
 
             msg.EmitComponentBroadcast(listeners[0].comp);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += counts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, total);
             Assert.AreEqual(1, counts[ManyCount]);
 
@@ -1667,15 +1754,6 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageRegistrationHandle firstHandle = default;
             MessageRegistrationHandle? secondHandle = null;
 
-            void Local(SimpleUntargetedMessage _)
-            {
-                count++;
-                if (secondHandle == null)
-                {
-                    secondHandle = token.RegisterUntargeted<SimpleUntargetedMessage>(Local);
-                }
-            }
-
             firstHandle = token.RegisterUntargeted<SimpleUntargetedMessage>(Local);
 
             SimpleUntargetedMessage msg = new();
@@ -1691,6 +1769,15 @@ namespace DxMessaging.Tests.Runtime.Core
                 token.RemoveRegistration(secondHandle.Value);
             }
             yield break;
+
+            void Local(SimpleUntargetedMessage _)
+            {
+                count++;
+                if (secondHandle == null)
+                {
+                    secondHandle = token.RegisterUntargeted<SimpleUntargetedMessage>(Local);
+                }
+            }
         }
 
         [UnityTest]
@@ -1784,19 +1871,28 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int handlerTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 handlerTotal += handlerCounts[i];
+            }
+
             Assert.AreEqual(ManyCount, handlerTotal);
 
             int ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 ppTotal += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount, ppTotal);
             Assert.AreEqual(0, ppCounts[ManyCount]);
 
             msg.EmitGameObjectTargeted(host);
             ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 ppTotal += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, ppTotal);
             Assert.AreEqual(1, ppCounts[ManyCount]);
 
@@ -1856,14 +1952,20 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectTargeted(host);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount, total);
             Assert.AreEqual(0, ppCounts[ManyCount]);
 
             msg.EmitGameObjectTargeted(host);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, total);
             Assert.AreEqual(1, ppCounts[ManyCount]);
 
@@ -1925,19 +2027,28 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int handlerTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 handlerTotal += handlerCounts[i];
+            }
+
             Assert.AreEqual(ManyCount, handlerTotal);
 
             int ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 ppTotal += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount, ppTotal);
             Assert.AreEqual(0, ppCounts[ManyCount]);
 
             msg.EmitGameObjectBroadcast(host);
             ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 ppTotal += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, ppTotal);
             Assert.AreEqual(1, ppCounts[ManyCount]);
 
@@ -1997,14 +2108,20 @@ namespace DxMessaging.Tests.Runtime.Core
             msg.EmitGameObjectBroadcast(host);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount, total);
             Assert.AreEqual(0, ppCounts[ManyCount]);
 
             msg.EmitGameObjectBroadcast(host);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
+            {
                 total += ppCounts[i];
+            }
+
             Assert.AreEqual(ManyCount * 2, total);
             Assert.AreEqual(1, ppCounts[ManyCount]);
 

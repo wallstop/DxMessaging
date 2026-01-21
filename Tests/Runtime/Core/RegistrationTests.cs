@@ -40,11 +40,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(SimpleUntargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterUntargeted<SimpleUntargetedMessage>(Handle),
@@ -70,6 +65,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(SimpleUntargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -77,11 +77,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref SimpleUntargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterUntargeted<SimpleUntargetedMessage>(Handle),
@@ -107,17 +102,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleUntargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator UntargetedPostProcessor()
         {
             int count = 0;
-
-            void Handle(ref SimpleUntargetedMessage message)
-            {
-                ++count;
-            }
 
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
@@ -144,18 +139,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleUntargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator UntargetedInterceptor()
         {
             int count = 0;
-
-            bool Intercept(ref SimpleUntargetedMessage message)
-            {
-                ++count;
-                return true;
-            }
 
             SimpleUntargetedMessage message = new();
             RunRegistrationTest(
@@ -182,6 +176,12 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            bool Intercept(ref SimpleUntargetedMessage message)
+            {
+                ++count;
+                return true;
+            }
         }
 
         [UnityTest]
@@ -189,11 +189,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterGameObjectTargeted<SimpleTargetedMessage>(_test, Handle),
@@ -220,6 +215,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -227,11 +227,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterGameObjectTargeted<SimpleTargetedMessage>(_test, Handle),
@@ -258,17 +253,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator GameObjectTargetedPostProcessor()
         {
             int count = 0;
-
-            void Handle(ref SimpleTargetedMessage message)
-            {
-                ++count;
-            }
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
@@ -300,6 +295,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -307,11 +307,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterComponentTargeted<SimpleTargetedMessage>(_component, Handle),
@@ -338,6 +333,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -345,11 +345,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterComponentTargeted<SimpleTargetedMessage>(_component, Handle),
@@ -376,17 +371,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator ComponentTargetedPostProcessor()
         {
             int count = 0;
-
-            void Handle(ref SimpleTargetedMessage message)
-            {
-                ++count;
-            }
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
@@ -418,18 +413,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator TargetedInterceptor()
         {
             int count = 0;
-
-            bool Intercept(ref InstanceId target, ref SimpleTargetedMessage message)
-            {
-                ++count;
-                return true;
-            }
 
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
@@ -457,6 +451,12 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            bool Intercept(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                ++count;
+                return true;
+            }
         }
 
         [UnityTest]
@@ -464,11 +464,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(InstanceId target, SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle),
@@ -495,6 +490,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(InstanceId target, SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -502,11 +502,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(Handle),
@@ -533,6 +528,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -540,11 +540,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(InstanceId target, SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token =>
@@ -574,6 +569,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(InstanceId target, SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -581,11 +581,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
-            {
-                ++count;
-            }
-
             SimpleTargetedMessage message = new();
             RunRegistrationTest(
                 token =>
@@ -615,6 +610,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref InstanceId target, ref SimpleTargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -622,11 +622,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(_test, Handle),
@@ -653,6 +648,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -660,11 +660,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(_test, Handle),
@@ -691,17 +686,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator GameObjectBroadcastPostProcessor()
         {
             int count = 0;
-
-            void Handle(ref SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
@@ -733,6 +728,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -740,11 +740,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token =>
@@ -772,6 +767,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -779,11 +779,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token =>
@@ -811,17 +806,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator ComponentBroadcastPostProcessor()
         {
             int count = 0;
-
-            void Handle(ref SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
@@ -853,18 +848,17 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
         public IEnumerator BroadcastInterceptor()
         {
             int count = 0;
-
-            bool Intercept(ref InstanceId target, ref SimpleBroadcastMessage message)
-            {
-                ++count;
-                return true;
-            }
 
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
@@ -892,6 +886,12 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            bool Intercept(ref InstanceId target, ref SimpleBroadcastMessage message)
+            {
+                ++count;
+                return true;
+            }
         }
 
         [UnityTest]
@@ -899,11 +899,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(InstanceId id, SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle),
@@ -930,6 +925,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -937,11 +937,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token => token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(Handle),
@@ -968,6 +963,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -975,11 +975,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(InstanceId id, SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token =>
@@ -1009,6 +1004,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(InstanceId id, SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -1016,11 +1016,6 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             int count = 0;
 
-            void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
-            {
-                ++count;
-            }
-
             SimpleBroadcastMessage message = new();
             RunRegistrationTest(
                 token =>
@@ -1050,6 +1045,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
+
+            void Handle(ref InstanceId id, ref SimpleBroadcastMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]
@@ -1058,6 +1058,61 @@ namespace DxMessaging.Tests.Runtime.Core
             int targetedCount = 0;
             int broadcastCount = 0;
             int untargetedCount = 0;
+
+            SimpleUntargetedMessage untargetedMessage = new();
+            SimpleTargetedMessage targetedMessage = new();
+            SimpleBroadcastMessage broadcastMessage = new();
+            RunRegistrationTest(
+                token =>
+                    token.RegisterGlobalAcceptAll(
+                        HandleUntargeted,
+                        HandleTargeted,
+                        HandleBroadcast
+                    ),
+                i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                },
+                i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    Assert.AreEqual(i, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    Assert.AreEqual(i + 1, targetedCount);
+                    Assert.AreEqual(i, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(i + 1, targetedCount);
+                    Assert.AreEqual(i + 1, broadcastCount);
+                    Assert.AreEqual(i + 1, untargetedCount);
+                },
+                () =>
+                {
+                    untargetedMessage.EmitUntargeted();
+                    targetedMessage.EmitGameObjectTargeted(_test);
+                    broadcastMessage.EmitComponentBroadcast(_component);
+                    Assert.AreEqual(0, targetedCount);
+                    Assert.AreEqual(0, broadcastCount);
+                    Assert.AreEqual(0, untargetedCount);
+                },
+                () =>
+                {
+                    targetedCount = 0;
+                    broadcastCount = 0;
+                    untargetedCount = 0;
+                }
+            );
+            yield break;
 
             void HandleUntargeted(IUntargetedMessage message)
             {
@@ -1073,6 +1128,14 @@ namespace DxMessaging.Tests.Runtime.Core
             {
                 ++broadcastCount;
             }
+        }
+
+        [UnityTest]
+        public IEnumerator GlobalAcceptAllNoCopy()
+        {
+            int targetedCount = 0;
+            int broadcastCount = 0;
+            int untargetedCount = 0;
 
             SimpleUntargetedMessage untargetedMessage = new();
             SimpleTargetedMessage targetedMessage = new();
@@ -1128,14 +1191,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator GlobalAcceptAllNoCopy()
-        {
-            int targetedCount = 0;
-            int broadcastCount = 0;
-            int untargetedCount = 0;
 
             void HandleUntargeted(ref IUntargetedMessage message)
             {
@@ -1151,61 +1206,6 @@ namespace DxMessaging.Tests.Runtime.Core
             {
                 ++broadcastCount;
             }
-
-            SimpleUntargetedMessage untargetedMessage = new();
-            SimpleTargetedMessage targetedMessage = new();
-            SimpleBroadcastMessage broadcastMessage = new();
-            RunRegistrationTest(
-                token =>
-                    token.RegisterGlobalAcceptAll(
-                        HandleUntargeted,
-                        HandleTargeted,
-                        HandleBroadcast
-                    ),
-                i =>
-                {
-                    Assert.AreEqual(i, targetedCount);
-                    Assert.AreEqual(i, broadcastCount);
-                    Assert.AreEqual(i, untargetedCount);
-                    untargetedMessage.EmitUntargeted();
-                    targetedMessage.EmitGameObjectTargeted(_test);
-                    broadcastMessage.EmitComponentBroadcast(_component);
-                },
-                i =>
-                {
-                    Assert.AreEqual(i, targetedCount);
-                    Assert.AreEqual(i, broadcastCount);
-                    Assert.AreEqual(i, untargetedCount);
-                    untargetedMessage.EmitUntargeted();
-                    Assert.AreEqual(i, targetedCount);
-                    Assert.AreEqual(i, broadcastCount);
-                    Assert.AreEqual(i + 1, untargetedCount);
-                    targetedMessage.EmitGameObjectTargeted(_test);
-                    Assert.AreEqual(i + 1, targetedCount);
-                    Assert.AreEqual(i, broadcastCount);
-                    Assert.AreEqual(i + 1, untargetedCount);
-                    broadcastMessage.EmitComponentBroadcast(_component);
-                    Assert.AreEqual(i + 1, targetedCount);
-                    Assert.AreEqual(i + 1, broadcastCount);
-                    Assert.AreEqual(i + 1, untargetedCount);
-                },
-                () =>
-                {
-                    untargetedMessage.EmitUntargeted();
-                    targetedMessage.EmitGameObjectTargeted(_test);
-                    broadcastMessage.EmitComponentBroadcast(_component);
-                    Assert.AreEqual(0, targetedCount);
-                    Assert.AreEqual(0, broadcastCount);
-                    Assert.AreEqual(0, untargetedCount);
-                },
-                () =>
-                {
-                    targetedCount = 0;
-                    broadcastCount = 0;
-                    untargetedCount = 0;
-                }
-            );
-            yield break;
         }
 
         private void RunRegistrationTest(

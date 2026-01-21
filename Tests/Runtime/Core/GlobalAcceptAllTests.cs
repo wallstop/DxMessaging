@@ -36,6 +36,53 @@ namespace DxMessaging.Tests.Runtime.Core
             int targetedCount = 0;
             int broadcastCount = 0;
 
+            SimpleUntargetedMessage untargetedMessage = new();
+            SimpleTargetedMessage targetedMessage = new();
+            SimpleBroadcastMessage broadcastMessage = new();
+            RunGlobalAcceptAllTest(
+                token =>
+                    token.RegisterGlobalAcceptAll(
+                        HandleUntargeted,
+                        HandleTargeted,
+                        HandleBroadcast
+                    ),
+                i =>
+                {
+                    Assert.AreEqual(i, untargetedCount);
+                    untargetedMessage.EmitUntargeted();
+                    Assert.AreEqual(i + 1, untargetedCount);
+                },
+                i =>
+                {
+                    Assert.AreEqual(i, targetedCount);
+                    if (_random.Next() % 2 == 0)
+                    {
+                        targetedMessage.EmitGameObjectTargeted(_test);
+                    }
+                    else
+                    {
+                        targetedMessage.EmitComponentTargeted(_test.transform);
+                    }
+
+                    Assert.AreEqual(i + 1, targetedCount);
+                },
+                i =>
+                {
+                    Assert.AreEqual(i, broadcastCount);
+                    if (_random.Next() % 2 == 0)
+                    {
+                        broadcastMessage.EmitGameObjectBroadcast(_test);
+                    }
+                    else
+                    {
+                        broadcastMessage.EmitComponentBroadcast(_test.transform);
+                    }
+
+                    Assert.AreEqual(i + 1, broadcastCount);
+                }
+            );
+            yield break;
+
             void HandleUntargeted(IUntargetedMessage message)
             {
                 ++untargetedCount;
@@ -50,6 +97,14 @@ namespace DxMessaging.Tests.Runtime.Core
             {
                 ++broadcastCount;
             }
+        }
+
+        [UnityTest]
+        public IEnumerator SimpleNoCopy()
+        {
+            int untargetedCount = 0;
+            int targetedCount = 0;
+            int broadcastCount = 0;
 
             SimpleUntargetedMessage untargetedMessage = new();
             SimpleTargetedMessage targetedMessage = new();
@@ -97,14 +152,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
             yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator SimpleNoCopy()
-        {
-            int untargetedCount = 0;
-            int targetedCount = 0;
-            int broadcastCount = 0;
 
             void HandleUntargeted(ref IUntargetedMessage message)
             {
@@ -120,53 +167,6 @@ namespace DxMessaging.Tests.Runtime.Core
             {
                 ++broadcastCount;
             }
-
-            SimpleUntargetedMessage untargetedMessage = new();
-            SimpleTargetedMessage targetedMessage = new();
-            SimpleBroadcastMessage broadcastMessage = new();
-            RunGlobalAcceptAllTest(
-                token =>
-                    token.RegisterGlobalAcceptAll(
-                        HandleUntargeted,
-                        HandleTargeted,
-                        HandleBroadcast
-                    ),
-                i =>
-                {
-                    Assert.AreEqual(i, untargetedCount);
-                    untargetedMessage.EmitUntargeted();
-                    Assert.AreEqual(i + 1, untargetedCount);
-                },
-                i =>
-                {
-                    Assert.AreEqual(i, targetedCount);
-                    if (_random.Next() % 2 == 0)
-                    {
-                        targetedMessage.EmitGameObjectTargeted(_test);
-                    }
-                    else
-                    {
-                        targetedMessage.EmitComponentTargeted(_test.transform);
-                    }
-
-                    Assert.AreEqual(i + 1, targetedCount);
-                },
-                i =>
-                {
-                    Assert.AreEqual(i, broadcastCount);
-                    if (_random.Next() % 2 == 0)
-                    {
-                        broadcastMessage.EmitGameObjectBroadcast(_test);
-                    }
-                    else
-                    {
-                        broadcastMessage.EmitComponentBroadcast(_test.transform);
-                    }
-
-                    Assert.AreEqual(i + 1, broadcastCount);
-                }
-            );
-            yield break;
         }
 
         private void RunGlobalAcceptAllTest(

@@ -16,7 +16,6 @@ namespace DxMessaging.Editor.Settings
     /// </remarks>
     public sealed class DxMessagingSettings : ScriptableObject
     {
-        private const int DefaultBufferSize = 100;
         private const string SettingsPath = "Assets/Editor/DxMessagingSettings.asset";
 
         [SerializeField]
@@ -28,7 +27,7 @@ namespace DxMessaging.Editor.Settings
         private bool _legacyEnableDiagnosticsInEditor;
 
         [SerializeField]
-        internal int _messageBufferSize = DefaultBufferSize;
+        internal int _messageBufferSize = IMessageBus.DefaultMessageBufferSize;
 
         [SerializeField]
         internal bool _suppressDomainReloadWarning = true;
@@ -82,7 +81,7 @@ namespace DxMessaging.Editor.Settings
             {
                 settings = CreateInstance<DxMessagingSettings>();
                 settings._diagnosticsTargets = DiagnosticsTarget.Off;
-                settings._messageBufferSize = DefaultBufferSize;
+                settings._messageBufferSize = IMessageBus.DefaultMessageBufferSize;
                 settings._suppressDomainReloadWarning = true;
                 if (!AssetDatabase.IsValidFolder("Assets/Editor"))
                 {

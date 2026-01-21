@@ -24,18 +24,6 @@ namespace DxMessaging.Tests.Runtime.Core
             int count = 0;
             MessageRegistrationHandle? secondHandle = null;
 
-            void Local(SimpleTargetedMessage _)
-            {
-                count++;
-                if (secondHandle == null)
-                {
-                    secondHandle = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                        host,
-                        Local
-                    );
-                }
-            }
-
             MessageRegistrationHandle firstHandle =
                 token.RegisterGameObjectTargeted<SimpleTargetedMessage>(host, Local);
 
@@ -52,6 +40,18 @@ namespace DxMessaging.Tests.Runtime.Core
                 token.RemoveRegistration(secondHandle.Value);
             }
             yield break;
+
+            void Local(SimpleTargetedMessage _)
+            {
+                count++;
+                if (secondHandle == null)
+                {
+                    secondHandle = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
+                        host,
+                        Local
+                    );
+                }
+            }
         }
 
         [UnityTest]
@@ -65,18 +65,6 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int count = 0;
             MessageRegistrationHandle? secondHandle = null;
-
-            void Local(SimpleBroadcastMessage _)
-            {
-                count++;
-                if (secondHandle == null)
-                {
-                    secondHandle = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                        host,
-                        Local
-                    );
-                }
-            }
 
             MessageRegistrationHandle firstHandle =
                 token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(host, Local);
@@ -94,6 +82,18 @@ namespace DxMessaging.Tests.Runtime.Core
                 token.RemoveRegistration(secondHandle.Value);
             }
             yield break;
+
+            void Local(SimpleBroadcastMessage _)
+            {
+                count++;
+                if (secondHandle == null)
+                {
+                    secondHandle = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
+                        host,
+                        Local
+                    );
+                }
+            }
         }
     }
 }

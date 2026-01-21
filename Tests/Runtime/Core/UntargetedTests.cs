@@ -58,18 +58,10 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int count1 = 0;
-            void Receive1(ref SimpleUntargetedMessage message)
-            {
-                ++count1;
-            }
             MessageRegistrationToken token1 = GetToken(component1);
             _ = token1.RegisterUntargeted<SimpleUntargetedMessage>(Receive1);
 
             int count2 = 0;
-            void Receive2(ref SimpleUntargetedMessage message)
-            {
-                ++count2;
-            }
             MessageRegistrationToken token2 = GetToken(component2);
             _ = token2.RegisterUntargeted<SimpleUntargetedMessage>(Receive2);
 
@@ -82,6 +74,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Receive1(ref SimpleUntargetedMessage message)
+            {
+                ++count1;
+            }
+
+            void Receive2(ref SimpleUntargetedMessage message)
+            {
+                ++count2;
+            }
         }
 
         [UnityTest]
@@ -98,19 +100,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 test2.GetComponent<EmptyMessageAwareComponent>();
 
             int count1 = 0;
-            void Receive1(ref SimpleUntargetedMessage message)
-            {
-                ++count1;
-            }
             MessageRegistrationToken token1 = GetToken(component1);
             _ = token1.RegisterUntargeted<SimpleUntargetedMessage>(Receive1);
             _ = token1.RegisterUntargeted<SimpleUntargetedMessage>(_ => ++count1);
 
             int count2 = 0;
-            void Receive2(ref SimpleUntargetedMessage message)
-            {
-                ++count2;
-            }
             MessageRegistrationToken token2 = GetToken(component2);
             _ = token2.RegisterUntargeted<SimpleUntargetedMessage>(Receive2);
 
@@ -123,6 +117,16 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void Receive1(ref SimpleUntargetedMessage message)
+            {
+                ++count1;
+            }
+
+            void Receive2(ref SimpleUntargetedMessage message)
+            {
+                ++count2;
+            }
         }
 
         [UnityTest]
@@ -135,10 +139,6 @@ namespace DxMessaging.Tests.Runtime.Core
             _spawned.Add(test);
 
             int count = 0;
-            void Receive(ref SimpleUntargetedMessage message)
-            {
-                ++count;
-            }
 
             EmptyMessageAwareComponent component = test.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
@@ -155,6 +155,11 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(4, count);
 
             yield break;
+
+            void Receive(ref SimpleUntargetedMessage message)
+            {
+                ++count;
+            }
         }
 
         [UnityTest]

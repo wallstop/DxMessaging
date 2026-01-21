@@ -72,7 +72,7 @@ repos:
         name: Enforce CRLF and no BOM
         entry: node scripts/check-eol.js
         language: system
-        pass_filenames: false
+        pass_filenames: true
         stages:
           - pre-commit
           - pre-push

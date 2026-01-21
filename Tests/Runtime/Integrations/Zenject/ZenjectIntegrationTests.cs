@@ -3,7 +3,6 @@ namespace DxMessaging.Tests.Runtime.Zenject
 {
 #if ZENJECT_PRESENT
     using DxMessaging.Core;
-    using System.Reflection;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Tests.Runtime;

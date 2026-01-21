@@ -57,9 +57,28 @@ namespace DxMessaging.Core.MessageBus
         long EmissionId { get; }
 
         /// <summary>
+        /// Default buffer size for message emission history.
+        /// </summary>
+        /// <remarks>
+        /// This constant is used as the default value for <see cref="GlobalMessageBufferSize"/>
+        /// and should be referenced by any settings classes to avoid configuration drift.
+        /// </remarks>
+        const int DefaultMessageBufferSize = 100;
+
+        /// <summary>
         /// Default ring buffer size for emission history when diagnostics are enabled.
         /// </summary>
-        static int GlobalMessageBufferSize { get; set; }
+        /// <remarks>
+        /// <para>
+        /// Controls the maximum number of <see cref="Diagnostics.MessageEmissionData"/> records retained
+        /// per <see cref="MessageBus"/> instance when <see cref="DiagnosticsMode"/> is active.
+        /// </para>
+        /// <para>
+        /// The default value is <see cref="DefaultMessageBufferSize"/> (100). Setting this to 0 will
+        /// cause emissions to be silently discarded (no history is retained).
+        /// </para>
+        /// </remarks>
+        static int GlobalMessageBufferSize { get; set; } = DefaultMessageBufferSize;
 
         internal static int GlobalSequentialIndex = -1;
 
