@@ -11,10 +11,7 @@ namespace DxMessaging.Tests.Runtime.Core
         [UnityTest]
         public IEnumerator AddAndOverwritePreservesChronology()
         {
-            CyclicBuffer<int> buf = new(3);
-            buf.Add(0);
-            buf.Add(1);
-            buf.Add(2);
+            CyclicBuffer<int> buf = new(3) { 0, 1, 2 };
 
             Assert.AreEqual(
                 3,

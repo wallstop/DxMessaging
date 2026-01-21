@@ -359,7 +359,7 @@ namespace DxMessaging.Core
         /// </summary>
         /// <remarks>
         /// This mirrors the legacy singleton so existing code continues to function. Use
-        /// <see cref="SetGlobalMessageBus(MessageBus.MessageBus)"/> to replace the instance (for example from a DI container) and
+        /// <see cref="SetGlobalMessageBus(Core.MessageBus.MessageBus)"/> to replace the instance (for example from a DI container) and
         /// <see cref="ResetGlobalMessageBus"/> to restore the stock configuration afterwards.
         /// </remarks>
         public static IMessageBus MessageBus => _globalMessageBus;
@@ -379,7 +379,7 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
-        /// Replaces the global <see cref="MessageBus.MessageBus"/> instance returned by <see cref="MessageBus"/>.
+        /// Replaces the global <see cref="Core.MessageBus.MessageBus"/> instance returned by <see cref="MessageBus"/>.
         /// </summary>
         /// <param name="messageBus">Instance to expose globally.</param>
         /// <exception cref="ArgumentNullException">
@@ -417,7 +417,7 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
-        /// Restores the global <see cref="MessageBus.MessageBus"/> to the built-in default instance.
+        /// Restores the global <see cref="Core.MessageBus.MessageBus"/> to the built-in default instance.
         /// </summary>
         /// <remarks>
         /// The default instance is recreated by <see cref="ResetStatics"/> when the static state reset utility runs.
@@ -441,7 +441,7 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
-        /// Recreates the built-in global <see cref="MessageBus.MessageBus"/> and assigns it as the active global bus.
+        /// Recreates the built-in global <see cref="Core.MessageBus.MessageBus"/> and assigns it as the active global bus.
         /// </summary>
         /// <remarks>
         /// Invoked by <see cref="DxMessagingStaticState.Reset"/> to provide a clean slate when domain reloads are disabled.

@@ -426,13 +426,13 @@ namespace DxMessaging.Core.MessageBus
             GlobalMessageBufferSize
         );
 
-        private bool _diagnosticsMode = IMessageBus.ShouldEnableDiagnostics();
+        private bool _diagnosticsMode = ShouldEnableDiagnostics();
         private bool _loggedReflexiveWarning;
 
         internal void ResetState()
         {
             _emissionId = 0;
-            _diagnosticsMode = IMessageBus.ShouldEnableDiagnostics();
+            _diagnosticsMode = ShouldEnableDiagnostics();
             _loggedReflexiveWarning = false;
 
             _sinks.Clear();
@@ -1118,35 +1118,21 @@ namespace DxMessaging.Core.MessageBus
 
             // Pre-freeze post-processing stacks for this emission so mutations during
             // handlers/post-processors are not observed until the next emission.
+            DispatchSnapshot untargetedPostSnapshot = DispatchSnapshot.Empty;
             if (
                 _postProcessingSinks.TryGetValue<TMessage>(
-                    out HandlerCache<int, HandlerCache> prefreezeUntargetedPost
+                    out HandlerCache<int, HandlerCache> untargetedPostHandlers
                 )
-                && prefreezeUntargetedPost.handlers.Count > 0
+                && untargetedPostHandlers.handlers.Count > 0
             )
             {
-                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
-                    prefreezeUntargetedPost,
+                untargetedPostSnapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
+                    untargetedPostHandlers,
+                    DispatchCategory.UntargetedPost,
                     _emissionId
                 );
-                int frozenCount = frozen.Count;
-                for (int i = 0; i < frozenCount; ++i)
-                {
-                    KeyValuePair<int, HandlerCache> entry = frozen[i];
-                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
-                        entry.Value,
-                        _emissionId
-                    );
-                    for (int h = 0; h < mhList.Count; ++h)
-                    {
-                        mhList[h]
-                            .PrefreezeUntargetedPostProcessorsForEmission<TMessage>(
-                                entry.Key,
-                                _emissionId,
-                                this
-                            );
-                    }
-                }
+                PrefreezeUntargetedPostSnapshot<TMessage>(untargetedPostSnapshot);
             }
 
             if (!RunUntargetedInterceptors(ref typedMessage))
@@ -1169,12 +1155,14 @@ namespace DxMessaging.Core.MessageBus
                 && 0 < sortedHandlers.handlers.Count
             )
             {
-                DispatchSnapshot snapshot = AcquireDispatchSnapshot<TMessage>(
-                    this,
-                    sortedHandlers,
-                    DispatchCategory.UntargetedPost,
-                    _emissionId
-                );
+                DispatchSnapshot snapshot = untargetedPostSnapshot.IsEmpty
+                    ? AcquireDispatchSnapshot<TMessage>(
+                        this,
+                        sortedHandlers,
+                        DispatchCategory.UntargetedPost,
+                        _emissionId
+                    )
+                    : untargetedPostSnapshot;
                 DispatchBucket[] buckets = snapshot.buckets;
                 int bucketCount = snapshot.bucketCount;
                 for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -1289,70 +1277,43 @@ namespace DxMessaging.Core.MessageBus
             }
 
             // Pre-freeze targeted post-processing for this emission (target-specific and without targeting)
+            DispatchSnapshot targetedPostSnapshot = DispatchSnapshot.Empty;
+            DispatchSnapshot targetedWithoutTargetingPostSnapshot = DispatchSnapshot.Empty;
             if (
                 _postProcessingTargetedSinks.TryGetValue<TMessage>(
-                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> prefreezeTargeted
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> targetedPostHandlers
                 )
-                && prefreezeTargeted.TryGetValue(
+                && targetedPostHandlers.TryGetValue(
                     target,
-                    out HandlerCache<int, HandlerCache> prefreezeTargetedByPriority
+                    out HandlerCache<int, HandlerCache> targetedPostByPriority
                 )
-                && prefreezeTargetedByPriority.handlers.Count > 0
+                && targetedPostByPriority.handlers.Count > 0
             )
             {
-                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
-                    prefreezeTargetedByPriority,
+                targetedPostSnapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
+                    targetedPostByPriority,
+                    DispatchCategory.TargetedPost,
                     _emissionId
                 );
-                int frozenCount = frozen.Count;
-                for (int i = 0; i < frozenCount; ++i)
-                {
-                    KeyValuePair<int, HandlerCache> entry = frozen[i];
-                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
-                        entry.Value,
-                        _emissionId
-                    );
-                    for (int h = 0; h < mhList.Count; ++h)
-                    {
-                        mhList[h]
-                            .PrefreezeTargetedPostProcessorsForEmission<TMessage>(
-                                target,
-                                entry.Key,
-                                _emissionId,
-                                this
-                            );
-                    }
-                }
+                PrefreezeTargetedPostSnapshot<TMessage>(ref target, targetedPostSnapshot);
             }
             if (
                 _postProcessingTargetedWithoutTargetingSinks.TryGetValue<TMessage>(
-                    out HandlerCache<int, HandlerCache> prefreezeTwt
+                    out HandlerCache<int, HandlerCache> targetedWithoutTargetingHandlers
                 )
-                && prefreezeTwt.handlers.Count > 0
+                && targetedWithoutTargetingHandlers.handlers.Count > 0
             )
             {
-                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
-                    prefreezeTwt,
+                targetedWithoutTargetingPostSnapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
+                    targetedWithoutTargetingHandlers,
+                    DispatchCategory.TargetedWithoutTargetingPost,
                     _emissionId
                 );
-                int frozenCount = frozen.Count;
-                for (int i = 0; i < frozenCount; ++i)
-                {
-                    KeyValuePair<int, HandlerCache> entry = frozen[i];
-                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
-                        entry.Value,
-                        _emissionId
-                    );
-                    for (int h = 0; h < mhList.Count; ++h)
-                    {
-                        mhList[h]
-                            .PrefreezeTargetedWithoutTargetingPostProcessorsForEmission<TMessage>(
-                                entry.Key,
-                                _emissionId,
-                                this
-                            );
-                    }
-                }
+                PrefreezeTargetedWithoutTargetingPostSnapshot<TMessage>(
+                    targetedWithoutTargetingPostSnapshot
+                );
             }
 
             if (!RunTargetedInterceptors(ref typedMessage, ref target))
@@ -1669,12 +1630,14 @@ namespace DxMessaging.Core.MessageBus
                 && sortedHandlers.handlers.Count > 0
             )
             {
-                DispatchSnapshot snapshot = AcquireDispatchSnapshot<TMessage>(
-                    this,
-                    sortedHandlers,
-                    DispatchCategory.TargetedPost,
-                    _emissionId
-                );
+                DispatchSnapshot snapshot = targetedPostSnapshot.IsEmpty
+                    ? AcquireDispatchSnapshot<TMessage>(
+                        this,
+                        sortedHandlers,
+                        DispatchCategory.TargetedPost,
+                        _emissionId
+                    )
+                    : targetedPostSnapshot;
                 DispatchBucket[] buckets = snapshot.buckets;
                 int bucketCount = snapshot.bucketCount;
                 for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -1822,12 +1785,14 @@ namespace DxMessaging.Core.MessageBus
                 && postTwt.handlers.Count > 0
             )
             {
-                DispatchSnapshot snapshot = AcquireDispatchSnapshot<TMessage>(
-                    this,
-                    postTwt,
-                    DispatchCategory.TargetedWithoutTargetingPost,
-                    _emissionId
-                );
+                DispatchSnapshot snapshot = targetedWithoutTargetingPostSnapshot.IsEmpty
+                    ? AcquireDispatchSnapshot<TMessage>(
+                        this,
+                        postTwt,
+                        DispatchCategory.TargetedWithoutTargetingPost,
+                        _emissionId
+                    )
+                    : targetedWithoutTargetingPostSnapshot;
                 DispatchBucket[] buckets = snapshot.buckets;
                 int bucketCount = snapshot.bucketCount;
                 for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -2319,70 +2284,46 @@ namespace DxMessaging.Core.MessageBus
             }
 
             // Pre-freeze broadcast post-processing for this emission (source-specific and without source)
+            DispatchSnapshot broadcastPostSnapshot = DispatchSnapshot.Empty;
+            DispatchSnapshot broadcastWithoutSourcePostSnapshot = DispatchSnapshot.Empty;
             if (
                 _postProcessingBroadcastSinks.TryGetValue<TMessage>(
-                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> prefreezeBroadcast
+                    out Dictionary<
+                        InstanceId,
+                        HandlerCache<int, HandlerCache>
+                    > broadcastPostHandlers
                 )
-                && prefreezeBroadcast.TryGetValue(
+                && broadcastPostHandlers.TryGetValue(
                     source,
-                    out HandlerCache<int, HandlerCache> prefreezeBroadcastByPriority
+                    out HandlerCache<int, HandlerCache> broadcastPostByPriority
                 )
-                && prefreezeBroadcastByPriority.handlers.Count > 0
+                && broadcastPostByPriority.handlers.Count > 0
             )
             {
-                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
-                    prefreezeBroadcastByPriority,
+                broadcastPostSnapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
+                    broadcastPostByPriority,
+                    DispatchCategory.BroadcastPost,
                     _emissionId
                 );
-                int frozenCount = frozen.Count;
-                for (int i = 0; i < frozenCount; ++i)
-                {
-                    KeyValuePair<int, HandlerCache> entry = frozen[i];
-                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
-                        entry.Value,
-                        _emissionId
-                    );
-                    for (int h = 0; h < mhList.Count; ++h)
-                    {
-                        mhList[h]
-                            .PrefreezeBroadcastPostProcessorsForEmission<TMessage>(
-                                source,
-                                entry.Key,
-                                _emissionId,
-                                this
-                            );
-                    }
-                }
+                PrefreezeBroadcastPostSnapshot<TMessage>(ref source, broadcastPostSnapshot);
             }
             if (
                 _postProcessingBroadcastWithoutSourceSinks.TryGetValue<TMessage>(
-                    out HandlerCache<int, HandlerCache> prefreezeBws
+                    out HandlerCache<int, HandlerCache> broadcastWithoutSourceHandlers
                 )
-                && prefreezeBws.handlers.Count > 0
+                && broadcastWithoutSourceHandlers.handlers.Count > 0
             )
             {
-                List<KeyValuePair<int, HandlerCache>> frozen = GetOrAddMessageHandlerStack(
-                    prefreezeBws,
+                broadcastWithoutSourcePostSnapshot = AcquireDispatchSnapshot<TMessage>(
+                    this,
+                    broadcastWithoutSourceHandlers,
+                    DispatchCategory.BroadcastWithoutSourcePost,
                     _emissionId
                 );
-                int frozenCount = frozen.Count;
-                for (int i = 0; i < frozenCount; ++i)
-                {
-                    KeyValuePair<int, HandlerCache> entry = frozen[i];
-                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
-                        entry.Value,
-                        _emissionId
-                    );
-                    for (int h = 0; h < mhList.Count; ++h)
-                    {
-                        mhList[h]
-                            .PrefreezeBroadcastWithoutSourcePostProcessorsForEmission<TMessage>(
-                                entry.Key,
-                                _emissionId,
-                                this
-                            );
-                    }
-                }
+                PrefreezeBroadcastWithoutSourcePostSnapshot<TMessage>(
+                    broadcastWithoutSourcePostSnapshot
+                );
             }
 
             if (!RunBroadcastInterceptors(ref typedMessage, ref source))
@@ -3607,6 +3548,40 @@ namespace DxMessaging.Core.MessageBus
             MessageHandler.UntargetedPostDispatchLink<TMessage> link =
                 Unsafe.As<MessageHandler.UntargetedPostDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref message, priority, _emissionId);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeUntargetedPostSnapshot<TMessage>(DispatchSnapshot snapshot)
+            where TMessage : IUntargetedMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeUntargetedPostProcessorsForEmission<TMessage>(
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
         }
 
         private bool InternalTargetedWithoutTargetingBroadcast<TMessage>(
@@ -4874,6 +4849,44 @@ namespace DxMessaging.Core.MessageBus
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeTargetedPostSnapshot<TMessage>(
+            ref InstanceId target,
+            DispatchSnapshot snapshot
+        )
+            where TMessage : ITargetedMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeTargetedPostProcessorsForEmission<TMessage>(
+                            target,
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InvokeGlobalUntargetedEntry<TMessage>(
             ref TMessage message,
             DispatchEntry entry
@@ -5011,6 +5024,42 @@ namespace DxMessaging.Core.MessageBus
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeTargetedWithoutTargetingPostSnapshot<TMessage>(
+            DispatchSnapshot snapshot
+        )
+            where TMessage : ITargetedMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeTargetedWithoutTargetingPostProcessorsForEmission<TMessage>(
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InvokeBroadcastEntry<TMessage>(
             ref InstanceId source,
             ref TMessage message,
@@ -5048,6 +5097,44 @@ namespace DxMessaging.Core.MessageBus
             MessageHandler.BroadcastPostDispatchLink<TMessage> link =
                 Unsafe.As<MessageHandler.BroadcastPostDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref source, ref message, priority, _emissionId);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeBroadcastPostSnapshot<TMessage>(
+            ref InstanceId source,
+            DispatchSnapshot snapshot
+        )
+            where TMessage : IBroadcastMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeBroadcastPostProcessorsForEmission<TMessage>(
+                            source,
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -5101,6 +5188,42 @@ namespace DxMessaging.Core.MessageBus
                     entry.dispatch
                 );
             link.Invoke(handler, ref source, ref message, priority, _emissionId);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeBroadcastWithoutSourcePostSnapshot<TMessage>(
+            DispatchSnapshot snapshot
+        )
+            where TMessage : IBroadcastMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeBroadcastWithoutSourcePostProcessorsForEmission<TMessage>(
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

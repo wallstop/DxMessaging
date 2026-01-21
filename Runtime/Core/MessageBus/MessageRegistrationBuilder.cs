@@ -319,8 +319,10 @@ namespace DxMessaging.Core.MessageBus
 
             IMessageBus messageBus = ResolveMessageBus(options);
             InstanceId owner = ResolveOwner(options);
-            MessageHandler messageHandler = new MessageHandler(owner, messageBus);
-            messageHandler.active = options.HandlerStartsActive;
+            MessageHandler messageHandler = new MessageHandler(owner, messageBus)
+            {
+                active = options.HandlerStartsActive,
+            };
             MessageRegistrationToken token = MessageRegistrationToken.Create(
                 messageHandler,
                 messageBus

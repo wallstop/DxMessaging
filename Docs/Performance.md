@@ -14,17 +14,17 @@ See also: [Performance optimizations](./DesignAndArchitecture.md#performance-opt
 
 | Message Tech                               | Operations / Second | Allocations? |
 | ------------------------------------------ | ------------------- | ------------ |
-| Unity                                      | 2,564,000           | Yes          |
-| DxMessaging (GameObject) - Normal          | 10,128,000          | No           |
-| DxMessaging (Component) - Normal           | 10,156,000          | No           |
-| DxMessaging (GameObject) - No-Copy         | 11,452,000          | No           |
-| DxMessaging (Component) - No-Copy          | 11,660,000          | No           |
-| DxMessaging (Untargeted) - No-Copy         | 19,592,000          | No           |
-| DxMessaging (Untargeted) - Interceptors    | 7,790,000           | No           |
-| DxMessaging (Untargeted) - Post-Processors | 5,572,000           | No           |
-| Reflexive (One Argument)                   | 2,860,000           | No           |
-| Reflexive (Two Arguments)                  | 2,266,000           | No           |
-| Reflexive (Three Arguments)                | 2,298,000           | No           |
+| Unity                                      | 2,678,000           | Yes          |
+| DxMessaging (GameObject) - Normal          | 10,242,000          | No           |
+| DxMessaging (Component) - Normal           | 10,238,000          | No           |
+| DxMessaging (GameObject) - No-Copy         | 11,054,000          | No           |
+| DxMessaging (Component) - No-Copy          | 11,662,000          | No           |
+| DxMessaging (Untargeted) - No-Copy         | 19,870,000          | No           |
+| DxMessaging (Untargeted) - Interceptors    | 7,250,000           | No           |
+| DxMessaging (Untargeted) - Post-Processors | 6,280,000           | No           |
+| Reflexive (One Argument)                   | 2,858,000           | No           |
+| Reflexive (Two Arguments)                  | 2,290,000           | No           |
+| Reflexive (Three Arguments)                | 2,308,000           | No           |
 
 ## macOS
 

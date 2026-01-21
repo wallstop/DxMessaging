@@ -36,27 +36,6 @@ namespace DxMessaging.Tests.Runtime.Core
             Dictionary<object, int> componentTargetedWorks = new();
             Dictionary<object, int> componentBroadcastWorks = new();
 
-            void SetupComponent(SimpleMessageAwareComponent toSetup)
-            {
-                toSetup.untargetedHandler = () => ++untargetedWorks;
-                toSetup.targetedHandler = () => ++targetedWorks;
-                toSetup.targetedWithoutTargetingHandler = () => ++targetedWithoutTargetingWorks;
-                toSetup.broadcastHandler = () => ++broadcastWorks;
-                toSetup.broadcastWithoutSourceHandler = () => ++broadcastWithoutSourceWorks;
-                toSetup.componentTargetedHandler = () =>
-                {
-                    int existing = componentTargetedWorks.GetValueOrDefault(toSetup, 0);
-
-                    componentTargetedWorks[toSetup] = ++existing;
-                };
-                toSetup.componentBroadcastHandler = () =>
-                {
-                    int existing = componentBroadcastWorks.GetValueOrDefault(toSetup, 0);
-
-                    componentBroadcastWorks[toSetup] = ++existing;
-                };
-            }
-
             SetupComponent(firstComponent);
 
             // Generate non-component targeted methods
@@ -261,6 +240,28 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(2, componentBroadcastWorks[secondComponent]);
             Assert.AreEqual(13, targetedWithoutTargetingWorks);
             Assert.AreEqual(13, broadcastWithoutSourceWorks);
+            yield break;
+
+            void SetupComponent(SimpleMessageAwareComponent toSetup)
+            {
+                toSetup.untargetedHandler = () => ++untargetedWorks;
+                toSetup.targetedHandler = () => ++targetedWorks;
+                toSetup.targetedWithoutTargetingHandler = () => ++targetedWithoutTargetingWorks;
+                toSetup.broadcastHandler = () => ++broadcastWorks;
+                toSetup.broadcastWithoutSourceHandler = () => ++broadcastWithoutSourceWorks;
+                toSetup.componentTargetedHandler = () =>
+                {
+                    int existing = componentTargetedWorks.GetValueOrDefault(toSetup, 0);
+
+                    componentTargetedWorks[toSetup] = ++existing;
+                };
+                toSetup.componentBroadcastHandler = () =>
+                {
+                    int existing = componentBroadcastWorks.GetValueOrDefault(toSetup, 0);
+
+                    componentBroadcastWorks[toSetup] = ++existing;
+                };
+            }
         }
 
         [UnityTest]
@@ -969,36 +970,6 @@ namespace DxMessaging.Tests.Runtime.Core
             int fastTargetedCount = 0;
             int fastBroadcastCount = 0;
 
-            void HandleUntargeted(IUntargetedMessage message)
-            {
-                ++untargetedCount;
-            }
-
-            void HandleFastUntargeted(ref IUntargetedMessage message)
-            {
-                ++fastUntargetedCount;
-            }
-
-            void HandleTargeted(InstanceId target, ITargetedMessage message)
-            {
-                ++targetedCount;
-            }
-
-            void HandleFastTargeted(ref InstanceId target, ref ITargetedMessage message)
-            {
-                ++fastTargetedCount;
-            }
-
-            void HandleBroadcast(InstanceId source, IBroadcastMessage message)
-            {
-                ++broadcastCount;
-            }
-
-            void HandleFastBroadcast(ref InstanceId source, ref IBroadcastMessage message)
-            {
-                ++fastBroadcastCount;
-            }
-
             HashSet<MessageRegistrationHandle> handles = new();
             try
             {
@@ -1159,6 +1130,36 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             yield break;
+
+            void HandleUntargeted(IUntargetedMessage message)
+            {
+                ++untargetedCount;
+            }
+
+            void HandleFastUntargeted(ref IUntargetedMessage message)
+            {
+                ++fastUntargetedCount;
+            }
+
+            void HandleTargeted(InstanceId target, ITargetedMessage message)
+            {
+                ++targetedCount;
+            }
+
+            void HandleFastTargeted(ref InstanceId target, ref ITargetedMessage message)
+            {
+                ++fastTargetedCount;
+            }
+
+            void HandleBroadcast(InstanceId source, IBroadcastMessage message)
+            {
+                ++broadcastCount;
+            }
+
+            void HandleFastBroadcast(ref InstanceId source, ref IBroadcastMessage message)
+            {
+                ++fastBroadcastCount;
+            }
         }
 
         [UnityTest]
@@ -1307,16 +1308,6 @@ namespace DxMessaging.Tests.Runtime.Core
             int callCount = 0;
             int fastCallCount = 0;
 
-            void HandleUntargeted(SimpleUntargetedMessage message)
-            {
-                ++callCount;
-            }
-
-            void HandleFastUntargeted(ref SimpleUntargetedMessage message)
-            {
-                ++fastCallCount;
-            }
-
             SimpleUntargetedMessage message = new();
             int expectedCallCount = 0;
             Run(
@@ -1378,6 +1369,16 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void HandleUntargeted(SimpleUntargetedMessage message)
+            {
+                ++callCount;
+            }
+
+            void HandleFastUntargeted(ref SimpleUntargetedMessage message)
+            {
+                ++fastCallCount;
+            }
         }
 
         [UnityTest]
@@ -1393,16 +1394,6 @@ namespace DxMessaging.Tests.Runtime.Core
 
             int callCount = 0;
             int fastCallCount = 0;
-
-            void HandleTargeted(SimpleTargetedMessage message)
-            {
-                ++callCount;
-            }
-
-            void HandleFastTargeted(ref SimpleTargetedMessage message)
-            {
-                ++fastCallCount;
-            }
 
             SimpleTargetedMessage message = new();
             int expectedCallCount = 0;
@@ -1553,6 +1544,16 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void HandleTargeted(SimpleTargetedMessage message)
+            {
+                ++callCount;
+            }
+
+            void HandleFastTargeted(ref SimpleTargetedMessage message)
+            {
+                ++fastCallCount;
+            }
         }
 
         [UnityTest]
@@ -1570,16 +1571,6 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageRegistrationToken token = GetToken(component);
             int callCount = 0;
             int fastCallCount = 0;
-
-            void HandleBroadcast(SimpleBroadcastMessage message)
-            {
-                ++callCount;
-            }
-
-            void HandleFastBroadcast(ref SimpleBroadcastMessage message)
-            {
-                ++fastCallCount;
-            }
 
             SimpleBroadcastMessage message = new();
             int expectedCallCount = 0;
@@ -1730,6 +1721,16 @@ namespace DxMessaging.Tests.Runtime.Core
             );
 
             yield break;
+
+            void HandleBroadcast(SimpleBroadcastMessage message)
+            {
+                ++callCount;
+            }
+
+            void HandleFastBroadcast(ref SimpleBroadcastMessage message)
+            {
+                ++fastCallCount;
+            }
         }
     }
 }
