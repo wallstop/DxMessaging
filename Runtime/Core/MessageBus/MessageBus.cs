@@ -4641,18 +4641,13 @@ namespace DxMessaging.Core.MessageBus
                     if (state.pendingDirty || (hasHandlers && state.pending.IsEmpty))
                     {
                         ReleaseSnapshot(ref state.pending);
-                        if (hasHandlers)
-                        {
-                            state.pending = BuildGlobalDispatchSnapshot<TMessage>(
+                        state.pending = hasHandlers
+                            ? BuildGlobalDispatchSnapshot<TMessage>(
                                 messageBus,
                                 handlers,
                                 category
-                            );
-                        }
-                        else
-                        {
-                            state.pending = DispatchSnapshot.Empty;
-                        }
+                            )
+                            : DispatchSnapshot.Empty;
 
                         state.pendingDirty = false;
                     }
