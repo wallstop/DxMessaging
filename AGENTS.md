@@ -26,6 +26,15 @@
 - Avoid `var` wherever possible, use expressive types.
 - Do not use nullable reference types.
 
+## Scripting Guidelines
+
+Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow these practices:
+
+- When parsing structured command output (git, build tools, etc.), prefer pattern matching over fixed positional indices. For example, use `Where-Object { $_ -like 'i/*' }` instead of assuming `[0]`.
+- Validate array/collection length before accessing by index.
+- Keep PowerShell and JavaScript implementations in sync when both exist for the same task.
+- Add comments explaining the expected format of external command output.
+
 ## Testing Guidelines
 
 - Frameworks: NUnit + Unity Test Framework. Use `[Test]`/`[UnityTest]` as needed.
