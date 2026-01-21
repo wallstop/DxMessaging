@@ -152,6 +152,62 @@ function getStagedFiles() {
 }
 
 /**
+ * Check for non-normalized line endings in the git index for tracked text files.
+ * The repository should store LF even when working tree uses CRLF.
+ * @param {string[]} files - Absolute file paths to check.
+ * @returns {Array<{path: string, indexEol: string}>} Array of index EOL issues.
+ */
+function getIndexEolIssues(files) {
+  if (!files || files.length === 0) {
+    return [];
+  }
+
+  const relPaths = files.map((file) => path.relative(repoRoot, file));
+  const result = spawnSync('git', ['ls-files', '--eol', '--', ...relPaths], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  });
+
+  if (result.status !== 0 || !result.stdout) {
+    return [];
+  }
+
+  const issues = [];
+  const lines = result.stdout.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line) {
+      continue;
+    }
+    const tabIndex = line.indexOf('\t');
+    if (tabIndex < 0) {
+      continue;
+    }
+    const meta = line.slice(0, tabIndex).trim();
+    const filePath = line.slice(tabIndex + 1).trim();
+    const ext = path.extname(filePath).toLowerCase();
+    if (!exts.has(ext)) {
+      continue;
+    }
+
+    const parts = meta.split(/\s+/);
+    const indexToken = parts.find((part) => part.startsWith('i/'));
+    const attrToken = parts.find((part) => part.startsWith('attr/'));
+    if (!indexToken) {
+      continue;
+    }
+    if (attrToken === 'attr/-text') {
+      continue;
+    }
+
+    if (indexToken !== 'i/lf' && indexToken !== 'i/none') {
+      issues.push({ path: filePath, indexEol: indexToken });
+    }
+  }
+
+  return issues;
+}
+
+/**
  * Check if a buffer starts with UTF-8 BOM (byte order mark).
  * @param {Buffer} buf - File content buffer.
  * @returns {boolean} True if BOM is present.
@@ -201,6 +257,7 @@ if (textFiles.length === 0) {
 
 const bomFiles = [];
 const badEolFiles = [];
+const indexEolIssues = getIndexEolIssues(textFiles);
 
 for (const file of textFiles) {
   let buf;
@@ -214,7 +271,7 @@ for (const file of textFiles) {
   if (hasNonCrlfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
 }
 
-if (bomFiles.length === 0 && badEolFiles.length === 0) {
+if (bomFiles.length === 0 && badEolFiles.length === 0 && indexEolIssues.length === 0) {
   console.log(`EOL check passed: ${textFiles.length} file(s) verified, CRLF only and no BOMs detected.`);
   process.exit(0);
 }
@@ -226,6 +283,13 @@ if (bomFiles.length) {
 if (badEolFiles.length) {
   console.log('Files contain non-CRLF line endings (found LF or bare CR):');
   for (const f of badEolFiles) console.log(`  ${f}`);
+}
+if (indexEolIssues.length) {
+  console.log('Git index contains non-normalized line endings (expected LF in repo for text files):');
+  for (const issue of indexEolIssues) {
+    console.log(`  ${issue.path} (${issue.indexEol})`);
+  }
+  console.log('Fix: git add --renormalize .');
 }
 console.error('EOL/BOM policy violations detected.');
 process.exit(1);

@@ -10,6 +10,49 @@ function Write-VerboseLine {
     if ($VerboseOutput) { Write-Host $Message }
 }
 
+function Get-GitIndexEolIssues {
+    param([string[]]$Extensions)
+
+    $issues = New-Object System.Collections.Generic.List[string]
+    try {
+        $gitRoot = git rev-parse --show-toplevel 2>$null
+    }
+    catch {
+        return $issues
+    }
+
+    if (-not $gitRoot) {
+        return $issues
+    }
+
+    $gitRoot = $gitRoot.Trim()
+    try {
+        $lines = git -C $gitRoot ls-files --eol 2>$null
+    }
+    catch {
+        return $issues
+    }
+
+    foreach ($line in $lines) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = $line -split "`t", 2
+        if ($parts.Count -lt 2) { continue }
+
+        $meta = $parts[0].Trim()
+        $relPath = $parts[1].Trim()
+        $ext = [System.IO.Path]::GetExtension($relPath).ToLowerInvariant()
+        if ($Extensions -notcontains $ext) { continue }
+        if ($meta -match 'attr/-text') { continue }
+
+        $indexToken = ($meta -split '\s+')[0]
+        if ($indexToken -ne 'i/lf' -and $indexToken -ne 'i/none') {
+            $issues.Add("$relPath ($indexToken)")
+        }
+    }
+
+    return $issues
+}
+
 # Directories to exclude from scanning
 $excludePatterns = @(
     "[\\/]\.git[\\/]",
@@ -38,6 +81,7 @@ Write-VerboseLine "Scanning for EOL/BOM issues under: $rootPath"
 
 $bomFiles = New-Object System.Collections.Generic.List[string]
 $badEolFiles = New-Object System.Collections.Generic.List[string]
+$indexIssues = Get-GitIndexEolIssues -Extensions $extensions
 
 Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
     ForEach-Object {
@@ -71,7 +115,7 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
         }
     }
 
-if ($bomFiles.Count -eq 0 -and $badEolFiles.Count -eq 0) {
+if ($bomFiles.Count -eq 0 -and $badEolFiles.Count -eq 0 -and $indexIssues.Count -eq 0) {
     Write-Host "EOL check passed: CRLF only and no BOMs detected."
     exit 0
 }
@@ -84,6 +128,12 @@ if ($bomFiles.Count -gt 0) {
 if ($badEolFiles.Count -gt 0) {
     Write-Host "Files contain non-CRLF line endings (found LF or bare CR):"
     $badEolFiles | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($indexIssues.Count -gt 0) {
+    Write-Host "Git index contains non-normalized line endings (expected LF in repo for text files):"
+    $indexIssues | ForEach-Object { Write-Host "  $_" }
+    Write-Host "Fix: git add --renormalize ."
 }
 
 Write-Error "EOL/BOM policy violations detected. See lists above."
