@@ -7,11 +7,11 @@ created: "2026-01-22"
 updated: "2026-01-22"
 
 source:
-  repository: "wallstop-studios/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: ".llm/skills/specification.md"
     - path: "scripts/validate-skills.js"
-  url: "https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "documentation"
@@ -245,11 +245,11 @@ File size limits improve:
 
 - [Documentation Updates](./documentation-updates.md)
 - [Changelog Management](./changelog-management.md)
-- [specification.md](../specification.md)
+- [Skill Specification](../specification.md)
 
 ## References
 
-- Skill specification: [.llm/skills/specification.md](../specification.md)
+- [Skill Specification](../specification.md)
 - Validation script: [scripts/validate-skills.js](../../../scripts/validate-skills.js)
 - Pre-commit config: [.pre-commit-config.yaml](../../../.pre-commit-config.yaml)
 

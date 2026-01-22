@@ -7,10 +7,10 @@ created: "2026-01-21"
 updated: "2026-01-21"
 
 source:
-  repository: "wallstop/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: "Runtime/"
-  url: "https://github.com/wallstop/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "memory"

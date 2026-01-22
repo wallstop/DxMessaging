@@ -7,12 +7,12 @@ created: "2026-01-21"
 updated: "2026-01-21"
 
 source:
-  repository: "wallstop-studios/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: "Runtime/Core/Pool/ObjectPool.cs"
       lines: "1-150"
     - path: "Runtime/Core/Messages/PooledMessage.cs"
-  url: "https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "memory"

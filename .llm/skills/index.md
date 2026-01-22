@@ -9,18 +9,18 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 67    |
+| Total Skills | 69    |
 | Categories   | 4     |
-| Unique Tags  | 111   |
+| Unique Tags  | 116   |
 
 ---
 
 ## Table of Contents
 
-- [Documentation](#documentation) (9)
+- [Documentation](#documentation) (10)
 - [Performance](#performance) (24)
 - [Solid](#solid) (13)
-- [Testing](#testing) (21)
+- [Testing](#testing) (22)
 - [Tag Cloud](#tag-cloud)
 - [All Skills by Complexity](#all-skills-by-complexity)
 
@@ -37,6 +37,7 @@
 | [Documentation Style Guide](./documentation/documentation-style-guide.md)               | 📝 186 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, style, writing            |
 | [Documentation Update Workflow](./documentation/documentation-update-workflow.md)       | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, workflow, checklist       |
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)       | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-comments, xml-docs   |
+| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)  | ✅ 293 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, links, urls               |
 | [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                    | ✅ 261 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, skills, file-organization |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                | 📝 191 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, xml-docs, api-reference   |
 
@@ -110,6 +111,7 @@
 | [Test Failure Investigation and Zero-Flaky Policy](./testing/test-failure-investigation.md)       | 📝 120 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, investigation, debugging           |
 | [Test Failure Investigation Procedure](./testing/test-failure-investigation-procedure.md)         | ✅ 217 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, investigation, procedure           |
 | [Test Failure Root Causes and Anti-Patterns](./testing/test-failure-investigation-root-causes.md) | 📝 187 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, root-cause-analysis, anti-patterns |
+| [Test Invalid Skill](./testing/test-invalid-skill.md)                                             | 📝 27  | super-expert    | ✅ Stable | ?           |                                             |
 | [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)            | 📝 172 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions, naming                 |
 | [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)     | ✅ 233 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity, anti-patterns               |
 
@@ -117,7 +119,7 @@
 
 ## Tag Cloud
 
-`testing`×22 `performance`×15 `unity`×13 `solid`×10 `memory`×9 `patterns`×9 `pooling`×9 `allocation`×8 `documentation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `singleton`×5 `struct`×5 `builder`×4 `dictionary`×4 `fixtures`×4 `versioning`×4 `anti-patterns`×3 `api-design`×3 `caching`×3 `changelog`×3 `coverage`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `logging`×3 `messaging`×3 `organization`×3 `parameterized`×3 `reference-counting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `eviction`×2 `examples`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `lfu`×2 `lifecycle`×2 `lru`×2 `optimization`×2 `quality`×2 `release-notes`×2 `root-cause-analysis`×2 `user-communication`×2 `writing`×2 `xml-docs`×2 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `configuration`×1 `coroutines`×1 `disposable`×1 `dry`×1 `error-handling`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `garbage-collection`×1 `generic`×1 `implementation`×1 `llm-context`×1 `maintainability`×1 `maintenance`×1 `markdown`×1 `methodimpl`×1 `naming`×1 `negative-tests`×1 `procedure`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `semantic-versioning`×1 `shared-state`×1 `shuffle`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `test-cases`×1 `thread-safety`×1 `type-specialization`×1 `workflow`×1 `yield`×1 `zero-flaky`×1
+`testing`×22 `performance`×15 `unity`×13 `solid`×10 `documentation`×9 `memory`×9 `patterns`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `singleton`×5 `struct`×5 `builder`×4 `dictionary`×4 `fixtures`×4 `versioning`×4 `anti-patterns`×3 `api-design`×3 `caching`×3 `changelog`×3 `coverage`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `logging`×3 `messaging`×3 `organization`×3 `parameterized`×3 `quality`×3 `reference-counting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `eviction`×2 `examples`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `lfu`×2 `lifecycle`×2 `lru`×2 `markdown`×2 `optimization`×2 `release-notes`×2 `root-cause-analysis`×2 `user-communication`×2 `writing`×2 `xml-docs`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `ci-cd`×1 `clarity`×1 `configuration`×1 `coroutines`×1 `disposable`×1 `dry`×1 `error-handling`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `garbage-collection`×1 `generic`×1 `github-actions`×1 `implementation`×1 `links`×1 `llm-context`×1 `maintainability`×1 `maintenance`×1 `methodimpl`×1 `naming`×1 `negative-tests`×1 `procedure`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `semantic-versioning`×1 `shared-state`×1 `shuffle`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `test-cases`×1 `thread-safety`×1 `type-specialization`×1 `urls`×1 `workflow`×1 `yield`×1 `zero-flaky`×1
 
 ---
 
@@ -133,6 +135,7 @@
 - [Documentation Style Guide](./documentation/documentation-style-guide.md) _(documentation)_
 - [Documentation Update Workflow](./documentation/documentation-update-workflow.md) _(documentation)_
 - [Documentation Updates and Maintenance](./documentation/documentation-updates.md) _(documentation)_
+- [Link Quality and External URL Management](./documentation/link-quality-guidelines.md) _(documentation)_
 - [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md) _(documentation)_
 - [StringBuilder Pooling for Zero-Allocation String Building](./performance/stringbuilder-pooling.md) _(performance)_
 - [Test Categories for Selective Execution](./testing/test-categories.md) _(testing)_

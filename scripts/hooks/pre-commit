@@ -15,7 +15,7 @@ SKILLS_DIR=".llm/skills"
 INDEX_FILE="$SKILLS_DIR/index.md"
 
 # Check if any skill files are staged (excluding index.md and specification.md)
-STAGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACMR | grep "^$SKILLS_DIR/" | grep -v "index.md" | grep -v "specification.md" | grep -v "templates/" || true)
+STAGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACMR | grep -F "$SKILLS_DIR/" | grep -v "index.md" | grep -v "specification.md" | grep -v "templates/" || true)
 
 if [ -n "$STAGED_SKILLS" ]; then
     echo "📚 Skill files modified, regenerating index..."

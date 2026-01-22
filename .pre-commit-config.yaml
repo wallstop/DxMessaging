@@ -50,7 +50,7 @@ repos:
     hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
-        entry: npx --yes markdownlint-cli2@0.17.1 --config .markdownlint.jsonc
+        entry: npx --yes markdownlint-cli2@0.17.1 --fix
         language: system
         files: '(?i)\.(md|markdown)$'
 
@@ -117,13 +117,13 @@ repos:
           - pre-commit
           - pre-push
         description: Validate skill file schema compliance and file size limits.
-      - id: skills-index-check
-        name: Check skills index.md is up to date
-        entry: node scripts/generate-skills-index.js --check
+      - id: skills-index-regen
+        name: Regenerate skills index.md
+        entry: bash -c 'node scripts/generate-skills-index.js && { git add .llm/skills/index.md 2>/dev/null || true; }'
         language: system
         pass_filenames: false
         files: '^\.llm/.*\.md$'
         stages:
           - pre-commit
           - pre-push
-        description: Regenerate index.md and fail if it changed.
+        description: Regenerate index.md and stage it for commit.

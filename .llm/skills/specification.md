@@ -322,9 +322,9 @@ If replacing an existing pattern:
 
 ## 4. Example Complete Skill File
 
-See [templates/skill-template.md](./templates/skill-template.md) for the template.
+See [the skill template](./templates/skill-template.md) for the template.
 
-See the example skill file: [performance/object-pooling.md](./performance/object-pooling.md)
+See the example skill file: [Object Pooling](./performance/object-pooling.md)
 
 ---
 

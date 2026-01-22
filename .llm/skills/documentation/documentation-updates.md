@@ -7,12 +7,12 @@ created: "2026-01-22"
 updated: "2026-01-22"
 
 source:
-  repository: "wallstop-studios/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: "Docs/"
     - path: "README.md"
     - path: "CHANGELOG.md"
-  url: "https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "documentation"
@@ -137,7 +137,7 @@ Outdated documentation misleads users and increases support load.
 ## References
 
 - [Microsoft XML Documentation Comments](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/xmldoc/)
-- [Unity Documentation Best Practices](https://docs.unity3d.com/Manual/BestPractices.html)
+- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/BestPracticeGuides.html)
 
 ## Changelog
 

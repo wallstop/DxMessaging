@@ -7,11 +7,11 @@ created: "2026-01-22"
 updated: "2026-01-22"
 
 source:
-  repository: "wallstop/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: "Tests/Runtime/Core/NominalTests.cs"
     - path: "Tests/Runtime/"
-  url: "https://github.com/wallstop/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "testing"

@@ -35,6 +35,28 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Keep PowerShell and JavaScript implementations in sync when both exist for the same task.
 - Add comments explaining the expected format of external command output.
 
+### Shell Pattern Matching
+
+- Use `grep -F` for literal string matching (paths, filenames with special characters like `.`).
+- Use `grep -E` only when regex features are explicitly needed.
+- Remember that `.` in a regex matches any character, not just a literal dot.
+- Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
+
+### JavaScript/Node.js Practices
+
+- All declared constants and variables must be used or removed.
+- Prefer `const` over `let`; use `let` only when reassignment is necessary.
+- When adding validation constants (e.g., `VALID_X`), ensure corresponding validation logic uses them.
+
+## PR Review Feedback Handling
+
+Before acting on PR review feedback:
+
+1. **Verify factual claims**: If a reviewer says a value is "incorrect," verify against the source of truth (e.g., run `git remote get-url origin` for repository URLs).
+1. **Test assertions**: If a reviewer claims code is broken, reproduce the issue before fixing.
+1. **Question assumptions**: Reviewers (including AI reviewers) can be mistaken. Respectfully verify before making changes.
+1. **Document verification**: When rejecting feedback, document why (e.g., "Verified against git remote: correct URL is X").
+
 ## Testing Guidelines
 
 - Frameworks: NUnit + Unity Test Framework. Use `[Test]`/`[UnityTest]` as needed.
@@ -87,15 +109,23 @@ After any new feature or bug fix, documentation must be updated:
 - **Code comments**: Keep inline comments accurate and helpful.
 - **XML docs**: Update `<summary>`, `<param>`, `<returns>`, and `<remarks>` for public APIs.
 - **Code samples**: Ensure examples are correct, compilable, and tested.
-- **README**: Update [README.md](../README.md) for significant features or breaking changes.
+- **README**: Update [the README](../README.md) for significant features or breaking changes.
 
 When documenting new behavior, note the version it was introduced (e.g., "Added in v1.2.0").
 
 See the [Documentation Updates skill](./skills/documentation/documentation-updates.md) and [Changelog Management skill](./skills/documentation/changelog-management.md) for detailed guidance.
 
+### Markdown Formatting Conventions
+
+- **Ordered lists**: Use lazy numbering (`1.`, `1.`, `1.`) not sequential (`1.`, `2.`, `3.`). This matches Prettier behavior and markdownlint MD029 configuration.
+- **Fenced code blocks**: Use triple backticks (```), not indented blocks.
+- **Line endings**: CRLF, no UTF-8 BOM (enforced by pre-commit hooks).
+- **Headings**: Use ATX-style headings (`#`, `##`, `###`) not underlined style.
+- **Line length**: Not enforced. Write naturally; let lines wrap as needed.
+
 ## Changelog Guidelines
 
-Every user-facing change must be added to [CHANGELOG.md](../CHANGELOG.md):
+Every user-facing change must be added to [the changelog](../CHANGELOG.md):
 
 - Follow the [Keep a Changelog](https://keepachangelog.com/) format.
 - Use categories: **Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**, **Security**.

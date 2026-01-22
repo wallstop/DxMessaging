@@ -7,11 +7,11 @@ created: "2026-01-22"
 updated: "2026-01-22"
 
 source:
-  repository: "wallstop-studios/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: "CHANGELOG.md"
     - path: "package.json"
-  url: "https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "changelog"
@@ -130,10 +130,10 @@ Use ISO 8601 dates and semantic versions in brackets:
 Add reference-style links at the bottom of the file:
 
 ```markdown
-[Unreleased]: https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging/compare/v2.1.4...HEAD
-[2.1.4]: https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging/compare/v2.1.3...v2.1.4
-[2.1.3]: https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging/compare/v2.1.2...v2.1.3
-[2.1.2]: https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging/releases/tag/v2.1.2
+[Unreleased]: https://github.com/wallstop/DxMessaging/compare/v2.1.4...HEAD
+[2.1.4]: https://github.com/wallstop/DxMessaging/compare/v2.1.3...v2.1.4
+[2.1.3]: https://github.com/wallstop/DxMessaging/compare/v2.1.2...v2.1.3
+[2.1.2]: https://github.com/wallstop/DxMessaging/releases/tag/v2.1.2
 ```
 
 Note: The oldest version links to its release tag, not a comparison.

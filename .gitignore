@@ -22,6 +22,9 @@ bld/
 [Oo]bj/
 [Ll]og/
 
+logs_*.zip
+logs_*.zip.meta
+
 Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.pdb*
 
 # Visual Studio 2015 cache/options directory

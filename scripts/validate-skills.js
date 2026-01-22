@@ -58,6 +58,7 @@ const VALID_CATEGORIES = [
 const VALID_COMPLEXITY_LEVELS = ['basic', 'intermediate', 'advanced', 'expert'];
 const VALID_STATUSES = ['draft', 'review', 'stable', 'deprecated'];
 const VALID_IMPACT_RATINGS = ['none', 'low', 'medium', 'high', 'critical'];
+const VALID_IMPACT_TYPES = ['performance', 'maintainability', 'testability'];
 
 class ValidationError {
     constructor(file, field, message) {
@@ -315,6 +316,53 @@ function validateSkill(skillFile) {
                 `Invalid status '${frontmatter.status}'. Valid: ${VALID_STATUSES.join(', ')}`
             )
         );
+    }
+
+    // Validate complexity level
+    if (
+        frontmatter.complexity &&
+        frontmatter.complexity.level &&
+        !VALID_COMPLEXITY_LEVELS.includes(frontmatter.complexity.level)
+    ) {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'complexity.level',
+                `Invalid complexity level '${frontmatter.complexity.level}'. Valid: ${VALID_COMPLEXITY_LEVELS.join(', ')}`
+            )
+        );
+    }
+
+    // Validate impact ratings
+    if (frontmatter.impact) {
+        // Warn about unknown impact types
+        for (const impactType of Object.keys(frontmatter.impact)) {
+            if (!VALID_IMPACT_TYPES.includes(impactType)) {
+                warnings.push(
+                    new ValidationError(
+                        skillFile.relativePath,
+                        `impact.${impactType}`,
+                        `Unknown impact type '${impactType}'. Valid: ${VALID_IMPACT_TYPES.join(', ')}`
+                    )
+                );
+            }
+        }
+        // Validate ratings for known impact types
+        for (const impactType of VALID_IMPACT_TYPES) {
+            if (
+                frontmatter.impact[impactType] &&
+                frontmatter.impact[impactType].rating &&
+                !VALID_IMPACT_RATINGS.includes(frontmatter.impact[impactType].rating)
+            ) {
+                warnings.push(
+                    new ValidationError(
+                        skillFile.relativePath,
+                        `impact.${impactType}.rating`,
+                        `Invalid rating '${frontmatter.impact[impactType].rating}'. Valid: ${VALID_IMPACT_RATINGS.join(', ')}`
+                    )
+                );
+            }
+        }
     }
 
     // Validate version format (semver-like)
