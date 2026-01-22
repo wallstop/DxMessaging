@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# Git pre-commit hook for skills index generation
+#
+# This hook automatically regenerates the skills index.md when skill files are modified.
+#
+# Installation:
+#   cp scripts/hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+
+set -e
+
+SKILLS_DIR=".llm/skills"
+INDEX_FILE="$SKILLS_DIR/index.md"
+
+# Check if any skill files are staged (excluding index.md and specification.md)
+STAGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACMR | grep "^$SKILLS_DIR/" | grep -v "index.md" | grep -v "specification.md" | grep -v "templates/" || true)
+
+if [ -n "$STAGED_SKILLS" ]; then
+    echo "📚 Skill files modified, regenerating index..."
+
+    # Prefer node, fall back to pwsh (which delegates to the JS script)
+    if command -v node &> /dev/null; then
+        node scripts/generate-skills-index.js
+    elif command -v pwsh &> /dev/null; then
+        pwsh scripts/generate-skills-index.ps1
+    else
+        echo "⚠️  Neither 'node' nor 'pwsh' found. Skipping index generation."
+        echo "   Please run scripts/generate-skills-index.js or .ps1 manually."
+        exit 0
+    fi
+
+    # Add the regenerated index to the commit
+    if [ -f "$INDEX_FILE" ]; then
+        git add "$INDEX_FILE"
+        echo "✅ index.md regenerated and staged"
+    fi
+fi
+
+exit 0
