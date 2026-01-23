@@ -7,7 +7,7 @@
 - [SourceGenerators](../SourceGenerators/) — Roslyn source generators (`netstandard2.0`).
 - [Tests/Runtime](../Tests/Runtime/) — NUnit/Unity Test Framework tests (e.g., [Core Nominal tests](../Tests/Runtime/Core/NominalTests.cs)).
 - [Docs](../Docs/) — usage patterns and examples.
-- Package manifest: [package.json](../package.json) (published to NPM/UPM).
+- Package manifest: [the package manifest](../package.json) (published to NPM/UPM).
 
 ## Build, Test, and Development Commands
 
@@ -17,7 +17,7 @@
 
 ## Coding Style & Naming Conventions
 
-- Indent with 4 spaces for `.cs` (JSON/YAML: 2). CRLF, UTF-8 (no BOM) (see [.editorconfig](../.editorconfig)).
+- Indent with 4 spaces for `.cs` (JSON/YAML: 2). CRLF, UTF-8 (no BOM) (see [the EditorConfig](../.editorconfig)).
 - Prefer explicit types over `var`. Braces required. `using` directives inside the namespace.
 - Naming: `PascalCase` for types/methods/properties; interfaces `I*`; type parameters `T*`; events prefixed `On*`; public fields lowerCamelCase (matches examples in the [README](../README.md)).
 - Place code under `DxMessaging.Core`, `DxMessaging.Unity`, or `DxMessaging.Editor` as appropriate.
@@ -165,7 +165,7 @@ See the [Skill File Sizing skill](./skills/documentation/skill-file-sizing.md) f
 
 - Commits: short, imperative subject; group related changes; reference issues/PRs (e.g., "Fix registration dedupe (#123)").
 - PRs: include a clear description, linked issues, before/after notes for performance changes (see [Tests/Runtime/Benchmarks](../Tests/Runtime/Benchmarks/)), and tests for bug fixes/features.
-- Releasing: changes to [package.json](../package.json) on `master` may trigger the NPM publish workflow.
+- Releasing: changes to [the package manifest](../package.json) on `master` may trigger the NPM publish workflow.
 
 ## Security & Configuration Tips
 

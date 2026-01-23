@@ -2,7 +2,7 @@
 title: "Documentation Code Samples"
 id: "documentation-code-samples"
 category: "documentation"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-01-22"
 updated: "2026-01-22"
 
@@ -19,6 +19,8 @@ tags:
   - "examples"
   - "testing"
   - "accuracy"
+  - "linting"
+  - "anti-patterns"
 
 complexity:
   level: "basic"
@@ -59,6 +61,7 @@ related:
   - "documentation-updates"
   - "documentation-style-guide"
   - "documentation-update-workflow"
+  - "link-quality-guidelines"
 
 status: "stable"
 ---
@@ -140,6 +143,28 @@ public void HandleDamage(DamageMessage msg)  // Wrong signature! Should be (ref 
     health -= msg.damage;  // Field doesn't exist in example - should be msg.amount
 }
 ```
+
+### Code Fence Language for Anti-Pattern Examples
+
+When showing examples of **bad patterns** (anti-patterns) in documentation, especially for Markdown syntax, use `text` or `none` as the code fence language instead of `markdown`:
+
+````markdown
+<!-- GOOD: Use 'text' for anti-pattern examples that might trigger linters -->
+
+```text
+<!-- BAD: Raw file names as link text -->
+See [README.md](../README.md) for installation.
+```
+````
+
+#### Why this matters
+
+- Documentation linters may scan for patterns like raw file names in link text
+- Using `text` or `none` signals that the content is illustrative, not actual documentation
+- Some linting tools only check content in `markdown` code blocks
+- Prevents false positives in CI/CD pipelines
+
+For non-Markdown anti-patterns (like C# code), using the actual language (`csharp`) is still appropriate since code linters typically don't run on documentation files.
 
 ### Anti-Patterns to Avoid
 
@@ -223,13 +248,15 @@ public void DocumentedDamageMessagePatternCompiles()
 - [Documentation Updates](documentation-updates.md)
 - [Documentation Style Guide](documentation-style-guide.md)
 - [Documentation Update Workflow](documentation-update-workflow.md)
+- [Link Quality Guidelines](link-quality-guidelines.md)
 
 ## References
 
-- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/BestPracticeGuides.html)
+- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/best-practice-guides.html)
 
 ## Changelog
 
-| Version | Date       | Changes         |
-| ------- | ---------- | --------------- |
-| 1.0.0   | 2026-01-22 | Initial version |
+| Version | Date       | Changes                                                  |
+| ------- | ---------- | -------------------------------------------------------- |
+| 1.1.0   | 2026-01-22 | Added guidance on code fence languages for anti-patterns |
+| 1.0.0   | 2026-01-22 | Initial version                                          |

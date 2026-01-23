@@ -137,7 +137,7 @@ Outdated documentation misleads users and increases support load.
 ## References
 
 - [Microsoft XML Documentation Comments](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/xmldoc/)
-- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/BestPracticeGuides.html)
+- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/best-practice-guides.html)
 
 ## Changelog
 

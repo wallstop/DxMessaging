@@ -2,7 +2,7 @@
 title: "Link Quality and External URL Management"
 id: "link-quality-guidelines"
 category: "documentation"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-01-22"
 updated: "2026-01-22"
 
@@ -24,6 +24,8 @@ tags:
   - "quality"
   - "accessibility"
   - "github-actions"
+  - "linting"
+  - "testing"
 
 complexity:
   level: "basic"
@@ -108,7 +110,7 @@ Link-related issues cause preventable CI/CD failures and documentation quality p
 
 #### Anti-patterns
 
-```markdown
+```text
 <!-- BAD: Raw file names as link text -->
 
 See [README.md](../README.md) for installation instructions.
@@ -118,7 +120,7 @@ Read [context.md](.llm/context.md) for guidelines.
 
 #### Correct Patterns
 
-```markdown
+```text
 <!-- GOOD: Descriptive link text -->
 
 See [the README](../README.md) for installation instructions.
@@ -131,7 +133,7 @@ Read [the AI Agent Guidelines](.llm/context.md) for guidelines.
 | Scenario               | Bad Example                    | Good Example                                |
 | ---------------------- | ------------------------------ | ------------------------------------------- |
 | File reference         | `[package.json](package.json)` | `[the package manifest](package.json)`      |
-| Section reference      | `[FAQ.md](Docs/FAQ.md)`        | `[frequently asked questions](Docs/FAQ.md)` |
+| Section reference      | `\[FAQ.md\](Docs/FAQ.md)`      | `[frequently asked questions](Docs/FAQ.md)` |
 | Code location          | `[Tests/](Tests/)`             | `[the test suite](Tests/)`                  |
 | External documentation | `[docs.unity3d.com](url)`      | `[Unity documentation](url)`                |
 | GitHub repository      | `[repo](url)`                  | `[the DxMessaging repository](url)`         |
@@ -262,6 +264,50 @@ Workflow files should use consistent action versions across all workflows.
 grep -rh "uses:" .github/workflows/ | sort | uniq
 ```
 
+## Documentation Linting Scripts
+
+Automated link validation prevents broken links from reaching production. However, these scripts require careful implementation and testing.
+
+### Linting Scripts Must Skip Code Blocks
+
+Documentation linters that check for raw file names or other patterns **must skip content inside code blocks**:
+
+- **Fenced code blocks**: Content between ` ``` ` markers
+- **Inline code**: Content between single backticks
+
+Without this, examples showing anti-patterns will trigger false positives:
+
+```markdown
+<!-- This anti-pattern example would trigger a linter without code block handling -->
+
+Bad: `See [README.md](../README.md)` <- Inline code, should be skipped
+```
+
+### Linting Scripts Need Unit Tests
+
+Documentation linting scripts are code and need tests like any other code:
+
+| Test Category        | Examples                                      |
+| -------------------- | --------------------------------------------- |
+| Normal patterns      | Valid links with good text                    |
+| Anti-patterns        | Raw file names that should be flagged         |
+| Edge cases           | Inline code, fenced blocks, nested structures |
+| False positive cases | Anti-pattern examples in documentation        |
+| Boundary conditions  | Empty files, single-line files, no links      |
+
+Without comprehensive tests, regressions can cause CI failures on valid documentation.
+
+### Script Implementation Checklist
+
+When creating or modifying documentation linters:
+
+- [ ] Skip content in fenced code blocks (` ``` `)
+- [ ] Skip content in inline code (backticks)
+- [ ] Handle nested structures correctly
+- [ ] Include unit tests covering edge cases
+- [ ] Test against existing documentation files
+- [ ] Document expected behavior in script comments
+
 ## Validation Checklist
 
 Before committing documentation or skill files:
@@ -272,6 +318,7 @@ Before committing documentation or skill files:
 - [ ] GitHub Action versions are consistent across all workflows
 - [ ] No `http://` links (use `https://` instead)
 - [ ] No URL shorteners or tracking parameters
+- [ ] Documentation linting scripts have adequate test coverage
 
 ## See Also
 
@@ -281,12 +328,13 @@ Before committing documentation or skill files:
 
 ## References
 
-- [Markdown Guide - Links](https://www.markdownguide.org/basic-syntax/#links)
+- [Markdown Guide - Links](https://www.markdownguide.org/basic-syntax/#links-1)
 - [WebAIM - Links and Hypertext](https://webaim.org/techniques/hypertext/)
 - [GitHub Actions - Using Actions](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsuses)
 
 ## Changelog
 
-| Version | Date       | Changes                                            |
-| ------- | ---------- | -------------------------------------------------- |
-| 1.0.0   | 2026-01-22 | Initial version covering link quality fundamentals |
+| Version | Date       | Changes                                                           |
+| ------- | ---------- | ----------------------------------------------------------------- |
+| 1.1.0   | 2026-01-22 | Added documentation linting scripts section with testing guidance |
+| 1.0.0   | 2026-01-22 | Initial version covering link quality fundamentals                |

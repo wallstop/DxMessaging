@@ -19,16 +19,40 @@ $issueCount = 0
 $excludeDirs = @('.git', 'node_modules', '.vs')
 
 $mdFiles = Get-ChildItem -Path $Root -Recurse -File -Filter *.md |
-    Where-Object { $excludeDirs -notcontains $_.Directory.Name }
+    Where-Object { 
+        $pathParts = $_.FullName.Split([IO.Path]::DirectorySeparatorChar)
+        -not ($excludeDirs | Where-Object { $pathParts -contains $_ })
+    }
 
 # Regex for inline markdown links (exclude images), capture optional title
 $pattern = '(?<!\!)\[(?<text>[^\]]+)\]\((?<target>[^)\s]+)(?:\s+"[^"]*")?\)'
 
 foreach ($file in $mdFiles) {
     $lines = Get-Content -LiteralPath $file.FullName -Encoding UTF8
+    $inCodeBlock = $false
+    $codeFencePattern = $null
+    
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]
-        $matches = [System.Text.RegularExpressions.Regex]::Matches($line, $pattern)
+        
+        # Skip fenced code blocks
+        $trimmedLine = $line.TrimStart()
+        if ($trimmedLine -match '^(`{3,})') {
+            if (-not $inCodeBlock) {
+                $inCodeBlock = $true
+                $codeFencePattern = $Matches[1]
+            } elseif ($trimmedLine.StartsWith($codeFencePattern) -and $trimmedLine.Trim() -match "^$([regex]::Escape($codeFencePattern))") {
+                $inCodeBlock = $false
+                $codeFencePattern = $null
+            }
+            continue
+        }
+        if ($inCodeBlock) { continue }
+        
+        # Strip inline code before checking for links
+        $lineToCheck = $line -replace '`[^`]+`', ''
+        
+        $matches = [System.Text.RegularExpressions.Regex]::Matches($lineToCheck, $pattern)
         foreach ($m in $matches) {
             $text = $m.Groups['text'].Value.Trim()
             $targetRaw = $m.Groups['target'].Value.Trim()

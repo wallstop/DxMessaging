@@ -137,7 +137,7 @@ Documentation updates needed:
 
 ## References
 
-- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/BestPracticeGuides.html)
+- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/best-practice-guides.html)
 
 ## Changelog
 
