@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-01-22. Do not edit manually.
+> **Auto-generated** on 2026-01-23. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -37,7 +37,7 @@
 | [Documentation Style Guide](./documentation/documentation-style-guide.md)               | 📝 186 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, style, writing            |
 | [Documentation Update Workflow](./documentation/documentation-update-workflow.md)       | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, workflow, checklist       |
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)       | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-comments, xml-docs   |
-| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)  | ✅ 341 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, links, urls               |
+| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)  | ⚠️ 397 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, links, urls               |
 | [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                    | ✅ 261 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, skills, file-organization |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                | 📝 191 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, xml-docs, api-reference   |
 
