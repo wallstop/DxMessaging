@@ -21,7 +21,6 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Split-Path -Parent $ScriptDir
 $JsScript = Join-Path $ScriptDir 'generate-skills-index.js'
 
 $node = Get-Command node -ErrorAction SilentlyContinue
