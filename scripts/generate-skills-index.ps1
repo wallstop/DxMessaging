@@ -29,10 +29,10 @@ if ($null -eq $node) {
     exit 1
 }
 
-$args = @()
+$nodeArgs = @()
 if ($Check) {
-    $args += '--check'
+    $nodeArgs += '--check'
 }
 
-& $node.Source $JsScript @args
+& $node.Source $JsScript @nodeArgs
 exit $LASTEXITCODE
