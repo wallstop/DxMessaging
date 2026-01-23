@@ -231,10 +231,14 @@ URL fragments (the `#section-name` portion after the main URL) are particularly 
 
 | Issue                          | Example                                                   | Risk                                                        |
 | ------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------- |
+| Missing ID on target heading   | `<h2>Links</h2>` with no `id` attribute                   | CI failure when lychee validates with `--include-fragments` |
 | Incorrect fragment guessing    | `#links-1` instead of `#links`                            | CI failure when lychee validates with `--include-fragments` |
 | Heading renumbered             | `#step-3-install` becomes `#step-4-install`               | Silent breakage, confusing users                            |
 | Heading text changed           | `#getting-started` becomes `#quick-start`                 | 404-like behavior on the page                               |
 | Auto-generated fragment suffix | `#links` vs `#links-1` (duplicate heading disambiguation) | Wrong section targeted                                      |
+
+> **Note**: Some websites have broken internal links themselves. For example, markdownguide.org
+> links to `#links` but their `<h2>Links</h2>` has no `id` attribute. When in doubt, omit the fragment.
 
 #### Fragment Validation Process
 
@@ -269,12 +273,12 @@ Different sites generate fragment IDs differently:
 ```markdown
 <!-- Good: Includes context in case fragment breaks -->
 
-See the [Markdown links syntax](https://www.markdownguide.org/basic-syntax/#links)
+See the [Markdown links syntax](https://www.markdownguide.org/basic-syntax/)
 section for details on inline and reference-style links.
 
 <!-- Risky: Fragment-only reference with no context -->
 
-See [here](https://www.markdownguide.org/basic-syntax/#links).
+See [here](https://www.markdownguide.org/basic-syntax/).
 ```
 
 ### GitHub Actions Version Consistency
@@ -383,7 +387,7 @@ Before committing documentation or skill files:
 
 ## References
 
-- [Markdown Guide - Links](https://www.markdownguide.org/basic-syntax/#links)
+- [Markdown Guide - Basic Syntax](https://www.markdownguide.org/basic-syntax/)
 - [WebAIM - Links and Hypertext](https://webaim.org/techniques/hypertext/)
 - [GitHub Actions - Using Actions](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsuses)
 

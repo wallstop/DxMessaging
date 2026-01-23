@@ -24,6 +24,7 @@ bld/
 
 logs_*.zip
 logs_*.zip.meta
+logs_*
 
 Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.pdb*
 
