@@ -20,6 +20,7 @@ def should_check_target(target: str) -> bool:
     try:
         core = urllib.parse.unquote(core)
     except Exception:
+        # Ignore malformed URL encoding - continue with the original string
         pass
     return core.lower().endswith(".md")
 
@@ -37,6 +38,7 @@ def is_link_text_problematic(text: str, target: str) -> bool:
     try:
         target_core = urllib.parse.unquote(target_core)
     except Exception:
+        # Ignore malformed URL encoding - continue with the original string
         pass
     file_name = os.path.basename(target_core)
 
@@ -159,6 +161,7 @@ def main(root: str) -> int:
                 with open(path, "r", encoding="utf-8") as f:
                     lines = f.readlines()
             except Exception:
+                # Skip files that cannot be read (permission errors, encoding issues, etc.)
                 continue
 
             file_issues = check_file_content(lines)
