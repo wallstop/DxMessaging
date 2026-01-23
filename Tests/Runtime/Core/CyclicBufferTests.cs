@@ -2,17 +2,15 @@
 namespace DxMessaging.Tests.Runtime.Core
 {
     using System;
-    using System.Collections;
     using System.Collections.Generic;
     using System.Linq;
     using DxMessaging.Core.DataStructure;
     using NUnit.Framework;
-    using UnityEngine.TestTools;
 
     public sealed class CyclicBufferTests
     {
-        [UnityTest]
-        public IEnumerator AddAndOverwritePreservesChronology()
+        [Test]
+        public void AddAndOverwritePreservesChronology()
         {
             CyclicBuffer<int> buf = new(3) { 0, 1, 2 };
 
@@ -38,12 +36,10 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(2, buf.Count, "Count should decrease after remove.");
             Assert.AreEqual(1, buf[0], "Remaining first element should be unchanged.");
             Assert.AreEqual(3, buf[1], "Remaining second element should be next in order.");
-
-            yield break;
         }
 
-        [UnityTest]
-        public IEnumerator ResizeTruncatesOrExtends()
+        [Test]
+        public void ResizeTruncatesOrExtends()
         {
             CyclicBuffer<int> buf = new(5);
             for (int i = 0; i < 5; ++i)
@@ -65,7 +61,6 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreEqual(2, buf[0], "Growing capacity should not alter order (first).");
             Assert.AreEqual(3, buf[1], "Growing capacity should not alter order (second).");
             Assert.AreEqual(4, buf[2], "Growing capacity should not alter order (third).");
-            yield break;
         }
 
         [Test]
@@ -211,12 +206,14 @@ namespace DxMessaging.Tests.Runtime.Core
         public void RemoveFromWrappedBuffer(int toRemove, int[] expected)
         {
             // Create a buffer that has wrapped around
-            CyclicBuffer<int> buffer = new(3);
-            buffer.Add(1);
-            buffer.Add(2);
-            buffer.Add(3);
-            // Buffer is now [1, 2, 3], full
-            buffer.Add(4);
+            CyclicBuffer<int> buffer = new(3)
+            {
+                1,
+                2,
+                3,
+                // Buffer is now [1, 2, 3], full
+                4,
+            };
             // Buffer has wrapped, now contains [2, 3, 4] logically
 
             int[] beforeRemove = buffer.ToArray();
@@ -249,10 +246,7 @@ namespace DxMessaging.Tests.Runtime.Core
         public void RemoveWithCustomComparer()
         {
             // Case-insensitive string comparer
-            CyclicBuffer<string> buffer = new(5);
-            buffer.Add("Apple");
-            buffer.Add("Banana");
-            buffer.Add("Cherry");
+            CyclicBuffer<string> buffer = new(5) { "Apple", "Banana", "Cherry" };
 
             // Should find and remove "BANANA" using case-insensitive comparison
             bool wasRemoved = buffer.Remove("BANANA", StringComparer.OrdinalIgnoreCase);
@@ -300,11 +294,13 @@ namespace DxMessaging.Tests.Runtime.Core
         public void WrappedBufferEnumerationConsistencyAfterRemove()
         {
             // Create a wrapped buffer
-            CyclicBuffer<int> buffer = new(3);
-            buffer.Add(1);
-            buffer.Add(2);
-            buffer.Add(3);
-            buffer.Add(4); // Now wrapped: [2, 3, 4]
+            CyclicBuffer<int> buffer = new(3)
+            {
+                1,
+                2,
+                3,
+                4, // Now wrapped: [2, 3, 4]
+            };
 
             buffer.Remove(3); // Remove middle: should be [2, 4]
 
@@ -331,17 +327,17 @@ namespace DxMessaging.Tests.Runtime.Core
         [Test]
         public void ZeroCapacityBufferIsEmpty()
         {
-            CyclicBuffer<int> buffer = new(0);
-
-            // Add multiple items - all should be silently discarded
-            buffer.Add(1);
-            buffer.Add(2);
-            buffer.Add(3);
+            CyclicBuffer<int> buffer = new(0)
+            {
+                // Add multiple items - all should be silently discarded
+                1,
+                2,
+                3,
+            };
 
             Assert.AreEqual(0, buffer.Capacity, "Capacity should remain 0.");
             Assert.AreEqual(0, buffer.Count, "Count should remain 0.");
         }
     }
 }
-
 #endif

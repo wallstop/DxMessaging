@@ -31,7 +31,7 @@ Handy commands:
 - Lint markdown (all files): `pre-commit run markdownlint --all-files`
 - Lint markdown (manual): `npx markdownlint-cli@0.41.0 "**/*.md" -c .markdownlint.jsonc --fix`
 - Format JSON/.asmdef (all files): `pre-commit run prettier --all-files`
-- Format JSON/.asmdef (manual): `npx prettier@3.6.2 --write "**/*.{json,asmdef}"`
+- Format JSON/.asmdef (manual): `npx prettier@3.8.0 --write "**/*.{json,asmdef}"`
 - Format YAML (all files): `pre-commit run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`

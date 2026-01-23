@@ -32,7 +32,7 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-        entry: npx --yes prettier@3.6.2 --write
+        entry: npx --yes prettier@3.8.0 --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
         description: Use pinned Prettier version to match CI.
@@ -50,7 +50,7 @@ repos:
     hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
-        entry: npx --yes markdownlint-cli2@0.17.1 --config .markdownlint.jsonc
+        entry: npx --yes markdownlint-cli2@0.17.1 --fix
         language: system
         files: '(?i)\.(md|markdown)$'
 
@@ -104,3 +104,26 @@ repos:
         pass_filenames: false
         stages:
           - pre-commit
+
+  - repo: local
+    hooks:
+      - id: validate-skills
+        name: Validate LLM skill files
+        entry: node scripts/validate-skills.js
+        language: system
+        pass_filenames: false
+        files: '^\.llm/.*\.md$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Validate skill file schema compliance and file size limits.
+      - id: skills-index-regen
+        name: Regenerate skills index.md
+        entry: bash -c 'node scripts/generate-skills-index.js && { git add .llm/skills/index.md 2>/dev/null || true; }'
+        language: system
+        pass_filenames: false
+        files: '^\.llm/.*\.md$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Regenerate index.md and stage it for commit.

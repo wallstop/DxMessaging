@@ -47,6 +47,7 @@ const excludeRegexes = [
 // Text file extensions to validate
 const exts = new Set([
   '.cs', '.csproj', '.sln',
+  '.js', '.cjs', '.mjs',
   '.json', '.jsonc', '.toml',
   '.yaml', '.yml',
   '.md', '.markdown',

@@ -26,6 +26,7 @@ const excludeRegexes = [
 // Text file extensions to fix (must match check-eol.js)
 const exts = new Set([
   '.cs', '.csproj', '.sln',
+  '.js', '.cjs', '.mjs',
   '.json', '.jsonc', '.toml',
   '.yaml', '.yml',
   '.md', '.markdown',
