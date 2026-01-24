@@ -80,7 +80,7 @@ Example: "Track every damage event for statistics"
 // Use the type-specific post-processor variant based on your message type:
 // - RegisterUntargetedPostProcessor<T> for IUntargetedMessage
 // - RegisterBroadcastWithoutSourcePostProcessor<T> for IBroadcastMessage from any source
-_ = token.RegisterBroadcastWithoutSourcePostProcessor<Damage>((InstanceId source, ref Damage msg) => {
+_ = token.RegisterBroadcastWithoutSourcePostProcessor<Damage>((InstanceId source, Damage msg) => {
     Analytics.LogDamage(source, msg.amount);
 });
 ```
