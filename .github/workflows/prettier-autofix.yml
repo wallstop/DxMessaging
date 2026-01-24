@@ -5,6 +5,10 @@ on:
   pull_request_target:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   pull-requests: write
@@ -14,6 +18,7 @@ jobs:
     name: Format and propose changes
     if: ${{ github.event_name != 'pull_request_target' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -44,7 +49,7 @@ jobs:
 
       - name: Markdownlint (auto-fix)
         if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
-        run: npx --yes markdownlint-cli@0.40.0 "**/*.md" "**/*.markdown" --config .markdownlint.json --ignore-path .markdownlintignore --fix
+        run: npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
 
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
@@ -81,6 +86,7 @@ jobs:
     name: Fork PR bot formatting PR (Dependabot only)
     if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout fork PR HEAD
         uses: actions/checkout@v6
@@ -112,7 +118,7 @@ jobs:
           npm run format:yaml
 
       - name: Markdownlint (auto-fix)
-        run: npx --yes markdownlint-cli@0.40.0 "**/*.md" "**/*.markdown" --config .markdownlint.json --ignore-path .markdownlintignore --fix
+        run: npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
 
       - name: Detect changes
         id: changes

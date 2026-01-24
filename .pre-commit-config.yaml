@@ -50,7 +50,7 @@ repos:
     hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
-        entry: npx --yes markdownlint-cli2@0.17.1 --fix
+        entry: npx --yes markdownlint-cli2@0.20.0 --fix
         language: system
         files: '(?i)\.(md|markdown)$'
 
@@ -144,7 +144,7 @@ repos:
     hooks:
       - id: cspell
         name: Check spelling
-        entry: npx --yes cspell@9 --no-progress --no-summary
+        entry: npx --yes cspell@8.2.0 --no-progress --no-summary
         language: system
         files: '(?i)\.(md|cs|json|ya?ml|ps1|js)$'
         pass_filenames: true
