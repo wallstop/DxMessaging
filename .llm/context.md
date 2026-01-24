@@ -14,6 +14,8 @@
 - Format: `dotnet tool restore` then `dotnet tool run csharpier format`.
 - Build generators: `dotnet build SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.csproj`.
 - Unity tests: open a Unity 2021.3+ project that references this package, then Window > Test Runner > PlayMode. CLI example: `Unity -batchmode -nographics -quit -projectPath <your_project> -runTests -testPlatform PlayMode -testResults ./TestResults.xml`.
+- Actionlint: Runs in CI on PRs/pushes to validate GitHub Actions workflows. Available as a pre-push hook (requires `actionlint` installed locally).
+- Spellcheck: Runs in CI on PRs/pushes via `cspell` to check spelling in Markdown, C#, JSON, YAML, and script files. Dictionary is maintained in [.cspell.json](../.cspell.json). Available as a pre-push hook via `npx cspell`.
 
 ## Coding Style & Naming Conventions
 

@@ -127,3 +127,27 @@ repos:
           - pre-commit
           - pre-push
         description: Regenerate index.md and stage it for commit.
+
+  - repo: local
+    hooks:
+      - id: actionlint
+        name: Lint GitHub Actions workflows
+        entry: bash -c 'if command -v actionlint >/dev/null 2>&1; then actionlint; else echo "actionlint not installed; skipping"; fi'
+        language: system
+        files: '^\.github/workflows/.*\.ya?ml$'
+        pass_filenames: false
+        stages:
+          - pre-push
+        description: Validate GitHub Actions workflow syntax before push.
+
+  - repo: local
+    hooks:
+      - id: cspell
+        name: Check spelling
+        entry: npx --yes cspell@9 --no-progress --no-summary
+        language: system
+        files: '(?i)\.(md|cs|json|ya?ml|ps1|js)$'
+        pass_filenames: true
+        stages:
+          - pre-push
+        description: Check spelling in changed files before push.
