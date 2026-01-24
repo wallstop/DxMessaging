@@ -23,10 +23,12 @@ _ = token.RegisterUntargeted<GameEvent>(msg => {
 });
 
 // First emission: only the original handler runs
-new GameEvent().Emit();  // DoWork() executes, ProcessLater() does NOT
+var firstEvent = new GameEvent();
+firstEvent.Emit();  // DoWork() executes, ProcessLater() does NOT
 
 // Second emission: both handlers run
-new GameEvent().Emit();  // Both DoWork() and ProcessLater() execute
+var secondEvent = new GameEvent();
+secondEvent.Emit();  // Both DoWork() and ProcessLater() execute
 ```
 
 ##### Why this matters
@@ -224,8 +226,10 @@ var uiManager = new UIStateManager();
 uiManager.RegisterInterceptors();
 uiManager.EnterCutscene();
 
-new OpenMenu("inventory").Emit();  // Cancelled by interceptor
-new ShowDialog("Hello!").Emit();   // Cancelled by interceptor
+var openMenu = new OpenMenu("inventory");
+openMenu.Emit();  // Cancelled by interceptor
+var showDialog = new ShowDialog("Hello!");
+showDialog.Emit();  // Cancelled by interceptor
 ```
 
 ###### Value Clamping and Normalization
@@ -275,7 +279,8 @@ var normalizer = new InputNormalizer();
 normalizer.RegisterInterceptors();
 
 // Even invalid input gets cleaned
-new MovementInput(new Vector2(100, 200), 9999f).Emit();
+var input = new MovementInput(new Vector2(100, 200), 9999f);
+input.Emit();
 // Handlers receive: direction=(0.45, 0.89), speed=10.0
 ```
 
@@ -349,10 +354,12 @@ var permissions = new PermissionSystem(playerDataService);
 permissions.RegisterInterceptors();
 
 // This will be blocked if player doesn't have 100 currency
-new SpendCurrency(100).EmitTargeted(playerId);
+var spendCurrency = new SpendCurrency(100);
+spendCurrency.EmitTargeted(playerId);
 
 // This will be blocked if achievement is already unlocked
-new UnlockAchievement("first_boss").EmitTargeted(playerId);
+var unlockAchievement = new UnlockAchievement("first_boss");
+unlockAchievement.EmitTargeted(playerId);
 ```
 
 ###### Message Enrichment and Context Addition
@@ -410,7 +417,8 @@ var enricher = new TelemetryEnricher(Guid.NewGuid().ToString());
 enricher.RegisterInterceptors();
 
 // Emit without timestamp/session - interceptor adds them
-new PlayerAction("jump").EmitTargeted(playerId);
+var action = new PlayerAction("jump");
+action.EmitTargeted(playerId);
 // Handlers receive fully enriched message with timestamp and sessionId
 ```
 
@@ -467,10 +475,13 @@ public class CooldownManager
 var cooldowns = new CooldownManager();
 cooldowns.RegisterInterceptors();
 
-new CastSpell("fireball").EmitTargeted(playerId);  // ✓ Allowed
-new CastSpell("fireball").EmitTargeted(playerId);  // ✗ Blocked (too soon)
+var spell1 = new CastSpell("fireball");
+spell1.EmitTargeted(playerId);  // ✓ Allowed
+var spell2 = new CastSpell("fireball");
+spell2.EmitTargeted(playerId);  // ✗ Blocked (too soon)
 // ... wait 1.5s ...
-new CastSpell("fireball").EmitTargeted(playerId);  // ✓ Allowed
+var spell3 = new CastSpell("fireball");
+spell3.EmitTargeted(playerId);  // ✓ Allowed
 ```
 
 When to Use Interceptors

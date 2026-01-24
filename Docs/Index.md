@@ -1,6 +1,6 @@
 # DxMessaging Documentation Hub
 
-**Welcome!** This is your complete guide to DxMessaging — a high-performance, type-safe messaging system for Unity.
+This is the documentation for DxMessaging, a type-safe messaging system for Unity.
 
 ## Visual Documentation Map
 
@@ -299,7 +299,5 @@ From [Comparisons](Comparisons.md):
 1. ⏱️ 30 min: [Design & Architecture](DesignAndArchitecture.md)
 
 ---
-
-**Happy messaging!** 🚀
 
 Need help? Check [FAQ](FAQ.md) or [Troubleshooting](Troubleshooting.md).

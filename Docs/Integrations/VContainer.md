@@ -6,14 +6,14 @@
 
 ## Overview
 
-**VContainer** is a fast, lightweight dependency injection framework for Unity with minimal overhead. DxMessaging integrates seamlessly with VContainer, allowing you to:
+**VContainer** is a fast, lightweight dependency injection framework for Unity with minimal overhead. DxMessaging integrates with VContainer, allowing you to:
 
 - **Inject `IMessageBus`** in any class with deterministic lifetimes
 - **Create per-scope buses** for scene isolation (perfect for additive scenes)
 - **Use DI for construction** + DxMessaging for events (best of both worlds)
-- **Minimal performance overhead** — VContainer + DxMessaging = blazing fast
+- **Compatible** — VContainer and DxMessaging can be used together
 
-**Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected). VContainer's scoped lifetimes make it perfect for per-scene message buses.
+**Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected), combining both approaches. VContainer's scoped lifetimes support per-scene message buses.
 
 ---
 
@@ -28,6 +28,7 @@
 
 ```csharp
 using DxMessaging.Core.MessageBus;
+using DxMessaging.Unity.Integrations.VContainer; // Required for RegisterMessageRegistrationBuilder()
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -47,6 +48,8 @@ public sealed class MessagingLifetimeScope : LifetimeScope
     }
 }
 ```
+
+**Note:** You must import the `DxMessaging.Unity.Integrations.VContainer` namespace to access the `RegisterMessageRegistrationBuilder()` extension method.
 
 #### Add to your scene
 
@@ -116,6 +119,10 @@ public sealed class PlayerService : IStartable, IDisposable
 #### Register the service in your scope
 
 ```csharp
+using DxMessaging.Unity.Integrations.VContainer; // Required for extension method
+
+// ...
+
 protected override void Configure(IContainerBuilder builder)
 {
     builder.Register<MessageBus>(Lifetime.Singleton).As<IMessageBus>();
@@ -193,10 +200,11 @@ public sealed class GameInitializer : IStartable
 
 ## Advanced: Scene Scopes and Isolation
 
-VContainer's scoped lifetimes make it perfect for per-scene message buses. This is useful for additive scenes or isolated gameplay features:
+VContainer's scoped lifetimes support per-scene message buses. This is useful for additive scenes or isolated gameplay features:
 
 ```csharp
 using DxMessaging.Core.MessageBus;
+using DxMessaging.Unity.Integrations.VContainer; // Required for extension method
 using VContainer;
 using VContainer.Unity;
 
@@ -227,7 +235,7 @@ public sealed class LevelLoader
 
 - Each scene gets its own isolated message bus
 - Messages don't leak between scenes
-- Perfect for multiplayer lobbies, mini-games, or feature-scoped events
+- Suitable for multiplayer lobbies, mini-games, or feature-scoped events
 
 ---
 
@@ -300,6 +308,7 @@ public IEnumerator PlayMode_MessageBusIsolation()
 - [ ] Install DxMessaging and VContainer
 - [ ] Create `MessagingLifetimeScope` with `builder.Register<MessageBus>().As<IMessageBus>()`
 - [ ] Add scope to your scene as a GameObject component
+- [ ] Import `DxMessaging.Unity.Integrations.VContainer` namespace for extension methods
 - [ ] Add `#if VCONTAINER_PRESENT` check and call `builder.RegisterMessageRegistrationBuilder()`
 
 ### Integration

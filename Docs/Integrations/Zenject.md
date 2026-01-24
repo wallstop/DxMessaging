@@ -6,14 +6,14 @@
 
 ## Overview
 
-**Zenject** (also known as Extenject) is a powerful dependency injection framework for Unity. DxMessaging integrates seamlessly with Zenject, allowing you to:
+**Zenject** (also known as Extenject) is a powerful dependency injection framework for Unity. DxMessaging integrates with Zenject, allowing you to:
 
 - **Inject `IMessageBus`** as a singleton dependency in any class
 - **Use DI for construction** + DxMessaging for events (best of both worlds)
 - **Create per-scope message buses** for scene or gameplay isolation
 - **Bridge to SignalBus** for gradual migration from Zenject Signals
 
-**Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected). This keeps your architecture clean and testable.
+**Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected), combining both approaches.
 
 ---
 

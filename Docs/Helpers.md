@@ -9,7 +9,7 @@
 - You write: `[DxAutoConstructor]` on a struct
 - Source generator sees: "Oh, they want a constructor!"
 - Source generator creates: A constructor with all the fields as parameters
-- You get: Less typing, fewer bugs, cleaner code
+- You get: Less typing, fewer bugs, more consistent code
 
 #### Learn more about source generators
 
@@ -218,7 +218,7 @@ public readonly partial struct Heal : ITargetedMessage<Heal>
 
 - ✅ **Less code** - 50% fewer lines
 - ✅ **Fewer bugs** - Can't forget fields in constructor
-- ✅ **Cleaner** - Focus on data, not boilerplate
+- ✅ **Focused** - Focus on data, not boilerplate
 - ✅ **Refactor-safe** - Add field? Constructor updates automatically!
 
 ## Complete Example: Attribute Definition vs Generated Output
@@ -682,4 +682,4 @@ public readonly partial struct WithData {
 - ✅ Explicit control
 - ✅ Understanding exactly what happens
 
-**Best practice:** Start with attributes (they cover 99% of cases), switch to manual only when needed!
+**Recommendation:** Start with attributes (they cover most cases), switch to manual only when needed.

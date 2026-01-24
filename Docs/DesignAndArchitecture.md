@@ -97,7 +97,7 @@ flowchart TB
 - Struct messages passed by `ref` to avoid copying and GC.
 - Minimal allocations in hot paths; logging and diagnostics use ring buffers.
 - Pre‑allocated internal collections for common operations.
-- Priority sorting performed once per registration; emission is O(N) over active handlers.
+- Handlers are sorted by priority once during registration. Emitting a message iterates through all active handlers in that order.
 
 ## Message Type System
 

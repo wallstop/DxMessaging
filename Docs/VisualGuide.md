@@ -1,4 +1,4 @@
-# DxMessaging Visual Guide for Absolute Beginners
+# DxMessaging Visual Guide for Beginners
 
 If you're brand new to messaging systems, this visual guide will help you understand DxMessaging in minutes.
 
@@ -66,7 +66,7 @@ graph TB
 
 - ✅ Nobody knows about anyone else
 - ✅ Easy to add/remove systems
-- ✅ Zero memory leaks (automatic cleanup)
+- ✅ Automatic cleanup (prevents common leaks)
 
 ## 📨 The Three Message Types (Simple!)
 
@@ -193,7 +193,7 @@ sequenceDiagram
 - **Step 1-2:** You create and emit the message
 - **Step 3 (Optional):** Interceptors can validate, modify, or cancel
 - **Step 4:** Handlers run in priority order (lower number = earlier)
-- **Step 5 (Optional):** Post-processors run after everything (perfect for analytics)
+- **Step 5 (Optional):** Post-processors run after everything (suitable for analytics)
 
 ## 🎮 Your First Message (3 Easy Steps)
 
@@ -211,18 +211,18 @@ public readonly partial struct Heal {
 
 #### What are those `[DxSomething]` tags?
 
-They're called **attributes** — magic markers that tell the computer to write code for you! It's like having a robot assistant:
+These are **attributes** that work with C# source generators to produce boilerplate code at compile time:
 
-- **`[DxTargetedMessage]`** → "Hey robot, make this a targeted message"
-- **`[DxAutoConstructor]`** → "Hey robot, create a constructor for me"
+- **`[DxTargetedMessage]`** — Marks this struct as a targeted message and generates the required emit methods
+- **`[DxAutoConstructor]`** — Generates a constructor that initializes all fields
 
-The `[DxAutoConstructor]` automatically creates this:
+For example, `[DxAutoConstructor]` generates this constructor automatically:
 
 ```csharp
 public Heal(int amount) { this.amount = amount; }
 ```
 
-**Why `partial`?** So the robot can add code to your type in a separate file. Think of it as giving permission to extend your struct.
+**Why `partial`?** The `partial` keyword allows the source generator to add the generated code to your type in a separate file during compilation.
 
 **Want to learn more?** See [Helpers & Source Generation](Helpers.md) for the full explanation!
 
@@ -245,7 +245,7 @@ public class Player : MessageAwareComponent {
 }
 ```
 
-**Magic:** `MessageAwareComponent` handles all the lifecycle automatically!
+**Automatic:** `MessageAwareComponent` handles all the lifecycle automatically.
 
 - Creates registration in `Awake()`
 - Activates in `OnEnable()`
@@ -259,7 +259,7 @@ public class Player : MessageAwareComponent {
 var healMsg = new Heal(50);
 healMsg.EmitComponentTargeted(playerComponent);
 
-// That's it! Player will receive it automatically.
+// Player will receive this message.
 ```
 
 ## 🧩 Common Patterns Visualized
@@ -284,7 +284,7 @@ sequenceDiagram
     Bus->>Save: SceneChanged received
     Save->>Save: SaveGame()
 
-    Note over Audio,Save: ✅ All independent!<br/>No coupling!
+    Note over Audio,Save: ✅ All independent,<br/>no coupling
 ```
 
 **Why this works:** AudioSystem and SaveSystem don't know about SceneManager or each other. They just listen for `SceneChanged` messages and react independently.
@@ -452,15 +452,15 @@ DxMessaging has built-in Inspector support!
 
 ## ⚡ Performance at a Glance
 
-| Metric       | Traditional C# Events | DxMessaging                         |
-| ------------ | --------------------- | ----------------------------------- |
-| **Speed**    | ⚡⚡⚡⚡ (baseline)   | ⚡⚡⚡⚡ (~10ns slower, negligible) |
-| **Memory**   | ⚠️ Can leak!          | ✅ Zero leaks (struct messages)     |
-| **Coupling** | ❌ Tight coupling     | ✅ Zero coupling                    |
+| Metric       | Traditional C# Events | DxMessaging                            |
+| ------------ | --------------------- | -------------------------------------- |
+| **Speed**    | ⚡⚡⚡⚡ (baseline)   | ⚡⚡⚡⚡ (~10ns slower, negligible)    |
+| **Memory**   | ⚠️ Can leak!          | ✅ Automatic cleanup (struct messages) |
+| **Coupling** | ❌ Tight coupling     | ✅ Zero coupling                       |
 
 **Bottom line:** Slightly slower than raw events, but:
 
-- ✅ Zero memory leaks
+- ✅ Prevents common memory leaks
 - ✅ Zero coupling
 - ✅ Full observability
 - ✅ Predictable ordering
@@ -487,7 +487,7 @@ graph TD
 
 **For pure C#:** No, you can use `MessageRegistrationToken` directly if you're not in Unity.
 
-**Bottom line:** If you're in Unity, just use `MessageAwareComponent`. It'll save you hours of debugging.
+**Bottom line:** If you're in Unity, use `MessageAwareComponent`. It handles subscription lifecycle automatically, which can reduce debugging related to memory leaks.
 
 ### "Can I send a message to multiple targets?"
 
@@ -511,9 +511,9 @@ msg.EmitGameObjectBroadcast(enemy);  // Now anyone can observe this enemy
 
 ### "What if I forget to unsubscribe?"
 
-**You literally can't forget!** 🎉
+#### The system handles cleanup automatically
 
-When your component is destroyed, DxMessaging automatically cleans up. No `OnDestroy()` needed. No memory leaks possible.
+When your component is destroyed, DxMessaging cleans up registrations for you. No `OnDestroy()` needed. This reduces the likelihood of common memory leak patterns.
 
 #### Old way (easy to forget)
 
@@ -522,26 +522,26 @@ void OnEnable() { GameManager.OnScoreChanged += Update; }
 void OnDisable() { GameManager.OnScoreChanged -= Update; }  // Forgot this? LEAK!
 ```
 
-##### DxMessaging way (impossible to forget)
+##### DxMessaging way (automatic management)
 
 ```csharp
 protected override void RegisterMessageHandlers() {
     _ = Token.RegisterUntargeted<ScoreChanged>(Update);
 }
-// That's it! Automatic cleanup when component dies.
+// Automatic cleanup when component is destroyed.
 ```
 
 ### "Is it slower than regular events?"
 
 **Barely** (~10ns per handler = 0.00001 milliseconds).
 
-#### Put it this way
+#### Benchmark comparison
 
 - Regular C# event: ~50ns
 - DxMessaging: ~60ns
-- The difference: Drinking a coffee takes 3 billion nanoseconds
+- Difference: ~10ns per invocation
 
-You get automatic lifecycle, zero leaks, full observability, and predictable ordering for a 20% overhead that's **completely negligible** in any real game.
+You get automatic lifecycle, automatic cleanup, full observability, and predictable ordering for approximately 20% overhead compared to direct method calls.
 
 ### "Can I cancel a message?"
 
@@ -586,7 +586,7 @@ You'll see:
 - [ ] Choosing the right message type (Untargeted/Targeted/Broadcast)? ✅
 - [ ] Using GameObject/Component emit helpers? ✅
 
-If you checked all these, **you're doing it right!** 🎉
+If you checked all these, you are following best practices.
 
 ## 🚀 Next Steps
 
@@ -599,4 +599,4 @@ Ready to dive deeper?
 
 ---
 
-**Remember:** DxMessaging makes complex communication simple. You define what to say, who should hear it, and the system handles the rest! 🎊
+**Summary:** DxMessaging provides a structured approach to inter-component communication. You define the message, specify recipients, and the system handles delivery.

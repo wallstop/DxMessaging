@@ -4,7 +4,7 @@
 
 ---
 
-**Goal:** Get a working message system in 5 minutes. Copy, paste, run. No explanations yet — just results!
+**Goal:** Get a working message system in 5 minutes. Copy, paste, run.
 
 **Stuck?** → [Troubleshooting](Troubleshooting.md) | [FAQ](FAQ.md)
 
@@ -120,17 +120,19 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 ---
 
-## ✅ Done! You just
+## Summary
 
-1. ✅ Defined 4 message types
-1. ✅ Created a component that listens
-1. ✅ Sent messages from anywhere
+You have:
 
-### No manual unsubscribe. No memory leaks. Full type safety
+1. Defined 4 message types
+1. Created a component that listens
+1. Sent messages from anywhere
+
+Registration cleanup is automatic. Messages are type-safe.
 
 ---
 
-## 🎯 What You Just Built
+## What You Built
 
 - **Untargeted messages** (`WorldRegenerated`, `VideoSettingsChanged`) → Global announcements anyone can hear
 - **Targeted messages** (`Heal`) → Commands to a specific object
@@ -138,7 +140,7 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
 ### Understand What You Did
 
@@ -164,7 +166,7 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 ---
 
-## 💡 Quick Tips
+## Quick Tips
 
 ### Do's
 
@@ -174,6 +176,6 @@ hit.EmitGameObjectBroadcast(gameObject);     // no InstanceId cast needed
 
 #### Don'ts
 
-- ❌ Don't emit from temporaries: `new Heal(10).Emit()` won't compile correctly
+- ❌ Don't emit from temporaries: `new Heal(10).Emit()` won't compile (struct emit methods require `ref this`)
 - ❌ Don't use Untargeted for commands to one object (use Targeted instead)
 - ❌ Don't forget `using DxMessaging.Core.Extensions;` for `Emit*` methods

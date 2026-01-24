@@ -10,7 +10,7 @@
 
 - **Basic Patterns** - Fundamental building blocks (scene transitions, commands, observability)
 - **Advanced Patterns** - Power user techniques (diagnostics, testing, legacy integration)
-- **Scale Patterns** - Production-ready examples (100+ entities, cross-scene systems, large UI)
+- **Scale Patterns** - Examples for larger systems (100+ entities, cross-scene systems, large UI)
 
 ### Reading guide
 
@@ -19,7 +19,7 @@
 - **Building at scale?** Go straight to Real-World Scale Patterns
 - **Specific problem?** Use Ctrl+F / Cmd+F to search
 
-**Philosophy:** These aren't toy examples. They're patterns from real games with real problems.
+**Philosophy:** These patterns address common challenges teams face when building messaging systems.
 
 ---
 
@@ -772,7 +772,7 @@ public class MatchStats : MessageAwareComponent {
 
 ## 14) Compatibility with Scriptable Object Architecture (SOA)
 
-**Disclaimer:** Scriptable Object Architecture (SOA) is a debated pattern in the Unity community. While it has proponents, there are documented criticisms regarding its scalability and maintainability. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for a detailed critique. **SOA is not a recommended pattern** for most projects, unless you need designers wiring events. Consider alternatives like dependency injection (Zenject, VContainer), reactive systems (UniRx), or messaging systems (DxMessaging, MessagePipe), as they often provide better long-term maintainability.
+**Note:** Scriptable Object Architecture (SOA) is a debated pattern in the Unity community. It has both proponents who value its designer-friendly workflow and critics who raise concerns about scalability and maintainability. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for one perspective on the criticisms. Teams should evaluate SOA based on their specific needs. Alternatives include dependency injection (Zenject, VContainer), reactive systems (UniRx), or messaging systems (DxMessaging, MessagePipe).
 
 That said, if your project uses or requires SOA, DxMessaging can work alongside it.
 
@@ -828,7 +828,7 @@ Use ScriptableObjects for their intended purpose: **immutable design-time data**
 | **Use Case**         | Shared state, designer-driven configs                                               | Event-driven communication, runtime logic |
 | **Testability**      | ⚠️ Requires SO asset cleanup                                                        | ✅ Isolated buses per test                |
 
-**Bottom line:** If you're starting fresh, prefer DxMessaging or DI. If you have legacy SOA code, the patterns below show coexistence strategies.
+**Summary:** For new projects, evaluate DxMessaging, DI frameworks, or other messaging approaches based on your needs. If you have existing SOA code, the patterns below show coexistence strategies.
 
 ### Pattern Overview
 
@@ -999,7 +999,7 @@ public class CombatAnalytics : MessageAwareComponent
 - ✅ Uses each system correctly: SOs for their intended purpose (immutable design data), messaging for runtime communication
 - ✅ This is NOT SOA - it's proper Unity architecture
 
-###### This is the recommended pattern for all projects
+###### This pattern separates concerns clearly
 
 ### When to Use Each Pattern
 

@@ -59,7 +59,11 @@ Code that runs **before** handlers. Can **validate, modify, or cancel** messages
 Example: "Only allow damage between 1 and 999"
 
 ```csharp
-_ = token.RegisterInterceptor<Damage>((ref Damage msg) => {
+// Use the type-specific interceptor variant based on your message type:
+// - RegisterUntargetedInterceptor<T> for IUntargetedMessage
+// - RegisterTargetedInterceptor<T> for ITargetedMessage
+// - RegisterBroadcastInterceptor<T> for IBroadcastMessage
+_ = token.RegisterBroadcastInterceptor<Damage>((ref InstanceId source, ref Damage msg) => {
     if (msg.amount <= 0) return false; // Cancel
     if (msg.amount > 999) msg = new Damage(999); // Clamp
     return true; // Allow
@@ -73,8 +77,11 @@ Code that runs **after** all handlers. Perfect for **logging, analytics, or metr
 Example: "Track every damage event for statistics"
 
 ```csharp
-_ = token.RegisterPostProcessor<Damage>((ref Damage msg) => {
-    Analytics.LogDamage(msg.amount);
+// Use the type-specific post-processor variant based on your message type:
+// - RegisterUntargetedPostProcessor<T> for IUntargetedMessage
+// - RegisterBroadcastWithoutSourcePostProcessor<T> for IBroadcastMessage from any source
+_ = token.RegisterBroadcastWithoutSourcePostProcessor<Damage>((InstanceId source, ref Damage msg) => {
+    Analytics.LogDamage(source, msg.amount);
 });
 ```
 

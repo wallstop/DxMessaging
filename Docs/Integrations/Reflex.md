@@ -6,14 +6,14 @@
 
 ## Overview
 
-**Reflex** is a minimal, lightweight dependency injection framework for Unity with blazing-fast performance. DxMessaging integrates seamlessly with Reflex, allowing you to:
+**Reflex** is a minimal, lightweight dependency injection framework for Unity. DxMessaging integrates with Reflex, allowing you to:
 
 - **Inject `IMessageBus`** in any class with minimal overhead
 - **Use DI for construction** + DxMessaging for events (best of both worlds)
-- **Minimal API surface** — easy to learn, easy to use
-- **High performance** — Reflex + DxMessaging = minimal allocations
+- **Minimal API surface** — small number of concepts to understand
+- **Compatible** — Reflex and DxMessaging can be used together
 
-**Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected). Reflex's minimal API makes integration simple and straightforward.
+**Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected), combining both approaches.
 
 ---
 
@@ -28,24 +28,41 @@
 
 ```csharp
 using DxMessaging.Core.MessageBus;
+using DxMessaging.Unity.Integrations.Reflex;
 using Reflex.Core;
 
-public sealed class DxMessagingInstaller : Installer
+// Option A: Use IInstaller interface (recommended for explicit registration)
+public sealed class DxMessagingInstaller : IInstaller
 {
-    public override void InstallBindings(ContainerDescriptor descriptor)
+    public void InstallBindings(ContainerBuilder containerBuilder)
     {
-        // Bind MessageBus as both concrete and interface
-        descriptor.AddSingleton(typeof(MessageBus), typeof(MessageBus));
-        descriptor.AddSingleton(typeof(IMessageBus), c => c.Resolve<MessageBus>());
+        // Bind MessageBus as singleton implementing IMessageBus
+        containerBuilder.AddSingleton(
+            typeof(MessageBus),
+            typeof(MessageBus),
+            typeof(IMessageBus)
+        );
 
         // Optional: Enable automatic IMessageRegistrationBuilder binding
-        // Requires REFLEX_PRESENT define (auto-added by DxMessaging when Reflex detected)
+        // Install the DxMessagingRegistrationInstaller to get IMessageRegistrationBuilder
         #if REFLEX_PRESENT
-        descriptor.AddMessageRegistrationBuilder();
+        new DxMessagingRegistrationInstaller().InstallBindings(containerBuilder);
         #endif
     }
 }
+
+// Option B: Extend Installer base class (common pattern)
+public sealed class DxMessagingInstallerAlt : Installer
+{
+    protected override void InstallBindings()
+    {
+        Container.Bind<MessageBus>().AsSingleton();
+        Container.Bind<IMessageBus>().FromContainer<MessageBus>();
+    }
+}
 ```
+
+**Note:** You must import the `DxMessaging.Unity.Integrations.Reflex` namespace to access `DxMessagingRegistrationInstaller`.
 
 #### Add to your scene
 
@@ -112,9 +129,17 @@ public sealed class DamageService
 #### Register the service in your installer
 
 ```csharp
-public override void InstallBindings(ContainerDescriptor descriptor)
+// Using IInstaller interface
+public void InstallBindings(ContainerBuilder containerBuilder)
 {
-    descriptor.AddSingleton<DamageService>();
+    containerBuilder.AddSingleton(typeof(DamageService), typeof(DamageService));
+    // Call Initialize() from a bootstrap MonoBehaviour
+}
+
+// Or using Installer base class
+protected override void InstallBindings()
+{
+    Container.Bind<DamageService>().AsSingleton();
     // Call Initialize() from a bootstrap MonoBehaviour
 }
 ```
@@ -264,7 +289,7 @@ public class DamageServiceTests
 - [ ] Install DxMessaging and Reflex
 - [ ] Create `DxMessagingInstaller` with bus bindings
 - [ ] Add installer to your `SceneContext` or `ProjectContext`
-- [ ] Add `#if REFLEX_PRESENT` check and call `descriptor.AddMessageRegistrationBuilder()`
+- [ ] Import `DxMessaging.Unity.Integrations.Reflex` and install `DxMessagingRegistrationInstaller` for `IMessageRegistrationBuilder` support
 
 ### Integration
 

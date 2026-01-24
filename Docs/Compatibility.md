@@ -31,7 +31,7 @@ DxMessaging can work alongside Scriptable Object Architecture patterns, though S
 
 ### Dependency Injection (DI) Frameworks
 
-DxMessaging integrates seamlessly with popular DI frameworks:
+DxMessaging integrates with popular DI frameworks:
 
 - **Zenject** - See [Zenject Integration Guide](Integrations/Zenject.md)
 - **VContainer** - See [VContainer Integration Guide](Integrations/VContainer.md)

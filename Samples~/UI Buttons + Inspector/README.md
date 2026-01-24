@@ -14,7 +14,7 @@
 
 ---
 
-## The Power Move
+## Comparison
 
 ### Before DxMessaging:
 
@@ -45,7 +45,7 @@ public class PlayButton : MonoBehaviour {
 }
 ```
 
-###### GameManager, Audio, and Analytics listen independently. Zero coupling.
+###### GameManager, Audio, and Analytics listen independently without direct references.
 
 ## Import & Run (30 Seconds)
 
@@ -55,10 +55,10 @@ public class PlayButton : MonoBehaviour {
 2. **Find DxMessaging** → Scroll to **Samples**
 3. **"UI Buttons + Inspector"** → Click **Import**
 4. **Navigate to** Assets/Samples/.../UI Buttons + Inspector/
-5. **Open the scene** → **Press Play** 🎮
+5. **Open the scene** → **Press Play**
 6. **Click the buttons** → Watch Console logs
 
-**Done!** You're seeing DxMessaging in action.
+You are now seeing DxMessaging in action.
 
 ## Click-To-Message: The Quick Path
 
@@ -140,7 +140,7 @@ Add your own partial struct next to it, then emit it from `UIButtonEmitter` usin
 
 ### If you extend `MessagingObserver` or create your own scripts deriving from `MessageAwareComponent`:
 
-### The Golden Rules (Follow These to Avoid Pain)
+### Important Guidelines
 
 1. **ALWAYS call `base.RegisterMessageHandlers()` FIRST** in your override:
 
@@ -206,4 +206,4 @@ public class MyObserver : MessageAwareComponent {
 - Patterns and recipes: [Common Patterns](../../Docs/Patterns.md)
 - Explore another sample: [Mini Combat sample](../Mini%20Combat/README.md)
 
-You now have an easy, inspector-first way to publish and observe messages. Build up from here by swapping in your own message types and listeners.
+You now have an inspector-first way to publish and observe messages. Build on this by using your own message types and listeners.

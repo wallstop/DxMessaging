@@ -2,11 +2,11 @@
 
 **Quick, readable ways to send messages** without reaching for `MessageHandler.MessageBus` directly.
 
-These shorthands make your code cleaner and more expressive, but they come with important Unity-specific gotchas around GameObject vs Component targeting. Read the [Pitfalls](#unity-targeting-pitfalls) section to avoid silent bugs!
+These shorthands provide concise syntax for sending messages, but they come with important Unity-specific gotchas around GameObject vs Component targeting. Read the [Pitfalls](#unity-targeting-pitfalls) section to avoid silent bugs.
 
 ## What You Get
 
-Three simple methods that work on any message:
+Three methods that work on any message:
 
 | Method                 | Purpose                   | Message Type         | Example                                |
 | ---------------------- | ------------------------- | -------------------- | -------------------------------------- |
@@ -172,9 +172,9 @@ heal.EmitAt(this);
 
 **Remember:** In Unity, `this` inside a `MonoBehaviour` is always a Component, not a GameObject!
 
-### 🚀 Global Observers: Listen to ALL Events
+### Global Observers: Listen to All Events
 
-**Killer feature:** Unlike traditional event buses, you can listen to ALL targeted or broadcast messages without knowing specific targets/sources!
+**Feature:** DxMessaging allows listening to all targeted or broadcast messages without knowing specific targets/sources.
 
 ```csharp
 // Listen to ALL heals, regardless of target
@@ -194,10 +194,10 @@ void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
 }
 ```
 
-#### Why this is revolutionary
+#### How this differs from some event bus patterns
 
-- **Classic event bus:** Subscribe to PlayerDamaged, EnemyDamaged, NPCDamaged... (tight coupling)
-- **DxMessaging:** Subscribe to ALL damage once (zero coupling, infinite scalability)
+- **Per-entity subscription:** Subscribe to PlayerDamaged, EnemyDamaged, NPCDamaged separately
+- **DxMessaging approach:** Subscribe to all damage events with one registration
 
 **Use cases:** Analytics, debugging, achievements, global UI, combat logs
 
@@ -267,13 +267,13 @@ DxMessaging includes three built-in string message types for rapid prototyping:
 "Hello".EmitAt(gameObject);
 
 // Or use explicit helpers
-"Hello".EmitGameObjectTargeted(gameObject); // Clearer!
+"Hello".EmitGameObjectTargeted(gameObject); // More explicit
 
 // Broadcast from GameObject
 "Died".EmitFrom(gameObject);
 
 // Or use explicit helpers
-"Died".EmitGameObjectBroadcast(gameObject); // Clearer!
+"Died".EmitGameObjectBroadcast(gameObject); // More explicit
 ```
 
 ### When to Use String Messages

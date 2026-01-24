@@ -1,13 +1,13 @@
-# Comparisons: DxMessaging vs. Everything Else
+# Comparisons: DxMessaging and Alternatives
 
-**TL;DR:** If you've used C# events, UnityEvents, or static event buses and thought "there has to be a better way," you're right. DxMessaging fixes the pain points while keeping the benefits.
+**TL;DR:** This guide compares DxMessaging with other messaging approaches. Each has legitimate strengths and trade-offs. DxMessaging takes a different approach with its own trade-offs.
 
 ## This guide shows
 
-- What's wrong with each approach (with real code examples)
-- How DxMessaging solves it (with real code examples)
-- Honest trade-offs (what you give up, what you gain)
-- When to actually use each approach (no BS)
+- Characteristics of each approach (with real code examples)
+- How DxMessaging takes a different approach (with real code examples)
+- Trade-offs for each option (what you give up, what you gain)
+- When to use each approach based on your needs
 
 ### Table of Contents
 
@@ -74,7 +74,7 @@ Need Unity-specific features (GameObject targeting, Inspector debugging, global 
 Want plug-and-play with zero dependencies?
   → Use DxMessaging (no setup required)
 
-Maximum raw throughput is THE priority?
+Maximum raw throughput is a top priority?
   → Use MessagePipe (highest ops/sec in benchmarks)
 
 Need message validation, interception, or ordered execution?
@@ -86,7 +86,7 @@ Simple pub/sub with automatic lifecycle management and debugging?
 
 ##### One-Line Summary for Each
 
-- **DxMessaging:** Unity-first pub/sub with automatic lifecycle, global observers, interceptors, priorities, and Inspector debugging (works standalone OR with DI)
+- **DxMessaging:** Unity-first pub/sub with automatic lifecycle and Inspector debugging
 - **UniRx:** Reactive programming with LINQ-style stream operators for complex event transformations
 - **MessagePipe:** DI-first, highest throughput for high-frequency messaging in DI architectures
 - **Zenject Signals:** Decoupled messaging integrated with Zenject dependency injection
@@ -124,7 +124,7 @@ public struct EnemySpawned
     public Vector3 Position;
 }
 
-// Publisher - extremely simple, no setup required
+// Publisher - straightforward, no setup required
 public class EnemySpawner : MonoBehaviour
 {
     void SpawnEnemy(int id)
@@ -137,7 +137,7 @@ public class EnemySpawner : MonoBehaviour
     }
 }
 
-// Subscriber - also extremely simple
+// Subscriber - also straightforward
 public class AchievementSystem : MonoBehaviour
 {
     void Start()
@@ -167,7 +167,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### What Problems It Solves
 
-- ✅ **Complex event streams:** Chain, filter, combine, and transform events elegantly
+- ✅ **Complex event streams:** Chain, filter, combine, and transform events with operators
 - ✅ **Async operations:** Better async/await alternative with cancellation
 - ✅ **Temporal logic:** Time-based operations (throttle, debounce, sample)
 - ✅ **UI reactivity:** Bind UI elements to data streams reactively
@@ -175,7 +175,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### What Problems It Doesn't Solve Well
 
-- ⚠️ **Simple pub/sub:** MessageBroker handles this well, but using reactive operators for simple scenarios is overkill
+- ⚠️ **Simple pub/sub:** MessageBroker handles this well, but reactive operators may add complexity for simple use cases
 - ❌ **Execution order control:** No built-in priority system for handler ordering
 - ❌ **Message validation/interception:** No pre-processing pipeline to validate or transform messages before handlers
 - ❌ **Unity Inspector debugging:** No Inspector integration to visualize message flow
@@ -184,7 +184,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### Performance Characteristics
 
-- **Allocations:** Can allocate on subscription/disposal; stream operators may allocate
+- **Allocations:** MessageBroker is zero-allocation for basic operations. Stream operators (Select, Where, Buffer) may allocate. For simple pub/sub, UniRx matches DxMessaging's allocation profile.
 - **Overhead:** Higher than simple events due to observable infrastructure
 - **Use case:** Best for complex event transformations; overhead justified by functionality
 
@@ -206,7 +206,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### When UniRx Wins
 
-- ✅ Simple pub/sub with minimal setup (MessageBroker is extremely easy)
+- ✅ Simple pub/sub with minimal setup (MessageBroker is straightforward)
 - ✅ Complex event transformations (e.g., double-click, gesture detection)
 - ✅ Combining multiple input sources
 - ✅ Time-based logic (debounce, throttle, sample)
@@ -222,7 +222,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 - ✅ Direct GameObject/Component targeting
 - ✅ Global message observation (listen to all instances of a message type)
 - ✅ Late-stage processing (post-processors after all handlers)
-- ✅ Automatic lifecycle management (zero memory leaks)
+- ✅ Automatic lifecycle management (prevents common memory leaks)
 - ✅ Teams unfamiliar with reactive programming (and don't need reactive features)
 
 #### Direct Comparison
@@ -252,7 +252,7 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 | **Temporal Operators**   | ✅ Extensive (Rx)      | ❌ Not built-in          |
 | **Complex Stream Logic** | ✅ LINQ-style          | ❌ Not designed for      |
 
-**Bottom Line:** UniRx excels at complex event stream transformations and reactive programming patterns, with MessageBroker providing extremely simple pub/sub setup. DxMessaging excels at straightforward pub/sub communication with control, validation, debugging, and Unity-specific features. Use UniRx when you need stream operators or simple zero-setup pub/sub; use DxMessaging when you need Unity integration with execution control and debugging.
+**Bottom Line:** UniRx is well-suited for complex event stream transformations and reactive programming patterns, with MessageBroker providing straightforward pub/sub setup. DxMessaging focuses on straightforward pub/sub communication with control, validation, debugging, and Unity-specific features. Both are viable options depending on your needs: choose UniRx when you need stream operators, reactive patterns, or simple zero-setup pub/sub; choose DxMessaging when you need Unity-native lifecycle integration, execution control, and debugging tools.
 
 ---
 
@@ -317,7 +317,7 @@ public class AchievementSystem
 
 #### What Problems It Solves
 
-- ✅ **Performance:** 78x faster than Prism EventAggregator, zero allocations
+- ✅ **Performance:** Zero allocations with struct-based messages (see [benchmarks](../Tests/Runtime/Benchmarks/) for comparison data)
 - ✅ **DI integration:** First-class support for dependency injection
 - ✅ **Async messaging:** Native async/await without blocking
 - ✅ **Leak detection:** Analyzer catches forgotten subscriptions at compile-time
@@ -335,7 +335,7 @@ public class AchievementSystem
 
 #### Performance Characteristics
 
-- **Best-in-class:** Claims 78x faster than Prism, faster than C# events in some scenarios
+- **High throughput:** MessagePipe is optimized for high-frequency messaging scenarios
 - **Zero allocation:** Struct-based messages with no GC per publish
 - **Benchmark data:** See performance section above for actual numbers
 - **Use case:** Optimized for high-frequency messaging (thousands/frame)
@@ -402,6 +402,8 @@ public class AchievementSystem
 | **Leak Detection**       | ✅ Roslyn analyzer          | ✅ Automatic lifecycle   |
 
 **Bottom Line:** MessagePipe is the performance king with DI-first design. DxMessaging is Unity-first with lifecycle awareness and debugging. Use MessagePipe if you have DI infrastructure and need maximum performance. Use DxMessaging if you want Unity-native messaging with automatic lifecycle management.
+
+**Note on Performance:** MessagePipe's ~95M ops/sec vs DxMessaging's ~20M ops/sec shows a significant throughput advantage. This matters primarily for high-frequency messaging scenarios (thousands of messages per frame). For typical gameplay events, both are fast enough that performance is not a distinguishing factor.
 
 > **💡 Want both?** DxMessaging integrates with DI frameworks! See [DI Integration Guides](../Integrations/) for Zenject, VContainer, and Reflex. Use DI for service construction, DxMessaging for event communication.
 
@@ -565,7 +567,7 @@ public class AchievementSystem
 | **Testability**          | ⭐⭐⭐⭐⭐ DI mocking        | ⭐⭐⭐⭐⭐ Local buses   |
 | **Decoupling**           | ⭐⭐⭐⭐⭐ Excellent         | ⭐⭐⭐⭐⭐ Excellent     |
 
-**Bottom Line:** Zenject Signals are great if you're already invested in Zenject and value testability through DI. DxMessaging is better if you want standalone messaging without DI overhead, with better performance and Unity integration.
+**Bottom Line:** Zenject Signals are well-suited if you're already invested in Zenject and value testability through DI. DxMessaging offers standalone messaging without requiring DI setup, and includes Unity-specific features.
 
 > **💡 Using Zenject?** DxMessaging integrates with Zenject! See [DxMessaging + Zenject Integration Guide](../Integrations/Zenject.md) for step-by-step setup. Get DxMessaging's features (priorities, interceptors, Inspector debugging) with Zenject's DI.
 
@@ -577,7 +579,7 @@ public class AchievementSystem
 
 **Core Philosophy:** Designer-driven, asset-based communication where systems communicate through serialized SO assets instead of direct references.
 
-**⚠️ Controversial Pattern:** SOA has significant criticisms regarding scalability and maintainability. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for detailed critique. Unity recommends ScriptableObjects for **immutable design data**, not mutable runtime state.
+**⚠️ Contested Pattern:** SOA has both proponents and critics. Supporters value its designer-friendly workflow and Inspector-based event wiring. Critics raise concerns about scalability and maintainability at scale. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for one perspective on the criticisms. Unity recommends ScriptableObjects for **immutable design data**, not mutable runtime state.
 
 ### Quick Comparison
 
@@ -841,7 +843,7 @@ public class UI : MonoBehaviour
 - ❌ **Performance:** Slower than C# events due to reflection and boxing
 - ❌ **Debugging:** Hard to trace "who called what" at runtime
 - ❌ **Merge conflicts:** Inspector changes cause git conflicts
-- ❌ **Refactoring pain:** Renaming/moving methods silently breaks connections
+- ❌ **Refactoring challenges:** Renaming/moving methods silently breaks connections
 
 #### Performance Characteristics
 
@@ -910,7 +912,7 @@ public class UI : MonoBehaviour
 | **Refactoring Safety**   | ❌ Silent breakage     | ✅ Compile-time errors |
 | **Code Visibility**      | ❌ Hidden in Inspector | ✅ Explicit in code    |
 
-**Bottom Line:** UnityEvents are great for simple Inspector-based wiring and designer workflows. DxMessaging is better for code-first development, refactoring safety, and complex messaging needs.
+**Bottom Line:** UnityEvents are well-suited for simple Inspector-based wiring and designer workflows. DxMessaging is better for code-first development, refactoring safety, and complex messaging needs.
 
 ---
 
@@ -979,7 +981,7 @@ public class Weapon : MonoBehaviour
 - ❌ **Limited parameters:** Only 0 or 1 parameter supported
 - ❌ **Boxing allocations:** Value types boxed to object, causes GC
 - ❌ **Hard to debug:** No compile-time checking, no IDE "Find Usages"
-- ❌ **Refactoring nightmare:** Renaming methods breaks string references
+- ❌ **Refactoring difficulty:** Renaming methods breaks string references
 - ❌ **No validation:** No way to validate or intercept messages
 - ❌ **Execution order:** Undefined call order for multiple receivers
 
@@ -1008,6 +1010,7 @@ public class Weapon : MonoBehaviour
 - ✅ Quick prototypes (throwaway code)
 - ✅ Simple tutorials or learning examples
 - ✅ Calling optional methods that may not exist
+- ✅ GameObject hierarchies with optional components (DontRequireReceiver pattern)
 
 #### When DxMessaging Wins
 
@@ -1224,20 +1227,22 @@ public class UI : MonoBehaviour
 EventHub.RaiseDamage(5);
 
 // DxMessaging equivalent (global bus)
-new TookDamage(5).Emit();
+var damage = new TookDamage(5);
+damage.Emit();
 
 // Or use local buses for subsystems
 var combatBus = new MessageBus();
-new TookDamage(5).Emit(combatBus);
+var combatDamage = new TookDamage(5);
+combatDamage.Emit(combatBus);
 ```
 
 ---
 
 ## Honest Trade-offs: What You Give Up, What You Gain
 
-**Let's be real:** DxMessaging isn't free magic. You trade some things for others. Here's the unfiltered truth about what you gain and what you sacrifice.
+DxMessaging involves trade-offs like any architectural choice. This section describes what you gain and what you sacrifice when adopting it.
 
-**Bottom line first:** For game jam prototypes, C# events are faster to write. For anything you'll maintain for months, DxMessaging saves you time and sanity.
+**Bottom line first:** For game jam prototypes, C# events are faster to write. For projects you'll maintain for months, DxMessaging becomes more valuable as project complexity increases.
 
 ### Learning Curve
 
@@ -1247,12 +1252,12 @@ new TookDamage(5).Emit(combatBus);
 - ❌ **Familiarity** - Your team knows C# events already; DxMessaging is new
 - ❌ **"Just works" intuition** - You need to think: "Which message type? What priority?"
 
-**Real talk:** Your first message will take 15 minutes. By the 10th message, you'll be faster than with events.
+Your first message will take 15 minutes. By the 10th message, you'll be faster than with events.
 
 #### What You Gain
 
 - ✅ **Long-term velocity** - Adding new features doesn't require touching 5 existing systems
-- ✅ **Debugging is 10x faster** - Inspector shows "what fired when" instantly
+- ✅ **Debugging is faster** - Inspector shows "what fired when" instantly
 - ✅ **Onboarding is easier** - New devs see explicit message contracts, not hidden event chains
 
 **Example:** Junior dev asks "How does damage work?"
@@ -1264,7 +1269,7 @@ new TookDamage(5).Emit(combatBus);
 
 - Game jam (1 week project): Learning curve not worth it → Stick with C# events
 - Mid-size game (1+ month): Pays off by week 2
-- Large game (6+ months): Essential for sanity
+- Large game (6+ months): Highly beneficial
 
 ### Boilerplate
 
@@ -1317,7 +1322,7 @@ msg.EmitGameObjectBroadcast(gameObject);
 - DxMessaging handler: ~60ns (~10ns overhead)
 - Memory: Zero allocations for struct messages
 
-**Verdict:** For UI, gameplay events, scene management → DxMessaging overhead is negligible. For ECS with millions of events/frame → stick with raw delegates or native code.
+**Verdict:** For UI, gameplay events, scene management → DxMessaging overhead is negligible. For ECS architectures processing millions of events per frame → consider raw delegates or native code, which are better suited for that specific use case.
 
 ### Flexibility
 
@@ -1348,7 +1353,7 @@ if (OnValidateDamage?.Invoke(damage) == true) {
 // DxMessaging workaround: Use interceptors or separate query pattern
 ```
 
-**Verdict:** If you need synchronous request/response, C# delegates/events or direct method calls are better. DxMessaging excels at notifications and commands.
+**Verdict:** If you need synchronous request/response, C# delegates/events or direct method calls are better. DxMessaging is designed for notifications and commands.
 
 ### Debuggability
 
@@ -1376,7 +1381,7 @@ _ = debugToken.RegisterBroadcastWithoutSource<TookDamage>(
 );
 ```
 
-**Verdict:** Initial debugging is slightly harder (extra layer), but systemic debugging is MUCH easier (observability tools).
+**Verdict:** Initial debugging is slightly harder (extra layer), but systemic debugging is easier (observability tools).
 
 ### Coupling and Architecture
 
@@ -1409,7 +1414,7 @@ All systems → Listen to messages
 Add/remove systems without affecting others
 ```
 
-**Verdict:** If your project is <5k lines, tight coupling is manageable. For larger projects, DxMessaging's decoupling is essential for sanity.
+**Verdict:** If your project is <5k lines, tight coupling is manageable. For larger projects, DxMessaging's decoupling significantly improves maintainability.
 
 ### Testing
 
@@ -1494,13 +1499,13 @@ public void TestAchievementSystem() {
 - **Large game (20k+ lines):** DxMessaging essential for maintainability
 - **Designer-driven workflow:** SOA has value (Inspector wiring) but consider maintenance costs
 - **Legacy SOA project:** Use Pattern B (keep SOs for configs, migrate events to DxMessaging)
-- **Performance-critical (millions of messages/frame):** MessagePipe wins (highest throughput)
-- **Performance-critical (Unity-specific):** DxMessaging (excellent perf + Unity integration)
-- **UI-heavy:** DxMessaging excels (decoupled updates, global observers for UI state)
-- **Complex event transformations:** UniRx wins (reactive stream operators)
+- **Performance-critical (millions of messages/frame):** MessagePipe offers the highest throughput
+- **Performance-critical (Unity-specific):** DxMessaging (strong performance + Unity integration)
+- **UI-heavy:** DxMessaging provides decoupled updates and global observers for UI state
+- **Complex event transformations:** UniRx provides reactive stream operators
 - **DI-first architecture:** MessagePipe or Zenject Signals win (DI integration)
-- **Analytics/diagnostics heavy:** DxMessaging wins (global observers, post-processors, Inspector)
-- **Need execution control:** DxMessaging wins (priorities, interceptors, ordered stages)
+- **Analytics/diagnostics heavy:** DxMessaging provides built-in support (global observers, post-processors, Inspector)
+- **Need execution control:** DxMessaging offers priorities, interceptors, and ordered stages
 
 ## When Each Approach ACTUALLY Wins
 
@@ -1509,7 +1514,7 @@ public void TestAchievementSystem() {
 - ✅ Unity-first projects (MonoBehaviour lifecycle integration)
 - ✅ 10+ systems that communicate (pub/sub decoupling)
 - ✅ Observability essential (Inspector debugging, message history)
-- ✅ Memory leaks are a pain point (automatic lifecycle management)
+- ✅ Memory leaks are a concern (automatic lifecycle management)
 - ✅ Cross-team development (clear message contracts)
 - ✅ Long-term maintenance (years, not weeks)
 - ✅ GameObject/Component targeting needed (Unity-specific patterns)
@@ -1523,7 +1528,7 @@ public void TestAchievementSystem() {
 
 ### UniRx Wins When
 
-- ✅ Simple pub/sub with minimal setup (MessageBroker is extremely easy)
+- ✅ Simple pub/sub with minimal setup (MessageBroker is straightforward)
 - ✅ Complex event stream transformations needed
 - ✅ Time-based operations (throttle, debounce, buffer)
 - ✅ Combining multiple input sources
@@ -1588,7 +1593,7 @@ public void TestAchievementSystem() {
 
 ### Benefits
 
-1. Zero memory leaks (automatic lifecycle)
+1. Automatic lifecycle prevents common memory leaks
 1. Full decoupling (systems don't reference each other)
 1. Observability (Inspector diagnostics, message history)
 1. Predictable ordering (priority-based execution)
@@ -1620,28 +1625,28 @@ public void TestAchievementSystem() {
 - **<1k lines:** Skip it → Direct method calls are fine
 - **1k-5k lines:** Consider it → If you're growing fast
 - **5k-20k lines:** Recommended → Coupling becomes painful
-- **20k+ lines:** Absolutely → Refactoring without it is a nightmare
+- **20k+ lines:** Absolutely → Refactoring becomes significantly more challenging without it
 
 ### 4. How Many Systems Need to Communicate?
 
 - **1-2 systems:** Skip → Just call methods directly
 - **3-5 systems:** Consider → If they don't share references
 - **6-10 systems:** Recommended → Coupling becomes unmanageable
-- **10+ systems:** Essential → You're drowning in SerializeFields
+- **10+ systems:** Essential → Managing many SerializeField references becomes difficult
 
 ### 5. Have You Had Memory Leaks From Forgotten Unsubscribes?
 
-- **Never:** Lucky you! Optional
+- **Never:** Optional → You may not need automatic lifecycle management
 - **Once or twice:** Consider it → Prevention is cheaper than debugging
-- **Multiple times:** Absolutely → Stop wasting time on this
-- **Currently debugging one:** Drop everything and adopt DxMessaging now
+- **Multiple times:** Recommended → Automatic cleanup would help
+- **Currently debugging one:** Strongly recommended → Consider adopting DxMessaging
 
 ### 6. How Often Do You Debug "What Fired When?"
 
-- **Never:** You're either lying or working on tiny projects
+- **Never:** Likely not needed → Small projects may not require message debugging tools
 - **Rarely:** Optional, but would help
 - **Monthly:** Recommended → Inspector diagnostics will save hours
-- **Weekly:** Absolutely → You're wasting too much time
+- **Weekly:** Strongly recommended → Debugging tools would provide significant time savings
 
 ### Quick Decision Matrix
 
@@ -1670,7 +1675,7 @@ If you're reading this and thinking:
 
 - **"I've experienced these pain points"** → DxMessaging will help
 - **"This seems like overkill"** → You probably don't need it yet
-- **"I need this yesterday"** → Welcome home 🚀
+- **"I need this yesterday"** → DxMessaging may be a good fit
 
 See also
 
