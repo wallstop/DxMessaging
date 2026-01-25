@@ -58,6 +58,7 @@ Before acting on PR review feedback:
 1. **Test assertions**: If a reviewer claims code is broken, reproduce the issue before fixing.
 1. **Question assumptions**: Reviewers (including AI reviewers) can be mistaken. Respectfully verify before making changes.
 1. **Document verification**: When rejecting feedback, document why (e.g., "Verified against git remote: correct URL is X").
+1. **Verify API completeness**: Before claiming documentation is incorrect, check for method overloads, extension methods, and implicit operators. A claim like "this signature is wrong" may be based on seeing only one overload when multiple exist (e.g., `RegisterGlobalAcceptAll` has both `Action<T>` and `FastHandler<T>` overloads—feedback about one doesn't invalidate the other). Use IDE features (Go to Definition, Find All References) or `grep_search` to find all overloads of a method.
 
 ## Testing Guidelines
 
