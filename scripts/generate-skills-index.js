@@ -31,7 +31,7 @@ const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
 const EXCLUDED_FILES = ["index.md", "specification.md"];
 const EXCLUDED_DIRS = ["templates"];
 const REPO_ROOT = path.join(__dirname, "..");
-const PRETTIER_VERSION = "3.8.0";
+const PRETTIER_VERSION = "3.8.1";
 
 function normalizeToCrlf(text) {
     let normalized = text.replace(/\r\n/g, "\n");

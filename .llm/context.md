@@ -169,6 +169,18 @@ See the [Skill File Sizing skill](./skills/documentation/skill-file-sizing.md) f
 - PRs: include a clear description, linked issues, before/after notes for performance changes (see [Tests/Runtime/Benchmarks](../Tests/Runtime/Benchmarks/)), and tests for bug fixes/features.
 - Releasing: changes to [the package manifest](../package.json) on `master` may trigger the NPM publish workflow.
 
+## CI/CD Tool Versioning
+
+When updating tool versions in pre-commit hooks or GitHub Actions workflows:
+
+- **Keep versions aligned**: The same tool should use the same version (or equivalent) across pre-commit and CI.
+- **Pin specific versions**: Use exact versions (e.g., `prettier@3.8.1`, `cspell@8.19.4`) rather than floating ranges for reproducibility.
+- **Add version comments**: Document why versions are pinned (e.g., "Pin to latest 8.x to align with CI").
+- **Update periodically**: When updating one location, update all locations using that tool.
+- **Version locations to check**:
+  - [.pre-commit-config.yaml](../.pre-commit-config.yaml) — local pre-commit hooks
+  - [.github/workflows/](../.github/workflows/) — CI workflows (spellcheck.yml, prettier-autofix.yml, format-on-demand.yml, yaml-format-lint.yml)
+
 ## Security & Configuration Tips
 
 - Editor analyzer DLLs are copied into the Unity project by [SetupCscRsp.cs](../Editor/SetupCscRsp.cs); do not commit generated DLLs into this repo.

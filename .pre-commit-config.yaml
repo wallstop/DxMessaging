@@ -32,7 +32,8 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-        entry: npx --yes prettier@3.8.0 --write
+        # Pin to latest 3.x to align with CI. Update periodically.
+        entry: npx --yes prettier@3.8.1 --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
         description: Use pinned Prettier version to match CI.
@@ -144,7 +145,9 @@ repos:
     hooks:
       - id: cspell
         name: Check spelling
-        entry: npx --yes cspell@8.2.0 --no-progress --no-summary
+        # Pin to latest 8.x to align with CI (streetsidesoftware/cspell-action@v8).
+        # npm does not support floating major versions; update periodically.
+        entry: npx --yes cspell@8.19.4 --no-progress --no-summary
         language: system
         files: '(?i)\.(md|cs|json|ya?ml|ps1|js)$'
         pass_filenames: true
