@@ -4,7 +4,7 @@
 
 ---
 
-Welcome! This guide will take you from zero to productive with DxMessaging in about 10 minutes. By the end, you'll understand what DxMessaging is, why it's powerful, and how to use it effectively in your Unity projects.
+This guide covers the basics of DxMessaging. By the end, you'll understand what DxMessaging is, when it might be useful, and how to use it in your Unity projects.
 
 ## 🎯 Your Goal
 
@@ -36,22 +36,22 @@ By the end of this guide, you will:
 - Check if an achievement unlocked
 - Maybe trigger a tutorial tip
 
-**The old way:** The Player script needs references to all 6 systems. Or they all need references to the Player. It's a tangled mess.
+**One approach:** The Player script needs references to all 6 systems. Or they all need references to the Player. This can create tight coupling.
 
-**The DxMessaging way:** The Player emits one message: `TookDamage(25)`. Everyone who cares receives it automatically. Zero coupling, zero leaks, zero hassle.
+**With DxMessaging:** The Player emits one message: `TookDamage(25)`. Interested systems receive it through subscriptions. This approach decouples systems and handles cleanup automatically.
 
 ---
 
-**Technical summary:** DxMessaging is a high-performance, type-safe messaging system that replaces C# events, UnityEvents, and global event buses with a clean, observable, and predictable communication pattern.
+**Technical summary:** DxMessaging is a type-safe messaging system that provides an alternative to C# events, UnityEvents, and global event buses.
 
-**Think of it as:** The event system Unity should have shipped with.
+**Think of it as:** An alternative event system designed for larger projects.
 
 ### What you get
 
-- **Decoupled systems** - no manual subscribe/unsubscribe, impossible to leak
+- **Decoupled systems** - no manual subscribe/unsubscribe, leak prevention built-in
 - **Predictable execution** - priority-based ordering, see exactly what runs when
 - **Actually debuggable** - Inspector shows message history with timestamps
-- **Scales effortlessly** - works for prototypes and 100k+ line codebases
+- **Designed to scale** - works for prototypes and larger codebases
 
 ## Quick Start
 
@@ -138,11 +138,11 @@ public struct Heal { public int amount; }
 public struct EnemyDied { public string enemyName; }
 ```
 
-**Still confused?** See the [Visual Guide](VisualGuide.md) for beginner-friendly explanations, or [MessageTypes](MessageTypes.md) for technical details.
+**Need more detail?** See the [Visual Guide](VisualGuide.md) for additional explanations, or [MessageTypes](MessageTypes.md) for technical details.
 
 ## Common Patterns
 
-### Want to see real examples? Here's what DxMessaging excels at
+### Example use cases
 
 - **UI reacting to gameplay** - Health bar updates when player takes damage (without UI knowing about Player)
 - **Achievement systems** - Track ALL kills across ALL enemies with ONE listener
@@ -150,20 +150,20 @@ public struct EnemyDied { public string enemyName; }
 - **Input handling** - Decouple input system from player controller
 - **Analytics** - Track all events without polluting gameplay code
 
-**Want code examples?** See [Patterns](Patterns.md) for production-ready patterns and [ListeningPatterns](ListeningPatterns.md) for advanced techniques.
+**Want code examples?** See [Patterns](Patterns.md) for example patterns and [ListeningPatterns](ListeningPatterns.md) for additional techniques.
 
 ## Troubleshooting
 
-### "My handler isn't being called!"
+### "My handler isn't being called"
 
-✅ Checklist:
+Checklist:
 
 1. Did you call `base.RegisterMessageHandlers()` first?
 1. Is your component enabled in the scene?
 1. Are you emitting to the right target? (Check GameObject vs Component)
 1. Check the Inspector - does the registration show up?
 
-#### "My message is firing twice!"
+#### "My message is firing twice"
 
 - Check if you accidentally registered the same handler multiple times
 - Make sure you're calling `base.RegisterMessageHandlers()` only once
@@ -173,7 +173,7 @@ public struct EnemyDied { public string enemyName; }
 - Did you mark the struct as `partial`? (required for code generation)
 - Example: `public readonly partial struct MyMessage`
 
-###### "Which message type should I use?"
+###### "Which message type should I use"
 
 - See the decision tree in [Message Types](#message-types) above
 - When in doubt, start with `Broadcast` - it's the most flexible
@@ -194,7 +194,9 @@ public struct EnemyDied { public string enemyName; }
 _ = Token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
 _ = Token.RegisterGameObjectTargeted<Heal>(playerGO, OnPlayerHealed);
 
-// Emit
-new TookDamage(25).EmitBroadcastWithoutSource();
-new Heal(10).EmitGameObjectTargeted(playerGO);
+// Emit (broadcasts always require a source)
+var damage = new TookDamage(25);
+damage.EmitGameObjectBroadcast(enemyGO);  // enemyGO is the source
+var heal = new Heal(10);
+heal.EmitGameObjectTargeted(playerGO);
 ```

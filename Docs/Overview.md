@@ -4,7 +4,7 @@
 
 ---
 
-DxMessaging is a high-performance, type-safe messaging system for Unity that **eliminates the three biggest pain points** of traditional event systems:
+DxMessaging is a type-safe messaging system for Unity that **addresses three common pain points** of traditional event systems:
 
 1. **Memory leaks** from forgotten unsubscribes → Automatic lifecycle management
 1. **Tight coupling** creating refactoring nightmares → Full decoupling with no direct references
@@ -14,7 +14,7 @@ DxMessaging is a high-performance, type-safe messaging system for Unity that **e
 
 ### For Beginners: "I'm calling methods manually everywhere"
 
-#### Your code probably looks like this
+#### Traditional approaches often look like this
 
 ```csharp
 public class Player : MonoBehaviour {
@@ -32,15 +32,16 @@ public class Player : MonoBehaviour {
 }
 ```
 
-**Every new system = another SerializeField + another manual call.** It's exhausting and brittle.
+**Every new system = another SerializeField + another manual call.** This approach requires frequent updates as systems are added.
 
 ##### DxMessaging fixes this
 
 ```csharp
 void TakeDamage(int amount) {
     health -= amount;
-    new TookDamage(amount).EmitComponentBroadcast(this);
-    // Done! Everything else reacts automatically.
+    var damage = new TookDamage(amount);
+    damage.EmitComponentBroadcast(this);
+    // Subscribed systems react to this message.
 }
 ```
 
@@ -50,15 +51,15 @@ void TakeDamage(int amount) {
 
 ```csharp
 void OnEnable() { GameManager.OnScoreChanged += UpdateUI; }
-void OnDisable() { /* Forgot this? 💀 LEAK! */ }
+void OnDisable() { /* Missing this results in a memory leak: */ }
 ```
 
-**DxMessaging makes leaks impossible** - automatic cleanup when components die.
+DxMessaging manages subscription lifecycle automatically, eliminating the need for manual unsubscribe - cleanup occurs when components are destroyed.
 
 ### For Advanced Devs: "I need observability and control"
 
 - ✅ See message history in Inspector (timestamps, payloads, call counts)
-- ✅ Priority-based execution (no more race conditions)
+- ✅ Priority-based execution (deterministic ordering)
 - ✅ Interceptors (validate/normalize before handlers)
 - ✅ Global observers (track ALL instances of a message type)
 - ✅ Local bus islands (isolated testing, zero global state)
@@ -67,9 +68,9 @@ void OnDisable() { /* Forgot this? 💀 LEAK! */ }
 
 - **Decoupling without references** - producers/consumers never know about each other
 - **Predictable lifecycle** - explicit tokens tied to Unity component lifecycles
-- **Performance** - struct messages passed by-ref, zero allocations, zero boxing
+- **Performance** - struct messages passed by-ref, designed to minimize allocations and boxing
 - **Observability** - interceptors, post-processors, diagnostics, registration logs
-- **Scalable taxonomy** - three message types (Untargeted/Targeted/Broadcast) cover 99% of use cases
+- **Scalable taxonomy** - three message types (Untargeted/Targeted/Broadcast) cover most common messaging patterns
 
 ## When to Consider DxMessaging
 
@@ -85,7 +86,7 @@ void OnDisable() { /* Forgot this? 💀 LEAK! */ }
 
 - Game jam prototype (<1 week)
 - Tiny project (<1000 lines)
-- Single-system communication (just call the method directly)
+- Single-system communication (call the method directly)
 - You need synchronous return values (DxMessaging is fire-and-forget)
 
 Core ideas
@@ -96,11 +97,11 @@ Core ideas
   - Broadcast: Emitted from a source; anyone can observe (e.g., TookDamage from Enemy).
 - Ordering: Lower priority runs earlier; same priority uses registration order.
 - Pipeline: Interceptors → Handlers → Post‑Processors, with diagnostics optionally enabled.
-- Unity integration: `MessagingComponent` and `MessageAwareComponent` manage lifecycles cleanly.
+- Unity integration: `MessagingComponent` and `MessageAwareComponent` manage subscription lifecycles automatically.
 
-## Killer Features (What Makes It Special)
+## Key Features
 
-### 🚀 Global Observers: The Unique Advantage
+### Global Observers: Observing All Instances
 
 #### Traditional event systems force you to do this
 
@@ -123,14 +124,14 @@ _ = Token.RegisterBroadcastWithoutSource<TookDamage>(
 );
 ```
 
-**Real-world impact:** Build achievement systems, combat logs, and analytics that work with ANY entity - even ones that don't exist yet.
+**Example use cases:** Achievement systems, combat logs, and analytics that work with any entity - including ones added later.
 
-### Other Killer Features
+### Other Features
 
-- **Priority-based ordering** - eliminate race conditions, control execution flow explicitly
+- **Priority-based ordering** - control execution flow explicitly
 - **Interceptor pipeline** - validate/normalize messages BEFORE handlers run (one validation, all handlers protected)
 - **Local bus islands** - isolated testing with zero global state contamination
-- **Zero-allocation design** - struct messages passed by-ref, no boxing, no GC spikes
+- **Low-allocation design** - struct messages passed by-ref, minimizes boxing and GC pressure
 - **Auto-constructor generation** - `[DxAutoConstructor]` eliminates boilerplate while keeping type safety
 - **Unity-first helpers** - `EmitGameObjectTargeted()`, `EmitComponentBroadcast()` feel natural
 - **Inspector diagnostics** - see message history, registrations, call counts in real-time

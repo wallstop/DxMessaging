@@ -161,9 +161,9 @@ damage.EmitAt(this);  // ✅ Works!
 
 ## Listening to ALL Events (Global Observers)
 
-**🚀 Killer Feature:** Unlike traditional event buses, DxMessaging lets you listen to ALL targeted or broadcast messages **without knowing the specific target or source**.
+**Feature:** DxMessaging allows listening to all targeted or broadcast messages **without knowing the specific target or source**.
 
-This is a game-changer for:
+This is useful for:
 
 - **Analytics** — Track every action in your game without coupling to individual objects
 - **Debugging** — See all events of a type in one place
@@ -197,7 +197,7 @@ void OnBossDamaged(int amount) { RecordDamage("Boss", amount); }
 ### DxMessaging Global Observer Pattern
 
 ```csharp
-// ✅ DxMessaging: One subscription, zero coupling, infinite scalability
+// ✅ DxMessaging: One subscription, zero coupling
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
 
 void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
@@ -205,7 +205,7 @@ void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
     // Works for Player, Enemy, NPC, Boss, and any future entity type!
     RecordDamage(source, msg.amount);
 }
-// Add new entity? Zero changes needed. It just works.
+// Add new entity? Zero changes needed.
 ```
 
 ### Listening to All Targeted Messages

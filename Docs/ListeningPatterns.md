@@ -10,11 +10,11 @@ using DxMessaging.Core.Messages;
 
 // Observe all Heal messages and their intended targets
 _ = token.RegisterTargetedWithoutTargeting<Heal>(OnAnyHeal);
-void OnAnyHeal(ref InstanceId target, ref Heal m) => Audit(target, m);
+void OnAnyHeal(InstanceId target, Heal m) => Audit(target, m);
 
 // Post‑process all targeted of type
 _ = token.RegisterTargetedWithoutTargetingPostProcessor<Heal>(OnAnyHealPost);
-void OnAnyHealPost(ref InstanceId target, ref Heal m) => Log(target, m);
+void OnAnyHealPost(InstanceId target, Heal m) => Log(target, m);
 ```
 
 Broadcast across all sources
@@ -27,7 +27,7 @@ using DxMessaging.Core.Messages;
 
 // Observe all TookDamage messages and their sources
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyTookDamage);
-void OnAnyTookDamage(ref InstanceId source, ref TookDamage m) => Track(source, m);
+void OnAnyTookDamage(InstanceId source, TookDamage m) => Track(source, m);
 
 // Post‑process all broadcast of type
 _ = token.RegisterBroadcastWithoutSourcePostProcessor<TookDamage>(OnAnyTookDamagePost);
@@ -172,9 +172,11 @@ public class NetworkReplicator : MessageHandler
 var replicator = new NetworkReplicator(networkManager) { active = true };
 _ = MessageHandler.MessageBus.RegisterGlobalAcceptAll(replicator);
 
-// These messages now "just work" across the network
-new PlayerMoved(playerPos).Emit();
-new DealDamage(50f).EmitTargeted(enemyId);
+// These messages are now replicated across the network
+var playerMoved = new PlayerMoved(playerPos);
+playerMoved.Emit();
+var dealDamage = new DealDamage(50f);
+dealDamage.EmitTargeted(enemyId);
 ```
 
 #### Message Analytics and Metrics
@@ -245,7 +247,7 @@ When to Use Global Accept‑All
 - Message replay/recording systems
 
 ⚠️ **Performance consideration:**
-Global Accept‑All handlers are invoked for **every** message of **every** type. For high‑performance gameplay logic, prefer type‑specific registrations which use O(1) lookup instead of O(N) iteration.
+Global Accept-All handlers are invoked for **every** message of **every** type. For performance-sensitive gameplay logic, prefer type-specific registrations which use O(1) lookup instead of O(N) iteration.
 
 ❌ **Avoid for:**
 

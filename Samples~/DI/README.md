@@ -22,7 +22,7 @@ Each sample shows:
 - Zenject sample installer: [SampleInstaller.cs](./Zenject/SampleInstaller.cs)
 - VContainer sample lifetime scope: [SampleLifetimeScope.cs](./VContainer/SampleLifetimeScope.cs)
 - Reflex sample installer: [SampleInstaller.cs](./Reflex/SampleInstaller.cs)
-- Current global message bus provider asset: [CurrentGlobalMessageBusProvider.asset](./Providers/CurrentGlobalMessageBusProvider.asset) — ScriptableObject that resolves whichever bus is currently configured as global.
+- Current global message bus provider asset: [GlobalMessageBusProvider.asset](./Providers/GlobalMessageBusProvider.asset) — ScriptableObject that resolves whichever bus is currently configured as global.
 - Initial global message bus provider asset: [InitialGlobalMessageBusProvider.asset](./Providers/InitialGlobalMessageBusProvider.asset) — ScriptableObject that always returns the original startup global bus, ignoring later overrides.
 - Prefab setup: [MessagingInstallerSample.prefab](./Prefabs/MessagingInstallerSample.prefab) — ready-to-use hierarchy with `MessagingComponentInstaller` configuring a child `MessagingComponent` using the provider asset. Drop it into a scene to see provider-driven wiring without writing setup code.
 
@@ -46,6 +46,6 @@ Each sample shows:
    Use the service exposed by the container (e.g., call into `ScoreboardService` or `PlayerAlertService`) to emit a message. Because the prefab already configured `MessagingComponent` instances via the installer, the listeners run immediately.
 
 4. **Swap providers** (optional)  
-   Duplicate [CurrentGlobalMessageBusProvider.asset](./Providers/CurrentGlobalMessageBusProvider.asset), modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
+   Duplicate [GlobalMessageBusProvider.asset](./Providers/GlobalMessageBusProvider.asset), modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
 
 Feel free to duplicate these scripts into your own project and adjust lifecycles or message types as needed.

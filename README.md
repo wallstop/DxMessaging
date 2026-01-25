@@ -1,4 +1,4 @@
-# DxMessaging for Unity — The Modern Event System
+# DxMessaging for Unity
 
 [![Unity](https://img.shields.io/badge/Unity-2021.3+-black.svg)](https://unity.com/releases/editor)<br/>
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)<br/>
@@ -7,9 +7,9 @@
 [![Markdown Link Validity](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-validity.yml/badge.svg)](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-validity.yml)<br/>
 [![Markdown Link Text Check](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-text-check.yml/badge.svg)](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-text-check.yml)
 
-**DxMessaging is a high‑performance, type‑safe messaging system** that replaces sprawling C# events, brittle UnityEvents, and global static event buses with a clean, observable, and predictable communication pattern.
+**DxMessaging is a type-safe messaging system** that replaces sprawling C# events, brittle UnityEvents, and global static event buses with an observable and lifecycle-managed communication pattern.
 
-Think of it as **the event system Unity should have built-in** — one that actually scales.
+Think of it as: A messaging system designed for decoupled game systems.
 
 Need install instructions for Git URLs, scoped registries, or tarballs? Jump to the [Install Guide](Docs/Install.md).
 
@@ -19,7 +19,7 @@ Need install instructions for Git URLs, scoped registries, or tarballs? Jump to 
 - [Quick Start (5 Minutes)](#quick-start-5-minutes)
 - [Is DxMessaging Right for You?](#is-dxmessaging-right-for-you)
 - [Why DxMessaging?](#why-dxmessaging)
-- [Killer Features](#killer-features)
+- [Key Features](#key-features)
 - [The DxMessaging Solution](#the-dxmessaging-solution)
 - [Real-World Examples](#real-world-examples)
 - [Performance](#performance)
@@ -41,9 +41,9 @@ Need install instructions for Git URLs, scoped registries, or tarballs? Jump to 
 - Wondered "which event fired when?" with no way to see message flow
 - Copy-pasted event boilerplate dozens of times
 
-#### Then DxMessaging solves your problems
+#### Then DxMessaging can help address these challenges
 
-- **Zero memory leaks** - automatic lifecycle management, no manual unsubscribe
+- **Automatic lifecycle management** - manages subscription lifecycle automatically, no manual unsubscribe
 - **Zero coupling** - systems communicate without knowing each other exist
 - **Full visibility** - see every message in the Inspector with timestamps and payloads
 - **Complete control** - priority-based ordering, validation, and interception
@@ -54,7 +54,7 @@ Need install instructions for Git URLs, scoped registries, or tarballs? Jump to 
 1. **Targeted** - "Tell Player to heal" (commands to specific entities)
 1. **Broadcast** - "I took damage" (things that happen to _you_ that others can observe)
 
-**One line:** It's the event system Unity should have shipped with - type-safe, leak-proof, and actually debuggable. 🚀
+**One line:** It's a type-safe messaging system with automatic lifecycle management and built-in inspection tools.
 
 ---
 
@@ -112,7 +112,7 @@ var msg = new OpenChest(chestId: 42);
 msg.EmitComponentTargeted(chestComponent);
 ```
 
-**Done!** No manual unsubscribe, no leaks, full type safety.
+No manual unsubscribe needed. Subscriptions are type-safe and lifecycle-managed.
 
 **Stuck?** See [Troubleshooting](Docs/Troubleshooting.md) or [FAQ](Docs/FAQ.md)
 
@@ -146,13 +146,13 @@ public class PlayerService : IInitializable, IDisposable
 
 - **DI for construction** — Inject services, repositories, managers via constructors
 - **Messaging for events** — Reactive, decoupled communication for gameplay events
-- **Best of both worlds** — Clean architecture with testable, isolated buses
+- **Combined approach** — Clean architecture with testable, isolated buses
 
 #### Automatic integration for
 
 - ✅ **Zenject/Extenject** — Full-featured DI with extensive Unity support
 - ✅ **VContainer** — Lightweight, high-performance DI with scoped lifetimes
-- ✅ **Reflex** — Minimal API, blazing-fast dependency injection
+- ✅ **Reflex** — Minimal API, high-performance dependency injection
 
 ##### Get started
 
@@ -165,7 +165,7 @@ public class PlayerService : IInitializable, IDisposable
 - [Runtime Configuration](Docs/RuntimeConfiguration.md) — Setting message buses at runtime, re-binding registrations
 - [Message Bus Providers](Docs/MessageBusProviders.md) — Provider system for design-time and runtime bus configuration
 
-**Not using DI?** No problem! DxMessaging works perfectly standalone with zero dependencies.
+**Not using DI?** No problem. DxMessaging works standalone with zero dependencies.
 
 ---
 
@@ -178,8 +178,8 @@ public class PlayerService : IInitializable, IDisposable
 - **Memory leaks are a concern** - You've been bitten by forgotten event unsubscribes before
 - **You value observability** - Need to debug "what fired when?" or track message flow
 - **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
-- **You want decoupling** - Hate when UI classes need references to 15 different game systems
-- **You're using DI frameworks** - Seamless integration with Zenject/VContainer/Reflex (see [DI Compatible](#-dependency-injection-di-compatible))
+- **You want decoupling** - When UI classes need references to many game systems
+- **You're using DI frameworks** - Compatible with Zenject/VContainer/Reflex (see [DI Compatible](#-dependency-injection-di-compatible))
 
 ### ❌ Don't Use DxMessaging When
 
@@ -197,21 +197,30 @@ public class PlayerService : IInitializable, IDisposable
 
 ### Decision Flow
 
-```text
-Does your project have 3+ systems that need to talk to each other?
-  NO → Stick with C# events or direct references
-  YES ↓
+```mermaid
+flowchart TD
+    Q1{Does your project have 3+<br/>systems that need to talk to each other?}
+    Q1 -->|NO| A1[Stick with C# events or direct references]
+    Q1 -->|YES| Q2
 
-Are you okay with a small upfront learning investment?
-  NO → Stick with what you know
-  YES ↓
+    Q2{Are you okay with a small<br/>upfront learning investment?}
+    Q2 -->|NO| A2[Stick with what you know]
+    Q2 -->|YES| Q3
 
-Do you need observable, decoupled, lifecycle-safe messaging?
-  YES → ✅ Use DxMessaging
-  NO → ❌ Keep it simple
+    Q3{Do you need observable, decoupled,<br/>lifecycle-safe messaging?}
+    Q3 -->|YES| A3["✅ Use DxMessaging"]
+    Q3 -->|NO| A4["❌ Keep it simple"]
+
+    style Q1 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style Q2 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style Q3 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
+    style A1 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+    style A2 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+    style A3 fill:#95de64,stroke:#237804,stroke-width:3px,color:#000
+    style A4 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
 ```
 
-**Rule of thumb:** If you're reading this README and thinking "wow, this would solve SO many problems," then DxMessaging is for you. If you're thinking "this seems complicated," start with the [Visual Guide](Docs/VisualGuide.md) or stick with simpler patterns.
+**Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](Docs/VisualGuide.md) or stick with simpler patterns.
 
 **New to messaging?** Start with the [Visual Guide](Docs/VisualGuide.md) (5 min) for a beginner-friendly introduction!
 
@@ -257,7 +266,7 @@ public class GameUI : MonoBehaviour {
 }
 ```
 
-**Your UI now depends on EVERYTHING.** Good luck refactoring that.
+**Your UI now depends on many systems.** Refactoring becomes more difficult.
 
 ###### Scenario 3: The Debugging Black Hole
 
@@ -267,17 +276,19 @@ You think: "Okay, which of the 47 events touching health failed? And in what ord
 
 **30 minutes later:** Still setting breakpoints everywhere...
 
-### Common Problems
+### Common Challenges
 
-- ❌ **Memory leaks** from forgotten unsubscribes (every Unity dev's nightmare)
-- ❌ **Tight coupling** making refactoring terrifying ("change one thing, break five others")
-- ❌ **No execution order control** ("why does the UI update before the player takes damage?")
-- ❌ **Impossible to debug** ("what fired when?" has no answer)
-- ❌ **Boilerplate overload** (write 50 lines for 3 events)
+Some developers encounter these challenges when working with traditional event systems:
+
+- **Memory leaks** from forgotten unsubscribes
+- **Tight coupling** making refactoring difficult
+- **No execution order control** leading to unpredictable behavior
+- **Limited debugging visibility** for tracking message flow
+- **Boilerplate code** when managing many event subscriptions
 
 ### The DxMessaging Solution
 
-#### Same scenarios, zero pain
+#### Same scenarios, simplified handling
 
 ##### Scenario 1: No More Memory Leaks
 
@@ -287,12 +298,12 @@ public class GameUI : MessageAwareComponent {
         base.RegisterMessageHandlers();
         _ = Token.RegisterUntargeted<ScoreChanged>(UpdateScore);
     }
-    // That's it! No manual cleanup needed.
+    // No manual cleanup needed.
     // Token automatically handles OnEnable/OnDisable/OnDestroy
 }
 ```
 
-**Automatic lifecycle = impossible to leak.** 🎉
+###### Automatic lifecycle = leaks are prevented by default
 
 ###### Scenario 2: No More Coupling
 
@@ -310,7 +321,7 @@ public class GameUI : MessageAwareComponent {
 }
 ```
 
-**Your UI is now independent.** Swap systems freely without breaking anything.
+**Your UI is now independent.** Swapping systems no longer requires updating UI references.
 
 ###### Scenario 3: Debugging is Built In
 
@@ -332,12 +343,12 @@ Active Registrations:
 ### How It Transforms Your Code
 
 ```csharp
-// 1. Define messages (clean, typed, discoverable)
+// 1. Define messages (typed, discoverable)
 [DxTargetedMessage]
 [DxAutoConstructor]
 public readonly partial struct Heal { public readonly int amount; }
 
-// 2. Listen (automatic lifecycle - zero leaks)
+// 2. Listen (automatic lifecycle - prevents leaks)
 public class Player : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
         base.RegisterMessageHandlers();
@@ -357,7 +368,7 @@ heal.EmitComponentTargeted(playerComponent);
 
 #### What you get
 
-- ✅ **Zero memory leaks** - tokens clean up automatically when components are destroyed
+- ✅ **Automatic cleanup** - tokens clean up when components are destroyed
 - ✅ **Zero coupling** - no SerializeFields, no GetComponent, no direct references
 - ✅ **Full visibility** - see message flow in Inspector with timestamps and payloads
 - ✅ **Predictable order** - priority-based execution (no more mystery race conditions)
@@ -365,11 +376,11 @@ heal.EmitComponentTargeted(playerComponent);
 - ✅ **Intercept & validate** - enforce rules before handlers run (clamp damage, block invalid input)
 - ✅ **Extension points everywhere** - interceptors, handlers, post-processors with priorities
 
-## Killer Features
+## Key Features
 
-Why DxMessaging is different:
+What DxMessaging offers:
 
-### 🚀 Performance: Zero-Allocation, Zero-Leak Design
+### Performance: Zero-Allocation Design
 
 **The problem with normal events:** Boxing allocations, GC spikes, memory leaks from forgotten unsubscribes.
 
@@ -379,12 +390,12 @@ Why DxMessaging is different:
 void OnDamage(ref TookDamage msg) {  // Pass by ref = zero allocations
     health -= msg.amount;            // No boxing, no GC pressure
 }
-// Automatic cleanup = zero leaks, guaranteed
+// Automatic cleanup prevents common leak patterns
 ```
 
-**Real-world impact:** A game emitting 1000 messages/second uses **zero GC** with DxMessaging vs. 40KB/sec with boxed events.
+**Note:** Struct messages passed by ref avoid GC allocations, which is standard behavior for value types in C#.
 
-### 🎯 Three Message Types That Actually Make Sense
+### Three Message Types
 
 Most event systems force you into one pattern. DxMessaging gives you the right tool for each job:
 
@@ -407,7 +418,7 @@ public struct TookDamage { public int amount; }
 
 **Why this matters:** You're not forcing everything through one generic "Event<T>" pattern. Each message type has clear semantics.
 
-### 🔄 The Message Pipeline
+### The Message Pipeline
 
 Every message flows through 3 stages with priority control:
 
@@ -421,11 +432,11 @@ flowchart LR
     style PP fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
 ```
 
-### 🎭 Global Observers: Listen to EVERYTHING (Unique Feature!)
+### Global Observers: Listen to All Events
 
 **The problem with normal events:** To track all player damage, enemy damage, and NPC damage, you need 3 separate event subscriptions.
 
-**DxMessaging's superpower:** Subscribe ONCE to a message type, receive ALL instances with source information:
+**DxMessaging approach:** Subscribe once to a message type, receive all instances with source information:
 
 ```csharp
 // Track ALL damage from ANY source (players, enemies, NPCs, environment)
@@ -445,9 +456,9 @@ _ = token.RegisterBroadcastWithoutSource<TookDamage>(
 - **Analytics:** Aggregate stats from all entities without knowing about them upfront
 - **Debug tools:** Watch ALL messages in the Inspector without instrumenting code
 
-**Why this is revolutionary:** Traditional event buses require you to know entity types upfront. DxMessaging lets you observe dynamically.
+**How this differs:** Some event bus patterns require subscribing to each entity type separately. DxMessaging allows observing all instances of a message type in one registration.
 
-### 🛡️ Interceptors: Validate Before Execution (Safety Built In)
+### Interceptors: Validate Before Execution
 
 **The problem with normal events:** Validation logic duplicated in every handler, or bugs when you forget.
 
@@ -482,7 +493,7 @@ void OnDamage(ref TookDamage msg) {
 - Block messages during cutscenes
 - Log/audit sensitive actions
 
-### 🔍 Built-in Inspector Diagnostics (Actually Debuggable!)
+### Built-in Inspector Diagnostics
 
 **The problem with normal events:** "Which event fired? When? Who handled it? In what order?" = 🤷
 
@@ -514,9 +525,9 @@ void OnDamage(ref TookDamage msg) {
 
 **No more:** Setting 50 breakpoints and stepping through code for 30 minutes.
 
-### 🏝️ Local Bus Islands for Testing (Actually Testable!)
+### Local Bus Islands for Testing
 
-**The problem with normal events:** Global static events contaminate tests. Mock hell. Flaky tests.
+**The problem with normal events:** Global static events contaminate tests. Mock complexity. Flaky tests.
 
 **DxMessaging solution:** Each test gets its own isolated message bus:
 
@@ -544,7 +555,7 @@ public void TestAchievementSystem() {
 - Tests don't interfere with each other
 - No "arrange/act/cleanup" boilerplate
 - No mocking frameworks needed
-- Parallel test execution works perfectly
+- Parallel test execution is supported
 
 ## Documentation
 
@@ -582,7 +593,7 @@ DxMessaging works standalone (zero dependencies) or with any major DI framework.
 
 - **[Zenject Integration Guide](Docs/Integrations/Zenject.md)** — Full-featured DI with extensive Unity support
 - **[VContainer Integration Guide](Docs/Integrations/VContainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
-- **[Reflex Integration Guide](Docs/Integrations/Reflex.md)** — Minimal API, blazing-fast performance
+- **[Reflex Integration Guide](Docs/Integrations/Reflex.md)** — Minimal API, high-performance DI
 
 #### Core DI concepts
 
@@ -616,7 +627,7 @@ See the [🔧 DI Compatible section](#-dependency-injection-di-compatible) above
 ##### Choose DxMessaging when you want
 
 - Unity-first design with GameObject/Component targeting
-- Automatic lifecycle management (zero memory leaks)
+- Automatic lifecycle management (prevents common memory leaks)
 - Inspector debugging to see message flow and history
 - Execution order control (priority-based handlers)
 - Message validation/interception pipeline
@@ -686,9 +697,9 @@ public class AchievementTracker : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
         base.RegisterMessageHandlers();
         _ = Token.RegisterGlobalAcceptAll(
-            onUntargeted: (ref IUntargetedMessage m) => Check(m),
-            onTargeted: (ref InstanceId t, ref ITargetedMessage m) => Check(m),
-            onBroadcast: (ref InstanceId s, ref IBroadcastMessage m) => Check(m)
+            acceptAllUntargeted: m => Check(m),
+            acceptAllTargeted: (t, m) => Check(m),
+            acceptAllBroadcast: (s, m) => Check(m)
         );
     }
 }
@@ -722,7 +733,7 @@ For OS-specific benchmark tables generated by PlayMode tests, see [Performance B
 | **Interceptors**         | ✅ Pipeline        | ❌ No              | ⚠️ Filters         | ❌ No              |
 | **Post-Processing**      | ✅ Dedicated       | ❌ No              | ⚠️ Filters         | ❌ No              |
 | **Stream Operators**     | ❌ No              | ✅ Extensive       | ❌ No              | ⚠️ With UniRx      |
-| **Performance**          | ✅ Good (14M)      | ✅ Good (18M)      | ✅ Best (97M)      | ⚠️ Moderate (2.5M) |
+| **Performance**          | ✅ Good (14M)      | ✅ Good (18M)      | ✅ High (97M)      | ⚠️ Moderate (2.5M) |
 | **Dependencies**         | ✅ None            | ⚠️ UniTask         | ✅ None            | ⚠️ Zenject         |
 
 ### Comparison with Traditional Approaches
@@ -772,5 +783,3 @@ Created and maintained by [wallstop studios](https://wallstopstudios.com)
 - 📘 [Full Documentation](Docs/Index.md)
 
 ---
-
-**Stop fighting events. Start messaging.** 🚀

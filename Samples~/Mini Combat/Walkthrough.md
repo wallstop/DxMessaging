@@ -141,7 +141,7 @@ Settings changes are **global events**—they don't target anyone specifically. 
 
 ### The Code Flow
 
-1. **[Boot.cs](./Boot.cs)** calls: `MessageHub.Publish(new VideoSettingsChanged())`
+1. **[Boot.cs](./Boot.cs)** calls: `var settings = new VideoSettingsChanged(); settings.Emit();`
 1. **[UIOverlay.cs](./UIOverlay.cs)** receives it through its registered handler
 1. **UIOverlay** rebuilds the UI with new settings
 
@@ -179,7 +179,7 @@ We want to heal **one specific player**, not all players in the scene.
 ### The Code Flow
 
 1. **[Boot.cs](./Boot.cs)** finds the Player Component reference
-1. **[Boot.cs](./Boot.cs)** calls: `MessageHub.Publish(new Heal(amount), targetComponent)`
+1. **[Boot.cs](./Boot.cs)** calls: `var heal = new Heal(amount); heal.EmitComponentTargeted(targetComponent);`
 1. **Only the targeted [Player.cs](./Player.cs)** receives it through its handler
 1. **Player** increases its HP
 
@@ -249,7 +249,7 @@ The Enemy doesn't know (or care) who needs to know about the damage. It just ann
 
 ```csharp
 // Player.cs registers like this:
-token.RegisterComponent<Heal>(this, OnHeal);
+token.RegisterComponentTargeted<Heal>(this, OnHeal);
 ```
 
 #### Reasoning:
@@ -418,13 +418,13 @@ Try modifying the sample:
 
 | Want to... | Use... | Example |
 |------------|--------|---------|
-| Send to everyone | Untargeted | `MessageHub.Publish(new GamePaused())` |
-| Send to specific Component | Targeted | `MessageHub.Publish(new Heal(10), playerComponent)` |
+| Send to everyone | Untargeted | `var paused = new GamePaused(); paused.Emit();` |
+| Send to specific Component | Targeted | `var heal = new Heal(10); heal.EmitComponentTargeted(playerComponent);` |
 | Announce an event | Broadcast | `this.EmitBroadcast(new Exploded())` |
 | Listen to everything | `RegisterBroadcastWithoutSource` | `token.RegisterBroadcastWithoutSource<Damage>(OnDamage)` |
 | Listen to specific source | `RegisterComponentBroadcast` | `token.RegisterComponentBroadcast<Fire>(weapon, OnFire)` |
-| Receive targeted messages | `RegisterComponent` | `token.RegisterComponent<Heal>(this, OnHeal)` |
+| Receive targeted messages | `RegisterComponentTargeted` | `token.RegisterComponentTargeted<Heal>(this, OnHeal)` |
 
 ---
 
-**Remember**: Keep Player, Enemy, and UIOverlay GameObjects each with a `MessagingComponent` attached, and enable diagnostics to see the magic happen!
+**Remember**: Keep Player, Enemy, and UIOverlay GameObjects each with a `MessagingComponent` attached, and enable diagnostics to observe message traffic.

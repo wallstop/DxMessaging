@@ -14,6 +14,8 @@
 - Format: `dotnet tool restore` then `dotnet tool run csharpier format`.
 - Build generators: `dotnet build SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.csproj`.
 - Unity tests: open a Unity 2021.3+ project that references this package, then Window > Test Runner > PlayMode. CLI example: `Unity -batchmode -nographics -quit -projectPath <your_project> -runTests -testPlatform PlayMode -testResults ./TestResults.xml`.
+- Actionlint: Runs in CI on PRs/pushes to validate GitHub Actions workflows. Available as a pre-push hook (requires `actionlint` installed locally).
+- Spellcheck: Runs in CI on PRs/pushes via `cspell` to check spelling in Markdown, C#, JSON, YAML, and script files. Dictionary is maintained in [.cspell.json](../.cspell.json). Available as a pre-push hook via `npx cspell`.
 
 ## Coding Style & Naming Conventions
 
@@ -56,6 +58,7 @@ Before acting on PR review feedback:
 1. **Test assertions**: If a reviewer claims code is broken, reproduce the issue before fixing.
 1. **Question assumptions**: Reviewers (including AI reviewers) can be mistaken. Respectfully verify before making changes.
 1. **Document verification**: When rejecting feedback, document why (e.g., "Verified against git remote: correct URL is X").
+1. **Verify API completeness**: Before claiming documentation is incorrect, check for method overloads, extension methods, and implicit operators. A claim like "this signature is wrong" may be based on seeing only one overload when multiple exist (e.g., `RegisterGlobalAcceptAll` has both `Action<T>` and `FastHandler<T>` overloads—feedback about one doesn't invalidate the other). Use IDE features (Go to Definition, Find All References) or `grep_search` to find all overloads of a method.
 
 ## Testing Guidelines
 
@@ -166,6 +169,18 @@ See the [Skill File Sizing skill](./skills/documentation/skill-file-sizing.md) f
 - Commits: short, imperative subject; group related changes; reference issues/PRs (e.g., "Fix registration dedupe (#123)").
 - PRs: include a clear description, linked issues, before/after notes for performance changes (see [Tests/Runtime/Benchmarks](../Tests/Runtime/Benchmarks/)), and tests for bug fixes/features.
 - Releasing: changes to [the package manifest](../package.json) on `master` may trigger the NPM publish workflow.
+
+## CI/CD Tool Versioning
+
+When updating tool versions in pre-commit hooks or GitHub Actions workflows:
+
+- **Keep versions aligned**: The same tool should use the same version (or equivalent) across pre-commit and CI.
+- **Pin specific versions**: Use exact versions (e.g., `prettier@3.8.1`, `cspell@8.19.4`) rather than floating ranges for reproducibility.
+- **Add version comments**: Document why versions are pinned (e.g., "Pin to latest 8.x to align with CI").
+- **Update periodically**: When updating one location, update all locations using that tool.
+- **Version locations to check**:
+  - [.pre-commit-config.yaml](../.pre-commit-config.yaml) — local pre-commit hooks
+  - [.github/workflows/](../.github/workflows/) — CI workflows (spellcheck.yml, prettier-autofix.yml, format-on-demand.yml, yaml-format-lint.yml)
 
 ## Security & Configuration Tips
 

@@ -1,10 +1,10 @@
 # Mini Combat Sample
 
-> **Perfect for:** First-time users who want to see messaging in action with a working combat example
+> **Ideal for:** First-time users who want to see messaging in action with a working combat example
 
 ## What You'll Learn in 10 Minutes
 
-**Stop reading documentation and start seeing it work!** This sample shows:
+**This sample demonstrates messaging concepts through a functional example.** It shows:
 
 1. How Player heals without UI knowing about Player (**zero coupling**)
 2. How Enemy broadcasts damage without knowing who cares (**observer pattern**)
@@ -45,7 +45,7 @@ public class Player : MessageAwareComponent {
 }
 ```
 
-###### Zero coupling. Zero manual wiring. That's the power of messaging.
+###### This decouples systems and removes manual wiring.
 
 ---
 
@@ -104,7 +104,7 @@ Here's what each script does:
 5. **Open the scene**
 6. **Press Play** 🎮
 
-**That's it!** Watch the Console logs as messages flow.
+Watch the Console logs as messages flow.
 
 **Pro tip:** Enable diagnostics in the Inspector (MessagingComponent → Enable Diagnostics) to see message traffic in real-time.
 

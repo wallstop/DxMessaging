@@ -29,9 +29,9 @@ Handy commands:
 
 - Internal links (local): `python .github/scripts/validate_markdown_links.py .`
 - Lint markdown (all files): `pre-commit run markdownlint --all-files`
-- Lint markdown (manual): `npx markdownlint-cli@0.41.0 "**/*.md" -c .markdownlint.jsonc --fix`
+- Lint markdown (manual): `npx markdownlint-cli2@0.20.0 "**/*.md" --fix`
 - Format JSON/.asmdef (all files): `pre-commit run prettier --all-files`
-- Format JSON/.asmdef (manual): `npx prettier@3.8.0 --write "**/*.{json,asmdef}"`
+- Format JSON/.asmdef (manual): `npx prettier@3.8.1 --write "**/*.{json,asmdef}"`
 - Format YAML (all files): `pre-commit run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`
