@@ -2,16 +2,21 @@
 
 [![Unity](https://img.shields.io/badge/Unity-2021.3+-black.svg)](https://unity.com/releases/editor)<br/>
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)<br/>
+[![openupm](https://img.shields.io/npm/v/com.wallstop-studios.dxmessaging?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.wallstop-studios.dxmessaging/)<br/>
 [![Version](https://img.shields.io/npm/v/com.wallstop-studios.dxmessaging.svg)](https://www.npmjs.com/package/com.wallstop-studios.dxmessaging)<br/>
-[![Performance: OS-Specific Benchmarks](https://img.shields.io/badge/Performance-OS--specific-blueviolet.svg)](Docs/Performance.md)<br/>
+[![Performance: OS-Specific Benchmarks](https://img.shields.io/badge/Performance-OS--specific-blueviolet.svg)](docs/architecture/performance.md)<br/>
 [![Markdown Link Validity](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-validity.yml/badge.svg)](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-validity.yml)<br/>
 [![Markdown Link Text Check](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-text-check.yml/badge.svg)](https://github.com/wallstop/DxMessaging/actions/workflows/markdown-link-text-check.yml)
+
+> **🤖 AI Assistance Disclosure:**
+>
+> This project has been actively developed and maintained by human authors for over a decade. Recent versions have utilized AI assistance for documentation, test coverage, and performance optimizations.
 
 **DxMessaging is a type-safe messaging system** that replaces sprawling C# events, brittle UnityEvents, and global static event buses with an observable and lifecycle-managed communication pattern.
 
 Think of it as: A messaging system designed for decoupled game systems.
 
-Need install instructions for Git URLs, scoped registries, or tarballs? Jump to the [Install Guide](Docs/Install.md).
+Need install instructions? Try [OpenUPM](https://openupm.com/packages/com.wallstop-studios.dxmessaging/) (recommended) or see the [Install Guide](docs/getting-started/install.md) for Git URLs, scoped registries, and more.
 
 ## Table of Contents
 
@@ -60,18 +65,24 @@ Need install instructions for Git URLs, scoped registries, or tarballs? Jump to 
 
 ## Quick Start (5 Minutes)
 
-**New to messaging?** Start with the [Visual Guide](Docs/VisualGuide.md) (5 min) for a beginner-friendly introduction!
+**New to messaging?** Start with the [Visual Guide](docs/getting-started/visual-guide.md) (5 min) for a beginner-friendly introduction!
 
 ### 1. Install
 
-Via Unity Package Manager → Add package from git URL (see the [Install Guide](Docs/Install.md) for scoped registry, tarball, and offline options):
+#### Via OpenUPM (Recommended)
+
+```bash
+openupm add com.wallstop-studios.dxmessaging
+```
+
+##### Or via Git URL
 
 ```bash
 # Unity Package Manager > Add package from git URL...
 https://github.com/wallstop/DxMessaging.git
 ```
 
-Prefer OpenUPM, scoped registries, or local tarballs? The [Install Guide](Docs/Install.md) covers every path in detail.
+See the [Install Guide](docs/getting-started/install.md) for all options including NPM scoped registries and local tarballs.
 
 ### 2. Define Your First Message
 
@@ -114,7 +125,7 @@ msg.EmitComponentTargeted(chestComponent);
 
 No manual unsubscribe needed. Subscriptions are type-safe and lifecycle-managed.
 
-**Stuck?** See [Troubleshooting](Docs/Troubleshooting.md) or [FAQ](Docs/FAQ.md)
+**Stuck?** See [Troubleshooting](docs/reference/troubleshooting.md) or [FAQ](docs/reference/faq.md)
 
 ---
 
@@ -156,20 +167,20 @@ public class PlayerService : IInitializable, IDisposable
 
 ##### Get started
 
-- [Zenject Integration Guide](Docs/Integrations/Zenject.md) — Complete setup with examples
-- [VContainer Integration Guide](Docs/Integrations/VContainer.md) — Scoped buses for scene isolation
-- [Reflex Integration Guide](Docs/Integrations/Reflex.md) — Minimal, lightweight patterns
+- [Zenject Integration Guide](docs/integrations/zenject.md) — Complete setup with examples
+- [VContainer Integration Guide](docs/integrations/vcontainer.md) — Scoped buses for scene isolation
+- [Reflex Integration Guide](docs/integrations/reflex.md) — Minimal, lightweight patterns
 
 ##### Core DI concepts
 
-- [Runtime Configuration](Docs/RuntimeConfiguration.md) — Setting message buses at runtime, re-binding registrations
-- [Message Bus Providers](Docs/MessageBusProviders.md) — Provider system for design-time and runtime bus configuration
+- [Runtime Configuration](docs/advanced/runtime-configuration.md) — Setting message buses at runtime, re-binding registrations
+- [Message Bus Providers](docs/advanced/message-bus-providers.md) — Provider system for design-time and runtime bus configuration
 
 **Not using DI?** No problem. DxMessaging works standalone with zero dependencies.
 
 ---
 
-## Is DxMessaging Right for You
+## Is DxMessaging Right for You?
 
 ### ✅ Use DxMessaging When
 
@@ -191,7 +202,7 @@ public class PlayerService : IInitializable, IDisposable
 
 ### ⚠️ Maybe Use DxMessaging (Start Small)
 
-- **Existing large codebase** - Migrate incrementally: start with new features, refactor old code gradually (see [Migration Guide](Docs/MigrationGuide.md))
+- **Existing large codebase** - Migrate incrementally: start with new features, refactor old code gradually (see [Migration Guide](docs/guides/migration-guide.md))
 - **Small team learning** - Try it for one system (e.g., achievements) before going all-in
 - **Mid-size projects (5-20k lines)** - Evaluate after trying it for one complex interaction (e.g., combat or scene transitions)
 
@@ -220,11 +231,11 @@ flowchart TD
     style A4 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
 ```
 
-**Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](Docs/VisualGuide.md) or stick with simpler patterns.
+**Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
 
-**New to messaging?** Start with the [Visual Guide](Docs/VisualGuide.md) (5 min) for a beginner-friendly introduction!
+**New to messaging?** Start with the [Visual Guide](docs/getting-started/visual-guide.md) (5 min) for a beginner-friendly introduction!
 
-Looking for hard numbers? See OS-specific [Performance Benchmarks](Docs/Performance.md).
+Looking for hard numbers? See OS-specific [Performance Benchmarks](docs/architecture/performance.md).
 
 ## Why DxMessaging
 
@@ -559,25 +570,29 @@ public void TestAchievementSystem() {
 
 ## Documentation
 
+- **[📖 Documentation Site](https://wallstop.github.io/DxMessaging/)** - Full searchable documentation
+- **[📚 Wiki](https://github.com/wallstop/DxMessaging/wiki)** - Quick reference wiki
+- **[📋 Changelog](CHANGELOG.md)** - Version history
+
 ### 🎓 Learn
 
-- **New here?** Start with [Getting Started Guide](Docs/GettingStarted.md) (10 min read)
-- **Want patterns?** See [Common Patterns](Docs/Patterns.md)
-- **Deep dive?** Read [Design & Architecture](Docs/DesignAndArchitecture.md)
+- **New here?** Start with [Getting Started Guide](docs/getting-started/getting-started.md) (10 min read)
+- **Want patterns?** See [Common Patterns](docs/guides/patterns.md)
+- **Deep dive?** Read [Design & Architecture](docs/architecture/design-and-architecture.md)
 
 ### 📚 Core Concepts
 
-- [Overview](Docs/Overview.md) — What and why
-- [Quick Start](Docs/QuickStart.md) — First message in 5 minutes
-- [Message Types](Docs/MessageTypes.md) — When to use Untargeted/Targeted/Broadcast
-- [Interceptors & Ordering](Docs/InterceptorsAndOrdering.md) — Control execution flow
-- [Listening Patterns](Docs/ListeningPatterns.md) — All the ways to receive messages
+- [Overview](docs/getting-started/overview.md) — What and why
+- [Quick Start](docs/getting-started/quick-start.md) — First message in 5 minutes
+- [Message Types](docs/concepts/message-types.md) — When to use Untargeted/Targeted/Broadcast
+- [Interceptors & Ordering](docs/concepts/interceptors-and-ordering.md) — Control execution flow
+- [Listening Patterns](docs/concepts/listening-patterns.md) — All the ways to receive messages
 
 ### 🔧 Unity Integration
 
-- [Unity Integration](Docs/UnityIntegration.md) — MessagingComponent deep dive
-- [Targeting & Context](Docs/TargetingAndContext.md) — GameObject vs Component
-- [Diagnostics](Docs/Diagnostics.md) — Inspector tools and debugging
+- [Unity Integration](docs/guides/unity-integration.md) — MessagingComponent deep dive
+- [Targeting & Context](docs/concepts/targeting-and-context.md) — GameObject vs Component
+- [Diagnostics](docs/guides/diagnostics.md) — Inspector tools and debugging
 
 Important: Inheritance with MessageAwareComponent
 
@@ -591,14 +606,14 @@ Important: Inheritance with MessageAwareComponent
 
 DxMessaging works standalone (zero dependencies) or with any major DI framework. For detailed setup guides and code examples:
 
-- **[Zenject Integration Guide](Docs/Integrations/Zenject.md)** — Full-featured DI with extensive Unity support
-- **[VContainer Integration Guide](Docs/Integrations/VContainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
-- **[Reflex Integration Guide](Docs/Integrations/Reflex.md)** — Minimal API, high-performance DI
+- **[Zenject Integration Guide](docs/integrations/zenject.md)** — Full-featured DI with extensive Unity support
+- **[VContainer Integration Guide](docs/integrations/vcontainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
+- **[Reflex Integration Guide](docs/integrations/reflex.md)** — Minimal API, high-performance DI
 
 #### Core DI concepts
 
-- **[Runtime Configuration](Docs/RuntimeConfiguration.md)** — Setting and overriding message buses at runtime, re-binding registrations
-- **[Message Bus Providers](Docs/MessageBusProviders.md)** — Provider system and MessageBusProviderHandle for flexible bus configuration
+- **[Runtime Configuration](docs/advanced/runtime-configuration.md)** — Setting and overriding message buses at runtime, re-binding registrations
+- **[Message Bus Providers](docs/advanced/message-bus-providers.md)** — Provider system and MessageBusProviderHandle for flexible bus configuration
 
 Each guide includes:
 
@@ -611,8 +626,8 @@ See the [🔧 DI Compatible section](#-dependency-injection-di-compatible) above
 
 ### 🆚 Comparisons
 
-- [Compare with Other Unity Messaging Frameworks](Docs/Comparisons.md) — In-depth comparison with UniRx, MessagePipe, Zenject Signals, C# events, UnityEvents, and more
-- [Scriptable Object Architecture (SOA) Compatibility](Docs/Patterns.md#14-compatibility-with-scriptable-object-architecture-soa) — Migration patterns and interoperability with SOA
+- [Compare with Other Unity Messaging Frameworks](docs/architecture/comparisons.md) — In-depth comparison with UniRx, MessagePipe, Zenject Signals, C# events, UnityEvents, and more
+- [Scriptable Object Architecture (SOA) Compatibility](docs/guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa) — Migration patterns and interoperability with SOA
 
 #### Quick Framework Comparison
 
@@ -635,11 +650,11 @@ See the [🔧 DI Compatible section](#-dependency-injection-di-compatible) above
 - Post-processing stage (analytics, logging after handlers)
 - No dependencies, plug-and-play setup
 
-See [full comparison](Docs/Comparisons.md) for detailed analysis with code examples, performance benchmarks, and decision guides.
+See [full comparison](docs/architecture/comparisons.md) for detailed analysis with code examples, performance benchmarks, and decision guides.
 
 > **📦 Using Scriptable Object Architecture (SOA)?**
 >
-> DxMessaging can work alongside or replace SOA patterns. See [SOA Compatibility Guide](Docs/Patterns.md#14-compatibility-with-scriptable-object-architecture-soa) for:
+> DxMessaging can work alongside or replace SOA patterns. See [SOA Compatibility Guide](docs/guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa) for:
 >
 > - Fair comparison of SOA vs. DxMessaging
 > - Migration patterns from GameEvent/FloatVariable to DxMessaging
@@ -648,17 +663,17 @@ See [full comparison](Docs/Comparisons.md) for detailed analysis with code examp
 
 ### 📖 Reference
 
-- [Install Guide](Docs/Install.md) — All install options (Git URL, scoped registry, tarball, manual copy)
-- [Glossary](Docs/Glossary.md) — All terms explained in plain English
-- [Quick Reference](Docs/QuickReference.md) — Cheat sheet
-- [API Reference](Docs/Reference.md) — Complete API
-- [Helpers](Docs/Helpers.md) — Source generators and utilities
-- [FAQ](Docs/FAQ.md) — Common questions
-- [Troubleshooting](Docs/Troubleshooting.md)
+- [Install Guide](docs/getting-started/install.md) — All install options (OpenUPM, Git URL, scoped registry, tarball)
+- [Glossary](docs/reference/glossary.md) — All terms explained in plain English
+- [Quick Reference](docs/reference/quick-reference.md) — Cheat sheet
+- [API Reference](docs/reference/reference.md) — Complete API
+- [Helpers](docs/reference/helpers.md) — Source generators and utilities
+- [FAQ](docs/reference/faq.md) — Common questions
+- [Troubleshooting](docs/reference/troubleshooting.md)
 
 ### 📦 Full Documentation
 
-Browse all docs: [Documentation Hub](Docs/Index.md)
+Browse all docs: [Documentation Hub](docs/getting-started/index.md)
 
 ## Real-World Examples
 
@@ -712,9 +727,9 @@ public class AchievementTracker : MessageAwareComponent {
 - **Type-indexed caching** for O(1) lookups
 - **Optimized for hot paths** with aggressive inlining
 
-See [Design & Architecture](Docs/DesignAndArchitecture.md#performance-optimizations) for details.
+See [Design & Architecture](docs/architecture/design-and-architecture.md#performance-optimizations) for details.
 
-For OS-specific benchmark tables generated by PlayMode tests, see [Performance Benchmarks](Docs/Performance.md).
+For OS-specific benchmark tables generated by PlayMode tests, see [Performance Benchmarks](docs/architecture/performance.md).
 
 ## Comparison Table
 
@@ -762,7 +777,7 @@ Import samples from Package Manager:
 - .NET Standard 2.1
 - Works with all render pipelines (URP, HDRP, Built-in)
 
-See [Compatibility](Docs/Compatibility.md) for details.
+See [Compatibility](docs/reference/compatibility.md) for details.
 
 ## Contributing
 
@@ -780,6 +795,7 @@ Created and maintained by [wallstop studios](https://wallstopstudios.com)
 
 - 📦 [Package on GitHub](https://github.com/wallstop/DxMessaging)
 - 🐛 [Report Issues](https://github.com/wallstop/DxMessaging/issues)
-- 📘 [Full Documentation](Docs/Index.md)
+- 📖 [Documentation Site](https://wallstop.github.io/DxMessaging/)
+- 📚 [Wiki](https://github.com/wallstop/DxMessaging/wiki)
 
 ---

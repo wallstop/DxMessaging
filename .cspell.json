@@ -136,6 +136,12 @@
     "csharpierignore",
     "csharpierrc",
     "pipx",
+    "mkdocs",
+    "pymdownx",
+    "superfences",
+    "twemoji",
+    "slugify",
+    "libz",
 
     // File extensions and formats
     "asmdef",

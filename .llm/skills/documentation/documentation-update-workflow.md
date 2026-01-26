@@ -9,7 +9,7 @@ updated: "2026-01-22"
 source:
   repository: "wallstop/DxMessaging"
   files:
-    - path: "Docs/"
+    - path: "docs/"
     - path: "README.md"
     - path: "CHANGELOG.md"
   url: "https://github.com/wallstop/DxMessaging"
@@ -81,7 +81,7 @@ Without a workflow, documentation updates are inconsistent, and important refere
 ### Step-by-Step Process
 
 1. **Identify scope**: What user-facing behavior changed?
-1. **Find affected docs**: Search Docs/ for mentions of the changed API/feature
+1. **Find affected docs**: Search docs/ for mentions of the changed API/feature
 1. **Update XML comments**: Modify or add comments on changed code
 1. **Update code samples**: Verify all examples still work
 1. **Add version notes**: Mark new/changed behavior with version
@@ -104,9 +104,9 @@ public void Emit<TMessage>(TMessage message, int priority)
 
 Documentation updates needed:
 
-1. **Docs/MessageTypes.md** - Add section on prioritized emission
-1. **Docs/Performance.md** - Note any performance implications
-1. **Docs/QuickReference.md** - Add to API quick reference table
+1. **docs/concepts/message-types.md** - Add section on prioritized emission
+1. **docs/architecture/performance.md** - Note any performance implications
+1. **docs/Quickreference/reference.md** - Add to API quick reference table
 1. **CHANGELOG.md** - Add under "Added" section
 
 ### Documentation Checklist
@@ -116,7 +116,7 @@ Documentation updates needed:
 - [ ] Code samples compile and run correctly
 - [ ] Version annotations added for new features
 - [ ] CHANGELOG.md updated with user-facing changes
-- [ ] Related Docs/ articles updated
+- [ ] Related docs/ articles updated
 - [ ] README.md updated if feature is significant
 - [ ] No TODOs or placeholders in documentation
 - [ ] Links between related docs are bidirectional

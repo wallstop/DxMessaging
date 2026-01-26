@@ -4,7 +4,7 @@
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
-  "documentationUrl": "Docs/Index.md",
+  "documentationUrl": "https://wallstop.github.io/DxMessaging/",
   "changelogUrl": "https://github.com/wallstop/DxMessaging/blob/master/CHANGELOG.md",
   "licensesUrl": "https://github.com/wallstop/DxMessaging/blob/master/LICENSE.md",
   "dependencies": {},

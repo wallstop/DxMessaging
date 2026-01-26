@@ -1,0 +1,130 @@
+/* Custom styling for DxMessaging documentation */
+
+/* ============================================
+   CSS Custom Properties for Mermaid Themes
+   ============================================
+   NOTE: These CSS variables are provided for documentation/reference
+   and potential future use in custom SVG styling or extensions.
+   The JavaScript mermaid-config.js uses its own color definitions
+   for runtime Mermaid initialization.
+   ============================================ */
+
+:root {
+  /* Light theme Mermaid colors */
+  --mermaid-primary-bg: #e3f2fd;
+  --mermaid-primary-text: #1565c0;
+  --mermaid-primary-border: #1976d2;
+
+  --mermaid-success-bg: #e8f5e9;
+  --mermaid-success-text: #2e7d32;
+  --mermaid-success-border: #388e3c;
+
+  --mermaid-warning-bg: #fff3e0;
+  --mermaid-warning-text: #c43e00;
+  --mermaid-warning-border: #f57c00;
+
+  --mermaid-danger-bg: #ffebee;
+  --mermaid-danger-text: #c62828;
+  --mermaid-danger-border: #d32f2f;
+
+  --mermaid-neutral-bg: #eceff1;
+  --mermaid-neutral-text: #37474f;
+  --mermaid-neutral-border: #607d8b;
+
+  --mermaid-accent-bg: #f3e5f5;
+  --mermaid-accent-text: #6a1b9a;
+  --mermaid-accent-border: #8e24aa;
+}
+
+[data-md-color-scheme="slate"] {
+  /* Dark theme Mermaid colors */
+  --mermaid-primary-bg: #1e3a5f;
+  --mermaid-primary-text: #90caf9;
+  --mermaid-primary-border: #42a5f5;
+
+  --mermaid-success-bg: #1b3d2e;
+  --mermaid-success-text: #81c784;
+  --mermaid-success-border: #66bb6a;
+
+  --mermaid-warning-bg: #3d2e1a;
+  --mermaid-warning-text: #ffb74d;
+  --mermaid-warning-border: #ffa726;
+
+  --mermaid-danger-bg: #3d1a1a;
+  --mermaid-danger-text: #ef9a9a;
+  --mermaid-danger-border: #ef5350;
+
+  --mermaid-neutral-bg: #2d2d2d;
+  --mermaid-neutral-text: #b0bec5;
+  --mermaid-neutral-border: #546e7a;
+
+  --mermaid-accent-bg: #2d1f3d;
+  --mermaid-accent-text: #ce93d8;
+  --mermaid-accent-border: #ab47bc;
+}
+
+/* ============================================
+   Code block styling
+   ============================================ */
+.md-typeset code {
+  font-size: 0.85em;
+}
+
+/* ============================================
+   Mermaid diagram container
+   ============================================ */
+.mermaid {
+  text-align: center;
+  margin: 1em 0;
+}
+
+/* Ensure diagrams are visible in dark mode */
+[data-md-color-scheme="slate"] .mermaid {
+  background-color: transparent;
+}
+
+/* SVG text readability in dark mode */
+[data-md-color-scheme="slate"] .mermaid svg {
+  max-width: 100%;
+}
+
+/* Ensure proper text contrast in dark mode for inline diagram text.
+   Using html selector for higher specificity to avoid !important. */
+html[data-md-color-scheme="slate"] body .mermaid svg .node text,
+html[data-md-color-scheme="slate"] body .mermaid svg .cluster-label text,
+html[data-md-color-scheme="slate"] body .mermaid svg .edgeLabel text,
+[data-md-color-scheme="slate"] .md-content .mermaid .node text,
+[data-md-color-scheme="slate"] .md-content .mermaid .cluster-label text,
+[data-md-color-scheme="slate"] .md-content .mermaid .edgeLabel text {
+  fill: var(--mermaid-neutral-text);
+}
+
+/* ============================================
+   Unity-specific admonition
+   ============================================ */
+.md-typeset .admonition.unity,
+.md-typeset details.unity {
+  border-color: #222c37;
+}
+
+.md-typeset .unity > .admonition-title,
+.md-typeset .unity > summary {
+  background-color: rgba(34, 44, 55, 0.1);
+}
+
+.md-typeset .unity > .admonition-title::before,
+.md-typeset .unity > summary::before {
+  background-color: #222c37;
+  /* Unity cube icon using mask */
+  -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l6.9 3.45L12 11.09 5.1 7.63 12 4.18zM4 8.82l7 3.5v7.86l-7-3.5V8.82zm9 11.36v-7.86l7-3.5v7.86l-7 3.5z"/></svg>');
+  mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l6.9 3.45L12 11.09 5.1 7.63 12 4.18zM4 8.82l7 3.5v7.86l-7-3.5V8.82zm9 11.36v-7.86l7-3.5v7.86l-7 3.5z"/></svg>');
+}
+
+/* ============================================
+   Feature grid for homepage
+   ============================================ */
+.md-typeset .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}

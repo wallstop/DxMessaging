@@ -9,7 +9,7 @@ updated: "2026-01-22"
 source:
   repository: "wallstop/DxMessaging"
   files:
-    - path: "Docs/"
+    - path: "docs/"
     - path: "README.md"
     - path: "CHANGELOG.md"
   url: "https://github.com/wallstop/DxMessaging"
@@ -103,17 +103,17 @@ Outdated documentation misleads users and increases support load.
 
 | Change Type                             | Documentation Required                                |
 | --------------------------------------- | ----------------------------------------------------- |
-| New public API                          | XML docs + Docs/ article + README if significant      |
+| New public API                          | XML docs + docs/ article + README if significant      |
 | Modified public API signature           | XML docs + all affected examples                      |
-| Behavior change (even if API unchanged) | Docs/ article + version annotation                    |
-| Bug fix with observable behavior change | CHANGELOG + possibly Docs/ if behavior was documented |
-| New configuration option                | RuntimeConfiguration.md + relevant guides             |
+| Behavior change (even if API unchanged) | docs/ article + version annotation                    |
+| Bug fix with observable behavior change | CHANGELOG + possibly docs/ if behavior was documented |
+| New configuration option                | advanced/runtime-configuration.md + relevant guides   |
 | Deprecation                             | XML docs with `[Obsolete]` + migration guide          |
-| Performance improvement                 | Performance.md + CHANGELOG                            |
+| Performance improvement                 | architecture/performance.md + CHANGELOG               |
 
 ### Check These Files
 
-1. **Docs/** - user-facing guides and tutorials
+1. **docs/** - user-facing guides and tutorials
 1. **README.md** - quick start and feature list
 1. **CHANGELOG.md** - version history and migration notes
 1. **XML comments** - public APIs
@@ -123,7 +123,7 @@ Outdated documentation misleads users and increases support load.
 
 - **Public APIs** with XML docs and examples
 - **Behavior changes** with version annotations
-- **User-facing features** in Docs/ guides
+- **User-facing features** in docs/ guides
 - **Breaking changes** with migration notes in CHANGELOG
 
 ## See Also

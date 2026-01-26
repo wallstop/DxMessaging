@@ -1,0 +1,125 @@
+name: Sync Wiki
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'docs/**'
+      - 'scripts/wiki/**'
+      - '.github/workflows/sync-wiki.yml'
+  workflow_dispatch:
+
+# Prevent concurrent wiki updates
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Wiki Content
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.check.outputs.should-deploy }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for documentation changes
+        id: check
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^docs/'; then
+            echo "should-deploy=true" >> $GITHUB_OUTPUT
+            echo "Documentation changes detected"
+          else
+            echo "should-deploy=false" >> $GITHUB_OUTPUT
+            echo "No documentation changes"
+          fi
+
+      - name: Validate Markdown files
+        if: steps.check.outputs.should-deploy == 'true'
+        run: |
+          echo "Validating Markdown structure..."
+          find docs -name "*.md" -type f | while read -r file; do
+            # Check for valid UTF-8
+            if ! iconv -f UTF-8 -t UTF-8 "$file" > /dev/null 2>&1; then
+              echo "ERROR: Invalid UTF-8 in $file"
+              exit 1
+            fi
+            # Check file is not empty
+            if [ ! -s "$file" ]; then
+              echo "ERROR: Empty file: $file"
+              exit 1
+            fi
+          done
+          echo "Validation passed"
+
+  sync:
+    name: Sync to Wiki
+    needs: validate
+    if: needs.validate.outputs.should-deploy == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Clone wiki repository
+        run: |
+          git clone "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.wiki.git" wiki
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Transform and copy documentation
+        run: |
+          cd main
+          node scripts/wiki/transform-docs-to-wiki.js ../wiki
+
+      - name: Generate sidebar
+        run: |
+          cd main
+          node scripts/wiki/generate-wiki-sidebar.js ../wiki
+
+      - name: Validate transformed content
+        run: |
+          cd wiki
+          if [ ! -f "Home.md" ]; then
+            echo "::error::Home.md not generated"
+            exit 1
+          fi
+          echo "Content validation passed"
+
+      - name: Commit and push to wiki
+        run: |
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Sync wiki from docs/ - ${{ github.sha }}"
+
+          for i in 1 2 3; do
+            if git push; then
+              echo "Push successful"
+              exit 0
+            fi
+            echo "Push attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+
+          echo "::error::Failed to push after 3 attempts"
+          exit 1

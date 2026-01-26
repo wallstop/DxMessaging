@@ -202,8 +202,8 @@ public class MyObserver : MessageAwareComponent {
 
 ## Next Steps
 
-- Quick tour: [Getting Started guide](../../Docs/GettingStarted.md)
-- Patterns and recipes: [Common Patterns](../../Docs/Patterns.md)
+- Quick tour: [Getting Started guide](../../docs/getting-started/getting-started.md)
+- Patterns and recipes: [Common Patterns](../../docs/guides/patterns.md)
 - Explore another sample: [Mini Combat sample](../Mini%20Combat/README.md)
 
 You now have an inspector-first way to publish and observe messages. Build on this by using your own message types and listeners.

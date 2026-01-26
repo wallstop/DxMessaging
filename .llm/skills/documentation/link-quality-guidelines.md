@@ -9,7 +9,7 @@ updated: "2026-01-23"
 source:
   repository: "wallstop/DxMessaging"
   files:
-    - path: "Docs/"
+    - path: "docs/"
     - path: "README.md"
     - path: ".llm/"
     - path: ".github/workflows/"
@@ -130,13 +130,13 @@ Read [the AI Agent Guidelines](.llm/context.md) for guidelines.
 
 #### Link Text Guidelines
 
-| Scenario               | Bad Example                    | Good Example                                |
-| ---------------------- | ------------------------------ | ------------------------------------------- |
-| File reference         | `[package.json](package.json)` | `[the package manifest](package.json)`      |
-| Section reference      | `\[FAQ.md\](Docs/FAQ.md)`      | `[frequently asked questions](Docs/FAQ.md)` |
-| Code location          | `[Tests/](Tests/)`             | `[the test suite](Tests/)`                  |
-| External documentation | `[docs.unity3d.com](url)`      | `[Unity documentation](url)`                |
-| GitHub repository      | `[repo](url)`                  | `[the DxMessaging repository](url)`         |
+| Scenario               | Bad Example                                   | Good Example                                          |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------- |
+| File reference         | `[package.json](package.json)`                | `[the package manifest](package.json)`                |
+| Section reference      | `\[reference/faq.md\](docs/reference/faq.md)` | `[frequently asked questions](docs/reference/faq.md)` |
+| Code location          | `[Tests/](Tests/)`                            | `[the test suite](Tests/)`                            |
+| External documentation | `[docs.unity3d.com](url)`                     | `[Unity documentation](url)`                          |
+| GitHub repository      | `[repo](url)`                                 | `[the DxMessaging repository](url)`                   |
 
 #### Accessibility Considerations
 
@@ -145,11 +145,11 @@ Screen readers announce link text. Users should understand the destination witho
 ```markdown
 <!-- BAD: "Click here" pattern -->
 
-For more information, click [here](../Docs/Advanced.md).
+For more information, click [here](../docs/guides/advanced.md).
 
 <!-- GOOD: Descriptive and accessible -->
 
-For more information, see [advanced usage patterns](../Docs/Advanced.md).
+For more information, see [advanced usage patterns](../docs/guides/advanced.md).
 ```
 
 ### Repository URL Consistency

@@ -7,7 +7,8 @@
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
       "installZsh": true,
-      "configureZshAsDefaultShell": false
+      "configureZshAsDefaultShell": false,
+      "upgradePackages": false
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },

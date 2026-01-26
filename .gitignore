@@ -7,6 +7,9 @@
 *.userosscache
 *.sln.docstates
 
+# MkDocs build output
+site/
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -325,3 +328,13 @@ Tests/Runtime/obj.meta
 
 PLAN.md
 PLAN.md.meta
+
+GH-PAGES-PLAN.md
+GH-PAGES-PLAN.md.meta
+
+progress/**
+
+__pycache__.meta
+.venv/
+site.meta
+progress.meta
