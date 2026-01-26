@@ -1,6 +1,6 @@
 # DxMessaging + Reflex
 
-[← Back to Integrations Overview](../../README.md#-di-framework-integrations)
+[← Back to Integrations Overview](index.md)
 
 ---
 

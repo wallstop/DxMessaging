@@ -403,6 +403,6 @@ public class DynamicComponentManager
 
 - **[Message Bus Providers](message-bus-providers.md)** — ScriptableObject-based provider system for design-time configuration
 - **[Registration Builders](registration-builders.md)** — Fluent API for building message registrations with priority and lifecycle control
-- **[DI Integration Guides](../integrations/)** — Zenject, VContainer, and Reflex integration patterns
+- **[DI Integration Guides](../integrations/index.md)** — Zenject, VContainer, and Reflex integration patterns
 - **[Testing Guide](../guides/testing.md)** — Comprehensive testing patterns with DxMessaging
 - **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs

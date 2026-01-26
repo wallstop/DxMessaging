@@ -1,88 +1,371 @@
 # API Reference (Practical)
 
-Message registration (Unity‑friendly)
+This reference provides a practical overview of the DxMessaging API for Unity developers.
 
-- `MessageRegistrationToken`
-  - Enable/Disable: `Enable()`, `Disable()`, `UnregisterAll()`, `RemoveRegistration(handle)`
-  - Untargeted
-    - `RegisterUntargeted<T>(Action<T> handler, int priority = 0)`
-    - `RegisterUntargeted<T>(MessageHandler.FastHandler<T> handler, int priority = 0)`
-    - `RegisterUntargetedPostProcessor<T>(MessageHandler.FastHandler<T> handler, int priority = 0)`
-  - Targeted
-    - Specific target (GameObject/Component/InstanceId overloads)
-    - `RegisterGameObjectTargeted<T>(...); RegisterComponentTargeted<T>(...); RegisterTargeted<T>(InstanceId, ...)`
-    - Post‑processors: `RegisterTargetedPostProcessor<T>(target, ...)`
-    - All targets: `RegisterTargetedWithoutTargeting<T>(...)`
-    - All targets post: `RegisterTargetedWithoutTargetingPostProcessor<T>(...)`
-  - Broadcast
-    - Specific source: `RegisterBroadcast<T>(InstanceId, ...)`
-    - Unity overloads: `RegisterGameObjectBroadcast<T>(GameObject, ...)`, `RegisterComponentBroadcast<T>(Component, ...)`
-    - Post‑processors: `RegisterBroadcastPostProcessor<T>(source, ...)`
-    - All sources: `RegisterBroadcastWithoutSource<T>(...)`
-    - All sources post: `RegisterBroadcastWithoutSourcePostProcessor<T>(...)`
+---
 
-Emit helpers
+## Message Registration (Unity-Friendly)
 
-- `DxMessaging.Core.Extensions.MessageExtensions`
-  - Untargeted: `Emit<T>(this T message)` / `EmitUntargeted`
-  - Targeted: `EmitTargeted<T>(InstanceId target)` and GameObject/Component variants
-  - Broadcast: `EmitBroadcast<T>(InstanceId source)` and GameObject/Component variants
-  - String conveniences: `"text".Emit()` and `"text".Emit(InstanceId target)`
+The `MessageRegistrationToken` is your primary interface for subscribing to messages in a managed, lifecycle-aware manner.
 
-Interceptors (bus‑level)
+### Token Lifecycle Methods
 
-- `IMessageBus`
-  - `RegisterUntargetedInterceptor<T>(UntargetedInterceptor<T> fn, int priority = 0)`
-  - `RegisterTargetedInterceptor<T>(TargetedInterceptor<T> fn, int priority = 0)`
-  - `RegisterBroadcastInterceptor<T>(BroadcastInterceptor<T> fn, int priority = 0)`
-  - `RegisterGlobalAcceptAll(MessageHandler handler)`
+```csharp
+// Enable/disable all registrations on this token
+token.Enable();
+token.Disable();
 
-Diagnostics
+// Remove all registrations
+token.UnregisterAll();
 
-- `IMessageBus.GlobalDiagnosticsMode`, `IMessageBus.GlobalMessageBufferSize`
-- `IMessageBus.DiagnosticsMode`, `MessageRegistrationToken.DiagnosticMode`
-- `RegistrationLog` (`bus.Log.Enabled`, `bus.Log.ToString()`)
+// Remove a specific registration
+token.RemoveRegistration(handle);
+```
 
-Key types
+### Untargeted Message Registration
 
-- `DxMessaging.Core.InstanceId` — value type identity for GameObjects/Components or custom owners.
-- `DxMessaging.Core.MessageHandler` — per‑owner callback runner.
-- `DxMessaging.Core.MessageBus.MessageBus` — instanced bus; global at `MessageHandler.MessageBus`.
-- `DxMessaging.Core.Messages.*` — Untargeted/Targeted/Broadcast interfaces and built‑in string messages.
-  - See also [String Messages](../advanced/string-messages.md)
+Register handlers for messages that have no specific target—system-wide events.
 
-Unity bridge types
+```csharp
+// Standard handler (allocation-friendly for simple cases)
+MessageRegistrationHandle RegisterUntargeted<T>(
+    Action<T> handler,
+    int priority = 0
+)
 
-- `DxMessaging.Unity.MessagingComponent`
-  - Fields: `emitMessagesWhenDisabled`
-  - Methods: `Create(MonoBehaviour)`, `ToggleMessageHandler(bool)`
-- `DxMessaging.Unity.MessageAwareComponent`
-  - Properties: `Token`
-  - Virtuals: `MessageRegistrationTiedToEnableStatus`, `RegisterForStringMessages`
-  - Hooks: `RegisterMessageHandlers()` calls in `Awake()`, auto `Enable()`/`Disable()` in `OnEnable`/`OnDisable` when tied to enable state
-  - Inheritance tip: If you override any of these hooks, call the base method (`base.RegisterMessageHandlers()`, `base.OnEnable()`, `base.OnDisable()`, `base.Awake()`/`base.OnDestroy()`). Skipping base calls may prevent token setup and default string‑message registrations.
+// Fast handler (zero-allocation, receives message by ref)
+MessageRegistrationHandle RegisterUntargeted<T>(
+    MessageHandler.FastHandler<T> handler,
+    int priority = 0
+)
 
-Source files (for exploration)
+// Post-processor (runs after all handlers)
+MessageRegistrationHandle RegisterUntargetedPostProcessor<T>(
+    MessageHandler.FastHandler<T> handler,
+    int priority = 0
+)
+```
 
-- Message bus interface: [IMessageBus](../../Runtime/Core/MessageBus/IMessageBus.cs)
-- Message bus: [MessageBus](../../Runtime/Core/MessageBus/MessageBus.cs)
-- Message handler/token: [MessageHandler](../../Runtime/Core/MessageHandler.cs), [MessageRegistrationToken](../../Runtime/Core/MessageRegistrationToken.cs)
-- Emit helpers: [MessageExtensions](../../Runtime/Core/Extensions/MessageExtensions.cs)
-- Attributes: [Attributes directory](../../Runtime/Core/Attributes/)
+### Targeted Message Registration
 
-API tables (quick view)
+Register handlers for messages directed at specific GameObjects, Components, or InstanceIds.
 
-Token registrations
+<!-- markdownlint-disable MD046 -->
 
-| Category   | Specific (Unity overloads)                                                                                                                    | All targets/sources                                              | Post‑processing                                                                                                                                                       |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Untargeted | `RegisterUntargeted<T>(Action<T> or FastHandler<T>)`                                                                                          | —                                                                | `RegisterUntargetedPostProcessor<T>(FastHandler<T>)`                                                                                                                  |
-| Targeted   | `RegisterGameObjectTargeted<T>(GameObject, ...)` · `RegisterComponentTargeted<T>(Component, ...)` · `RegisterTargeted<T>(InstanceId, ...)`    | `RegisterTargetedWithoutTargeting<T>(FastHandlerWithContext<T>)` | `RegisterTargetedPostProcessor<T>(InstanceId, FastHandler<T>)` · `RegisterTargetedWithoutTargetingPostProcessor<T>(FastHandlerWithContext<T>)`                        |
-| Broadcast  | `RegisterGameObjectBroadcast<T>(GameObject, ...)` · `RegisterComponentBroadcast<T>(Component, ...)` · `RegisterBroadcast<T>(InstanceId, ...)` | `RegisterBroadcastWithoutSource<T>(FastHandlerWithContext<T>)`   | `RegisterBroadcastPostProcessor<T>(InstanceId, FastHandler<T>)` · `RegisterBroadcastWithoutSourcePostProcessor<T>(Action<InstanceId,T> or FastHandlerWithContext<T>)` |
+=== "Specific Target"
 
-Bus‑level
+    ```csharp
+    // GameObject target
+    MessageRegistrationHandle RegisterGameObjectTargeted<T>(
+        GameObject target,
+        Action<T> handler,
+        int priority = 0
+    )
 
-| Category        | API                                                                                                                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Interceptors    | `RegisterUntargetedInterceptor<T>(UntargetedInterceptor<T>)` · `RegisterTargetedInterceptor<T>(TargetedInterceptor<T>)` · `RegisterBroadcastInterceptor<T>(BroadcastInterceptor<T>)` |
-| Global observer | `RegisterGlobalAcceptAll(MessageHandler)`                                                                                                                                            |
+    // Component target
+    MessageRegistrationHandle RegisterComponentTargeted<T>(
+        Component target,
+        Action<T> handler,
+        int priority = 0
+    )
+
+    // InstanceId target (low-level)
+    MessageRegistrationHandle RegisterTargeted<T>(
+        InstanceId target,
+        Action<T> handler,
+        int priority = 0
+    )
+    ```
+
+=== "All Targets"
+
+    ```csharp
+    // Receive all targeted messages regardless of target
+    MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(
+        FastHandlerWithContext<T> handler,
+        int priority = 0
+    )
+    ```
+
+=== "Post-Processors"
+
+    ```csharp
+    // Post-process for specific target
+    MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
+        InstanceId target,
+        FastHandler<T> handler,
+        int priority = 0
+    )
+
+    // Post-process all targeted messages
+    MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(
+        FastHandlerWithContext<T> handler,
+        int priority = 0
+    )
+    ```
+
+### Broadcast Message Registration
+
+Register handlers for messages broadcast from specific sources.
+
+=== "Specific Source"
+
+    ```csharp
+    // From specific GameObject
+    MessageRegistrationHandle RegisterGameObjectBroadcast<T>(
+        GameObject source,
+        Action<T> handler,
+        int priority = 0
+    )
+
+    // From specific Component
+    MessageRegistrationHandle RegisterComponentBroadcast<T>(
+        Component source,
+        Action<T> handler,
+        int priority = 0
+    )
+
+    // From specific InstanceId
+    MessageRegistrationHandle RegisterBroadcast<T>(
+        InstanceId source,
+        Action<T> handler,
+        int priority = 0
+    )
+    ```
+
+=== "All Sources"
+
+    ```csharp
+    // Receive broadcasts from any source
+    MessageRegistrationHandle RegisterBroadcastWithoutSource<T>(
+        FastHandlerWithContext<T> handler,
+        int priority = 0
+    )
+    ```
+
+=== "Post-Processors"
+
+    ```csharp
+    // Post-process for specific source
+    MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(
+        InstanceId source,
+        FastHandler<T> handler,
+        int priority = 0
+    )
+
+    // Post-process all broadcasts
+    MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(
+        FastHandlerWithContext<T> handler,
+        int priority = 0
+    )
+    ```
+
+<!-- markdownlint-enable MD046 -->
+
+---
+
+## Emit Helpers
+
+The `DxMessaging.Core.Extensions.MessageExtensions` class provides convenient extension methods for emitting messages.
+
+### Untargeted Emission
+
+```csharp
+// Emit any message type as untargeted
+message.Emit();
+message.EmitUntargeted();
+```
+
+### Targeted Emission
+
+```csharp
+// Emit to specific target (by InstanceId)
+message.EmitTargeted(InstanceId target);
+
+// Emit to GameObject target
+message.EmitGameObjectTargeted(GameObject target);
+
+// Emit to Component target
+message.EmitComponentTargeted(Component target);
+```
+
+### Broadcast Emission
+
+```csharp
+// Broadcast from specific source (by InstanceId)
+message.EmitBroadcast(InstanceId source);
+
+// Broadcast from GameObject source
+message.EmitGameObjectBroadcast(GameObject source);
+
+// Broadcast from Component source
+message.EmitComponentBroadcast(Component source);
+```
+
+### String Message Conveniences
+
+```csharp
+// Quick string message emission
+"PlayerDied".Emit();
+"DamageDealt".Emit(targetInstanceId);
+```
+
+---
+
+## Interceptors (Bus-Level)
+
+Interceptors allow you to intercept and potentially modify or cancel messages at the bus level before they reach handlers.
+
+```csharp
+// Intercept untargeted messages
+Action RegisterUntargetedInterceptor<T>(
+    UntargetedInterceptor<T> interceptor,
+    int priority = 0
+)
+
+// Intercept targeted messages
+Action RegisterTargetedInterceptor<T>(
+    TargetedInterceptor<T> interceptor,
+    int priority = 0
+)
+
+// Intercept broadcast messages
+Action RegisterBroadcastInterceptor<T>(
+    BroadcastInterceptor<T> interceptor,
+    int priority = 0
+)
+
+// Global observer for all messages
+Action RegisterGlobalAcceptAll(MessageHandler handler)
+```
+
+---
+
+## Diagnostics
+
+DxMessaging provides diagnostic tools for debugging and monitoring message flow.
+
+### Global Settings
+
+```csharp
+// Enable/disable diagnostics globally
+IMessageBus.GlobalDiagnosticsMode = true;
+
+// Configure global message buffer size
+IMessageBus.GlobalMessageBufferSize = 1024;
+```
+
+### Per-Instance Settings
+
+```csharp
+// Per-bus diagnostics
+messageBus.DiagnosticsMode = true;
+
+// Per-token diagnostics
+token.DiagnosticMode = true;
+```
+
+### Registration Logging
+
+```csharp
+// Enable registration logging
+bus.Log.Enabled = true;
+
+// Get log output
+string logOutput = bus.Log.ToString();
+```
+
+---
+
+## Key Types
+
+| Type                                     | Description                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| `DxMessaging.Core.InstanceId`            | Value type identity for GameObjects, Components, or custom owners     |
+| `DxMessaging.Core.MessageHandler`        | Per-owner callback runner that manages message dispatch               |
+| `DxMessaging.Core.MessageBus.MessageBus` | Instanced bus; global instance at `MessageHandler.MessageBus`         |
+| `DxMessaging.Core.Messages.*`            | Untargeted/Targeted/Broadcast interfaces and built-in string messages |
+
+!!! tip "String Messages"
+For lightweight string-based messaging, see [String Messages](../advanced/string-messages.md).
+
+---
+
+## Unity Bridge Types
+
+### MessagingComponent
+
+Base component for objects that emit messages.
+
+```csharp
+public class MessagingComponent : MonoBehaviour
+{
+    // When true, messages can be emitted even when component is disabled
+    public bool emitMessagesWhenDisabled;
+
+    // Create a registration token for a listener on this GameObject
+    public MessageRegistrationToken Create(MonoBehaviour listener);
+
+    // Toggle the message handler on/off
+    public void ToggleMessageHandler(bool enabled);
+}
+```
+
+### MessageAwareComponent
+
+Base component for objects that both emit and receive messages.
+
+```csharp
+public abstract class MessageAwareComponent : MessagingComponent
+{
+    // The registration token for this component
+    public MessageRegistrationToken Token { get; }
+
+    // When true, registrations are enabled/disabled with OnEnable/OnDisable
+    protected virtual bool MessageRegistrationTiedToEnableStatus { get; }
+
+    // When true, registers for string messages automatically
+    protected virtual bool RegisterForStringMessages { get; }
+
+    // Override to register your message handlers
+    protected virtual void RegisterMessageHandlers() { }
+}
+```
+
+<!-- markdownlint-disable MD046 -->
+
+!!! warning "Inheritance Tip"
+If you override any lifecycle hooks (`Awake`, `OnDestroy`, `OnEnable`, `OnDisable`) or `RegisterMessageHandlers`, always call the base method:
+
+    ```csharp
+    protected override void RegisterMessageHandlers()
+    {
+        base.RegisterMessageHandlers();
+        // Your registrations here
+    }
+
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        // Your logic here
+    }
+    ```
+
+    Skipping base calls may prevent token setup and default string-message registrations.
+
+<!-- markdownlint-enable MD046 -->
+
+---
+
+## Source Files
+
+For deeper exploration, browse the source code:
+
+| Component             | Source                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Message Bus Interface | [IMessageBus.cs](https://github.com/wallstop/DxMessaging/blob/master/Runtime/Core/MessageBus/IMessageBus.cs)                |
+| Message Bus           | [MessageBus.cs](https://github.com/wallstop/DxMessaging/blob/master/Runtime/Core/MessageBus/MessageBus.cs)                  |
+| Message Handler       | [MessageHandler.cs](https://github.com/wallstop/DxMessaging/blob/master/Runtime/Core/MessageHandler.cs)                     |
+| Registration Token    | [MessageRegistrationToken.cs](https://github.com/wallstop/DxMessaging/blob/master/Runtime/Core/MessageRegistrationToken.cs) |
+| Emit Helpers          | [MessageExtensions.cs](https://github.com/wallstop/DxMessaging/blob/master/Runtime/Core/Extensions/MessageExtensions.cs)    |
+| Attributes            | [Attributes/](https://github.com/wallstop/DxMessaging/tree/master/Runtime/Core/Attributes)                                  |

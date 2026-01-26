@@ -117,12 +117,12 @@ graph TD
 
 **Located in `Samples~/` directory** - Import via Unity Package Manager!
 
-- **[Mini Combat](../../Samples~/Mini%20Combat/README.md)** - Interactive combat demo with Heal/Damage messages
+- **[Mini Combat](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md)** - Interactive combat demo with Heal/Damage messages
   - Perfect first example to understand message flow
   - Shows Targeted and Broadcast messages in action
   - Complete working scene you can play with
 
-- **[UI Buttons + Inspector](../../Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** - Interactive diagnostics demo
+- **[UI Buttons + Inspector](https://github.com/wallstop/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** - Interactive diagnostics demo
   - See the Inspector diagnostics in action
   - Explore message history and handler registrations
   - Great for debugging and understanding the system
@@ -291,8 +291,8 @@ From [Comparisons](../architecture/comparisons.md):
 - [Compatibility](../reference/compatibility.md)
 - [End-to-End Example](../examples/end-to-end.md)
 - [Scene Transitions Example](../examples/end-to-end-scene-transitions.md)
-- [Mini Combat Sample](../../Samples~/Mini%20Combat/README.md)
-- [UI Buttons + Inspector Sample](../../Samples~/UI%20Buttons%20%2B%20Inspector/README.md)
+- [Mini Combat Sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md)
+- [UI Buttons + Inspector Sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md)
 
 ---
 
@@ -303,7 +303,7 @@ From [Comparisons](../architecture/comparisons.md):
 1. 5 min: [Visual Guide](visual-guide.md) - Start here for pictures & analogies!
 1. 10 min: [Getting Started](getting-started.md) - Deep dive
 1. 5 min: [Quick Start](quick-start.md) - Hands-on code
-1. 10 min: Try a [Sample](../../Samples~/Mini%20Combat/README.md) - See it in action
+1. 10 min: Try a [Sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) - See it in action
 
 **Want to go deep?** Continue with:
 

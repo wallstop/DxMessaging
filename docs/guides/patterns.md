@@ -1,6 +1,6 @@
 # DxMessaging Patterns: Real-World Solutions
 
-[← Back to Index](../getting-started/index.md) | [Getting Started](../getting-started/getting-started.md) | [Message Types](../concepts/message-types.md) | [Samples](../../Samples~/)
+[← Back to Index](../getting-started/index.md) | [Getting Started](../getting-started/getting-started.md) | [Message Types](../concepts/message-types.md) | [Samples](https://github.com/wallstop/DxMessaging/tree/master/Samples~)
 
 ---
 
@@ -806,7 +806,7 @@ From [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptab
 
 #### Recommended alternatives
 
-- **Dependency Injection** - Zenject, VContainer, Reflex (see [DxMessaging DI Integrations](../integrations/))
+- **Dependency Injection** - Zenject, VContainer, Reflex (see [DxMessaging DI Integrations](../integrations/index.md))
 - **Reactive Systems** - UniRx, UniTask
 - **Messaging** - DxMessaging (this framework), MessagePipe
 - **Configuration Data** - Spreadsheet-based solutions (e.g., BakingSheet)
@@ -1048,7 +1048,7 @@ For SOA variables:
 - [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) - Detailed critique
 - [Ryan Hipple Unite 2017 Talk](https://www.youtube.com/watch?v=raQ3iHhE_Kk) - Original SOA presentation
 - [Unity Official Guide](https://unity.com/how-to/architect-game-code-scriptable-objects) - Unity's perspective
-- [DxMessaging DI Integrations](../integrations/) - Better alternatives for dependency management
+- [DxMessaging DI Integrations](../integrations/index.md) - Better alternatives for dependency management
 - [Zenject](https://github.com/modesttree/Zenject) - Recommended DI framework
 - [VContainer](https://github.com/hadashiA/VContainer) - Lightweight DI alternative
 
@@ -1064,8 +1064,8 @@ For SOA variables:
 
 ### Try Real Examples
 
-- → [Mini Combat sample](../../Samples~/Mini%20Combat/README.md) — Working combat example
-- → [UI Buttons + Inspector sample](../../Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — Interactive diagnostics
+- → [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) — Working combat example
+- → [UI Buttons + Inspector sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — Interactive diagnostics
 - → [End-to-End Example](../examples/end-to-end.md) — Complete feature walkthrough
 
 ### Deep Dives

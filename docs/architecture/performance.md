@@ -1,6 +1,6 @@
 # Performance Benchmarks
 
-This page is auto-updated by the Unity PlayMode benchmark tests in the [Performance PlayMode benchmark suite](../../Tests/Runtime/Benchmarks/PerformanceTests.cs).
+This page is auto-updated by the Unity PlayMode benchmark tests in the [Performance PlayMode benchmark suite](https://github.com/wallstop/DxMessaging/blob/master/Tests/Runtime/Benchmarks/PerformanceTests.cs).
 
 How it works:
 

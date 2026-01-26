@@ -28,7 +28,7 @@
 
 ## Performance Benchmarks
 
-These sections are auto-updated by the PlayMode comparison benchmarks in the [Comparison Performance PlayMode tests](../../Tests/Runtime/Benchmarks/ComparisonPerformanceTests.cs). Run the suite locally to refresh the tables.
+These sections are auto-updated by the PlayMode comparison benchmarks in the [Comparison Performance PlayMode tests](https://github.com/wallstop/DxMessaging/blob/master/Tests/Runtime/Benchmarks/ComparisonPerformanceTests.cs). Run the suite locally to refresh the tables.
 
 ### Comparisons (Windows)
 
@@ -91,7 +91,7 @@ Simple pub/sub with automatic lifecycle management and debugging?
 - **MessagePipe:** DI-first, highest throughput for high-frequency messaging in DI architectures
 - **Zenject Signals:** Decoupled messaging integrated with Zenject dependency injection
 
-> **💡 Note:** DxMessaging works both standalone (zero dependencies) AND with DI frameworks. See [Integration Guides](../integrations/) for Zenject, VContainer, and Reflex.
+> **💡 Note:** DxMessaging works both standalone (zero dependencies) AND with DI frameworks. See [Integration Guides](../integrations/index.md) for Zenject, VContainer, and Reflex.
 
 ---
 
@@ -317,7 +317,7 @@ public class AchievementSystem
 
 #### What Problems It Solves
 
-- ✅ **Performance:** Zero allocations with struct-based messages (see [benchmarks](../../Tests/Runtime/Benchmarks/) for comparison data)
+- ✅ **Performance:** Zero allocations with struct-based messages (see [benchmarks](https://github.com/wallstop/DxMessaging/tree/master/Tests/Runtime/Benchmarks) for comparison data)
 - ✅ **DI integration:** First-class support for dependency injection
 - ✅ **Async messaging:** Native async/await without blocking
 - ✅ **Leak detection:** Analyzer catches forgotten subscriptions at compile-time
@@ -405,7 +405,7 @@ public class AchievementSystem
 
 **Note on Performance:** MessagePipe's ~95M ops/sec vs DxMessaging's ~20M ops/sec shows a significant throughput advantage. This matters primarily for high-frequency messaging scenarios (thousands of messages per frame). For typical gameplay events, both are fast enough that performance is not a distinguishing factor.
 
-> **💡 Want both?** DxMessaging integrates with DI frameworks! See [DI Integration Guides](../integrations/) for Zenject, VContainer, and Reflex. Use DI for service construction, DxMessaging for event communication.
+> **💡 Want both?** DxMessaging integrates with DI frameworks! See [DI Integration Guides](../integrations/index.md) for Zenject, VContainer, and Reflex. Use DI for service construction, DxMessaging for event communication.
 
 ---
 

@@ -263,5 +263,5 @@ public class UI : MessageAwareComponent {
 - → [Quick Reference](quick-reference.md) — API cheat sheet
 - → [API Reference](reference.md) — Complete API documentation
 
-- → [Mini Combat sample](../../Samples~/Mini%20Combat/README.md) — See concepts in action
+- → [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) — See concepts in action
 - → [Patterns](../guides/patterns.md) — Real-world usage patterns

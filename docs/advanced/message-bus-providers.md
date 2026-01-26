@@ -492,6 +492,6 @@ public class RuntimeReconfiguration : MonoBehaviour
 
 - **[Runtime Configuration](runtime-configuration.md)** — Setting and overriding global buses, re-binding registrations
 - **[Registration Builders](registration-builders.md)** — Fluent API for building message registrations with priority and lifecycle control
-- **[DI Integration Guides](../integrations/)** — Zenject, VContainer, and Reflex integration patterns
+- **[DI Integration Guides](../integrations/index.md)** — Zenject, VContainer, and Reflex integration patterns
 - **[Unity Integration](../guides/unity-integration.md)** — MessagingComponent and MessageAwareComponent deep dive
 - **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs

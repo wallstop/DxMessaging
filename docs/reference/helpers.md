@@ -162,14 +162,29 @@ var settings4 = new SettingsChanged(0.8f, 2, brightness: 50);    // fullscreen=f
 
 The attribute provides constructor overloads for all common primitive types:
 
-| Category              | Types                             |
-| --------------------- | --------------------------------- |
-| **Boolean**           | `bool`                            |
-| **Character**         | `char`                            |
-| **String**            | `string`                          |
-| **Signed Integers**   | `sbyte`, `short`, `int`, `long`   |
-| **Unsigned Integers** | `byte`, `ushort`, `uint`, `ulong` |
-| **Floating Point**    | `float`, `double`                 |
+<!-- markdownlint-disable MD046 -->
+
+!!! info "Built-in Type Support"
+
+    === "Numeric"
+
+        | Category              | Types                             |
+        | --------------------- | --------------------------------- |
+        | **Signed Integers**   | `sbyte`, `short`, `int`, `long`   |
+        | **Unsigned Integers** | `byte`, `ushort`, `uint`, `ulong` |
+        | **Floating Point**    | `float`, `double`                 |
+
+    === "Other"
+
+        | Category      | Types    |
+        | ------------- | -------- |
+        | **Boolean**   | `bool`   |
+        | **Character** | `char`   |
+        | **String**    | `string` |
+
+    For enums, Unity types, and other complex types, use the `Expression` property.
+
+<!-- markdownlint-enable MD046 -->
 
 ##### Examples by type
 
@@ -279,12 +294,16 @@ public readonly partial struct AdvancedDefaults
 }
 ```
 
-##### Expression rules
+<!-- markdownlint-disable MD046 -->
 
-- The expression is inserted **verbatim** into the generated code
-- Must be a valid C# constant expression
-- Type safety is enforced by the C# compiler at build time
-- Perfect for enums, nullable types, static constants, or complex defaults
+!!! tip "Expression rules"
+
+    - The expression is inserted **verbatim** into the generated code
+    - Must be a valid C# constant expression
+    - Type safety is enforced by the C# compiler at build time
+    - Perfect for enums, nullable types, static constants, or complex defaults
+
+<!-- markdownlint-enable MD046 -->
 
 #### Code Examples
 
@@ -392,11 +411,17 @@ new AudioSettingsChanged(0.7f, 0.6f, 0.9f, false).Emit();
 
 #### Best Practices
 
-1. **Order matters** - Place required fields before optional fields in your struct
-1. **Use meaningful defaults** - Choose defaults that represent the most common use case
-1. **Prefer explicit values** - Use `[DxOptionalParameter(0)]` instead of `[DxOptionalParameter]` when clarity helps
-1. **Use Expression for complex types** - Don't fight the type system; use `Expression` for enums and Unity types
-1. **Document unusual defaults** - If a default isn't obvious, add a comment explaining why
+<!-- markdownlint-disable MD046 -->
+
+!!! success "Recommendations"
+
+    1. **Order matters** — Place required fields before optional fields in your struct
+    1. **Use meaningful defaults** — Choose defaults that represent the most common use case
+    1. **Prefer explicit values** — Use `[DxOptionalParameter(0)]` instead of `[DxOptionalParameter]` when clarity helps
+    1. **Use Expression for complex types** — Don't fight the type system; use `Expression` for enums and Unity types
+    1. **Document unusual defaults** — If a default isn't obvious, add a comment explaining why
+
+<!-- markdownlint-enable MD046 -->
 
 ## Why Use Attributes Instead of Manual Implementation
 
@@ -611,21 +636,106 @@ msg.Emit(testBus);
 
 ## Attributes Quick Reference
 
-| Attribute               | Purpose                              | Example                                                                   |
-| ----------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| `[DxUntargetedMessage]` | Mark as global message               | `[DxUntargetedMessage]`                                                   |
-| `[DxTargetedMessage]`   | Mark as targeted message             | `[DxTargetedMessage]`                                                     |
-| `[DxBroadcastMessage]`  | Mark as broadcast message            | `[DxBroadcastMessage]`                                                    |
-| `[DxAutoConstructor]`   | Generate constructor                 | `[DxAutoConstructor]`                                                     |
-| `[DxOptionalParameter]` | Make parameter optional (default)    | `[DxOptionalParameter] public readonly bool flag;`                        |
-| `[DxOptionalParameter]` | Make parameter optional (custom)     | `[DxOptionalParameter(42)] public readonly int count;`                    |
-| `[DxOptionalParameter]` | Make parameter optional (expression) | `[DxOptionalParameter(Expression = "null")] public readonly string name;` |
+### Message Type Attributes
 
-### Works with
+<!-- markdownlint-disable MD046 -->
 
-- Top-level types (public structs/classes)
-- Nested types (types inside other classes)
-- Internal types (assembly-private messages)
+=== "Untargeted"
+
+    Mark as a global message (no target):
+
+    ```csharp
+    [DxUntargetedMessage]
+    public readonly partial struct GamePaused { }
+    ```
+
+=== "Targeted"
+
+    Mark as a message sent to a specific target:
+
+    ```csharp
+    [DxTargetedMessage]
+    public readonly partial struct Heal
+    {
+        public readonly int amount;
+    }
+    ```
+
+=== "Broadcast"
+
+    Mark as a message broadcast from a source:
+
+    ```csharp
+    [DxBroadcastMessage]
+    public readonly partial struct TookDamage
+    {
+        public readonly int amount;
+    }
+    ```
+
+<!-- markdownlint-enable MD046 -->
+
+### Constructor Generation Attributes
+
+#### `[DxAutoConstructor]`
+
+Automatically generates a constructor with all public fields as parameters:
+
+```csharp
+[DxAutoConstructor]
+public readonly partial struct Damage
+{
+    public readonly int amount;
+    public readonly string type;
+}
+// Generates: Damage(int amount, string type)
+```
+
+#### `[DxOptionalParameter]`
+
+Makes a constructor parameter optional. Three usage patterns:
+
+<!-- markdownlint-disable MD046 -->
+
+??? example "Default Value (type default)"
+
+    Uses the type's default value (`0`, `false`, `null`, etc.):
+
+    ```csharp
+    [DxOptionalParameter]
+    public readonly bool flag;
+    // Generates: bool flag = default
+    ```
+
+??? example "Custom Value (primitive)"
+
+    Provides a specific default value:
+
+    ```csharp
+    [DxOptionalParameter(42)]
+    public readonly int count;
+    // Generates: int count = 42
+    ```
+
+??? example "Expression (complex types)"
+
+    Uses a verbatim expression for enums, Unity types, etc.:
+
+    ```csharp
+    [DxOptionalParameter(Expression = "DamageType.Physical")]
+    public readonly DamageType damageType;
+    // Generates: DamageType damageType = DamageType.Physical
+    ```
+
+<!-- markdownlint-enable MD046 -->
+
+### Supported Types
+
+These attributes work with:
+
+- **Top-level types** — public structs and classes
+- **Nested types** — types inside other classes
+- **Internal types** — assembly-private messages
 
 ## Common Patterns with Attributes
 
@@ -826,51 +936,55 @@ public readonly partial struct MessageA
 
 ## Troubleshooting Source Generators
 
-### "Attributes not working / code not generated"
+<!-- markdownlint-disable MD046 -->
 
-#### Checklist
+??? warning "Attributes not working / code not generated"
 
-1. ✅ Is type marked `partial`?
-1. ✅ Did you rebuild the project?
-1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
-1. ✅ Check `obj/` folder for `.g.cs` files
+    ### Checklist
 
-##### Fix
+    1. ✅ Is type marked `partial`?
+    1. ✅ Did you rebuild the project?
+    1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
+    1. ✅ Check `obj/` folder for `.g.cs` files
 
-```csharp
-// ❌ Missing partial, will not compile
-[DxAutoConstructor]
-public readonly struct MyMsg { }
+    #### Fix
 
-// ✅ Correct
-[DxAutoConstructor]
-public readonly partial struct MyMsg { }
-```
+    ```csharp
+    // ❌ Missing partial, will not compile
+    [DxAutoConstructor]
+    public readonly struct MyMsg { }
 
-### "Constructor not generated"
+    // ✅ Correct
+    [DxAutoConstructor]
+    public readonly partial struct MyMsg { }
+    ```
 
-**Cause:** No public fields to generate from
+??? warning "Constructor not generated"
 
-```csharp
-// ❌ No public fields
-[DxAutoConstructor]
-public readonly partial struct Empty { }
+    **Cause:** No public fields to generate from
 
-// ✅ Has public field
-[DxAutoConstructor]
-public readonly partial struct WithData {
-    public readonly int value;
-}
-```
+    ```csharp
+    // ❌ No public fields
+    [DxAutoConstructor]
+    public readonly partial struct Empty { }
 
-### "Unity can't find generated code"
+    // ✅ Has public field
+    [DxAutoConstructor]
+    public readonly partial struct WithData {
+        public readonly int value;
+    }
+    ```
 
-#### Solution
+??? warning "Unity can't find generated code"
 
-1. Close Unity
-1. Delete `Library/` folder
-1. Reopen Unity
-1. Let it reimport everything
+    ##### Solution
+
+    1. Close Unity
+    1. Delete `Library/` folder
+    1. Reopen Unity
+    1. Let it reimport everything
+
+<!-- markdownlint-enable MD046 -->
 
 ## Related Documentation
 

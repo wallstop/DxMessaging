@@ -44,6 +44,11 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Remember that `.` in a regex matches any character, not just a literal dot.
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
 
+### Forbidden Commands
+
+- **NEVER** run `exec bash`, `exec /bin/bash`, or any variant of `exec` that replaces the current shell. This breaks terminal sessions and causes command failures.
+- If you need a new shell environment, spawn a subshell with `bash -c "command"` or simply run commands directly.
+
 ### JavaScript/Node.js Practices
 
 - All declared constants and variables must be used or removed.
