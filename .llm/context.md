@@ -43,6 +43,7 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Use `grep -E` only when regex features are explicitly needed.
 - Remember that `.` in a regex matches any character, not just a literal dot.
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
+- **`grep` exit codes**: `grep` returns exit code 1 when no matches are found, which fails CI pipelines. Use `|| true`, `|| echo "0"`, or pipe to `wc -l` instead of `grep -c` when zero matches is acceptable.
 
 ### Forbidden Commands
 

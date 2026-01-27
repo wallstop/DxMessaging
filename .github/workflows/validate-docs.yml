@@ -167,8 +167,11 @@ jobs:
           echo "Checking internal link structure..."
 
           # Count internal links in generated HTML
-          LINK_COUNT=$(grep -roc 'href="[^"]*"' _site --include='*.html' | awk -F: '{sum+=$NF} END {print sum}')
-          INTERNAL_LINKS=$(grep -roh 'href="[^"]*"' _site --include='*.html' | grep -vc 'href="https\?://\|href="mailto:')
+          # Use || true to prevent exit code 1 from grep when no matches
+          LINK_COUNT=$(grep -roc 'href="[^"]*"' _site --include='*.html' | awk -F: '{sum+=$NF} END {print sum}' || echo "0")
+          # For internal links, pipe through awk to count instead of grep -c which exits 1 on no match
+          # shellcheck disable=SC2126  # wc -l intentional: grep -c exits 1 on no match, breaking CI
+          INTERNAL_LINKS=$(grep -roh 'href="[^"]*"' _site --include='*.html' 2>/dev/null | grep -v 'href="https\?://\|href="mailto:' | wc -l || echo "0")
 
           echo "📊 Found $LINK_COUNT total links ($INTERNAL_LINKS internal)"
           echo "✅ Link structure scan completed"

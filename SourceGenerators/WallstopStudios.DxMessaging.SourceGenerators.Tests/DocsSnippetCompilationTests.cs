@@ -17,6 +17,43 @@ public sealed class DocsSnippetCompilationTests
         "CS8803", // top-level statements mixed with declarations (visual guide style snippets)
     };
 
+    // Compiled regex patterns for API signature detection
+    private static readonly System.Text.RegularExpressions.Regex MethodSignatureStartRegex = new(
+        @"^\w+(?:<[^>]+>)?\s+\w+(?:<[^>]+>)?\s*\($",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
+    private static readonly System.Text.RegularExpressions.Regex DocumentationStyleMethodCallRegex =
+        new(
+            @"\(\s*[A-Z]\w*\s+\w+\s*\)[\s;]*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled
+        );
+
+    private static readonly System.Text.RegularExpressions.Regex GenericMethodCallRegex = new(
+        @"<T>\s*\(",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
+    private static readonly System.Text.RegularExpressions.Regex HandlerParameterRegex = new(
+        @",\s*handler\s*,",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
+    private static readonly System.Text.RegularExpressions.Regex ApiReferenceUnityTypeRegex = new(
+        @"\(\s*(GameObject|Component|InstanceId)\s+\w+\s*,",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
+    private static readonly System.Text.RegularExpressions.Regex ApiReferenceHandlerPriorityRegex =
+        new(
+            @",\s*handler\s*,\s*(int|bool|string)\s+\w+\s*=",
+            System.Text.RegularExpressions.RegexOptions.Compiled
+        );
+
+    // Constants for signature detection thresholds
+    private const double ApiSignatureRatioThreshold = 0.30;
+    private const int MinimumApiSignatureLinesForDetection = 2;
+
     [Test]
     public void QuickStartStep1Compiles()
     {
@@ -240,6 +277,73 @@ using UnityEngine;
         true,
         TestName = "Interceptor signature should be skipped"
     )]
+    [TestCase(
+        "token.RegisterUntargeted<T>(Action<T> handler, int priority = 0)",
+        true,
+        TestName = "Method call with generic type parameter and Action handler should be skipped"
+    )]
+    [TestCase(
+        "token.RegisterUntargeted<T>(FastHandler<T> handler, int priority = 0)",
+        true,
+        TestName = "Method call with FastHandler parameter should be skipped"
+    )]
+    [TestCase(
+        "token.RegisterGameObjectTargeted<T>(GameObject go, handler, int priority = 0)",
+        true,
+        TestName = "Method call with handler parameter name should be skipped"
+    )]
+    [TestCase(
+        "token.RegisterTargetedWithoutTargeting<T>(FastHandlerWithContext<T> handler, int priority = 0)",
+        true,
+        TestName = "Method call with FastHandlerWithContext should be skipped"
+    )]
+    [TestCase(
+        "bus.RegisterUntargetedInterceptor<T>(UntargetedInterceptor<T> interceptor, int priority = 0)",
+        true,
+        TestName = "Bus interceptor registration with generic type should be skipped"
+    )]
+    [TestCase(
+        "token.RegisterTargeted<T>(InstanceId id, handler, int priority = 0)",
+        true,
+        TestName = "Method with InstanceId parameter and handler should be skipped"
+    )]
+    [TestCase(
+        "token.RegisterBroadcast<T>(InstanceId id, handler, int priority = 0)",
+        true,
+        TestName = "Broadcast registration with InstanceId and handler should be skipped"
+    )]
+    [TestCase("int x = 0;", false, TestName = "Assignment with zero should not be skipped")]
+    [TestCase("var priority = 0;", false, TestName = "Variable assignment should not be skipped")]
+    [TestCase(
+        "int priority = 0;\nConsole.WriteLine(priority);",
+        false,
+        TestName = "Variable assignment with usage should not be skipped"
+    )]
+    [TestCase(
+        "bool isEnabled = false;\nif (isEnabled) { DoSomething(); }",
+        false,
+        TestName = "Boolean assignment with conditional should not be skipped"
+    )]
+    [TestCase(
+        "string name = null;\nname = GetName();",
+        false,
+        TestName = "Null assignment with reassignment should not be skipped"
+    )]
+    [TestCase(
+        "public void Process()\n{\n    int count = 0;\n}",
+        false,
+        TestName = "Method with local variable initialization should not be skipped"
+    )]
+    [TestCase(
+        "Action<int> handler = x => Console.WriteLine(x);",
+        false,
+        TestName = "Lambda assignment should not be skipped"
+    )]
+    [TestCase(
+        "var result = Calculate(value, 0);",
+        false,
+        TestName = "Method call with zero argument should not be skipped"
+    )]
     public void ShouldSkipSnippetDetectsApiSignatures(string snippet, bool expectedSkip)
     {
         bool actualSkip = ShouldSkipSnippet(snippet);
@@ -298,6 +402,8 @@ using UnityEngine;
     /// <item><description>Partial signature patterns: lines ending in comma with parameter type keywords (Action&lt;&gt;, Func&lt;&gt;, int, bool, string, GameObject, Component, InstanceId, FastHandler)</description></item>
     /// <item><description>Isolated closing parens: lines that are just <c>)</c> or <c>);</c></description></item>
     /// <item><description>Documentation-style method calls: <c>method(TypeName param);</c> showing parameter types as placeholders</description></item>
+    /// <item><description>Generic method calls with type parameters: <c>method&lt;T&gt;(Action&lt;T&gt; handler, ...)</c> with generic handler types</description></item>
+    /// <item><description>API reference parameter lines: <c>(GameObject go, handler, int priority = 0)</c> with type-name pairs and handler placeholders</description></item>
     /// </list>
     /// </para>
     /// <para>
@@ -352,10 +458,7 @@ using UnityEngine;
                 && !line.StartsWith("var ")
                 && !line.Contains(" = ")
                 && line.EndsWith("(")
-                && System.Text.RegularExpressions.Regex.IsMatch(
-                    line,
-                    @"^\w+(?:<[^>]+>)?\s+\w+(?:<[^>]+>)?\s*\($"
-                );
+                && MethodSignatureStartRegex.IsMatch(line);
 
             bool isPartialSignature =
                 line.EndsWith(",")
@@ -382,9 +485,31 @@ using UnityEngine;
                 && !line.StartsWith("/*")
                 && (line.EndsWith(");") || line.EndsWith(")"))
                 && line.Contains("(")
-                && System.Text.RegularExpressions.Regex.IsMatch(
-                    line,
-                    @"\(\s*[A-Z]\w*\s+\w+\s*\)[\s;]*$"
+                && DocumentationStyleMethodCallRegex.IsMatch(line);
+
+            // Generic method calls with <T>( pattern that are API reference style
+            // e.g., "token.RegisterUntargeted<T>(Action<T> handler, int priority = 0)"
+            bool isGenericMethodCallWithTypeParams =
+                !line.StartsWith("//")
+                && !line.StartsWith("/*")
+                && GenericMethodCallRegex.IsMatch(line)
+                && (
+                    line.Contains("Action<T>")
+                    || line.Contains("FastHandler")
+                    || line.Contains("Interceptor<T>")
+                    || line.Contains("FastHandlerWithContext")
+                    || HandlerParameterRegex.IsMatch(line)
+                );
+
+            // API reference lines with parameter declarations showing type and name
+            // e.g., "(GameObject go, handler, int priority = 0)" or "(InstanceId id, handler,"
+            bool isApiReferenceParameterLine =
+                !line.StartsWith("//")
+                && !line.StartsWith("/*")
+                && line.Contains("(")
+                && (
+                    ApiReferenceUnityTypeRegex.IsMatch(line)
+                    || ApiReferenceHandlerPriorityRegex.IsMatch(line)
                 );
 
             if (
@@ -394,6 +519,8 @@ using UnityEngine;
                 || isPartialSignature
                 || isIsolatedClosingParen
                 || isDocumentationStyleMethodCall
+                || isGenericMethodCallWithTypeParams
+                || isApiReferenceParameterLine
             )
             {
                 signatureLineCount++;
@@ -403,7 +530,10 @@ using UnityEngine;
         if (signatureLineCount > 0 && totalNonEmptyLines > 0)
         {
             double ratio = (double)signatureLineCount / totalNonEmptyLines;
-            if (ratio >= 0.3 || signatureLineCount >= 2)
+            if (
+                ratio >= ApiSignatureRatioThreshold
+                || signatureLineCount >= MinimumApiSignatureLinesForDetection
+            )
             {
                 return true;
             }
