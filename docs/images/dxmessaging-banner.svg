@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200" style="background:transparent" role="img" aria-label="DxMessaging - Synchronous Event Bus for Unity by Wallstop Studios">
+  <title>DxMessaging - Synchronous Event Bus for Unity</title>
+  <defs>
+    <!-- Messaging-themed gradients (blue/teal for communication) -->
+    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3498db;stop-opacity:0"/>
+      <stop offset="20%" style="stop-color:#3498db"/>
+      <stop offset="50%" style="stop-color:#00d9ff"/>
+      <stop offset="80%" style="stop-color:#2980b9"/>
+      <stop offset="100%" style="stop-color:#2980b9;stop-opacity:0"/>
+    </linearGradient>
+    
+    <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3498db"/>
+      <stop offset="100%" style="stop-color:#00d9ff"/>
+    </linearGradient>
+    
+    <linearGradient id="titleGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="50%" style="stop-color:#e0f7ff"/>
+      <stop offset="100%" style="stop-color:#00d9ff"/>
+    </linearGradient>
+    
+    <!-- Glow effects -->
+    <filter id="titleGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Wallstop Studios Hexagonal Logo (left side) -->
+  <g transform="translate(50, 100)">
+    <!-- Outer hexagon -->
+    <polygon points="0,-45 39,-22.5 39,22.5 0,45 -39,22.5 -39,-22.5" 
+             fill="none" stroke="url(#hexGradient)" stroke-width="2.5" opacity="0.9"/>
+    <!-- Inner hexagon -->
+    <polygon points="0,-32 27.7,-16 27.7,16 0,32 -27.7,16 -27.7,-16" 
+             fill="url(#hexGradient)" opacity="0.15"/>
+    <!-- W letter stylized -->
+    <text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif" font-size="32" font-weight="700" fill="url(#hexGradient)" letter-spacing="1">W</text>
+  </g>
+  
+  <!-- Main Title: DxMessaging -->
+  <text x="120" y="75" font-family="'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif" font-size="52" font-weight="700" fill="url(#titleGradient)" filter="url(#titleGlow)" letter-spacing="1">DxMessaging</text>
+  
+  <!-- Tagline -->
+  <text x="125" y="105" font-family="'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#b8e0f0" letter-spacing="0.5">Synchronous messaging. Zero allocations. Blazing fast.</text>
+  
+  <!-- Horizontal accent line -->
+  <line x1="120" y1="118" x2="600" y2="118" stroke="url(#lineGradient)" stroke-width="2" opacity="0.8"/>
+  
+  <!-- Feature icons row -->
+  <g transform="translate(120, 145)" font-family="'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif" font-size="11">
+    <!-- Messages -->
+    <g transform="translate(0, 0)">
+      <text x="0" y="0" font-size="16" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif">📨</text>
+      <text x="22" y="0" fill="#00d9ff" letter-spacing="0.3">Messages</text>
+    </g>
+    <!-- Targeted -->
+    <g transform="translate(95, 0)">
+      <text x="0" y="0" font-size="16" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif">🎯</text>
+      <text x="22" y="0" fill="#00d9ff" letter-spacing="0.3">Targeted</text>
+    </g>
+    <!-- Broadcast -->
+    <g transform="translate(185, 0)">
+      <text x="0" y="0" font-size="16" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif">📡</text>
+      <text x="22" y="0" fill="#00d9ff" letter-spacing="0.3">Broadcast</text>
+    </g>
+    <!-- Zero-Alloc -->
+    <g transform="translate(280, 0)">
+      <text x="0" y="0" font-size="16" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif">⚡</text>
+      <text x="22" y="0" fill="#00d9ff" letter-spacing="0.3">Zero-Alloc</text>
+    </g>
+    <!-- Lifecycle -->
+    <g transform="translate(380, 0)">
+      <text x="0" y="0" font-size="16" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif">🔄</text>
+      <text x="22" y="0" fill="#00d9ff" letter-spacing="0.3">Lifecycle</text>
+    </g>
+  </g>
+  
+  <!-- Stats badges (right side) -->
+  <g transform="translate(610, 85)" font-family="'SF Mono', 'Fira Code', monospace" font-size="11">
+    <!-- Unity badge -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="-12" width="110" height="20" rx="10" fill="#1a1a2e" stroke="#3498db" stroke-width="1" opacity="0.9"/>
+      <text x="55" y="3" text-anchor="middle" fill="#00d9ff" font-weight="600" letter-spacing="0.3">🎮 Unity 2021.3+</text>
+    </g>
+    <!-- Zero Alloc badge -->
+    <g transform="translate(0, 28)">
+      <rect x="0" y="-12" width="110" height="20" rx="10" fill="#1a1a2e" stroke="#3498db" stroke-width="1" opacity="0.9"/>
+      <text x="55" y="3" text-anchor="middle" fill="#00d9ff" font-weight="600" letter-spacing="0.3">✅ Zero Alloc</text>
+    </g>
+    <!-- High Perf badge -->
+    <g transform="translate(0, 56)">
+      <rect x="0" y="-12" width="110" height="20" rx="10" fill="#1a1a2e" stroke="#3498db" stroke-width="1" opacity="0.9"/>
+      <text x="55" y="3" text-anchor="middle" fill="#00d9ff" font-weight="600" letter-spacing="0.3">⚡ High Perf</text>
+    </g>
+  </g>
+  
+  <!-- Version badge (top right) - CRITICAL: pattern must be >vX.Y.Z</text> for regex -->
+  <g transform="translate(720, 25)">
+    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
+    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v2.1.4</text>
+  </g>
+  
+  <!-- Wallstop Studios branding (bottom right) -->
+  <g transform="translate(750, 185)">
+    <text x="0" y="0" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="9" fill="#6b7b8a" opacity="0.8" letter-spacing="0.3">Wallstop Studios</text>
+  </g>
+  
+
+</svg>

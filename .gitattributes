@@ -34,6 +34,9 @@
 *.ksh       text eol=lf
 *.fish      text eol=lf
 
+# Git hooks must use LF for proper execution on Unix systems
+scripts/hooks/* text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
