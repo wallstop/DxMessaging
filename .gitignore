@@ -30,6 +30,7 @@ logs_*.zip.meta
 logs_*
 
 Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.pdb*
+com.wallstop-studios.dxmessaging.sln.DotSettings.user.meta
 
 # Visual Studio 2015 cache/options directory
 .vs/

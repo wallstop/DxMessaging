@@ -101,9 +101,26 @@ function findMarkdownLinks(line) {
         }
 
         if (line[i] === '`') {
-            const endTick = line.indexOf('`', i + 1);
+            // Per CommonMark spec:
+            // - Code spans open with N backticks and close with exactly N backticks
+            // - If no matching closing delimiter is found, the backticks are literal text
+            // - Empty spans like `` `` (two backticks, space, two backticks) are valid
+            // Count consecutive backticks to determine delimiter length
+            let backtickCount = 0;
+            let j = i;
+            while (j < line.length && line[j] === '`') {
+                backtickCount++;
+                j++;
+            }
+            // Find closing delimiter with same backtick count
+            const delimiter = '`'.repeat(backtickCount);
+            const endTick = line.indexOf(delimiter, j);
             if (endTick !== -1) {
-                i = endTick + 1;
+                i = endTick + backtickCount;
+                continue;
+            } else {
+                // No matching closing delimiter, skip the opening backticks
+                i = j;
                 continue;
             }
         }

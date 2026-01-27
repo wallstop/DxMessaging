@@ -33,12 +33,25 @@ jobs:
       - name: Check for documentation changes
         id: check
         run: |
-          if git diff --name-only HEAD~1 HEAD | grep -qE '^docs/'; then
-            echo "should-deploy=true" >> "${GITHUB_OUTPUT}"
-            echo "Documentation changes detected"
+          # Check if parent commit exists (guards against initial commit)
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            # Normal case: compare with parent commit
+            if git diff --name-only HEAD~1 HEAD | grep -qE '^docs/'; then
+              echo "should-deploy=true" >> "${GITHUB_OUTPUT}"
+              echo "Documentation changes detected"
+            else
+              echo "should-deploy=false" >> "${GITHUB_OUTPUT}"
+              echo "No documentation changes"
+            fi
           else
-            echo "should-deploy=false" >> "${GITHUB_OUTPUT}"
-            echo "No documentation changes"
+            # Initial commit: check if docs/ exists in tree
+            if git ls-tree --name-only -r HEAD | grep -qE '^docs/'; then
+              echo "should-deploy=true" >> "${GITHUB_OUTPUT}"
+              echo "Initial commit with documentation detected"
+            else
+              echo "should-deploy=false" >> "${GITHUB_OUTPUT}"
+              echo "Initial commit without documentation"
+            fi
           fi
 
       - name: Validate Markdown files

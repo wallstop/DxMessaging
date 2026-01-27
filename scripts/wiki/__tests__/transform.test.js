@@ -177,6 +177,48 @@ describe('findMarkdownLinks', () => {
         expect(links).toHaveLength(0);
     });
 
+    test('ignores links inside double-backtick inline code', () => {
+        const links = findMarkdownLinks('Use ``[link](file.md)`` syntax');
+        expect(links).toHaveLength(0);
+    });
+
+    test('ignores links inside double-backtick with text before', () => {
+        const links = findMarkdownLinks('Some text ``[link](file.md)`` more text');
+        expect(links).toHaveLength(0);
+    });
+
+    test('finds real link after double-backtick inline code', () => {
+        const links = findMarkdownLinks('Use ``code`` then [real](file.md)');
+        expect(links).toHaveLength(1);
+        expect(links[0].text).toBe('real');
+        expect(links[0].href).toBe('file.md');
+    });
+
+    test('ignores links inside triple-backtick inline code', () => {
+        const links = findMarkdownLinks('Use ```[link](file.md)``` syntax');
+        expect(links).toHaveLength(0);
+    });
+
+    test('handles mixed single and double backtick code spans', () => {
+        const links = findMarkdownLinks('`single` and ``double [link](file.md)`` and [real](page.md)');
+        expect(links).toHaveLength(1);
+        expect(links[0].text).toBe('real');
+        expect(links[0].href).toBe('page.md');
+    });
+
+    test('handles unclosed multi-backtick delimiter', () => {
+        const links = findMarkdownLinks('Text ``unclosed [link](file.md)');
+        expect(links).toHaveLength(1);
+        expect(links[0].href).toBe('file.md');
+    });
+
+    test('handles asymmetric backticks correctly', () => {
+        // Double open, single close - should not match, link should be found
+        const links = findMarkdownLinks('Text ``code` [link](file.md)');
+        expect(links).toHaveLength(1);
+        expect(links[0].href).toBe('file.md');
+    });
+
     test('finds links with nested brackets in text', () => {
         const links = findMarkdownLinks('[[nested]](page.md)');
         expect(links).toHaveLength(1);
@@ -197,6 +239,30 @@ describe('findMarkdownLinks', () => {
     test('handles escaped brackets', () => {
         const links = findMarkdownLinks('\\[not a link\\](file.md)');
         expect(links).toHaveLength(0);
+    });
+
+    test('handles empty code span before link', () => {
+        const links = findMarkdownLinks('`` `` then [link](file.md)');
+        expect(links).toHaveLength(1);
+        expect(links[0].text).toBe('link');
+        expect(links[0].href).toBe('file.md');
+    });
+
+    test('handles very long backtick sequences', () => {
+        const links = findMarkdownLinks('``````````[link](file.md)``````````');
+        expect(links).toHaveLength(0);
+    });
+
+    test('handles backticks at end of line with no close', () => {
+        const links = findMarkdownLinks('text with unclosed ``');
+        expect(links).toHaveLength(0);
+    });
+
+    test('handles backtick immediately before link', () => {
+        const links = findMarkdownLinks('`[link](file.md)');
+        expect(links).toHaveLength(1);
+        expect(links[0].text).toBe('link');
+        expect(links[0].href).toBe('file.md');
     });
 });
 
