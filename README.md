@@ -1,5 +1,11 @@
 # DxMessaging for Unity
 
+<p align="center">
+  <a href="https://wallstop.github.io/DxMessaging/">
+    <img src="https://img.shields.io/badge/📖_Full_Documentation-Visit_the_Docs_Site-2ea44f?style=for-the-badge" alt="Full Documentation" />
+  </a>
+</p>
+
 [![Unity](https://img.shields.io/badge/Unity-2021.3+-black.svg)](https://unity.com/releases/editor)<br/>
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)<br/>
 [![openupm](https://img.shields.io/npm/v/com.wallstop-studios.dxmessaging?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.wallstop-studios.dxmessaging/)<br/>
