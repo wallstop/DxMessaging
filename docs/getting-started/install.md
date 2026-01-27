@@ -19,7 +19,7 @@ This page helps you install DxMessaging into a Unity 2021.3+ project using the U
 
 The easiest way to install DxMessaging is via [OpenUPM](https://openupm.com/packages/com.wallstop-studios.dxmessaging/).
 
-If you have the [openupm-cli](https://openupm.com/docs/getting-started.html#installing-openupm-cli) installed, run:
+If you have the [openupm-cli](https://openupm.com/docs/getting-started.html) installed, run:
 
 ```bash
 openupm add com.wallstop-studios.dxmessaging
@@ -32,7 +32,7 @@ openupm add com.wallstop-studios.dxmessaging
 - Simple one-command installation
 - Version history and changelogs available on the [OpenUPM page](https://openupm.com/packages/com.wallstop-studios.dxmessaging/)
 
-**Don't want to install the CLI?** You can also [add OpenUPM as a scoped registry manually](https://openupm.com/docs/getting-started.html#installing-a-upm-package).
+**Don't want to install the CLI?** You can also [add OpenUPM as a scoped registry manually](https://openupm.com/docs/getting-started.html).
 
 ### Git URL
 

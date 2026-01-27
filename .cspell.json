@@ -98,6 +98,17 @@
     "Cysharp",
     "cysharp",
     "UniRx",
+
+    // Documentation tools and terms
+    "WCAG",
+    "openupm",
+    "Pygments",
+    "pygments",
+    "kwds",
+    "arithmatex",
+    "linenums",
+    "inlinehilite",
+    "cairosvg",
     "UNIRX",
     "unirx",
     "Blazor",

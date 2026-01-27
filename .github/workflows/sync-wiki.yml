@@ -34,10 +34,10 @@ jobs:
         id: check
         run: |
           if git diff --name-only HEAD~1 HEAD | grep -qE '^docs/'; then
-            echo "should-deploy=true" >> $GITHUB_OUTPUT
+            echo "should-deploy=true" >> "${GITHUB_OUTPUT}"
             echo "Documentation changes detected"
           else
-            echo "should-deploy=false" >> $GITHUB_OUTPUT
+            echo "should-deploy=false" >> "${GITHUB_OUTPUT}"
             echo "No documentation changes"
           fi
 

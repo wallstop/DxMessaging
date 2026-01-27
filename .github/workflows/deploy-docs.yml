@@ -72,8 +72,8 @@ jobs:
 
       - name: Validate mkdocs.yml syntax
         run: |
-          python -c "import yaml; yaml.safe_load(open('mkdocs.yml'))"
-          echo "mkdocs.yml syntax validation passed"
+          python -c "from mkdocs.config import load_config; load_config('mkdocs.yml')"
+          echo "✅ mkdocs.yml syntax validation passed"
 
       - name: Build documentation
         run: mkdocs build --strict --site-dir _site

@@ -27,5 +27,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Comprehensive syntax highlighting for C# code blocks in documentation with distinct colors for keywords, types, functions, strings, numbers, comments, namespaces, and attributes
 - WCAG AA accessibility compliance for code syntax highlighting in both light and dark themes
-
-[Unreleased]: https://github.com/wallstop/DxMessaging/compare/v2.1.4...HEAD
