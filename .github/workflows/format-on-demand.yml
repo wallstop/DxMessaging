@@ -94,7 +94,7 @@ jobs:
         run: dotnet tool run csharpier format
 
       - name: Renormalize line endings
-        run: git add --renormalize .
+        run: git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.markdown' '**/*.markdown' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref'
 
       - name: Detect changes
         id: changes
@@ -245,7 +245,7 @@ jobs:
         run: dotnet tool run csharpier format
 
       - name: Renormalize line endings
-        run: git add --renormalize .
+        run: git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.markdown' '**/*.markdown' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref'
 
       - name: Detect changes
         id: changes

@@ -34,7 +34,7 @@ jobs:
             echo "Error: version field not found in package.json"
             exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Extracted version: $VERSION"
 
       - name: Extract changelog for version
@@ -46,7 +46,7 @@ jobs:
           if [ ! -f CHANGELOG.md ]; then
             echo "Warning: CHANGELOG.md not found"
             echo "No changelog file found." > /tmp/changelog_section.md
-            echo "changelog_file=/tmp/changelog_section.md" >> $GITHUB_OUTPUT
+            echo "changelog_file=/tmp/changelog_section.md" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -72,7 +72,7 @@ jobs:
 
           # Write to file for multi-line handling
           echo "$CHANGELOG_CONTENT" > /tmp/changelog_section.md
-          echo "changelog_file=/tmp/changelog_section.md" >> $GITHUB_OUTPUT
+          echo "changelog_file=/tmp/changelog_section.md" >> "$GITHUB_OUTPUT"
 
       - name: Run Release Drafter
         uses: release-drafter/release-drafter@v6

@@ -34,7 +34,7 @@ jobs:
 
       - name: Renormalize line endings
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
-        run: git add --renormalize .
+        run: git add --renormalize -- '*.cs' '**/*.cs'
 
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
@@ -74,7 +74,7 @@ jobs:
         run: ~/.dotnet/tools/csharpier .
 
       - name: Renormalize line endings
-        run: git add --renormalize .
+        run: git add --renormalize -- '*.cs' '**/*.cs'
 
       - name: Detect changes
         id: changes

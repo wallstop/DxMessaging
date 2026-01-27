@@ -184,7 +184,7 @@ indent_size = 4
 tab_width = 4
 
 # Shell scripts use LF line endings for Unix compatibility
-[*.sh]
+[**/*.{sh,bash,zsh,ksh,fish}]
 end_of_line = lf
 indent_style = space
 indent_size = 2

@@ -41,7 +41,10 @@ const excludeRegexes = [
   /(^|[\/\\])(Obj|obj)([\/\\]|$)/,
   /(^|[\/\\])Temp([\/\\]|$)/,
   /(^|[\/\\])Samples~([\/\\]|$)/,
-  /(^|[\/\\])\.vs([\/\\]|$)/
+  /(^|[\/\\])\.vs([\/\\]|$)/,
+  /(^|[\/\\])\.venv([\/\\]|$)/,
+  /(^|[\/\\])\.artifacts([\/\\]|$)/,
+  /(^|[\/\\])site([\/\\]|$)/
 ];
 
 // Text file extensions that require CRLF line endings
@@ -58,7 +61,7 @@ const crlfExts = new Set([
 ]);
 
 // Shell scripts require LF line endings for Unix compatibility
-const lfExts = new Set(['.sh']);
+const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
 
 // All text file extensions we validate
 const exts = new Set([...crlfExts, ...lfExts]);
@@ -300,24 +303,34 @@ for (const file of textFiles) {
 }
 
 if (bomFiles.length === 0 && badEolFiles.length === 0 && indexEolIssues.length === 0) {
-  console.log(`EOL check passed: ${textFiles.length} file(s) verified, CRLF only and no BOMs detected.`);
+  console.log(`EOL check passed: ${textFiles.length} file(s) verified (CRLF for text files, LF for shell scripts), no BOMs detected.`);
   process.exit(0);
 }
 
 if (bomFiles.length) {
-  console.log('Files contain a UTF-8 BOM (should be no BOM):');
-  for (const f of bomFiles) console.log(`  ${f}`);
+  console.error('Files contain a UTF-8 BOM (should be no BOM):');
+  for (const f of bomFiles) console.error(`  ${f}`);
 }
 if (badEolFiles.length) {
-  console.log('Files contain non-CRLF line endings (found LF or bare CR):');
-  for (const f of badEolFiles) console.log(`  ${f}`);
+  // Separate CRLF-required files from LF-required files for clearer error messages
+  const crlfViolations = badEolFiles.filter((f) => !lfExts.has(path.extname(f).toLowerCase()));
+  const lfViolations = badEolFiles.filter((f) => lfExts.has(path.extname(f).toLowerCase()));
+  
+  if (crlfViolations.length) {
+    console.error('Files require CRLF line endings but contain LF or bare CR:');
+    for (const f of crlfViolations) console.error(`  ${f}`);
+  }
+  if (lfViolations.length) {
+    console.error('Shell scripts require LF line endings but contain CRLF or bare CR:');
+    for (const f of lfViolations) console.error(`  ${f}`);
+  }
 }
 if (indexEolIssues.length) {
-  console.log('Git index contains non-normalized line endings (expected LF in repo for text files):');
+  console.error('Git index contains non-normalized line endings (expected LF in repo for text files):');
   for (const issue of indexEolIssues) {
-    console.log(`  ${issue.path} (${issue.indexEol})`);
+    console.error(`  ${issue.path} (${issue.indexEol})`);
   }
-  console.log('Fix: git add --renormalize .');
+  console.error('Fix: Run "node scripts/fix-eol.js" then re-stage affected files.');
 }
 console.error('EOL/BOM policy violations detected.');
 process.exit(1);

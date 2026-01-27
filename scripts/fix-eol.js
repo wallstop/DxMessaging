@@ -20,7 +20,10 @@ const excludeRegexes = [
   /(^|[\/\\])(Obj|obj)([\/\\]|$)/,
   /(^|[\/\\])Temp([\/\\]|$)/,
   /(^|[\/\\])Samples~([\/\\]|$)/,
-  /(^|[\/\\])\.vs([\/\\]|$)/
+  /(^|[\/\\])\.vs([\/\\]|$)/,
+  /(^|[\/\\])\.venv([\/\\]|$)/,
+  /(^|[\/\\])\.artifacts([\/\\]|$)/,
+  /(^|[\/\\])site([\/\\]|$)/
 ];
 
 // Text file extensions that require CRLF line endings (must match check-eol.js)
@@ -37,7 +40,7 @@ const crlfExts = new Set([
 ]);
 
 // Shell scripts require LF line endings for Unix compatibility
-const lfExts = new Set(['.sh']);
+const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
 
 // All text file extensions we fix
 const exts = new Set([...crlfExts, ...lfExts]);

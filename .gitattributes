@@ -29,6 +29,10 @@
 
 # Shell scripts must use LF for proper execution on Unix systems
 *.sh        text eol=lf
+*.bash      text eol=lf
+*.zsh       text eol=lf
+*.ksh       text eol=lf
+*.fish      text eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

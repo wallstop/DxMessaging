@@ -83,7 +83,11 @@ $extensions = @(
 
 # Shell scripts must use LF for Unix compatibility
 $lfExtensions = @(
-    '.sh'
+    '.sh',
+    '.bash',
+    '.zsh',
+    '.ksh',
+    '.fish'
 )
 
 # All extensions to scan (CRLF + LF types)
@@ -157,7 +161,7 @@ if ($badEolFiles.Count -gt 0) {
 if ($indexIssues.Count -gt 0) {
     Write-Host "Git index contains non-normalized line endings (expected LF in repo for text files):"
     $indexIssues | ForEach-Object { Write-Host "  $_" }
-    Write-Host "Fix: git add --renormalize ."
+    Write-Host "Fix: Run 'node scripts/fix-eol.js' then re-stage affected files."
 }
 
 Write-Error "EOL/BOM policy violations detected. See lists above."

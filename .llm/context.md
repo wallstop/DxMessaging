@@ -45,6 +45,22 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
 - **`grep` exit codes**: `grep` returns exit code 1 when no matches are found, which fails CI pipelines. Use `|| true`, `|| echo "0"`, or pipe to `wc -l` instead of `grep -c` when zero matches is acceptable.
 
+### EditorConfig Glob Patterns
+
+- **Recursive matching requires `**`**: `[*.sh]`only matches files in the root directory. Use`[**/*.sh]` for recursive matching across all directories.
+- **Brace expansion**: Use `[**/*.{sh,bash,zsh}]` to match multiple extensions in one section.
+- **Test patterns**: Verify EditorConfig patterns by checking files in subdirectories, not just the root.
+
+### Mixed Line Ending Policies
+
+This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`). When working with line endings:
+
+- **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
+- **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.
+- **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
+
+See the [Git Workflow Robustness skill](./skills/scripting/git-workflow-robustness.md) for detailed patterns.
+
 ### Forbidden Commands
 
 - **NEVER** run `exec bash`, `exec /bin/bash`, or any variant of `exec` that replaces the current shell. This breaks terminal sessions and causes command failures.

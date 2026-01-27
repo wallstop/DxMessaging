@@ -8,11 +8,11 @@ Before committing, please enable our git hooks and local linters so you catch is
 - Install hooks: `pre-commit install`
 - Run on all files: `pre-commit run --all-files`
 
-Line endings: Git already normalizes files to CRLF through `.gitattributes`. Run this once after cloning (especially on Windows) so your working tree matches CI:
+Line endings: Git normalizes most text files to CRLF through `.gitattributes`. **Exception:** Shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`) use LF for Unix compatibility. Run this once after cloning (especially on Windows) so your working tree matches CI:
 
 ```bash
 git config core.autocrlf false
-git add --renormalize .
+git add --renormalize -- '*.cs' '*.md' '*.json' '*.yml' '*.yaml' '*.asmdef' '*.asmref'
 ```
 
 What runs locally:

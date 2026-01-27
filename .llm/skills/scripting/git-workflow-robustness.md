@@ -1,8 +1,8 @@
 ---
 id: git-workflow-robustness
 title: "Git and Parser Robustness in CI/CD"
-description: "Best practices for robust git commands and markdown parsing in workflows"
-version: 1.0.0
+description: "Best practices for robust git commands, line ending normalization, and EditorConfig in workflows"
+version: 1.1.0
 created: 2026-01-27
 updated: 2026-01-27
 status: stable
@@ -12,14 +12,15 @@ complexity:
   prerequisites:
     - Basic shell scripting
     - Git fundamentals
-    - Markdown syntax
+    - EditorConfig syntax
+    - GitHub Actions workflow syntax
 impact:
   testability:
     rating: high
     description: Prevents flaky tests from git edge cases
   maintainability:
-    rating: medium
-    description: Improves parser reliability
+    rating: high
+    description: Improves workflow reliability and prevents unintended commits
 related:
   - testing/comprehensive-test-coverage
   - documentation/documentation-updates
@@ -29,8 +30,9 @@ related:
 
 ## Overview
 
-This skill covers best practices for writing robust git commands in CI/CD pipelines and
-implementing reliable markdown parsers that handle edge cases correctly.
+This skill covers best practices for writing robust git commands in CI/CD pipelines,
+handling line ending normalization safely, configuring EditorConfig for mixed policies,
+and using git-auto-commit-action correctly.
 
 ## Solution
 
@@ -299,6 +301,162 @@ grep "pattern" file.txt || true
 COUNT=$(grep -c "pattern" file.txt 2>/dev/null || echo "0")
 ```
 
+## Line Ending Normalization in Workflows
+
+### The `git add --renormalize` Pitfall
+
+`git add --renormalize .` stages ALL files in the repository for line ending normalization,
+which can include unintended changes from other steps or untracked files.
+
+```bash
+# DANGEROUS: Stages ALL files, including unintended changes
+git add --renormalize .
+
+# SAFE: Specify exact file patterns to renormalize
+git add --renormalize -- '*.md' '**/*.md' '*.json' '**/*.json'
+```
+
+**Why this matters**: In CI workflows that modify files, running `git add --renormalize .`
+will stage everything, potentially committing tool configuration changes, cached files,
+or modifications from earlier workflow steps that weren't intended for commit.
+
+### Targeted Renormalization Pattern
+
+Always specify explicit path patterns that match only the files you intend to commit:
+
+```yaml
+- name: Renormalize line endings
+  run: |
+    # Only renormalize the specific file types we're formatting
+    git add --renormalize -- \
+      '*.md' '**/*.md' \
+      '*.json' '**/*.json' \
+      '*.yml' '**/*.yml' \
+      '*.yaml' '**/*.yaml'
+```
+
+### git-auto-commit-action and `file_pattern`
+
+The `file_pattern` option in `stefanzweifel/git-auto-commit-action` only limits which
+files are **added** to the commit. Previously staged files are still committed.
+
+```yaml
+# PROBLEM: If files were staged earlier, they still get committed
+- uses: stefanzweifel/git-auto-commit-action@v7
+  with:
+    file_pattern: "**/*.md" # Only limits what's NEWLY added
+```
+
+**Safe pattern**: Use `add_options` with `--renormalize` and match `file_pattern` exactly:
+
+```yaml
+- name: Commit changes
+  uses: stefanzweifel/git-auto-commit-action@v7
+  with:
+    commit_message: "chore(format): apply formatting"
+    add_options: --renormalize
+    file_pattern: |
+      **/*.md
+      **/*.json
+      **/*.yml
+      **/*.yaml
+```
+
+**Important**: The `file_pattern` and any preceding `git add` commands should target
+the same file set to avoid committing unintended files.
+
+## EditorConfig Glob Pattern Syntax
+
+### Recursive Matching Requires `**`
+
+EditorConfig patterns like `[*.sh]` only match files in the **root directory**.
+Use `[**/*.sh]` for recursive matching:
+
+```editorconfig
+# WRONG: Only matches *.sh in root directory
+[*.sh]
+end_of_line = lf
+
+# CORRECT: Matches *.sh in all directories
+[**/*.sh]
+end_of_line = lf
+```
+
+### Matching Both Root and Subdirectories
+
+To match files in both the root and subdirectories, use the `**` pattern:
+
+```editorconfig
+# Matches shell scripts anywhere in the repository
+[**/*.sh]
+end_of_line = lf
+indent_style = space
+indent_size = 2
+```
+
+### Multiple Patterns in One Section
+
+Use brace expansion for multiple extensions:
+
+```editorconfig
+# Shell scripts and related files
+[**/*.{sh,bash,zsh}]
+end_of_line = lf
+```
+
+## Mixed Line Ending Policies
+
+### Clear Error Messages for Policy Violations
+
+When a project has different line ending policies for different file types (e.g., CRLF
+for most files, LF for shell scripts), error messages must clearly indicate which
+policy was violated:
+
+```powershell
+# POOR: Ambiguous error message
+"Line ending error in file.sh"
+
+# GOOD: Clear policy indication
+"file.sh: Expected LF line endings (shell script policy), found CRLF"
+"README.md: Expected CRLF line endings (project policy), found LF"
+```
+
+### Validation Script Pattern
+
+```bash
+#!/bin/bash
+# Check line endings with clear policy reporting
+
+check_file() {
+    local file="$1"
+    local expected="$2"
+    local policy_name="$3"
+
+    if [[ "$expected" == "lf" ]]; then
+        if grep -q $'\r' "$file"; then
+            echo "ERROR: $file: Expected LF ($policy_name), found CRLF" >&2
+            return 1
+        fi
+    elif [[ "$expected" == "crlf" ]]; then
+        if ! grep -q $'\r' "$file"; then
+            echo "ERROR: $file: Expected CRLF ($policy_name), found LF" >&2
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Check shell scripts (LF required)
+for f in $(find . -name "*.sh" -type f); do
+    check_file "$f" "lf" "shell script policy"
+done
+
+# Check other files (CRLF required)
+for f in $(find . -name "*.md" -type f); do
+    check_file "$f" "crlf" "project policy"
+done
+```
+
 ## Validation Checklist
 
 Before merging code with git commands or parsers:
@@ -307,6 +465,10 @@ Before merging code with git commands or parsers:
 - [ ] Git commands work with shallow clones
 - [ ] Git commands handle detached HEAD states
 - [ ] File paths are properly quoted
+- [ ] `git add --renormalize` uses targeted paths, not `.` or `*`
+- [ ] git-auto-commit-action `file_pattern` matches staged files exactly
+- [ ] EditorConfig patterns use `**/*.ext` for recursive matching
+- [ ] Line ending error messages indicate which policy was violated
 - [ ] Parsers handle empty input
 - [ ] Parsers handle malformed/unmatched delimiters
 - [ ] Parsers handle unicode and special characters
@@ -320,3 +482,4 @@ Before merging code with git commands or parsers:
   strategies
 - [Documentation Updates](../documentation/documentation-updates.md) - Keeping docs in sync
 - [Shell Pattern Matching](../../context.md#shell-pattern-matching) - Main context file patterns
+- [EditorConfig glob patterns](https://spec.editorconfig.org) - Official specification

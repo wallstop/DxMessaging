@@ -75,7 +75,7 @@
 
 | Skill                                                                        | Lines  | Complexity      | Status    | Performance | Tags |
 | ---------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ---- |
-| [Git and Parser Robustness in CI/CD](./scripting/git-workflow-robustness.md) | ✅ 323 | 🟡 Intermediate | ✅ Stable | ?           |      |
+| [Git and Parser Robustness in CI/CD](./scripting/git-workflow-robustness.md) | ⚠️ 486 | 🟡 Intermediate | ✅ Stable | ?           |      |
 
 ## Solid
 
