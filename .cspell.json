@@ -35,7 +35,6 @@
     "cspell-output.txt"
   ],
   "words": [
-    // Project-specific terms
     "DxMessaging",
     "dxmessaging",
     "wallstop",
@@ -47,8 +46,6 @@
     "retarget",
     "Retarget",
     "Retargets",
-
-    // Unity terms
     "Behaviour",
     "Behaviours",
     "behaviour",
@@ -68,8 +65,6 @@
     "unityproj",
     "userprefs",
     "booproj",
-
-    // C# / .NET terms
     "finalizers",
     "methodimpl",
     "iequatable",
@@ -84,8 +79,6 @@
     "creational",
     "deregistrations",
     "unregistrations",
-
-    // Third-party library names
     "Zenject",
     "ZENJECT",
     "zenject",
@@ -98,8 +91,6 @@
     "Cysharp",
     "cysharp",
     "UniRx",
-
-    // Documentation tools and terms
     "WCAG",
     "openupm",
     "Pygments",
@@ -117,8 +108,6 @@
     "NUNIT",
     "Paket",
     "paket",
-
-    // GitHub usernames / package authors
     "rhysd",
     "stefanzweifel",
     "ibiqlik",
@@ -129,8 +118,6 @@
     "yzhang",
     "Anson",
     "csdevkit",
-
-    // Tools and CLI terms
     "NOLOGO",
     "ncdu",
     "procs",
@@ -153,8 +140,6 @@
     "twemoji",
     "slugify",
     "libz",
-
-    // File extensions and formats
     "asmdef",
     "asmref",
     "asax",
@@ -184,14 +169,10 @@
     "pycache",
     "publishproj",
     "astextplain",
-
-    // Cache/algorithm terms
     "SLRU",
     "Slru",
     "RAII",
     "raii",
-
-    // Misc legitimate terms
     "Configurator",
     "Initializable",
     "Hipple",
@@ -208,8 +189,6 @@
     "conv",
     "Hspec",
     "Pspec",
-
-    // Gitignore pattern fragments (not typos - from [Dd]ebug style patterns)
     "ebug",
     "elease",
     "eleases",
@@ -219,7 +198,10 @@
     "ublish",
     "esult",
     "xpress",
-    "checkin"
+    "checkin",
+    "Segoe",
+    "Noto",
+    "Fira"
   ],
   "ignoreRegExpList": [
     "/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g",

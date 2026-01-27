@@ -35,7 +35,9 @@
 *.fish      text eol=lf
 
 # Git hooks must use LF for proper execution on Unix systems
+# (.meta files override back to CRLF per Unity requirements)
 scripts/hooks/* text eol=lf
+scripts/hooks/*.meta text eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
