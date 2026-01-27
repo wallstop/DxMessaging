@@ -219,7 +219,6 @@ See the [Skill File Sizing skill](./skills/documentation/skill-file-sizing.md) f
 
 - Commits: short, imperative subject; group related changes; reference issues/PRs (e.g., "Fix registration dedupe (#123)").
 - PRs: include a clear description, linked issues, before/after notes for performance changes (see [Tests/Runtime/Benchmarks](../Tests/Runtime/Benchmarks/)), and tests for bug fixes/features.
-- Releasing: changes to [the package manifest](../package.json) on `master` may trigger the NPM publish workflow.
 
 ## Security & Configuration Tips
 
