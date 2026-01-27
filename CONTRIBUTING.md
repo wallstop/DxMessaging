@@ -8,12 +8,16 @@ Before committing, please enable our git hooks and local linters so you catch is
 - Install hooks: `pre-commit install`
 - Run on all files: `pre-commit run --all-files`
 
-Line endings: Git normalizes most text files to CRLF through `.gitattributes`. **Exception:** Shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`) use LF for Unix compatibility. Run this once after cloning (especially on Windows) so your working tree matches CI:
+Line endings: Git normalizes most text files to CRLF through `.gitattributes`. **Exception:** Shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`) use LF for Unix compatibility. Run this once after cloning (especially on Windows) to fix your working tree:
 
 ```bash
 git config core.autocrlf false
-git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.json' '**/*.json' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref'
+node scripts/fix-eol.js
 ```
+
+This directly converts files in your working directory to the correct line endings. Add `-v` for verbose output showing each file fixed.
+
+> **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area)—it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
 
 What runs locally:
 

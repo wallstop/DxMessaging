@@ -175,6 +175,39 @@ if [ ${#FILES[@]} -gt 0 ]; then
 fi
 ```
 
+### Line Ending Normalization: Index vs Working Tree
+
+`git add --renormalize` is commonly misunderstood. It updates the git **index** (staging area) based on `.gitattributes` rules but does **not** modify working tree files:
+
+```bash
+# MISLEADING: This does NOT fix files on disk
+git add --renormalize -- '*.md' '**/*.md'
+# After this command:
+# - Index: updated with normalized content
+# - Working tree: UNCHANGED (still has original line endings)
+# - Repository: left in a staged state
+```
+
+#### When to use each approach
+
+| Goal                                         | Command                           |
+| -------------------------------------------- | --------------------------------- |
+| Fix files on disk after cloning              | `node scripts/fix-eol.js`         |
+| Re-stage files after `.gitattributes` change | `git add --renormalize`           |
+| Fix files copied from external source        | `node scripts/fix-eol.js`         |
+| Verify line endings without changing         | `node scripts/check-eol.js`       |
+| Verify line endings before committing        | `node scripts/check-eol.js --all` |
+
+#### Working tree fix pattern
+
+```bash
+# Recommended: Fix working tree directly
+node scripts/fix-eol.js
+
+# Optional: Verbose mode shows what was fixed
+node scripts/fix-eol.js -v
+```
+
 ## Markdown Inline Code Parsing
 
 ### CommonMark Multi-Backtick Semantics

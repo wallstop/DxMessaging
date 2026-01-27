@@ -75,8 +75,10 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 
 This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`). When working with line endings:
 
-- **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
+- **Prefer `fix-eol.js` for working tree fixes**: Run `node scripts/fix-eol.js` to directly fix line endings in your working tree. This is the recommended approach after cloning or when files have incorrect endings.
+- **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.
 - **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.
+- **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
 - **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
 
 See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness.md) for detailed patterns.

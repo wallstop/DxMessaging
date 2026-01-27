@@ -99,7 +99,7 @@
 | [Data-Driven Test Sources](./testing/data-driven-tests-sources.md)                                | ✅ 256 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, parameterized, data-driven         |
 | [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md)                           | 📝 108 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, parameterized, data-driven         |
 | [Data-Driven Tests with TestCaseSource](./testing/data-driven-tests.md)                           | 📝 198 | 🟡 Intermediate | ✅ Stable | ●○○○○       | testing, parameterized, data-driven         |
-| [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md)                        | ✅ 337 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, git, ci-cd                         |
+| [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md)                        | ⚠️ 370 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, git, ci-cd                         |
 | [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                   | 📝 186 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, generic                  |
 | [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)       | ✅ 253 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, reference-counting       |
 | [Shared Test Fixtures with Reference Counting](./testing/shared-test-fixtures.md)                 | 📝 166 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, performance              |
