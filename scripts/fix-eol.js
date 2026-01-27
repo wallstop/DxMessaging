@@ -23,8 +23,8 @@ const excludeRegexes = [
   /(^|[\/\\])\.vs([\/\\]|$)/
 ];
 
-// Text file extensions to fix (must match check-eol.js)
-const exts = new Set([
+// Text file extensions that require CRLF line endings (must match check-eol.js)
+const crlfExts = new Set([
   '.cs', '.csproj', '.sln',
   '.js', '.cjs', '.mjs',
   '.json', '.jsonc', '.toml',
@@ -35,6 +35,12 @@ const exts = new Set([
   '.asmdef', '.asmref', '.meta',
   '.ps1'
 ]);
+
+// Shell scripts require LF line endings for Unix compatibility
+const lfExts = new Set(['.sh']);
+
+// All text file extensions we fix
+const exts = new Set([...crlfExts, ...lfExts]);
 
 function walk(dir, files = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -65,6 +71,13 @@ function toCrlf(txt) {
   let normalized = txt.replace(/\r\n/g, '\n');
   normalized = normalized.replace(/\r/g, '\n');
   return normalized.replace(/\n/g, '\r\n');
+}
+
+function toLf(txt) {
+  // Normalize all newlines to LF (for shell scripts)
+  let normalized = txt.replace(/\r\n/g, '\n');
+  normalized = normalized.replace(/\r/g, '\n');
+  return normalized;
 }
 
 function resolveTargets(targets) {
@@ -118,10 +131,12 @@ for (const file of allFiles) {
   buf = stripBom(buf);
   const origTxt = origBuf.toString('utf8');
   const noBomTxt = buf.toString('utf8');
-  const crlfTxt = toCrlf(noBomTxt);
+  
+  // Shell scripts use LF, all other text files use CRLF
+  const fixedTxt = lfExts.has(ext) ? toLf(noBomTxt) : toCrlf(noBomTxt);
 
-  if (crlfTxt !== origTxt) {
-    fs.writeFileSync(file, crlfTxt, { encoding: 'utf8' });
+  if (fixedTxt !== origTxt) {
+    fs.writeFileSync(file, fixedTxt, { encoding: 'utf8' });
     changed++;
     if (verbose) console.log(`Fixed: ${path.relative(repoRoot, file)}`);
   }
@@ -129,5 +144,5 @@ for (const file of allFiles) {
 
 console.log(`Scanned ${scanned} text files. Updated ${changed}.`);
 if (changed > 0) {
-  console.log('All changes written with CRLF and no BOM.');
+  console.log('All changes written with correct line endings (CRLF for most files, LF for shell scripts) and no BOM.');
 }

@@ -129,6 +129,7 @@ echo ""
 echo -e "${BLUE}=== Code Analysis ===${NC}"
 check_tool "tokei" "tokei" "--version"
 check_tool "shellcheck" "shellcheck" "--version"
+check_tool "pre-commit" "pre-commit" "--version"
 
 echo ""
 echo -e "${BLUE}=== YAML/JSON Tools ===${NC}"

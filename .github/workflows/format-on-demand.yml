@@ -93,6 +93,9 @@ jobs:
       - name: Apply CSharpier formatting
         run: dotnet tool run csharpier format
 
+      - name: Renormalize line endings
+        run: git add --renormalize .
+
       - name: Detect changes
         id: changes
         shell: bash
@@ -109,6 +112,7 @@ jobs:
         with:
           commit_message: "chore(format): apply requested formatting"
           branch: ${{ steps.meta.outputs.head_ref }}
+          add_options: --renormalize
           file_pattern: |
             **/*.cs
             **/*.md
@@ -130,7 +134,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           # Stage only supported text files; avoid workflows to prevent permission issues
-          git add '**/*.cs' '**/*.md' '**/*.markdown' '**/*.json' '**/*.asmdef' '**/*.asmref'
+          # Use --renormalize to ensure LF line endings in git index per .gitattributes
+          git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.markdown' '**/*.markdown' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref'
           git commit -m "chore(format): apply requested formatting for PR #${{ steps.meta.outputs.pr }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream
@@ -239,6 +244,9 @@ jobs:
       - name: Apply CSharpier formatting
         run: dotnet tool run csharpier format
 
+      - name: Renormalize line endings
+        run: git add --renormalize .
+
       - name: Detect changes
         id: changes
         shell: bash
@@ -255,6 +263,7 @@ jobs:
         with:
           commit_message: "chore(format): apply requested formatting"
           branch: ${{ steps.meta.outputs.head_ref }}
+          add_options: --renormalize
           file_pattern: |
             **/*.cs
             **/*.md
@@ -276,7 +285,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           # Stage only supported text files; avoid workflows to prevent permission issues
-          git add '**/*.cs' '**/*.md' '**/*.markdown' '**/*.json' '**/*.asmdef' '**/*.asmref'
+          # Use --renormalize to ensure LF line endings in git index per .gitattributes
+          git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.markdown' '**/*.markdown' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref'
           git commit -m "chore(format): apply requested formatting for PR #${{ steps.meta.outputs.pr }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream

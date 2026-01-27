@@ -51,12 +51,17 @@ jobs:
         if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
 
+      - name: Renormalize line endings
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        run: git add --renormalize .
+
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(format): apply Prettier/markdownlint fixes"
           branch: ${{ github.head_ref }}
+          add_options: --renormalize
           file_pattern: |
             **/*.md
             **/*.markdown
@@ -120,6 +125,9 @@ jobs:
       - name: Markdownlint (auto-fix)
         run: npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
 
+      - name: Renormalize line endings
+        run: git add --renormalize .
+
       - name: Detect changes
         id: changes
         shell: bash
@@ -143,7 +151,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           # Stage only files we format; avoid workflows to prevent permission issues
-          git add '**/*.md' '**/*.markdown' '**/*.json' '**/*.asmdef' '**/*.asmref' '**/*.yml' '**/*.yaml'
+          # Use --renormalize to ensure LF line endings in git index per .gitattributes
+          git add --renormalize -- '*.md' '**/*.md' '*.markdown' '**/*.markdown' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml'
           git commit -m "chore(format): apply Prettier/markdownlint fixes for PR #${{ github.event.pull_request.number }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream

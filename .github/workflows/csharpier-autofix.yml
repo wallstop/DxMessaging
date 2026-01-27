@@ -32,12 +32,17 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: dotnet tool run csharpier format
 
+      - name: Renormalize line endings
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
+        run: git add --renormalize .
+
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(format): apply CSharpier formatting"
           branch: ${{ github.head_ref }}
+          add_options: --renormalize
           file_pattern: |
             **/*.cs
 
@@ -68,6 +73,9 @@ jobs:
       - name: Run CSharpier (format repository)
         run: ~/.dotnet/tools/csharpier .
 
+      - name: Renormalize line endings
+        run: git add --renormalize .
+
       - name: Detect changes
         id: changes
         shell: bash
@@ -91,7 +99,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           # Only stage C# files to avoid touching workflow YAML (requires special permissions)
-          git add '**/*.cs'
+          # Use --renormalize to ensure LF line endings in git index per .gitattributes
+          git add --renormalize -- '*.cs' '**/*.cs'
           git commit -m "chore(format): apply CSharpier formatting for PR #${{ github.event.pull_request.number }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream

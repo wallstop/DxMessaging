@@ -69,7 +69,7 @@ $excludePatterns = @(
     "[\\/]\.vs[\\/]"
 )
 
-# File extensions we treat as text and validate
+# File extensions we treat as text and validate (CRLF expected)
 $extensions = @(
     '.cs', '.csproj', '.sln',
     '.json', '.jsonc', '.toml',
@@ -81,12 +81,20 @@ $extensions = @(
     '.ps1'
 )
 
+# Shell scripts must use LF for Unix compatibility
+$lfExtensions = @(
+    '.sh'
+)
+
+# All extensions to scan (CRLF + LF types)
+$allExtensions = $extensions + $lfExtensions
+
 $rootPath = Resolve-Path -LiteralPath $Root
 Write-VerboseLine "Scanning for EOL/BOM issues under: $rootPath"
 
 $bomFiles = New-Object System.Collections.Generic.List[string]
 $badEolFiles = New-Object System.Collections.Generic.List[string]
-$indexIssues = Get-GitIndexEolIssues -Extensions $extensions
+$indexIssues = Get-GitIndexEolIssues -Extensions $allExtensions
 
 Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
     ForEach-Object {
@@ -95,7 +103,7 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
         foreach ($pat in $excludePatterns) { if ($path -match $pat) { return } }
 
         $ext = [System.IO.Path]::GetExtension($path).ToLowerInvariant()
-        if ($extensions -notcontains $ext) { return }
+        if ($allExtensions -notcontains $ext) { return }
 
         try {
             $bytes = [System.IO.File]::ReadAllBytes($path)
@@ -110,18 +118,29 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
             $bomFiles.Add($path)
         }
 
-        # Check for line endings
+        # Check for line endings based on file type
         $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-        $lfOnly = [regex]::Matches($text, '(?<!\r)\n').Count
-        $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
-
-        if ($lfOnly -gt 0 -or $crOnly -gt 0) {
-            $badEolFiles.Add($path)
+        
+        if ($lfExtensions -contains $ext) {
+            # Shell scripts should have LF only (no CRLF or bare CR)
+            $crlfCount = [regex]::Matches($text, '\r\n').Count
+            $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
+            if ($crlfCount -gt 0 -or $crOnly -gt 0) {
+                $badEolFiles.Add($path)
+            }
+        }
+        else {
+            # All other text files should have CRLF (no bare LF or bare CR)
+            $lfOnly = [regex]::Matches($text, '(?<!\r)\n').Count
+            $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
+            if ($lfOnly -gt 0 -or $crOnly -gt 0) {
+                $badEolFiles.Add($path)
+            }
         }
     }
 
 if ($bomFiles.Count -eq 0 -and $badEolFiles.Count -eq 0 -and $indexIssues.Count -eq 0) {
-    Write-Host "EOL check passed: CRLF only and no BOMs detected."
+    Write-Host "EOL check passed: line endings correct and no BOMs detected."
     exit 0
 }
 
