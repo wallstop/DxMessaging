@@ -98,7 +98,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             + "- Run PlayMode tests locally in your Unity project that references this package.\n"
             + "- The benchmark test writes an OS-specific section below with a markdown table.\n"
             + "- CI runs skip writing to avoid noisy diffs.\n\n"
-            + "See also: `Docs/DesignAndArchitecture.md#performance-optimizations` for design details.\n";
+            + "See also: `docs/architecture/design-and-architecture.md#performance-optimizations` for design details.\n";
 
         internal static string GetOperatingSystemSection()
         {
@@ -208,12 +208,15 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
         internal static string TryFindPerformanceDocPath()
         {
-            return TryFindDocPath(Path.Combine("Docs", "Performance.md"), PerformanceHeader);
+            return TryFindDocPath(
+                Path.Combine("docs", "architecture", "performance.md"),
+                PerformanceHeader
+            );
         }
 
         internal static string TryFindComparisonsDocPath()
         {
-            return TryFindDocPath(Path.Combine("Docs", "Comparisons.md"));
+            return TryFindDocPath(Path.Combine("docs", "architecture", "comparisons.md"));
         }
 
         internal static string TryFindReadmePath()

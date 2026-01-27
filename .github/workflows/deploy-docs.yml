@@ -1,0 +1,117 @@
+# Deploy Documentation to GitHub Pages
+#
+# This workflow builds MkDocs documentation and deploys it to GitHub Pages.
+# It runs on pushes to master (for deployment) and on PRs (for validation only).
+#
+# Badge URL: https://github.com/wallstop/DxMessaging/actions/workflows/deploy-docs.yml/badge.svg
+# Pages URL: https://wallstop.github.io/DxMessaging/
+
+name: Deploy Documentation
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - ".github/workflows/deploy-docs.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - ".github/workflows/deploy-docs.yml"
+  workflow_dispatch:
+
+# Prevent concurrent deployments to avoid conflicts
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Full history for git-revision-date-localized plugin
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "requirements-docs.txt"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev \
+            libfreetype6-dev \
+            libffi-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libz-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-docs.txt
+
+      - name: Validate mkdocs.yml syntax
+        run: |
+          python -c "from mkdocs.config import load_config; load_config('mkdocs.yml')"
+          echo "✅ mkdocs.yml syntax validation passed"
+
+      - name: Build documentation
+        run: mkdocs build --strict --site-dir _site
+
+      - name: Validate build output
+        run: |
+          if [ ! -d "_site" ]; then
+            echo "::error::Build failed - _site directory not found"
+            exit 1
+          fi
+          if [ ! -f "_site/index.html" ]; then
+            echo "::error::Build failed - index.html not found"
+            exit 1
+          fi
+          PAGE_COUNT=$(find _site -name '*.html' | wc -l)
+          echo "✅ Build validation passed"
+          echo "📄 Generated $PAGE_COUNT HTML pages"
+          echo "📁 Site contents:"
+          ls -la _site/
+          if [ "$PAGE_COUNT" -lt 5 ]; then
+            echo "::warning::Low page count ($PAGE_COUNT) - verify all docs are included"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

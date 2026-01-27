@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-01-23. Do not edit manually.
+> **Auto-generated** on 2026-01-27. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,8 +9,8 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 69    |
-| Categories   | 4     |
+| Total Skills | 71    |
+| Categories   | 5     |
 | Unique Tags  | 117   |
 
 ---
@@ -19,8 +19,9 @@
 
 - [Documentation](#documentation) (10)
 - [Performance](#performance) (24)
+- [Scripting](#scripting) (1)
 - [Solid](#solid) (13)
-- [Testing](#testing) (22)
+- [Testing](#testing) (23)
 - [Tag Cloud](#tag-cloud)
 - [All Skills by Complexity](#all-skills-by-complexity)
 
@@ -70,6 +71,12 @@
 | [StringBuilder Pooling for Zero-Allocation String Building](./performance/stringbuilder-pooling.md)             | ✅ 320 | 🟢 Basic        | ✅ Stable | ●●●○○       | memory, allocation, pooling            |
 | [WaitForSeconds and Yield Instruction Pooling](./performance/yield-instruction-pooling.md)                      | ✅ 348 | 🟢 Basic        | ✅ Stable | ●●●○○       | performance, unity, coroutines         |
 
+## Scripting
+
+| Skill                                                                        | Lines  | Complexity      | Status    | Performance | Tags |
+| ---------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ---- |
+| [Git and Parser Robustness in CI/CD](./scripting/git-workflow-robustness.md) | ✅ 323 | 🟡 Intermediate | ✅ Stable | ?           |      |
+
 ## Solid
 
 | Skill                                                                                              | Lines  | Complexity      | Status    | Performance | Tags                                 |
@@ -97,6 +104,7 @@
 | [Data-Driven Test Sources](./testing/data-driven-tests-sources.md)                                | ✅ 256 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, parameterized, data-driven         |
 | [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md)                           | 📝 108 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, parameterized, data-driven         |
 | [Data-Driven Tests with TestCaseSource](./testing/data-driven-tests.md)                           | 📝 198 | 🟡 Intermediate | ✅ Stable | ●○○○○       | testing, parameterized, data-driven         |
+| [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md)                        | ✅ 323 | 🟡 Intermediate | ✅ Stable | ?           |                                             |
 | [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                   | 📝 186 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, generic                  |
 | [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)       | ✅ 253 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, reference-counting       |
 | [Shared Test Fixtures with Reference Counting](./testing/shared-test-fixtures.md)                 | 📝 166 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, performance              |
@@ -168,6 +176,8 @@
 - [Fluent Builder Pattern with Struct Builders](./solid/fluent-builder-pattern.md) _(solid)_
 - [Fluent Builder Templates and Factories](./solid/fluent-builder-pattern-templates.md) _(solid)_
 - [Fluent Builder Usage Examples](./solid/fluent-builder-pattern-usage-examples.md) _(solid)_
+- [Git and Parser Robustness in CI/CD](./scripting/git-workflow-robustness.md) _(scripting)_
+- [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md) _(testing)_
 - [IEquatable Implementation for Value Types](./solid/iequatable-implementation.md) _(solid)_
 - [IEquatable Implementation Variants](./solid/iequatable-implementation-variants.md) _(solid)_
 - [IEquatable Usage Examples](./solid/iequatable-implementation-usage.md) _(solid)_

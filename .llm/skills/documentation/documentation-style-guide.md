@@ -9,7 +9,7 @@ updated: "2026-01-22"
 source:
   repository: "wallstop/DxMessaging"
   files:
-    - path: "Docs/"
+    - path: "docs/"
     - path: "README.md"
   url: "https://github.com/wallstop/DxMessaging"
 
@@ -66,7 +66,7 @@ status: "stable"
 
 ## Overview
 
-Clear documentation is concise, direct, and optimized for quick understanding. This guide keeps documentation consistent across README and Docs/ content.
+Clear documentation is concise, direct, and optimized for quick understanding. This guide keeps documentation consistent across README and docs/ content.
 
 ## Problem Statement
 

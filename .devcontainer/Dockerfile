@@ -15,6 +15,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 ENV DOTNET_NOLOGO=1
 
+# ------------------------------------------------------------------------------
+# Fix expired Yarn GPG key issue
+# The base image includes the Yarn repository which has an expired signing key.
+# Remove it since this project doesn't require Yarn.
+# ------------------------------------------------------------------------------
+RUN rm -f /etc/apt/sources.list.d/yarn.list \
+    && rm -f /usr/share/keyrings/yarn-keyring.gpg \
+    && rm -f /etc/apt/keyrings/yarn.gpg
+
 # Install essential APT packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep \

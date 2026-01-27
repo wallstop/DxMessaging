@@ -247,9 +247,9 @@ Ready to understand the implementation details?
 
 ### Need Help
 
-- **New to messaging patterns?** Check the main [Getting Started Guide](../../Docs/GettingStarted.md)
-- **Want more examples?** See [Patterns Documentation](../../Docs/Patterns.md)
-- **Having issues?** Visit [Troubleshooting Guide](../../Docs/Troubleshooting.md)
+- **New to messaging patterns?** Check the main [Getting Started Guide](../../docs/getting-started/getting-started.md)
+- **Want more examples?** See [Patterns Documentation](../../docs/guides/patterns.md)
+- **Having issues?** Visit [Troubleshooting Guide](../../docs/reference/troubleshooting.md)
 
 ---
 

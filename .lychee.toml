@@ -24,5 +24,7 @@ exclude = [
   "^https?://0\\.0\\.0\\.0",
   "^file://",
   # NPM package page serves a Cloudflare JS challenge to non-browser clients; registry endpoint remains covered.
-  "^https://www\\.npmjs\\.com/package/com\\.wallstop-studios\\.dxmessaging$"
+  "^https://www\\.npmjs\\.com/package/com\\.wallstop-studios\\.dxmessaging$",
+  # GitHub Pages site - not deployed yet, will be available after first successful deploy
+  "^https://wallstop\\.github\\.io/DxMessaging"
 ]

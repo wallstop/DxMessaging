@@ -388,7 +388,7 @@ token.RegisterBroadcastWithoutSource<TookDamage>(OnTookDamage);
 ### For Advanced Developers
 
 1. **Source-filtered broadcasts exist**: Use `RegisterGameObjectBroadcast` for efficiency
-1. **Message order can be controlled**: See InterceptorsAndOrdering.md
+1. **Message order can be controlled**: See the Interceptors & Ordering documentation
 1. **Performance considerations**: Targeted > Broadcast in terms of overhead
 1. **Consider message granularity**: Too many message types = harder maintenance
 
@@ -407,10 +407,10 @@ Try modifying the sample:
 
 ### Learn More
 
-- **[Message Types Documentation](../../Docs/MessageTypes.md)** - Complete message type reference
-- **[Targeting and Context Guide](../../Docs/TargetingAndContext.md)** - Deep dive into targeting
-- **[Patterns Guide](../../Docs/Patterns.md)** - Common messaging patterns
-- **[Performance Guide](../../Docs/Performance.md)** - Optimization tips
+- **[Message Types Documentation](../../docs/concepts/message-types.md)** - Complete message type reference
+- **[Targeting and Context Guide](../../docs/concepts/targeting-and-context.md)** - Deep dive into targeting
+- **[Patterns Guide](../../docs/guides/patterns.md)** - Common messaging patterns
+- **[Performance Guide](../../docs/architecture/performance.md)** - Optimization tips
 
 ---
 

@@ -7,6 +7,9 @@
 *.userosscache
 *.sln.docstates
 
+# MkDocs build output
+site/
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -27,6 +30,7 @@ logs_*.zip.meta
 logs_*
 
 Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.pdb*
+com.wallstop-studios.dxmessaging.sln.DotSettings.user.meta
 
 # Visual Studio 2015 cache/options directory
 .vs/
@@ -325,3 +329,13 @@ Tests/Runtime/obj.meta
 
 PLAN.md
 PLAN.md.meta
+
+GH-PAGES-PLAN.md
+GH-PAGES-PLAN.md.meta
+
+progress/**
+
+__pycache__.meta
+.venv/
+site.meta
+progress.meta
