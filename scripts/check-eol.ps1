@@ -66,12 +66,16 @@ $excludePatterns = @(
     "[\\/]Obj[\\/]|[\\/]obj[\\/]",
     "[\\/]Temp[\\/]",
     "[\\/]Samples~[\\/]",
-    "[\\/]\.vs[\\/]"
+    "[\\/]\.vs[\\/]",
+    "[\\/]\.venv[\\/]",
+    "[\\/]\.artifacts[\\/]",
+    "[\\/]site[\\/]"
 )
 
 # File extensions we treat as text and validate (CRLF expected)
 $extensions = @(
     '.cs', '.csproj', '.sln',
+    '.js', '.cjs', '.mjs',
     '.json', '.jsonc', '.toml',
     '.yaml', '.yml',
     '.md', '.markdown',
@@ -97,7 +101,8 @@ $rootPath = Resolve-Path -LiteralPath $Root
 Write-VerboseLine "Scanning for EOL/BOM issues under: $rootPath"
 
 $bomFiles = New-Object System.Collections.Generic.List[string]
-$badEolFiles = New-Object System.Collections.Generic.List[string]
+$crlfViolations = New-Object System.Collections.Generic.List[string]
+$lfViolations = New-Object System.Collections.Generic.List[string]
 $indexIssues = Get-GitIndexEolIssues -Extensions $allExtensions
 
 Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
@@ -130,7 +135,7 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
             $crlfCount = [regex]::Matches($text, '\r\n').Count
             $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
             if ($crlfCount -gt 0 -or $crOnly -gt 0) {
-                $badEolFiles.Add($path)
+                $lfViolations.Add($path)
             }
         }
         else {
@@ -138,12 +143,12 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
             $lfOnly = [regex]::Matches($text, '(?<!\r)\n').Count
             $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
             if ($lfOnly -gt 0 -or $crOnly -gt 0) {
-                $badEolFiles.Add($path)
+                $crlfViolations.Add($path)
             }
         }
     }
 
-if ($bomFiles.Count -eq 0 -and $badEolFiles.Count -eq 0 -and $indexIssues.Count -eq 0) {
+if ($bomFiles.Count -eq 0 -and $crlfViolations.Count -eq 0 -and $lfViolations.Count -eq 0 -and $indexIssues.Count -eq 0) {
     Write-Host "EOL check passed: line endings correct and no BOMs detected."
     exit 0
 }
@@ -153,9 +158,14 @@ if ($bomFiles.Count -gt 0) {
     $bomFiles | ForEach-Object { Write-Host "  $_" }
 }
 
-if ($badEolFiles.Count -gt 0) {
-    Write-Host "Files contain non-CRLF line endings (found LF or bare CR):"
-    $badEolFiles | ForEach-Object { Write-Host "  $_" }
+if ($lfViolations.Count -gt 0) {
+    Write-Host "Shell scripts require LF line endings but contain CRLF or bare CR:"
+    $lfViolations | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($crlfViolations.Count -gt 0) {
+    Write-Host "Files require CRLF line endings but contain LF or bare CR:"
+    $crlfViolations | ForEach-Object { Write-Host "  $_" }
 }
 
 if ($indexIssues.Count -gt 0) {

@@ -16,7 +16,7 @@ function Normalize-Name {
 $issueCount = 0
 
 # Exclude typical directories that shouldn't be scanned
-$excludeDirs = @('.git', 'node_modules', '.vs')
+$excludeDirs = @('.git', 'node_modules', '.vs', '.venv', '.artifacts', 'site', 'Library', 'Obj', 'Temp', 'Samples~')
 
 $mdFiles = Get-ChildItem -Path $Root -Recurse -File -Filter *.md |
     Where-Object { 
