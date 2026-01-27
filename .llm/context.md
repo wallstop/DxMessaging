@@ -79,7 +79,7 @@ This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, 
 - **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.
 - **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
 
-See the [Git Workflow Robustness skill](./skills/scripting/git-workflow-robustness.md) for detailed patterns.
+See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness.md) for detailed patterns.
 
 ### Forbidden Commands
 

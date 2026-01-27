@@ -7,19 +7,33 @@ created: 2026-01-27
 updated: 2026-01-27
 status: stable
 category: testing
+
+tags:
+  - testing
+  - git
+  - ci-cd
+  - workflows
+  - markdown
+  - parsing
+
 complexity:
   level: intermediate
   prerequisites:
     - Basic shell scripting
     - Git fundamentals
     - Markdown syntax
+
 impact:
+  performance:
+    rating: "none"
+    details: "CI/CD patterns only; no runtime impact"
   testability:
     rating: high
     description: Prevents flaky tests from git edge cases
   maintainability:
     rating: medium
     description: Improves parser reliability
+
 related:
   - testing/comprehensive-test-coverage
   - documentation/documentation-updates

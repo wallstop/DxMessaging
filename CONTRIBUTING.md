@@ -12,7 +12,7 @@ Line endings: Git normalizes most text files to CRLF through `.gitattributes`. *
 
 ```bash
 git config core.autocrlf false
-git add --renormalize -- '*.cs' '*.md' '*.json' '*.yml' '*.yaml' '*.asmdef' '*.asmref'
+git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.json' '**/*.json' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml' '*.asmdef' '**/*.asmdef' '*.asmref' '**/*.asmref'
 ```
 
 What runs locally:
