@@ -84,6 +84,7 @@ See the [Git Workflow Robustness skill](./skills/scripting/git-workflow-robustne
 ### Forbidden Commands
 
 - **NEVER** run `exec bash`, `exec /bin/bash`, or any variant of `exec` that replaces the current shell. This breaks terminal sessions and causes command failures.
+- **NEVER** run just `bash` as a standalone command. This spawns an interactive subshell that hangs indefinitely, blocking all further operations. Always run specific commands directly.
 - If you need a new shell environment, spawn a subshell with `bash -c "command"` or simply run commands directly.
 
 ### JavaScript/Node.js Practices

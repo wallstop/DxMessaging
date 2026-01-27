@@ -72,6 +72,8 @@ related:
   - "documentation-updates"
   - "changelog-management"
   - "documentation-style-guide"
+  - "external-url-fragment-validation"
+  - "github-actions-version-consistency"
 
 status: "stable"
 ---
@@ -223,148 +225,11 @@ Some domains change URL structures frequently. Extra verification is needed:
 - Microsoft documentation (`docs.microsoft.com`, `learn.microsoft.com`) - Reorganized in 2023
 - Stack Overflow - Answers can be deleted; quote key information
 
-### External URL Fragment Validation
-
-URL fragments (the `#section-name` portion after the main URL) are particularly fragile for external links. The target page's heading structure can change without notice, breaking fragment references.
-
-#### Common Fragment Issues
-
-| Issue                          | Example                                                   | Risk                                                        |
-| ------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------- |
-| Missing ID on target heading   | `<h2>Links</h2>` with no `id` attribute                   | CI failure when lychee validates with `--include-fragments` |
-| Incorrect fragment guessing    | `#links-1` instead of `#links`                            | CI failure when lychee validates with `--include-fragments` |
-| Heading renumbered             | `#step-3-install` becomes `#step-4-install`               | Silent breakage, confusing users                            |
-| Heading text changed           | `#getting-started` becomes `#quick-start`                 | 404-like behavior on the page                               |
-| Auto-generated fragment suffix | `#links` vs `#links-1` (duplicate heading disambiguation) | Wrong section targeted                                      |
-
-> **Note**: Some websites have broken internal links themselves. For example, markdownguide.org
-> links to `#links` but their `<h2>Links</h2>` has no `id` attribute. When in doubt, omit the fragment.
-
-#### Fragment Validation Process
-
-1. **Navigate to the exact URL**: Open `https://example.com/page#fragment` in a browser
-1. **Verify scroll position**: Confirm the page scrolls to the expected section
-1. **Inspect the heading ID**: Right-click the heading → Inspect → Check the `id` attribute
-1. **Test with link checker**: Run `lychee --include-fragments "URL"` locally
-
-#### Fragment ID Discovery
-
-Different sites generate fragment IDs differently:
-
-```bash
-# GitHub generates IDs from heading text (lowercase, hyphens for spaces)
-## Getting Started → #getting-started
-
-# Some sites use custom IDs
-<h2 id="quick-start">Getting Started</h2> → #quick-start
-
-# Duplicate headings get suffixes
-## Links → #links
-## Links → #links-1  (second occurrence)
-```
-
-#### Best Practices for Fragment URLs
-
-- **Prefer linking without fragments** when the page is short enough to scan
-- **Quote key information** rather than relying solely on the fragment link
-- **Use versioned documentation** when fragments must remain stable
-- **Add comments** near fragile external links explaining what they reference
-
-```markdown
-<!-- Good: Includes context in case fragment breaks -->
-
-See the [Markdown links syntax](https://www.markdownguide.org/basic-syntax/)
-section for details on inline and reference-style links.
-
-<!-- Risky: Fragment-only reference with no context -->
-
-See [here](https://www.markdownguide.org/basic-syntax/).
-```
+For detailed guidance on URL fragment validation (`#section-name` links), see [External URL Fragment Validation](external-url-fragment-validation.md).
 
 ### GitHub Actions Version Consistency
 
-Workflow files should use consistent action versions across all workflows.
-
-#### Version Format Standards
-
-```yaml
-# GOOD: Use the same major version consistently
-- uses: actions/checkout@v4
-- uses: actions/setup-dotnet@v4
-- uses: actions/upload-artifact@v4
-
-# BAD: Mixed versions across workflows
-- uses: actions/checkout@v3 # One workflow
-- uses: actions/checkout@v4 # Another workflow
-```
-
-#### Version Update Process
-
-1. **Audit all workflows**: Find all action uses across `.github/workflows/`
-1. **Identify inconsistencies**: List actions with different versions
-1. **Update together**: Change all instances in a single PR
-1. **Test thoroughly**: Run all affected workflows before merging
-
-#### Common Actions to Monitor
-
-| Action                      | Current Recommended | Notes                              |
-| --------------------------- | ------------------- | ---------------------------------- |
-| `actions/checkout`          | `v4`                | Breaking changes from v3           |
-| `actions/setup-dotnet`      | `v4`                | .NET SDK setup                     |
-| `actions/upload-artifact`   | `v4`                | Breaking changes from v3           |
-| `actions/download-artifact` | `v4`                | Must match upload-artifact version |
-| `actions/cache`             | `v4`                | Caching for dependencies           |
-
-#### Audit Command
-
-```bash
-# Find all action versions in workflows
-grep -rh "uses:" .github/workflows/ | sort | uniq
-```
-
-## Documentation Linting Scripts
-
-Automated link validation prevents broken links from reaching production. However, these scripts require careful implementation and testing.
-
-### Linting Scripts Must Skip Code Blocks
-
-Documentation linters that check for raw file names or other patterns **must skip content inside code blocks**:
-
-- **Fenced code blocks**: Content between ` ``` ` markers
-- **Inline code**: Content between single backticks
-
-Without this, examples showing anti-patterns will trigger false positives:
-
-```markdown
-<!-- This anti-pattern example would trigger a linter without code block handling -->
-
-Bad: `See [README.md](../README.md)` <- Inline code, should be skipped
-```
-
-### Linting Scripts Need Unit Tests
-
-Documentation linting scripts are code and need tests like any other code:
-
-| Test Category        | Examples                                      |
-| -------------------- | --------------------------------------------- |
-| Normal patterns      | Valid links with good text                    |
-| Anti-patterns        | Raw file names that should be flagged         |
-| Edge cases           | Inline code, fenced blocks, nested structures |
-| False positive cases | Anti-pattern examples in documentation        |
-| Boundary conditions  | Empty files, single-line files, no links      |
-
-Without comprehensive tests, regressions can cause CI failures on valid documentation.
-
-### Script Implementation Checklist
-
-When creating or modifying documentation linters:
-
-- [ ] Skip content in fenced code blocks (` ``` `)
-- [ ] Skip content in inline code (backticks)
-- [ ] Handle nested structures correctly
-- [ ] Include unit tests covering edge cases
-- [ ] Test against existing documentation files
-- [ ] Document expected behavior in script comments
+Workflow files should use consistent action versions across all workflows. For detailed guidance including version update processes and common actions to monitor, see [GitHub Actions Version Consistency](github-actions-version-consistency.md).
 
 ## Validation Checklist
 
@@ -377,13 +242,14 @@ Before committing documentation or skill files:
 - [ ] GitHub Action versions are consistent across all workflows
 - [ ] No `http://` links (use `https://` instead)
 - [ ] No URL shorteners or tracking parameters
-- [ ] Documentation linting scripts have adequate test coverage
 
 ## See Also
 
 - [Documentation Updates](documentation-updates.md)
 - [Changelog Management](changelog-management.md)
 - [Documentation Style Guide](documentation-style-guide.md)
+- [External URL Fragment Validation](external-url-fragment-validation.md)
+- [GitHub Actions Version Consistency](github-actions-version-consistency.md)
 
 ## References
 
@@ -395,6 +261,7 @@ Before committing documentation or skill files:
 
 | Version | Date       | Changes                                                                     |
 | ------- | ---------- | --------------------------------------------------------------------------- |
+| 1.3.0   | 2026-01-27 | Split fragment validation and GitHub Actions to separate skills             |
 | 1.2.0   | 2026-01-23 | Added external URL fragment validation section based on CI failure analysis |
 | 1.1.0   | 2026-01-22 | Added documentation linting scripts section with testing guidance           |
 | 1.0.0   | 2026-01-22 | Initial version covering link quality fundamentals                          |

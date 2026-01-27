@@ -8,11 +8,11 @@ updated: "2026-01-22"
 status: "stable"
 
 complexity:
-  level: "super-expert"
+  level: "expert"
 
 impact:
   performance:
-    rating: "mega-high"
+    rating: "high"
   maintainability:
     rating: "high"
 ---
