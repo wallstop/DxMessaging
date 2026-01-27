@@ -10,9 +10,27 @@ updates:
     reviewers:
       - wallstop
 
-  # NuGet: .csproj/props/targets and .config/dotnet-tools.json (local tools)
+  # NuGet: SourceGenerator project - Roslyn packages pinned for Unity compiler compatibility
   - package-ecosystem: "nuget"
-    directory: "/"
+    directory: "/SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators"
+    schedule:
+      interval: "daily"
+    assignees:
+      - wallstop
+    reviewers:
+      - wallstop
+    ignore:
+      # SourceGenerator Roslyn packages - pinned for Unity compiler compatibility.
+      # Unity's embedded compiler requires specific Roslyn versions; updating breaks SourceGenerator loading.
+      # See: https://docs.unity3d.com/Manual/roslyn-analyzers.html
+      - dependency-name: "Microsoft.CodeAnalysis*"
+      - dependency-name: "System.Collections.Immutable"
+      - dependency-name: "System.Reflection.Metadata"
+      - dependency-name: "System.Runtime.CompilerServices.Unsafe"
+
+  # NuGet: SourceGenerator tests - no version restrictions
+  - package-ecosystem: "nuget"
+    directory: "/SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests"
     schedule:
       interval: "daily"
     assignees:
