@@ -60,6 +60,10 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Renormalize line endings
+        if: steps.git_changes.outputs.changed == 'true'
+        run: git add --renormalize -- '.config/dotnet-tools.json'
+
       - name: Create Pull Request
         if: steps.git_changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8

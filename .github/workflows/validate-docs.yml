@@ -18,6 +18,7 @@ on:
       - ".github/workflows/validate-docs.yml"
   push:
     branches:
+      - main
       - master
     paths:
       - "docs/**"

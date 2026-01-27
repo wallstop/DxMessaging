@@ -41,11 +41,14 @@ const excludeRegexes = [
   /(^|[\/\\])(Obj|obj)([\/\\]|$)/,
   /(^|[\/\\])Temp([\/\\]|$)/,
   /(^|[\/\\])Samples~([\/\\]|$)/,
-  /(^|[\/\\])\.vs([\/\\]|$)/
+  /(^|[\/\\])\.vs([\/\\]|$)/,
+  /(^|[\/\\])\.venv([\/\\]|$)/,
+  /(^|[\/\\])\.artifacts([\/\\]|$)/,
+  /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// Text file extensions to validate
-const exts = new Set([
+// Text file extensions that require CRLF line endings
+const crlfExts = new Set([
   '.cs', '.csproj', '.sln',
   '.js', '.cjs', '.mjs',
   '.json', '.jsonc', '.toml',
@@ -56,6 +59,12 @@ const exts = new Set([
   '.asmdef', '.asmref', '.meta',
   '.ps1'
 ]);
+
+// Shell scripts require LF line endings for Unix compatibility
+const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
+
+// All text file extensions we validate
+const exts = new Set([...crlfExts, ...lfExts]);
 
 /**
  * Recursively collect file paths under dir, excluding paths matching excludeRegexes.
@@ -230,6 +239,18 @@ function hasNonCrlfEol(buf) {
   return stripped.includes('\n') || stripped.includes('\r');
 }
 
+/**
+ * Check if buffer contains non-LF line endings (CRLF or bare CR).
+ * Used for shell scripts that must use LF only.
+ * @param {Buffer} buf - File content buffer.
+ * @returns {boolean} True if non-LF line endings are found.
+ */
+function hasNonLfEol(buf) {
+  const txt = buf.toString('utf8');
+  // CRLF or bare CR are invalid for LF-only files
+  return txt.includes('\r');
+}
+
 const candidateFiles = checkEntireRepo
   ? walk(repoRoot)
   : resolveTargets(targetArgs.length > 0 ? targetArgs : getStagedFiles());
@@ -270,28 +291,46 @@ for (const file of textFiles) {
     continue;
   }
   if (hasBom(buf)) bomFiles.push(path.relative(repoRoot, file));
-  if (hasNonCrlfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
+  
+  const ext = path.extname(file).toLowerCase();
+  if (lfExts.has(ext)) {
+    // Shell scripts must use LF only
+    if (hasNonLfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
+  } else {
+    // All other text files must use CRLF
+    if (hasNonCrlfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
+  }
 }
 
 if (bomFiles.length === 0 && badEolFiles.length === 0 && indexEolIssues.length === 0) {
-  console.log(`EOL check passed: ${textFiles.length} file(s) verified, CRLF only and no BOMs detected.`);
+  console.log(`EOL check passed: ${textFiles.length} file(s) verified (CRLF for text files, LF for shell scripts), no BOMs detected.`);
   process.exit(0);
 }
 
 if (bomFiles.length) {
-  console.log('Files contain a UTF-8 BOM (should be no BOM):');
-  for (const f of bomFiles) console.log(`  ${f}`);
+  console.error('Files contain a UTF-8 BOM (should be no BOM):');
+  for (const f of bomFiles) console.error(`  ${f}`);
 }
 if (badEolFiles.length) {
-  console.log('Files contain non-CRLF line endings (found LF or bare CR):');
-  for (const f of badEolFiles) console.log(`  ${f}`);
+  // Separate CRLF-required files from LF-required files for clearer error messages
+  const crlfViolations = badEolFiles.filter((f) => !lfExts.has(path.extname(f).toLowerCase()));
+  const lfViolations = badEolFiles.filter((f) => lfExts.has(path.extname(f).toLowerCase()));
+  
+  if (crlfViolations.length) {
+    console.error('Files require CRLF line endings but contain LF or bare CR:');
+    for (const f of crlfViolations) console.error(`  ${f}`);
+  }
+  if (lfViolations.length) {
+    console.error('Shell scripts require LF line endings but contain CRLF or bare CR:');
+    for (const f of lfViolations) console.error(`  ${f}`);
+  }
 }
 if (indexEolIssues.length) {
-  console.log('Git index contains non-normalized line endings (expected LF in repo for text files):');
+  console.error('Git index contains non-normalized line endings (expected LF in repo for text files):');
   for (const issue of indexEolIssues) {
-    console.log(`  ${issue.path} (${issue.indexEol})`);
+    console.error(`  ${issue.path} (${issue.indexEol})`);
   }
-  console.log('Fix: git add --renormalize .');
+  console.error('Fix: Run "node scripts/fix-eol.js" then re-stage affected files.');
 }
 console.error('EOL/BOM policy violations detected.');
 process.exit(1);

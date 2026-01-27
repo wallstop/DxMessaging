@@ -349,6 +349,12 @@ RUN set -eux; \
 RUN pip3 install --no-cache-dir yamllint --break-system-packages && yamllint --version
 
 # ------------------------------------------------------------------------------
+# Install pre-commit
+# https://pre-commit.com
+# ------------------------------------------------------------------------------
+RUN pip3 install --no-cache-dir pre-commit --break-system-packages && pre-commit --version
+
+# ------------------------------------------------------------------------------
 # Configure shell aliases for bash
 # ------------------------------------------------------------------------------
 RUN cat >> /etc/bash.bashrc <<'EOF'

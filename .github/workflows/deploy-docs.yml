@@ -17,6 +17,7 @@ on:
       - ".github/workflows/deploy-docs.yml"
   push:
     branches:
+      - main
       - master
     paths:
       - "docs/**"

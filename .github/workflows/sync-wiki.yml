@@ -3,6 +3,7 @@ name: Sync Wiki
 on:
   push:
     branches:
+      - main
       - master
     paths:
       - 'docs/**'

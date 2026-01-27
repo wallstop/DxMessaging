@@ -37,6 +37,26 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Keep PowerShell and JavaScript implementations in sync when both exist for the same task.
 - Add comments explaining the expected format of external command output.
 
+### Script Configuration Synchronization
+
+When scripts exist in both PowerShell and JavaScript, keep these values synchronized:
+
+- **Extension lists**: File extensions for CRLF, LF, or other validation must match exactly.
+- **Exclude patterns**: Directory exclusion patterns (`.git`, `node_modules`, `Library`, etc.) must match.
+- **Validation logic**: Error categories and reporting must use the same structure.
+
+When modifying one script, search for and update the corresponding script. Use comments to mark synchronized sections:
+
+```powershell
+# SYNC: Keep in sync with check-eol.js crlfExts
+$extensions = @('.cs', '.csproj', '.sln', ...)
+```
+
+```javascript
+// SYNC: Keep in sync with check-eol.ps1 $extensions
+const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
+```
+
 ### Shell Pattern Matching
 
 - Use `grep -F` for literal string matching (paths, filenames with special characters like `.`).
@@ -45,9 +65,28 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
 - **`grep` exit codes**: `grep` returns exit code 1 when no matches are found, which fails CI pipelines. Use `|| true`, `|| echo "0"`, or pipe to `wc -l` instead of `grep -c` when zero matches is acceptable.
 
+### EditorConfig Glob Patterns
+
+- **Recursive matching requires `**`**: `[*.sh]`only matches files in the root directory. Use`[**/*.sh]` for recursive matching across all directories.
+- **Brace expansion**: Use `[**/*.{sh,bash,zsh}]` to match multiple extensions in one section.
+- **Test patterns**: Verify EditorConfig patterns by checking files in subdirectories, not just the root.
+
+### Mixed Line Ending Policies
+
+This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`). When working with line endings:
+
+- **Prefer `fix-eol.js` for working tree fixes**: Run `node scripts/fix-eol.js` to directly fix line endings in your working tree. This is the recommended approach after cloning or when files have incorrect endings.
+- **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.
+- **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.
+- **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
+- **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
+
+See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness.md) for detailed patterns.
+
 ### Forbidden Commands
 
 - **NEVER** run `exec bash`, `exec /bin/bash`, or any variant of `exec` that replaces the current shell. This breaks terminal sessions and causes command failures.
+- **NEVER** run just `bash` as a standalone command. This spawns an interactive subshell that hangs indefinitely, blocking all further operations. Always run specific commands directly.
 - If you need a new shell environment, spawn a subshell with `bash -c "command"` or simply run commands directly.
 
 ### JavaScript/Node.js Practices
@@ -55,6 +94,12 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - All declared constants and variables must be used or removed.
 - Prefer `const` over `let`; use `let` only when reassignment is necessary.
 - When adding validation constants (e.g., `VALID_X`), ensure corresponding validation logic uses them.
+
+### Validation and Error Reporting
+
+- **Separate violation tracking**: When validating multiple policies (e.g., CRLF vs LF line endings, BOM vs encoding), track each violation type in separate collections. This enables clear, specific error messages.
+- **Specific error messages**: Error messages must indicate which policy was violated. Instead of "Line ending error in file.sh", report "file.sh: Expected LF line endings (shell script policy), found CRLF".
+- **Aggregate reporting**: Report all violations at the end rather than failing on the first error. This gives users a complete picture of what needs fixing.
 
 ## PR Review Feedback Handling
 
@@ -130,6 +175,7 @@ See the [Documentation Updates skill](./skills/documentation/documentation-updat
 - **Line endings**: CRLF, no UTF-8 BOM (enforced by pre-commit hooks).
 - **Headings**: Use ATX-style headings (`#`, `##`, `###`) not underlined style.
 - **Line length**: Not enforced. Write naturally; let lines wrap as needed.
+- **Inline code spacing**: Always include a space before and after inline code when adjacent to text. Write ``the `code` here`` not ``the`code`here``. This improves readability and matches CommonMark best practices.
 
 ## Changelog Guidelines
 

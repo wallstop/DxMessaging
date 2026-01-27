@@ -66,12 +66,16 @@ $excludePatterns = @(
     "[\\/]Obj[\\/]|[\\/]obj[\\/]",
     "[\\/]Temp[\\/]",
     "[\\/]Samples~[\\/]",
-    "[\\/]\.vs[\\/]"
+    "[\\/]\.vs[\\/]",
+    "[\\/]\.venv[\\/]",
+    "[\\/]\.artifacts[\\/]",
+    "[\\/]site[\\/]"
 )
 
-# File extensions we treat as text and validate
+# File extensions we treat as text and validate (CRLF expected)
 $extensions = @(
     '.cs', '.csproj', '.sln',
+    '.js', '.cjs', '.mjs',
     '.json', '.jsonc', '.toml',
     '.yaml', '.yml',
     '.md', '.markdown',
@@ -81,12 +85,25 @@ $extensions = @(
     '.ps1'
 )
 
+# Shell scripts must use LF for Unix compatibility
+$lfExtensions = @(
+    '.sh',
+    '.bash',
+    '.zsh',
+    '.ksh',
+    '.fish'
+)
+
+# All extensions to scan (CRLF + LF types)
+$allExtensions = $extensions + $lfExtensions
+
 $rootPath = Resolve-Path -LiteralPath $Root
 Write-VerboseLine "Scanning for EOL/BOM issues under: $rootPath"
 
 $bomFiles = New-Object System.Collections.Generic.List[string]
-$badEolFiles = New-Object System.Collections.Generic.List[string]
-$indexIssues = Get-GitIndexEolIssues -Extensions $extensions
+$crlfViolations = New-Object System.Collections.Generic.List[string]
+$lfViolations = New-Object System.Collections.Generic.List[string]
+$indexIssues = Get-GitIndexEolIssues -Extensions $allExtensions
 
 Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
     ForEach-Object {
@@ -95,7 +112,7 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
         foreach ($pat in $excludePatterns) { if ($path -match $pat) { return } }
 
         $ext = [System.IO.Path]::GetExtension($path).ToLowerInvariant()
-        if ($extensions -notcontains $ext) { return }
+        if ($allExtensions -notcontains $ext) { return }
 
         try {
             $bytes = [System.IO.File]::ReadAllBytes($path)
@@ -110,18 +127,29 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
             $bomFiles.Add($path)
         }
 
-        # Check for line endings
+        # Check for line endings based on file type
         $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-        $lfOnly = [regex]::Matches($text, '(?<!\r)\n').Count
-        $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
-
-        if ($lfOnly -gt 0 -or $crOnly -gt 0) {
-            $badEolFiles.Add($path)
+        
+        if ($lfExtensions -contains $ext) {
+            # Shell scripts should have LF only (no CRLF or bare CR)
+            $crlfCount = [regex]::Matches($text, '\r\n').Count
+            $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
+            if ($crlfCount -gt 0 -or $crOnly -gt 0) {
+                $lfViolations.Add($path)
+            }
+        }
+        else {
+            # All other text files should have CRLF (no bare LF or bare CR)
+            $lfOnly = [regex]::Matches($text, '(?<!\r)\n').Count
+            $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
+            if ($lfOnly -gt 0 -or $crOnly -gt 0) {
+                $crlfViolations.Add($path)
+            }
         }
     }
 
-if ($bomFiles.Count -eq 0 -and $badEolFiles.Count -eq 0 -and $indexIssues.Count -eq 0) {
-    Write-Host "EOL check passed: CRLF only and no BOMs detected."
+if ($bomFiles.Count -eq 0 -and $crlfViolations.Count -eq 0 -and $lfViolations.Count -eq 0 -and $indexIssues.Count -eq 0) {
+    Write-Host "EOL check passed: line endings correct and no BOMs detected."
     exit 0
 }
 
@@ -130,15 +158,20 @@ if ($bomFiles.Count -gt 0) {
     $bomFiles | ForEach-Object { Write-Host "  $_" }
 }
 
-if ($badEolFiles.Count -gt 0) {
-    Write-Host "Files contain non-CRLF line endings (found LF or bare CR):"
-    $badEolFiles | ForEach-Object { Write-Host "  $_" }
+if ($lfViolations.Count -gt 0) {
+    Write-Host "Shell scripts require LF line endings but contain CRLF or bare CR:"
+    $lfViolations | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($crlfViolations.Count -gt 0) {
+    Write-Host "Files require CRLF line endings but contain LF or bare CR:"
+    $crlfViolations | ForEach-Object { Write-Host "  $_" }
 }
 
 if ($indexIssues.Count -gt 0) {
     Write-Host "Git index contains non-normalized line endings (expected LF in repo for text files):"
     $indexIssues | ForEach-Object { Write-Host "  $_" }
-    Write-Host "Fix: git add --renormalize ."
+    Write-Host "Fix: Run 'node scripts/fix-eol.js' then re-stage affected files."
 }
 
 Write-Error "EOL/BOM policy violations detected. See lists above."
