@@ -79,7 +79,15 @@ jobs:
       - name: Apply CSharpier formatting
         run: dotnet tool run csharpier format
       - name: Renormalize line endings
-        run: git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml'
+        shell: bash
+        run: |
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # when certain file types don't exist or aren't accessible in this checkout context
+          for ext in cs md json asmdef yml yaml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
       - name: Detect changes
         id: changes
         shell: bash
@@ -117,7 +125,12 @@ jobs:
           git checkout -B "$BRANCH"
           # Stage only supported text files; avoid workflows to prevent permission issues
           # Use --renormalize to ensure LF line endings in git index per .gitattributes
-          git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml'
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          for ext in cs md json asmdef yml yaml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
           git commit -m "chore(format): apply requested formatting for PR #${{ steps.meta.outputs.pr }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream
@@ -214,7 +227,15 @@ jobs:
       - name: Apply CSharpier formatting
         run: dotnet tool run csharpier format
       - name: Renormalize line endings
-        run: git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml'
+        shell: bash
+        run: |
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # when certain file types don't exist or aren't accessible in this checkout context
+          for ext in cs md json asmdef yml yaml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
       - name: Detect changes
         id: changes
         shell: bash
@@ -252,7 +273,12 @@ jobs:
           git checkout -B "$BRANCH"
           # Stage only supported text files; avoid workflows to prevent permission issues
           # Use --renormalize to ensure LF line endings in git index per .gitattributes
-          git add --renormalize -- '*.cs' '**/*.cs' '*.md' '**/*.md' '*.json' '**/*.json' '*.asmdef' '**/*.asmdef' '*.yml' '**/*.yml' '*.yaml' '**/*.yaml'
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          for ext in cs md json asmdef yml yaml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
           git commit -m "chore(format): apply requested formatting for PR #${{ steps.meta.outputs.pr }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream

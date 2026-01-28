@@ -44,7 +44,15 @@ jobs:
 
       - name: Renormalize line endings
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
-        run: git add --renormalize -- '*.cs' '**/*.cs'
+        shell: bash
+        run: |
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # when certain file types don't exist or aren't accessible in this checkout context
+          for ext in cs; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
 
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
@@ -84,7 +92,15 @@ jobs:
         run: ~/.dotnet/tools/csharpier .
 
       - name: Renormalize line endings
-        run: git add --renormalize -- '*.cs' '**/*.cs'
+        shell: bash
+        run: |
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # when certain file types don't exist or aren't accessible in this checkout context
+          for ext in cs; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
 
       - name: Detect changes
         id: changes
@@ -110,7 +126,12 @@ jobs:
           git checkout -B "$BRANCH"
           # Only stage C# files to avoid touching workflow YAML (requires special permissions)
           # Use --renormalize to ensure LF line endings in git index per .gitattributes
-          git add --renormalize -- '*.cs' '**/*.cs'
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          for ext in cs; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
           git commit -m "chore(format): apply CSharpier formatting for PR #${{ github.event.pull_request.number }}"
           git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
           git fetch upstream
