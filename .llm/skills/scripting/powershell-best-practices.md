@@ -62,6 +62,7 @@ aliases:
   - "Script reliability"
 
 related:
+  - "shell-best-practices"
   - "git-workflow-robustness"
   - "documentation-updates"
 
@@ -141,6 +142,52 @@ This distinction applies when:
 1. **Matching XML/SVG/HTML tag attributes**: `[^>]*` is safe—closing `>` is outside quotes
 1. **The file is controlled/validated**: Project-maintained assets with known format
 1. **Matching comments or CDATA**: Use `.*?` instead—these sections allow `>`
+
+### Structural Completeness in XML/SVG Replacements
+
+When using regex to find-and-replace XML/SVG structures, both the pattern and replacement must
+capture complete structural units. Partial matches create fragile code that breaks on formatting
+changes.
+
+#### Problem: Incomplete Structural Boundaries
+
+```powershell
+# BROKEN: Pattern matches up to </text> but leaves </g> outside
+$pattern = '<g id="version-badge">.*?</text>'
+$replacement = '<g id="version-badge"><text>New Content</text>'
+
+# Input:  <g id="version-badge"><text>Old</text></g>
+# Result: <g id="version-badge"><text>New Content</text></g>  ← Works by accident!
+
+# But what if there's whitespace or nested elements?
+# Input:  <g id="version-badge">
+#           <text>Old</text>
+#         </g>
+# Result: <g id="version-badge"><text>New Content</text>
+#         </g>  ← Broken indentation, fragile!
+```
+
+The pattern relies on `</g>` being immediately after `</text>`, which is an undocumented assumption.
+
+#### Solution: Match Complete Structural Units
+
+```powershell
+# CORRECT: Match the entire structural unit including closing tags
+$pattern = '<g id="version-badge">.*?</g>'
+$replacement = '<g id="version-badge"><text>New Content</text></g>'
+
+# Now the replacement is self-contained and doesn't depend on surrounding structure
+```
+
+#### Structural Completeness Checklist
+
+When writing XML/SVG regex replacements:
+
+- [ ] Pattern includes all opening AND closing tags for matched elements
+- [ ] Replacement is a valid, complete XML fragment on its own
+- [ ] Test with both minified and pretty-printed input
+- [ ] Consider using `(?s)` flag (DOTALL) if content spans multiple lines
+- [ ] Document which elements are expected in the matched structure
 
 ### Self-Referential Documentation Breaking Code
 

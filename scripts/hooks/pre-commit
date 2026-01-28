@@ -22,9 +22,9 @@ set -e
 #   - CI/CD can enforce version sync separately if needed
 echo "🏷️  Syncing banner version..."
 if command -v pwsh &> /dev/null; then
-    pwsh -NoProfile -File scripts/sync-banner-version.ps1
+    pwsh -NoProfile -File scripts/sync-banner-version.ps1 || echo "⚠️  Banner version sync failed (cosmetic only, continuing)"
 elif command -v powershell &> /dev/null; then
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-banner-version.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-banner-version.ps1 || echo "⚠️  Banner version sync failed (cosmetic only, continuing)"
 else
     echo "⚠️  PowerShell not found. Skipping banner version sync (cosmetic only)."
 fi

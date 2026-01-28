@@ -3,7 +3,7 @@
     Syncs the version from package.json to the SVG banner.
 .DESCRIPTION
     Reads the version from package.json and updates the version badge in the
-    dxmessaging-banner.svg file. Automatically stages the SVG if modified.
+    DxMessaging-banner.svg file. Automatically stages the SVG if modified.
     
     Called by the pre-commit hook before each commit is created.
     
@@ -22,7 +22,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 
 # Construct paths for package.json and SVG
 $packageJsonPath = Join-Path $repoRoot "package.json"
-$svgPath = Join-Path $repoRoot "docs" "images" "dxmessaging-banner.svg"
+$svgPath = Join-Path $repoRoot "docs" "images" "DxMessaging-banner.svg"
 
 # Check if package.json exists
 if (-not (Test-Path $packageJsonPath)) {
@@ -74,12 +74,13 @@ try {
 # 3. This SVG file is a controlled, project-maintained asset with validated format
 # 4. This differs from XML comments where '>' IS allowed (hence .*? for the comment body)
 # Note: Malformed XML (mismatched quotes) would break this assumption, but such files fail parsing anyway
-$versionPattern = '<!-- Version badge \(top right\).*?-->\s*<g[^>]*>\s*<rect[^>]*/>\s*<text[^>]*>v[\d]+\.[\d]+\.[\d]+[^<]*</text>'
+$versionPattern = '<!-- Version badge \(top right\).*?-->\s*<g[^>]*>\s*<rect[^>]*/>\s*<text[^>]*>v\d+\.\d+\.\d+[^<]*</text>\s*</g>'
 $newVersionText = @"
 <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->
   <g transform="translate(720, 25)">
     <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
     <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v$version</text>
+  </g>
 "@
 
 # Check if the pattern matches
@@ -93,7 +94,7 @@ if ($svgContent -notmatch $versionPattern) {
 $currentMatch = [regex]::Match($svgContent, $versionPattern).Value
 
 # Extract just the version number from the current match for comparison
-$currentVersionMatch = [regex]::Match($currentMatch, '>v([\d]+\.[\d]+\.[\d]+[^<]*)</text>')
+$currentVersionMatch = [regex]::Match($currentMatch, '>v(\d+\.\d+\.\d+[^<]*)</text>')
 if ($currentVersionMatch.Success) {
     $currentVersion = $currentVersionMatch.Groups[1].Value
     if ($currentVersion -eq $version) {
