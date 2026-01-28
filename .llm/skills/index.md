@@ -49,7 +49,7 @@
 
 | Skill                                                                              | Lines  | Complexity      | Status    | Performance | Tags                            |
 | ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ------------------------------- |
-| [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md) | ✅ 266 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, git, ci-cd      |
+| [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md) | ✅ 349 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, git, ci-cd      |
 | [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)    | ✅ 347 | 🟡 Intermediate | ✅ Stable | ●●○○○       | github-actions, ci-cd, workflow |
 
 ## Performance
@@ -87,7 +87,7 @@
 | ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md) | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)    | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
-| [Shell Scripting Best Practices](./scripting/shell-best-practices.md)              | ✅ 336 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
+| [Shell Scripting Best Practices](./scripting/shell-best-practices.md)              | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
 
 ## Solid
 

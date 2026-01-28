@@ -82,10 +82,44 @@ and synchronization across workflow sections.
 
 Apply these requirements when using `git add --renormalize` in CI:
 
+1. **Use per-extension loops** (REQUIRED) - Process each extension separately with existence checks
 1. **Validate every pattern** matches at least one file in the repository
 1. **Remove patterns for non-existent file types** (e.g., `*.markdown` when only `*.md` exists)
 1. **Synchronize patterns** between `git add --renormalize`, `file_pattern`, and path triggers
 1. **Add missing patterns** for file types that are formatted (e.g., add YAML patterns if Prettier formats YAML)
+
+### Required Pattern: Per-Extension Loop
+
+**ALWAYS** use this pattern when renormalizing multiple file types:
+
+```bash
+# REQUIRED: Per-extension loop with existence check
+for ext in cs md json asmdef yml yaml; do
+  if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+    git add --renormalize -- "*.$ext" "**/*.$ext"
+  fi
+done
+```
+
+This pattern:
+
+- Processes each extension individually
+- Checks if files exist before attempting to renormalize
+- Prevents "pathspec did not match" failures (exit code 128)
+- Works correctly even when some file types are missing
+
+### Forbidden Patterns
+
+**NEVER** use single-line multi-pattern commands:
+
+```bash
+# FORBIDDEN: Single command with multiple patterns
+# Fails with exit code 128 if ANY pattern matches no files
+git add --renormalize -- '*.md' '**/*.md' '*.json' '**/*.json' '*.yml' '**/*.yml'
+
+# FORBIDDEN: Unguarded multiple extensions
+git add --renormalize -- '*.md' '*.markdown' '*.json'  # Fails if no .markdown files
+```
 
 ## The Problem
 
@@ -237,8 +271,13 @@ git ls-files '*.md'        # this pattern
 # Dangerous: Stages ALL files
 - run: git add --renormalize .
 
-# Better: Specific file types
-- run: git add --renormalize -- '*.md' '**/*.md' '*.json' '**/*.json'
+# Better: Use per-extension loop pattern (see Required Pattern above)
+- run: |
+    for ext in md json; do
+      if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+        git add --renormalize -- "*.$ext" "**/*.$ext"
+      fi
+    done
 ```
 
 ## Integration with Workflow Consistency
@@ -253,10 +292,54 @@ This skill complements the [Workflow Consistency skill](./workflow-consistency.m
 
 Before merging workflow changes:
 
+- [ ] Uses per-extension loop pattern with existence checks (REQUIRED)
 - [ ] All path patterns match at least one file (`git ls-files '<pattern>'`)
 - [ ] Patterns are consistent between `pull_request` and `pull_request_target`
 - [ ] No deprecated or removed file extensions are referenced
 - [ ] Comments document the purpose of non-obvious patterns
+
+## Verification
+
+### Manual Verification
+
+Test your renormalize patterns locally before committing:
+
+```bash
+# Verify file types exist
+for ext in cs md json asmdef yml yaml; do
+  count=$(git ls-files "*.$ext" "**/*.$ext" | wc -l)
+  echo "$ext: $count files"
+done
+
+# Test the full loop pattern (dry run)
+for ext in cs md json asmdef yml yaml; do
+  if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+    echo "Would renormalize: *.$ext"
+  else
+    echo "SKIP (no files): *.$ext"
+  fi
+done
+```
+
+### Automated Validation
+
+Run the workflow validation script to detect problematic patterns:
+
+```bash
+node scripts/validate-workflows.js
+```
+
+This script scans all workflow files for:
+
+- Single-line multi-pattern `git add --renormalize` commands (FORBIDDEN)
+- Missing existence checks before renormalize commands
+- Patterns that may not match any files
+
+### CI Integration
+
+The validation script runs as part of the CI pipeline (via the actionlint workflow) to catch
+problematic patterns before they cause failures. Note: This validation does not run in
+pre-commit hooks—only in CI.
 
 ## See Also
 
