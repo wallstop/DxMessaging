@@ -1,6 +1,10 @@
 # DxMessaging for Unity
 
 <p align="center">
+  <img src="docs/images/DxMessaging-banner.svg" alt="DxMessaging Banner" width="800"/>
+</p>
+
+<p align="center">
   <a href="https://wallstop.github.io/DxMessaging/">
     <img src="https://img.shields.io/badge/📖_Full_Documentation-Visit_the_Docs_Site-2ea44f?style=for-the-badge" alt="Full Documentation" />
   </a>

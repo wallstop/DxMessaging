@@ -42,8 +42,17 @@ const crlfExts = new Set([
 // Shell scripts require LF line endings for Unix compatibility
 const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
 
+// Git hooks directory - files here need LF regardless of extension
+const hooksDir = path.join('scripts', 'hooks');
+
 // All text file extensions we fix
 const exts = new Set([...crlfExts, ...lfExts]);
+
+// Check if a file is a git hook (no extension, in hooks directory)
+function isGitHook(filePath) {
+  const rel = path.relative(repoRoot, filePath);
+  return rel.startsWith(hooksDir + path.sep) && path.extname(filePath) === '';
+}
 
 function walk(dir, files = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -122,7 +131,10 @@ let scanned = 0;
 
 for (const file of allFiles) {
   const ext = path.extname(file).toLowerCase();
-  if (!exts.has(ext)) continue;
+  const isHook = isGitHook(file);
+  
+  // Process if it has a known extension OR if it's a git hook
+  if (!exts.has(ext) && !isHook) continue;
   let buf;
   try {
     buf = fs.readFileSync(file);
@@ -135,8 +147,9 @@ for (const file of allFiles) {
   const origTxt = origBuf.toString('utf8');
   const noBomTxt = buf.toString('utf8');
   
-  // Shell scripts use LF, all other text files use CRLF
-  const fixedTxt = lfExts.has(ext) ? toLf(noBomTxt) : toCrlf(noBomTxt);
+  // Shell scripts and git hooks use LF, all other text files use CRLF
+  const needsLf = lfExts.has(ext) || isHook;
+  const fixedTxt = needsLf ? toLf(noBomTxt) : toCrlf(noBomTxt);
 
   if (fixedTxt !== origTxt) {
     fs.writeFileSync(file, fixedTxt, { encoding: 'utf8' });

@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-01-27. Do not edit manually.
+> **Auto-generated** on 2026-01-28. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,9 +9,9 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 72    |
-| Categories   | 4     |
-| Unique Tags  | 123   |
+| Total Skills | 76    |
+| Categories   | 5     |
+| Unique Tags  | 139   |
 
 ---
 
@@ -19,8 +19,9 @@
 
 - [Documentation](#documentation) (12)
 - [Performance](#performance) (24)
+- [Scripting](#scripting) (3)
 - [Solid](#solid) (13)
-- [Testing](#testing) (23)
+- [Testing](#testing) (24)
 - [Tag Cloud](#tag-cloud)
 - [All Skills by Complexity](#all-skills-by-complexity)
 
@@ -72,6 +73,14 @@
 | [StringBuilder Pooling for Zero-Allocation String Building](./performance/stringbuilder-pooling.md)             | ✅ 320 | 🟢 Basic        | ✅ Stable | ●●●○○       | memory, allocation, pooling            |
 | [WaitForSeconds and Yield Instruction Pooling](./performance/yield-instruction-pooling.md)                      | ✅ 348 | 🟢 Basic        | ✅ Stable | ●●●○○       | performance, unity, coroutines         |
 
+## Scripting
+
+| Skill                                                                              | Lines  | Complexity      | Status    | Performance | Tags                                      |
+| ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
+| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md) | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
+| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)    | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
+| [Shell Scripting Best Practices](./scripting/shell-best-practices.md)              | ✅ 336 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
+
 ## Solid
 
 | Skill                                                                                              | Lines  | Complexity      | Status    | Performance | Tags                                 |
@@ -100,6 +109,7 @@
 | [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md)                           | 📝 108 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, parameterized, data-driven         |
 | [Data-Driven Tests with TestCaseSource](./testing/data-driven-tests.md)                           | 📝 198 | 🟡 Intermediate | ✅ Stable | ●○○○○       | testing, parameterized, data-driven         |
 | [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md)                        | ⚠️ 370 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, git, ci-cd                         |
+| [Script Test Coverage Requirements](./testing/script-test-coverage.md)                            | ✅ 260 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, scripts, jest                      |
 | [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                   | 📝 186 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, generic                  |
 | [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)       | ✅ 253 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, reference-counting       |
 | [Shared Test Fixtures with Reference Counting](./testing/shared-test-fixtures.md)                 | 📝 166 | 🟠 Advanced     | ✅ Stable | ●●●○○       | testing, fixtures, performance              |
@@ -122,7 +132,7 @@
 
 ## Tag Cloud
 
-`testing`×24 `performance`×15 `unity`×13 `documentation`×10 `solid`×10 `memory`×9 `patterns`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `singleton`×5 `struct`×5 `anti-patterns`×4 `builder`×4 `ci-cd`×4 `dictionary`×4 `fixtures`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `coverage`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `linting`×3 `logging`×3 `markdown`×3 `messaging`×3 `organization`×3 `parameterized`×3 `quality`×3 `reference-counting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `eviction`×2 `examples`×2 `github-actions`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `lfu`×2 `lifecycle`×2 `links`×2 `lru`×2 `optimization`×2 `release-notes`×2 `root-cause-analysis`×2 `urls`×2 `user-communication`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `configuration`×1 `coroutines`×1 `disposable`×1 `dry`×1 `error-handling`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `git`×1 `implementation`×1 `llm-context`×1 `maintainability`×1 `maintenance`×1 `methodimpl`×1 `naming`×1 `negative-tests`×1 `parsing`×1 `procedure`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `semantic-versioning`×1 `shared-state`×1 `shuffle`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `test-cases`×1 `thread-safety`×1 `type-specialization`×1 `validation`×1 `version-management`×1 `workflow`×1 `yield`×1 `zero-flaky`×1
+`testing`×26 `performance`×15 `unity`×13 `documentation`×10 `solid`×10 `memory`×9 `patterns`×9 `pooling`×9 `allocation`×8 `ci-cd`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `singleton`×5 `struct`×5 `anti-patterns`×4 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `linting`×3 `logging`×3 `markdown`×3 `messaging`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `error-handling`×2 `eviction`×2 `examples`×2 `github-actions`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `javascript`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `optimization`×2 `release-notes`×2 `root-cause-analysis`×2 `scripting`×2 `urls`×2 `user-communication`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `configuration`×1 `coroutines`×1 `cross-platform`×1 `disposable`×1 `dry`×1 `encoding`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `git`×1 `here-strings`×1 `implementation`×1 `jest`×1 `llm-context`×1 `macos`×1 `maintainability`×1 `maintenance`×1 `methodimpl`×1 `naming`×1 `negative-tests`×1 `parsing`×1 `pre-commit`×1 `procedure`×1 `raii`×1 `regex`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `test-cases`×1 `thread-safety`×1 `type-specialization`×1 `validation`×1 `version-management`×1 `windows`×1 `workflow`×1 `yield`×1 `zero-flaky`×1
 
 ---
 
@@ -166,6 +176,7 @@
 - [Collection Extensions: Type Specialization](./solid/collection-extensions-type-specialization.md) _(solid)_
 - [Collection Pooling with RAII Pattern](./performance/collection-pooling.md) _(performance)_
 - [Comprehensive Test Coverage Requirements](./testing/comprehensive-test-coverage.md) _(testing)_
+- [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md) _(scripting)_
 - [Data-Driven Coverage Patterns](./testing/test-coverage-data-driven.md) _(testing)_
 - [Data-Driven Test Sources](./testing/data-driven-tests-sources.md) _(testing)_
 - [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md) _(testing)_
@@ -181,14 +192,17 @@
 - [Object Pooling for Zero-Allocation Messaging](./performance/object-pooling.md) _(performance)_
 - [Object Pooling Usage Examples](./performance/object-pooling-usage-examples.md) _(performance)_
 - [Object Pooling Variations](./performance/object-pooling-variations.md) _(performance)_
+- [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md) _(scripting)_
 - [Readonly Struct Cached Hash Performance Notes](./performance/readonly-struct-cached-hash-performance-notes.md) _(performance)_
 - [Readonly Struct with Cached Hash for Dictionary Keys](./performance/readonly-struct-cached-hash.md) _(performance)_
 - [Runtime Singleton Pattern](./performance/singleton-runtime.md) _(performance)_
 - [RuntimeSingleton and ScriptableObject Singleton Patterns](./performance/singleton-patterns.md) _(performance)_
+- [Script Test Coverage Requirements](./testing/script-test-coverage.md) _(testing)_
 - [ScriptableObject Singleton Pattern](./performance/singleton-scriptableobject.md) _(performance)_
 - [Serializable Dictionary for Unity Inspector](./performance/serializable-dictionary.md) _(performance)_
 - [Serializable Dictionary Property Drawer](./performance/serializable-dictionary-property-drawer.md) _(performance)_
 - [Serializable Dictionary Usage Examples](./performance/serializable-dictionary-usage-examples.md) _(performance)_
+- [Shell Scripting Best Practices](./scripting/shell-best-practices.md) _(scripting)_
 - [Singleton Usage Examples](./performance/singleton-usage-examples.md) _(performance)_
 - [Test Base Class Cleanup Usage](./testing/test-base-class-cleanup-usage.md) _(testing)_
 - [Test Base Class with Automatic Resource Cleanup](./testing/test-base-class-cleanup.md) _(testing)_

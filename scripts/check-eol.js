@@ -63,8 +63,21 @@ const crlfExts = new Set([
 // Shell scripts require LF line endings for Unix compatibility
 const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
 
+// Git hooks directory - files here need LF regardless of extension
+const hooksDir = path.join('scripts', 'hooks');
+
 // All text file extensions we validate
 const exts = new Set([...crlfExts, ...lfExts]);
+
+/**
+ * Check if a file is a git hook (no extension, in hooks directory)
+ * @param {string} filePath - Absolute path to the file.
+ * @returns {boolean} True if the file is a git hook.
+ */
+function isGitHook(filePath) {
+  const rel = path.relative(repoRoot, filePath);
+  return rel.startsWith(hooksDir + path.sep) && path.extname(filePath) === '';
+}
 
 /**
  * Recursively collect file paths under dir, excluding paths matching excludeRegexes.
@@ -195,7 +208,11 @@ function getIndexEolIssues(files) {
     const meta = line.slice(0, tabIndex).trim();
     const filePath = line.slice(tabIndex + 1).trim();
     const ext = path.extname(filePath).toLowerCase();
-    if (!exts.has(ext)) {
+    const fullPath = path.resolve(repoRoot, filePath);
+    const isHook = isGitHook(fullPath);
+    
+    // Skip if not a known text file extension and not a git hook
+    if (!exts.has(ext) && !isHook) {
       continue;
     }
 
@@ -260,7 +277,10 @@ const seenFiles = new Set();
 
 for (const file of candidateFiles) {
   const ext = path.extname(file).toLowerCase();
-  if (!exts.has(ext)) {
+  const isHook = isGitHook(file);
+  
+  // Process if it has a known extension OR if it's a git hook
+  if (!exts.has(ext) && !isHook) {
     continue;
   }
 
@@ -293,8 +313,11 @@ for (const file of textFiles) {
   if (hasBom(buf)) bomFiles.push(path.relative(repoRoot, file));
   
   const ext = path.extname(file).toLowerCase();
-  if (lfExts.has(ext)) {
-    // Shell scripts must use LF only
+  const isHook = isGitHook(file);
+  
+  // Shell scripts and git hooks must use LF only
+  const needsLf = lfExts.has(ext) || isHook;
+  if (needsLf) {
     if (hasNonLfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
   } else {
     // All other text files must use CRLF
@@ -312,16 +335,22 @@ if (bomFiles.length) {
   for (const f of bomFiles) console.error(`  ${f}`);
 }
 if (badEolFiles.length) {
-  // Separate CRLF-required files from LF-required files for clearer error messages
-  const crlfViolations = badEolFiles.filter((f) => !lfExts.has(path.extname(f).toLowerCase()));
-  const lfViolations = badEolFiles.filter((f) => lfExts.has(path.extname(f).toLowerCase()));
+  // Separate CRLF-required files from LF-required files (shell scripts + git hooks)
+  const crlfViolations = badEolFiles.filter((f) => {
+    const fullPath = path.resolve(repoRoot, f);
+    return !lfExts.has(path.extname(f).toLowerCase()) && !isGitHook(fullPath);
+  });
+  const lfViolations = badEolFiles.filter((f) => {
+    const fullPath = path.resolve(repoRoot, f);
+    return lfExts.has(path.extname(f).toLowerCase()) || isGitHook(fullPath);
+  });
   
   if (crlfViolations.length) {
     console.error('Files require CRLF line endings but contain LF or bare CR:');
     for (const f of crlfViolations) console.error(`  ${f}`);
   }
   if (lfViolations.length) {
-    console.error('Shell scripts require LF line endings but contain CRLF or bare CR:');
+    console.error('Shell scripts and git hooks require LF line endings but contain CRLF or bare CR:');
     for (const f of lfViolations) console.error(`  ${f}`);
   }
 }

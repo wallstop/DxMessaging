@@ -53,6 +53,7 @@ const VALID_CATEGORIES = [
     'error-handling',
     'code-generation',
     'documentation',
+    'scripting',
 ];
 
 const VALID_COMPLEXITY_LEVELS = ['basic', 'intermediate', 'advanced', 'expert'];

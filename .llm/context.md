@@ -37,6 +37,27 @@ Scripts in `scripts/` may be PowerShell (`.ps1`) or JavaScript (`.js`). Follow t
 - Keep PowerShell and JavaScript implementations in sync when both exist for the same task.
 - Add comments explaining the expected format of external command output.
 
+### Filename Case Sensitivity
+
+Linux filesystems are case-sensitive; Windows and macOS are not. Scripts that work locally may fail in CI:
+
+- **Verify exact case**: Use `git ls-files | grep -i filename` or `ls -la` to confirm actual filenames.
+- **Test on Linux**: Run scripts in Docker, WSL, or Linux before committing.
+- **Common mistake**: Using `dxmessaging-banner.svg` when the file is `DxMessaging-banner.svg`.
+
+See the [Cross-Platform Compatibility skill](./skills/scripting/cross-platform-compatibility.md) for detailed patterns.
+
+### Script Test Coverage
+
+All scripts in `scripts/` must have corresponding test coverage in `scripts/__tests__/`:
+
+- **Naming**: `script-name.test.js` for each script.
+- **Coverage**: Test core logic, input validation, edge cases, and error handling.
+- **File paths**: Include tests that verify referenced file paths exist with correct case.
+- **PowerShell logic**: Implement equivalent JavaScript functions to test PowerShell script logic.
+
+See the [Cross-Platform Compatibility skill](./skills/scripting/cross-platform-compatibility.md) for testing patterns.
+
 ### Script Configuration Synchronization
 
 When scripts exist in both PowerShell and JavaScript, keep these values synchronized:
@@ -94,6 +115,28 @@ See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness
 - All declared constants and variables must be used or removed.
 - Prefer `const` over `let`; use `let` only when reassignment is necessary.
 - When adding validation constants (e.g., `VALID_X`), ensure corresponding validation logic uses them.
+
+### Jest Test Style
+
+For JavaScript tests using Jest:
+
+- **Use `test()` not `it()`**: All tests must use `test()` for consistency with existing tests.
+- **Descriptive names**: Test descriptions should clearly state what is being tested.
+- **Group with `describe()`**: Use `describe()` blocks to group related tests logically.
+
+```javascript
+// CORRECT
+describe("Version Extraction", () => {
+  test("should extract valid semver version", () => {
+    // ...
+  });
+});
+
+// WRONG: Do not use it()
+it("should extract valid semver version", () => {
+  // ...
+});
+```
 
 ### Validation and Error Reporting
 

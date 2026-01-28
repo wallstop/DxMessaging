@@ -1,8 +1,10 @@
 #!/bin/bash
 #
-# Git pre-commit hook for skills index generation
+# Git pre-commit hook for DxMessaging
 #
-# This hook automatically regenerates the skills index.md when skill files are modified.
+# This hook:
+# 1. Syncs the banner version from package.json to the SVG banner
+# 2. Regenerates the skills index.md when skill files are modified
 #
 # Installation:
 #   cp scripts/hooks/pre-commit .git/hooks/pre-commit
@@ -10,6 +12,22 @@
 #
 
 set -e
+
+# 0) Sync banner version from package.json (runs before each commit is created)
+# This ensures the SVG banner always displays the correct version.
+#
+# NOTE: PowerShell is optional here. If not found, we skip silently because:
+#   - The banner version is purely cosmetic (README appearance)
+#   - Contributors without PowerShell should not be blocked from committing
+#   - CI/CD can enforce version sync separately if needed
+echo "🏷️  Syncing banner version..."
+if command -v pwsh &> /dev/null; then
+    pwsh -NoProfile -File scripts/sync-banner-version.ps1 || echo "⚠️  Banner version sync failed (cosmetic only, continuing)"
+elif command -v powershell &> /dev/null; then
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-banner-version.ps1 || echo "⚠️  Banner version sync failed (cosmetic only, continuing)"
+else
+    echo "⚠️  PowerShell not found. Skipping banner version sync (cosmetic only)."
+fi
 
 SKILLS_DIR=".llm/skills"
 INDEX_FILE="$SKILLS_DIR/index.md"
