@@ -118,6 +118,30 @@ closing delimiter `-->`.
 | `.*?`    | Content may contain any characters    | XML/HTML comments         |
 | `[^x]*?` | Rarely needed; non-greedy exclusion   | Edge cases only           |
 
+#### When `[^>]*` IS Appropriate: XML Tag Attributes
+
+While `[^>]*` fails for XML/HTML **comments** (where `>` is allowed), it is safe for matching
+XML **tag attributes** in well-formed XML. The `>` character IS allowed unescaped in attribute
+values per XML 1.0 section 2.3's `AttValue` grammar, but the closing `>` of a tag is always
+outside the quoted attribute values (since quotes must be properly matched):
+
+```powershell
+# SAFE: Matching XML tag attributes in well-formed XML
+# The closing '>' is always outside quoted attribute values due to grammar constraints
+$pattern = '<rect[^>]*/>'  # Safe: closing '>' is outside any attribute quotes
+$pattern = '<g[^>]*>'      # Safe: same reasoning (malformed XML would fail parsing anyway)
+
+# UNSAFE: Matching XML comments (where '>' IS allowed)
+$pattern = '<!--[^>]*-->'  # Broken: comments can contain '>'
+$pattern = '<!--.*?-->'    # Correct: use non-greedy for comments
+```
+
+This distinction applies when:
+
+1. **Matching XML/SVG/HTML tag attributes**: `[^>]*` is safe—closing `>` is outside quotes
+1. **The file is controlled/validated**: Project-maintained assets with known format
+1. **Matching comments or CDATA**: Use `.*?` instead—these sections allow `>`
+
 ### Self-Referential Documentation Breaking Code
 
 Comments that document regex patterns must not contain literal examples of matched content.

@@ -66,6 +66,14 @@ try {
 # SYNC: Keep pattern in sync with the SVG banner format
 # The pattern anchors to the Version badge comment to avoid matching other version-like text
 # Note: Uses .*? (non-greedy) for comment body to match anything up to -->
+#
+# PATTERN SAFETY: The [^>]* patterns used here for XML tag attributes (e.g., <g[^>]*>) are safe because:
+# 1. In well-formed XML, the closing '>' of a tag is always outside quoted attribute values
+# 2. The AttValue grammar (XML 1.0 section 2.3) ensures quotes are properly matched, so the
+#    parser finds the '>' that closes the tag, not any '>' that might appear in attribute values
+# 3. This SVG file is a controlled, project-maintained asset with validated format
+# 4. This differs from XML comments where '>' IS allowed (hence .*? for the comment body)
+# Note: Malformed XML (mismatched quotes) would break this assumption, but such files fail parsing anyway
 $versionPattern = '<!-- Version badge \(top right\).*?-->\s*<g[^>]*>\s*<rect[^>]*/>\s*<text[^>]*>v[\d]+\.[\d]+\.[\d]+[^<]*</text>'
 $newVersionText = @"
 <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->

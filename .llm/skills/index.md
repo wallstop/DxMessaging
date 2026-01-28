@@ -77,7 +77,7 @@
 
 | Skill                                                                           | Lines  | Complexity      | Status    | Performance | Tags                         |
 | ------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ---------------------------- |
-| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md) | ✅ 343 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex |
+| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md) | ⚠️ 367 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex |
 
 ## Solid
 
