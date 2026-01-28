@@ -59,6 +59,10 @@ This document defines the structure, schema, and tooling for storing code patter
 │   │   ├── source-generators.md
 │   │   └── emit-patterns.md
 │   │
+│   ├── scripting/                # Shell and script patterns
+│   │   ├── powershell-best-practices.md
+│   │   └── shell-patterns.md
+│   │
 │   └── documentation/            # Documentation and code comments
 │       └── documentation-updates.md
 ```
@@ -74,7 +78,7 @@ Every skill file MUST include the following YAML frontmatter:
 # Required Fields
 title: "Human-readable skill title"
 id: "unique-kebab-case-identifier"
-category: "performance|testing|solid|messaging|unity|concurrency|architecture|error-handling|code-generation|documentation"
+category: "performance|testing|solid|messaging|unity|concurrency|architecture|error-handling|code-generation|documentation|scripting"
 version: "1.0.0"
 created: "2026-01-21"
 updated: "2026-01-21"

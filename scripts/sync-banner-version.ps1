@@ -4,7 +4,14 @@
 .DESCRIPTION
     Reads the version from package.json and updates the version badge in the
     dxmessaging-banner.svg file. Automatically stages the SVG if modified.
-    Runs on every commit to ensure the banner is always in sync.
+    
+    Called by the pre-commit hook before each commit is created.
+    
+    NOTE: This script is optional in the pre-commit workflow. If PowerShell
+    is not available, the hook skips banner sync because:
+    - The banner version is purely cosmetic (affects README appearance only)
+    - Contributors without PowerShell should not be blocked from committing
+    - The banner can be updated manually or via CI if needed
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -57,8 +64,15 @@ try {
 
 # Pattern to find version text in the SVG
 # SYNC: Keep pattern in sync with the SVG banner format
-$versionPattern = '>v[\d]+\.[\d]+\.[\d]+[^<]*</text>'
-$newVersionText = ">v$version</text>"
+# The pattern anchors to the Version badge comment to avoid matching other version-like text
+# Note: Uses .*? (non-greedy) for comment body to match anything up to -->
+$versionPattern = '<!-- Version badge \(top right\).*?-->\s*<g[^>]*>\s*<rect[^>]*/>\s*<text[^>]*>v[\d]+\.[\d]+\.[\d]+[^<]*</text>'
+$newVersionText = @"
+<!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->
+  <g transform="translate(720, 25)">
+    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
+    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v$version</text>
+"@
 
 # Check if the pattern matches
 if ($svgContent -notmatch $versionPattern) {
@@ -70,10 +84,14 @@ if ($svgContent -notmatch $versionPattern) {
 # Extract the current version from the match
 $currentMatch = [regex]::Match($svgContent, $versionPattern).Value
 
-# Check if update is needed
-if ($currentMatch -eq $newVersionText) {
-    Write-Host "Banner already has correct version: v$version"
-    exit 0
+# Extract just the version number from the current match for comparison
+$currentVersionMatch = [regex]::Match($currentMatch, '>v([\d]+\.[\d]+\.[\d]+[^<]*)</text>')
+if ($currentVersionMatch.Success) {
+    $currentVersion = $currentVersionMatch.Groups[1].Value
+    if ($currentVersion -eq $version) {
+        Write-Host "Banner already has correct version: v$version"
+        exit 0
+    }
 }
 
 # Replace the version in the SVG

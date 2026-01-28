@@ -13,15 +13,20 @@
 
 set -e
 
-# 0) Sync banner version from package.json (runs on every commit)
-# This ensures the SVG banner always displays the correct version
+# 0) Sync banner version from package.json (runs before each commit is created)
+# This ensures the SVG banner always displays the correct version.
+#
+# NOTE: PowerShell is optional here. If not found, we skip silently because:
+#   - The banner version is purely cosmetic (README appearance)
+#   - Contributors without PowerShell should not be blocked from committing
+#   - CI/CD can enforce version sync separately if needed
 echo "🏷️  Syncing banner version..."
 if command -v pwsh &> /dev/null; then
     pwsh -NoProfile -File scripts/sync-banner-version.ps1
 elif command -v powershell &> /dev/null; then
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-banner-version.ps1
 else
-    echo "⚠️  PowerShell not found. Skipping banner version sync."
+    echo "⚠️  PowerShell not found. Skipping banner version sync (cosmetic only)."
 fi
 
 SKILLS_DIR=".llm/skills"
