@@ -30,6 +30,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: sync-banner-version
+        name: Sync banner version from package.json
+        entry: bash scripts/sync-banner-version.sh
+        language: system
+        files: '^package\.json$'
+        pass_filenames: false
+        stages:
+          - pre-commit
+        description: Sync version from package.json to SVG banner (cosmetic, non-blocking).
+
+  - repo: local
+    hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
         entry: npx --yes prettier@3.8.0 --write
