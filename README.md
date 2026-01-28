@@ -1,7 +1,7 @@
 # DxMessaging for Unity
 
 <p align="center">
-  <img src="docs/images/dxmessaging-banner.svg" alt="DxMessaging Banner" width="800"/>
+  <img src="docs/images/DxMessaging-banner.svg" alt="DxMessaging Banner" width="800"/>
 </p>
 
 <p align="center">

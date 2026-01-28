@@ -10,6 +10,9 @@
 # MkDocs build output
 site/
 
+# Test coverage output
+coverage/
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

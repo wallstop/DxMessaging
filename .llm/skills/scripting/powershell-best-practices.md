@@ -4,7 +4,7 @@ id: "powershell-best-practices"
 category: "scripting"
 version: "1.0.0"
 created: "2026-01-27"
-updated: "2026-01-27"
+updated: "2026-01-28"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -63,6 +63,7 @@ aliases:
 
 related:
   - "shell-best-practices"
+  - "cross-platform-compatibility"
   - "git-workflow-robustness"
   - "documentation-updates"
 
@@ -80,6 +81,22 @@ PowerShell has unique behaviors that differ from other scripting languages and e
 contexts. This skill documents lessons learned from real PR feedback cycles to help avoid
 repeated mistakes involving regex patterns, here-string quoting, file encoding, and precise
 terminology for git hooks.
+
+## Solution
+
+1. **Use non-greedy `.*?`** instead of `[^x]*` when content may contain the excluded character
+1. **Verify file paths** in case-sensitive environments before committing
+1. **Use single `"` in here-strings** - double quotes are NOT needed for escaping
+1. **Use precise hook terminology** - say "runs before each commit is created" not "on every commit"
+1. **Know your encoding defaults** - `WriteAllText()` uses UTF-8 without BOM
+
+## Case-Sensitive File Paths
+
+PowerShell scripts that run fine on Windows fail on Linux due to case-sensitive file paths.
+Verify paths with `git ls-files` or `Get-ChildItem` before hardcoding, and test in
+case-sensitive environments (Docker, WSL) before committing.
+
+See the [Cross-Platform Compatibility skill](./cross-platform-compatibility.md) for detailed patterns.
 
 ## Regex Pattern Pitfalls
 
@@ -235,27 +252,20 @@ $json = @"
     ""name"": ""value""
 }
 "@
-# Output contains literal: {"name": "value"} ← Wrong!
+# Output: {"name": "value"} ← Wrong!
 
-# CORRECT: Single quotes work as-is
+# CORRECT: Use single quotes naturally
 $json = @"
 {
     "name": "value"
 }
 "@
-# Output contains: {"name": "value"} ← Correct!
+# Output: {"name": "value"} ← Correct!
 ```
 
 ### Single-Quote Here-Strings (@'...'@)
 
-In `@'...'@` here-strings, no escaping is possible—everything is literal:
-
-```powershell
-$literal = @'
-This $variable won't expand
-"Quotes" work 'fine'
-'@
-```
+In `@'...'@` here-strings, no escaping is possible—everything is literal.
 
 ### Here-String Syntax Rules
 
@@ -263,22 +273,6 @@ This $variable won't expand
 | --------- | ------------------ | ----------------------- | ------------------- |
 | `@"..."@` | Yes                | No (use single `"`)     | Dynamic content     |
 | `@'...'@` | No                 | No escaping possible    | Literal/static text |
-
-### Common Mistake Pattern
-
-```powershell
-# MISTAKE: Applying regular string escaping rules to here-strings
-$bad = @"
-Use ""doubled quotes"" for escaping
-"@
-# Result: Use "doubled quotes" for escaping ← Oops!
-
-# CORRECT: Here-strings need no quote escaping
-$good = @"
-Use "single quotes" naturally
-"@
-# Result: Use "single quotes" naturally ← Correct!
-```
 
 ## Pre-Commit Hook Terminology
 
@@ -367,44 +361,23 @@ Before merging PowerShell scripts:
 
 ## Testing PowerShell Scripts
 
-### Manual Testing Pattern
+Test regex patterns with edge cases before committing:
 
 ```powershell
-# Test regex patterns with edge cases
-$testCases = @(
-    '<!-- simple -->',
-    '<!-- has > inside -->',
-    '<!-- multiple >> chars -->',
-    "<!-- has `n newline -->"
-)
-
+$testCases = @('<!-- simple -->', '<!-- has > inside -->', '<!-- multiple >> chars -->')
 foreach ($case in $testCases) {
-    $result = $case -match $pattern
-    Write-Host "Input: $case"
-    Write-Host "Match: $result"
-    if ($result) { Write-Host "Matched: $($Matches[0])" }
+    Write-Host "Input: $case - Match: $($case -match $pattern)"
 }
 ```
 
-### Here-String Output Verification
-
-```powershell
-# Verify here-string content matches expectations
-$expected = '{"name": "value"}'
-$actual = @"
-{"name": "value"}
-"@
-
-if ($actual -ne $expected) {
-    Write-Error "Mismatch: expected [$expected] got [$actual]"
-}
-```
+For comprehensive test coverage patterns, see [Script Test Coverage](../testing/script-test-coverage.md).
 
 ## See Also
 
+- [Cross-Platform Compatibility](./cross-platform-compatibility.md) - Case sensitivity patterns
+- [Script Test Coverage](../testing/script-test-coverage.md) - Script test coverage requirements
 - [Git Workflow Robustness](../testing/git-workflow-robustness.md) - Git command patterns
 - [Shell Pattern Matching](../../context.md#shell-pattern-matching) - Main context file patterns
-- [Scripting Guidelines](../../context.md#scripting-guidelines) - General scripting rules
 
 ## Changelog
 
