@@ -2,19 +2,45 @@ name: YAML Format + Lint
 
 on:
   pull_request:
+    paths:
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".yamllint.yaml"
+      - ".prettierrc*"
+      - "package.json"
+      - "package-lock.json"
   push:
     branches:
       - main
       - master
+    paths:
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".yamllint.yaml"
+      - ".prettierrc*"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   yaml-checks:
     name: Prettier and yamllint
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v6

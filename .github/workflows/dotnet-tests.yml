@@ -6,9 +6,22 @@ on:
       - master
       - main
       - develop
+    paths:
+      - "**/*.cs"
+      - "**/*.csproj"
+      - "**/*.sln"
+      - "SourceGenerators/**"
+      - ".config/dotnet-tools.json"
   pull_request:
     branches:
       - "*"
+    paths:
+      - "**/*.cs"
+      - "**/*.csproj"
+      - "**/*.sln"
+      - "SourceGenerators/**"
+      - ".config/dotnet-tools.json"
+  workflow_dispatch:
 
 jobs:
   test:

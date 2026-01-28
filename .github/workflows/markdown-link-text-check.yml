@@ -2,10 +2,20 @@ name: Markdown Link Text Check
 
 on:
   pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - ".github/scripts/check_markdown_links.py"
+      - ".github/scripts/check_markdown_url_encoding.py"
   push:
     branches:
       - main
       - master
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - ".github/scripts/check_markdown_links.py"
+      - ".github/scripts/check_markdown_url_encoding.py"
   workflow_dispatch:
 
 jobs:

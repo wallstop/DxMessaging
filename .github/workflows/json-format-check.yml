@@ -2,19 +2,43 @@ name: JSON Format Check
 
 on:
   pull_request:
+    paths:
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - ".prettierrc*"
+      - "package.json"
+      - "package-lock.json"
   push:
     branches:
       - main
       - master
+    paths:
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - ".prettierrc*"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   prettier-json:
     name: Check JSON/.asmdef formatting
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v6

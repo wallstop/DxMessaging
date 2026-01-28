@@ -5,7 +5,28 @@ on:
     branches:
       - main
       - master
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
   pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,7 +61,3 @@ jobs:
 
       - name: Markdown lint
         run: npm run lint:markdown
-
-      - name: Enforce EOL (CRLF) and No BOM
-        shell: pwsh
-        run: ./scripts/check-eol.ps1 -VerboseOutput

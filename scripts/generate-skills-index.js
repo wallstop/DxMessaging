@@ -33,6 +33,79 @@ const EXCLUDED_DIRS = ["templates"];
 const REPO_ROOT = path.join(__dirname, "..");
 const PRETTIER_VERSION = "3.8.1";
 
+/**
+ * Brand name capitalization mapping.
+ * Maps lowercase words to their properly capitalized forms.
+ */
+const BRAND_NAMES = {
+    github: "GitHub",
+    javascript: "JavaScript",
+    typescript: "TypeScript",
+    nodejs: "Node.js",
+    csharp: "C#",
+    dotnet: ".NET",
+    nuget: "NuGet",
+    npm: "npm",
+    api: "API",
+    apis: "APIs",
+    cli: "CLI",
+    json: "JSON",
+    yaml: "YAML",
+    xml: "XML",
+    html: "HTML",
+    css: "CSS",
+    sql: "SQL",
+    url: "URL",
+    urls: "URLs",
+    uri: "URI",
+    uris: "URIs",
+    http: "HTTP",
+    https: "HTTPS",
+    rest: "REST",
+    graphql: "GraphQL",
+    oauth: "OAuth",
+    jwt: "JWT",
+    sdk: "SDK",
+    ide: "IDE",
+    vscode: "VS Code",
+    visualstudio: "Visual Studio",
+    macos: "macOS",
+    ios: "iOS",
+    webgl: "WebGL",
+    opengl: "OpenGL",
+    directx: "DirectX",
+    llm: "LLM",
+    ai: "AI",
+    ml: "ML",
+    ci: "CI",
+    cd: "CD",
+};
+
+/**
+ * Apply proper brand name capitalization to a word.
+ * Returns the properly capitalized form if it's a known brand,
+ * otherwise returns the word with standard title case.
+ */
+function applyBrandCapitalization(word) {
+    const lowerWord = word.toLowerCase();
+    if (BRAND_NAMES[lowerWord]) {
+        return BRAND_NAMES[lowerWord];
+    }
+    // Standard title case: capitalize first letter
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+/**
+ * Convert a category slug (e.g., "github-actions") to a properly
+ * capitalized title (e.g., "GitHub Actions").
+ */
+function categoryToTitle(category) {
+    return category
+        .split("-")
+        .map((word) => applyBrandCapitalization(word))
+        .join(" ");
+}
+
 function normalizeToCrlf(text) {
     let normalized = text.replace(/\r\n/g, "\n");
     normalized = normalized.replace(/\r/g, "\n");
@@ -369,7 +442,7 @@ function generateIndex(skills) {
 `;
 
     for (const cat of sortedCategories) {
-        const catTitle = cat.charAt(0).toUpperCase() + cat.slice(1).replace(/-/g, " ");
+        const catTitle = categoryToTitle(cat);
         content += `- [${catTitle}](#${cat}) (${byCategory[cat].length})\n`;
     }
 
@@ -380,7 +453,7 @@ function generateIndex(skills) {
 
     // Category sections
     for (const cat of sortedCategories) {
-        const catTitle = cat.charAt(0).toUpperCase() + cat.slice(1).replace(/-/g, " ");
+        const catTitle = categoryToTitle(cat);
         content += `## ${catTitle}\n\n`;
 
         content += `| Skill | Lines | Complexity | Status | Performance | Tags |\n`;

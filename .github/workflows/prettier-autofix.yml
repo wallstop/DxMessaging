@@ -2,7 +2,35 @@ name: Prettier Auto Fix
 
 on:
   pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-eol.ps1"
   pull_request_target:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-eol.ps1"
   workflow_dispatch:
 
 concurrency:
@@ -28,8 +56,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: package.json
 
       - name: Install dependencies
@@ -57,6 +85,7 @@ jobs:
 
       - name: Commit formatting changes to PR branch (Dependabot only)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
+        id: auto-commit
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(format): apply Prettier/markdownlint fixes"
@@ -70,6 +99,15 @@ jobs:
             **/*.asmref
             **/*.yml
             **/*.yaml
+
+      - name: Refresh checkout after auto-commit
+        if: ${{ steps.auto-commit.outputs.changes_detected == 'true' }}
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Fetch the newly pushed commit and checkout to get normalized line endings in working tree
+          git fetch origin "$HEAD_REF"
+          git checkout -f FETCH_HEAD
 
       - name: Prettier check (Markdown)
         run: npm run format:md:check
@@ -104,8 +142,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: package.json
 
       - name: Install dependencies
