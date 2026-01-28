@@ -61,6 +61,7 @@ aliases:
 related:
   - "cross-platform-compatibility"
   - "shell-best-practices"
+  - "git-renormalize-patterns"
 
 status: "stable"
 ---
@@ -337,6 +338,8 @@ Before committing a workflow, verify:
 
 ## See Also
 
+- [Git Renormalize Pattern Validation](./git-renormalize-patterns.md) — ensuring pathspec patterns
+  match actual repository files to prevent CI failures
 - [Cross-Platform Compatibility](../scripting/cross-platform-compatibility.md) — handling platform
   differences in CI scripts
 - [Shell Best Practices](../scripting/shell-best-practices.md) — patterns for shell commands in
