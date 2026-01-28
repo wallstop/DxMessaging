@@ -54,6 +54,7 @@ const VALID_CATEGORIES = [
     'code-generation',
     'documentation',
     'scripting',
+    'github-actions',
 ];
 
 const VALID_COMPLEXITY_LEVELS = ['basic', 'intermediate', 'advanced', 'expert'];

@@ -10,6 +10,7 @@ on:
       - "**/*.asmref"
       - "**/*.yml"
       - "**/*.yaml"
+      - ".github/workflows/**"
       - ".prettierrc*"
       - ".markdownlint*"
       - "package.json"
@@ -24,6 +25,7 @@ on:
       - "**/*.asmref"
       - "**/*.yml"
       - "**/*.yaml"
+      - ".github/workflows/**"
       - ".prettierrc*"
       - ".markdownlint*"
       - "package.json"
@@ -54,8 +56,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: package.json
 
       - name: Install dependencies
@@ -140,8 +142,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: package.json
 
       - name: Install dependencies
