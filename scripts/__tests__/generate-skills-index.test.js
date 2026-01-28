@@ -98,7 +98,7 @@ describe("generate-skills-index", () => {
         });
 
         test("should have non-empty values for all keys", () => {
-            for (const [key, value] of Object.entries(BRAND_NAMES)) {
+            for (const value of Object.values(BRAND_NAMES)) {
                 expect(value).toBeTruthy();
                 expect(typeof value).toBe("string");
             }
