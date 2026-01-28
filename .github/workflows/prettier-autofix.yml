@@ -2,7 +2,33 @@ name: Prettier Auto Fix
 
 on:
   pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-eol.ps1"
   pull_request_target:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.asmref"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-eol.ps1"
   workflow_dispatch:
 
 concurrency:

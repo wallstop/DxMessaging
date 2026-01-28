@@ -2,10 +2,24 @@ name: YAML Format + Lint
 
 on:
   pull_request:
+    paths:
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".yamllint.yaml"
+      - ".prettierrc*"
+      - "package.json"
+      - "package-lock.json"
   push:
     branches:
       - main
       - master
+    paths:
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".yamllint.yaml"
+      - ".prettierrc*"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
 
 jobs:

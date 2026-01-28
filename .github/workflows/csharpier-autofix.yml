@@ -2,8 +2,18 @@ name: CSharpier Auto Format
 
 on:
   pull_request:
+    paths:
+      - "**/*.cs"
+      - ".config/dotnet-tools.json"
   pull_request_target:
+    paths:
+      - "**/*.cs"
+      - ".config/dotnet-tools.json"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write

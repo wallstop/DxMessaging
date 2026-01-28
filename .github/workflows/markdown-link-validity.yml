@@ -2,10 +2,20 @@ name: Markdown Link Validity
 
 on:
   pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "docs/**"
+      - ".lychee.toml"
   push:
     branches:
       - main
       - master
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - "docs/**"
+      - ".lychee.toml"
   workflow_dispatch:
 
 jobs:
