@@ -32,7 +32,7 @@ repos:
     hooks:
       - id: sync-banner-version
         name: Sync banner version from package.json
-        entry: bash -c 'if command -v pwsh >/dev/null 2>&1; then pwsh -NoProfile -File scripts/sync-banner-version.ps1; elif command -v powershell >/dev/null 2>&1; then powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-banner-version.ps1; else echo "PowerShell not found; skipping banner sync (cosmetic only)"; fi'
+        entry: bash scripts/sync-banner-version.sh
         language: system
         files: '^package\.json$'
         pass_filenames: false
