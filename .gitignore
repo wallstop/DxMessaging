@@ -41,6 +41,7 @@ com.wallstop-studios.dxmessaging.sln.DotSettings.user.meta
 #wwwroot/
 
 .artifacts/
+coverage.meta
 
 # MSTest test Results
 [Tt]est[Rr]esult*/
