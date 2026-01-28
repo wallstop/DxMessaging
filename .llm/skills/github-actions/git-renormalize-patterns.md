@@ -215,10 +215,10 @@ Prefer consistent glob patterns across all workflow files:
 
 ## Common Mistakes
 
-### Mistake 1: Assuming Errors on No Match
+### Mistake 1: Assuming Success on No Match
 
 ```yaml
-# This step succeeds even if no .markdown files exist
+# This step fails (exit code 128) if no .markdown files exist
 - name: Renormalize markdown
   run: git add --renormalize -- '*.markdown' '**/*.markdown'
 ```
