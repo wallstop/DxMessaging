@@ -18,7 +18,7 @@
 ## Table of Contents
 
 - [Documentation](#documentation) (12)
-- [Github actions](#github-actions) (1)
+- [GitHub Actions](#github-actions) (1)
 - [Performance](#performance) (24)
 - [Scripting](#scripting) (3)
 - [Solid](#solid) (13)
@@ -36,7 +36,7 @@
 | [Changelog Management](./documentation/changelog-management.md)                             | 📝 191 | 🟢 Basic   | ✅ Stable | ○○○○○       | changelog, documentation, versioning      |
 | [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                 | ✅ 250 | 🟢 Basic   | ✅ Stable | ○○○○○       | changelog, release-workflow, versioning   |
 | [Documentation Code Samples](./documentation/documentation-code-samples.md)                 | ✅ 263 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-samples, examples     |
-| [Documentation Style Guide](./documentation/documentation-style-guide.md)                   | 📝 186 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, style, writing             |
+| [Documentation Style Guide](./documentation/documentation-style-guide.md)                   | ✅ 204 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, style, writing             |
 | [Documentation Update Workflow](./documentation/documentation-update-workflow.md)           | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, workflow, checklist        |
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)           | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-comments, xml-docs    |
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)     | 📝 182 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, links, urls                |
@@ -45,7 +45,7 @@
 | [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                        | ✅ 261 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, skills, file-organization  |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                    | 📝 191 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, xml-docs, api-reference    |
 
-## Github actions
+## GitHub Actions
 
 | Skill                                                                           | Lines  | Complexity      | Status    | Performance | Tags                            |
 | ------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ------------------------------- |

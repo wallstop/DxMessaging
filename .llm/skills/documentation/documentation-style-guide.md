@@ -131,6 +131,24 @@ MessageRegistrationHandle handle = _messageRegistrationToken.RegisterGameObjectT
 ```
 ````
 
+### Use Correct Brand Capitalization
+
+Technology brands have specific capitalization. Using incorrect forms looks unprofessional:
+
+| Correct       | Incorrect                   |
+| ------------- | --------------------------- |
+| GitHub        | Github, github              |
+| JavaScript    | Javascript, java script     |
+| TypeScript    | Typescript, typescript      |
+| Node.js       | NodeJS, Nodejs, node.js     |
+| npm           | NPM, Npm (always lowercase) |
+| C#            | c#, CSharp                  |
+| .NET          | .Net, dotnet (in prose)     |
+| Unity         | unity (in prose)            |
+| NuGet         | Nuget, nuget                |
+| Visual Studio | VisualStudio                |
+| VS Code       | VSCode, vscode (in prose)   |
+
 ## Anti-Patterns
 
 ### Bad: Placeholder Documentation
