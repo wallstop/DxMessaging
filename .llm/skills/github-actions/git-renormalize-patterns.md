@@ -337,8 +337,9 @@ This script scans all workflow files for:
 
 ### CI Integration
 
-The validation script runs as part of the pre-commit hooks and CI pipeline to catch
-problematic patterns before they cause failures.
+The validation script runs as part of the CI pipeline (via the actionlint workflow) to catch
+problematic patterns before they cause failures. Note: This validation does not run in
+pre-commit hooks—only in CI.
 
 ## See Also
 
