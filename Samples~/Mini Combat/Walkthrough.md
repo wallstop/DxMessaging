@@ -108,7 +108,6 @@ Let's understand what each script does:
 Here's the full sequence that happens when you press Play:
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 sequenceDiagram
     participant Boot
     participant UIOverlay

@@ -2,7 +2,7 @@
 title: "Mermaid Diagram Theming"
 id: "mermaid-theming"
 category: "documentation"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-01-29"
 updated: "2026-01-29"
 
@@ -11,7 +11,10 @@ source:
   files:
     - path: "docs/javascripts/mermaid-config.js"
     - path: "docs/"
+    - path: "README.md"
+    - path: "Samples~/"
   url: "https://github.com/wallstop/DxMessaging"
+  note: "Guidance applies to ALL markdown files in the repository"
 
 tags:
   - "documentation"
@@ -66,11 +69,48 @@ status: "stable"
 
 # Mermaid Diagram Theming
 
-> **One-line summary**: Do not use `%%{init: {'theme': '...'}}%%` directives in docs/ files; use the global `mermaid-config.js` for theme-aware rendering.
+> **One-line summary**: Never use `%%{init: {'theme': '...'}}%%` directives in any markdown file; let renderers (GitHub, VS Code, MkDocs) automatically detect user theme preferences.
 
 ## Overview
 
 This project uses Mermaid diagrams for visualizing architecture and message flows. Theming must be handled correctly to support both light and dark modes in MkDocs Material.
+
+## Critical: Never Hardcode Dark Themes
+
+> **⚠️ NEVER use `%%{init: {'theme': 'dark'}}%%` in ANY markdown file** - not in `docs/`, not in `README.md`, nowhere.
+
+### Why This Matters
+
+GitHub and VS Code now respect `prefers-color-scheme` automatically for Mermaid diagrams. Hardcoding `'theme': 'dark'` causes these problems:
+
+1. **Breaks light-mode users**: Users with light theme preferences see dark-themed diagrams with poor contrast
+1. **Ignores user preferences**: Modern renderers detect system/browser theme automatically
+1. **Creates inconsistency**: Some diagrams follow user theme, others don't
+1. **Reduces accessibility**: Low contrast combinations harm users with visual impairments
+
+### The Solution
+
+**Omit init directives entirely.** Let the renderer (GitHub, VS Code, MkDocs) choose the appropriate theme based on user preferences.
+
+````markdown
+<!-- ✅ CORRECT: No init directive -->
+
+```mermaid
+flowchart TD
+    A[Start] --> B[Process]
+    B --> C[End]
+```
+````
+
+````markdown
+<!-- ❌ FORBIDDEN: Hardcoded dark theme -->
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+flowchart TD
+    A[Start] --> B[Process]
+```
+````
 
 ## The Problem
 
@@ -90,17 +130,19 @@ While this works for static rendering (GitHub, VS Code), it creates a critical i
 
 ## docs/ Files vs README.md
 
-Different rules apply depending on where the markdown file will be rendered:
+The same rule applies to ALL markdown files: **omit init directives entirely**.
 
 | Location    | Viewer          | Theming Approach                                               |
 | ----------- | --------------- | -------------------------------------------------------------- |
 | `docs/`     | MkDocs Material | **No per-diagram directives** - use global `mermaid-config.js` |
-| `README.md` | GitHub/VS Code  | Per-diagram directives are acceptable (optional)               |
+| `README.md` | GitHub/VS Code  | **No per-diagram directives** - rely on automatic theming      |
+| Any `.md`   | Any renderer    | **No per-diagram directives** - let renderer choose theme      |
 
-### Why the difference?
+### Why automatic theming is preferred everywhere
 
 - **MkDocs Material** dynamically loads `mermaid-config.js` which detects theme changes and re-renders diagrams with appropriate colors. Per-diagram directives interfere with this.
-- **GitHub/VS Code** render diagrams statically with no theme switching, so per-diagram directives provide consistent appearance.
+- **GitHub** automatically respects `prefers-color-scheme` and renders diagrams in the user's preferred theme. Hardcoded themes override this.
+- **VS Code** preview respects the editor's color theme. Hardcoded dark themes look poor in light-themed editors.
 
 ## How Global Theming Works
 
@@ -131,16 +173,15 @@ No init directive needed. The global configuration handles theming automatically
 
 ````markdown
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart TD
     A[Start] --> B[Process]
     B --> C[End]
 ```
 ````
 
-Per-diagram directive is acceptable for static rendering contexts.
+No init directive needed. GitHub and VS Code automatically detect user theme preferences.
 
-### ❌ Forbidden: docs/ Files with Theme Directive
+### ❌ Forbidden: Any File with Hardcoded Theme Directive
 
 ````markdown
 ```mermaid
@@ -150,18 +191,51 @@ flowchart TD
 ```
 ````
 
-This bypasses theme switching and causes poor rendering in light mode.
+This bypasses automatic theme detection and causes poor rendering for users with different theme preferences. Never use `'theme': 'dark'`, `'theme': 'forest'`, or any hardcoded theme value.
+
+## Inline Style Directives
+
+Mermaid also supports inline `style` directives for individual nodes:
+
+```mermaid
+flowchart TD
+    A[Start] --> B[Process]
+    style B fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
+```
+
+### The Problem with Hardcoded Colors
+
+Inline style directives with hardcoded hex colors (e.g., `fill:#1e3a5f,color:#e0e0e0`) are designed for dark backgrounds. In light mode, these create:
+
+- **Poor contrast**: Dark fill colors blend into light backgrounds
+- **Illegible text**: Light text colors become invisible on light backgrounds
+- **Inconsistent appearance**: Some nodes follow theme, others don't
+
+### Recommendations
+
+1. **Prefer no inline styles**: Let the global theme configuration handle all colors
+1. **Use semantic class names** when custom styling is needed (if supported by renderer)
+1. **If inline styles are unavoidable**: Document the trade-off and ensure adequate contrast in both themes
+
+> **Note**: Unlike init directives, inline style directives cannot be automatically stripped by the mermaid-config.js script. Exercise caution when adding custom node styles.
 
 ## Validation
 
-Check for forbidden per-diagram theme directives in docs/:
+Check for forbidden per-diagram theme directives in ALL markdown files:
 
 ```bash
-# Find Mermaid theme directives in docs/ markdown files
-grep -rn --include='*.md' "%%{init.*theme" docs/
+# Find Mermaid theme directives in ALL markdown files
+grep -rn --include='*.md' "%%{init.*theme" .
 ```
 
 A successful validation produces no output. If any matches appear (showing filename, line number, and the offending directive), remove the `%%{init: {'theme': '...'}}%%` line from each matching diagram.
+
+### Additional validation for README.md
+
+```bash
+# Specifically check README.md
+grep -n "%%{init" README.md
+```
 
 ## The mermaid-config.js Script
 
@@ -236,7 +310,7 @@ After adding new Mermaid diagrams, always run the validation command to ensure n
 ## See Also
 
 - [Markdown Compatibility Guidelines](markdown-compatibility.md) - Full list of forbidden MkDocs-specific syntax
-- [Documentation Style Guide](documentation-style-guide.md)
+- [Documentation Style Guide](documentation-style-guide.md) - General documentation standards and formatting conventions
 
 ## References
 
@@ -245,6 +319,7 @@ After adding new Mermaid diagrams, always run the validation command to ensure n
 
 ## Changelog
 
-| Version | Date       | Changes                                  |
-| ------- | ---------- | ---------------------------------------- |
-| 1.0.0   | 2026-01-29 | Extracted from markdown-compatibility.md |
+| Version | Date       | Changes                                                                  |
+| ------- | ---------- | ------------------------------------------------------------------------ |
+| 1.1.0   | 2026-01-29 | Added critical guidance against hardcoded themes; updated README.md rule |
+| 1.0.0   | 2026-01-29 | Extracted from markdown-compatibility.md                                 |

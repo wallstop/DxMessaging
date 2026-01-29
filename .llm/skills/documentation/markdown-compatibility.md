@@ -457,6 +457,7 @@ grep -rn --include='*.md' "%%{init.*theme" docs/
 
 - [Documentation Style Guide](documentation-style-guide.md)
 - [Documentation Updates](documentation-updates.md)
+- [Mermaid Diagram Theming](mermaid-theming.md)
 - [MkDocs Navigation](mkdocs-navigation.md)
 
 ## References

@@ -219,7 +219,6 @@ public class PlayerService : IInitializable, IDisposable
 ### Decision Flow
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart TD
     Q1{Does your project have 3+<br/>systems that need to talk to each other?}
     Q1 -->|NO| A1[Stick with C# events or direct references]
@@ -445,7 +444,6 @@ public struct TookDamage { public int amount; }
 Every message flows through 3 stages with priority control:
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
     P[Producer] --> I[Interceptors<br/>validate/mutate]
     I --> H[Handlers<br/>main logic]
