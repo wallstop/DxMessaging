@@ -171,6 +171,44 @@ MAJOR.MINOR.PATCH
 - Link issues or PRs when available
 - Flag breaking changes explicitly with migration guidance
 
+## Anti-Patterns
+
+### Anti-Pattern 1: Internal Tooling or AI Agent Documentation
+
+```markdown
+<!-- WRONG -->
+
+### Added
+
+- MkDocs navigation skill documenting navigation patterns
+```
+
+Changelog entries describe changes that **users experience**, not internal tooling, AI agent guidance, or developer-facing documentation. Skills, context files, and internal process documentation are invisible to package consumers and do not belong in the changelog.
+
+**What to document instead**: Changes to user-facing documentation (API docs, tutorials, README) may warrant changelog entries if they significantly improve the user experience.
+
+### Anti-Pattern 2: Overly Broad Scope
+
+```markdown
+<!-- WRONG -->
+
+### Changed
+
+- Updated test assembly definitions
+```
+
+This entry implies all test assembly definitions were changed, which is rarely accurate. Entries must accurately scope what was actually affected.
+
+```markdown
+<!-- CORRECT -->
+
+### Fixed
+
+- `WallstopStudios.DxMessaging.Tests.Runtime` assembly definition now specifies Editor-only platform to prevent Burst compilation errors during player builds
+```
+
+**Rule**: Be specific about what changed. Name the exact files, assemblies, or components that were modified. Vague entries create confusion about which components were affected and make it harder to trace issues back to specific changes.
+
 ## See Also
 
 - [Changelog Entry Writing](changelog-entry-writing.md)

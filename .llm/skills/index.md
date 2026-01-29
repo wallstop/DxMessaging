@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 81    |
+| Total Skills | 82    |
 | Categories   | 6     |
 | Unique Tags  | 152   |
 
@@ -20,7 +20,7 @@
 - [Documentation](#documentation) (15)
 - [GitHub Actions](#github-actions) (2)
 - [Performance](#performance) (24)
-- [Scripting](#scripting) (3)
+- [Scripting](#scripting) (4)
 - [Solid](#solid) (13)
 - [Testing](#testing) (24)
 - [Tag Cloud](#tag-cloud)
@@ -33,7 +33,7 @@
 | Skill                                                                                       | Lines  | Complexity      | Status    | Performance | Tags                                      |
 | ------------------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
 | [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)     | ✅ 278 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, release-notes, writing         |
-| [Changelog Management](./documentation/changelog-management.md)                             | 📝 191 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, documentation, versioning      |
+| [Changelog Management](./documentation/changelog-management.md)                             | ✅ 229 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, documentation, versioning      |
 | [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                 | ✅ 250 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, release-workflow, versioning   |
 | [Documentation Code Samples](./documentation/documentation-code-samples.md)                 | ✅ 263 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, code-samples, examples     |
 | [Documentation Style Guide](./documentation/documentation-style-guide.md)                   | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, style, writing             |
@@ -90,6 +90,7 @@
 | ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md) | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)    | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
+| [Regex Pattern Documentation](./scripting/regex-documentation.md)                  | ✅ 350 | ?               | ✅ Stable | ?           |                                           |
 | [Shell Scripting Best Practices](./scripting/shell-best-practices.md)              | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
 
 ## Solid
@@ -211,6 +212,7 @@
 - [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md) _(scripting)_
 - [Readonly Struct Cached Hash Performance Notes](./performance/readonly-struct-cached-hash-performance-notes.md) _(performance)_
 - [Readonly Struct with Cached Hash for Dictionary Keys](./performance/readonly-struct-cached-hash.md) _(performance)_
+- [Regex Pattern Documentation](./scripting/regex-documentation.md) _(scripting)_
 - [Runtime Singleton Pattern](./performance/singleton-runtime.md) _(performance)_
 - [RuntimeSingleton and ScriptableObject Singleton Patterns](./performance/singleton-patterns.md) _(performance)_
 - [Script Test Coverage Requirements](./testing/script-test-coverage.md) _(testing)_

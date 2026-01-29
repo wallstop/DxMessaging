@@ -121,9 +121,11 @@
 
   /**
    * Regex pattern to match Mermaid init directives
-   * Matches %%{init: {...}}%% at the start of diagram source (single-line or multi-line)
+   * Matches %%{init: {...}}%% at the start of any line in diagram source
+   * The 'm' flag (multiline mode) makes '^' match at the start of every line, not just
+   * the start of the string - this ensures init directives are stripped wherever they appear
+   * The 's' flag (dotAll mode) makes '.*?' match newlines in multi-line directives
    * These directives can override our theme settings, so we strip them
-   * The 's' flag enables dotAll mode so '.*?' matches newlines in multi-line directives
    */
   const INIT_DIRECTIVE_PATTERN = /^\s*%%\{init:.*?\}%%\s*/gims;
 

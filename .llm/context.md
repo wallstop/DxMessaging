@@ -238,6 +238,8 @@ Every user-facing change must be added to [the changelog](../CHANGELOG.md):
 - Include proper version headers with dates (e.g., `## [1.2.0] - 2026-01-22`).
 - Link issues and PRs in entries (e.g., "Fixed registration bug (#123)").
 - Write entries from the user's perspective, focusing on impact.
+- Entries must describe **user-visible** changes only; do not document internal tooling, AI agent guidance, or developer-only changes like `.llm/` skill files.
+- Use accurate scope: if only some files/assemblies were changed, name them specifically rather than implying all were changed.
 
 See the [Changelog Management skill](./skills/documentation/changelog-management.md) for detailed guidance.
 
