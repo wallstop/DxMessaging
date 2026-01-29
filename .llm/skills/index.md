@@ -42,8 +42,8 @@
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)     | 📝 182 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links, urls                |
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md) | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | github-actions, ci-cd, version-management |
 | [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)      | ✅ 268 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links, urls                |
-| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)              | ⚠️ 449 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, markdown, compatibility    |
-| [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                               | ✅ 249 | 🟡 Intermediate | ✅ Stable | ○○○○○       | documentation, mermaid, theming           |
+| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)              | ⚠️ 476 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, markdown, compatibility    |
+| [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                               | ✅ 251 | 🟡 Intermediate | ✅ Stable | ○○○○○       | documentation, mermaid, theming           |
 | [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                        | ✅ 291 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, mkdocs, navigation         |
 | [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                        | ✅ 261 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, skills, file-organization  |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                    | 📝 191 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, xml-docs, api-reference    |

@@ -2,7 +2,7 @@
 title: "Markdown Compatibility Guidelines"
 id: "markdown-compatibility"
 category: "documentation"
-version: "1.1.0"
+version: "1.2.0"
 created: "2026-01-29"
 updated: "2026-01-29"
 
@@ -95,6 +95,32 @@ On GitHub, this displays as literal text: `!!! warning "Caution"` followed by an
 ## Solution
 
 Use only standard markdown syntax with Unicode emoji for visual emphasis. This ensures consistent rendering across all platforms.
+
+---
+
+## Nested Fenced Code Blocks
+
+When documenting markdown that contains code blocks, the **outer fence must have MORE backticks than any inner fence**. CommonMark requires opening and closing sequences to match exactly, so use 4+ backticks for outer fences when inner uses 3:
+
+`````markdown
+````markdown
+This outer fence uses 4 backticks.
+
+```python
+print("Hello")
+```
+````
+`````
+
+For deeper nesting, keep increasing: outer uses 5, middle uses 4, inner uses 3.
+
+### Common Mistakes
+
+| Mistake             | Problem                              | Fix                            |
+| ------------------- | ------------------------------------ | ------------------------------ |
+| Same backtick count | Inner fence closes outer prematurely | More backticks on outer        |
+| Spaces in fence     | ` ``` ` may not parse                | No spaces in backtick sequence |
+| Mismatched closing  | Opening with 4, closing with 3       | Count must match exactly       |
 
 ---
 
@@ -444,5 +470,6 @@ grep -rn --include='*.md' "%%{init.*theme" docs/
 
 | Version | Date       | Changes                                             |
 | ------- | ---------- | --------------------------------------------------- |
+| 1.2.0   | 2026-01-29 | Added nested fenced code blocks section             |
 | 1.1.0   | 2026-01-29 | Added Mermaid diagram theming section               |
 | 1.0.0   | 2026-01-29 | Initial version with forbidden syntax documentation |

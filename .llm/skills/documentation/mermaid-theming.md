@@ -117,35 +117,38 @@ This ensures diagrams always match the user's preferred theme.
 
 ### ✅ Correct: docs/ Files (MkDocs)
 
-``````markdown
-`````mermaid
+````markdown
+```mermaid
 flowchart TD
     A[Start] --> B[Process]
     B --> C[End]
-```                                                  ```
+```
+````
 
 No init directive needed. The global configuration handles theming automatically.
 
 ### ✅ Correct: README.md (GitHub/VS Code)
 
-```markdown
+````markdown
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart TD
     A[Start] --> B[Process]
     B --> C[End]
-```                                                  ```
+```
+````
 
 Per-diagram directive is acceptable for static rendering contexts.
 
 ### ❌ Forbidden: docs/ Files with Theme Directive
 
-```markdown
+````markdown
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart TD
     A[Start] --> B[Process]
-```                                                  ```
+```
+````
 
 This bypasses theme switching and causes poor rendering in light mode.
 
@@ -217,13 +220,12 @@ The `s` flag enables dotAll mode, allowing `.*?` to match newlines in multi-line
 ````markdown
 <!-- ❌ WRONG: This bypasses theme switching -->
 
-````mermaid
+```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart TD
     A --> B
 ```
-`````
-``````
+````
 
 The `%%{init: {'theme': 'dark'}}%%` directive overrides the automatic theme detection. Remove this line entirely to allow the mermaid-config.js script to handle theming dynamically.
 

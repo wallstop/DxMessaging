@@ -221,6 +221,7 @@ See the [Documentation Updates skill](./skills/documentation/documentation-updat
 
 - **Ordered lists**: Use lazy numbering (`1.`, `1.`, `1.`) not sequential (`1.`, `2.`, `3.`). This matches Prettier behavior and markdownlint MD029 configuration.
 - **Fenced code blocks**: Use triple backticks (```), not indented blocks.
+- **Nested fences**: When showing code blocks inside code blocks (e.g., documenting markdown), the outer fence must have MORE backticks than inner fences. Use ``for outer when inner uses` ```.
 - **Line endings**: CRLF, no UTF-8 BOM (enforced by pre-commit hooks).
 - **Headings**: Use ATX-style headings (`#`, `##`, `###`) not underlined style.
 - **Line length**: Not enforced. Write naturally; let lines wrap as needed.
