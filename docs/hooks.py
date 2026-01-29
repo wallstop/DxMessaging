@@ -28,11 +28,20 @@ SOURCE_PREFIXES = ("Runtime/", "Tests/", "Editor/", "Samples~/")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 # Regex to match fenced code blocks (``` or ~~~ with optional language specifier)
-# Uses DOTALL to match across newlines
+# Regex flags used:
+#   - DOTALL (s): Makes . match newline characters, allowing pattern to span multiple lines
+# The re.sub() method with this pattern finds all occurrences (equivalent to 'g' global flag)
+# Pattern is case-sensitive (no IGNORECASE flag needed - backticks are symbols)
+# No MULTILINE flag needed - we don't use ^ or $ anchors
 FENCED_CODE_BLOCK_PATTERN = re.compile(r"(```|~~~)[^\n]*\n.*?\1", re.DOTALL)
 
 # Regex to match inline code (handles multiple backticks like `` or ```)
 # Matches backtick(s), then content that doesn't contain that same sequence, then same backticks
+# Regex flags used:
+#   - DOTALL (s): Makes . match newline characters, allowing inline code to span lines
+# The re.sub() method with this pattern finds all occurrences (equivalent to 'g' global flag)
+# Pattern is case-sensitive (no IGNORECASE flag needed - backticks are symbols)
+# No MULTILINE flag needed - we don't use ^ or $ anchors
 INLINE_CODE_PATTERN = re.compile(r"(`+)(?!`)(.*?)(?<!`)\1(?!`)", re.DOTALL)
 
 

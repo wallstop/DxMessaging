@@ -378,6 +378,38 @@ function validateSkill(skillFile) {
         );
     }
 
+    // Warn about missing optional fields that affect skills index display
+    // These are not required but cause '?' placeholders in the generated index
+    if (!frontmatter.complexity || !frontmatter.complexity.level) {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'complexity.level',
+                `Missing 'complexity.level' - will show '?' in Difficulty column of skills index`
+            )
+        );
+    }
+
+    if (!frontmatter.impact || !frontmatter.impact.performance || !frontmatter.impact.performance.rating) {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'impact.performance.rating',
+                `Missing 'impact.performance.rating' - will show '?' in Priority column of skills index`
+            )
+        );
+    }
+
+    if (!frontmatter.tags || (Array.isArray(frontmatter.tags) && frontmatter.tags.length === 0)) {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'tags',
+                `Missing or empty 'tags' array - will show empty Tags column in skills index`
+            )
+        );
+    }
+
     // Validate date format
     for (const dateField of ['created', 'updated']) {
         if (frontmatter[dateField] && !frontmatter[dateField].match(/^\d{4}-\d{2}-\d{2}$/)) {

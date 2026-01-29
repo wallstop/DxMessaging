@@ -231,14 +231,6 @@ flowchart TD
     Q3{Do you need observable, decoupled,<br/>lifecycle-safe messaging?}
     Q3 -->|YES| A3["✅ Use DxMessaging"]
     Q3 -->|NO| A4["❌ Keep it simple"]
-
-    style Q1 fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
-    style Q2 fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
-    style Q3 fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
-    style A1 fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
-    style A2 fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
-    style A3 fill:#1b5e20,stroke:#81c784,stroke-width:3px,color:#e0e0e0
-    style A4 fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
 ```
 
 **Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
@@ -448,10 +440,6 @@ flowchart LR
     P[Producer] --> I[Interceptors<br/>validate/mutate]
     I --> H[Handlers<br/>main logic]
     H --> PP[Post-Processors<br/>analytics/logging]
-    style P fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
-    style I fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#e0e0e0
-    style H fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
-    style PP fill:#1b5e20,stroke:#81c784,stroke-width:2px,color:#e0e0e0
 ```
 
 ### Global Observers: Listen to All Events

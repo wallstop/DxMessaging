@@ -5,15 +5,82 @@ category: "scripting"
 version: "1.0.0"
 created: "2026-01-29"
 updated: "2026-01-29"
-status: "stable"
+
+source:
+  repository: "wallstop/DxMessaging"
+  files:
+    - path: "scripts/"
+    - path: "docs/"
+  url: "https://github.com/wallstop/DxMessaging"
+
+tags:
+  - "regex"
+  - "documentation"
+  - "scripting"
+  - "patterns"
+  - "comments"
+  - "maintenance"
+
+complexity:
+  level: "intermediate"
+  reasoning: "Requires regex knowledge to understand flag behaviors and documentation implications"
+
+impact:
+  performance:
+    rating: "none"
+    details: "Documentation only; no runtime performance impact"
+  maintainability:
+    rating: "high"
+    details: "Improves code clarity and prevents maintenance bugs from misleading comments"
+  testability:
+    rating: "medium"
+    details: "Helps verify regex behavior matches documented expectations"
+
+prerequisites:
+  - "Basic regex syntax"
+  - "Understanding of regex flags"
+
+dependencies:
+  packages: []
+  skills:
+    - "shell-best-practices"
+
+applies_to:
+  languages:
+    - "JavaScript"
+    - "PowerShell"
+    - "C#"
+    - "Bash"
+  frameworks: []
+  versions: {}
+
+aliases:
+  - "Regex comments"
+  - "Pattern documentation"
+  - "Regular expression documentation"
+
 related:
   - shell-best-practices
   - cross-platform-compatibility
+
+status: "stable"
 ---
 
 # Regex Pattern Documentation
 
-This skill covers best practices for documenting regular expression patterns. Accurate comments are critical because regex behavior changes dramatically based on flags, and misleading comments cause maintenance bugs.
+> **One-line summary**: Document regex patterns accurately by describing what they actually match,
+> including all flag-dependent behavior.
+
+## Overview
+
+This skill covers best practices for documenting regular expression patterns. Accurate comments are critical because regex behavior changes dramatically based on flags, and misleading comments cause maintenance bugs. Many subtle bugs arise when comments describe intended behavior rather than actual behavior.
+
+## Solution
+
+1. **Describe actual behavior** - Comments must answer "What will this pattern match?" not "What do I hope it matches?"
+1. **Document flag effects** - Global, case-insensitive, multiline, and dotall flags change matching behavior significantly
+1. **Use precise language** - Say "matches all occurrences" (global) vs "matches first occurrence" (non-global)
+1. **Include character class details** - Specify whether patterns match Unicode, newlines, or specific character ranges
 
 ## Core Principle
 

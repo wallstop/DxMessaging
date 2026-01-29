@@ -277,7 +277,7 @@ function isDarkTheme() {
 As a safety net, the script strips per-diagram init directives before rendering:
 
 ```javascript
-// Matches single-line and multi-line %%{init:...}%% directives
+// Matches %%{init:...}%% directives (gims: global, case-insensitive, multiline, dotAll)
 const INIT_DIRECTIVE_PATTERN = /^\s*%%\{init:.*?\}%%\s*/gims;
 
 function stripInitDirectives(source) {
@@ -285,7 +285,7 @@ function stripInitDirectives(source) {
 }
 ```
 
-The `s` flag enables dotAll mode, allowing `.*?` to match newlines in multi-line directives.
+The regex uses four flags: `g` (global) replaces all occurrences, `i` (case-insensitive) matches regardless of case, `m` (multiline) makes `^` match the start of each line, and `s` (dotAll) allows `.*?` to match newlines in multi-line directives.
 
 ## Common Mistakes
 
