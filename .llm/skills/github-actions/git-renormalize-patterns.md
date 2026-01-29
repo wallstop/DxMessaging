@@ -94,7 +94,8 @@ Apply these requirements when using `git add --renormalize` in CI:
 
 ```bash
 # REQUIRED: Per-extension loop with existence check
-for ext in cs md json asmdef yml yaml; do
+# yaml excluded: dotfiles match git ls-files but not git add globs
+for ext in cs md json asmdef yml; do
   if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
     git add --renormalize -- "*.$ext" "**/*.$ext"
   fi
@@ -129,6 +130,44 @@ When `git add --renormalize` is given a pattern that matches no files, it fails:
 Run git add --renormalize -- '*.md' '*.markdown' '*.json'
 fatal: pathspec '*.markdown' did not match any files
 Error: Process completed with exit code 128.
+```
+
+### Dotfile Glob Behavior Difference
+
+**CRITICAL**: `git ls-files` and `git add` handle dotfiles differently:
+
+```bash
+# git ls-files MATCHES dotfiles
+git ls-files "*.yaml"              # Returns: .pre-commit-config.yaml
+
+# git add does NOT match dotfiles with globs
+git add --renormalize -- "*.yaml"  # FAILS: pathspec did not match any files
+```
+
+This causes a subtle failure mode: the existence check passes (because `git ls-files`
+finds the dotfile), but the actual `git add --renormalize` fails (because it doesn't
+match dotfiles with glob patterns).
+
+**Solution**: Exclude `yaml` from extension loops since `.yaml` files in most repositories
+are dotfiles (e.g., `.pre-commit-config.yaml`). Use `yml` extension for non-dotfile YAML files.
+
+**Generalized rule**: Exclude any extension from `git add --renormalize` loops when ALL
+tracked files of that extension are dotfiles (files whose names start with `.`). To verify:
+
+```bash
+# Check if ALL files of an extension are dotfiles
+git ls-files "*.$ext" "**/*.$ext" | while read f; do
+  basename "$f" | grep -q '^\.\.' || echo "non-dotfile: $f"
+done
+# If no output, all files are dotfiles → exclude this extension
+```
+
+```bash
+# CORRECT: Exclude yaml, dotfiles won't cause issues
+for ext in md json asmdef yml; do
+
+# WRONG: yaml causes failures when only dotfiles exist
+for ext in md json asmdef yml yaml; do
 ```
 
 This causes CI failures when:
@@ -306,13 +345,15 @@ Test your renormalize patterns locally before committing:
 
 ```bash
 # Verify file types exist
-for ext in cs md json asmdef yml yaml; do
+# yaml excluded: dotfiles match git ls-files but not git add globs
+for ext in cs md json asmdef yml; do
   count=$(git ls-files "*.$ext" "**/*.$ext" | wc -l)
   echo "$ext: $count files"
 done
 
 # Test the full loop pattern (dry run)
-for ext in cs md json asmdef yml yaml; do
+# yaml excluded: dotfiles match git ls-files but not git add globs
+for ext in cs md json asmdef yml; do
   if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
     echo "Would renormalize: *.$ext"
   else

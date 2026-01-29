@@ -20,6 +20,7 @@ description: High-performance type-safe messaging library for Unity
 
 ## Quick Links
 
+- **[Mental Model](concepts/mental-model.md)** — How to think about DxMessaging
 - **[Visual Guide](getting-started/visual-guide.md)** — Beginner-friendly introduction with diagrams
 - **[Quick Start](getting-started/quick-start.md)** — Your first message in 5 minutes
 - **[Message Types](concepts/message-types.md)** — Untargeted, Targeted, Broadcast patterns

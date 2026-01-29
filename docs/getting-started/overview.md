@@ -142,6 +142,7 @@ _ = Token.RegisterBroadcastWithoutSource<TookDamage>(
 
 ### Start Here
 
+- -> [Mental Model](../concepts/mental-model.md) (10 min) - Philosophy and first principles
 - -> [Visual Guide](visual-guide.md) (5 min) - Beginner-friendly introduction
 - -> [Getting Started](getting-started.md) (10 min) - Complete guide
 - -> [Quick Start](quick-start.md) (5 min) - Working example

@@ -601,6 +601,7 @@ If you checked all these, you are following best practices.
 
 Ready to dive deeper?
 
+1. **[Mental Model](../concepts/mental-model.md)** - Understand the philosophy
 1. **[Getting Started Guide](getting-started.md)** - Full guide with more details
 1. **[Common Patterns](../guides/patterns.md)** - Real-world examples
 1. **[Message Types](../concepts/message-types.md)** - Deep dive into when to use what
