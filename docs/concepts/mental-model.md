@@ -14,7 +14,7 @@ You have data. You need to pass it around. That's the problem.
 
 DxMessaging provides fast, simple primitives as building blocks. You model changes as message types with optional context, using game primitives (GameObjects, components) as that context. The library handles the plumbing.
 
-You don't build your game INTO the messaging system. The messaging system is opt-in and optional—a tool you reach for when it helps.
+You don't build your game INTO the messaging system. The messaging system is opt-in and optional - a tool you reach for when it helps.
 
 ## What Problem Does This Solve?
 
@@ -32,7 +32,7 @@ Player takes damage
 
 Traditional approaches require tight coupling: either the Player knows about all these systems, or they all hold references to the Player. Both paths lead to tangled dependencies.
 
-DxMessaging inverts this relationship. The Player broadcasts a fact—"I took 25 damage"—and interested systems subscribe to receive it. Systems come and go without the Player knowing or caring.
+DxMessaging inverts this relationship. The Player broadcasts a fact - "I took 25 damage" - and interested systems subscribe to receive it. Systems come and go without the Player knowing or caring.
 
 ## The Three Message Categories
 
@@ -41,6 +41,7 @@ DxMessaging models three fundamental patterns of communication. Each maps to a r
 ### Untargeted: The PA System
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart LR
     S[Someone] -->|announces| PA[📢 PA System]
     PA --> L1[Listener A]
@@ -50,8 +51,9 @@ flowchart LR
 
 Untargeted messages are announcements. No specific recipient. No specific sender that matters. Everyone who cares can hear it.
 
-!!! note "No sender identity"
-Unlike a real PA system, untargeted messages carry no concept of "who announced it." There is no sender identity attached—only the message content itself.
+> 📝 **Note: No sender identity**
+>
+> Unlike a real PA system, untargeted messages carry no concept of "who announced it." There is no sender identity attached - only the message content itself.
 
 #### Real examples
 
@@ -61,14 +63,15 @@ Unlike a real PA system, untargeted messages carry no concept of "who announced 
 - "Day/night cycle switched to night"
 
 ```csharp
-// Define an untargeted message
-public readonly struct GamePaused : IUntargetedMessage<GamePaused>
+// Define an untargeted message with attributes
+[DxUntargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct GamePaused
 {
     public readonly bool isPaused;
-    public GamePaused(bool isPaused) { this.isPaused = isPaused; }
 }
 
-// Or with attributes (source generators create the boilerplate)
+// Multiple fields are supported
 [DxUntargetedMessage]
 [DxAutoConstructor]
 public readonly partial struct SettingsChanged
@@ -83,6 +86,7 @@ public readonly partial struct SettingsChanged
 ### Targeted: The Addressed Letter
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart LR
     S[Sender] -->|"To: Player"| Letter[📬 Message Bus]
     Letter --> Player[Player receives]
@@ -100,11 +104,12 @@ Targeted messages are commands or directed events. They have a specific recipien
 - "Inventory slot 3, equip this weapon"
 
 ```csharp
-// Define a targeted message
-public readonly struct Heal : ITargetedMessage<Heal>
+// Define a targeted message with attributes
+[DxTargetedMessage]
+[DxAutoConstructor]
+public readonly partial struct Heal
 {
     public readonly int amount;
-    public Heal(int amount) { this.amount = amount; }
 }
 
 // Emit to a specific target
@@ -117,6 +122,7 @@ heal.EmitGameObjectTargeted(playerGameObject);
 ### Broadcast: The Radio Station
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart LR
     Source[Enemy] -->|"I took damage!"| Radio[📻 Message Bus]
     Radio --> L1[Damage Numbers UI]
@@ -125,7 +131,7 @@ flowchart LR
     Radio --> L4[Combat Log]
 ```
 
-Broadcast messages are facts emitted by a specific source. Unlike targeted messages, there's no intended recipient—just an origin. Anyone who wants to observe can tune in.
+Broadcast messages are facts emitted by a specific source. Unlike targeted messages, there's no intended recipient - just an origin. Anyone who wants to observe can tune in.
 
 #### Real examples
 
@@ -135,11 +141,12 @@ Broadcast messages are facts emitted by a specific source. Unlike targeted messa
 - "Projectile hit something" (from the projectile)
 
 ```csharp
-// Define a broadcast message
-public readonly struct TookDamage : IBroadcastMessage<TookDamage>
+// Define a broadcast message with attributes
+[DxBroadcastMessage]
+[DxAutoConstructor]
+public readonly partial struct TookDamage
 {
     public readonly int amount;
-    public TookDamage(int amount) { this.amount = amount; }
 }
 
 // Emit from a specific source
@@ -152,6 +159,7 @@ damage.EmitGameObjectBroadcast(thisEnemy);
 ## Deciding Which Type to Use
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
     Start([I need to send a message])
     Start --> Q1{Does it matter<br/>WHO sent it?}
@@ -196,12 +204,14 @@ public class HealthDisplay : MessageAwareComponent
 }
 ```
 
-!!! warning "Always call `base.RegisterMessageHandlers()`"
-When overriding `RegisterMessageHandlers()`, always call `base.RegisterMessageHandlers()` first. This ensures that any registrations from parent classes are preserved. Forgetting this call can silently break inherited behavior.
+> ⚠️ **Warning: Always call `base.RegisterMessageHandlers()`**
+>
+> When overriding `RegisterMessageHandlers()`, always call `base.RegisterMessageHandlers()` first. This ensures that any registrations from parent classes are preserved. Forgetting this call can silently break inherited behavior.
 
 ### What the Token Does
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 sequenceDiagram
     participant C as Component
     participant T as Token
@@ -252,7 +262,7 @@ DxMessaging uses Unity's primitives (GameObjects, Components) as natural context
 
 ### InstanceId
 
-Every registration and emission uses an `InstanceId`—a lightweight identifier that wraps a Unity Object's instance ID. You rarely need to create these manually because extension methods handle the conversion:
+Every registration and emission uses an `InstanceId` - a lightweight identifier that wraps a Unity Object's instance ID. You rarely need to create these manually because extension methods handle the conversion:
 
 ```csharp
 // These are equivalent:
@@ -379,7 +389,7 @@ Design your handlers to be fast and non-blocking.
 
 ## Next Steps
 
-- [Message Types](message-types.md) — Detailed reference for all three types
-- [Listening Patterns](listening-patterns.md) — All the ways to receive messages
-- [Getting Started](../getting-started/getting-started.md) — Hands-on walkthrough
-- [Patterns Guide](../guides/patterns.md) — Real-world usage patterns
+- [Message Types](message-types.md): Detailed reference for all three types
+- [Listening Patterns](listening-patterns.md): All the ways to receive messages
+- [Getting Started](../getting-started/getting-started.md): Hands-on walkthrough
+- [Patterns Guide](../guides/patterns.md): Real-world usage patterns

@@ -50,7 +50,7 @@ DxMessaging was built with these principles:
 ## Architecture Overview
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
+%%{init: {'theme': 'dark'}}%%
 flowchart TB
     subgraph App["Application Layer"]
         CompA[Component A<br/>Token.Reg]

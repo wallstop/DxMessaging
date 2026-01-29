@@ -157,7 +157,7 @@ tracked files of that extension are dotfiles (files whose names start with `.`).
 ```bash
 # Check if ALL files of an extension are dotfiles
 git ls-files "*.$ext" "**/*.$ext" | while read f; do
-  basename "$f" | grep -q '^\.\.' || echo "non-dotfile: $f"
+  basename "$f" | grep -q '^\.' || echo "non-dotfile: $f"
 done
 # If no output, all files are dotfiles → exclude this extension
 ```

@@ -177,7 +177,11 @@ Interceptors → Global Accept-All → Handlers<T> @ source
     → Post-Processors<T> (All Sources)
 ```
 
-!!! note "Priority Rules" - Lower priority values run earlier - Same priority preserves registration order - Within a priority, fast (by-ref) handlers run before action handlers
+> 📝 **Note: Priority Rules**
+>
+> - Lower priority values run earlier
+> - Same priority preserves registration order
+> - Within a priority, fast (by-ref) handlers run before action handlers
 
 ## API Quick Reference
 

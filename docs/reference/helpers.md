@@ -162,29 +162,25 @@ var settings4 = new SettingsChanged(0.8f, 2, brightness: 50);    // fullscreen=f
 
 The attribute provides constructor overloads for all common primitive types:
 
-<!-- markdownlint-disable MD046 -->
-
-!!! info "Built-in Type Support"
-
-    === "Numeric"
-
-        | Category              | Types                             |
-        | --------------------- | --------------------------------- |
-        | **Signed Integers**   | `sbyte`, `short`, `int`, `long`   |
-        | **Unsigned Integers** | `byte`, `ushort`, `uint`, `ulong` |
-        | **Floating Point**    | `float`, `double`                 |
-
-    === "Other"
-
-        | Category      | Types    |
-        | ------------- | -------- |
-        | **Boolean**   | `bool`   |
-        | **Character** | `char`   |
-        | **String**    | `string` |
-
-    For enums, Unity types, and other complex types, use the `Expression` property.
-
-<!-- markdownlint-enable MD046 -->
+> ℹ️ **Info: Built-in Type Support**
+>
+> **Numeric:**
+>
+> | Category              | Types                             |
+> | --------------------- | --------------------------------- |
+> | **Signed Integers**   | `sbyte`, `short`, `int`, `long`   |
+> | **Unsigned Integers** | `byte`, `ushort`, `uint`, `ulong` |
+> | **Floating Point**    | `float`, `double`                 |
+>
+> **Other:**
+>
+> | Category      | Types    |
+> | ------------- | -------- |
+> | **Boolean**   | `bool`   |
+> | **Character** | `char`   |
+> | **String**    | `string` |
+>
+> For enums, Unity types, and other complex types, use the `Expression` property.
 
 ##### Examples by type
 
@@ -294,16 +290,12 @@ public readonly partial struct AdvancedDefaults
 }
 ```
 
-<!-- markdownlint-disable MD046 -->
-
-!!! tip "Expression rules"
-
-    - The expression is inserted **verbatim** into the generated code
-    - Must be a valid C# constant expression
-    - Type safety is enforced by the C# compiler at build time
-    - Perfect for enums, nullable types, static constants, or complex defaults
-
-<!-- markdownlint-enable MD046 -->
+> 💡 **Tip: Expression rules**
+>
+> - The expression is inserted **verbatim** into the generated code
+> - Must be a valid C# constant expression
+> - Type safety is enforced by the C# compiler at build time
+> - Perfect for enums, nullable types, static constants, or complex defaults
 
 #### Code Examples
 
@@ -411,17 +403,13 @@ new AudioSettingsChanged(0.7f, 0.6f, 0.9f, false).Emit();
 
 #### Best Practices
 
-<!-- markdownlint-disable MD046 -->
-
-!!! success "Recommendations"
-
-    1. **Order matters** — Place required fields before optional fields in your struct
-    1. **Use meaningful defaults** — Choose defaults that represent the most common use case
-    1. **Prefer explicit values** — Use `[DxOptionalParameter(0)]` instead of `[DxOptionalParameter]` when clarity helps
-    1. **Use Expression for complex types** — Don't fight the type system; use `Expression` for enums and Unity types
-    1. **Document unusual defaults** — If a default isn't obvious, add a comment explaining why
-
-<!-- markdownlint-enable MD046 -->
+> ✅ **Success: Recommendations**
+>
+> 1. **Order matters** — Place required fields before optional fields in your struct
+> 1. **Use meaningful defaults** — Choose defaults that represent the most common use case
+> 1. **Prefer explicit values** — Use `[DxOptionalParameter(0)]` instead of `[DxOptionalParameter]` when clarity helps
+> 1. **Use Expression for complex types** — Don't fight the type system; use `Expression` for enums and Unity types
+> 1. **Document unusual defaults** — If a default isn't obvious, add a comment explaining why
 
 ## Why Use Attributes Instead of Manual Implementation
 
@@ -638,42 +626,38 @@ msg.Emit(testBus);
 
 ### Message Type Attributes
 
-<!-- markdownlint-disable MD046 -->
+#### Untargeted
 
-=== "Untargeted"
+Mark as a global message (no target):
 
-    Mark as a global message (no target):
+```csharp
+[DxUntargetedMessage]
+public readonly partial struct GamePaused { }
+```
 
-    ```csharp
-    [DxUntargetedMessage]
-    public readonly partial struct GamePaused { }
-    ```
+#### Targeted
 
-=== "Targeted"
+Mark as a message sent to a specific target:
 
-    Mark as a message sent to a specific target:
+```csharp
+[DxTargetedMessage]
+public readonly partial struct Heal
+{
+    public readonly int amount;
+}
+```
 
-    ```csharp
-    [DxTargetedMessage]
-    public readonly partial struct Heal
-    {
-        public readonly int amount;
-    }
-    ```
+#### Broadcast
 
-=== "Broadcast"
+Mark as a message broadcast from a source:
 
-    Mark as a message broadcast from a source:
-
-    ```csharp
-    [DxBroadcastMessage]
-    public readonly partial struct TookDamage
-    {
-        public readonly int amount;
-    }
-    ```
-
-<!-- markdownlint-enable MD046 -->
+```csharp
+[DxBroadcastMessage]
+public readonly partial struct TookDamage
+{
+    public readonly int amount;
+}
+```
 
 ### Constructor Generation Attributes
 
@@ -695,39 +679,35 @@ public readonly partial struct Damage
 
 Makes a constructor parameter optional. Three usage patterns:
 
-<!-- markdownlint-disable MD046 -->
-
-??? example "Default Value (type default)"
-
-    Uses the type's default value (`0`, `false`, `null`, etc.):
-
-    ```csharp
-    [DxOptionalParameter]
-    public readonly bool flag;
-    // Generates: bool flag = default
-    ```
-
-??? example "Custom Value (primitive)"
-
-    Provides a specific default value:
-
-    ```csharp
-    [DxOptionalParameter(42)]
-    public readonly int count;
-    // Generates: int count = 42
-    ```
-
-??? example "Expression (complex types)"
-
-    Uses a verbatim expression for enums, Unity types, etc.:
-
-    ```csharp
-    [DxOptionalParameter(Expression = "DamageType.Physical")]
-    public readonly DamageType damageType;
-    // Generates: DamageType damageType = DamageType.Physical
-    ```
-
-<!-- markdownlint-enable MD046 -->
+> 📋 **Example: Default Value (type default)**
+>
+> Uses the type's default value (`0`, `false`, `null`, etc.):
+>
+> ```csharp
+> [DxOptionalParameter]
+> public readonly bool flag;
+> // Generates: bool flag = default
+> ```
+>
+> 📋 **Example: Custom Value (primitive)**
+>
+> Provides a specific default value:
+>
+> ```csharp
+> [DxOptionalParameter(42)]
+> public readonly int count;
+> // Generates: int count = 42
+> ```
+>
+> 📋 **Example: Expression (complex types)**
+>
+> Uses a verbatim expression for enums, Unity types, etc.:
+>
+> ```csharp
+> [DxOptionalParameter(Expression = "DamageType.Physical")]
+> public readonly DamageType damageType;
+> // Generates: DamageType damageType = DamageType.Physical
+> ```
 
 ### Supported Types
 
@@ -936,55 +916,51 @@ public readonly partial struct MessageA
 
 ## Troubleshooting Source Generators
 
-<!-- markdownlint-disable MD046 -->
-
-??? warning "Attributes not working / code not generated"
-
-    ### Checklist
-
-    1. ✅ Is type marked `partial`?
-    1. ✅ Did you rebuild the project?
-    1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
-    1. ✅ Check `obj/` folder for `.g.cs` files
-
-    #### Fix
-
-    ```csharp
-    // ❌ Missing partial, will not compile
-    [DxAutoConstructor]
-    public readonly struct MyMsg { }
-
-    // ✅ Correct
-    [DxAutoConstructor]
-    public readonly partial struct MyMsg { }
-    ```
-
-??? warning "Constructor not generated"
-
-    **Cause:** No public fields to generate from
-
-    ```csharp
-    // ❌ No public fields
-    [DxAutoConstructor]
-    public readonly partial struct Empty { }
-
-    // ✅ Has public field
-    [DxAutoConstructor]
-    public readonly partial struct WithData {
-        public readonly int value;
-    }
-    ```
-
-??? warning "Unity can't find generated code"
-
-    ##### Solution
-
-    1. Close Unity
-    1. Delete `Library/` folder
-    1. Reopen Unity
-    1. Let it reimport everything
-
-<!-- markdownlint-enable MD046 -->
+> ⚠️ **Warning: Attributes not working / code not generated**
+>
+> ### Checklist
+>
+> 1. ✅ Is type marked `partial`?
+> 1. ✅ Did you rebuild the project?
+> 1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
+> 1. ✅ Check `obj/` folder for `.g.cs` files
+>
+> #### Fix
+>
+> ```csharp
+> // ❌ Missing partial, will not compile
+> [DxAutoConstructor]
+> public readonly struct MyMsg { }
+>
+> // ✅ Correct
+> [DxAutoConstructor]
+> public readonly partial struct MyMsg { }
+> ```
+>
+> ⚠️ **Warning: Constructor not generated**
+>
+> **Cause:** No public fields to generate from
+>
+> ```csharp
+> // ❌ No public fields
+> [DxAutoConstructor]
+> public readonly partial struct Empty { }
+>
+> // ✅ Has public field
+> [DxAutoConstructor]
+> public readonly partial struct WithData {
+>     public readonly int value;
+> }
+> ```
+>
+> ⚠️ **Warning: Unity can't find generated code**
+>
+> ##### Solution
+>
+> 1. Close Unity
+> 1. Delete `Library/` folder
+> 1. Reopen Unity
+> 1. Let it reimport everything
 
 ## Related Documentation
 

@@ -219,6 +219,7 @@ public class PlayerService : IInitializable, IDisposable
 ### Decision Flow
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart TD
     Q1{Does your project have 3+<br/>systems that need to talk to each other?}
     Q1 -->|NO| A1[Stick with C# events or direct references]
@@ -232,13 +233,13 @@ flowchart TD
     Q3 -->|YES| A3["✅ Use DxMessaging"]
     Q3 -->|NO| A4["❌ Keep it simple"]
 
-    style Q1 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
-    style Q2 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
-    style Q3 fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
-    style A1 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
-    style A2 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
-    style A3 fill:#95de64,stroke:#237804,stroke-width:3px,color:#000
-    style A4 fill:#f0f0f0,stroke:#666,stroke-width:2px,color:#000
+    style Q1 fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
+    style Q2 fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
+    style Q3 fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
+    style A1 fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
+    style A2 fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
+    style A3 fill:#1b5e20,stroke:#81c784,stroke-width:3px,color:#e0e0e0
+    style A4 fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
 ```
 
 **Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
@@ -444,13 +445,15 @@ public struct TookDamage { public int amount; }
 Every message flows through 3 stages with priority control:
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 flowchart LR
     P[Producer] --> I[Interceptors<br/>validate/mutate]
     I --> H[Handlers<br/>main logic]
     H --> PP[Post-Processors<br/>analytics/logging]
-    style I fill:#ffe7ba,stroke:#d48806,stroke-width:2px,color:#000
-    style H fill:#91d5ff,stroke:#096dd9,stroke-width:2px,color:#000
-    style PP fill:#b7eb8f,stroke:#389e0d,stroke-width:2px,color:#000
+    style P fill:#37474f,stroke:#90a4ae,stroke-width:2px,color:#e0e0e0
+    style I fill:#e65100,stroke:#ffb74d,stroke-width:2px,color:#e0e0e0
+    style H fill:#1e3a5f,stroke:#90caf9,stroke-width:2px,color:#e0e0e0
+    style PP fill:#1b5e20,stroke:#81c784,stroke-width:2px,color:#e0e0e0
 ```
 
 ### Global Observers: Listen to All Events

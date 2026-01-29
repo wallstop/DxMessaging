@@ -9,7 +9,7 @@
     "WallstopStudios.DxMessaging.VContainer",
     "WallstopStudios.DxMessaging.Zenject"
   ],
-  "includePlatforms": [],
+  "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": true,

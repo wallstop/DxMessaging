@@ -83,6 +83,8 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 - Use `grep -F` for literal string matching (paths, filenames with special characters like `.`).
 - Use `grep -E` only when regex features are explicitly needed.
 - Remember that `.` in a regex matches any character, not just a literal dot.
+- **Count escape sequences carefully**: Each `\.` matches exactly one literal dot. The pattern `^\.\.$` matches the literal string `..` (two consecutive dots), not "any string with dots at each end."
+- **Dotfile matching**: To match dotfiles (files starting with `.`), use `^\.` which is sufficient for `git ls-files` output since `..` directory entries are never listed.
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
 - **`grep` exit codes**: `grep` returns exit code 1 when no matches are found, which fails CI pipelines. Use `|| true`, `|| echo "0"`, or pipe to `wc -l` instead of `grep -c` when zero matches is acceptable.
 
@@ -222,6 +224,8 @@ See the [Documentation Updates skill](./skills/documentation/documentation-updat
 - **Headings**: Use ATX-style headings (`#`, `##`, `###`) not underlined style.
 - **Line length**: Not enforced. Write naturally; let lines wrap as needed.
 - **Inline code spacing**: Always include a space before and after inline code when adjacent to text. Write ``the `code` here`` not ``the`code`here``. This improves readability and matches CommonMark best practices.
+
+See the [Markdown Compatibility skill](./skills/documentation/markdown-compatibility.md) for MkDocs-specific syntax to avoid.
 
 ## Changelog Guidelines
 
