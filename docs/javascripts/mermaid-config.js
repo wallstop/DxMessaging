@@ -8,7 +8,10 @@
  * 4. Uses semantic class-based styling that works with both themes
  *
  * For GitHub/VSCode markdown preview fallback, diagrams include:
- * %%{init: {'theme': 'neutral'}}%%
+ * %%{init: {'theme': 'dark'}}%%
+ *
+ * This provides consistent dark-themed diagrams in GitHub markdown preview
+ * while MkDocs Material dynamically adjusts themes based on user preference.
  */
 
 (function () {

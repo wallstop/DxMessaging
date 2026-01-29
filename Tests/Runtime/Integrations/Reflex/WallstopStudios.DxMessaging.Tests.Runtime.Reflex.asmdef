@@ -9,7 +9,7 @@
     "Reflex",
     "WallstopStudios.DxMessaging.Reflex"
   ],
-  "includePlatforms": [],
+  "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": true,

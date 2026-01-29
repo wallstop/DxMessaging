@@ -159,6 +159,8 @@ nav:
       - Getting Started Guide: getting-started/getting-started.md
       - Visual Guide: getting-started/visual-guide.md
   - Concepts:
+      - concepts/index.md
+      - Mental Model: concepts/mental-model.md
       - Message Types: concepts/message-types.md
       - Listening Patterns: concepts/listening-patterns.md
       - Targeting & Context: concepts/targeting-and-context.md

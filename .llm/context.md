@@ -83,6 +83,8 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 - Use `grep -F` for literal string matching (paths, filenames with special characters like `.`).
 - Use `grep -E` only when regex features are explicitly needed.
 - Remember that `.` in a regex matches any character, not just a literal dot.
+- **Count escape sequences carefully**: Each `\.` matches exactly one literal dot. The pattern `^\.\.$` matches the literal string `..` (two consecutive dots), not "any string with dots at each end."
+- **Dotfile matching**: To match dotfiles (files starting with `.`), use `^\.` which is sufficient for `git ls-files` output since `..` directory entries are never listed.
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
 - **`grep` exit codes**: `grep` returns exit code 1 when no matches are found, which fails CI pipelines. Use `|| true`, `|| echo "0"`, or pipe to `wc -l` instead of `grep -c` when zero matches is acceptable.
 
@@ -100,6 +102,8 @@ This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, 
 - **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.
 - **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.
 - **Use per-extension loops for `git add --renormalize`**: Multi-pattern renormalize commands fail with exit code 128 if any pattern matches no files. Use a loop to process each extension separately with existence checks. Example: `for ext in md json yml; do if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then git add --renormalize -- "*.$ext" "**/*.$ext"; fi; done`.
+- **Dotfiles do not match glob patterns in `git add`**: The command `git ls-files "*.yaml"` matches dotfiles like `.pre-commit-config.yaml`, but `git add --renormalize -- "*.yaml"` does NOT match dotfiles. This causes the existence check to pass but the renormalize to fail. Exclude `yaml` from extension loops since the only `.yaml` files are typically dotfiles; use `yml` instead.
+- **Generalized rule for dotfile-only extensions**: Exclude any extension from `git add --renormalize` loops when ALL tracked files of that extension are dotfiles (files whose names start with `.`). To check: run `git ls-files "*.$ext" "**/*.$ext"` and verify whether any results are non-dotfiles. If all matches are dotfiles, exclude that extension.
 - **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
 - **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
 
@@ -207,10 +211,11 @@ After any new feature or bug fix, documentation must be updated:
 - **XML docs**: Update `<summary>`, `<param>`, `<returns>`, and `<remarks>` for public APIs.
 - **Code samples**: Ensure examples are correct, compilable, and tested.
 - **README**: Update [the README](../README.md) for significant features or breaking changes.
+- **MkDocs navigation**: When adding new pages to `docs/`, always add corresponding entries to `mkdocs.yml` nav section.
 
 When documenting new behavior, note the version it was introduced (e.g., "Added in v1.2.0").
 
-See the [Documentation Updates skill](./skills/documentation/documentation-updates.md) and [Changelog Management skill](./skills/documentation/changelog-management.md) for detailed guidance.
+See the [Documentation Updates skill](./skills/documentation/documentation-updates.md), [Changelog Management skill](./skills/documentation/changelog-management.md), and [MkDocs Navigation skill](./skills/documentation/mkdocs-navigation.md) for detailed guidance.
 
 ### Markdown Formatting Conventions
 
@@ -220,6 +225,8 @@ See the [Documentation Updates skill](./skills/documentation/documentation-updat
 - **Headings**: Use ATX-style headings (`#`, `##`, `###`) not underlined style.
 - **Line length**: Not enforced. Write naturally; let lines wrap as needed.
 - **Inline code spacing**: Always include a space before and after inline code when adjacent to text. Write ``the `code` here`` not ``the`code`here``. This improves readability and matches CommonMark best practices.
+
+See the [Markdown Compatibility skill](./skills/documentation/markdown-compatibility.md) for MkDocs-specific syntax to avoid.
 
 ## Changelog Guidelines
 

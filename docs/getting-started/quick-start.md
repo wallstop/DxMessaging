@@ -143,7 +143,8 @@ Registration cleanup is automatic. Messages are type-safe.
 ## Next Steps
 
 - **Understand What You Did**
-  - -> [Getting Started Guide](getting-started.md) (10 min) - Full explanation with mental models
+  - -> [Mental Model](../concepts/mental-model.md) (10 min) - Philosophy and first principles
+  - -> [Getting Started Guide](getting-started.md) (10 min) - Full explanation with examples
   - -> [Visual Guide](visual-guide.md) (5 min) - Pictures and analogies
 - **Try Real Examples**
   - -> [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) - Working combat example

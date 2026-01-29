@@ -182,6 +182,7 @@ Checklist:
 
 ## Next Steps
 
+- [Mental Model](../concepts/mental-model.md) - Understand the philosophy behind DxMessaging
 - [Visual Guide](visual-guide.md)
 - [Quick Reference](../reference/quick-reference.md)
 - [Diagnostics](../guides/diagnostics.md)

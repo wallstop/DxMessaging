@@ -50,117 +50,113 @@ MessageRegistrationHandle RegisterUntargetedPostProcessor<T>(
 
 Register handlers for messages directed at specific GameObjects, Components, or InstanceIds.
 
-<!-- markdownlint-disable MD046 -->
+#### Specific Target
 
-=== "Specific Target"
+```csharp
+// GameObject target
+MessageRegistrationHandle RegisterGameObjectTargeted<T>(
+    GameObject target,
+    Action<T> handler,
+    int priority = 0
+)
 
-    ```csharp
-    // GameObject target
-    MessageRegistrationHandle RegisterGameObjectTargeted<T>(
-        GameObject target,
-        Action<T> handler,
-        int priority = 0
-    )
+// Component target
+MessageRegistrationHandle RegisterComponentTargeted<T>(
+    Component target,
+    Action<T> handler,
+    int priority = 0
+)
 
-    // Component target
-    MessageRegistrationHandle RegisterComponentTargeted<T>(
-        Component target,
-        Action<T> handler,
-        int priority = 0
-    )
+// InstanceId target (low-level)
+MessageRegistrationHandle RegisterTargeted<T>(
+    InstanceId target,
+    Action<T> handler,
+    int priority = 0
+)
+```
 
-    // InstanceId target (low-level)
-    MessageRegistrationHandle RegisterTargeted<T>(
-        InstanceId target,
-        Action<T> handler,
-        int priority = 0
-    )
-    ```
+#### All Targets
 
-=== "All Targets"
+```csharp
+// Receive all targeted messages regardless of target
+MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(
+    FastHandlerWithContext<T> handler,
+    int priority = 0
+)
+```
 
-    ```csharp
-    // Receive all targeted messages regardless of target
-    MessageRegistrationHandle RegisterTargetedWithoutTargeting<T>(
-        FastHandlerWithContext<T> handler,
-        int priority = 0
-    )
-    ```
+#### Post-Processors
 
-=== "Post-Processors"
+```csharp
+// Post-process for specific target
+MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
+    InstanceId target,
+    FastHandler<T> handler,
+    int priority = 0
+)
 
-    ```csharp
-    // Post-process for specific target
-    MessageRegistrationHandle RegisterTargetedPostProcessor<T>(
-        InstanceId target,
-        FastHandler<T> handler,
-        int priority = 0
-    )
-
-    // Post-process all targeted messages
-    MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(
-        FastHandlerWithContext<T> handler,
-        int priority = 0
-    )
-    ```
+// Post-process all targeted messages
+MessageRegistrationHandle RegisterTargetedWithoutTargetingPostProcessor<T>(
+    FastHandlerWithContext<T> handler,
+    int priority = 0
+)
+```
 
 ### Broadcast Message Registration
 
 Register handlers for messages broadcast from specific sources.
 
-=== "Specific Source"
+#### Specific Source
 
-    ```csharp
-    // From specific GameObject
-    MessageRegistrationHandle RegisterGameObjectBroadcast<T>(
-        GameObject source,
-        Action<T> handler,
-        int priority = 0
-    )
+```csharp
+// From specific GameObject
+MessageRegistrationHandle RegisterGameObjectBroadcast<T>(
+    GameObject source,
+    Action<T> handler,
+    int priority = 0
+)
 
-    // From specific Component
-    MessageRegistrationHandle RegisterComponentBroadcast<T>(
-        Component source,
-        Action<T> handler,
-        int priority = 0
-    )
+// From specific Component
+MessageRegistrationHandle RegisterComponentBroadcast<T>(
+    Component source,
+    Action<T> handler,
+    int priority = 0
+)
 
-    // From specific InstanceId
-    MessageRegistrationHandle RegisterBroadcast<T>(
-        InstanceId source,
-        Action<T> handler,
-        int priority = 0
-    )
-    ```
+// From specific InstanceId
+MessageRegistrationHandle RegisterBroadcast<T>(
+    InstanceId source,
+    Action<T> handler,
+    int priority = 0
+)
+```
 
-=== "All Sources"
+#### All Sources
 
-    ```csharp
-    // Receive broadcasts from any source
-    MessageRegistrationHandle RegisterBroadcastWithoutSource<T>(
-        FastHandlerWithContext<T> handler,
-        int priority = 0
-    )
-    ```
+```csharp
+// Receive broadcasts from any source
+MessageRegistrationHandle RegisterBroadcastWithoutSource<T>(
+    FastHandlerWithContext<T> handler,
+    int priority = 0
+)
+```
 
-=== "Post-Processors"
+#### Post-Processors
 
-    ```csharp
-    // Post-process for specific source
-    MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(
-        InstanceId source,
-        FastHandler<T> handler,
-        int priority = 0
-    )
+```csharp
+// Post-process for specific source
+MessageRegistrationHandle RegisterBroadcastPostProcessor<T>(
+    InstanceId source,
+    FastHandler<T> handler,
+    int priority = 0
+)
 
-    // Post-process all broadcasts
-    MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(
-        FastHandlerWithContext<T> handler,
-        int priority = 0
-    )
-    ```
-
-<!-- markdownlint-enable MD046 -->
+// Post-process all broadcasts
+MessageRegistrationHandle RegisterBroadcastWithoutSourcePostProcessor<T>(
+    FastHandlerWithContext<T> handler,
+    int priority = 0
+)
+```
 
 ---
 
@@ -286,8 +282,9 @@ string logOutput = bus.Log.ToString();
 | `DxMessaging.Core.MessageBus.MessageBus` | Instanced bus; global instance at `MessageHandler.MessageBus`         |
 | `DxMessaging.Core.Messages.*`            | Untargeted/Targeted/Broadcast interfaces and built-in string messages |
 
-!!! tip "String Messages"
-For lightweight string-based messaging, see [String Messages](../advanced/string-messages.md).
+> 💡 **Tip: String Messages**
+>
+> For lightweight string-based messaging, see [String Messages](../advanced/string-messages.md).
 
 ---
 
@@ -332,28 +329,25 @@ public abstract class MessageAwareComponent : MessagingComponent
 }
 ```
 
-<!-- markdownlint-disable MD046 -->
-
-!!! warning "Inheritance Tip"
-If you override any lifecycle hooks (`Awake`, `OnDestroy`, `OnEnable`, `OnDisable`) or `RegisterMessageHandlers`, always call the base method:
-
-    ```csharp
-    protected override void RegisterMessageHandlers()
-    {
-        base.RegisterMessageHandlers();
-        // Your registrations here
-    }
-
-    protected override void OnEnable()
-    {
-        base.OnEnable();
-        // Your logic here
-    }
-    ```
-
-    Skipping base calls may prevent token setup and default string-message registrations.
-
-<!-- markdownlint-enable MD046 -->
+> ⚠️ **Warning: Inheritance Tip**
+>
+> If you override any lifecycle hooks (`Awake`, `OnDestroy`, `OnEnable`, `OnDisable`) or `RegisterMessageHandlers`, always call the base method:
+>
+> ```csharp
+> protected override void RegisterMessageHandlers()
+> {
+>     base.RegisterMessageHandlers();
+>     // Your registrations here
+> }
+>
+> protected override void OnEnable()
+> {
+>     base.OnEnable();
+>     // Your logic here
+> }
+> ```
+>
+> Skipping base calls may prevent token setup and default string-message registrations.
 
 ---
 

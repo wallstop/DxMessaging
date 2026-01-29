@@ -12,7 +12,7 @@
     "UniRx",
     "UniTask"
   ],
-  "includePlatforms": [],
+  "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": true,
@@ -34,11 +34,6 @@
       "name": "com.cysharp.unirx",
       "expression": "0.0.1",
       "define": "UNIRX_PRESENT"
-    },
-    {
-      "name": "com.svermeulen.extenject",
-      "expression": "0.0.1",
-      "define": "ZENJECT_PRESENT"
     },
     {
       "name": "com.svermeulen.extenject",
