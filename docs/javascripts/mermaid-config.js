@@ -6,12 +6,12 @@
  * 2. Initializes Mermaid with appropriate theme variables
  * 3. Listens for theme changes and re-renders diagrams
  * 4. Uses semantic class-based styling that works with both themes
+ * 5. Strips per-diagram %%{init:...}%% directives to prevent theme override conflicts
  *
- * For GitHub/VSCode markdown preview fallback, diagrams include:
- * %%{init: {'theme': 'dark'}}%%
- *
- * This provides consistent dark-themed diagrams in GitHub markdown preview
- * while MkDocs Material dynamically adjusts themes based on user preference.
+ * IMPORTANT: Do not use %%{init: {'theme': '...'}}%% directives in docs/ markdown files.
+ * This script manages theming globally and per-diagram directives bypass the theme switching,
+ * causing diagrams to render incorrectly in light mode. The stripping function below removes
+ * such directives before rendering to ensure consistent behavior.
  */
 
 (function () {
@@ -120,6 +120,23 @@
   };
 
   /**
+   * Regex pattern to match Mermaid init directives
+   * Matches %%{init: {...}}%% at the start of diagram source (single-line or multi-line)
+   * These directives can override our theme settings, so we strip them
+   * The 's' flag enables dotAll mode so '.*?' matches newlines in multi-line directives
+   */
+  const INIT_DIRECTIVE_PATTERN = /^\s*%%\{init:.*?\}%%\s*/gims;
+
+  /**
+   * Strip per-diagram init directives that would override our theme configuration
+   * @param {string} source - The original Mermaid diagram source
+   * @returns {string} The source with init directives removed
+   */
+  function stripInitDirectives(source) {
+    return source.replace(INIT_DIRECTIVE_PATTERN, "");
+  }
+
+  /**
    * Detect if dark theme is currently active
    * MkDocs Material uses data-md-color-scheme attribute on body
    */
@@ -208,8 +225,11 @@
         // Generate unique ID for this diagram
         const id = `mermaid-diagram-${Date.now()}-${i}`;
 
+        // Strip any per-diagram init directives that would override our theme
+        const cleanedDefinition = stripInitDirectives(graphDefinition);
+
         // Render the diagram
-        const { svg } = await mermaid.render(id, graphDefinition);
+        const { svg } = await mermaid.render(id, cleanedDefinition);
         element.innerHTML = svg;
         element.setAttribute("data-processed", "true");
       } catch (error) {
@@ -248,7 +268,9 @@
 
       try {
         const id = `mermaid-rerender-${Date.now()}-${i}`;
-        const { svg } = await mermaid.render(id, originalSource);
+        // Strip any per-diagram init directives that would override our theme
+        const cleanedSource = stripInitDirectives(originalSource);
+        const { svg } = await mermaid.render(id, cleanedSource);
         element.innerHTML = svg;
       } catch (error) {
         console.error("Mermaid re-rendering error:", error);

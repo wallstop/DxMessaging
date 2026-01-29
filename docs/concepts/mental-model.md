@@ -41,7 +41,6 @@ DxMessaging models three fundamental patterns of communication. Each maps to a r
 ### Untargeted: The PA System
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
     S[Someone] -->|announces| PA[📢 PA System]
     PA --> L1[Listener A]
@@ -86,7 +85,6 @@ public readonly partial struct SettingsChanged
 ### Targeted: The Addressed Letter
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
     S[Sender] -->|"To: Player"| Letter[📬 Message Bus]
     Letter --> Player[Player receives]
@@ -122,7 +120,6 @@ heal.EmitGameObjectTargeted(playerGameObject);
 ### Broadcast: The Radio Station
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
     Source[Enemy] -->|"I took damage!"| Radio[📻 Message Bus]
     Radio --> L1[Damage Numbers UI]
@@ -159,7 +156,6 @@ damage.EmitGameObjectBroadcast(thisEnemy);
 ## Deciding Which Type to Use
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart TD
     Start([I need to send a message])
     Start --> Q1{Does it matter<br/>WHO sent it?}
@@ -211,7 +207,6 @@ public class HealthDisplay : MessageAwareComponent
 ### What the Token Does
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 sequenceDiagram
     participant C as Component
     participant T as Token

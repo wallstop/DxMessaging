@@ -2,7 +2,7 @@
 title: "Markdown Compatibility Guidelines"
 id: "markdown-compatibility"
 category: "documentation"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-01-29"
 updated: "2026-01-29"
 
@@ -61,6 +61,7 @@ related:
   - "documentation-style-guide"
   - "documentation-updates"
   - "mkdocs-navigation"
+  - "mermaid-theming"
 
 status: "stable"
 ---
@@ -381,6 +382,14 @@ Changed "old text" to "new text".
 
 ---
 
+## Mermaid Diagram Theming
+
+> 🔗 **See [Mermaid Theming](mermaid-theming.md)** for complete guidance on Mermaid diagram theming in MkDocs Material.
+
+**Key rule**: Do not use `%%{init: {'theme': '...'}}%%` directives in `docs/` files. The global `mermaid-config.js` handles theme-aware rendering automatically.
+
+---
+
 ## Validation
 
 Before committing documentation changes:
@@ -398,6 +407,8 @@ Add to your review process:
 grep -rn --include='*.md' -E '^(!!!|\?\?\?|===)' docs/
 grep -rn --include='*.md' '{ *\.md-button' docs/
 grep -rn --include='*.md' ':[a-z_]+:' docs/ | grep -v 'https://'
+# Find per-diagram Mermaid theme directives (forbidden in docs/)
+grep -rn --include='*.md' "%%{init.*theme" docs/
 ```
 
 ---
@@ -427,9 +438,11 @@ grep -rn --include='*.md' ':[a-z_]+:' docs/ | grep -v 'https://'
 - [CommonMark Specification](https://spec.commonmark.org/)
 - [GitHub Flavored Markdown](https://github.github.com/gfm/)
 - [MkDocs Material Extensions](https://squidfunk.github.io/mkdocs-material/reference/)
+- [Mermaid Theming](https://mermaid.js.org/config/theming.html)
 
 ## Changelog
 
 | Version | Date       | Changes                                             |
 | ------- | ---------- | --------------------------------------------------- |
+| 1.1.0   | 2026-01-29 | Added Mermaid diagram theming section               |
 | 1.0.0   | 2026-01-29 | Initial version with forbidden syntax documentation |

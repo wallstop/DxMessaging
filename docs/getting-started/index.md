@@ -5,7 +5,6 @@ This is the documentation for DxMessaging, a type-safe messaging system for Unit
 ## Visual Documentation Map
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart TD
     Start[START HERE<br/>Visual Guide<br/>5 minutes]
     Start --> Quick[Quick Start<br/>5 min]
@@ -168,7 +167,6 @@ From [Common Patterns](../guides/patterns.md):
 Every message flows through 3 stages:
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
     P[Producer] --> I[Interceptors<br/>validate/mutate/cancel]
     I --> H[Handlers<br/>main logic by priority]

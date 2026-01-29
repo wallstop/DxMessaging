@@ -84,7 +84,6 @@ Notes on handler groups
 Visual overview
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 flowchart LR
   subgraph Untargeted["Untargeted Messages"]
     direction TB
@@ -126,7 +125,6 @@ flowchart LR
 Example sequence
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
 sequenceDiagram
     participant P as Producer
     participant I as Interceptor(s)
