@@ -211,10 +211,11 @@ After any new feature or bug fix, documentation must be updated:
 - **XML docs**: Update `<summary>`, `<param>`, `<returns>`, and `<remarks>` for public APIs.
 - **Code samples**: Ensure examples are correct, compilable, and tested.
 - **README**: Update [the README](../README.md) for significant features or breaking changes.
+- **MkDocs navigation**: When adding new pages to `docs/`, always add corresponding entries to `mkdocs.yml` nav section.
 
 When documenting new behavior, note the version it was introduced (e.g., "Added in v1.2.0").
 
-See the [Documentation Updates skill](./skills/documentation/documentation-updates.md) and [Changelog Management skill](./skills/documentation/changelog-management.md) for detailed guidance.
+See the [Documentation Updates skill](./skills/documentation/documentation-updates.md), [Changelog Management skill](./skills/documentation/changelog-management.md), and [MkDocs Navigation skill](./skills/documentation/mkdocs-navigation.md) for detailed guidance.
 
 ### Markdown Formatting Conventions
 

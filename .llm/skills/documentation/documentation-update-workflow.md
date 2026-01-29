@@ -60,6 +60,7 @@ related:
   - "documentation-xml-docs"
   - "documentation-code-samples"
   - "changelog-management"
+  - "mkdocs-navigation"
 
 status: "stable"
 ---
@@ -133,6 +134,7 @@ Documentation updates needed:
 - [Documentation Updates](documentation-updates.md)
 - [XML Documentation Standards](documentation-xml-docs.md)
 - [Documentation Code Samples](documentation-code-samples.md)
+- [MkDocs Navigation](mkdocs-navigation.md)
 - [Changelog Management](changelog-management.md)
 
 ## References

@@ -60,6 +60,7 @@ aliases:
 related:
   - "documentation-style-guide"
   - "documentation-updates"
+  - "mkdocs-navigation"
 
 status: "stable"
 ---
@@ -419,6 +420,7 @@ grep -rn --include='*.md' ':[a-z_]+:' docs/ | grep -v 'https://'
 
 - [Documentation Style Guide](documentation-style-guide.md)
 - [Documentation Updates](documentation-updates.md)
+- [MkDocs Navigation](mkdocs-navigation.md)
 
 ## References
 

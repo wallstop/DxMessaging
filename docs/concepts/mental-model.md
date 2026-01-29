@@ -195,7 +195,7 @@ public class HealthDisplay : MessageAwareComponent
         base.RegisterMessageHandlers();
 
         // Register handlers through the Token
-        _ = Token.RegisterGameObjectTargeted<TookDamage>(player, OnPlayerDamaged);
+        _ = Token.RegisterGameObjectBroadcast<TookDamage>(player, OnPlayerDamaged);
         _ = Token.RegisterUntargeted<GamePaused>(OnGamePaused);
     }
 

@@ -9,15 +9,15 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 79    |
+| Total Skills | 80    |
 | Categories   | 6     |
-| Unique Tags  | 147   |
+| Unique Tags  | 149   |
 
 ---
 
 ## Table of Contents
 
-- [Documentation](#documentation) (13)
+- [Documentation](#documentation) (14)
 - [GitHub Actions](#github-actions) (2)
 - [Performance](#performance) (24)
 - [Scripting](#scripting) (3)
@@ -37,12 +37,13 @@
 | [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                 | ✅ 250 | 🟢 Basic   | ✅ Stable | ○○○○○       | changelog, release-workflow, versioning   |
 | [Documentation Code Samples](./documentation/documentation-code-samples.md)                 | ✅ 263 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-samples, examples     |
 | [Documentation Style Guide](./documentation/documentation-style-guide.md)                   | ✅ 204 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, style, writing             |
-| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)           | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, workflow, checklist        |
-| [Documentation Updates and Maintenance](./documentation/documentation-updates.md)           | 📝 147 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-comments, xml-docs    |
+| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)           | 📝 149 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, workflow, checklist        |
+| [Documentation Updates and Maintenance](./documentation/documentation-updates.md)           | 📝 149 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, code-comments, xml-docs    |
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)     | 📝 182 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, links, urls                |
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md) | ✅ 204 | 🟢 Basic   | ✅ Stable | ○○○○○       | github-actions, ci-cd, version-management |
 | [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)      | ✅ 268 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, links, urls                |
-| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)              | ⚠️ 434 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, markdown, compatibility    |
+| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)              | ⚠️ 436 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, markdown, compatibility    |
+| [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                        | ✅ 291 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, mkdocs, navigation         |
 | [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                        | ✅ 261 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, skills, file-organization  |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                    | 📝 191 | 🟢 Basic   | ✅ Stable | ○○○○○       | documentation, xml-docs, api-reference    |
 
@@ -141,7 +142,7 @@
 
 ## Tag Cloud
 
-`testing`×26 `performance`×15 `unity`×13 `documentation`×11 `ci-cd`×10 `solid`×10 `memory`×9 `patterns`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `singleton`×5 `struct`×5 `anti-patterns`×4 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `github-actions`×4 `markdown`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `linting`×3 `logging`×3 `messaging`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `error-handling`×2 `eviction`×2 `examples`×2 `git`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `javascript`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `optimization`×2 `release-notes`×2 `root-cause-analysis`×2 `scripting`×2 `urls`×2 `user-communication`×2 `workflow`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `compatibility`×1 `configuration`×1 `consistency`×1 `coroutines`×1 `cross-platform`×1 `disposable`×1 `dry`×1 `encoding`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `gitattributes`×1 `here-strings`×1 `implementation`×1 `jest`×1 `line-endings`×1 `llm-context`×1 `macos`×1 `maintainability`×1 `maintenance`×1 `methodimpl`×1 `mkdocs`×1 `naming`×1 `negative-tests`×1 `parsing`×1 `portability`×1 `pre-commit`×1 `procedure`×1 `raii`×1 `regex`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `security`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `test-cases`×1 `thread-safety`×1 `type-specialization`×1 `validation`×1 `version-management`×1 `windows`×1 `yaml`×1 `yield`×1 `zero-flaky`×1
+`testing`×26 `performance`×15 `unity`×13 `documentation`×12 `ci-cd`×10 `solid`×10 `memory`×9 `patterns`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `singleton`×5 `struct`×5 `anti-patterns`×4 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `github-actions`×4 `markdown`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `linting`×3 `logging`×3 `messaging`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `error-handling`×2 `eviction`×2 `examples`×2 `git`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `javascript`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `mkdocs`×2 `optimization`×2 `release-notes`×2 `root-cause-analysis`×2 `scripting`×2 `urls`×2 `user-communication`×2 `workflow`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `yaml`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `compatibility`×1 `configuration`×1 `consistency`×1 `coroutines`×1 `cross-platform`×1 `disposable`×1 `dry`×1 `encoding`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `gitattributes`×1 `here-strings`×1 `implementation`×1 `jest`×1 `line-endings`×1 `llm-context`×1 `macos`×1 `maintainability`×1 `maintenance`×1 `methodimpl`×1 `naming`×1 `navigation`×1 `negative-tests`×1 `parsing`×1 `portability`×1 `pre-commit`×1 `procedure`×1 `raii`×1 `regex`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `security`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `site-structure`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `test-cases`×1 `thread-safety`×1 `type-specialization`×1 `validation`×1 `version-management`×1 `windows`×1 `yield`×1 `zero-flaky`×1
 
 ---
 
@@ -161,6 +162,7 @@
 - [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md) _(documentation)_
 - [Link Quality and External URL Management](./documentation/link-quality-guidelines.md) _(documentation)_
 - [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md) _(documentation)_
+- [MkDocs Navigation Management](./documentation/mkdocs-navigation.md) _(documentation)_
 - [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md) _(documentation)_
 - [StringBuilder Pooling for Zero-Allocation String Building](./performance/stringbuilder-pooling.md) _(performance)_
 - [Test Categories for Selective Execution](./testing/test-categories.md) _(testing)_
