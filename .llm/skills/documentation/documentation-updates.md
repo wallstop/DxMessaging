@@ -69,6 +69,7 @@ related:
   - "documentation-code-samples"
   - "documentation-style-guide"
   - "documentation-update-workflow"
+  - "mkdocs-navigation"
   - "test-failure-investigation"
 
 status: "stable"
@@ -132,6 +133,7 @@ Outdated documentation misleads users and increases support load.
 - [Code Sample Requirements](documentation-code-samples.md)
 - [Documentation Style Guide](documentation-style-guide.md)
 - [Documentation Update Workflow](documentation-update-workflow.md)
+- [MkDocs Navigation](mkdocs-navigation.md)
 - [Changelog Management](changelog-management.md)
 
 ## References

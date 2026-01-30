@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Concepts index page and Mental Model documentation for understanding DxMessaging's design principles
+
+### Fixed
+
+- Orphaned documentation pages in Concepts section now included in mkdocs.yml navigation
+- Burst compiler assembly resolution errors when using DxMessaging as a package on disk and building for player platforms. Benchmarks and integration test assembly definitions now specify Editor-only platform to prevent Burst from attempting to resolve these assemblies during player builds.
+
 ## [2.1.5]
 
 ### Added

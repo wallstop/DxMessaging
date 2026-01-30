@@ -83,7 +83,8 @@ jobs:
         run: |
           # Renormalize each extension separately to avoid "pathspec did not match" failures
           # when certain file types don't exist or aren't accessible in this checkout context
-          for ext in cs md json asmdef yml yaml; do
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in cs md json asmdef yml; do
             if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
               git add --renormalize -- "*.$ext" "**/*.$ext"
             fi
@@ -104,13 +105,13 @@ jobs:
           commit_message: "chore(format): apply requested formatting"
           branch: ${{ steps.meta.outputs.head_ref }}
           add_options: --renormalize
+          # NOTE: yaml excluded - all .yaml files are dotfiles, which git add patterns don't match
           file_pattern: |
             **/*.cs
             **/*.md
             **/*.json
             **/*.asmdef
             **/*.yml
-            **/*.yaml
       - name: Create bot branch and PR (fork)
         if: ${{ steps.meta.outputs.same_repo != 'true' && steps.changes.outputs.has_changes == 'true' }}
         shell: bash
@@ -126,7 +127,8 @@ jobs:
           # Stage only supported text files; avoid workflows to prevent permission issues
           # Use --renormalize to ensure LF line endings in git index per .gitattributes
           # Renormalize each extension separately to avoid "pathspec did not match" failures
-          for ext in cs md json asmdef yml yaml; do
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in cs md json asmdef yml; do
             if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
               git add --renormalize -- "*.$ext" "**/*.$ext"
             fi
@@ -231,7 +233,8 @@ jobs:
         run: |
           # Renormalize each extension separately to avoid "pathspec did not match" failures
           # when certain file types don't exist or aren't accessible in this checkout context
-          for ext in cs md json asmdef yml yaml; do
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in cs md json asmdef yml; do
             if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
               git add --renormalize -- "*.$ext" "**/*.$ext"
             fi
@@ -252,13 +255,13 @@ jobs:
           commit_message: "chore(format): apply requested formatting"
           branch: ${{ steps.meta.outputs.head_ref }}
           add_options: --renormalize
+          # NOTE: yaml excluded - all .yaml files are dotfiles, which git add patterns don't match
           file_pattern: |
             **/*.cs
             **/*.md
             **/*.json
             **/*.asmdef
             **/*.yml
-            **/*.yaml
       - name: Create bot branch and PR (fork)
         if: ${{ steps.meta.outputs.same_repo != 'true' && steps.changes.outputs.has_changes == 'true' }}
         shell: bash
@@ -274,7 +277,8 @@ jobs:
           # Stage only supported text files; avoid workflows to prevent permission issues
           # Use --renormalize to ensure LF line endings in git index per .gitattributes
           # Renormalize each extension separately to avoid "pathspec did not match" failures
-          for ext in cs md json asmdef yml yaml; do
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in cs md json asmdef yml; do
             if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
               git add --renormalize -- "*.$ext" "**/*.$ext"
             fi

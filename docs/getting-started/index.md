@@ -5,8 +5,7 @@ This is the documentation for DxMessaging, a type-safe messaging system for Unit
 ## Visual Documentation Map
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
-graph TD
+flowchart TD
     Start[START HERE<br/>Visual Guide<br/>5 minutes]
     Start --> Quick[Quick Start<br/>5 min]
     Start --> Getting[Getting Started<br/>10 min]
@@ -39,6 +38,7 @@ graph TD
 
 **Never used a messaging system before?** Start here:
 
+1. **[Mental Model](../concepts/mental-model.md)** - How to think about DxMessaging (10 min)
 1. **[Visual Guide](visual-guide.md)** - Beginner-friendly visual introduction (5 min)
 1. **[Getting Started Guide](getting-started.md)** - Comprehensive guide with examples (10 min)
 1. **[Quick Start](quick-start.md)** - Your first working message (5 min)
@@ -48,6 +48,7 @@ graph TD
 
 ### For Absolute Beginners (Never Used Messaging Before)
 
+1. Read [Mental Model](../concepts/mental-model.md) (10 min) - Philosophy first!
 1. Read [Visual Guide](visual-guide.md) (5 min) - Pictures and analogies!
 1. Read [Getting Started](getting-started.md) (10 min) - Complete introduction
 1. Try [Quick Start](quick-start.md) (5 min) - Hands-on tutorial
@@ -166,7 +167,6 @@ From [Common Patterns](../guides/patterns.md):
 Every message flows through 3 stages:
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
 flowchart LR
     P[Producer] --> I[Interceptors<br/>validate/mutate/cancel]
     I --> H[Handlers<br/>main logic by priority]
@@ -298,9 +298,10 @@ From [Comparisons](../architecture/comparisons.md):
 
 ## Quick Start Path
 
-**Absolute Beginner?** Follow this 30-minute path:
+**Absolute Beginner?** Follow this 40-minute path:
 
-1. 5 min: [Visual Guide](visual-guide.md) - Start here for pictures & analogies!
+1. 10 min: [Mental Model](../concepts/mental-model.md) - Understand the philosophy first!
+1. 5 min: [Visual Guide](visual-guide.md) - Pictures & analogies
 1. 10 min: [Getting Started](getting-started.md) - Deep dive
 1. 5 min: [Quick Start](quick-start.md) - Hands-on code
 1. 10 min: Try a [Sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) - See it in action

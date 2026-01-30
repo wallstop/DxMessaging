@@ -10,79 +10,11 @@
 
 "use strict";
 
-// SYNC: Keep brand names in sync with generate-skills-index.js BRAND_NAMES
-const BRAND_NAMES = {
-    github: "GitHub",
-    javascript: "JavaScript",
-    typescript: "TypeScript",
-    nodejs: "Node.js",
-    csharp: "C#",
-    dotnet: ".NET",
-    nuget: "NuGet",
-    npm: "npm",
-    api: "API",
-    apis: "APIs",
-    cli: "CLI",
-    json: "JSON",
-    yaml: "YAML",
-    xml: "XML",
-    html: "HTML",
-    css: "CSS",
-    sql: "SQL",
-    url: "URL",
-    urls: "URLs",
-    uri: "URI",
-    uris: "URIs",
-    http: "HTTP",
-    https: "HTTPS",
-    rest: "REST",
-    graphql: "GraphQL",
-    oauth: "OAuth",
-    jwt: "JWT",
-    sdk: "SDK",
-    ide: "IDE",
-    vscode: "VS Code",
-    visualstudio: "Visual Studio",
-    macos: "macOS",
-    ios: "iOS",
-    webgl: "WebGL",
-    opengl: "OpenGL",
-    directx: "DirectX",
-    llm: "LLM",
-    ai: "AI",
-    ml: "ML",
-    ci: "CI",
-    cd: "CD",
-};
-
-/**
- * Apply proper brand name capitalization to a word.
- * Returns the properly capitalized form if it's a known brand,
- * otherwise returns the word with standard title case.
- *
- * SYNC: Keep logic in sync with generate-skills-index.js applyBrandCapitalization
- */
-function applyBrandCapitalization(word) {
-    const lowerWord = word.toLowerCase();
-    if (BRAND_NAMES[lowerWord]) {
-        return BRAND_NAMES[lowerWord];
-    }
-    // Standard title case: capitalize first letter
-    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-}
-
-/**
- * Convert a category slug (e.g., "github-actions") to a properly
- * capitalized title (e.g., "GitHub Actions").
- *
- * SYNC: Keep logic in sync with generate-skills-index.js categoryToTitle
- */
-function categoryToTitle(category) {
-    return category
-        .split("-")
-        .map((word) => applyBrandCapitalization(word))
-        .join(" ");
-}
+const {
+    applyBrandCapitalization,
+    categoryToTitle,
+    BRAND_NAMES,
+} = require('../generate-skills-index.js');
 
 describe("generate-skills-index", () => {
     describe("BRAND_NAMES mapping", () => {

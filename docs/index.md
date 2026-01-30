@@ -7,19 +7,19 @@ description: High-performance type-safe messaging library for Unity
 
 **DxMessaging** is a high-performance, type-safe messaging library for Unity that provides a clean, decoupled communication pattern between game components.
 
-[Get Started](getting-started/index.md){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/wallstop/DxMessaging){ .md-button }
+**[Get Started](getting-started/index.md)** | [View on GitHub](https://github.com/wallstop/DxMessaging)
 
 ## Why DxMessaging?
 
-- :zap: **High Performance** — Zero-allocation message dispatch with pooled handlers
-- :shield: **Type-Safe** — Compile-time message type checking prevents runtime errors
-- :package: **Decoupled Architecture** — Components communicate without direct references
-- :dart: **Flexible Targeting** — Untargeted, Targeted, and Broadcast message patterns
-- :wrench: **Unity-Native** — Built specifically for Unity with MonoBehaviour integration
+- ⚡ **High Performance** — Zero-allocation message dispatch with pooled handlers
+- 🛡️ **Type-Safe** — Compile-time message type checking prevents runtime errors
+- 📦 **Decoupled Architecture** — Components communicate without direct references
+- 🎯 **Flexible Targeting** — Untargeted, Targeted, and Broadcast message patterns
+- 🔧 **Unity-Native** — Built specifically for Unity with MonoBehaviour integration
 
 ## Quick Links
 
+- **[Mental Model](concepts/mental-model.md)** — How to think about DxMessaging
 - **[Visual Guide](getting-started/visual-guide.md)** — Beginner-friendly introduction with diagrams
 - **[Quick Start](getting-started/quick-start.md)** — Your first message in 5 minutes
 - **[Message Types](concepts/message-types.md)** — Untargeted, Targeted, Broadcast patterns

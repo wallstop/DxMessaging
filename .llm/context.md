@@ -78,11 +78,20 @@ $extensions = @('.cs', '.csproj', '.sln', ...)
 const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 ```
 
+### SYNC Note Best Practices
+
+- **Always bidirectional**: When code A has a SYNC note referencing code B, code B must also have a SYNC note referencing code A. One-way SYNC notes are easily missed during updates.
+- **Never use line numbers**: Reference function names, class names, or named anchors instead. Line numbers become stale as code evolves.
+- **Use descriptive identifiers**: `SYNC: Keep logic in sync with validate-skills.js validateSkill() tags validation` is better than `SYNC: Keep in sync with validate-skills.js lines 224-250`.
+- **Verify references exist**: Before adding a SYNC note, confirm the referenced function, variable, or block actually exists with the exact name.
+
 ### Shell Pattern Matching
 
 - Use `grep -F` for literal string matching (paths, filenames with special characters like `.`).
 - Use `grep -E` only when regex features are explicitly needed.
 - Remember that `.` in a regex matches any character, not just a literal dot.
+- **Count escape sequences carefully**: Each `\.` matches exactly one literal dot. The pattern `^\.\.$` matches the literal string `..` (two consecutive dots), not "any string with dots at each end."
+- **Dotfile matching**: To match dotfiles (files starting with `.`), use `^\.` which is sufficient for `git ls-files` output since `..` directory entries are never listed.
 - Always quote variable expansions in patterns: `grep -F "$PATH_VAR/"` not `grep -F $PATH_VAR/`.
 - **`grep` exit codes**: `grep` returns exit code 1 when no matches are found, which fails CI pipelines. Use `|| true`, `|| echo "0"`, or pipe to `wc -l` instead of `grep -c` when zero matches is acceptable.
 
@@ -100,8 +109,11 @@ This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, 
 - **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.
 - **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.
 - **Use per-extension loops for `git add --renormalize`**: Multi-pattern renormalize commands fail with exit code 128 if any pattern matches no files. Use a loop to process each extension separately with existence checks. Example: `for ext in md json yml; do if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then git add --renormalize -- "*.$ext" "**/*.$ext"; fi; done`.
+- **Dotfiles do not match glob patterns in `git add`**: The command `git ls-files "*.yaml"` matches dotfiles like `.pre-commit-config.yaml`, but `git add --renormalize -- "*.yaml"` does NOT match dotfiles. This causes the existence check to pass but the renormalize to fail. Exclude `yaml` from extension loops since the only `.yaml` files are typically dotfiles; use `yml` instead.
+- **Generalized rule for dotfile-only extensions**: Exclude any extension from `git add --renormalize` loops when ALL tracked files of that extension are dotfiles (files whose names start with `.`). To check: run `git ls-files "*.$ext" "**/*.$ext"` and verify whether any results are non-dotfiles. If all matches are dotfiles, exclude that extension.
 - **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
 - **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
+- **`file_pattern` does not match dotfiles**: Like `git add`, the `file_pattern` option in `git-auto-commit-action` uses glob patterns that do not match dotfiles. Exclude patterns like `**/*.yaml` from `file_pattern` when all `.yaml` files are dotfiles (e.g., `.pre-commit-config.yaml`). This follows the same rule as excluding `yaml` from `git add --renormalize` loops.
 
 See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness.md) and the [Git Renormalize Patterns skill](./skills/github-actions/git-renormalize-patterns.md) for detailed patterns.
 
@@ -117,6 +129,83 @@ See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness
 - Prefer `const` over `let`; use `let` only when reassignment is necessary.
 - When adding validation constants (e.g., `VALID_X`), ensure corresponding validation logic uses them.
 
+#### Presence vs Value Validation
+
+When validating input, clearly separate "presence" checks (is the value defined?) from "value" checks (is the defined value valid?). This two-phase approach produces clearer error messages and more maintainable code.
+
+##### Checking for missing values (undefined/null)
+
+```javascript
+// CORRECT: Explicit null/undefined check
+if (frontmatter[field] === undefined || frontmatter[field] === null) {
+  errors.push(`Required field '${field}' is missing`);
+}
+
+// ALSO CORRECT: Loose equality shorthand (null == undefined is true)
+if (frontmatter[field] == null) {
+  errors.push(`Required field '${field}' is missing`);
+}
+
+// WRONG: Falsy check conflates missing with empty/invalid
+if (!frontmatter[field]) {
+  errors.push(`Required field '${field}' is missing`); // Misleading: also triggers for ""
+}
+```
+
+###### Two-phase validation pattern
+
+```javascript
+// Phase 1: Check presence
+if (value === undefined || value === null) {
+  errors.push("Value is missing");
+} else if (value === "") {
+  // Phase 2: Check value validity (only if present)
+  errors.push("Value is empty");
+} else if (!isValidFormat(value)) {
+  errors.push("Value has invalid format");
+}
+```
+
+###### When to use falsy checks (`!x`)
+
+- Only when you explicitly want to catch ALL falsy values: `undefined`, `null`, `0`, `""`, `false`, `NaN`
+- Common legitimate uses: `if (!array.length)` to check empty arrays, `if (!str.trim())` to check whitespace-only strings
+
+###### Common pitfalls
+
+- **Empty array is truthy**: `[]` is truthy, so `![]` is `false`. Use `!array.length` instead.
+- **Zero is falsy**: `0` is falsy, so `!count` fails when count is legitimately zero.
+- **Empty string vs missing**: `!value` treats `""` the same as `undefined`, but they often need different error messages.
+
+###### Guard clause for enum validation
+
+When checking if a value is valid according to an enum/allowlist, guard against missing and empty values first. This prevents spurious "invalid value" errors for empty strings:
+
+```javascript
+// CORRECT: Guard against missing and empty before enum check
+if (value != null && value !== "" && !VALID_VALUES.includes(value)) {
+  errors.push(`Invalid ${fieldName}: '${value}'`);
+}
+
+// WRONG: Missing guard allows empty string to be flagged as "invalid"
+if (!VALID_VALUES.includes(value)) {
+  errors.push(`Invalid ${fieldName}: '${value}'`); // Reports "" as "Invalid: ''"
+}
+```
+
+###### Type coercion for YAML values
+
+YAML parsers may return non-string types (e.g., `1.0.0` becomes number `1`). Use `String()` after presence checks:
+
+```javascript
+if (value != null && value !== "") {
+  const strValue = String(value);
+  if (!strValue.match(/^\d+\.\d+\.\d+$/)) {
+    errors.push(`Invalid format: '${strValue}'`);
+  }
+}
+```
+
 ### Jest Test Style
 
 For JavaScript tests using Jest:
@@ -124,6 +213,9 @@ For JavaScript tests using Jest:
 - **Use `test()` not `it()`**: All tests must use `test()` for consistency with existing tests.
 - **Descriptive names**: Test descriptions should clearly state what is being tested.
 - **Group with `describe()`**: Use `describe()` blocks to group related tests logically.
+- **Accurate categorization**: `describe()` block names must accurately reflect the tests they contain. Do not group "undefined/null" checks under "falsy" if falsy wrong-type values (empty string, 0, false) are tested separately.
+- **Test accuracy**: Test names, descriptions, and comments must be factually correct. Never include statements that contradict how JavaScript actually behaves (e.g., claiming "empty array is falsy" when it is truthy).
+- **Message content tests**: When code produces user-facing messages, add tests that verify message content matches actual UI/output terminology.
 
 ```javascript
 // CORRECT
@@ -198,6 +290,17 @@ This project maintains a strict **zero-flaky test policy**. Every test failure i
 
 See the [Test Failure Investigation skill](./skills/testing/test-failure-investigation.md) for detailed investigation patterns and procedures.
 
+### Test Production Code Directly
+
+Tests must import and exercise actual production code, never re-implement production logic locally. Re-implementing validation or business logic in tests creates a false sense of security - tests can pass while production code regresses.
+
+- **Import production functions**: Tests should import and call the actual production functions, not local copies.
+- **Export testable helpers**: Structure production code with exported helper functions that tests can verify.
+- **Avoid duplication**: If test files contain utility functions that mirror production logic, refactor to import instead.
+- **Use SYNC notes for unavoidable duplication**: When parallel implementations are necessary (e.g., PowerShell scripts tested via JavaScript), use bidirectional SYNC notes referencing function names.
+
+See the [Test Production Code skill](./skills/testing/test-production-code.md) for patterns and examples.
+
 ## Documentation Guidelines
 
 After any new feature or bug fix, documentation must be updated:
@@ -207,19 +310,23 @@ After any new feature or bug fix, documentation must be updated:
 - **XML docs**: Update `<summary>`, `<param>`, `<returns>`, and `<remarks>` for public APIs.
 - **Code samples**: Ensure examples are correct, compilable, and tested.
 - **README**: Update [the README](../README.md) for significant features or breaking changes.
+- **MkDocs navigation**: When adding new pages to `docs/`, always add corresponding entries to `mkdocs.yml` nav section.
 
 When documenting new behavior, note the version it was introduced (e.g., "Added in v1.2.0").
 
-See the [Documentation Updates skill](./skills/documentation/documentation-updates.md) and [Changelog Management skill](./skills/documentation/changelog-management.md) for detailed guidance.
+See the [Documentation Updates skill](./skills/documentation/documentation-updates.md), [Changelog Management skill](./skills/documentation/changelog-management.md), and [MkDocs Navigation skill](./skills/documentation/mkdocs-navigation.md) for detailed guidance.
 
 ### Markdown Formatting Conventions
 
 - **Ordered lists**: Use lazy numbering (`1.`, `1.`, `1.`) not sequential (`1.`, `2.`, `3.`). This matches Prettier behavior and markdownlint MD029 configuration.
 - **Fenced code blocks**: Use triple backticks (```), not indented blocks.
+- **Nested fences**: When showing code blocks inside code blocks (e.g., documenting markdown), the outer fence must have MORE backticks than inner fences. Use ``for outer when inner uses` ```.
 - **Line endings**: CRLF, no UTF-8 BOM (enforced by pre-commit hooks).
 - **Headings**: Use ATX-style headings (`#`, `##`, `###`) not underlined style.
 - **Line length**: Not enforced. Write naturally; let lines wrap as needed.
 - **Inline code spacing**: Always include a space before and after inline code when adjacent to text. Write ``the `code` here`` not ``the`code`here``. This improves readability and matches CommonMark best practices.
+
+See the [Markdown Compatibility skill](./skills/documentation/markdown-compatibility.md) for MkDocs-specific syntax to avoid.
 
 ## Changelog Guidelines
 
@@ -230,6 +337,8 @@ Every user-facing change must be added to [the changelog](../CHANGELOG.md):
 - Include proper version headers with dates (e.g., `## [1.2.0] - 2026-01-22`).
 - Link issues and PRs in entries (e.g., "Fixed registration bug (#123)").
 - Write entries from the user's perspective, focusing on impact.
+- Entries must describe **user-visible** changes only; do not document internal tooling, AI agent guidance, or developer-only changes like `.llm/` skill files.
+- Use accurate scope: if only some files/assemblies were changed, name them specifically rather than implying all were changed.
 
 See the [Changelog Management skill](./skills/documentation/changelog-management.md) for detailed guidance.
 

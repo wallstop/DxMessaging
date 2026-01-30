@@ -7,8 +7,7 @@ If you're brand new to messaging systems, this visual guide will help you unders
 ### The Old Way (Spaghetti Code)
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
-graph LR
+flowchart LR
     Player[Player]
     Enemy[Enemy]
     Inventory[Inventory]
@@ -36,8 +35,7 @@ graph LR
 ### The DxMessaging Way (Clean Separation)
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
-graph TB
+flowchart TB
     Player[Player]
     Enemy[Enemy]
     Inventory[Inventory]
@@ -152,7 +150,6 @@ _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyEnemy);
 When you send a message, here's what happens:
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
 sequenceDiagram
     participant You as Your Code
     participant Msg as Message
@@ -268,7 +265,6 @@ healMsg.EmitComponentTargeted(playerComponent);
 ### Pattern: Scene Transition
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
 sequenceDiagram
     participant SM as SceneManager
     participant Bus as Message Bus
@@ -311,7 +307,6 @@ _ = saveToken.RegisterUntargeted<SceneChanged>(OnScene);
 ### Pattern: Player Input -> Action
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
 sequenceDiagram
     participant Input as InputSystem
     participant Bus as Message Bus
@@ -349,7 +344,6 @@ void OnJump(ref Jump msg) {
 ### Pattern: Achievement Tracking
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
 sequenceDiagram
     participant E as Enemy
     participant P as Player
@@ -472,8 +466,7 @@ DxMessaging has built-in Inspector support!
 ## Learning Path
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
-graph TD
+flowchart TD
     Start[START HERE<br/>Read this Visual Guide<br/>5 min]
     Start --> Step2[Try Quick Start example<br/>5 min<br/>Define -> Listen -> Send]
     Step2 --> Step3[Import Mini Combat sample<br/>10 min<br/>See it in action!]
@@ -601,6 +594,7 @@ If you checked all these, you are following best practices.
 
 Ready to dive deeper?
 
+1. **[Mental Model](../concepts/mental-model.md)** - Understand the philosophy
 1. **[Getting Started Guide](getting-started.md)** - Full guide with more details
 1. **[Common Patterns](../guides/patterns.md)** - Real-world examples
 1. **[Message Types](../concepts/message-types.md)** - Deep dive into when to use what

@@ -15,7 +15,6 @@ This guide introduces the three message categories in DxMessaging with concepts,
 ### Quick Decision Guide
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
 flowchart TD
     Start([Choose Message Type])
 

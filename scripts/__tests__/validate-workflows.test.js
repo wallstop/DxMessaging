@@ -7,67 +7,10 @@
 
 "use strict";
 
-/**
- * Checks if a line contains a problematic single-line multi-pattern renormalize command.
- * Extracted from validate-workflows.js for testing.
- *
- * @param {string} line - The line to check
- * @returns {boolean} True if the line contains a forbidden pattern
- */
-function isForbiddenRenormalizePattern(line) {
-    const trimmed = line.trim();
-
-    if (!trimmed.includes("git add") || !trimmed.includes("--renormalize")) {
-        return false;
-    }
-
-    if (trimmed.includes("$ext") || trimmed.includes("${ext}")) {
-        return false;
-    }
-
-    const singleFilePattern = /git add --renormalize\s+--\s+'[^'*?]+'/;
-    if (singleFilePattern.test(trimmed)) {
-        return false;
-    }
-
-    const extensionPatterns = trimmed.match(/\*\.(\w+)/g) || [];
-    const uniqueExtensions = new Set(
-        extensionPatterns.map((p) => p.replace("*.", ""))
-    );
-
-    return uniqueExtensions.size > 1;
-}
-
-/**
- * Checks if a renormalize command is properly guarded by an existence check.
- *
- * @param {string[]} lines - All lines of the file
- * @param {number} lineIndex - Index of the renormalize line
- * @returns {boolean} True if properly guarded
- */
-function hasExistenceCheck(lines, lineIndex) {
-    const lookbackLines = 5;
-    const startIndex = Math.max(0, lineIndex - lookbackLines);
-
-    for (let i = lineIndex - 1; i >= startIndex; i--) {
-        const line = lines[i];
-        if (
-            line.includes("git ls-files") &&
-            line.includes("grep -q") &&
-            (line.includes("then") || lines[i + 1]?.includes("then"))
-        ) {
-            return true;
-        }
-        if (line.includes("for ext in") || line.includes("for EXT in")) {
-            for (let j = i + 1; j < lineIndex; j++) {
-                if (lines[j].includes("git ls-files") && lines[j].includes("grep -q")) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
+const {
+    isForbiddenRenormalizePattern,
+    hasExistenceCheck,
+} = require('../validate-workflows.js');
 
 describe("isForbiddenRenormalizePattern", () => {
     describe("should detect FORBIDDEN patterns", () => {
