@@ -80,6 +80,7 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 
 ### SYNC Note Best Practices
 
+- **Always bidirectional**: When code A has a SYNC note referencing code B, code B must also have a SYNC note referencing code A. One-way SYNC notes are easily missed during updates.
 - **Never use line numbers**: Reference function names, class names, or named anchors instead. Line numbers become stale as code evolves.
 - **Use descriptive identifiers**: `SYNC: Keep logic in sync with validate-skills.js validateSkill() tags validation` is better than `SYNC: Keep in sync with validate-skills.js lines 224-250`.
 - **Verify references exist**: Before adding a SYNC note, confirm the referenced function, variable, or block actually exists with the exact name.
@@ -138,7 +139,9 @@ For JavaScript tests using Jest:
 - **Use `test()` not `it()`**: All tests must use `test()` for consistency with existing tests.
 - **Descriptive names**: Test descriptions should clearly state what is being tested.
 - **Group with `describe()`**: Use `describe()` blocks to group related tests logically.
+- **Accurate categorization**: `describe()` block names must accurately reflect the tests they contain. Do not group "undefined/null" checks under "falsy" if falsy wrong-type values (empty string, 0, false) are tested separately.
 - **Test accuracy**: Test names, descriptions, and comments must be factually correct. Never include statements that contradict how JavaScript actually behaves (e.g., claiming "empty array is falsy" when it is truthy).
+- **Message content tests**: When code produces user-facing messages, add tests that verify message content matches actual UI/output terminology.
 
 ```javascript
 // CORRECT

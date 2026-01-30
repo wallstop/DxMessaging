@@ -380,26 +380,29 @@ function validateSkill(skillFile) {
 
     // Warn about missing optional fields that affect skills index display
     // These are not required but cause '?' placeholders in the generated index
+    // SYNC: Keep logic in sync with validate-skills-optional-fields.test.js validateComplexityLevel()
     if (!frontmatter.complexity || !frontmatter.complexity.level) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,
                 'complexity.level',
-                `Missing 'complexity.level' - will show '?' in Difficulty column of skills index`
+                `Missing 'complexity.level' - will show '?' in Complexity column of skills index`
             )
         );
     }
 
+    // SYNC: Keep logic in sync with validate-skills-optional-fields.test.js validatePerformanceRating()
     if (!frontmatter.impact || !frontmatter.impact.performance || !frontmatter.impact.performance.rating) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,
                 'impact.performance.rating',
-                `Missing 'impact.performance.rating' - will show '?' in Priority column of skills index`
+                `Missing 'impact.performance.rating' - will show '?' in Performance column of skills index`
             )
         );
     }
 
+    // SYNC: Keep logic in sync with validate-skills-tags.test.js validateTags()
     if (frontmatter.tags === undefined || frontmatter.tags === null) {
         warnings.push(
             new ValidationError(

@@ -2,7 +2,7 @@
  * @fileoverview Tests for validate-skills.js tags validation logic.
  *
  * These tests validate the tags field validation in skill files:
- * - Missing tags (falsy/undefined)
+ * - Missing tags (undefined/null)
  * - Wrong type (string, object, number instead of array)
  * - Empty tags array
  * - Valid tags array
@@ -87,8 +87,10 @@ describe("validate-skills tags validation", () => {
             expect(warnings[0].field).toBe("tags");
             expect(warnings[0].message).toContain("Missing 'tags' array");
         });
+    });
 
-        test("should warn when tags is empty string", () => {
+    describe("wrong type for tags", () => {
+        test("should warn when tags is an empty string", () => {
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
@@ -104,7 +106,7 @@ describe("validate-skills tags validation", () => {
             expect(warnings[0].message).toContain("got string");
         });
 
-        test("should warn when tags is 0", () => {
+        test("should warn when tags is a zero", () => {
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
@@ -120,7 +122,7 @@ describe("validate-skills tags validation", () => {
             expect(warnings[0].message).toContain("got number");
         });
 
-        test("should warn when tags is false", () => {
+        test("should warn when tags is boolean false", () => {
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
@@ -135,9 +137,7 @@ describe("validate-skills tags validation", () => {
             expect(warnings[0].message).toContain("'tags' must be an array");
             expect(warnings[0].message).toContain("got boolean");
         });
-    });
 
-    describe("wrong type for tags", () => {
         test("should warn when tags is a string", () => {
             const frontmatter = {
                 title: "Sample Skill",
@@ -183,7 +183,7 @@ describe("validate-skills tags validation", () => {
             expect(warnings[0].message).toContain("got object");
         });
 
-        test("should warn when tags is a boolean true", () => {
+        test("should warn when tags is boolean true", () => {
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
@@ -368,7 +368,6 @@ describe("validate-skills tags validation", () => {
         });
 
         test("should accept array created with Array constructor", () => {
-            // eslint-disable-next-line unicorn/no-new-array
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
