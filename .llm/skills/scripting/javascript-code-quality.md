@@ -308,6 +308,8 @@ When adding a SYNC note:
 1. **Reference by function/variable name** - not line numbers
 1. **Verify the referenced code exists** - don't reference non-existent functions
 1. **Update tests** - if synced values are used in tests, add SYNC notes there too
+1. **Cross-environment code** - browser/Node.js boundaries require SYNC notes since modules cannot
+   be shared; the test file replicates logic and the SYNC notes ensure they stay aligned
 
 ## Common Mistakes Checklist
 

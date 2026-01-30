@@ -123,6 +123,8 @@
    * Regex pattern to match Mermaid init directives
    * Matches %%{init: {...}}%% at the start of any line in diagram source
    *
+   * SYNC: Keep pattern in sync with scripts/__tests__/mermaid-config.test.js INIT_DIRECTIVE_PATTERN
+   *
    * Flags (gims):
    * - 'g' (global): Finds and replaces all occurrences, not just the first one
    * - 'i' (case-insensitive): Matches regardless of case (e.g., `%%{Init:...}%%` or `%%{INIT:...}%%`)
@@ -139,6 +141,9 @@
 
   /**
    * Strip per-diagram init directives that would override our theme configuration
+   *
+   * SYNC: Keep logic in sync with scripts/__tests__/mermaid-config.test.js stripInitDirectives
+   *
    * @param {string} source - The original Mermaid diagram source
    * @returns {string} The source with init directives removed
    */

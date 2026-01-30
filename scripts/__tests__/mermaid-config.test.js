@@ -43,12 +43,18 @@ function stripInitDirectives(source) {
 /**
  * Helper to test if a pattern matches an input.
  * Creates a fresh regex to avoid global state issues with lastIndex.
+ *
+ * Derives the pattern from INIT_DIRECTIVE_PATTERN.source to avoid duplicating
+ * the regex literal, ensuring tests always validate the same pattern used by
+ * stripInitDirectives().
+ *
  * @param {string} input - The input string to test
  * @returns {boolean} Whether the pattern matches
  */
 function testPattern(input) {
-    // Create fresh regex to avoid lastIndex state issues with global regex
-    const pattern = /^[ \t]*%%\{init:.*?\}%%[ \t]*\r?\n?/gims;
+    // Create fresh regex from INIT_DIRECTIVE_PATTERN to avoid lastIndex state issues
+    // and ensure we're testing the exact same pattern used by stripInitDirectives()
+    const pattern = new RegExp(INIT_DIRECTIVE_PATTERN.source, INIT_DIRECTIVE_PATTERN.flags);
     return pattern.test(input);
 }
 
