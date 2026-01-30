@@ -96,12 +96,12 @@ jobs:
           commit_message: "chore(format): apply Prettier/markdownlint fixes"
           branch: ${{ github.head_ref }}
           add_options: --renormalize
+          # NOTE: yaml excluded - all .yaml files are dotfiles, which git add patterns don't match
           file_pattern: |
             **/*.md
             **/*.json
             **/*.asmdef
             **/*.yml
-            **/*.yaml
 
       - name: Refresh checkout after auto-commit
         if: ${{ steps.auto-commit.outputs.changes_detected == 'true' }}

@@ -113,6 +113,7 @@ This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, 
 - **Generalized rule for dotfile-only extensions**: Exclude any extension from `git add --renormalize` loops when ALL tracked files of that extension are dotfiles (files whose names start with `.`). To check: run `git ls-files "*.$ext" "**/*.$ext"` and verify whether any results are non-dotfiles. If all matches are dotfiles, exclude that extension.
 - **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
 - **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
+- **`file_pattern` does not match dotfiles**: Like `git add`, the `file_pattern` option in `git-auto-commit-action` uses glob patterns that do not match dotfiles. Exclude patterns like `**/*.yaml` from `file_pattern` when all `.yaml` files are dotfiles (e.g., `.pre-commit-config.yaml`). This follows the same rule as excluding `yaml` from `git add --renormalize` loops.
 
 See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness.md) and the [Git Renormalize Patterns skill](./skills/github-actions/git-renormalize-patterns.md) for detailed patterns.
 

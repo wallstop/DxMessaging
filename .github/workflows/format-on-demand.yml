@@ -105,13 +105,13 @@ jobs:
           commit_message: "chore(format): apply requested formatting"
           branch: ${{ steps.meta.outputs.head_ref }}
           add_options: --renormalize
+          # NOTE: yaml excluded - all .yaml files are dotfiles, which git add patterns don't match
           file_pattern: |
             **/*.cs
             **/*.md
             **/*.json
             **/*.asmdef
             **/*.yml
-            **/*.yaml
       - name: Create bot branch and PR (fork)
         if: ${{ steps.meta.outputs.same_repo != 'true' && steps.changes.outputs.has_changes == 'true' }}
         shell: bash
@@ -255,13 +255,13 @@ jobs:
           commit_message: "chore(format): apply requested formatting"
           branch: ${{ steps.meta.outputs.head_ref }}
           add_options: --renormalize
+          # NOTE: yaml excluded - all .yaml files are dotfiles, which git add patterns don't match
           file_pattern: |
             **/*.cs
             **/*.md
             **/*.json
             **/*.asmdef
             **/*.yml
-            **/*.yaml
       - name: Create bot branch and PR (fork)
         if: ${{ steps.meta.outputs.same_repo != 'true' && steps.changes.outputs.has_changes == 'true' }}
         shell: bash
