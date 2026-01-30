@@ -582,4 +582,16 @@ function main() {
     return 0;
 }
 
-process.exit(main());
+// Export for testing when required as a module
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        applyBrandCapitalization,
+        categoryToTitle,
+        BRAND_NAMES,
+    };
+}
+
+// Only run main when executed directly (not when required as a module)
+if (require.main === module) {
+    process.exit(main());
+}

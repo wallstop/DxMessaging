@@ -35,7 +35,7 @@ const EXCLUDED_DIRS = ['templates'];
 // Files excluded from "short file" informational messages
 const SHORT_FILE_EXCLUDES = ['context.md'];
 
-// SYNC: Keep in sync with validate-skills-required-fields.test.js REQUIRED_FIELDS
+// Required fields that must be present in all skill files
 const REQUIRED_FIELDS = ['title', 'id', 'category', 'version', 'created', 'updated', 'status'];
 
 // File size limits (in lines)
@@ -73,6 +73,127 @@ class ValidationError {
     toString() {
         return `[${this.file}] ${this.field}: ${this.message}`;
     }
+}
+
+/**
+ * Validates a single required field of a frontmatter object.
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @param {string} field - The field name to validate
+ * @param {string} relativePath - The relative path for error reporting
+ * @returns {ValidationError[]} Array of validation errors
+ */
+function validateRequiredField(frontmatter, field, relativePath) {
+    const errors = [];
+
+    if (frontmatter[field] === undefined || frontmatter[field] === null) {
+        errors.push(new ValidationError(relativePath, field, `Required field '${field}' is missing`));
+    } else if (frontmatter[field] === '') {
+        errors.push(new ValidationError(relativePath, field, `Required field '${field}' is empty`));
+    }
+
+    return errors;
+}
+
+/**
+ * Validates the tags field of a frontmatter object.
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @param {string} relativePath - The relative path for error reporting
+ * @returns {ValidationError[]} Array of validation warnings
+ */
+function validateTags(frontmatter, relativePath) {
+    const warnings = [];
+
+    if (frontmatter.tags === undefined || frontmatter.tags === null) {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'tags',
+                `Missing 'tags' array - will show empty Tags column in skills index`
+            )
+        );
+    } else if (!Array.isArray(frontmatter.tags)) {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'tags',
+                `'tags' must be an array, got ${typeof frontmatter.tags} - will show empty Tags column in skills index`
+            )
+        );
+    } else if (frontmatter.tags.length === 0) {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'tags',
+                `Empty 'tags' array - will show empty Tags column in skills index`
+            )
+        );
+    }
+
+    return warnings;
+}
+
+/**
+ * Validates the complexity.level field of a frontmatter object.
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @param {string} relativePath - The relative path for error reporting
+ * @returns {ValidationError[]} Array of validation warnings
+ */
+function validateComplexityLevel(frontmatter, relativePath) {
+    const warnings = [];
+
+    if (frontmatter.complexity == null || frontmatter.complexity.level == null) {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'complexity.level',
+                `Missing 'complexity.level' - will show '?' in Complexity column of skills index`
+            )
+        );
+    } else if (frontmatter.complexity.level === '') {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'complexity.level',
+                `Empty 'complexity.level' - will show '?' in Complexity column of skills index`
+            )
+        );
+    }
+
+    return warnings;
+}
+
+/**
+ * Validates the impact.performance.rating field of a frontmatter object.
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @param {string} relativePath - The relative path for error reporting
+ * @returns {ValidationError[]} Array of validation warnings
+ */
+function validatePerformanceRating(frontmatter, relativePath) {
+    const warnings = [];
+
+    if (frontmatter.impact == null || frontmatter.impact.performance == null || frontmatter.impact.performance.rating == null) {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'impact.performance.rating',
+                `Missing 'impact.performance.rating' - will show '?' in Performance column of skills index`
+            )
+        );
+    } else if (frontmatter.impact.performance.rating === '') {
+        warnings.push(
+            new ValidationError(
+                relativePath,
+                'impact.performance.rating',
+                `Empty 'impact.performance.rating' - will show '?' in Performance column of skills index`
+            )
+        );
+    }
+
+    return warnings;
 }
 
 /**
@@ -219,6 +340,33 @@ function findSkillFiles(dir) {
 }
 
 /**
+ * Validates that impact is present and is an object (not a primitive or array).
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @returns {boolean} True if impact is a valid object to iterate over
+ */
+function isValidImpactObject(frontmatter) {
+    return frontmatter.impact != null && typeof frontmatter.impact === 'object';
+}
+
+/**
+ * Validates all required fields of a frontmatter object.
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @param {string} relativePath - The relative path for error reporting
+ * @returns {ValidationError[]} Array of validation errors
+ */
+function validateRequiredFields(frontmatter, relativePath) {
+    const errors = [];
+
+    for (const field of REQUIRED_FIELDS) {
+        errors.push(...validateRequiredField(frontmatter, field, relativePath));
+    }
+
+    return errors;
+}
+
+/**
  * Validate a single skill file.
  * Returns validation results with errors, warnings, and line count.
  */
@@ -271,17 +419,9 @@ function validateSkill(skillFile) {
     }
 
     // Check required fields
-    // SYNC: Keep logic in sync with validate-skills-required-fields.test.js validateRequiredField()
-    for (const field of REQUIRED_FIELDS) {
-        if (frontmatter[field] === undefined || frontmatter[field] === null) {
-            errors.push(new ValidationError(skillFile.relativePath, field, `Required field '${field}' is missing`));
-        } else if (frontmatter[field] === '') {
-            errors.push(new ValidationError(skillFile.relativePath, field, `Required field '${field}' is empty`));
-        }
-    }
+    errors.push(...validateRequiredFields(frontmatter, skillFile.relativePath));
 
     // Validate id matches filename
-    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     if (frontmatter.id != null && frontmatter.id !== '' && frontmatter.id !== skillFile.expectedId) {
         errors.push(
             new ValidationError(
@@ -293,7 +433,6 @@ function validateSkill(skillFile) {
     }
 
     // Validate category matches folder
-    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     if (frontmatter.category != null && frontmatter.category !== '' && frontmatter.category !== skillFile.category) {
         errors.push(
             new ValidationError(
@@ -305,7 +444,6 @@ function validateSkill(skillFile) {
     }
 
     // Validate category is known
-    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     if (frontmatter.category != null && frontmatter.category !== '' && !VALID_CATEGORIES.includes(frontmatter.category)) {
         warnings.push(
             new ValidationError(
@@ -317,7 +455,6 @@ function validateSkill(skillFile) {
     }
 
     // Validate status
-    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     if (frontmatter.status != null && frontmatter.status !== '' && !VALID_STATUSES.includes(frontmatter.status)) {
         errors.push(
             new ValidationError(
@@ -345,8 +482,7 @@ function validateSkill(skillFile) {
     }
 
     // Validate impact ratings
-    // SYNC: Keep presence check pattern in sync with validate-skills-optional-fields.test.js isValidImpactObject()
-    if (frontmatter.impact != null && typeof frontmatter.impact === 'object') {
+    if (isValidImpactObject(frontmatter)) {
         // Warn about unknown impact types
         for (const impactType of Object.keys(frontmatter.impact)) {
             if (!VALID_IMPACT_TYPES.includes(impactType)) {
@@ -379,7 +515,6 @@ function validateSkill(skillFile) {
     }
 
     // Validate version format (semver-like)
-    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     if (frontmatter.version != null && frontmatter.version !== '') {
         // Coerce to string to handle numeric or other non-string types
         const versionStr = String(frontmatter.version);
@@ -396,73 +531,11 @@ function validateSkill(skillFile) {
 
     // Warn about missing optional fields that affect skills index display
     // These are not required but cause '?' placeholders in the generated index
-    // SYNC: Keep logic in sync with validate-skills-optional-fields.test.js validateComplexityLevel()
-    if (frontmatter.complexity == null || frontmatter.complexity.level == null) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'complexity.level',
-                `Missing 'complexity.level' - will show '?' in Complexity column of skills index`
-            )
-        );
-    } else if (frontmatter.complexity.level === '') {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'complexity.level',
-                `Empty 'complexity.level' - will show '?' in Complexity column of skills index`
-            )
-        );
-    }
-
-    // SYNC: Keep logic in sync with validate-skills-optional-fields.test.js validatePerformanceRating()
-    if (frontmatter.impact == null || frontmatter.impact.performance == null || frontmatter.impact.performance.rating == null) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'impact.performance.rating',
-                `Missing 'impact.performance.rating' - will show '?' in Performance column of skills index`
-            )
-        );
-    } else if (frontmatter.impact.performance.rating === '') {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'impact.performance.rating',
-                `Empty 'impact.performance.rating' - will show '?' in Performance column of skills index`
-            )
-        );
-    }
-
-    // SYNC: Keep logic in sync with validate-skills-tags.test.js validateTags()
-    if (frontmatter.tags === undefined || frontmatter.tags === null) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'tags',
-                `Missing 'tags' array - will show empty Tags column in skills index`
-            )
-        );
-    } else if (!Array.isArray(frontmatter.tags)) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'tags',
-                `'tags' must be an array, got ${typeof frontmatter.tags} - will show empty Tags column in skills index`
-            )
-        );
-    } else if (frontmatter.tags.length === 0) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'tags',
-                `Empty 'tags' array - will show empty Tags column in skills index`
-            )
-        );
-    }
+    warnings.push(...validateComplexityLevel(frontmatter, skillFile.relativePath));
+    warnings.push(...validatePerformanceRating(frontmatter, skillFile.relativePath));
+    warnings.push(...validateTags(frontmatter, skillFile.relativePath));
 
     // Validate date format
-    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     for (const dateField of ['created', 'updated']) {
         if (frontmatter[dateField] != null && frontmatter[dateField] !== '') {
             // Coerce to string to handle numeric or other non-string types
@@ -643,14 +716,38 @@ function main() {
     return 0;
 }
 
-// Export for testing when required as a module
+/**
+ * @module validate-skills
+ * @description Validates skill files in .llm/skills/ for frontmatter correctness, naming conventions,
+ * size limits, and cross-references. Used by pre-commit hooks and CI pipelines.
+ *
+ * @exports {Function} validateSkill - Validates a single skill file, returning errors and warnings
+ * @exports {Function} parseFrontmatter - Extracts YAML frontmatter from markdown content
+ * @exports {Function} validateRequiredField - Validates a single required frontmatter field
+ * @exports {Function} validateRequiredFields - Validates all required frontmatter fields
+ * @exports {Function} validateTags - Validates the tags array in frontmatter
+ * @exports {Function} validateComplexityLevel - Validates the complexity.level field
+ * @exports {Function} validatePerformanceRating - Validates numeric impact ratings (1-5)
+ * @exports {Function} isValidImpactObject - Checks if impact field is a non-null object
+ * @exports {Class} ValidationError - Error class with file, field, and message properties
+ * @exports {Array<string>} REQUIRED_FIELDS - List of required frontmatter field names
+ * @exports {Array<string>} VALID_COMPLEXITY_LEVELS - Valid values: 'basic', 'intermediate', 'advanced'
+ * @exports {Array<string>} VALID_IMPACT_RATINGS - Valid rating values: '1'-'5' as strings
+ */
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         validateSkill,
         parseFrontmatter,
         ValidationError,
+        REQUIRED_FIELDS,
         VALID_COMPLEXITY_LEVELS,
         VALID_IMPACT_RATINGS,
+        validateRequiredField,
+        validateRequiredFields,
+        validateTags,
+        validateComplexityLevel,
+        validatePerformanceRating,
+        isValidImpactObject,
     };
 }
 

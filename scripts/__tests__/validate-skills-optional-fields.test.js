@@ -11,83 +11,11 @@
 
 "use strict";
 
-/**
- * Validation result object matching the ValidationError class pattern.
- * @typedef {Object} ValidationWarning
- * @property {string} file - The file path
- * @property {string} field - The field being validated
- * @property {string} message - The warning message
- */
-
-/**
- * Validates the complexity.level field of a frontmatter object.
- *
- * SYNC: Keep logic in sync with validate-skills.js validateSkill() complexity.level validation block
- *
- * @param {Object} frontmatter - The parsed frontmatter object
- * @param {string} relativePath - The relative path for error reporting
- * @returns {ValidationWarning[]} Array of validation warnings
- */
-function validateComplexityLevel(frontmatter, relativePath) {
-    const warnings = [];
-
-    if (frontmatter.complexity == null || frontmatter.complexity.level == null) {
-        warnings.push({
-            file: relativePath,
-            field: "complexity.level",
-            message: `Missing 'complexity.level' - will show '?' in Complexity column of skills index`,
-        });
-    } else if (frontmatter.complexity.level === '') {
-        warnings.push({
-            file: relativePath,
-            field: "complexity.level",
-            message: `Empty 'complexity.level' - will show '?' in Complexity column of skills index`,
-        });
-    }
-
-    return warnings;
-}
-
-/**
- * Validates that impact is present and is an object (not a primitive or array).
- *
- * SYNC: Keep presence check pattern in sync with validate-skills.js validateSkill() impact ratings validation block
- *
- * @param {Object} frontmatter - The parsed frontmatter object
- * @returns {boolean} True if impact is a valid object to iterate over
- */
-function isValidImpactObject(frontmatter) {
-    return frontmatter.impact != null && typeof frontmatter.impact === 'object';
-}
-
-/**
- * Validates the impact.performance.rating field of a frontmatter object.
- *
- * SYNC: Keep logic in sync with validate-skills.js validateSkill() impact.performance.rating validation block
- *
- * @param {Object} frontmatter - The parsed frontmatter object
- * @param {string} relativePath - The relative path for error reporting
- * @returns {ValidationWarning[]} Array of validation warnings
- */
-function validatePerformanceRating(frontmatter, relativePath) {
-    const warnings = [];
-
-    if (frontmatter.impact == null || frontmatter.impact.performance == null || frontmatter.impact.performance.rating == null) {
-        warnings.push({
-            file: relativePath,
-            field: "impact.performance.rating",
-            message: `Missing 'impact.performance.rating' - will show '?' in Performance column of skills index`,
-        });
-    } else if (frontmatter.impact.performance.rating === '') {
-        warnings.push({
-            file: relativePath,
-            field: "impact.performance.rating",
-            message: `Empty 'impact.performance.rating' - will show '?' in Performance column of skills index`,
-        });
-    }
-
-    return warnings;
-}
+const {
+    validateComplexityLevel,
+    validatePerformanceRating,
+    isValidImpactObject,
+} = require('../validate-skills.js');
 
 describe("validate-skills optional field validation", () => {
     const testPath = "testing/sample-skill.md";

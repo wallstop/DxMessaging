@@ -12,69 +12,11 @@
 
 "use strict";
 
-/**
- * Required fields that must be present in all skill files.
- *
- * SYNC: Keep in sync with validate-skills.js REQUIRED_FIELDS
- */
-const REQUIRED_FIELDS = ['title', 'id', 'category', 'version', 'created', 'updated', 'status'];
-
-/**
- * Validation result object matching the ValidationError class pattern.
- * @typedef {Object} ValidationError
- * @property {string} file - The file path
- * @property {string} field - The field being validated
- * @property {string} message - The error message
- */
-
-/**
- * Validates a single required field of a frontmatter object.
- *
- * SYNC: Keep logic in sync with validate-skills.js validateSkill() required fields validation block
- *
- * @param {Object} frontmatter - The parsed frontmatter object
- * @param {string} field - The field name to validate
- * @param {string} relativePath - The relative path for error reporting
- * @returns {ValidationError[]} Array of validation errors
- */
-function validateRequiredField(frontmatter, field, relativePath) {
-    const errors = [];
-
-    if (frontmatter[field] === undefined || frontmatter[field] === null) {
-        errors.push({
-            file: relativePath,
-            field: field,
-            message: `Required field '${field}' is missing`,
-        });
-    } else if (frontmatter[field] === '') {
-        errors.push({
-            file: relativePath,
-            field: field,
-            message: `Required field '${field}' is empty`,
-        });
-    }
-
-    return errors;
-}
-
-/**
- * Validates all required fields of a frontmatter object.
- *
- * SYNC: Keep logic in sync with validate-skills.js validateSkill() required fields validation block
- *
- * @param {Object} frontmatter - The parsed frontmatter object
- * @param {string} relativePath - The relative path for error reporting
- * @returns {ValidationError[]} Array of validation errors
- */
-function validateRequiredFields(frontmatter, relativePath) {
-    const errors = [];
-
-    for (const field of REQUIRED_FIELDS) {
-        errors.push(...validateRequiredField(frontmatter, field, relativePath));
-    }
-
-    return errors;
-}
+const {
+    validateRequiredField,
+    validateRequiredFields,
+    REQUIRED_FIELDS,
+} = require('../validate-skills.js');
 
 describe("validate-skills required field validation", () => {
     const testPath = "testing/sample-skill.md";

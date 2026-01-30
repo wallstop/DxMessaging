@@ -257,4 +257,16 @@ function main() {
     process.exit(0);
 }
 
-main();
+// Export for testing when required as a module
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        isForbiddenRenormalizePattern,
+        hasExistenceCheck,
+        Violation,
+    };
+}
+
+// Only run main when executed directly (not when required as a module)
+if (require.main === module) {
+    main();
+}

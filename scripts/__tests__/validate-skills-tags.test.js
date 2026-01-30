@@ -13,48 +13,7 @@
 
 "use strict";
 
-/**
- * Validation result object matching the ValidationError class pattern.
- * @typedef {Object} ValidationWarning
- * @property {string} file - The file path
- * @property {string} field - The field being validated
- * @property {string} message - The warning message
- */
-
-/**
- * Validates the tags field of a frontmatter object.
- *
- * SYNC: Keep logic in sync with validate-skills.js validateSkill() tags validation block
- *
- * @param {Object} frontmatter - The parsed frontmatter object
- * @param {string} relativePath - The relative path for error reporting
- * @returns {ValidationWarning[]} Array of validation warnings
- */
-function validateTags(frontmatter, relativePath) {
-    const warnings = [];
-
-    if (frontmatter.tags === undefined || frontmatter.tags === null) {
-        warnings.push({
-            file: relativePath,
-            field: "tags",
-            message: `Missing 'tags' array - will show empty Tags column in skills index`,
-        });
-    } else if (!Array.isArray(frontmatter.tags)) {
-        warnings.push({
-            file: relativePath,
-            field: "tags",
-            message: `'tags' must be an array, got ${typeof frontmatter.tags} - will show empty Tags column in skills index`,
-        });
-    } else if (frontmatter.tags.length === 0) {
-        warnings.push({
-            file: relativePath,
-            field: "tags",
-            message: `Empty 'tags' array - will show empty Tags column in skills index`,
-        });
-    }
-
-    return warnings;
-}
+const { validateTags } = require('../validate-skills.js');
 
 describe("validate-skills tags validation", () => {
     const testPath = "testing/sample-skill.md";

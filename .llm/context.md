@@ -289,6 +289,17 @@ This project maintains a strict **zero-flaky test policy**. Every test failure i
 
 See the [Test Failure Investigation skill](./skills/testing/test-failure-investigation.md) for detailed investigation patterns and procedures.
 
+### Test Production Code Directly
+
+Tests must import and exercise actual production code, never re-implement production logic locally. Re-implementing validation or business logic in tests creates a false sense of security - tests can pass while production code regresses.
+
+- **Import production functions**: Tests should import and call the actual production functions, not local copies.
+- **Export testable helpers**: Structure production code with exported helper functions that tests can verify.
+- **Avoid duplication**: If test files contain utility functions that mirror production logic, refactor to import instead.
+- **Use SYNC notes for unavoidable duplication**: When parallel implementations are necessary (e.g., PowerShell scripts tested via JavaScript), use bidirectional SYNC notes referencing function names.
+
+See the [Test Production Code skill](./skills/testing/test-production-code.md) for patterns and examples.
+
 ## Documentation Guidelines
 
 After any new feature or bug fix, documentation must be updated:
