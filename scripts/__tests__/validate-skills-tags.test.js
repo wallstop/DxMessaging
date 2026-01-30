@@ -24,7 +24,7 @@
 /**
  * Validates the tags field of a frontmatter object.
  *
- * SYNC: Keep logic in sync with validate-skills.js tags validation (lines 403-427)
+ * SYNC: Keep logic in sync with validate-skills.js validateSkill() tags validation block
  *
  * @param {Object} frontmatter - The parsed frontmatter object
  * @param {string} relativePath - The relative path for error reporting
@@ -33,7 +33,7 @@
 function validateTags(frontmatter, relativePath) {
     const warnings = [];
 
-    if (!frontmatter.tags) {
+    if (frontmatter.tags === undefined || frontmatter.tags === null) {
         warnings.push({
             file: relativePath,
             field: "tags",
@@ -99,8 +99,9 @@ describe("validate-skills tags validation", () => {
 
             expect(warnings).toHaveLength(1);
             expect(warnings[0].field).toBe("tags");
-            // Empty string is falsy, so triggers "Missing" warning
-            expect(warnings[0].message).toContain("Missing 'tags' array");
+            // Empty string is defined but wrong type
+            expect(warnings[0].message).toContain("'tags' must be an array");
+            expect(warnings[0].message).toContain("got string");
         });
 
         test("should warn when tags is 0", () => {
@@ -114,8 +115,9 @@ describe("validate-skills tags validation", () => {
 
             expect(warnings).toHaveLength(1);
             expect(warnings[0].field).toBe("tags");
-            // 0 is falsy, so triggers "Missing" warning
-            expect(warnings[0].message).toContain("Missing 'tags' array");
+            // 0 is defined but wrong type
+            expect(warnings[0].message).toContain("'tags' must be an array");
+            expect(warnings[0].message).toContain("got number");
         });
 
         test("should warn when tags is false", () => {
@@ -129,8 +131,9 @@ describe("validate-skills tags validation", () => {
 
             expect(warnings).toHaveLength(1);
             expect(warnings[0].field).toBe("tags");
-            // false is falsy, so triggers "Missing" warning
-            expect(warnings[0].message).toContain("Missing 'tags' array");
+            // false is defined but wrong type
+            expect(warnings[0].message).toContain("'tags' must be an array");
+            expect(warnings[0].message).toContain("got boolean");
         });
     });
 
@@ -362,20 +365,6 @@ describe("validate-skills tags validation", () => {
             expect(warnings).toHaveLength(1);
             expect(warnings[0].message).toContain("'tags' must be an array");
             expect(warnings[0].message).toContain("got object");
-        });
-
-        test("should accept typed arrays as valid arrays", () => {
-            // Array.isArray returns true for typed arrays in Node.js
-            const arr = ["testing", "validation"];
-            const frontmatter = {
-                title: "Sample Skill",
-                id: "sample-skill",
-                tags: arr,
-            };
-
-            const warnings = validateTags(frontmatter, testPath);
-
-            expect(warnings).toHaveLength(0);
         });
 
         test("should accept array created with Array constructor", () => {

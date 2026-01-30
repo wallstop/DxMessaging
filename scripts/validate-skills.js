@@ -400,7 +400,7 @@ function validateSkill(skillFile) {
         );
     }
 
-    if (!frontmatter.tags) {
+    if (frontmatter.tags === undefined || frontmatter.tags === null) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,

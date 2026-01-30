@@ -78,6 +78,12 @@ $extensions = @('.cs', '.csproj', '.sln', ...)
 const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 ```
 
+### SYNC Note Best Practices
+
+- **Never use line numbers**: Reference function names, class names, or named anchors instead. Line numbers become stale as code evolves.
+- **Use descriptive identifiers**: `SYNC: Keep logic in sync with validate-skills.js validateSkill() tags validation` is better than `SYNC: Keep in sync with validate-skills.js lines 224-250`.
+- **Verify references exist**: Before adding a SYNC note, confirm the referenced function, variable, or block actually exists with the exact name.
+
 ### Shell Pattern Matching
 
 - Use `grep -F` for literal string matching (paths, filenames with special characters like `.`).
@@ -120,6 +126,10 @@ See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness
 - All declared constants and variables must be used or removed.
 - Prefer `const` over `let`; use `let` only when reassignment is necessary.
 - When adding validation constants (e.g., `VALID_X`), ensure corresponding validation logic uses them.
+- **Falsy value checking**: When checking if a property is missing (undefined/null) vs wrong type, use explicit checks:
+  - Use `x === undefined || x === null` (or `x == null`) to check for "missing"
+  - Use `!x` only when you truly want to catch all falsy values (empty string, 0, false, null, undefined)
+  - **Empty array pitfall**: `[]` is truthy, so `![]` is `false`. If you write `if (!frontmatter.tags)` expecting to catch missing tags, it won't trigger when `tags: []`—the empty array passes this check, potentially causing bugs downstream
 
 ### Jest Test Style
 
@@ -128,6 +138,7 @@ For JavaScript tests using Jest:
 - **Use `test()` not `it()`**: All tests must use `test()` for consistency with existing tests.
 - **Descriptive names**: Test descriptions should clearly state what is being tested.
 - **Group with `describe()`**: Use `describe()` blocks to group related tests logically.
+- **Test accuracy**: Test names, descriptions, and comments must be factually correct. Never include statements that contradict how JavaScript actually behaves (e.g., claiming "empty array is falsy" when it is truthy).
 
 ```javascript
 // CORRECT
