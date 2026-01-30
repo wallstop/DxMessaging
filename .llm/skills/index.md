@@ -43,7 +43,7 @@
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md) | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | github-actions, ci-cd, version-management |
 | [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)      | ✅ 268 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links, urls                |
 | [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)              | ⚠️ 477 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, markdown, compatibility    |
-| [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                               | ✅ 326 | 🟡 Intermediate | ✅ Stable | ○○○○○       | documentation, mermaid, theming           |
+| [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                               | ✅ 327 | 🟡 Intermediate | ✅ Stable | ○○○○○       | documentation, mermaid, theming           |
 | [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                        | ✅ 291 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, mkdocs, navigation         |
 | [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                        | ✅ 261 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, skills, file-organization  |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                    | 📝 191 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, xml-docs, api-reference    |
@@ -90,7 +90,7 @@
 | ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md) | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)    | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
-| [Regex Pattern Documentation](./scripting/regex-documentation.md)                  | ⚠️ 417 | 🟡 Intermediate | ✅ Stable | ○○○○○       | regex, documentation, scripting           |
+| [Regex Pattern Documentation](./scripting/regex-documentation.md)                  | ⚠️ 462 | 🟡 Intermediate | ✅ Stable | ○○○○○       | regex, documentation, scripting           |
 | [Shell Scripting Best Practices](./scripting/shell-best-practices.md)              | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
 
 ## Solid

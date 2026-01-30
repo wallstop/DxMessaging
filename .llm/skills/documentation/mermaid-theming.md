@@ -278,14 +278,15 @@ As a safety net, the script strips per-diagram init directives before rendering:
 
 ```javascript
 // Matches %%{init:...}%% directives (gims: global, case-insensitive, multiline, dotAll)
-const INIT_DIRECTIVE_PATTERN = /^\s*%%\{init:.*?\}%%\s*/gims;
+// Uses [ \t]* for spaces/tabs only (not \s* which includes newlines) to preserve line separation
+const INIT_DIRECTIVE_PATTERN = /^[ \t]*%%\{init:.*?\}%%[ \t]*\r?\n?/gims;
 
 function stripInitDirectives(source) {
   return source.replace(INIT_DIRECTIVE_PATTERN, "");
 }
 ```
 
-The regex uses four flags: `g` (global) replaces all occurrences, `i` (case-insensitive) matches regardless of case, `m` (multiline) makes `^` match the start of each line, and `s` (dotAll) allows `.*?` to match newlines in multi-line directives.
+The regex uses four flags: `g` (global) replaces all occurrences, `i` (case-insensitive) matches regardless of case, `m` (multiline) makes `^` match the start of each line, and `s` (dotAll) allows `.*?` to match newlines in multi-line directives. We use `[ \t]*` instead of `\s*` around the directive to avoid consuming newlines, which would concatenate adjacent diagram lines and break Mermaid syntax. The optional `\r?\n?` at the end consumes just the line ending of the directive line itself.
 
 ## Common Mistakes
 

@@ -88,6 +88,51 @@ This skill covers best practices for documenting regular expression patterns. Ac
 
 A regex comment should answer: "What will this pattern actually match?" not "What do I hope it matches?"
 
+## Whitespace Character Classes
+
+### `\s` vs `[ \t]` - A Critical Distinction
+
+The `\s` shorthand matches **all whitespace characters including newlines**. This is a frequent source of bugs when you only want to match spaces and tabs.
+
+| Pattern     | Matches                                                                     | Use When                                                         |
+| ----------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `\s`        | Space, tab, newline (`\n`), carriage return (`\r`), form feed, vertical tab | You want to match ANY whitespace including line breaks           |
+| `[ \t]`     | Only space and tab                                                          | You want horizontal whitespace only, preserving newlines         |
+| `[\r\n]`    | Only newline characters                                                     | You want to match line breaks specifically                       |
+| `[^\S\r\n]` | Whitespace except newlines (double negative trick)                          | Alternative to `[ \t]` that includes other horizontal whitespace |
+
+#### Wrong Pattern
+
+```javascript
+// WRONG: \s* consumes newlines, concatenating lines when replaced
+const DIRECTIVE_PATTERN = /^%%\{init:.*?\}%%\s*/gm;
+// Intended: Strip directive and trailing spaces
+// Actual: Also consumes the newline, joining this line with the next
+```
+
+#### Correct Pattern
+
+```javascript
+// CORRECT: [ \t]* only matches horizontal whitespace
+const DIRECTIVE_PATTERN = /^[ \t]*%%\{init:.*?\}%%[ \t]*\r?\n?/gm;
+// Strips directive, surrounding spaces/tabs, and just its own line ending
+// Preserves separation between other lines
+```
+
+#### Practical Impact
+
+```javascript
+const text = "line1\n%%{init:...}%%\nline2";
+
+// Bug: \s* consumes the newline AFTER the directive
+text.replace(/%%\{init:.*?\}%%\s*/g, "");
+// Result: "line1\nline2" with missing newline before line2
+
+// Fixed: [ \t]* preserves newlines
+text.replace(/%%\{init:.*?\}%%[ \t]*/g, "");
+// Result: "line1\n\nline2" - newlines preserved
+```
+
 ## Flag Reference Table
 
 | Flag | Name                 | Effect                                                    | Comment Implications                                            |

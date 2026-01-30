@@ -400,12 +400,28 @@ function validateSkill(skillFile) {
         );
     }
 
-    if (!frontmatter.tags || (Array.isArray(frontmatter.tags) && frontmatter.tags.length === 0)) {
+    if (!frontmatter.tags) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,
                 'tags',
-                `Missing or empty 'tags' array - will show empty Tags column in skills index`
+                `Missing 'tags' array - will show empty Tags column in skills index`
+            )
+        );
+    } else if (!Array.isArray(frontmatter.tags)) {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'tags',
+                `'tags' must be an array, got ${typeof frontmatter.tags} - will show empty Tags column in skills index`
+            )
+        );
+    } else if (frontmatter.tags.length === 0) {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'tags',
+                `Empty 'tags' array - will show empty Tags column in skills index`
             )
         );
     }

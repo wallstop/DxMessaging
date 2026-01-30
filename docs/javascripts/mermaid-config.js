@@ -131,9 +131,11 @@
    * - 's' (dotAll): Makes '.' match any character including newlines, allowing '.*?' to span
    *   multi-line directives
    *
-   * These directives can override our theme settings, so we strip them
+   * These directives can override our theme settings, so we strip them.
+   * We use [ \t]* instead of \s* around the directive to avoid consuming newlines,
+   * which would concatenate adjacent diagram lines and break Mermaid syntax.
    */
-  const INIT_DIRECTIVE_PATTERN = /^\s*%%\{init:.*?\}%%\s*/gims;
+  const INIT_DIRECTIVE_PATTERN = /^[ \t]*%%\{init:.*?\}%%[ \t]*\r?\n?/gims;
 
   /**
    * Strip per-diagram init directives that would override our theme configuration
