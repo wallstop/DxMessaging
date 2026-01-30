@@ -346,7 +346,7 @@ function findSkillFiles(dir) {
  * @returns {boolean} True if impact is a valid object to iterate over
  */
 function isValidImpactObject(frontmatter) {
-    return frontmatter.impact != null && typeof frontmatter.impact === 'object';
+    return frontmatter.impact != null && typeof frontmatter.impact === 'object' && !Array.isArray(frontmatter.impact);
 }
 
 /**
@@ -727,12 +727,12 @@ function main() {
  * @exports {Function} validateRequiredFields - Validates all required frontmatter fields
  * @exports {Function} validateTags - Validates the tags array in frontmatter
  * @exports {Function} validateComplexityLevel - Validates the complexity.level field
- * @exports {Function} validatePerformanceRating - Validates numeric impact ratings (1-5)
- * @exports {Function} isValidImpactObject - Checks if impact field is a non-null object
+ * @exports {Function} validatePerformanceRating - Validates presence of impact.performance.rating field
+ * @exports {Function} isValidImpactObject - Checks if impact field is a non-null object (excludes arrays)
  * @exports {Class} ValidationError - Error class with file, field, and message properties
  * @exports {Array<string>} REQUIRED_FIELDS - List of required frontmatter field names
- * @exports {Array<string>} VALID_COMPLEXITY_LEVELS - Valid values: 'basic', 'intermediate', 'advanced'
- * @exports {Array<string>} VALID_IMPACT_RATINGS - Valid rating values: '1'-'5' as strings
+ * @exports {Array<string>} VALID_COMPLEXITY_LEVELS - Valid values: 'basic', 'intermediate', 'advanced', 'expert'
+ * @exports {Array<string>} VALID_IMPACT_RATINGS - Valid rating values: 'none', 'low', 'medium', 'high', 'critical'
  */
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {

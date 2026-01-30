@@ -88,6 +88,10 @@ maintainability.
 
 ## Solution
 
+1. **Keep JSDoc accurate** - function descriptions, parameter types, and return values must match
+   implementation
+1. **Keep module exports documented** - `@exports` tags must list actual exports with correct types
+   and values
 1. **Place linter directives immediately before suppressed code** - `eslint-disable-next-line`
    only affects the next line
 1. **Only use linter directives if the linter is configured** - don't add ESLint comments to
@@ -147,6 +151,84 @@ Before adding a linter directive, verify:
 // GOOD: If ESLint is not used in the project, don't add ESLint directives
 // Just remove or use the code properly instead of suppressing warnings
 ```
+
+## JSDoc Accuracy
+
+### Problem
+
+JSDoc comments that don't match implementation create dangerous misunderstandings. Tests written
+against inaccurate JSDoc verify incorrect behavior.
+
+### Anti-Pattern: Misleading Function Description
+
+```javascript
+// BAD: JSDoc says "excludes arrays" but implementation accepts them
+/**
+ * Validates that value is a non-null object (excludes arrays).
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a non-null object
+ */
+function isValidObject(value) {
+  // Implementation actually accepts arrays!
+  return value !== null && typeof value === "object";
+}
+```
+
+### Correct Pattern: Documentation Matches Implementation
+
+```javascript
+// GOOD: JSDoc accurately describes behavior
+/**
+ * Validates that value is a non-null object (arrays are objects in JavaScript).
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is non-null and typeof is 'object'
+ */
+function isValidObject(value) {
+  return value !== null && typeof value === "object";
+}
+
+// OR: Update implementation to match documented intent
+/**
+ * Validates that value is a non-null, non-array object.
+ * @param {*} value - Value to check
+ * @returns {boolean} True if value is a non-null, non-array object
+ */
+function isValidObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+```
+
+### Module Export Documentation
+
+When using `@exports` tags to document module exports, keep them synchronized with actual exports:
+
+```javascript
+// BAD: @exports lists wrong values or missing exports
+/**
+ * @exports {Array<string>} VALID_LEVELS - Valid values: 'low', 'high'
+ */
+module.exports = {
+  VALID_LEVELS, // Actual values: ['basic', 'intermediate', 'advanced']
+  helperFunction // Not documented!
+};
+
+// GOOD: @exports matches actual export values
+/**
+ * @exports {Array<string>} VALID_LEVELS - Valid values: 'basic', 'intermediate', 'advanced'
+ * @exports {Function} helperFunction - Validates input and returns errors
+ */
+module.exports = {
+  VALID_LEVELS,
+  helperFunction
+};
+```
+
+### Verification Checklist
+
+1. **Read the implementation** - Don't just copy JSDoc from similar functions
+1. **Test edge cases mentioned in JSDoc** - If it says "excludes arrays", test with arrays
+1. **Update JSDoc when changing implementation** - Don't leave stale documentation
+1. **Avoid vague descriptions** - "Validates value" doesn't tell readers what validation occurs
 
 ## Test Documentation Accuracy
 
@@ -316,6 +398,9 @@ When adding a SYNC note:
 
 Before committing JavaScript code, verify:
 
+- [ ] JSDoc function descriptions match implementation behavior
+- [ ] JSDoc `@param` and `@returns` types are accurate
+- [ ] Module `@exports` documentation lists actual exports with correct values
 - [ ] Linter directives are immediately before the suppressed line
 - [ ] Linter directives are only used if the linter is actually configured
 - [ ] Test `describe` blocks accurately categorize the tests they contain

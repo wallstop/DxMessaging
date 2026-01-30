@@ -89,7 +89,7 @@
 | Skill                                                                                      | Lines  | Complexity      | Status    | Performance | Tags                                      |
 | ------------------------------------------------------------------------------------------ | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)         | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
-| [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                | ✅ 333 | 🟡 Intermediate | ✅ Stable | ○○○○○       | javascript, code-quality, linting         |
+| [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                | ⚠️ 418 | 🟡 Intermediate | ✅ Stable | ○○○○○       | javascript, code-quality, linting         |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)            | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
 | [Regex Pattern Documentation](./scripting/regex-documentation.md)                          | ⚠️ 462 | 🟡 Intermediate | ✅ Stable | ○○○○○       | regex, documentation, scripting           |
 | [Shell Scripting Best Practices](./scripting/shell-best-practices.md)                      | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |

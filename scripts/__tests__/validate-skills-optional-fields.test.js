@@ -650,14 +650,14 @@ describe("validate-skills optional field validation", () => {
             expect(isValidImpactObject(frontmatter)).toBe(true);
         });
 
-        test("should return true for array impact (arrays are objects in JavaScript)", () => {
+        test("should return false for array impact (arrays should not be valid impact objects)", () => {
             const frontmatter = {
                 impact: [],
             };
 
-            // Arrays have typeof === 'object' in JavaScript, so they pass the check
-            // This is technically correct, though unusual for this field
-            expect(isValidImpactObject(frontmatter)).toBe(true);
+            // Arrays are explicitly excluded since they would cause confusing validation
+            // (array indices would be treated as unknown impact types)
+            expect(isValidImpactObject(frontmatter)).toBe(false);
         });
     });
 });
