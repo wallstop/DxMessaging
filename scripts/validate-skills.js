@@ -328,6 +328,7 @@ function validateSkill(skillFile) {
     if (
         frontmatter.complexity != null &&
         frontmatter.complexity.level != null &&
+        frontmatter.complexity.level !== '' &&
         !VALID_COMPLEXITY_LEVELS.includes(frontmatter.complexity.level)
     ) {
         warnings.push(
@@ -358,6 +359,7 @@ function validateSkill(skillFile) {
             if (
                 frontmatter.impact[impactType] != null &&
                 frontmatter.impact[impactType].rating != null &&
+                frontmatter.impact[impactType].rating !== '' &&
                 !VALID_IMPACT_RATINGS.includes(frontmatter.impact[impactType].rating)
             ) {
                 warnings.push(
@@ -626,4 +628,18 @@ function main() {
     return 0;
 }
 
-process.exit(main());
+// Export for testing when required as a module
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        validateSkill,
+        parseFrontmatter,
+        ValidationError,
+        VALID_COMPLEXITY_LEVELS,
+        VALID_IMPACT_RATINGS,
+    };
+}
+
+// Only run main when executed directly (not when required as a module)
+if (require.main === module) {
+    process.exit(main());
+}

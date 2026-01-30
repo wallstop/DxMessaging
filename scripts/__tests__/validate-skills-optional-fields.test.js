@@ -549,3 +549,230 @@ describe("validate-skills optional field validation", () => {
         });
     });
 });
+
+/**
+ * Integration tests using the actual validateSkill function from validate-skills.js.
+ *
+ * These tests ensure that empty string values in optional fields produce exactly ONE warning,
+ * not duplicates from both "invalid enum" and "missing/empty" validation paths.
+ */
+describe("validate-skills integration tests for optional fields", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const os = require("os");
+    const { validateSkill } = require("../validate-skills");
+
+    let tempDir;
+
+    beforeEach(() => {
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-skills-test-"));
+    });
+
+    afterEach(() => {
+        if (tempDir && fs.existsSync(tempDir)) {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    /**
+     * Creates a skill file object with all required fields present and valid.
+     * @param {string} tempDir - The temporary directory path
+     * @param {string} content - The markdown content with frontmatter
+     * @returns {Object} Skill file object compatible with validateSkill()
+     */
+    function createMockSkillFile(tempDir, content) {
+        const fileName = "test-skill.md";
+        const filePath = path.join(tempDir, fileName);
+        fs.writeFileSync(filePath, content, "utf8");
+        return {
+            path: filePath,
+            relativePath: "testing/test-skill.md",
+            expectedId: "test-skill",
+            category: "testing",
+        };
+    }
+
+    /**
+     * Creates valid frontmatter with all required fields set.
+     * Override specific fields as needed.
+     * @param {Object} overrides - Fields to override in the frontmatter
+     * @returns {string} The YAML frontmatter as a string
+     */
+    function createValidFrontmatter(overrides = {}) {
+        const base = {
+            title: "Test Skill",
+            id: "test-skill",
+            category: "testing",
+            version: "1.0.0",
+            created: "2026-01-30",
+            updated: "2026-01-30",
+            status: "stable",
+            ...overrides,
+        };
+
+        let yaml = "---\n";
+        for (const [key, value] of Object.entries(base)) {
+            if (typeof value === "object" && value !== null) {
+                yaml += `${key}:\n`;
+                for (const [subKey, subValue] of Object.entries(value)) {
+                    if (typeof subValue === "object" && subValue !== null) {
+                        yaml += `  ${subKey}:\n`;
+                        for (const [subSubKey, subSubValue] of Object.entries(subValue)) {
+                            yaml += `    ${subSubKey}: "${subSubValue}"\n`;
+                        }
+                    } else {
+                        yaml += `  ${subKey}: "${subValue}"\n`;
+                    }
+                }
+            } else {
+                yaml += `${key}: "${value}"\n`;
+            }
+        }
+        yaml += "---\n\n## Overview\n\nTest content.\n\n## Solution\n\nTest solution.\n";
+        return yaml;
+    }
+
+    describe("empty string complexity.level produces exactly one warning", () => {
+        test("should produce exactly 1 warning for complexity.level: '' (no duplicate from invalid enum check)", () => {
+            const content = createValidFrontmatter({
+                complexity: { level: "" },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for complexity.level field only
+            const complexityWarnings = result.warnings.filter(
+                (w) => w.field === "complexity.level"
+            );
+
+            // Should have exactly 1 warning about empty complexity.level
+            expect(complexityWarnings).toHaveLength(1);
+            expect(complexityWarnings[0].message).toContain("Empty 'complexity.level'");
+            expect(complexityWarnings[0].message).toContain("Complexity column");
+        });
+    });
+
+    describe("whitespace-only complexity.level produces invalid enum warning", () => {
+        test("should produce invalid enum warning for complexity.level: '   ' (whitespace not treated as empty)", () => {
+            const content = createValidFrontmatter({
+                complexity: { level: "   " },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for complexity.level field only
+            const complexityWarnings = result.warnings.filter(
+                (w) => w.field === "complexity.level"
+            );
+
+            // Should have exactly 1 warning about invalid enum value
+            // Whitespace-only strings are not trimmed, so treated as an invalid enum value
+            expect(complexityWarnings).toHaveLength(1);
+            expect(complexityWarnings[0].message).toContain("Invalid complexity level");
+            expect(complexityWarnings[0].message).toContain("   ");
+        });
+    });
+
+    describe("empty string impact.performance.rating produces exactly one warning", () => {
+        test("should produce exactly 1 warning for impact.performance.rating: '' (no duplicate from invalid enum check)", () => {
+            const content = createValidFrontmatter({
+                impact: { performance: { rating: "" } },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for impact.performance.rating field only
+            const performanceWarnings = result.warnings.filter(
+                (w) => w.field === "impact.performance.rating"
+            );
+
+            // Should have exactly 1 warning about empty impact.performance.rating
+            expect(performanceWarnings).toHaveLength(1);
+            expect(performanceWarnings[0].message).toContain("Empty 'impact.performance.rating'");
+            expect(performanceWarnings[0].message).toContain("Performance column");
+        });
+    });
+
+    describe("whitespace-only impact.performance.rating produces invalid enum warning", () => {
+        test("should produce invalid enum warning for impact.performance.rating: '   ' (whitespace not treated as empty)", () => {
+            const content = createValidFrontmatter({
+                impact: { performance: { rating: "   " } },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for impact.performance.rating field only
+            const performanceWarnings = result.warnings.filter(
+                (w) => w.field === "impact.performance.rating"
+            );
+
+            // Should have exactly 1 warning about invalid rating
+            // Whitespace-only strings are not trimmed, so treated as an invalid enum value
+            expect(performanceWarnings).toHaveLength(1);
+            expect(performanceWarnings[0].message).toContain("Invalid rating");
+            expect(performanceWarnings[0].message).toContain("   ");
+        });
+    });
+
+    describe("valid enum values produce no warnings for those fields", () => {
+        test("should produce no warnings for valid complexity.level value", () => {
+            const content = createValidFrontmatter({
+                complexity: { level: "intermediate" },
+                impact: { performance: { rating: "high" } },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Should have no warnings for complexity.level or performance.rating
+            const relevantWarnings = result.warnings.filter(
+                (w) => w.field === "complexity.level" || w.field === "impact.performance.rating"
+            );
+            expect(relevantWarnings).toHaveLength(0);
+        });
+    });
+
+    describe("invalid enum values produce exactly one warning", () => {
+        test("should produce exactly 1 warning for invalid complexity.level enum value", () => {
+            const content = createValidFrontmatter({
+                complexity: { level: "super-hard" },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for complexity.level field only
+            const complexityWarnings = result.warnings.filter(
+                (w) => w.field === "complexity.level"
+            );
+
+            // Should have exactly 1 warning about invalid enum value (not 2)
+            expect(complexityWarnings).toHaveLength(1);
+            expect(complexityWarnings[0].message).toContain("Invalid complexity level");
+            expect(complexityWarnings[0].message).toContain("super-hard");
+        });
+
+        test("should produce exactly 1 warning for invalid impact.performance.rating enum value", () => {
+            const content = createValidFrontmatter({
+                impact: { performance: { rating: "super-high" } },
+            });
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for impact.performance.rating field only
+            const performanceWarnings = result.warnings.filter(
+                (w) => w.field === "impact.performance.rating"
+            );
+
+            // Should have exactly 1 warning about invalid rating (not 2)
+            expect(performanceWarnings).toHaveLength(1);
+            expect(performanceWarnings[0].message).toContain("Invalid rating");
+            expect(performanceWarnings[0].message).toContain("super-high");
+        });
+    });
+});

@@ -9,9 +9,9 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 84    |
+| Total Skills | 85    |
 | Categories   | 6     |
-| Unique Tags  | 156   |
+| Unique Tags  | 159   |
 
 ---
 
@@ -20,7 +20,7 @@
 - [Documentation](#documentation) (15)
 - [GitHub Actions](#github-actions) (2)
 - [Performance](#performance) (24)
-- [Scripting](#scripting) (5)
+- [Scripting](#scripting) (6)
 - [Solid](#solid) (13)
 - [Testing](#testing) (25)
 - [Tag Cloud](#tag-cloud)
@@ -86,13 +86,14 @@
 
 ## Scripting
 
-| Skill                                                                              | Lines  | Complexity      | Status    | Performance | Tags                                      |
-| ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
-| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md) | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
-| [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)        | ✅ 332 | 🟡 Intermediate | ✅ Stable | ○○○○○       | javascript, code-quality, linting         |
-| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)    | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
-| [Regex Pattern Documentation](./scripting/regex-documentation.md)                  | ⚠️ 462 | 🟡 Intermediate | ✅ Stable | ○○○○○       | regex, documentation, scripting           |
-| [Shell Scripting Best Practices](./scripting/shell-best-practices.md)              | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
+| Skill                                                                                      | Lines  | Complexity      | Status    | Performance | Tags                                      |
+| ------------------------------------------------------------------------------------------ | ------ | --------------- | --------- | ----------- | ----------------------------------------- |
+| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)         | ✅ 225 | 🟡 Intermediate | ✅ Stable | ○○○○○       | cross-platform, case-sensitivity, testing |
+| [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                | ✅ 333 | 🟡 Intermediate | ✅ Stable | ○○○○○       | javascript, code-quality, linting         |
+| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)            | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
+| [Regex Pattern Documentation](./scripting/regex-documentation.md)                          | ⚠️ 462 | 🟡 Intermediate | ✅ Stable | ○○○○○       | regex, documentation, scripting           |
+| [Shell Scripting Best Practices](./scripting/shell-best-practices.md)                      | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
+| [Validation Patterns and Duplicate Warning Prevention](./scripting/validation-patterns.md) | ✅ 298 | 🟡 Intermediate | ✅ Stable | ○○○○○       | validation, javascript, error-handling    |
 
 ## Solid
 
@@ -146,7 +147,7 @@
 
 ## Tag Cloud
 
-`testing`×28 `documentation`×16 `performance`×15 `unity`×13 `ci-cd`×10 `patterns`×10 `solid`×10 `memory`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `linting`×5 `singleton`×5 `struct`×5 `anti-patterns`×4 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `github-actions`×4 `javascript`×4 `markdown`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `logging`×3 `messaging`×3 `mkdocs`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `scripting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-quality`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `error-handling`×2 `eviction`×2 `examples`×2 `git`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `jest`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `maintenance`×2 `optimization`×2 `regex`×2 `release-notes`×2 `root-cause-analysis`×2 `urls`×2 `user-communication`×2 `workflow`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `yaml`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `comments`×1 `compatibility`×1 `configuration`×1 `consistency`×1 `coroutines`×1 `cross-platform`×1 `diagrams`×1 `disposable`×1 `dry`×1 `encoding`×1 `eslint`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `gitattributes`×1 `here-strings`×1 `implementation`×1 `line-endings`×1 `llm-context`×1 `macos`×1 `maintainability`×1 `mermaid`×1 `methodimpl`×1 `naming`×1 `navigation`×1 `negative-tests`×1 `parsing`×1 `portability`×1 `pre-commit`×1 `procedure`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `security`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `site-structure`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `sync-notes`×1 `test-cases`×1 `theming`×1 `thread-safety`×1 `type-specialization`×1 `validation`×1 `version-management`×1 `windows`×1 `yield`×1 `zero-flaky`×1
+`testing`×29 `documentation`×16 `performance`×15 `unity`×13 `ci-cd`×10 `patterns`×10 `solid`×10 `memory`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `collections`×5 `data-driven`×5 `debugging`×5 `javascript`×5 `linting`×5 `singleton`×5 `struct`×5 `anti-patterns`×4 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `github-actions`×4 `markdown`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `error-handling`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `logging`×3 `messaging`×3 `mkdocs`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `scripting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-quality`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `eviction`×2 `examples`×2 `git`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `jest`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `maintenance`×2 `optimization`×2 `regex`×2 `release-notes`×2 `root-cause-analysis`×2 `urls`×2 `user-communication`×2 `validation`×2 `workflow`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `yaml`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `best-practices`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `comments`×1 `compatibility`×1 `configuration`×1 `consistency`×1 `coroutines`×1 `cross-platform`×1 `diagrams`×1 `disposable`×1 `dry`×1 `duplicate-warnings`×1 `encoding`×1 `enum-validation`×1 `eslint`×1 `file-organization`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `gitattributes`×1 `here-strings`×1 `implementation`×1 `line-endings`×1 `llm-context`×1 `macos`×1 `maintainability`×1 `mermaid`×1 `methodimpl`×1 `naming`×1 `navigation`×1 `negative-tests`×1 `optional-fields`×1 `parsing`×1 `portability`×1 `pre-commit`×1 `procedure`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `security`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `site-structure`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `sync-notes`×1 `test-cases`×1 `theming`×1 `thread-safety`×1 `type-specialization`×1 `version-management`×1 `windows`×1 `yield`×1 `zero-flaky`×1
 
 ---
 
@@ -235,6 +236,7 @@
 - [Test Failure Investigation and Zero-Flaky Policy](./testing/test-failure-investigation.md) _(testing)_
 - [Test Failure Investigation Procedure](./testing/test-failure-investigation-procedure.md) _(testing)_
 - [Test Failure Root Causes and Anti-Patterns](./testing/test-failure-investigation-root-causes.md) _(testing)_
+- [Validation Patterns and Duplicate Warning Prevention](./scripting/validation-patterns.md) _(scripting)_
 
 ### 🟠 Advanced
 

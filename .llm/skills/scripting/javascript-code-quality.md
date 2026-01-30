@@ -69,6 +69,7 @@ related:
   - "script-test-coverage"
   - "cross-platform-compatibility"
   - "comprehensive-test-coverage"
+  - "validation-patterns"
 
 status: "stable"
 ---
