@@ -176,6 +176,35 @@ if (value === undefined || value === null) {
 - **Zero is falsy**: `0` is falsy, so `!count` fails when count is legitimately zero.
 - **Empty string vs missing**: `!value` treats `""` the same as `undefined`, but they often need different error messages.
 
+###### Guard clause for enum validation
+
+When checking if a value is valid according to an enum/allowlist, guard against missing and empty values first. This prevents spurious "invalid value" errors for empty strings:
+
+```javascript
+// CORRECT: Guard against missing and empty before enum check
+if (value != null && value !== "" && !VALID_VALUES.includes(value)) {
+  errors.push(`Invalid ${fieldName}: '${value}'`);
+}
+
+// WRONG: Missing guard allows empty string to be flagged as "invalid"
+if (!VALID_VALUES.includes(value)) {
+  errors.push(`Invalid ${fieldName}: '${value}'`); // Reports "" as "Invalid: ''"
+}
+```
+
+###### Type coercion for YAML values
+
+YAML parsers may return non-string types (e.g., `1.0.0` becomes number `1`). Use `String()` after presence checks:
+
+```javascript
+if (value != null && value !== "") {
+  const strValue = String(value);
+  if (!strValue.match(/^\d+\.\d+\.\d+$/)) {
+    errors.push(`Invalid format: '${strValue}'`);
+  }
+}
+```
+
 ### Jest Test Style
 
 For JavaScript tests using Jest:

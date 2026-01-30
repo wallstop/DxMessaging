@@ -2,7 +2,7 @@
 title: "Validation Patterns and Duplicate Warning Prevention"
 id: "validation-patterns"
 category: "scripting"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-01-30"
 updated: "2026-01-30"
 
@@ -21,10 +21,12 @@ tags:
   - "enum-validation"
   - "optional-fields"
   - "testing"
+  - "truthiness"
+  - "type-coercion"
 
 complexity:
   level: "intermediate"
-  reasoning: "Requires understanding of validation flow and conditional logic ordering"
+  reasoning: "Requires understanding of validation flow, conditional logic ordering, and JavaScript type coercion"
 
 impact:
   performance:
@@ -57,6 +59,7 @@ aliases:
   - "duplicate warning prevention"
   - "validation deduplication"
   - "enum validation"
+  - "presence vs truthiness"
 
 related:
   - "javascript-code-quality"
@@ -83,6 +86,124 @@ confuses users and makes debugging harder.
 1. **Use else-if chains** to ensure only one warning per field
 1. **Exclude empty/null values from enum validation** - an empty string is "empty," not "invalid enum"
 1. **Write integration tests** that verify exactly one warning per field condition
+1. **Use explicit presence checks** - avoid truthiness-based validation that conflates different issues
+
+## Truthiness vs Presence Checks
+
+### The Anti-Pattern: Using Truthiness for Presence
+
+Truthiness-based checks (`!value`, `if (value)`) conflate multiple distinct conditions, producing
+misleading error messages and duplicate warnings.
+
+```javascript
+// WRONG: Truthiness-based validation
+function validateField(frontmatter, field) {
+  if (!frontmatter[field]) {
+    // This triggers for:
+    // - undefined (missing)
+    // - null (missing)
+    // - "" (empty string - should be separate error)
+    // - 0 (legitimate value for numeric fields!)
+    // - false (legitimate value for boolean fields!)
+    errors.push(`Required field '${field}' is missing`);
+  }
+}
+```
+
+### The Correct Pattern: Explicit Presence Checks
+
+Use explicit null/undefined checks, then separate empty string checks:
+
+```javascript
+// RIGHT: Presence-based validation with explicit checks
+function validateField(frontmatter, field) {
+  if (frontmatter[field] === undefined || frontmatter[field] === null) {
+    errors.push(`Required field '${field}' is missing`);
+  } else if (frontmatter[field] === "") {
+    errors.push(`Required field '${field}' is empty`);
+  }
+}
+
+// ALSO RIGHT: Using loose equality shorthand (null == undefined is true)
+function validateField(frontmatter, field) {
+  if (frontmatter[field] == null) {
+    errors.push(`Required field '${field}' is missing`);
+  } else if (frontmatter[field] === "") {
+    errors.push(`Required field '${field}' is empty`);
+  }
+}
+```
+
+### The Guard Clause Pattern: `!= null && !== ''`
+
+When validating a value (checking if it's in an enum, matches a regex, etc.), guard against
+both missing and empty values to prevent spurious "invalid value" errors:
+
+```javascript
+// RIGHT: Guard against missing and empty before validating
+if (value != null && value !== "" && !VALID_VALUES.includes(value)) {
+  errors.push(`Invalid ${fieldName}: '${value}'`);
+}
+
+// WRONG: Missing guard allows empty string to be flagged as "invalid"
+if (!VALID_VALUES.includes(value)) {
+  // Empty string "" will produce: "Invalid fieldName: ''"
+  // Should be "fieldName is empty" instead!
+  errors.push(`Invalid ${fieldName}: '${value}'`);
+}
+```
+
+## Type Coercion Considerations
+
+### When to Use `String()`
+
+YAML parsers may return non-string types for values that look like numbers or dates:
+
+```yaml
+version: 1.0.0 # Parsed as number 1 (decimal truncated!)
+created: 2026-01-30 # Parsed as Date object in some parsers
+```
+
+Use `String()` to safely coerce before string operations:
+
+```javascript
+// RIGHT: Coerce before regex matching
+if (frontmatter.version != null && frontmatter.version !== "") {
+  const versionStr = String(frontmatter.version);
+  if (!versionStr.match(/^\d+\.\d+\.\d+$/)) {
+    warnings.push(`Version '${versionStr}' should be semver format`);
+  }
+}
+
+// WRONG: Assumes string type
+if (frontmatter.version != null && frontmatter.version !== "") {
+  if (!frontmatter.version.match(/^\d+\.\d+\.\d+$/)) {
+    // TypeError if version is a number!
+    warnings.push(`Invalid version format`);
+  }
+}
+```
+
+### Edge Cases with Type Coercion
+
+| Input Value | `String(value)` Result | Notes                         |
+| ----------- | ---------------------- | ----------------------------- |
+| `1.0`       | `"1"`                  | Decimal .0 is lost!           |
+| `null`      | `"null"`               | Check before coercing         |
+| `undefined` | `"undefined"`          | Check before coercing         |
+| `[1, 2]`    | `"1,2"`                | Array becomes comma-separated |
+| `{a: 1}`    | `"[object Object]"`    | Objects need special handling |
+| `true`      | `"true"`               | Boolean to string             |
+| `0`         | `"0"`                  | Zero is preserved             |
+
+**Best Practice**: Always check for `null`/empty before coercing:
+
+```javascript
+if (value != null && value !== "") {
+  const strValue = String(value);
+  // Now safe to validate strValue
+}
+```
 
 ## The Duplicate Warning Problem
 

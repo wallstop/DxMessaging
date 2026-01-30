@@ -49,6 +49,18 @@ function validateComplexityLevel(frontmatter, relativePath) {
 }
 
 /**
+ * Validates that impact is present and is an object (not a primitive or array).
+ *
+ * SYNC: Keep presence check pattern in sync with validate-skills.js validateSkill() impact ratings validation block
+ *
+ * @param {Object} frontmatter - The parsed frontmatter object
+ * @returns {boolean} True if impact is a valid object to iterate over
+ */
+function isValidImpactObject(frontmatter) {
+    return frontmatter.impact != null && typeof frontmatter.impact === 'object';
+}
+
+/**
  * Validates the impact.performance.rating field of a frontmatter object.
  *
  * SYNC: Keep logic in sync with validate-skills.js validateSkill() impact.performance.rating validation block
@@ -548,6 +560,178 @@ describe("validate-skills optional field validation", () => {
             expect(warnings).toHaveLength(0);
         });
     });
+
+    describe("exotic value types", () => {
+        describe("NaN values", () => {
+            test("should not warn for complexity.level value of NaN (is present, not null/undefined)", () => {
+                const frontmatter = {
+                    title: "Sample Skill",
+                    id: "sample-skill",
+                    complexity: {
+                        level: NaN, // NaN is present (not null/undefined), so not "missing"
+                    },
+                };
+
+                const warnings = validateComplexityLevel(frontmatter, testPath);
+
+                // Uses explicit null check, so NaN is treated as present
+                expect(warnings).toHaveLength(0);
+            });
+
+            test("should not warn for impact.performance.rating value of NaN (is present, not null/undefined)", () => {
+                const frontmatter = {
+                    title: "Sample Skill",
+                    id: "sample-skill",
+                    impact: {
+                        performance: {
+                            rating: NaN, // NaN is present (not null/undefined), so not "missing"
+                        },
+                    },
+                };
+
+                const warnings = validatePerformanceRating(frontmatter, testPath);
+
+                // Uses explicit null check, so NaN is treated as present
+                expect(warnings).toHaveLength(0);
+            });
+        });
+
+        describe("empty array values for scalar fields", () => {
+            test("should not warn for complexity.level as empty array (is present, not null/undefined)", () => {
+                const frontmatter = {
+                    title: "Sample Skill",
+                    id: "sample-skill",
+                    complexity: {
+                        level: [], // Empty array is present (not null/undefined)
+                    },
+                };
+
+                const warnings = validateComplexityLevel(frontmatter, testPath);
+
+                // String([]) === "", but the local function only checks for null/undefined
+                // The actual validateSkill will produce an invalid enum warning
+                expect(warnings).toHaveLength(0);
+            });
+
+            test("should not warn for impact.performance.rating as empty array (is present, not null/undefined)", () => {
+                const frontmatter = {
+                    title: "Sample Skill",
+                    id: "sample-skill",
+                    impact: {
+                        performance: {
+                            rating: [], // Empty array is present (not null/undefined)
+                        },
+                    },
+                };
+
+                const warnings = validatePerformanceRating(frontmatter, testPath);
+
+                // String([]) === "", but the local function only checks for null/undefined
+                expect(warnings).toHaveLength(0);
+            });
+        });
+
+        describe("object values for scalar fields", () => {
+            test("should not warn for complexity.level as object (is present, not null/undefined)", () => {
+                const frontmatter = {
+                    title: "Sample Skill",
+                    id: "sample-skill",
+                    complexity: {
+                        level: { nested: "value" }, // Object is present (not null/undefined)
+                    },
+                };
+
+                const warnings = validateComplexityLevel(frontmatter, testPath);
+
+                // String({}) === "[object Object]", but the local function only checks for null/undefined
+                expect(warnings).toHaveLength(0);
+            });
+
+            test("should not warn for impact.performance.rating as object (is present, not null/undefined)", () => {
+                const frontmatter = {
+                    title: "Sample Skill",
+                    id: "sample-skill",
+                    impact: {
+                        performance: {
+                            rating: { nested: "value" }, // Object is present (not null/undefined)
+                        },
+                    },
+                };
+
+                const warnings = validatePerformanceRating(frontmatter, testPath);
+
+                // String({}) === "[object Object]", but the local function only checks for null/undefined
+                expect(warnings).toHaveLength(0);
+            });
+        });
+    });
+
+    describe("impact object type validation", () => {
+        test("should return true for valid impact object", () => {
+            const frontmatter = {
+                impact: { performance: { rating: "high" } },
+            };
+
+            expect(isValidImpactObject(frontmatter)).toBe(true);
+        });
+
+        test("should return false for null impact", () => {
+            const frontmatter = {
+                impact: null,
+            };
+
+            expect(isValidImpactObject(frontmatter)).toBe(false);
+        });
+
+        test("should return false for undefined impact", () => {
+            const frontmatter = {};
+
+            expect(isValidImpactObject(frontmatter)).toBe(false);
+        });
+
+        test("should return false for string impact (typeof string !== object)", () => {
+            const frontmatter = {
+                impact: "not-an-object",
+            };
+
+            expect(isValidImpactObject(frontmatter)).toBe(false);
+        });
+
+        test("should return false for number impact (typeof number !== object)", () => {
+            const frontmatter = {
+                impact: 42,
+            };
+
+            expect(isValidImpactObject(frontmatter)).toBe(false);
+        });
+
+        test("should return false for boolean impact (typeof boolean !== object)", () => {
+            const frontmatter = {
+                impact: true,
+            };
+
+            expect(isValidImpactObject(frontmatter)).toBe(false);
+        });
+
+        test("should return true for empty object impact (is valid object, just empty)", () => {
+            const frontmatter = {
+                impact: {},
+            };
+
+            // Empty object is still a valid object to iterate over (Object.keys returns [])
+            expect(isValidImpactObject(frontmatter)).toBe(true);
+        });
+
+        test("should return true for array impact (arrays are objects in JavaScript)", () => {
+            const frontmatter = {
+                impact: [],
+            };
+
+            // Arrays have typeof === 'object' in JavaScript, so they pass the check
+            // This is technically correct, though unusual for this field
+            expect(isValidImpactObject(frontmatter)).toBe(true);
+        });
+    });
 });
 
 /**
@@ -773,6 +957,590 @@ describe("validate-skills integration tests for optional fields", () => {
             expect(performanceWarnings).toHaveLength(1);
             expect(performanceWarnings[0].message).toContain("Invalid rating");
             expect(performanceWarnings[0].message).toContain("super-high");
+        });
+    });
+
+    describe("exotic value types produce meaningful warnings via String coercion", () => {
+        test("should produce warning for version as NaN (String(NaN) === 'NaN' does not match semver)", () => {
+            // NaN cannot be directly serialized in YAML, but we test the validation logic
+            const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: ".nan"
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for version field only
+            const versionWarnings = result.warnings.filter((w) => w.field === "version");
+
+            // String(".nan") does not match semver pattern
+            expect(versionWarnings).toHaveLength(1);
+            expect(versionWarnings[0].message).toContain("should be in semver format");
+        });
+
+        test("should produce warning for version as object-like string (simulating String({}) coercion)", () => {
+            const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "[object Object]"
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for version field only
+            const versionWarnings = result.warnings.filter((w) => w.field === "version");
+
+            // String({}) === "[object Object]" does not match semver pattern
+            expect(versionWarnings).toHaveLength(1);
+            expect(versionWarnings[0].message).toContain("[object Object]");
+            expect(versionWarnings[0].message).toContain("should be in semver format");
+        });
+
+        test("should produce warning for created date as invalid format (simulating String([]) coercion)", () => {
+            // YAML parses [] as an empty array, which when stringified becomes ""
+            // For testing, we use a string that shows the behavior
+            const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "[]"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            const result = validateSkill(skillFile);
+
+            // Filter warnings for created field only
+            const createdWarnings = result.warnings.filter((w) => w.field === "created");
+
+            // "[]" does not match ISO date pattern YYYY-MM-DD
+            expect(createdWarnings).toHaveLength(1);
+            expect(createdWarnings[0].message).toContain("should be in ISO format");
+        });
+
+        test("should handle impact as non-object type gracefully (no crash)", () => {
+            // When impact is a string, the typeof check should prevent Object.keys from crashing
+            const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+impact: "not-an-object"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            // Should not throw - the typeof check prevents iteration over non-objects
+            const result = validateSkill(skillFile);
+
+            // Should have warning about missing impact.performance.rating (since impact is not an object)
+            const impactWarnings = result.warnings.filter(
+                (w) => w.field === "impact.performance.rating"
+            );
+            expect(impactWarnings).toHaveLength(1);
+            expect(impactWarnings[0].message).toContain("Missing 'impact.performance.rating'");
+        });
+
+        test("should handle impact as number gracefully (no crash)", () => {
+            const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+impact: 42
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            // Should not throw - the typeof check prevents iteration over non-objects
+            const result = validateSkill(skillFile);
+
+            // Should have warning about missing impact.performance.rating (since impact is not an object)
+            const impactWarnings = result.warnings.filter(
+                (w) => w.field === "impact.performance.rating"
+            );
+            expect(impactWarnings).toHaveLength(1);
+        });
+
+        test("should handle impact as boolean gracefully (no crash)", () => {
+            const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+impact: true
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+            const skillFile = createMockSkillFile(tempDir, content);
+
+            // Should not throw - the typeof check prevents iteration over non-objects
+            const result = validateSkill(skillFile);
+
+            // Should have warning about missing impact.performance.rating (since impact is not an object)
+            const impactWarnings = result.warnings.filter(
+                (w) => w.field === "impact.performance.rating"
+            );
+            expect(impactWarnings).toHaveLength(1);
+        });
+    });
+
+    describe("exotic value types for version and date fields", () => {
+        describe("NaN values", () => {
+            test("should produce warning for version field containing YAML NaN (.nan)", () => {
+                // YAML parses .nan as NaN, which String() converts to "NaN"
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: .nan
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const versionWarnings = result.warnings.filter((w) => w.field === "version");
+
+                // String(NaN) === "NaN" does not match semver pattern
+                expect(versionWarnings).toHaveLength(1);
+                expect(versionWarnings[0].message).toContain("should be in semver format");
+            });
+
+            test("should produce warning for created date field containing YAML NaN (.nan)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: .nan
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const createdWarnings = result.warnings.filter((w) => w.field === "created");
+
+                // String(NaN) === "NaN" does not match ISO date pattern
+                expect(createdWarnings).toHaveLength(1);
+                expect(createdWarnings[0].message).toContain("should be in ISO format");
+            });
+
+            test("should produce warning for updated date field containing YAML NaN (.nan)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated: .nan
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const updatedWarnings = result.warnings.filter((w) => w.field === "updated");
+
+                // String(NaN) === "NaN" does not match ISO date pattern
+                expect(updatedWarnings).toHaveLength(1);
+                expect(updatedWarnings[0].message).toContain("should be in ISO format");
+            });
+        });
+
+        describe("empty array values (YAML parses [] as empty array, String([]) is empty)", () => {
+            test("should produce warning for version as empty array (empty string is invalid semver)", () => {
+                // YAML parses [] as an empty array; String([]) === ""
+                // The value is truthy (not null/undefined), so validation runs
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: []
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const versionWarnings = result.warnings.filter((w) => w.field === "version");
+
+                // YAML parses [] as empty array, which is truthy (not null/undefined)
+                // String([]) === "" produces invalid semver format warning
+                expect(versionWarnings).toHaveLength(1);
+                expect(versionWarnings[0].message).toContain("should be in semver format");
+            });
+
+            test("should produce warning for created date as empty array (empty string is invalid date format)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: []
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const createdWarnings = result.warnings.filter((w) => w.field === "created");
+
+                // YAML parses [] as empty array which is truthy (not null/undefined)
+                // The validation runs and String([]) === "" produces a warning
+                expect(createdWarnings).toHaveLength(1);
+                expect(createdWarnings[0].message).toContain("should be in ISO format");
+            });
+
+            test("should produce warning for updated date as empty array (empty string is invalid date format)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated: []
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const updatedWarnings = result.warnings.filter((w) => w.field === "updated");
+
+                // YAML parses [] as empty array which is truthy (not null/undefined)
+                // The validation runs and String([]) === "" produces a warning
+                expect(updatedWarnings).toHaveLength(1);
+                expect(updatedWarnings[0].message).toContain("should be in ISO format");
+            });
+        });
+
+        describe("object values (YAML parses {} as empty object)", () => {
+            test("should produce warning for version as empty object (invalid semver)", () => {
+                // YAML parses {} as an empty object
+                // String({}) in JavaScript is "[object Object]" but YAML/gray-matter may stringify differently
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: {}
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const versionWarnings = result.warnings.filter((w) => w.field === "version");
+
+                // Empty object does not match semver pattern
+                expect(versionWarnings).toHaveLength(1);
+                expect(versionWarnings[0].message).toContain("should be in semver format");
+            });
+
+            test("should produce warning for created date as empty object (invalid date format)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: {}
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const createdWarnings = result.warnings.filter((w) => w.field === "created");
+
+                // Empty object does not match ISO date pattern
+                expect(createdWarnings).toHaveLength(1);
+                expect(createdWarnings[0].message).toContain("should be in ISO format");
+            });
+
+            test("should produce warning for updated date as empty object (invalid date format)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated: {}
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const updatedWarnings = result.warnings.filter((w) => w.field === "updated");
+
+                // Empty object does not match ISO date pattern
+                expect(updatedWarnings).toHaveLength(1);
+                expect(updatedWarnings[0].message).toContain("should be in ISO format");
+            });
+        });
+
+        describe("non-empty array values (String([1,2]) coerces to '1,2')", () => {
+            test("should produce warning for version as non-empty array (invalid semver)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version:
+  - 1
+  - 0
+  - 0
+created: "2026-01-30"
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const versionWarnings = result.warnings.filter((w) => w.field === "version");
+
+                // String([1, 0, 0]) === "1,0,0" does not match semver pattern (needs dots, not commas)
+                expect(versionWarnings).toHaveLength(1);
+                expect(versionWarnings[0].message).toContain("should be in semver format");
+            });
+
+            test("should produce warning for created date as non-empty array (invalid date)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created:
+  - 2026
+  - 01
+  - 30
+updated: "2026-01-30"
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const createdWarnings = result.warnings.filter((w) => w.field === "created");
+
+                // String([2026, 1, 30]) === "2026,1,30" does not match ISO date pattern
+                expect(createdWarnings).toHaveLength(1);
+                expect(createdWarnings[0].message).toContain("should be in ISO format");
+            });
+
+            test("should produce warning for updated date as non-empty array (invalid date)", () => {
+                const content = `---
+title: "Test Skill"
+id: "test-skill"
+category: "testing"
+version: "1.0.0"
+created: "2026-01-30"
+updated:
+  - 2026
+  - 01
+  - 30
+status: "stable"
+---
+
+## Overview
+
+Test content.
+
+## Solution
+
+Test solution.
+`;
+                const skillFile = createMockSkillFile(tempDir, content);
+
+                const result = validateSkill(skillFile);
+
+                const updatedWarnings = result.warnings.filter((w) => w.field === "updated");
+
+                // String([2026, 1, 30]) === "2026,1,30" does not match ISO date pattern
+                expect(updatedWarnings).toHaveLength(1);
+                expect(updatedWarnings[0].message).toContain("should be in ISO format");
+            });
         });
     });
 });

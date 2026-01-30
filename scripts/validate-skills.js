@@ -281,7 +281,8 @@ function validateSkill(skillFile) {
     }
 
     // Validate id matches filename
-    if (frontmatter.id && frontmatter.id !== skillFile.expectedId) {
+    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
+    if (frontmatter.id != null && frontmatter.id !== '' && frontmatter.id !== skillFile.expectedId) {
         errors.push(
             new ValidationError(
                 skillFile.relativePath,
@@ -292,7 +293,8 @@ function validateSkill(skillFile) {
     }
 
     // Validate category matches folder
-    if (frontmatter.category && frontmatter.category !== skillFile.category) {
+    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
+    if (frontmatter.category != null && frontmatter.category !== '' && frontmatter.category !== skillFile.category) {
         errors.push(
             new ValidationError(
                 skillFile.relativePath,
@@ -303,7 +305,8 @@ function validateSkill(skillFile) {
     }
 
     // Validate category is known
-    if (frontmatter.category && !VALID_CATEGORIES.includes(frontmatter.category)) {
+    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
+    if (frontmatter.category != null && frontmatter.category !== '' && !VALID_CATEGORIES.includes(frontmatter.category)) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,
@@ -314,7 +317,8 @@ function validateSkill(skillFile) {
     }
 
     // Validate status
-    if (frontmatter.status && !VALID_STATUSES.includes(frontmatter.status)) {
+    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
+    if (frontmatter.status != null && frontmatter.status !== '' && !VALID_STATUSES.includes(frontmatter.status)) {
         errors.push(
             new ValidationError(
                 skillFile.relativePath,
@@ -341,7 +345,8 @@ function validateSkill(skillFile) {
     }
 
     // Validate impact ratings
-    if (frontmatter.impact) {
+    // SYNC: Keep presence check pattern in sync with validate-skills-optional-fields.test.js isValidImpactObject()
+    if (frontmatter.impact != null && typeof frontmatter.impact === 'object') {
         // Warn about unknown impact types
         for (const impactType of Object.keys(frontmatter.impact)) {
             if (!VALID_IMPACT_TYPES.includes(impactType)) {
@@ -374,14 +379,19 @@ function validateSkill(skillFile) {
     }
 
     // Validate version format (semver-like)
-    if (frontmatter.version && !frontmatter.version.match(/^\d+\.\d+\.\d+$/)) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'version',
-                `Version '${frontmatter.version}' should be in semver format (e.g., 1.0.0)`
-            )
-        );
+    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
+    if (frontmatter.version != null && frontmatter.version !== '') {
+        // Coerce to string to handle numeric or other non-string types
+        const versionStr = String(frontmatter.version);
+        if (!versionStr.match(/^\d+\.\d+\.\d+$/)) {
+            warnings.push(
+                new ValidationError(
+                    skillFile.relativePath,
+                    'version',
+                    `Version '${versionStr}' should be in semver format (e.g., 1.0.0)`
+                )
+            );
+        }
     }
 
     // Warn about missing optional fields that affect skills index display
@@ -452,15 +462,20 @@ function validateSkill(skillFile) {
     }
 
     // Validate date format
+    // SYNC: Keep presence check pattern in sync with validate-skills-required-fields.test.js
     for (const dateField of ['created', 'updated']) {
-        if (frontmatter[dateField] && !frontmatter[dateField].match(/^\d{4}-\d{2}-\d{2}$/)) {
-            warnings.push(
-                new ValidationError(
-                    skillFile.relativePath,
-                    dateField,
-                    `Date '${frontmatter[dateField]}' should be in ISO format (YYYY-MM-DD)`
-                )
-            );
+        if (frontmatter[dateField] != null && frontmatter[dateField] !== '') {
+            // Coerce to string to handle numeric or other non-string types
+            const dateStr = String(frontmatter[dateField]);
+            if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                warnings.push(
+                    new ValidationError(
+                        skillFile.relativePath,
+                        dateField,
+                        `Date '${dateStr}' should be in ISO format (YYYY-MM-DD)`
+                    )
+                );
+            }
         }
     }
 
