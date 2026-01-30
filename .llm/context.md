@@ -127,10 +127,54 @@ See the [Git Workflow Robustness skill](./skills/testing/git-workflow-robustness
 - All declared constants and variables must be used or removed.
 - Prefer `const` over `let`; use `let` only when reassignment is necessary.
 - When adding validation constants (e.g., `VALID_X`), ensure corresponding validation logic uses them.
-- **Falsy value checking**: When checking if a property is missing (undefined/null) vs wrong type, use explicit checks:
-  - Use `x === undefined || x === null` (or `x == null`) to check for "missing"
-  - Use `!x` only when you truly want to catch all falsy values (empty string, 0, false, null, undefined)
-  - **Empty array pitfall**: `[]` is truthy, so `![]` is `false`. If you write `if (!frontmatter.tags)` expecting to catch missing tags, it won't trigger when `tags: []`—the empty array passes this check, potentially causing bugs downstream
+
+#### Presence vs Value Validation
+
+When validating input, clearly separate "presence" checks (is the value defined?) from "value" checks (is the defined value valid?). This two-phase approach produces clearer error messages and more maintainable code.
+
+##### Checking for missing values (undefined/null)
+
+```javascript
+// CORRECT: Explicit null/undefined check
+if (frontmatter[field] === undefined || frontmatter[field] === null) {
+  errors.push(`Required field '${field}' is missing`);
+}
+
+// ALSO CORRECT: Loose equality shorthand (null == undefined is true)
+if (frontmatter[field] == null) {
+  errors.push(`Required field '${field}' is missing`);
+}
+
+// WRONG: Falsy check conflates missing with empty/invalid
+if (!frontmatter[field]) {
+  errors.push(`Required field '${field}' is missing`); // Misleading: also triggers for ""
+}
+```
+
+###### Two-phase validation pattern
+
+```javascript
+// Phase 1: Check presence
+if (value === undefined || value === null) {
+  errors.push("Value is missing");
+} else if (value === "") {
+  // Phase 2: Check value validity (only if present)
+  errors.push("Value is empty");
+} else if (!isValidFormat(value)) {
+  errors.push("Value has invalid format");
+}
+```
+
+###### When to use falsy checks (`!x`)
+
+- Only when you explicitly want to catch ALL falsy values: `undefined`, `null`, `0`, `""`, `false`, `NaN`
+- Common legitimate uses: `if (!array.length)` to check empty arrays, `if (!str.trim())` to check whitespace-only strings
+
+###### Common pitfalls
+
+- **Empty array is truthy**: `[]` is truthy, so `![]` is `false`. Use `!array.length` instead.
+- **Zero is falsy**: `0` is falsy, so `!count` fails when count is legitimately zero.
+- **Empty string vs missing**: `!value` treats `""` the same as `undefined`, but they often need different error messages.
 
 ### Jest Test Style
 

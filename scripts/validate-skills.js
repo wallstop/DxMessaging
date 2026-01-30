@@ -35,6 +35,7 @@ const EXCLUDED_DIRS = ['templates'];
 // Files excluded from "short file" informational messages
 const SHORT_FILE_EXCLUDES = ['context.md'];
 
+// SYNC: Keep in sync with validate-skills-required-fields.test.js REQUIRED_FIELDS
 const REQUIRED_FIELDS = ['title', 'id', 'category', 'version', 'created', 'updated', 'status'];
 
 // File size limits (in lines)
@@ -270,9 +271,12 @@ function validateSkill(skillFile) {
     }
 
     // Check required fields
+    // SYNC: Keep logic in sync with validate-skills-required-fields.test.js validateRequiredField()
     for (const field of REQUIRED_FIELDS) {
-        if (!frontmatter[field]) {
+        if (frontmatter[field] === undefined || frontmatter[field] === null) {
             errors.push(new ValidationError(skillFile.relativePath, field, `Required field '${field}' is missing`));
+        } else if (frontmatter[field] === '') {
+            errors.push(new ValidationError(skillFile.relativePath, field, `Required field '${field}' is empty`));
         }
     }
 
@@ -322,8 +326,8 @@ function validateSkill(skillFile) {
 
     // Validate complexity level
     if (
-        frontmatter.complexity &&
-        frontmatter.complexity.level &&
+        frontmatter.complexity != null &&
+        frontmatter.complexity.level != null &&
         !VALID_COMPLEXITY_LEVELS.includes(frontmatter.complexity.level)
     ) {
         warnings.push(
@@ -352,8 +356,8 @@ function validateSkill(skillFile) {
         // Validate ratings for known impact types
         for (const impactType of VALID_IMPACT_TYPES) {
             if (
-                frontmatter.impact[impactType] &&
-                frontmatter.impact[impactType].rating &&
+                frontmatter.impact[impactType] != null &&
+                frontmatter.impact[impactType].rating != null &&
                 !VALID_IMPACT_RATINGS.includes(frontmatter.impact[impactType].rating)
             ) {
                 warnings.push(
@@ -381,7 +385,7 @@ function validateSkill(skillFile) {
     // Warn about missing optional fields that affect skills index display
     // These are not required but cause '?' placeholders in the generated index
     // SYNC: Keep logic in sync with validate-skills-optional-fields.test.js validateComplexityLevel()
-    if (!frontmatter.complexity || !frontmatter.complexity.level) {
+    if (frontmatter.complexity == null || frontmatter.complexity.level == null) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,
@@ -389,15 +393,31 @@ function validateSkill(skillFile) {
                 `Missing 'complexity.level' - will show '?' in Complexity column of skills index`
             )
         );
+    } else if (frontmatter.complexity.level === '') {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'complexity.level',
+                `Empty 'complexity.level' - will show '?' in Complexity column of skills index`
+            )
+        );
     }
 
     // SYNC: Keep logic in sync with validate-skills-optional-fields.test.js validatePerformanceRating()
-    if (!frontmatter.impact || !frontmatter.impact.performance || !frontmatter.impact.performance.rating) {
+    if (frontmatter.impact == null || frontmatter.impact.performance == null || frontmatter.impact.performance.rating == null) {
         warnings.push(
             new ValidationError(
                 skillFile.relativePath,
                 'impact.performance.rating',
                 `Missing 'impact.performance.rating' - will show '?' in Performance column of skills index`
+            )
+        );
+    } else if (frontmatter.impact.performance.rating === '') {
+        warnings.push(
+            new ValidationError(
+                skillFile.relativePath,
+                'impact.performance.rating',
+                `Empty 'impact.performance.rating' - will show '?' in Performance column of skills index`
             )
         );
     }

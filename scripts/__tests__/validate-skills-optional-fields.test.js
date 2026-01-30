@@ -31,11 +31,17 @@
 function validateComplexityLevel(frontmatter, relativePath) {
     const warnings = [];
 
-    if (!frontmatter.complexity || !frontmatter.complexity.level) {
+    if (frontmatter.complexity == null || frontmatter.complexity.level == null) {
         warnings.push({
             file: relativePath,
             field: "complexity.level",
             message: `Missing 'complexity.level' - will show '?' in Complexity column of skills index`,
+        });
+    } else if (frontmatter.complexity.level === '') {
+        warnings.push({
+            file: relativePath,
+            field: "complexity.level",
+            message: `Empty 'complexity.level' - will show '?' in Complexity column of skills index`,
         });
     }
 
@@ -54,11 +60,17 @@ function validateComplexityLevel(frontmatter, relativePath) {
 function validatePerformanceRating(frontmatter, relativePath) {
     const warnings = [];
 
-    if (!frontmatter.impact || !frontmatter.impact.performance || !frontmatter.impact.performance.rating) {
+    if (frontmatter.impact == null || frontmatter.impact.performance == null || frontmatter.impact.performance.rating == null) {
         warnings.push({
             file: relativePath,
             field: "impact.performance.rating",
             message: `Missing 'impact.performance.rating' - will show '?' in Performance column of skills index`,
+        });
+    } else if (frontmatter.impact.performance.rating === '') {
+        warnings.push({
+            file: relativePath,
+            field: "impact.performance.rating",
+            message: `Empty 'impact.performance.rating' - will show '?' in Performance column of skills index`,
         });
     }
 
@@ -160,7 +172,7 @@ describe("validate-skills optional field validation", () => {
 
                 expect(warnings).toHaveLength(1);
                 expect(warnings[0].field).toBe("complexity.level");
-                expect(warnings[0].message).toContain("Missing 'complexity.level'");
+                expect(warnings[0].message).toContain("Empty 'complexity.level'");
             });
         });
 
@@ -372,7 +384,7 @@ describe("validate-skills optional field validation", () => {
 
                 expect(warnings).toHaveLength(1);
                 expect(warnings[0].field).toBe("impact.performance.rating");
-                expect(warnings[0].message).toContain("Missing 'impact.performance.rating'");
+                expect(warnings[0].message).toContain("Empty 'impact.performance.rating'");
             });
         });
 
@@ -472,36 +484,68 @@ describe("validate-skills optional field validation", () => {
             expect(performanceWarnings).toHaveLength(0);
         });
 
-        test("should warn for falsy complexity.level values like zero (documents current behavior)", () => {
+        test("should not warn for complexity.level value of zero (uses explicit null check)", () => {
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
                 complexity: {
-                    level: 0, // 0 is falsy, truthy check fails
+                    level: 0, // 0 is present (not null/undefined), so not "missing"
                 },
             };
 
             const warnings = validateComplexityLevel(frontmatter, testPath);
 
-            // The current implementation treats 0 as falsy/missing
-            expect(warnings).toHaveLength(1);
+            // Uses explicit null check, so 0 is treated as present (not missing)
+            expect(warnings).toHaveLength(0);
         });
 
-        test("should warn for falsy impact.performance.rating values like zero (documents current behavior)", () => {
+        test("should not warn for impact.performance.rating value of zero (uses explicit null check)", () => {
             const frontmatter = {
                 title: "Sample Skill",
                 id: "sample-skill",
                 impact: {
                     performance: {
-                        rating: 0, // 0 is falsy, truthy check fails
+                        rating: 0, // 0 is present (not null/undefined), so not "missing"
                     },
                 },
             };
 
             const warnings = validatePerformanceRating(frontmatter, testPath);
 
-            // The current implementation treats 0 as falsy/missing
-            expect(warnings).toHaveLength(1);
+            // Uses explicit null check, so 0 is treated as present (not missing)
+            expect(warnings).toHaveLength(0);
+        });
+
+        test("should not warn for complexity.level value of false (uses explicit null check)", () => {
+            const frontmatter = {
+                title: "Sample Skill",
+                id: "sample-skill",
+                complexity: {
+                    level: false, // false is present (not null/undefined), so not "missing"
+                },
+            };
+
+            const warnings = validateComplexityLevel(frontmatter, testPath);
+
+            // Uses explicit null check, so false is treated as present (not missing)
+            expect(warnings).toHaveLength(0);
+        });
+
+        test("should not warn for impact.performance.rating value of false (uses explicit null check)", () => {
+            const frontmatter = {
+                title: "Sample Skill",
+                id: "sample-skill",
+                impact: {
+                    performance: {
+                        rating: false, // false is present (not null/undefined), so not "missing"
+                    },
+                },
+            };
+
+            const warnings = validatePerformanceRating(frontmatter, testPath);
+
+            // Uses explicit null check, so false is treated as present (not missing)
+            expect(warnings).toHaveLength(0);
         });
     });
 });
