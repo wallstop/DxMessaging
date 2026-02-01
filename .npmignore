@@ -1,0 +1,123 @@
+# npm package exclusions for com.wallstop-studios.dxmessaging
+#
+# This file works together with package.json "files" to control npm packaging:
+# - "files" in package.json is an ALLOWLIST of what to include
+# - This .npmignore file EXCLUDES items from within those allowed directories
+#
+# Only exclusions for files within Editor/, Runtime/, Samples~/, and
+# SourceGenerators/ are needed here. Files outside those directories are
+# already excluded by not being in the "files" allowlist.
+
+# =============================================================================
+# Build Artifacts (within included directories)
+# =============================================================================
+**/.vs/
+**/.idea/
+**/bin/
+**/obj/
+**/*.pdb
+
+# =============================================================================
+# SourceGenerator Exclusions
+# =============================================================================
+# Exclude the test project entirely (both folder and .meta file)
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/
+SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests.meta
+
+# =============================================================================
+# Tests (not needed in distributed package)
+# =============================================================================
+Tests/
+Tests.meta
+
+# =============================================================================
+# Development Files
+# =============================================================================
+# Scripts and CI
+scripts/
+scripts.meta
+.github/
+
+# AI/LLM guidance
+.llm/
+AGENTS.md
+AGENTS.md.meta
+CLAUDE.md
+CLAUDE.md.meta
+
+# Git hooks and configuration
+.husky/
+.git/
+.gitattributes
+
+# Devcontainer
+.devcontainer/
+
+# Tool configuration
+.config/
+
+# =============================================================================
+# Documentation Build (source docs included, build tooling excluded)
+# =============================================================================
+requirements-docs.txt
+requirements-docs.txt.meta
+mkdocs.yml
+mkdocs.yml.meta
+docs/hooks.py
+docs/hooks.py.meta
+docs/__pycache__/
+
+# MkDocs output and progress tracking
+site/
+site.meta
+progress/
+progress.meta
+
+# =============================================================================
+# Node.js / JavaScript Tooling
+# =============================================================================
+node_modules/
+node_modules.meta
+package-lock.json
+package-lock.json.meta
+jest.config.js
+jest.config.js.meta
+jest.config.mjs
+jest.config.mjs.meta
+coverage/
+coverage.meta
+__pycache__.meta
+
+# =============================================================================
+# Linting and Formatting Configuration
+# =============================================================================
+.editorconfig
+.prettierrc
+.prettierrc.json
+.prettierignore
+.markdownlint.json
+.markdownlint.jsonc
+.markdownlint-cli2.jsonc
+.markdownlintignore
+.yamllint.yaml
+.cspell.json
+.lychee.toml
+.csharpierignore
+.csharpierrc.json
+.cursorrules
+.pre-commit-config.yaml
+
+# =============================================================================
+# Contributing and Planning Documents
+# =============================================================================
+CONTRIBUTING.md
+CONTRIBUTING.md.meta
+PLAN.md
+PLAN.md.meta
+GH-PAGES-PLAN.md
+GH-PAGES-PLAN.md.meta
+
+# =============================================================================
+# Python Virtual Environment
+# =============================================================================
+.venv/
