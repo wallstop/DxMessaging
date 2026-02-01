@@ -40,8 +40,7 @@
     "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/*.cs.meta",
     "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/*.csproj",
     "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/*.csproj.meta",
-    "SourceGenerators/*.meta",
-    "!SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests.meta",
+    "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.meta",
     "CHANGELOG.md",
     "CHANGELOG.md.meta",
     "LICENSE.md",
@@ -53,12 +52,7 @@
     "package.json.meta",
     "Editor.meta",
     "Runtime.meta",
-    "SourceGenerators.meta",
-    "!**/.vs/**",
-    "!**/.idea/**",
-    "!**/bin/**",
-    "!**/obj/**",
-    "!**/*.pdb"
+    "SourceGenerators.meta"
   ],
   "scripts": {
     "test": "jest",
