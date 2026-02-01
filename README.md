@@ -1,7 +1,7 @@
 # DxMessaging for Unity
 
 <p align="center">
-  <img src="docs/images/DxMessaging-banner.svg" alt="DxMessaging Banner" width="800"/>
+  <img src="docs/images/DxMessaging-banner.svg" alt="DxMessaging - Type-safe messaging system for Unity" width="800"/>
 </p>
 
 <p align="center">
@@ -31,9 +31,11 @@ Need install instructions? Try [OpenUPM](https://openupm.com/packages/com.wallst
 ## Table of Contents
 
 - [30-Second Elevator Pitch](#30-second-elevator-pitch)
+- [Mental Model: How to Think About DxMessaging](#mental-model-how-to-think-about-dxmessaging)
 - [Quick Start (5 Minutes)](#quick-start-5-minutes)
+- [Dependency Injection (DI) Compatible](#-dependency-injection-di-compatible)
 - [Is DxMessaging Right for You?](#is-dxmessaging-right-for-you)
-- [Why DxMessaging?](#why-dxmessaging)
+- [Why DxMessaging](#why-dxmessaging)
 - [Key Features](#key-features)
 - [The DxMessaging Solution](#the-dxmessaging-solution)
 - [Real-World Examples](#real-world-examples)
@@ -65,11 +67,111 @@ Need install instructions? Try [OpenUPM](https://openupm.com/packages/com.wallst
 
 ##### Three simple message types
 
-1. **Untargeted** - "Everyone listen!" (pause game, settings changed)
-1. **Targeted** - "Tell Player to heal" (commands to specific entities)
-1. **Broadcast** - "I took damage" (things that happen to _you_ that others can observe)
+1. **Untargeted** - Global announcements
+1. **Targeted** - Commands to specific entities
+1. **Broadcast** - Observable facts from a source
+
+See [Mental Model](#mental-model-how-to-think-about-dxmessaging) for how to choose the right type.
 
 **One line:** It's a type-safe messaging system with automatic lifecycle management and built-in inspection tools.
+
+---
+
+## Mental Model: How to Think About DxMessaging
+
+### The Core Idea
+
+DxMessaging is built around one principle: **it gets out of your way**.
+
+You have data. You need to pass it around. That's the problem. DxMessaging provides fast, simple primitives as building blocks. You model changes as message types with optional context, using game primitives (GameObjects, components) as that context.
+
+**You don't build your game INTO the messaging system.** It's opt-in and optional—a tool you reach for when it helps.
+
+### The Three Message Types: Real-World Analogies
+
+> 💡 _Diagrams below require Mermaid support. If they don't render, try viewing this file directly on [GitHub](https://github.com/wallstop/DxMessaging)._
+
+Each message type maps to a real-world communication pattern:
+
+#### 1. Untargeted = PA System 📢
+
+```mermaid
+flowchart LR
+    S[Someone] -->|announces| PA[📢 PA System]
+    PA --> L1[Listener A]
+    PA --> L2[Listener B]
+    PA --> L3[Listener C]
+```
+
+Announcements with no specific recipient. Everyone who cares can hear it.
+
+**Examples:** "The game is paused", "Settings changed", "Scene finished loading"
+
+#### 2. Targeted = Addressed Letter 📬
+
+```mermaid
+flowchart LR
+    S[Sender] -->|"To: Player"| Letter[📬 Message Bus]
+    Letter --> Player[Player receives]
+    Other1[Enemy A] -.->|ignores| Letter
+    Other2[Enemy B] -.->|ignores| Letter
+```
+
+Commands to a specific recipient. Only that entity receives them.
+
+**Examples:** "Player, heal for 10 HP", "Door #7, open", "This enemy, take 25 damage"
+
+#### 3. Broadcast = Radio Station 📻
+
+```mermaid
+flowchart LR
+    Source[Enemy] -->|"I took damage!"| Radio[📻 Message Bus]
+    Radio --> L1[Damage Numbers UI]
+    Radio --> L2[Achievement Tracker]
+    Radio --> L3[Analytics]
+    Radio --> L4[Combat Log]
+```
+
+Facts emitted by a specific source. No intended recipient—just an origin. Anyone can tune in.
+
+**Examples:** "This enemy took 25 damage", "The player picked up item X", "This chest opened"
+
+### Choosing the Right Message Type
+
+```mermaid
+flowchart TD
+    Start([I need to send a message])
+    Start --> Q1{Does it matter<br/>WHO sent it?}
+
+    Q1 -->|No| Q2{Does it matter<br/>WHO receives it?}
+    Q2 -->|No| Untargeted[Use UNTARGETED<br/>Global announcement]
+    Q2 -->|Yes| Targeted[Use TARGETED<br/>Directed command]
+
+    Q1 -->|Yes| Q3{Am I commanding<br/>someone to act?}
+    Q3 -->|Yes| Targeted
+    Q3 -->|No| Broadcast[Use BROADCAST<br/>Observable fact]
+```
+
+| Question                            | Untargeted | Targeted | Broadcast |
+| ----------------------------------- | :--------: | :------: | :-------: |
+| Has a specific sender that matters? |     ❌     |    ❌    |    ✅     |
+| Has a specific recipient?           |     ❌     |    ✅    |    ❌     |
+| Is it a command?                    |     ❌     |    ✅    |    ❌     |
+| Is it an observable fact?           |   Maybe    |    ❌    |    ✅     |
+| Is it a global announcement?        |     ✅     |    ❌    |    ❌     |
+
+> ⚠️ **Common Mistakes:**
+>
+> - **Forgetting to enable the token** — Messages won't be received. Use `MessageAwareComponent` (auto-enables) or call `Token.Enable()` manually.
+> - **Targeting Component when you meant GameObject** — These are distinct registration paths. Component-targeted messages won't reach GameObject-level handlers.
+> - **Using Broadcast when you need Targeted** — Broadcasts have no recipient, just an origin. Use Targeted when commanding a specific entity.
+> - **Missing `[Dx*Message]` attribute** — The source generator won't process the struct without the marker attribute.
+>
+> 📖 See [Troubleshooting](docs/reference/troubleshooting.md) for solutions to these and other issues.
+
+📖 **Want more depth?** See the full [Mental Model documentation](docs/concepts/mental-model.md) for detailed examples, lifecycle patterns, and edge cases.
+
+📖 **Ready to code?** Jump to [Quick Start](#quick-start-5-minutes) to send your first message!
 
 ---
 
@@ -85,7 +187,7 @@ Need install instructions? Try [OpenUPM](https://openupm.com/packages/com.wallst
 openupm add com.wallstop-studios.dxmessaging
 ```
 
-##### Or via Git URL
+#### Or via Git URL
 
 ```bash
 # Unity Package Manager > Add package from git URL...
@@ -235,8 +337,6 @@ flowchart TD
 
 **Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
 
-**New to messaging?** Start with the [Visual Guide](docs/getting-started/visual-guide.md) (5 min) for a beginner-friendly introduction!
-
 Looking for hard numbers? See OS-specific [Performance Benchmarks](docs/architecture/performance.md).
 
 ## Why DxMessaging
@@ -258,7 +358,7 @@ public class GameUI : MonoBehaviour {
 
 Months later: "Why is our game using 2GB of RAM after an hour?"
 
-##### Scenario 2: The Spaghetti Mess
+#### Scenario 2: The Spaghetti Mess
 
 ```csharp
 public class GameUI : MonoBehaviour {
@@ -281,7 +381,7 @@ public class GameUI : MonoBehaviour {
 
 **Your UI now depends on many systems.** Refactoring becomes more difficult.
 
-###### Scenario 3: The Debugging Black Hole
+#### Scenario 3: The Debugging Black Hole
 
 Player reports: "My health bar didn't update!"
 
@@ -318,7 +418,7 @@ public class GameUI : MessageAwareComponent {
 
 ###### Automatic lifecycle = leaks are prevented by default
 
-###### Scenario 2: No More Coupling
+##### Scenario 2: No More Coupling
 
 ```csharp
 public class GameUI : MessageAwareComponent {
@@ -336,7 +436,7 @@ public class GameUI : MessageAwareComponent {
 
 **Your UI is now independent.** Swapping systems no longer requires updating UI references.
 
-###### Scenario 3: Debugging is Built In
+##### Scenario 3: Debugging is Built In
 
 Open any `MessageAwareComponent` in the Inspector:
 
@@ -747,7 +847,7 @@ For OS-specific benchmark tables generated by PlayMode tests, see [Performance B
 | **Interceptors**         | ✅ Pipeline        | ❌ No              | ⚠️ Filters         | ❌ No              |
 | **Post-Processing**      | ✅ Dedicated       | ❌ No              | ⚠️ Filters         | ❌ No              |
 | **Stream Operators**     | ❌ No              | ✅ Extensive       | ❌ No              | ⚠️ With UniRx      |
-| **Performance**          | ✅ Good (14M)      | ✅ Good (18M)      | ✅ High (97M)      | ⚠️ Moderate (2.5M) |
+| **Performance**          | ✅ Good (10-17M)   | ✅ Good (18M)      | ✅ High (97M)      | ⚠️ Moderate (2.5M) |
 | **Dependencies**         | ✅ None            | ⚠️ UniTask         | ✅ None            | ⚠️ Zenject         |
 
 ### Comparison with Traditional Approaches
