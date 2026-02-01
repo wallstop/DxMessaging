@@ -1,6 +1,6 @@
 {
   "name": "com.wallstop-studios.dxmessaging",
-  "version": "2.1.6",
+  "version": "2.1.7",
   "displayName": "DxMessaging",
   "description": "Synchronous Event Bus for Unity",
   "unity": "2021.3",
@@ -28,7 +28,7 @@
     "url": "https://github.com/wallstop/DxMessaging/issues"
   },
   "author": "wallstop studios <wallstop@wallstopstudios.com> (https://wallstopstudios.com)",
-  "homepage": "https://github.com/wallstop/DxMessaging#readme",
+  "homepage": "https://wallstop.github.io/DxMessaging/",
   "main": "README.md",
   "scripts": {
     "test": "jest",
@@ -58,6 +58,11 @@
       "displayName": "UI Buttons + Inspector",
       "description": "UI-driven message emissions and a global observer demonstrating inspector diagnostics and RegisterGlobalAcceptAll.",
       "path": "Samples~/UI Buttons + Inspector"
+    },
+    {
+      "displayName": "Dependency Injection",
+      "description": "Integration samples for Zenject, VContainer, and Reflex showing IMessageRegistrationBuilder usage with container lifecycles.",
+      "path": "Samples~/DI"
     }
   ]
 }
