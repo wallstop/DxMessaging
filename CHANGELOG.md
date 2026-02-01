@@ -7,10 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.7]
+
 ### Changed
 
-- Improved README with prominent Mental Model section addressing issue #155
-- Added real-world analogies (PA System, Addressed Letter, Radio Station) for message types
+- Improved README with prominent Mental Model section
 - Added Mermaid diagrams and decision flowchart for choosing message types
 - Added Common Mistakes callout with troubleshooting link
 - Updated performance comparison table with accurate benchmark range (10-17M ops/sec)
