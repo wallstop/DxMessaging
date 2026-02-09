@@ -149,7 +149,7 @@
 | [Test Invalid Skill](./testing/test-invalid-skill.md)                                             | 📝 27  | 🔴 Expert       | ✅ Stable | ●●●○○       |                                             |
 | [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)            | 📝 172 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions, naming                 |
 | [Test Production Code Directly](./testing/test-production-code.md)                                | ✅ 349 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, anti-patterns, code-quality        |
-| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)     | ✅ 233 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity, anti-patterns               |
+| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)     | ✅ 260 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity, anti-patterns               |
 
 ---
 

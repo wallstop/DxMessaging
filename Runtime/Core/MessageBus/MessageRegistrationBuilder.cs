@@ -282,11 +282,6 @@ namespace DxMessaging.Core.MessageBus
             _ = Interlocked.Exchange(ref _syntheticOwnerCounter, value);
         }
 
-        internal static void ResetSyntheticOwnerCounter()
-        {
-            SetSyntheticOwnerCounter(0);
-        }
-
         /// <summary>
         /// Initializes a builder that resolves buses from global state.
         /// </summary>

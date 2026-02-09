@@ -35,9 +35,6 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.IsNotNull(syntheticOwnerField);
             syntheticOwnerField.SetValue(null, 3);
 
-            MessageCache<object> cache = new MessageCache<object>();
-            cache.GetOrAdd<DummyUntargetedMessage>();
-
             MessageHandler.SetGlobalMessageBus(new MessageBus());
 
             DxMessagingStaticState.Reset();
@@ -55,15 +52,61 @@ namespace DxMessaging.Tests.Runtime.Core
             object syntheticOwnerValue = syntheticOwnerField.GetValue(null);
             Assert.AreEqual(0, (int)syntheticOwnerValue);
 
-            Assert.AreEqual(0, MessageHelperIndexer.TotalMessages);
-            Assert.AreEqual(-1, MessageHelperIndexer<DummyUntargetedMessage>.SequentialId);
             Assert.AreSame(MessageHandler.InitialGlobalMessageBus, MessageHandler.MessageBus);
             Assert.AreSame(baselineBus, MessageHandler.MessageBus);
 
             DxMessagingStaticState.Reset();
         }
 
-        private struct DummyUntargetedMessage : IUntargetedMessage { }
+        [Test]
+        public void MessageTypeIdIsStableAfterReset()
+        {
+            MessageCache<object> cache = new MessageCache<object>();
+            cache.GetOrAdd<StabilityTestMessage>();
+
+            int idBeforeReset = MessageHelperIndexer<StabilityTestMessage>.SequentialId;
+            Assert.GreaterOrEqual(
+                idBeforeReset,
+                0,
+                "Message type should have a valid sequential ID after registration"
+            );
+
+            DxMessagingStaticState.Reset();
+
+            int idAfterReset = MessageHelperIndexer<StabilityTestMessage>.SequentialId;
+            Assert.AreEqual(
+                idBeforeReset,
+                idAfterReset,
+                "Message type ID should be preserved after Reset()"
+            );
+        }
+
+        [Test]
+        public void TotalMessagesPreservedAfterReset()
+        {
+            MessageCache<object> cache = new MessageCache<object>();
+            cache.GetOrAdd<TotalMessagesTestMessage>();
+
+            int totalBeforeReset = MessageHelperIndexer.TotalMessages;
+            Assert.Greater(
+                totalBeforeReset,
+                0,
+                "TotalMessages should be greater than zero after registering a message type"
+            );
+
+            DxMessagingStaticState.Reset();
+
+            int totalAfterReset = MessageHelperIndexer.TotalMessages;
+            Assert.AreEqual(
+                totalBeforeReset,
+                totalAfterReset,
+                "TotalMessages should be preserved after Reset()"
+            );
+        }
+
+        private struct StabilityTestMessage : IUntargetedMessage { }
+
+        private struct TotalMessagesTestMessage : IUntargetedMessage { }
     }
 }
 #endif
