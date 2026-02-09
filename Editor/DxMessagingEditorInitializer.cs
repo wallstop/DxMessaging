@@ -26,7 +26,7 @@ namespace DxMessaging.Editor
         {
             if (
                 stateChange == PlayModeStateChange.EnteredEditMode
-                || stateChange == PlayModeStateChange.EnteredPlayMode
+                || stateChange == PlayModeStateChange.ExitingEditMode
             )
             {
                 ApplyEditorSettings();
