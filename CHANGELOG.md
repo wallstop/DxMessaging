@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed a bug where no messages would get received by any listeners due to specifics in Unity play mode timings
+
 ## [2.1.8]
 
 ### Fixed
