@@ -29,15 +29,12 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           # Include fragments ensures anchors are validated
+          # Use conservative concurrency (4) to avoid GitHub rate limiting
           args: >-
             -c .lychee.toml
             --no-progress
             --include-fragments
             --verbose
-            --max-concurrency 12
-            --timeout 20
-            --retry-wait-time 2
-            --max-retries 2
             "./**/*.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
