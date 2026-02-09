@@ -250,7 +250,7 @@ Before acting on PR review feedback:
 
 - Frameworks: NUnit + Unity Test Framework. Use `[Test]`/`[UnityTest]` as needed.
 - Location: add files under [Tests/Runtime](../Tests/Runtime/) `<Area>/` named `*Tests.cs` with classes `*Tests`.
-- Keep tests independent: prefer a local `MessageBus` and explicit `MessageRegistrationToken` lifecycles.
+- Keep tests independent: prefer a local `MessageBus` and explicit `MessageRegistrationToken` lifecycles. When using `MessageHandler`, set `active = true`. When using `MessageRegistrationToken`, pass the local `MessageBus` to `Create()` and call `Enable()` to activate handlers.
 - Do not use underscores in test function names.
 - Prefer expressive assertions and failure messages so it is clear what exactly is failing when a test fails.
 - Do not use regions.

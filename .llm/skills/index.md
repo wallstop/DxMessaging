@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-02-01. Do not edit manually.
+> **Auto-generated** on 2026-02-09. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -42,7 +42,7 @@
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)           | 📝 149 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, code-comments, xml-docs    |
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)     | 📝 182 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links, urls                |
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md) | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | github-actions, ci-cd, version-management |
-| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)      | ✅ 268 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links, urls                |
+| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)      | ✅ 312 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links, urls                |
 | [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)              | ⚠️ 477 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, markdown, compatibility    |
 | [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                               | ✅ 327 | 🟡 Intermediate | ✅ Stable | ○○○○○       | documentation, mermaid, theming           |
 | [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                        | ✅ 291 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, mkdocs, navigation         |
@@ -149,7 +149,7 @@
 | [Test Invalid Skill](./testing/test-invalid-skill.md)                                             | 📝 27  | 🔴 Expert       | ✅ Stable | ●●●○○       |                                             |
 | [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)            | 📝 172 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions, naming                 |
 | [Test Production Code Directly](./testing/test-production-code.md)                                | ✅ 349 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, anti-patterns, code-quality        |
-| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)     | ✅ 233 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity, anti-patterns               |
+| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)     | ✅ 260 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity, anti-patterns               |
 
 ---
 

@@ -2,9 +2,9 @@
 title: "Link Quality and External URL Management"
 id: "link-quality-guidelines"
 category: "documentation"
-version: "1.2.0"
+version: "1.4.0"
 created: "2026-01-22"
-updated: "2026-01-23"
+updated: "2026-02-09"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -227,6 +227,49 @@ Some domains change URL structures frequently. Extra verification is needed:
 
 For detailed guidance on URL fragment validation (`#section-name` links), see [External URL Fragment Validation](external-url-fragment-validation.md).
 
+### Handling Link Checker False Positives
+
+Automated link checkers (like lychee) can fail on valid URLs when websites block automated requests. This does not mean the link is broken.
+
+#### Common Blocking Status Codes
+
+| Status Code | Meaning                | Example Cause                               |
+| ----------- | ---------------------- | ------------------------------------------- |
+| 403         | Forbidden              | User-agent blocking, geographic restriction |
+| 415         | Unsupported Media Type | Server rejects non-browser Accept headers   |
+| 429         | Too Many Requests      | Rate limiting                               |
+| 503         | Service Unavailable    | Bot protection, Cloudflare challenge        |
+
+#### Investigating Link Checker Failures
+
+When a link checker reports an error:
+
+1. **Manually verify the link**: Open the URL in a browser to confirm it works
+1. **Check the status code**: Some codes (403, 415, 429) often indicate bot blocking, not broken links
+1. **Try a different user-agent**: The link may work with browser-like headers
+1. **Check if the site has bot protection**: Cloudflare, Akamai, or custom protection may block automated clients
+
+#### Adding Exclusions to `.lychee.toml`
+
+When a link is valid but the site blocks automated checkers, add an exclusion pattern:
+
+```toml
+exclude = [
+  # NPM package page serves a Cloudflare JS challenge to non-browser clients
+  "^https://www\\.npmjs\\.com/package/com\\.wallstop-studios\\.dxmessaging$",
+  # Game Programming Patterns site returns 415 to automated clients despite valid content
+  "^https://gameprogrammingpatterns\\.com/"
+]
+```
+
+#### Exclusion Pattern Guidelines
+
+- **Use regex anchors**: Start patterns with `^` to match from the beginning of the URL
+- **Escape special characters**: Dots in domain names need `\\.` escaping
+- **Document the reason**: Add a comment explaining why the exclusion exists
+- **Be specific**: Prefer specific URL patterns over broad domain exclusions when possible
+- **Verify first**: Always manually verify the link is actually valid before adding an exclusion
+
 ### GitHub Actions Version Consistency
 
 Workflow files should use consistent action versions across all workflows. For detailed guidance including version update processes and common actions to monitor, see [GitHub Actions Version Consistency](github-actions-version-consistency.md).
@@ -259,9 +302,10 @@ Before committing documentation or skill files:
 
 ## Changelog
 
-| Version | Date       | Changes                                                                     |
-| ------- | ---------- | --------------------------------------------------------------------------- |
-| 1.3.0   | 2026-01-27 | Split fragment validation and GitHub Actions to separate skills             |
-| 1.2.0   | 2026-01-23 | Added external URL fragment validation section based on CI failure analysis |
-| 1.1.0   | 2026-01-22 | Added documentation linting scripts section with testing guidance           |
-| 1.0.0   | 2026-01-22 | Initial version covering link quality fundamentals                          |
+| Version | Date       | Changes                                                                        |
+| ------- | ---------- | ------------------------------------------------------------------------------ |
+| 1.4.0   | 2026-02-09 | Added guidance for handling link checker false positives and lychee exclusions |
+| 1.3.0   | 2026-01-27 | Split fragment validation and GitHub Actions to separate skills                |
+| 1.2.0   | 2026-01-23 | Added external URL fragment validation section based on CI failure analysis    |
+| 1.1.0   | 2026-01-22 | Added documentation linting scripts section with testing guidance              |
+| 1.0.0   | 2026-01-22 | Initial version covering link quality fundamentals                             |

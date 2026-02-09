@@ -146,6 +146,33 @@ Assert.That(component == null, Is.True, "Component should be null");
 Assert.That(gameObject != null, Is.True, "GameObject should exist");
 ```
 
+### MessageRegistrationToken Lifecycle
+
+When testing with `MessageRegistrationToken`, always:
+
+1. Set `MessageHandler.active = true` when creating the handler
+1. Pass the local `MessageBus` to avoid using the global bus
+1. Call `Enable()` after creating the token to activate registrations
+
+```csharp
+// GOOD: Complete setup with active handler, local bus, and Enable()
+MessageBus messageBus = new MessageBus();
+MessageHandler handler = new MessageHandler(instanceId, messageBus) { active = true };
+MessageRegistrationToken token = MessageRegistrationToken.Create(handler, messageBus);
+token.Enable();
+
+// BAD: Missing active = true - handler ignores all messages
+MessageHandler handler = new MessageHandler(instanceId, messageBus);
+// handler.active is false by default!
+
+// BAD: Missing Enable() - handlers are staged but not activated
+MessageRegistrationToken token = MessageRegistrationToken.Create(handler, messageBus);
+// Handlers are registered but inactive!
+
+// BAD: Missing messageBus - uses global state, causes test pollution
+MessageRegistrationToken token = MessageRegistrationToken.Create(handler);
+```
+
 ## Anti-Patterns to Avoid
 
 ### Don't Use Underscores in Test Names

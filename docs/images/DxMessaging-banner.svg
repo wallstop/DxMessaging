@@ -107,7 +107,7 @@
   <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->
   <g transform="translate(720, 25)">
     <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
-    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v2.1.8</text>
+    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v2.1.9</text>
   </g>
   
   <!-- Wallstop Studios branding (bottom right) -->

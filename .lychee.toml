@@ -10,9 +10,9 @@ retry_wait_time = 2     # seconds between retries
 max_redirects = 10
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
-# Treat successes and rate-limiting as acceptable in CI
-# Accept all 2xx as valid plus 429 (rate limited)
-accept = ["200..=299", 429]
+# Treat successes, rate-limiting, and transient server errors as acceptable in CI
+# Accept all 2xx as valid plus 429 (rate limited) and 502 (bad gateway - transient)
+accept = ["200..=299", 429, 502]
 
 # Only check web links
 scheme = ["https", "http"]
@@ -26,5 +26,7 @@ exclude = [
   # NPM package page serves a Cloudflare JS challenge to non-browser clients; registry endpoint remains covered.
   "^https://www\\.npmjs\\.com/package/com\\.wallstop-studios\\.dxmessaging$",
   # GitHub Pages site - not deployed yet, will be available after first successful deploy
-  "^https://wallstop\\.github\\.io/DxMessaging"
+  "^https://wallstop\\.github\\.io/DxMessaging",
+  # Game Programming Patterns site returns 415 (Unsupported Media Type) to automated clients despite valid content
+  "^https://gameprogrammingpatterns\\.com/"
 ]

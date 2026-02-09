@@ -29,11 +29,6 @@ namespace DxMessaging.Core
             _ = Interlocked.Exchange(ref StaticIdCount, value);
         }
 
-        internal static void ResetIdSeed()
-        {
-            SetIdSeed(0);
-        }
-
         /// <summary>
         /// Creates a new unique handle.
         /// </summary>
