@@ -30,7 +30,7 @@ function getPackageFiles() {
     try {
         // Create a temporary tarball
         console.log("Creating package tarball...");
-        execSync("npm pack 2>&1 > /dev/null", {
+        execSync("npm pack > /dev/null 2>&1", {
             encoding: "utf8",
             cwd: repoRoot,
         });
