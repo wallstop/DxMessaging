@@ -36,7 +36,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
 
       - name: Run actionlint
-        uses: rhysd/actionlint@v1.7.10
+        uses: rhysd/actionlint@v1.7.11
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
