@@ -1,0 +1,40 @@
+---
+name: Validate llms.txt
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - .llm/**
+      - scripts/update-llms-txt.js
+      - llms.txt
+  push:
+    branches:
+      - master
+    paths:
+      - package.json
+      - .llm/**
+      - scripts/update-llms-txt.js
+      - llms.txt
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Check llms.txt is up-to-date
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check llms.txt is up-to-date
+        run: npm run check:llms-txt
