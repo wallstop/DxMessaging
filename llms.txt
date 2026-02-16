@@ -41,12 +41,12 @@ DxMessaging is a high-performance messaging library for Unity (v2021.3+) that re
    - Anyone can listen
    - Example: Game settings changed
 
-1. **Targeted Messages** - Commands to specific entities
+2. **Targeted Messages** - Commands to specific entities
    - Has a specific GameObject/Component target
    - Only target and its children listen
    - Example: Heal this specific character
 
-1. **Broadcast Messages** - Observable facts from a source
+3. **Broadcast Messages** - Observable facts from a source
    - Has a source GameObject/Component
    - Anyone can observe what happened
    - Example: This enemy took damage
@@ -118,14 +118,12 @@ public class HealthDisplay : MessageAwareComponent
 ## Documentation Structure
 
 ### Getting Started
-
 - [Overview](https://wallstop.github.io/DxMessaging/getting-started/overview/)
 - [Installation](https://wallstop.github.io/DxMessaging/getting-started/install/)
 - [Quick Start](https://wallstop.github.io/DxMessaging/getting-started/quick-start/)
 - [Visual Guide](https://wallstop.github.io/DxMessaging/getting-started/visual-guide/)
 
 ### Concepts
-
 - [Mental Model](https://wallstop.github.io/DxMessaging/concepts/mental-model/) - Core philosophy and design principles
 - [Message Types](https://wallstop.github.io/DxMessaging/concepts/message-types/) - Untargeted, Targeted, Broadcast
 - [Listening Patterns](https://wallstop.github.io/DxMessaging/concepts/listening-patterns/)
@@ -133,7 +131,6 @@ public class HealthDisplay : MessageAwareComponent
 - [Interceptors & Ordering](https://wallstop.github.io/DxMessaging/concepts/interceptors-and-ordering/)
 
 ### Guides
-
 - [Patterns](https://wallstop.github.io/DxMessaging/guides/patterns/) - Best practices and common patterns
 - [Unity Integration](https://wallstop.github.io/DxMessaging/guides/unity-integration/)
 - [Testing](https://wallstop.github.io/DxMessaging/guides/testing/) - Testing strategies for message-based systems
@@ -141,26 +138,22 @@ public class HealthDisplay : MessageAwareComponent
 - [Migration Guide](https://wallstop.github.io/DxMessaging/guides/migration-guide/)
 
 ### Architecture
-
 - [Design & Architecture](https://wallstop.github.io/DxMessaging/architecture/design-and-architecture/)
 - [Performance](https://wallstop.github.io/DxMessaging/architecture/performance/) - Benchmarks (10-17M ops/sec)
 - [Comparisons](https://wallstop.github.io/DxMessaging/architecture/comparisons/) - vs Events, UnityEvents, other buses
 
 ### Advanced Topics
-
 - [Emit Shorthands](https://wallstop.github.io/DxMessaging/advanced/emit-shorthands/)
 - [Message Bus Providers](https://wallstop.github.io/DxMessaging/advanced/message-bus-providers/)
 - [Registration Builders](https://wallstop.github.io/DxMessaging/advanced/registration-builders/)
 - [Runtime Configuration](https://wallstop.github.io/DxMessaging/advanced/runtime-configuration/)
 
 ### Integrations
-
 - [Zenject](https://wallstop.github.io/DxMessaging/integrations/zenject/) - Extenject/Zenject DI integration
 - [VContainer](https://wallstop.github.io/DxMessaging/integrations/vcontainer/) - VContainer DI integration
 - [Reflex](https://wallstop.github.io/DxMessaging/integrations/reflex/) - Reflex DI integration
 
 ### Reference
-
 - [Quick Reference](https://wallstop.github.io/DxMessaging/reference/quick-reference/)
 - [FAQ](https://wallstop.github.io/DxMessaging/reference/faq/)
 - [Glossary](https://wallstop.github.io/DxMessaging/reference/glossary/)
@@ -228,22 +221,18 @@ This repository includes comprehensive AI agent guidance in the `.llm/` director
 ## Common Pitfalls & Solutions
 
 ### Memory Leaks
-
 **Problem:** Forgot to unsubscribe from events
 **Solution:** Use `MessageAwareComponent` or `MessageHandler` for automatic lifecycle management
 
 ### Message Not Received
-
 **Problem:** Handler registered after message was emitted
 **Solution:** Messages are synchronous; ensure registration happens during `Awake`/`OnEnable`
 
 ### Wrong Message Type
-
 **Problem:** Used Broadcast when Targeted was needed
 **Solution:** See [Mental Model](https://wallstop.github.io/DxMessaging/concepts/mental-model/) for type selection guidance
 
 ### Performance Issues
-
 **Problem:** Too many handlers or heavy interceptors
 **Solution:** Use priority ordering, profile with Inspector diagnostics
 
@@ -260,9 +249,7 @@ See [Performance Documentation](https://wallstop.github.io/DxMessaging/architect
 ## Examples
 
 ### Mini Combat Sample
-
 Demonstrates all three message types in a simple combat scenario:
-
 - **Untargeted:** Game settings changes
 - **Targeted:** Heal specific character
 - **Broadcast:** Enemy takes damage
@@ -270,9 +257,7 @@ Demonstrates all three message types in a simple combat scenario:
 **Location:** `Samples~/Mini Combat`
 
 ### DI Integration Sample
-
 Shows integration with Zenject, VContainer, and Reflex:
-
 - Scoped message buses
 - Container lifecycle integration
 - IMessageRegistrationBuilder usage
@@ -280,9 +265,7 @@ Shows integration with Zenject, VContainer, and Reflex:
 **Location:** `Samples~/DI`
 
 ### Inspector Diagnostics Sample
-
 Demonstrates debugging tools:
-
 - Global observer pattern
 - Message flow visualization
 - Timestamp and payload inspection
