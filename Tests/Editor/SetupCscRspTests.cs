@@ -75,7 +75,7 @@ namespace DxMessaging.Tests.Editor
 
             // Assert: Should detect duplicate DxMessaging entries
             Assert.AreEqual(4, dxMessagingCount, "Should detect all DxMessaging analyzer entries");
-            Assert.AreEqual(0, otherCount, "Should have other entries preserved");
+            Assert.AreEqual(0, otherCount, "Should have no other -a: entries in this test");
         }
 
         [Test]
