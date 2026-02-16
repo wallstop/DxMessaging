@@ -65,7 +65,9 @@
     "format:yaml": "prettier --write \"**/*.{yml,yaml}\"",
     "format:yaml:check": "prettier --check \"**/*.{yml,yaml}\"",
     "check:yaml": "prettier --check \"**/*.{yml,yaml}\" && yamllint -c .yamllint.yaml .",
-    "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\""
+    "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\"",
+    "update:llms-txt": "node scripts/update-llms-txt.js",
+    "check:llms-txt": "node scripts/update-llms-txt.js --check"
   },
   "devDependencies": {
     "jest": "^30.2.0",

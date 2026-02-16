@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `llms.txt` file following [llmstxt.org](https://llmstxt.org/) standard for improved AI agent integration
+- Added automation script `scripts/update-llms-txt.js` to keep `llms.txt` up-to-date
+- Added npm scripts `update:llms-txt` and `check:llms-txt` for managing llms.txt
+- Added GitHub Actions workflows for automatic validation and updates of llms.txt
+- Added documentation about AI agent integration in README
+
 ## [2.2.0]
 
 ### Fixed

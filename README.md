@@ -46,6 +46,7 @@ Need install instructions? Try [OpenUPM](https://openupm.com/packages/com.wallst
 - [Requirements](#requirements)
 - [Contributing](#contributing)
 - [Links](#links)
+- [AI Agent Integration](#ai-agent-integration)
 
 ---
 
@@ -896,5 +897,42 @@ Created and maintained by [wallstop studios](https://wallstopstudios.com)
 - 🐛 [Report Issues](https://github.com/wallstop/DxMessaging/issues)
 - 📖 [Documentation Site](https://wallstop.github.io/DxMessaging/)
 - 📚 [Wiki](https://github.com/wallstop/DxMessaging/wiki)
+
+## AI Agent Integration
+
+DxMessaging provides comprehensive AI agent context through [llms.txt](llms.txt), following the [llmstxt.org](https://llmstxt.org/) standard for LLM-friendly documentation.
+
+### 🤖 For AI Agents
+
+- **[llms.txt](llms.txt)** — Complete project overview, API reference, and context in a single file
+- **[Repository Guidelines](.llm/context.md)** — Coding standards and development workflows
+- **[AI Agent Skills](.llm/skills/)** — 90+ specialized skill documents covering documentation, testing, GitHub Actions, and more
+
+The `llms.txt` file is automatically updated via CI/CD to stay current with project changes. It includes:
+
+- Project overview and quick facts
+- Core concepts and architecture
+- Complete documentation links
+- Development commands and standards
+- Common pitfalls and solutions
+- Performance characteristics
+- Code examples and patterns
+
+### Keeping llms.txt Updated
+
+The automation script ensures llms.txt stays current:
+
+```bash
+# Update llms.txt
+npm run update:llms-txt
+
+# Verify llms.txt is current
+npm run check:llms-txt
+```
+
+GitHub Actions automatically validates and updates llms.txt:
+
+- **Validation:** Runs on PRs to ensure llms.txt is up-to-date
+- **Auto-update:** Runs weekly and on relevant file changes
 
 ---
