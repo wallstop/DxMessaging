@@ -26,6 +26,7 @@
 *.asmref    text eol=crlf
 *.meta      text eol=crlf
 *.ps1       text eol=crlf
+*.txt       text eol=crlf
 
 # Shell scripts must use LF for proper execution on Unix systems
 *.sh        text eol=lf
@@ -97,3 +98,4 @@ scripts/hooks/*.meta text eol=crlf
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+*.txt        text eol=crlf

@@ -402,7 +402,9 @@ function main() {
       }
 
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
-      if (currentContent.trim() !== newContent.trim()) {
+      // Normalize line endings for comparison (support both LF and CRLF)
+      const normalizeLineEndings = (str) => str.replace(/\r\n/g, '\n');
+      if (normalizeLineEndings(currentContent.trim()) !== normalizeLineEndings(newContent.trim())) {
         console.error("ERROR: llms.txt is out of date");
         console.error("Run: node scripts/update-llms-txt.js");
         process.exit(1);
@@ -413,7 +415,9 @@ function main() {
     }
 
     // Update mode - write the file
-    fs.writeFileSync(LLMS_TXT_PATH, newContent, "utf8");
+    // Convert LF to CRLF for Windows/gitattributes compatibility
+    const contentWithCRLF = newContent.replace(/\r?\n/g, '\r\n');
+    fs.writeFileSync(LLMS_TXT_PATH, contentWithCRLF, "utf8");
     console.log("✓ Updated llms.txt");
     process.exit(0);
   } catch (error) {
