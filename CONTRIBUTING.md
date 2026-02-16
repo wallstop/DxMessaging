@@ -42,12 +42,12 @@ Handy commands:
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`
 - Validate NPM package: `npm run validate:npm-meta`
 
-### NPM Package Validation
+## NPM Package Validation
 
 Unity requires `.meta` files for every asset to maintain consistent GUIDs across installations. The `validate:npm-meta` script ensures:
 
 1. Every `.meta` file in the package corresponds to an actual file or directory
-2. Every Unity-tracked file/directory has its `.meta` file included
+1. Every Unity-tracked file/directory has its `.meta` file included
 
 This validation runs automatically:
 
