@@ -142,6 +142,17 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-npm-meta
+        name: Validate NPM package meta files
+        entry: node scripts/validate-npm-meta.js --check
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-push
+        description: Validate that npm package includes all .meta files correctly.
+
+  - repo: local
+    hooks:
       - id: actionlint
         name: Lint GitHub Actions workflows
         entry: bash -c 'if command -v actionlint >/dev/null 2>&1; then actionlint; else echo "actionlint not installed; skipping"; fi'

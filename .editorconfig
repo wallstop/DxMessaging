@@ -1,11 +1,19 @@
 
 [*]
 charset = utf-8
-end_of_line = crlf
+end_of_line = lf
 trim_trailing_whitespace = false
 insert_final_newline = false
 indent_style = space
 indent_size = 4
+
+# C# files use CRLF for .NET compatibility
+[*.cs]
+end_of_line = crlf
+
+# .NET project files use CRLF
+[*.{csproj,sln}]
+end_of_line = crlf
 
 # Microsoft .NET properties
 csharp_new_line_before_members_in_object_initializers = false
