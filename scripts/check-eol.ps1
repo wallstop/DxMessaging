@@ -72,9 +72,13 @@ $excludePatterns = @(
     "[\\/]site[\\/]"
 )
 
-# File extensions we treat as text and validate (CRLF expected)
-$extensions = @(
-    '.cs', '.csproj', '.sln',
+# File extensions that require CRLF (C# and .NET files only)
+$crlfExtensions = @(
+    '.cs', '.csproj', '.sln'
+)
+
+# File extensions that require LF (all other text files)
+$lfExtensions = @(
     '.js', '.cjs', '.mjs',
     '.json', '.jsonc', '.toml',
     '.yaml', '.yml',
@@ -82,11 +86,7 @@ $extensions = @(
     '.xml', '.uxml', '.uss',
     '.shader', '.hlsl', '.compute', '.cginc',
     '.asmdef', '.asmref', '.meta',
-    '.ps1'
-)
-
-# Shell scripts must use LF for Unix compatibility
-$lfExtensions = @(
+    '.ps1',
     '.sh',
     '.bash',
     '.zsh',
@@ -95,7 +95,7 @@ $lfExtensions = @(
 )
 
 # All extensions to scan (CRLF + LF types)
-$allExtensions = $extensions + $lfExtensions
+$allExtensions = $crlfExtensions + $lfExtensions
 
 $rootPath = Resolve-Path -LiteralPath $Root
 Write-VerboseLine "Scanning for EOL/BOM issues under: $rootPath"
@@ -130,20 +130,20 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
         # Check for line endings based on file type
         $text = [System.Text.Encoding]::UTF8.GetString($bytes)
         
-        if ($lfExtensions -contains $ext) {
-            # Shell scripts should have LF only (no CRLF or bare CR)
-            $crlfCount = [regex]::Matches($text, '\r\n').Count
-            $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
-            if ($crlfCount -gt 0 -or $crOnly -gt 0) {
-                $lfViolations.Add($path)
-            }
-        }
-        else {
-            # All other text files should have CRLF (no bare LF or bare CR)
+        if ($crlfExtensions -contains $ext) {
+            # C# and .NET files should have CRLF (no bare LF or bare CR)
             $lfOnly = [regex]::Matches($text, '(?<!\r)\n').Count
             $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
             if ($lfOnly -gt 0 -or $crOnly -gt 0) {
                 $crlfViolations.Add($path)
+            }
+        }
+        elseif ($lfExtensions -contains $ext) {
+            # All other text files should have LF only (no CRLF or bare CR)
+            $crlfCount = [regex]::Matches($text, '\r\n').Count
+            $crOnly = [regex]::Matches($text, '\r(?!\n)').Count
+            if ($crlfCount -gt 0 -or $crOnly -gt 0) {
+                $lfViolations.Add($path)
             }
         }
     }
@@ -159,12 +159,12 @@ if ($bomFiles.Count -gt 0) {
 }
 
 if ($lfViolations.Count -gt 0) {
-    Write-Host "Shell scripts require LF line endings but contain CRLF or bare CR:"
+    Write-Host "Files require LF line endings but contain CRLF or bare CR:"
     $lfViolations | ForEach-Object { Write-Host "  $_" }
 }
 
 if ($crlfViolations.Count -gt 0) {
-    Write-Host "Files require CRLF line endings but contain LF or bare CR:"
+    Write-Host "C# and .NET files require CRLF line endings but contain LF or bare CR:"
     $crlfViolations | ForEach-Object { Write-Host "  $_" }
 }
 
