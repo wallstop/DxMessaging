@@ -100,4 +100,3 @@ scripts/hooks/* text eol=lf
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
-*.txt        text eol=crlf
