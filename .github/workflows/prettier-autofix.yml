@@ -1,0 +1,266 @@
+name: Prettier Auto Fix
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-eol.ps1"
+  pull_request_target:
+    paths:
+      - "**/*.md"
+      - "**/*.json"
+      - "**/*.asmdef"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".prettierrc*"
+      - ".markdownlint*"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/check-eol.ps1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autofix:
+    name: Format and propose changes
+    if: ${{ github.event_name != 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i --no-audit --no-fund
+          fi
+
+      - name: Run Prettier (write fixes)
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        run: |
+          npm run format:md
+          npm run format:json
+          npm run format:yaml
+
+      - name: Markdownlint (auto-fix)
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        run: npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
+
+      - name: Renormalize line endings
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        shell: bash
+        run: |
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # when certain file types don't exist or aren't accessible in this checkout context
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in md json asmdef yml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
+
+      - name: Commit formatting changes to PR branch (Dependabot only)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
+        id: auto-commit
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "chore(format): apply Prettier/markdownlint fixes"
+          branch: ${{ github.head_ref }}
+          add_options: --renormalize
+          # NOTE: yaml excluded - all .yaml files are dotfiles, which git add patterns don't match
+          file_pattern: |
+            **/*.md
+            **/*.json
+            **/*.asmdef
+            **/*.yml
+
+      - name: Refresh checkout after auto-commit
+        if: ${{ steps.auto-commit.outputs.changes_detected == 'true' }}
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Fetch the newly pushed commit and checkout to get normalized line endings in working tree
+          git fetch origin "$HEAD_REF"
+          git checkout -f FETCH_HEAD
+
+      - name: Prettier check (Markdown)
+        run: npm run format:md:check
+
+      - name: Prettier check (JSON / asmdef / asmref)
+        run: npm run format:json:check
+
+      - name: Prettier check (YAML)
+        run: npm run format:yaml:check
+
+      - name: Markdown lint (CI gate)
+        run: npm run lint:markdown
+
+      - name: Enforce EOL (CRLF) and No BOM
+        shell: pwsh
+        run: ./scripts/check-eol.ps1 -VerboseOutput
+
+  autofix_fork:
+    name: Fork PR bot formatting PR (Dependabot only)
+    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository && github.event.pull_request.user.login == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout fork PR HEAD
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i --no-audit --no-fund
+          fi
+
+      - name: Run Prettier (write fixes)
+        run: |
+          npm run format:md
+          npm run format:json
+          npm run format:yaml
+
+      - name: Markdownlint (auto-fix)
+        run: npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
+
+      - name: Renormalize line endings
+        shell: bash
+        run: |
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # when certain file types don't exist or aren't accessible in this checkout context
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in md json asmdef yml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create bot branch and push to base repo
+        if: steps.changes.outputs.has_changes == 'true'
+        shell: bash
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="bot/prettier/pr-${{ github.event.pull_request.number }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          # Stage only files we format; avoid workflows to prevent permission issues
+          # Use --renormalize to ensure line endings in git index per .gitattributes
+          # Renormalize each extension separately to avoid "pathspec did not match" failures
+          # yaml excluded: dotfiles (.pre-commit-config.yaml) match git ls-files but not git add globs
+          for ext in md json asmdef yml; do
+            if git ls-files "*.$ext" "**/*.$ext" | grep -q .; then
+              git add --renormalize -- "*.$ext" "**/*.$ext"
+            fi
+          done
+          git commit -m "chore(format): apply Prettier/markdownlint fixes for PR #${{ github.event.pull_request.number }}"
+          git remote add upstream "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git fetch upstream
+          git push upstream "$BRANCH" --force
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update formatting PR in base repo
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const baseRef = context.payload.pull_request.base.ref;
+            const headBranch = `bot/prettier/pr-${prNumber}`;
+            const {owner, repo} = context.repo;
+            const title = `chore(format): Apply Prettier/markdownlint to PR #${prNumber}`;
+            const body = [
+              `This automated PR applies Prettier and markdownlint fixes to the changes from PR #${prNumber}.`,
+              '',
+              `- Source PR (fork): #${prNumber}`,
+              `- Target branch: ${baseRef}`,
+              '',
+              'If this PR is merged, it will include the contributor\'s changes plus required formatting.',
+              'You can then close the original PR or ask the author to rebase.',
+            ].join('\n');
+
+            const existing = await github.rest.pulls.list({ owner, repo, state: 'open', head: `${owner}:${headBranch}` });
+            if (existing.data.length === 0) {
+              await github.rest.pulls.create({ owner, repo, head: headBranch, base: baseRef, title, body });
+            }
+
+      - name: Comment link on original PR
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const {owner, repo} = context.repo;
+            const headBranch = `bot/prettier/pr-${prNumber}`;
+            const resp = await github.rest.pulls.list({ owner, repo, state: 'open', head: `${owner}:${headBranch}` });
+            if (resp.data.length > 0) {
+              const fmtPr = resp.data[0];
+              const body = `A formatting PR has been opened: #${fmtPr.number} (applies Prettier/markdownlint fixes to this PR).`;
+              const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 50 });
+              const already = comments.data.some(
+                (c) =>
+                  c.body &&
+                  c.body.includes(`#${fmtPr.number}`) &&
+                  c.user &&
+                  c.user.login === 'github-actions[bot]'
+              );
+              if (!already) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+              }
+            }

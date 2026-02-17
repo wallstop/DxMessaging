@@ -1,0 +1,37 @@
+{
+  "name": "WallstopStudios.DxMessaging.Tests.Runtime.VContainer",
+  "rootNamespace": "DxMessaging.Tests.Runtime.VContainer",
+  "references": [
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "WallstopStudios.DxMessaging",
+    "WallstopStudios.DxMessaging.Tests.Runtime",
+    "VContainer",
+    "WallstopStudios.DxMessaging.VContainer"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": true,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "VCONTAINER_PRESENT"],
+  "versionDefines": [
+    {
+      "name": "jp.cysharp.vcontainer",
+      "expression": "0.0.1",
+      "define": "VCONTAINER_PRESENT"
+    },
+    {
+      "name": "jp.hadashikick.vcontainer",
+      "expression": "0.0.1",
+      "define": "VCONTAINER_PRESENT"
+    },
+    {
+      "name": "VContainer",
+      "expression": "0.0.1",
+      "define": "VCONTAINER_PRESENT"
+    }
+  ],
+  "noEngineReferences": false
+}

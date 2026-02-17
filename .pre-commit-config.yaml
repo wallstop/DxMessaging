@@ -1,0 +1,176 @@
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+  - post-checkout
+  - post-merge
+  - post-rewrite
+
+repos:
+  - repo: local
+    hooks:
+      - id: dotnet-tool-restore
+        name: Install .NET tools
+        entry: dotnet tool restore
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages:
+          - pre-commit
+          - pre-push
+          - post-checkout
+          - post-rewrite
+        description: Install the .NET tools listed at .config/dotnet-tools.json.
+      - id: csharpier
+        name: Run CSharpier on C# files
+        entry: dotnet tool run csharpier format
+        language: system
+        types:
+          - c#
+        description: CSharpier is an opinionated C# formatter inspired by Prettier.
+
+  - repo: local
+    hooks:
+      - id: sync-banner-version
+        name: Sync banner version from package.json
+        entry: bash scripts/sync-banner-version.sh
+        language: system
+        files: '^package\.json$'
+        pass_filenames: false
+        stages:
+          - pre-commit
+        description: Sync version from package.json to SVG banner (cosmetic, non-blocking).
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
+        entry: npx --yes prettier@3.8.0 --write
+        language: system
+        files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
+        description: Use pinned Prettier version to match CI.
+
+  - repo: local
+    hooks:
+      - id: markdown-structure-fix
+        name: Markdown structure auto-fix (headings, fences)
+        entry: node scripts/fix-md036-headings.js
+        language: system
+        files: '(?i)\.(md|markdown)$'
+        description: Auto-fix MD036 (no-emphasis-as-heading) by converting bold-only lines to headings.
+
+  - repo: local
+    hooks:
+      - id: markdownlint
+        name: markdownlint (respect repo config)
+        entry: npx --yes markdownlint-cli2@0.17.1 --fix
+        language: system
+        files: '(?i)\.(md|markdown)$'
+
+  - repo: local
+    hooks:
+      - id: yamllint
+        name: yamllint (if available)
+        entry: bash -c 'if command -v yamllint >/dev/null 2>&1; then yamllint -c .yamllint.yaml "$@"; else echo "yamllint not installed; skipping"; fi' --
+        language: system
+        files: '(?i)\.(ya?ml)$'
+
+  - repo: local
+    hooks:
+      - id: fix-eol
+        name: Normalize CRLF and strip BOM
+        entry: node scripts/fix-eol.js
+        language: system
+        stages:
+          - pre-commit
+        pass_filenames: true
+        description: Automatically rewrite text files to match CI EOL/BOM policy.
+      - id: fix-eol-repo
+        name: Normalize CRLF after checkout/merge
+        entry: node scripts/fix-eol.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - post-checkout
+          - post-merge
+          - post-rewrite
+        description: Ensure working tree EOLs stay normalized after git operations.
+
+  - repo: local
+    hooks:
+      - id: eol-bom-check
+        name: Enforce CRLF and no BOM
+        entry: node scripts/check-eol.js
+        language: system
+        pass_filenames: true
+        stages:
+          - pre-commit
+          - pre-push
+
+  - repo: local
+    hooks:
+      - id: conflict-markers
+        name: Fail on merge conflict markers
+        entry: bash -lc 'if rg -n -S -g "!**/.git/**" -e "^(<<<<<<<|=======|>>>>>>>)" .; then echo "Conflict markers found. Resolve merges before committing." >&2; exit 1; fi'
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-commit
+
+  - repo: local
+    hooks:
+      - id: validate-skills
+        name: Validate LLM skill files
+        entry: node scripts/validate-skills.js
+        language: system
+        pass_filenames: false
+        files: '^\.llm/.*\.md$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Validate skill file schema compliance and file size limits.
+      - id: skills-index-regen
+        name: Regenerate skills index.md
+        entry: bash -c 'node scripts/generate-skills-index.js && { git add .llm/skills/index.md 2>/dev/null || true; }'
+        language: system
+        pass_filenames: false
+        files: '^\.llm/.*\.md$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Regenerate index.md and stage it for commit.
+
+  - repo: local
+    hooks:
+      - id: validate-npm-meta
+        name: Validate NPM package meta files
+        entry: node scripts/validate-npm-meta.js --check
+        language: system
+        pass_filenames: false
+        stages:
+          - pre-push
+        description: Validate that npm package includes all .meta files correctly.
+
+  - repo: local
+    hooks:
+      - id: actionlint
+        name: Lint GitHub Actions workflows
+        entry: bash -c 'if command -v actionlint >/dev/null 2>&1; then actionlint; else echo "actionlint not installed; skipping"; fi'
+        language: system
+        files: '^\.github/workflows/.*\.ya?ml$'
+        pass_filenames: false
+        stages:
+          - pre-push
+        description: Validate GitHub Actions workflow syntax before push.
+
+  - repo: local
+    hooks:
+      - id: cspell
+        name: Check spelling
+        entry: npx --yes cspell@9 --no-progress --no-summary
+        language: system
+        files: '(?i)\.(md|cs|json|ya?ml|ps1|js)$'
+        pass_filenames: true
+        stages:
+          - pre-push
+        description: Check spelling in changed files before push.

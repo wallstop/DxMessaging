@@ -1,0 +1,58 @@
+---
+name: Validate llms.txt
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - .llm/**
+      - scripts/update-llms-txt.js
+      - llms.txt
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - package.json
+      - .llm/**
+      - scripts/update-llms-txt.js
+      - llms.txt
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Check llms.txt is up-to-date
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i --no-audit --no-fund
+          fi
+
+      - name: Check llms.txt is up-to-date
+        run: npm run check:llms-txt

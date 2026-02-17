@@ -1,0 +1,200 @@
+site_name: DxMessaging Documentation
+site_url: https://wallstop.github.io/DxMessaging/
+site_description: High-performance type-safe messaging library for Unity
+site_author: Wallstop Studios
+repo_name: wallstop/DxMessaging
+repo_url: https://github.com/wallstop/DxMessaging
+edit_uri: edit/master/docs/
+
+copyright: Copyright &copy; 2017-2026 Wallstop Studios
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+# Extensions - Full suite for rich documentation
+markdown_extensions:
+  # Python Markdown core extensions
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Anchor link to this section
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+
+  # PyMdownx extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      auto_title: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: wallstop
+      repo: DxMessaging
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Hooks for source code link transformation
+hooks:
+  - docs/hooks.py
+
+# Plugins - Production-ready suite
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+      lang: en
+  - git-revision-date-localized:
+      enable_creation_date: true
+      enable_git_follow: false
+      type: timeago
+      fallback_to_build_date: true
+      strict: false
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+      htmlmin_opts:
+        remove_comments: true
+
+# Extra configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/wallstop
+      name: Wallstop Studios on GitHub
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
+  - javascripts/mermaid-config.js
+  - javascripts/csharp-highlight.js
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Overview: getting-started/overview.md
+      - Installation: getting-started/install.md
+      - Quick Start: getting-started/quick-start.md
+      - Getting Started Guide: getting-started/getting-started.md
+      - Visual Guide: getting-started/visual-guide.md
+  - Concepts:
+      - concepts/index.md
+      - Mental Model: concepts/mental-model.md
+      - Message Types: concepts/message-types.md
+      - Listening Patterns: concepts/listening-patterns.md
+      - Targeting & Context: concepts/targeting-and-context.md
+      - Interceptors & Ordering: concepts/interceptors-and-ordering.md
+  - Guides:
+      - Patterns: guides/patterns.md
+      - Unity Integration: guides/unity-integration.md
+      - Testing: guides/testing.md
+      - Diagnostics: guides/diagnostics.md
+      - Advanced Topics: guides/advanced.md
+      - Migration Guide: guides/migration-guide.md
+  - Architecture:
+      - Design & Architecture: architecture/design-and-architecture.md
+      - Comparisons: architecture/comparisons.md
+      - Performance: architecture/performance.md
+  - Advanced:
+      - Emit Shorthands: advanced/emit-shorthands.md
+      - Message Bus Providers: advanced/message-bus-providers.md
+      - Registration Builders: advanced/registration-builders.md
+      - Runtime Configuration: advanced/runtime-configuration.md
+      - String Messages: advanced/string-messages.md
+  - Integrations:
+      - integrations/index.md
+      - VContainer: integrations/vcontainer.md
+      - Zenject: integrations/zenject.md
+      - Reflex: integrations/reflex.md
+  - Examples:
+      - End-to-End: examples/end-to-end.md
+      - Scene Transitions: examples/end-to-end-scene-transitions.md
+  - Reference:
+      - reference/reference.md
+      - Quick Reference: reference/quick-reference.md
+      - Helpers: reference/helpers.md
+      - FAQ: reference/faq.md
+      - Glossary: reference/glossary.md
+      - Troubleshooting: reference/troubleshooting.md
+      - Compatibility: reference/compatibility.md

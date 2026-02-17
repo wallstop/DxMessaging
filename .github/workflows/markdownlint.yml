@@ -1,0 +1,57 @@
+name: Markdown Lint
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - ".markdownlint.json"
+      - ".markdownlint-cli2.jsonc"
+      - "package.json"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "**/*.md"
+      - "**/*.markdown"
+      - ".markdownlint.json"
+      - ".markdownlint-cli2.jsonc"
+      - "package.json"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    name: Lint repository Markdown
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: package.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i --no-audit --no-fund
+          fi
+
+      - name: Run markdownlint via npm script (CLI2 + repo config)
+        run: npm run lint:markdown

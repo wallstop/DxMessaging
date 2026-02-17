@@ -1,0 +1,13 @@
+{
+  "name": "WallstopStudios.DxMessaging.UIButtons.Sample",
+  "rootNamespace": "WallstopStudios.DxMessaging.UIButtons.Sample",
+  "references": ["WallstopStudios.DxMessaging"],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "noEngineReferences": false
+}
