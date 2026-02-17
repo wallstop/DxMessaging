@@ -1,32 +1,35 @@
 ###############################################################################
 # Line endings
 #
-# Enforce CRLF in the working tree for all text files to align with
-# .editorconfig (end_of_line = crlf, charset = utf-8 without BOM) and avoid
-# formatter diffs on Linux runners.
+# Default to LF line endings for all text files for better cross-platform
+# compatibility and CI/CD consistency. C# files use CRLF per .NET conventions.
 ###############################################################################
-* text=auto eol=crlf
+* text=auto eol=lf
 
-# Be explicit for common text file types in this repo
+# C# and .NET project files use CRLF
 *.cs        text eol=crlf
 *.csproj    text eol=crlf
 *.sln       text eol=crlf
-*.json      text eol=crlf
-*.yaml      text eol=crlf
-*.yml       text eol=crlf
-*.md        text eol=crlf
-*.xml       text eol=crlf
-*.uxml      text eol=crlf
-*.uss       text eol=crlf
-*.shader    text eol=crlf
-*.hlsl      text eol=crlf
-*.compute   text eol=crlf
-*.cginc     text eol=crlf
-*.asmdef    text eol=crlf
-*.asmref    text eol=crlf
-*.meta      text eol=crlf
-*.ps1       text eol=crlf
-*.txt       text eol=crlf
+
+# All other text files use LF
+*.json      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
+*.xml       text eol=lf
+*.uxml      text eol=lf
+*.uss       text eol=lf
+*.shader    text eol=lf
+*.hlsl      text eol=lf
+*.compute   text eol=lf
+*.cginc     text eol=lf
+*.asmdef    text eol=lf
+*.asmref    text eol=lf
+*.meta      text eol=lf
+*.ps1       text eol=lf
+*.txt       text eol=lf
+*.js        text eol=lf
+*.mjs       text eol=lf
 
 # Shell scripts must use LF for proper execution on Unix systems
 *.sh        text eol=lf
@@ -36,9 +39,7 @@
 *.fish      text eol=lf
 
 # Git hooks must use LF for proper execution on Unix systems
-# (.meta files override back to CRLF per Unity requirements)
 scripts/hooks/* text eol=lf
-scripts/hooks/*.meta text eol=crlf
 
 ###############################################################################
 # Set default behavior for command prompt diff.
