@@ -201,20 +201,81 @@ namespace DxMessaging.Editor
                 }
 
                 string rspContent = File.ReadAllText(RspFilePath);
-                bool modified = false;
-                foreach (string analyzerArgument in GetAnalyzerArguments())
-                {
-                    if (rspContent.Contains(analyzerArgument, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
 
-                    File.AppendAllText(RspFilePath, analyzerArgument + Environment.NewLine);
-                    modified = true;
+                // Get current valid analyzer arguments
+                HashSet<string> currentAnalyzerArgs = new(
+                    GetAnalyzerArguments(),
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+                // Parse existing lines and filter out stale DxMessaging analyzer entries
+                List<string> newLines = new();
+                bool foundStaleEntries = false;
+
+                foreach (
+                    string line in rspContent.Split(
+                        new[] { '\r', '\n' },
+                        StringSplitOptions.RemoveEmptyEntries
+                    )
+                )
+                {
+                    string trimmedLine = line.Trim();
+
+                    // Check if this is a DxMessaging analyzer line
+                    bool isDxMessagingAnalyzer =
+                        trimmedLine.StartsWith("-a:", StringComparison.OrdinalIgnoreCase)
+                        && (
+                            trimmedLine.Contains(
+                                "com.wallstop-studios.dxmessaging",
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                            || trimmedLine.Contains(
+                                "WallstopStudios.DxMessaging",
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        );
+
+                    if (isDxMessagingAnalyzer)
+                    {
+                        // Only keep if it's in the current valid set
+                        if (currentAnalyzerArgs.Contains(trimmedLine))
+                        {
+                            newLines.Add(trimmedLine);
+                        }
+                        else
+                        {
+                            foundStaleEntries = true;
+                        }
+                    }
+                    else
+                    {
+                        // Keep all non-DxMessaging lines as-is
+                        newLines.Add(trimmedLine);
+                    }
                 }
+
+                // Add any new analyzer arguments that aren't already present
+                bool foundNewEntries = false;
+                foreach (string analyzerArgument in currentAnalyzerArgs)
+                {
+                    if (!newLines.Contains(analyzerArgument, StringComparer.OrdinalIgnoreCase))
+                    {
+                        newLines.Add(analyzerArgument);
+                        foundNewEntries = true;
+                    }
+                }
+
+                bool modified = foundStaleEntries || foundNewEntries;
 
                 if (modified)
                 {
+                    // Write the cleaned up content
+                    string newContent = string.Join(Environment.NewLine, newLines);
+                    if (!string.IsNullOrEmpty(newContent))
+                    {
+                        newContent += Environment.NewLine;
+                    }
+                    File.WriteAllText(RspFilePath, newContent);
                     AssetDatabase.ImportAsset("csc.rsp");
                     Debug.Log("Updated csc.rsp.");
                 }

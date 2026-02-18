@@ -10,6 +10,7 @@
 *.cs        text eol=crlf
 *.csproj    text eol=crlf
 *.sln       text eol=crlf
+*.props     text eol=crlf
 
 # All other text files use LF
 *.json      text eol=lf
@@ -99,4 +100,3 @@ scripts/hooks/* text eol=lf
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
-*.txt        text eol=crlf
