@@ -60,7 +60,7 @@ jobs:
           cat artifacts/coverage/Summary.txt
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: generator-coverage
           path: artifacts/coverage
