@@ -47,9 +47,13 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// Text file extensions that require CRLF line endings
+// Text file extensions that require CRLF line endings (C# and .NET files only)
 const crlfExts = new Set([
-  '.cs', '.csproj', '.sln',
+  '.cs', '.csproj', '.sln'
+]);
+
+// All other text file extensions use LF line endings
+const lfExts = new Set([
   '.js', '.cjs', '.mjs',
   '.json', '.jsonc', '.toml',
   '.yaml', '.yml',
@@ -57,11 +61,9 @@ const crlfExts = new Set([
   '.xml', '.uxml', '.uss',
   '.shader', '.hlsl', '.compute', '.cginc',
   '.asmdef', '.asmref', '.meta',
-  '.ps1'
+  '.ps1',
+  '.sh', '.bash', '.zsh', '.ksh', '.fish'
 ]);
-
-// Shell scripts require LF line endings for Unix compatibility
-const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
 
 // Git hooks directory - files here need LF regardless of extension
 const hooksDir = path.join('scripts', 'hooks');
@@ -315,18 +317,18 @@ for (const file of textFiles) {
   const ext = path.extname(file).toLowerCase();
   const isHook = isGitHook(file);
   
-  // Shell scripts and git hooks must use LF only
-  const needsLf = lfExts.has(ext) || isHook;
-  if (needsLf) {
-    if (hasNonLfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
-  } else {
-    // All other text files must use CRLF
+  // C# and .NET files must use CRLF; all other text files (including shell scripts and git hooks) use LF
+  const needsCrlf = crlfExts.has(ext) && !isHook;
+  if (needsCrlf) {
     if (hasNonCrlfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
+  } else {
+    // All other text files must use LF
+    if (hasNonLfEol(buf)) badEolFiles.push(path.relative(repoRoot, file));
   }
 }
 
 if (bomFiles.length === 0 && badEolFiles.length === 0 && indexEolIssues.length === 0) {
-  console.log(`EOL check passed: ${textFiles.length} file(s) verified (CRLF for text files, LF for shell scripts), no BOMs detected.`);
+  console.log(`EOL check passed: ${textFiles.length} file(s) verified (CRLF for C#/.NET files, LF for all other text files), no BOMs detected.`);
   process.exit(0);
 }
 
@@ -335,22 +337,22 @@ if (bomFiles.length) {
   for (const f of bomFiles) console.error(`  ${f}`);
 }
 if (badEolFiles.length) {
-  // Separate CRLF-required files from LF-required files (shell scripts + git hooks)
+  // Separate CRLF-required files (C#/.NET) from LF-required files (everything else)
   const crlfViolations = badEolFiles.filter((f) => {
     const fullPath = path.resolve(repoRoot, f);
-    return !lfExts.has(path.extname(f).toLowerCase()) && !isGitHook(fullPath);
+    return crlfExts.has(path.extname(f).toLowerCase()) && !isGitHook(fullPath);
   });
   const lfViolations = badEolFiles.filter((f) => {
     const fullPath = path.resolve(repoRoot, f);
-    return lfExts.has(path.extname(f).toLowerCase()) || isGitHook(fullPath);
+    return !crlfExts.has(path.extname(f).toLowerCase()) || isGitHook(fullPath);
   });
   
   if (crlfViolations.length) {
-    console.error('Files require CRLF line endings but contain LF or bare CR:');
+    console.error('C#/.NET files require CRLF line endings but contain LF or bare CR:');
     for (const f of crlfViolations) console.error(`  ${f}`);
   }
   if (lfViolations.length) {
-    console.error('Shell scripts and git hooks require LF line endings but contain CRLF or bare CR:');
+    console.error('Text files require LF line endings but contain CRLF or bare CR:');
     for (const f of lfViolations) console.error(`  ${f}`);
   }
 }
