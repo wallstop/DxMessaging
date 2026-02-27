@@ -124,6 +124,11 @@ jobs:
       - name: Markdown lint (CI gate)
         run: npm run lint:markdown
 
+      - name: Normalize line endings in index and working tree
+        run: |
+          git add --renormalize .
+          git reset --hard
+
       - name: Enforce EOL (CRLF) and No BOM
         shell: pwsh
         run: ./scripts/check-eol.ps1 -VerboseOutput

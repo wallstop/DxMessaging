@@ -26,9 +26,13 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// Text file extensions that require CRLF line endings (must match check-eol.js)
+// Text file extensions that require CRLF line endings (C# and .NET files only)
 const crlfExts = new Set([
-  '.cs', '.csproj', '.sln',
+  '.cs', '.csproj', '.sln'
+]);
+
+// All other text file extensions use LF line endings
+const lfExts = new Set([
   '.js', '.cjs', '.mjs',
   '.json', '.jsonc', '.toml',
   '.yaml', '.yml',
@@ -36,11 +40,9 @@ const crlfExts = new Set([
   '.xml', '.uxml', '.uss',
   '.shader', '.hlsl', '.compute', '.cginc',
   '.asmdef', '.asmref', '.meta',
-  '.ps1'
+  '.ps1',
+  '.sh', '.bash', '.zsh', '.ksh', '.fish'
 ]);
-
-// Shell scripts require LF line endings for Unix compatibility
-const lfExts = new Set(['.sh', '.bash', '.zsh', '.ksh', '.fish']);
 
 // Git hooks directory - files here need LF regardless of extension
 const hooksDir = path.join('scripts', 'hooks');
@@ -147,9 +149,9 @@ for (const file of allFiles) {
   const origTxt = origBuf.toString('utf8');
   const noBomTxt = buf.toString('utf8');
   
-  // Shell scripts and git hooks use LF, all other text files use CRLF
-  const needsLf = lfExts.has(ext) || isHook;
-  const fixedTxt = needsLf ? toLf(noBomTxt) : toCrlf(noBomTxt);
+  // C# and .NET files use CRLF; all other text files (including shell scripts and git hooks) use LF
+  const needsCrlf = crlfExts.has(ext) && !isHook;
+  const fixedTxt = needsCrlf ? toCrlf(noBomTxt) : toLf(noBomTxt);
 
   if (fixedTxt !== origTxt) {
     fs.writeFileSync(file, fixedTxt, { encoding: 'utf8' });
