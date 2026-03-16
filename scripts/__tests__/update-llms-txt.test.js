@@ -5,6 +5,7 @@ const {
   countSkillFiles,
   getSkillCategories,
   normalizeForComparison,
+  hasValidLastUpdatedLine,
 } = require("../update-llms-txt");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
@@ -149,10 +150,13 @@ describe("update-llms-txt.js", () => {
     test("llms.txt should be up to date", () => {
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
 
-      // Ensure there is exactly one "Last Updated" line present in the file, with an ISO YYYY-MM-DD date.
-      const lastUpdatedMatches = currentContent.match(/^\*\*Last Updated:\*\*\s+\d{4}-\d{2}-\d{2}\s*\r?$/gm);
-      expect(lastUpdatedMatches).not.toBeNull();
-      expect(lastUpdatedMatches.length).toBe(1);
+      // Ensure there is exactly one "Last Updated" line present in the file, and validate it
+      // using the same helper as the runtime logic to avoid drift.
+      const lastUpdatedLines = currentContent
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("**Last Updated:**"));
+      expect(lastUpdatedLines.length).toBe(1);
+      expect(hasValidLastUpdatedLine(lastUpdatedLines[0])).toBe(true);
 
       const expectedContent = generateLlmsTxt();
       expect(normalizeForComparison(currentContent)).toBe(normalizeForComparison(expectedContent));
