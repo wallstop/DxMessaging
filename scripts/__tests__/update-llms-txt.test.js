@@ -148,6 +148,12 @@ describe("update-llms-txt.js", () => {
 
     test("llms.txt should be up to date", () => {
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
+
+      // Ensure there is exactly one "Last Updated" line present in the file.
+      const lastUpdatedMatches = currentContent.match(/^\*\*Last Updated:\*\* .+$/gm);
+      expect(lastUpdatedMatches).not.toBeNull();
+      expect(lastUpdatedMatches.length).toBe(1);
+
       const expectedContent = generateLlmsTxt();
       expect(normalizeForComparison(currentContent)).toBe(normalizeForComparison(expectedContent));
     });
