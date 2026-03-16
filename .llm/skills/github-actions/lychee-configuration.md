@@ -140,6 +140,8 @@ The script:
 1. Validates field values where applicable (e.g., `verbose` must be one of the allowed
    string enum values: "error", "warn", "info", "debug", "trace", including when
    key-value pairs are defined inside TOML tables)
+1. Requires properly paired quote boundaries before unquoting string-enum values (invalid
+   quote forms like `"info` or `"info'` are rejected, not normalized)
 1. Reports errors for any unrecognized fields
 1. Reports warnings for duplicate fields
 1. Exits with code 1 on validation failure
@@ -256,6 +258,10 @@ the valid field list, also update test expectations.
 | Pinning to `@v2` without validation         | New lychee versions can break config silently          | Always pair floating tags with config validation              |
 | Ignoring TOML table headers in validators   | Invalid table-based config bypasses validation         | Parse `[table]` and `[[array]]` headers as top-level fields   |
 | Reading config files at test module scope   | Jest can fail during test collection with poor context | Read files in `beforeAll` with an existence guard             |
+
+Additional parser guard: malformed quoted values such as `"info` or `"info'`
+must be treated as invalid and rejected unless opening/closing quotes are present
+and use the same quote character.
 
 ## Validation Checklist
 

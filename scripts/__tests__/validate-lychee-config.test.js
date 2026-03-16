@@ -354,6 +354,30 @@ describe("validateFieldValues", () => {
             const { errors } = validateFieldValues(keyValues);
             expect(errors).toEqual([]);
         });
+
+        test("should reject mismatched quote boundaries", () => {
+            const keyValues = [{ key: "verbose", value: '"info\'' }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("must be a quoted string");
+        });
+
+        test("should reject unclosed opening quote", () => {
+            const keyValues = [{ key: "verbose", value: '"info' }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("must be a quoted string");
+        });
+
+        test("should reject value with trailing quote only", () => {
+            const keyValues = [{ key: "verbose", value: 'info"' }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("must be a quoted string");
+        });
     });
 
     test("should not produce errors for non-verbose fields", () => {

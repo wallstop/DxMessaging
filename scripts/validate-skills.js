@@ -105,7 +105,7 @@ function validateRequiredField(frontmatter, field, relativePath) {
 function validateTags(frontmatter, relativePath) {
     const warnings = [];
 
-    if (frontmatter.tags === undefined || frontmatter.tags === null) {
+    if (frontmatter.tags == null) {
         warnings.push(
             new ValidationError(
                 relativePath,
@@ -242,7 +242,7 @@ function parseFrontmatter(content) {
             if (colonIndex > 0 && !arrayValue.startsWith('"') && !arrayValue.startsWith("'")) {
                 // Array of objects - parse as key: value
                 const itemKey = arrayValue.slice(0, colonIndex).trim();
-                let itemValue = arrayValue.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
+                let itemValue = stripMatchingBoundaryQuotes(arrayValue.slice(colonIndex + 1).trim());
 
                 // Check if we need to create a new object in the array
                 if (currentContext.isArray) {
@@ -255,7 +255,7 @@ function parseFrontmatter(content) {
                 }
             } else {
                 // Simple array value
-                const value = arrayValue.replace(/^["']|["']$/g, '');
+                const value = stripMatchingBoundaryQuotes(arrayValue);
                 if (currentContext.isArray) {
                     currentContext.obj.push(value);
                 }
@@ -291,12 +291,35 @@ function parseFrontmatter(content) {
             }
         } else {
             // Simple key: value
-            value = value.replace(/^["']|["']$/g, '');
+            value = stripMatchingBoundaryQuotes(value);
             currentContext.obj[key] = value;
         }
     }
 
     return result;
+}
+
+/**
+ * Strip wrapping quotes only when both boundary quotes match.
+ *
+ * @param {string} value - Raw YAML scalar value
+ * @returns {string} Trimmed value with matching boundary quotes removed
+ */
+function stripMatchingBoundaryQuotes(value) {
+    const trimmed = value.trim();
+    if (trimmed.length < 2) {
+        return trimmed;
+    }
+
+    const firstChar = trimmed[0];
+    const lastChar = trimmed[trimmed.length - 1];
+    const hasMatchingQuotes = (firstChar === '"' || firstChar === "'") && firstChar === lastChar;
+
+    if (!hasMatchingQuotes) {
+        return trimmed;
+    }
+
+    return trimmed.slice(1, -1);
 }
 
 /**

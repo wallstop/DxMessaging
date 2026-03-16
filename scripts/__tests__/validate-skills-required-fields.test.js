@@ -13,6 +13,7 @@
 "use strict";
 
 const {
+    parseFrontmatter,
     validateRequiredField,
     validateRequiredFields,
     REQUIRED_FIELDS,
@@ -184,5 +185,42 @@ describe("validate-skills required field validation", () => {
             expect(errors[0].field).toBe(field);
             expect(errors[0].message).toContain(`Required field '${field}' is missing`);
         });
+    });
+});
+
+describe("validate-skills parseFrontmatter quote boundary handling", () => {
+    test("should strip properly paired quote boundaries", () => {
+        const content = [
+            "---",
+            "title: 'Sample Skill'",
+            "---",
+        ].join("\n");
+
+        const frontmatter = parseFrontmatter(content);
+        expect(frontmatter.title).toBe("Sample Skill");
+    });
+
+    test("should keep mismatched quote boundaries unchanged", () => {
+        const content = [
+            "---",
+            "title: 'Sample Skill\"",
+            "---",
+        ].join("\n");
+
+        const frontmatter = parseFrontmatter(content);
+        expect(frontmatter.title).toBe("'Sample Skill\"");
+    });
+
+    test("should keep unclosed array string quote unchanged", () => {
+        const content = [
+            "---",
+            "tags:",
+            "  - 'alpha",
+            "  - 'beta'",
+            "---",
+        ].join("\n");
+
+        const frontmatter = parseFrontmatter(content);
+        expect(frontmatter.tags).toEqual(["'alpha", "beta"]);
     });
 });

@@ -309,6 +309,40 @@ function parseTopLevelKeyValues(content) {
 }
 
 /**
+ * Returns true when a value has matching quote boundaries using the same quote character.
+ *
+ * @param {string} value - Raw value from TOML
+ * @returns {boolean} True when value starts and ends with matching single or double quotes
+ */
+function hasMatchingBoundaryQuotes(value) {
+    const trimmed = value.trim();
+    if (trimmed.length < 2) {
+        return false;
+    }
+
+    const firstChar = trimmed[0];
+    const lastChar = trimmed[trimmed.length - 1];
+    const isQuote = firstChar === '"' || firstChar === "'";
+
+    return isQuote && firstChar === lastChar;
+}
+
+/**
+ * Strip wrapping quotes only when both boundary quotes match.
+ *
+ * @param {string} value - Raw value from TOML
+ * @returns {string} Trimmed value with matching boundary quotes removed
+ */
+function stripMatchingBoundaryQuotes(value) {
+    const trimmed = value.trim();
+    if (!hasMatchingBoundaryQuotes(trimmed)) {
+        return trimmed;
+    }
+
+    return trimmed.slice(1, -1);
+}
+
+/**
  * Validate field values against known constraints.
  * Currently validates:
  *   - verbose: must be one of "error", "warn", "info", "debug", "trace"
@@ -316,7 +350,8 @@ function parseTopLevelKeyValues(content) {
  * This function is designed to be extended with additional field validations
  * as lychee evolves.
  *
- * @param {{ key: string, value: string }[]} keyValues - Array of key-value pairs from the TOML file
+ * @param {Array<{ key: string, value: string, table?: string, keyPath?: string }>} keyValues
+ *   - Array of key-value pairs from the TOML file, including optional table/keyPath metadata
  * @returns {{ errors: string[], warnings: string[] }} Validation results
  */
 function validateFieldValues(keyValues) {
@@ -326,16 +361,19 @@ function validateFieldValues(keyValues) {
     for (const { key, value, keyPath } of keyValues) {
         if (key === "verbose") {
             // verbose must be a quoted string matching one of the valid log levels
-            // Strip surrounding quotes for comparison
-            const unquoted = value.replace(/^["']|["']$/g, "");
-            const isQuotedString = value.startsWith('"') || value.startsWith("'");
+            // Require matching boundary quotes so malformed TOML like '"info' is rejected.
+            const isQuotedString = hasMatchingBoundaryQuotes(value);
             const keyDisplay = keyPath || key;
 
             if (!isQuotedString) {
                 errors.push(
                     `Invalid value for '${keyDisplay}': ${value} (must be a quoted string, one of: ${VALID_VERBOSE_VALUES.join(", ")})`
                 );
-            } else if (!VALID_VERBOSE_VALUES.includes(unquoted)) {
+                continue;
+            }
+
+            const unquoted = stripMatchingBoundaryQuotes(value);
+            if (!VALID_VERBOSE_VALUES.includes(unquoted)) {
                 errors.push(
                     `Invalid value for '${keyDisplay}': ${value} (must be one of: ${VALID_VERBOSE_VALUES.join(", ")})`
                 );

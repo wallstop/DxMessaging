@@ -2,9 +2,9 @@
 title: "Validation Patterns and Duplicate Warning Prevention"
 id: "validation-patterns"
 category: "scripting"
-version: "1.1.0"
+version: "1.2.0"
 created: "2026-01-30"
-updated: "2026-01-30"
+updated: "2026-03-16"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -23,6 +23,7 @@ tags:
   - "testing"
   - "truthiness"
   - "type-coercion"
+  - "quote-validation"
 
 complexity:
   level: "intermediate"
@@ -85,8 +86,39 @@ confuses users and makes debugging harder.
    checking for invalid values
 1. **Use else-if chains** to ensure only one warning per field
 1. **Exclude empty/null values from enum validation** - an empty string is "empty," not "invalid enum"
+1. **Require matching quote boundaries before unquoting** - strip quotes only when both sides are present and the same quote character
 1. **Write integration tests** that verify exactly one warning per field condition
+1. **Include malformed quote tests** - cover mismatched and unclosed quotes so parsers do not silently normalize invalid input
 1. **Use explicit presence checks** - avoid truthiness-based validation that conflates different issues
+
+## Quote-Boundary Validation
+
+When parsing YAML/TOML scalar values, avoid regex patterns that remove leading or trailing quotes independently.
+For example, `/^["']|["']$/g` can transform malformed input into apparently valid values.
+
+Use a boundary check first:
+
+```javascript
+function stripMatchingBoundaryQuotes(value) {
+  const trimmed = value.trim();
+  if (trimmed.length < 2) {
+    return trimmed;
+  }
+
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  const hasMatchingQuotes = (first === '"' || first === "'") && first === last;
+
+  return hasMatchingQuotes ? trimmed.slice(1, -1) : trimmed;
+}
+```
+
+Test at least these malformed inputs:
+
+- `"value'` (mismatched boundaries)
+- `'value"` (mismatched boundaries)
+- `"value` (missing closing quote)
+- `value"` (missing opening quote)
 
 ## Truthiness vs Presence Checks
 

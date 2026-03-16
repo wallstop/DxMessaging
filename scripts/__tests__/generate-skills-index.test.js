@@ -13,6 +13,7 @@
 const {
     applyBrandCapitalization,
     categoryToTitle,
+    parseFrontmatter,
     normalizeToLf,
     BRAND_NAMES,
 } = require('../generate-skills-index.js');
@@ -412,6 +413,43 @@ describe("generate-skills-index", () => {
                 const result = normalizeToLf(content);
                 expect(result).not.toContain("\r");
             });
+        });
+    });
+
+    describe("parseFrontmatter quote boundary handling", () => {
+        test("should strip properly paired quotes", () => {
+            const content = [
+                "---",
+                'title: "My Skill"',
+                "---",
+            ].join("\n");
+
+            const frontmatter = parseFrontmatter(content);
+            expect(frontmatter.title).toBe("My Skill");
+        });
+
+        test("should keep mismatched quote boundaries unchanged", () => {
+            const content = [
+                "---",
+                'title: "My Skill\'',
+                "---",
+            ].join("\n");
+
+            const frontmatter = parseFrontmatter(content);
+            expect(frontmatter.title).toBe('"My Skill\'');
+        });
+
+        test("should keep unclosed quoted array values unchanged", () => {
+            const content = [
+                "---",
+                "tags:",
+                '  - "alpha',
+                '  - "beta"',
+                "---",
+            ].join("\n");
+
+            const frontmatter = parseFrontmatter(content);
+            expect(frontmatter.tags).toEqual(['"alpha', "beta"]);
         });
     });
 
