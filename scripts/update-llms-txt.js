@@ -391,12 +391,22 @@ Copyright (c) 2017-2026 Wallstop Studios
  * date changing each day.
  */
 function normalizeForComparison(str) {
-  return str
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .filter((line) => !line.startsWith("**Last Updated:**"))
-    .join("\n")
+  const normalized = str.replace(/\r\n/g, "\n");
+
+  // Normalize the Last Updated line by replacing the date with a fixed placeholder,
+  // while keeping the marker text so that structural differences are still detected.
+  return normalized
+    .replace(/^\*\*Last Updated:\*\*.*$/m, "**Last Updated:** <DATE>")
     .trim();
+}
+
+/**
+ * Count how many "**Last Updated:**" lines are present in the given string.
+ */
+function countLastUpdatedLines(str) {
+  const normalized = str.replace(/\r\n/g, "\n");
+  const matches = normalized.match(/^\*\*Last Updated:\*\*/gm);
+  return matches ? matches.length : 0;
 }
 
 /**
@@ -417,6 +427,15 @@ function main() {
       }
 
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
+
+      // Validate that both contents contain exactly one "**Last Updated:**" line
+      const currentLastUpdatedCount = countLastUpdatedLines(currentContent);
+      const newLastUpdatedCount = countLastUpdatedLines(newContent);
+      if (currentLastUpdatedCount !== 1 || newLastUpdatedCount !== 1) {
+        console.error("ERROR: llms.txt is missing or has an invalid '**Last Updated:**' line");
+        process.exit(1);
+      }
+
       if (normalizeForComparison(currentContent) !== normalizeForComparison(newContent)) {
         console.error("ERROR: llms.txt is out of date");
         console.error("Run: node scripts/update-llms-txt.js");
