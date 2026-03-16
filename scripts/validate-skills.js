@@ -26,6 +26,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+    stripMatchingBoundaryQuotes,
+    normalizeToLf,
+} = require('./lib/quote-parser');
 
 const SKILLS_DIR = path.join(__dirname, '..', '.llm', 'skills');
 const CONTEXT_FILE = path.join(__dirname, '..', '.llm', 'context.md');
@@ -105,7 +109,7 @@ function validateRequiredField(frontmatter, field, relativePath) {
 function validateTags(frontmatter, relativePath) {
     const warnings = [];
 
-    if (frontmatter.tags === undefined || frontmatter.tags === null) {
+    if (frontmatter.tags == null) {
         warnings.push(
             new ValidationError(
                 relativePath,
@@ -202,14 +206,15 @@ function validatePerformanceRating(frontmatter, relativePath) {
  * Returns null if no valid frontmatter found.
  */
 function parseFrontmatter(content) {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    const normalizedContent = normalizeToLf(content);
+    const match = normalizedContent.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
         return null;
     }
 
     const yaml = match[1];
     const result = {};
-    const lines = yaml.split(/\r?\n/);
+    const lines = yaml.split('\n');
 
     // Stack-based parser for arbitrary nesting depth
     // Each stack entry: { obj, key, indent, isArray }
@@ -242,7 +247,7 @@ function parseFrontmatter(content) {
             if (colonIndex > 0 && !arrayValue.startsWith('"') && !arrayValue.startsWith("'")) {
                 // Array of objects - parse as key: value
                 const itemKey = arrayValue.slice(0, colonIndex).trim();
-                let itemValue = arrayValue.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
+                let itemValue = stripMatchingBoundaryQuotes(arrayValue.slice(colonIndex + 1).trim());
 
                 // Check if we need to create a new object in the array
                 if (currentContext.isArray) {
@@ -255,7 +260,7 @@ function parseFrontmatter(content) {
                 }
             } else {
                 // Simple array value
-                const value = arrayValue.replace(/^["']|["']$/g, '');
+                const value = stripMatchingBoundaryQuotes(arrayValue);
                 if (currentContext.isArray) {
                     currentContext.obj.push(value);
                 }
@@ -291,7 +296,7 @@ function parseFrontmatter(content) {
             }
         } else {
             // Simple key: value
-            value = value.replace(/^["']|["']$/g, '');
+            value = stripMatchingBoundaryQuotes(value);
             currentContext.obj[key] = value;
         }
     }
@@ -388,7 +393,7 @@ function validateSkill(skillFile) {
         return { errors, warnings, lineCount: 0 };
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split('\n').length;
     const frontmatter = parseFrontmatter(content);
 
     // Check line count limits
@@ -591,7 +596,7 @@ function validateContextFile() {
         return { errors, warnings, lineCount: 0 };
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split('\n').length;
 
     if (lineCount > LINE_LIMIT_HARD_MAX) {
         errors.push(

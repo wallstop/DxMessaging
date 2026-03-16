@@ -25,6 +25,10 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const {
+    stripMatchingBoundaryQuotes,
+    normalizeToLf,
+} = require("./lib/quote-parser");
 
 const SKILLS_DIR = path.join(__dirname, "..", ".llm", "skills");
 const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
@@ -106,12 +110,6 @@ function categoryToTitle(category) {
         .join(" ");
 }
 
-function normalizeToCrlf(text) {
-    let normalized = text.replace(/\r\n/g, "\n");
-    normalized = normalized.replace(/\r/g, "\n");
-    return normalized.replace(/\n/g, "\r\n");
-}
-
 function getLatestSkillDate(skills) {
     const dates = skills
         .map((skill) => skill.updated || skill.created)
@@ -161,14 +159,15 @@ function formatWithPrettier(content) {
  * Returns null if no valid frontmatter found.
  */
 function parseFrontmatter(content) {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    const normalizedContent = normalizeToLf(content);
+    const match = normalizedContent.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
         return null;
     }
 
     const yaml = match[1];
     const result = {};
-    const lines = yaml.split(/\r?\n/);
+    const lines = yaml.split("\n");
 
     // Stack-based parser for arbitrary nesting depth
     // Each stack entry: { obj, key, indent, isArray }
@@ -201,7 +200,7 @@ function parseFrontmatter(content) {
             if (colonIndex > 0 && !arrayValue.startsWith('"') && !arrayValue.startsWith("'")) {
                 // Array of objects - parse as key: value
                 const itemKey = arrayValue.slice(0, colonIndex).trim();
-                let itemValue = arrayValue.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, "");
+                let itemValue = stripMatchingBoundaryQuotes(arrayValue.slice(colonIndex + 1).trim());
 
                 // Check if we need to create a new object in the array
                 if (currentContext.isArray) {
@@ -214,7 +213,7 @@ function parseFrontmatter(content) {
                 }
             } else {
                 // Simple array value
-                const value = arrayValue.replace(/^["']|["']$/g, "");
+                const value = stripMatchingBoundaryQuotes(arrayValue);
                 if (currentContext.isArray) {
                     currentContext.obj.push(value);
                 }
@@ -250,7 +249,7 @@ function parseFrontmatter(content) {
             }
         } else {
             // Simple key: value
-            value = value.replace(/^["']|["']$/g, "");
+            value = stripMatchingBoundaryQuotes(value);
             currentContext.obj[key] = value;
         }
     }
@@ -310,7 +309,7 @@ function loadSkill(skillFile) {
         return null;
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split("\n").length;
     const frontmatter = parseFrontmatter(content);
 
     if (!frontmatter) {
@@ -556,7 +555,7 @@ function main() {
         return 1;
     }
 
-    const normalizedContent = normalizeToCrlf(formattedContent);
+    const normalizedContent = normalizeToLf(formattedContent);
 
     if (checkOnly) {
         let existingContent = null;
@@ -587,6 +586,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         applyBrandCapitalization,
         categoryToTitle,
+        parseFrontmatter,
         BRAND_NAMES,
     };
 }

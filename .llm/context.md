@@ -53,6 +53,14 @@ All scripts in `scripts/` must have corresponding test coverage in `scripts/__te
 
 - **Naming**: `script-name.test.js` for each script.
 - **Coverage**: Test core logic, input validation, edge cases, and error handling.
+- **Shared helpers**: If a test or another module imports a script helper, export that helper explicitly and treat it as part of the module contract.
+- **Match runtime inputs**: When a test reuses a runtime validation helper, pass the same shape of input that production code passes. Do not narrow a whole-document validator down to a single extracted line unless that narrower contract is the one production uses.
+- **Quote-boundary parsing**: When unquoting TOML/YAML values, only strip quotes if both boundaries are present and use the same quote character. Never use start-or-end-only regex stripping.
+- **Shared quote parsing helper**: Reuse `scripts/lib/quote-parser.js` (`hasMatchingBoundaryQuotes`, `stripMatchingBoundaryQuotes`) instead of re-implementing quote-boundary logic in individual scripts.
+- **Shared newline normalization helper**: Reuse `scripts/lib/quote-parser.js` `normalizeToLf()` before parser line splitting or multiline boundary matching; do not rely on `/\r?\n/` alone because lone `\r` line endings will be missed.
+- **Malformed quote tests**: Parser-related tests must include malformed quote cases (mismatched and unclosed quotes) to ensure invalid config/frontmatter is surfaced instead of normalized silently.
+- **Malformed newline tests**: Parser-related tests must include lone-CR and mixed-line-ending inputs to guard against silent parsing failures.
+- **Dead helpers**: Remove unused helpers promptly unless a committed caller or test uses them. Do not leave validation helpers orphaned.
 - **File paths**: Include tests that verify referenced file paths exist with correct case.
 - **PowerShell logic**: Implement equivalent JavaScript functions to test PowerShell script logic.
 
@@ -66,15 +74,19 @@ When scripts exist in both PowerShell and JavaScript, keep these values synchron
 - **Exclude patterns**: Directory exclusion patterns (`.git`, `node_modules`, `Library`, etc.) must match.
 - **Validation logic**: Error categories and reporting must use the same structure.
 
-When modifying one script, search for and update the corresponding script. Use comments to mark synchronized sections:
+When modifying one script, search for and update the corresponding script. For EOL policy, treat
+`scripts/lib/eol-policy.js` as the JavaScript source of truth and keep PowerShell plus
+`.gitattributes` aligned. Note that `.gitattributes` enforces LF primarily via the default
+`* text=auto eol=lf` rule and explicit CRLF overrides for .NET file types. Use comments to mark
+synchronized sections:
 
 ```powershell
-# SYNC: Keep in sync with check-eol.js crlfExts
+# SYNC: Keep in sync with scripts/lib/eol-policy.js crlfExts and .gitattributes EOL policy
 $extensions = @('.cs', '.csproj', '.sln', ...)
 ```
 
 ```javascript
-// SYNC: Keep in sync with check-eol.ps1 $extensions
+// SYNC: Keep in sync with scripts/check-eol.ps1 $crlfExtensions and .gitattributes EOL policy
 const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 ```
 
@@ -103,7 +115,7 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 
 ### Mixed Line Ending Policies
 
-This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`). When working with line endings:
+This project uses LF for most text files and CRLF only for C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) per `.gitattributes`. When working with line endings:
 
 - **Prefer `fix-eol.js` for working tree fixes**: Run `node scripts/fix-eol.js` to directly fix line endings in your working tree. This is the recommended approach after cloning or when files have incorrect endings.
 - **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.
@@ -112,6 +124,7 @@ This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, 
 - **Dotfiles do not match glob patterns in `git add`**: The command `git ls-files "*.yaml"` matches dotfiles like `.pre-commit-config.yaml`, but `git add --renormalize -- "*.yaml"` does NOT match dotfiles. This causes the existence check to pass but the renormalize to fail. Exclude `yaml` from extension loops since the only `.yaml` files are typically dotfiles; use `yml` instead.
 - **Generalized rule for dotfile-only extensions**: Exclude any extension from `git add --renormalize` loops when ALL tracked files of that extension are dotfiles (files whose names start with `.`). To check: run `git ls-files "*.$ext" "**/*.$ext"` and verify whether any results are non-dotfiles. If all matches are dotfiles, exclude that extension.
 - **Error messages must be specific**: Indicate which policy was violated (e.g., "Expected LF for shell scripts" vs "Expected CRLF per project policy").
+- **Normalize all newline forms in script output/comparison paths**: When scripts write or compare text content, convert both `\r\n` and lone `\r` to `\n` (e.g., `text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")`). CRLF-only replacement is incomplete and can leave hidden lone-CR mismatches.
 - **git-auto-commit-action `file_pattern`**: This only limits what gets newly added; previously staged files still get committed. Ensure preceding `git add` commands target the same file set.
 - **`file_pattern` does not match dotfiles**: Like `git add`, the `file_pattern` option in `git-auto-commit-action` uses glob patterns that do not match dotfiles. Exclude patterns like `**/*.yaml` from `file_pattern` when all `.yaml` files are dotfiles (e.g., `.pre-commit-config.yaml`). This follows the same rule as excluding `yaml` from `git add --renormalize` loops.
 

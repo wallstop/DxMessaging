@@ -11,11 +11,36 @@
 "use strict";
 
 const {
+    parseTarListingOutput,
     validateMetaFilesHaveTargets,
     validateFilesHaveMetaFiles,
 } = require('../validate-npm-meta.js');
 
 describe("validate-npm-meta", () => {
+    describe("parseTarListingOutput", () => {
+        test("parses package paths with LF line endings", () => {
+            const tarOutput = [
+                "package/Runtime/File.cs",
+                "package/Runtime/File.cs.meta",
+                "",
+            ].join("\n");
+
+            const files = parseTarListingOutput(tarOutput);
+            expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+        });
+
+        test("parses package paths with lone CR line endings", () => {
+            const tarOutput = [
+                "package/Runtime/File.cs",
+                "package/Runtime/File.cs.meta",
+                "",
+            ].join("\r");
+
+            const files = parseTarListingOutput(tarOutput);
+            expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+        });
+    });
+
     describe("validateMetaFilesHaveTargets", () => {
         test("should pass when all .meta files have corresponding files", () => {
             const files = [

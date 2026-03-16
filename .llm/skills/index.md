@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-02-09. Do not edit manually.
+> **Auto-generated** on 2026-03-16. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,16 +9,16 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 87    |
+| Total Skills | 88    |
 | Categories   | 7     |
-| Unique Tags  | 166   |
+| Unique Tags  | 169   |
 
 ---
 
 ## Table of Contents
 
 - [Documentation](#documentation) (15)
-- [GitHub Actions](#github-actions) (2)
+- [GitHub Actions](#github-actions) (3)
 - [Packaging](#packaging) (1)
 - [Performance](#performance) (24)
 - [Scripting](#scripting) (6)
@@ -51,10 +51,11 @@
 
 ## GitHub Actions
 
-| Skill                                                                              | Lines  | Complexity      | Status    | Performance | Tags                            |
-| ---------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ------------------------------- |
-| [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md) | ✅ 232 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, git, ci-cd      |
-| [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)    | ✅ 347 | 🟡 Intermediate | ✅ Stable | ●●○○○       | github-actions, ci-cd, workflow |
+| Skill                                                                                    | Lines  | Complexity      | Status    | Performance | Tags                            |
+| ---------------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ------------------------------- |
+| [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md)       | ✅ 232 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, git, ci-cd      |
+| [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)          | ✅ 347 | 🟡 Intermediate | ✅ Stable | ●●○○○       | github-actions, ci-cd, workflow |
+| [Lychee Link Checker Configuration Management](./github-actions/lychee-configuration.md) | ✅ 292 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, ci-cd, lychee   |
 
 ## Packaging
 
@@ -100,7 +101,7 @@
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)            | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | powershell, scripting, regex              |
 | [Regex Pattern Documentation](./scripting/regex-documentation.md)                          | ⚠️ 462 | 🟡 Intermediate | ✅ Stable | ○○○○○       | regex, documentation, scripting           |
 | [Shell Scripting Best Practices](./scripting/shell-best-practices.md)                      | ⚠️ 387 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash, scripting                    |
-| [Validation Patterns and Duplicate Warning Prevention](./scripting/validation-patterns.md) | ⚠️ 419 | 🟡 Intermediate | ✅ Stable | ○○○○○       | validation, javascript, error-handling    |
+| [Validation Patterns and Duplicate Warning Prevention](./scripting/validation-patterns.md) | ⚠️ 451 | 🟡 Intermediate | ✅ Stable | ○○○○○       | validation, javascript, error-handling    |
 
 ## Solid
 
@@ -155,7 +156,7 @@
 
 ## Tag Cloud
 
-`testing`×30 `documentation`×16 `performance`×15 `unity`×14 `ci-cd`×10 `patterns`×10 `solid`×10 `memory`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `javascript`×6 `anti-patterns`×5 `collections`×5 `data-driven`×5 `debugging`×5 `linting`×5 `singleton`×5 `struct`×5 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `github-actions`×4 `markdown`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `code-quality`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `error-handling`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `logging`×3 `messaging`×3 `mkdocs`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `scripting`×3 `serialization`×3 `try-pattern`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `best-practices`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `configuration`×2 `data-structures`×2 `edge-cases`×2 `eviction`×2 `examples`×2 `git`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `jest`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `maintainability`×2 `maintenance`×2 `optimization`×2 `regex`×2 `release-notes`×2 `root-cause-analysis`×2 `urls`×2 `user-communication`×2 `validation`×2 `workflow`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `yaml`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `comments`×1 `compatibility`×1 `consistency`×1 `coroutines`×1 `cross-platform`×1 `diagrams`×1 `disposable`×1 `dry`×1 `duplicate-warnings`×1 `encoding`×1 `enum-validation`×1 `eslint`×1 `file-organization`×1 `files`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `gitattributes`×1 `here-strings`×1 `implementation`×1 `line-endings`×1 `llm-context`×1 `macos`×1 `mermaid`×1 `methodimpl`×1 `naming`×1 `navigation`×1 `negative-tests`×1 `npm`×1 `npmignore`×1 `optional-fields`×1 `packaging`×1 `parsing`×1 `portability`×1 `pre-commit`×1 `procedure`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `security`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `site-structure`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `sync-notes`×1 `test-cases`×1 `testability`×1 `theming`×1 `thread-safety`×1 `truthiness`×1 `type-coercion`×1 `type-specialization`×1 `version-management`×1 `windows`×1 `yield`×1 `zero-flaky`×1
+`testing`×30 `documentation`×16 `performance`×15 `unity`×14 `ci-cd`×11 `patterns`×10 `solid`×10 `memory`×9 `pooling`×9 `allocation`×8 `nunit`×8 `zero-alloc`×7 `javascript`×6 `anti-patterns`×5 `collections`×5 `data-driven`×5 `debugging`×5 `github-actions`×5 `linting`×5 `singleton`×5 `struct`×5 `builder`×4 `coverage`×4 `dictionary`×4 `fixtures`×4 `markdown`×4 `versioning`×4 `api-design`×3 `caching`×3 `changelog`×3 `code-quality`×3 `configuration`×3 `defensive`×3 `diagnostics`×3 `equality`×3 `error-handling`×3 `extensions`×3 `fluent-api`×3 `inspector`×3 `investigation`×3 `keep-a-changelog`×3 `logging`×3 `messaging`×3 `mkdocs`×3 `organization`×3 `parameterized`×3 `powershell`×3 `quality`×3 `reference-counting`×3 `scripting`×3 `serialization`×3 `try-pattern`×3 `validation`×3 `api-reference`×2 `arrays`×2 `benchmark`×2 `best-practices`×2 `case-sensitivity`×2 `categories`×2 `ci`×2 `cleanup`×2 `code-comments`×2 `code-samples`×2 `data-structures`×2 `edge-cases`×2 `eviction`×2 `examples`×2 `git`×2 `hashcode`×2 `hot-path`×2 `iequatable`×2 `inlining`×2 `jest`×2 `lfu`×2 `lifecycle`×2 `links`×2 `linux`×2 `lru`×2 `maintainability`×2 `maintenance`×2 `optimization`×2 `regex`×2 `release-notes`×2 `root-cause-analysis`×2 `urls`×2 `user-communication`×2 `workflow`×2 `workflows`×2 `writing`×2 `xml-docs`×2 `yaml`×2 `accessibility`×1 `accuracy`×1 `architecture`×1 `arraypool`×1 `assertions`×1 `automation`×1 `bash`×1 `boxing`×1 `buffers`×1 `checklist`×1 `clarity`×1 `comments`×1 `compatibility`×1 `consistency`×1 `coroutines`×1 `cross-platform`×1 `diagrams`×1 `disposable`×1 `dry`×1 `duplicate-warnings`×1 `encoding`×1 `enum-validation`×1 `eslint`×1 `file-organization`×1 `files`×1 `fisher-yates`×1 `flaky-tests`×1 `fragments`×1 `garbage-collection`×1 `generic`×1 `gitattributes`×1 `here-strings`×1 `implementation`×1 `line-endings`×1 `link-checking`×1 `llm-context`×1 `lychee`×1 `macos`×1 `mermaid`×1 `methodimpl`×1 `naming`×1 `navigation`×1 `negative-tests`×1 `npm`×1 `npmignore`×1 `optional-fields`×1 `packaging`×1 `parsing`×1 `portability`×1 `pre-commit`×1 `procedure`×1 `quote-validation`×1 `raii`×1 `release-workflow`×1 `scriptable-object`×1 `scripts`×1 `security`×1 `semantic-versioning`×1 `shared-state`×1 `shell`×1 `shuffle`×1 `site-structure`×1 `skills`×1 `stringbuilder`×1 `strings`×1 `style`×1 `sync-notes`×1 `test-cases`×1 `testability`×1 `theming`×1 `thread-safety`×1 `truthiness`×1 `type-coercion`×1 `type-specialization`×1 `version-management`×1 `windows`×1 `yield`×1 `zero-flaky`×1
 
 ---
 
@@ -216,6 +217,7 @@
 - [IEquatable Implementation Variants](./solid/iequatable-implementation-variants.md) _(solid)_
 - [IEquatable Usage Examples](./solid/iequatable-implementation-usage.md) _(solid)_
 - [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md) _(scripting)_
+- [Lychee Link Checker Configuration Management](./github-actions/lychee-configuration.md) _(github-actions)_
 - [Mermaid Diagram Theming](./documentation/mermaid-theming.md) _(documentation)_
 - [npm Package Configuration](./packaging/npm-package-configuration.md) _(packaging)_
 - [Object Pooling Anti-Patterns](./performance/object-pooling-anti-patterns.md) _(performance)_

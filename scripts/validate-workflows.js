@@ -25,6 +25,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { normalizeToLf } = require("./lib/quote-parser");
 
 const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
 
@@ -148,7 +149,7 @@ function validateWorkflow(filePath) {
         return violations;
     }
 
-    const lines = content.split(/\r?\n/);
+    const lines = normalizeToLf(content).split("\n");
 
     lines.forEach((line, index) => {
         const lineNumber = index + 1;
@@ -262,6 +263,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         isForbiddenRenormalizePattern,
         hasExistenceCheck,
+        validateWorkflow,
         Violation,
     };
 }

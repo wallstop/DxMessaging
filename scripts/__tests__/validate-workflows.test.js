@@ -7,9 +7,14 @@
 
 "use strict";
 
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
 const {
     isForbiddenRenormalizePattern,
     hasExistenceCheck,
+    validateWorkflow,
 } = require('../validate-workflows.js');
 
 describe("isForbiddenRenormalizePattern", () => {
@@ -184,5 +189,29 @@ describe("Real workflow patterns", () => {
                 true
             );
         });
+    });
+});
+
+describe("validateWorkflow newline handling", () => {
+    test("detects forbidden pattern when file uses lone CR line endings", () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-"));
+        try {
+            const workflowPath = path.join(tempDir, "test.yml");
+
+            const workflowContent = [
+                "name: Test",
+                "jobs:",
+                "  lint:",
+                "    steps:",
+                "      - run: git add --renormalize -- '*.md' '*.json'",
+            ].join("\r");
+
+            fs.writeFileSync(workflowPath, workflowContent, "utf8");
+            const violations = validateWorkflow(workflowPath);
+
+            expect(violations.some((v) => v.severity === "error")).toBe(true);
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
     });
 });

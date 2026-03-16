@@ -44,7 +44,7 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-        entry: npx --yes prettier@3.8.0 --write
+        entry: npx --yes prettier@3.8.1 --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
         description: Use pinned Prettier version to match CI.
@@ -139,6 +139,24 @@ repos:
           - pre-commit
           - pre-push
         description: Regenerate index.md and stage it for commit.
+      - id: update-llms-txt
+        name: Update llms.txt
+        entry: bash -c 'node scripts/update-llms-txt.js && { git add llms.txt 2>/dev/null || true; }'
+        language: system
+        pass_filenames: false
+        files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|\.llm/skills/.*)$'
+        stages:
+          - pre-commit
+        description: Regenerate llms.txt and stage it when llms inputs change.
+      - id: validate-llms-txt
+        name: Validate llms.txt generator contract
+        entry: npm run validate:llms-txt
+        language: system
+        pass_filenames: false
+        files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|scripts/__tests__/update-llms-txt\.test\.js|\.llm/skills/.*)$'
+        stages:
+          - pre-push
+        description: Run llms.txt generator tests and freshness checks before push.
 
   - repo: local
     hooks:
@@ -153,6 +171,35 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-lychee-config
+        name: Validate lychee configuration
+        entry: node scripts/validate-lychee-config.js
+        language: system
+        pass_filenames: false
+        files: '^\.lychee\.toml$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Validate .lychee.toml fields against lychee v0.23.0 valid options.
+      - id: script-parser-tests
+        name: Run parser script tests
+        entry: >-
+          npx jest --runTestsByPath scripts/__tests__/validate-lychee-config.test.js
+          scripts/__tests__/generate-skills-index.test.js
+          scripts/__tests__/validate-skills-required-fields.test.js
+          scripts/__tests__/validate-workflows.test.js
+          scripts/__tests__/check-eol.test.js
+          scripts/__tests__/quote-parser.test.js
+          scripts/__tests__/update-llms-txt.test.js
+        language: system
+        pass_filenames: false
+        files: '^(scripts/(check-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
+        stages:
+          - pre-commit
+        description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.
+
+  - repo: local
+    hooks:
       - id: actionlint
         name: Lint GitHub Actions workflows
         entry: bash -c 'if command -v actionlint >/dev/null 2>&1; then actionlint; else echo "actionlint not installed; skipping"; fi'
@@ -162,6 +209,15 @@ repos:
         stages:
           - pre-push
         description: Validate GitHub Actions workflow syntax before push.
+      - id: script-tests
+        name: Run JavaScript script tests
+        entry: npm run test:scripts
+        language: system
+        pass_filenames: false
+        files: '^(package\.json|package-lock\.json|scripts/.*\.js|scripts/__tests__/.*\.js)$'
+        stages:
+          - pre-push
+        description: Run Jest script tests before push when script files change.
 
   - repo: local
     hooks:
