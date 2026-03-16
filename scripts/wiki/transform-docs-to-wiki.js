@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { normalizeToLf } = require('../lib/quote-parser');
 
 const DOCS_DIR = path.join(__dirname, '..', '..', 'docs');
 
@@ -261,7 +262,7 @@ function transformLine(line, currentFilePath) {
 }
 
 function transformFile(content, filePath) {
-    const lines = content.split('\n');
+    const lines = normalizeToLf(content).split('\n');
     const tracker = new CodeBlockTracker();
     const result = [];
 

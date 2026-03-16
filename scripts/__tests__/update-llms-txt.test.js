@@ -302,8 +302,8 @@ describe("update-llms-txt.js", () => {
 
     test("llms.txt should be up to date", () => {
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
-      const lastUpdatedLines = currentContent
-        .split(/\r?\n/)
+      const lastUpdatedLines = normalizeToLf(currentContent)
+        .split("\n")
         .filter((line) => line.startsWith("**Last Updated:**"));
 
       expect(lastUpdatedLines.length).toBe(1);
