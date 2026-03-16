@@ -475,9 +475,9 @@ function main() {
     }
 
     // Update mode - write the file
-    // Convert LF to CRLF for Windows/gitattributes compatibility
-    const contentWithCRLF = newContent.replace(/\r?\n/g, "\r\n");
-    fs.writeFileSync(LLMS_TXT_PATH, contentWithCRLF, "utf8");
+    // Normalize to LF line endings to match .gitattributes for *.txt files
+    const contentWithLF = newContent.replace(/\r\n/g, "\n");
+    fs.writeFileSync(LLMS_TXT_PATH, contentWithLF, "utf8");
     console.log("✓ Updated llms.txt");
     process.exit(0);
   } catch (error) {
