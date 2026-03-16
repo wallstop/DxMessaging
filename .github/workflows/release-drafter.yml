@@ -76,7 +76,7 @@ jobs:
           echo "changelog_file=/tmp/changelog_section.md" >> "$GITHUB_OUTPUT"
 
       - name: Run Release Drafter
-        uses: release-drafter/release-drafter@v6
+        uses: release-drafter/release-drafter@v7
         id: release_drafter
         with:
           config-name: release-drafter.yml
