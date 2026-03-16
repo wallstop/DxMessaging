@@ -171,6 +171,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-lychee-config
+        name: Validate lychee configuration
+        entry: node scripts/validate-lychee-config.js
+        language: system
+        pass_filenames: false
+        files: '^\.lychee\.toml$'
+        stages:
+          - pre-push
+        description: Validate .lychee.toml fields against lychee v0.23.0 valid options.
+
+  - repo: local
+    hooks:
       - id: actionlint
         name: Lint GitHub Actions workflows
         entry: bash -c 'if command -v actionlint >/dev/null 2>&1; then actionlint; else echo "actionlint not installed; skipping"; fi'

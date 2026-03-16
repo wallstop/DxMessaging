@@ -106,10 +106,9 @@ function categoryToTitle(category) {
         .join(" ");
 }
 
-function normalizeToCrlf(text) {
+function normalizeToLf(text) {
     let normalized = text.replace(/\r\n/g, "\n");
-    normalized = normalized.replace(/\r/g, "\n");
-    return normalized.replace(/\n/g, "\r\n");
+    return normalized.replace(/\r/g, "\n");
 }
 
 function getLatestSkillDate(skills) {
@@ -556,7 +555,7 @@ function main() {
         return 1;
     }
 
-    const normalizedContent = normalizeToCrlf(formattedContent);
+    const normalizedContent = normalizeToLf(formattedContent);
 
     if (checkOnly) {
         let existingContent = null;
@@ -587,6 +586,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         applyBrandCapitalization,
         categoryToTitle,
+        normalizeToLf,
         BRAND_NAMES,
     };
 }

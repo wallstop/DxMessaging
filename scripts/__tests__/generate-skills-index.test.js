@@ -13,6 +13,7 @@
 const {
     applyBrandCapitalization,
     categoryToTitle,
+    normalizeToLf,
     BRAND_NAMES,
 } = require('../generate-skills-index.js');
 
@@ -369,6 +370,48 @@ describe("generate-skills-index", () => {
             for (const [input, expected] of Object.entries(specialCases)) {
                 expect(BRAND_NAMES[input]).toBe(expected);
             }
+        });
+    });
+
+    describe("normalizeToLf", () => {
+        describe("line ending conversions", () => {
+            test.each([
+                ["CRLF to LF", "hello\r\nworld\r\n", "hello\nworld\n"],
+                ["standalone CR to LF", "hello\rworld\r", "hello\nworld\n"],
+                ["mixed line endings (CRLF + CR + LF)", "line1\r\nline2\rline3\nline4", "line1\nline2\nline3\nline4"],
+                ["already LF content (no-op)", "hello\nworld\n", "hello\nworld\n"],
+                ["no line endings at all", "hello world", "hello world"],
+                ["empty string", "", ""],
+                ["only CRLF line endings", "\r\n\r\n", "\n\n"],
+                ["only CR line endings", "\r\r", "\n\n"],
+                ["only LF line endings", "\n\n", "\n\n"],
+            ])("%s", (_description, input, expected) => {
+                expect(normalizeToLf(input)).toBe(expected);
+            });
+        });
+
+        describe("CRLF not double-converted", () => {
+            test("should convert CRLF to single LF, not double LF", () => {
+                const input = "first\r\nsecond\r\nthird";
+                const result = normalizeToLf(input);
+                expect(result).toBe("first\nsecond\nthird");
+                expect(result).not.toContain("\r");
+                expect(result).not.toContain("\n\n");
+            });
+
+            test("should not produce extra newlines from consecutive CRLF pairs", () => {
+                const input = "a\r\n\r\nb";
+                const result = normalizeToLf(input);
+                expect(result).toBe("a\n\nb");
+            });
+        });
+
+        describe("integration", () => {
+            test("should produce output containing no CR characters", () => {
+                const content = "---\r\ntitle: Test\r\n---\r\n\r\n# Heading\r\n\rParagraph with mixed\nline endings\r\nand more\rcontent.\n";
+                const result = normalizeToLf(content);
+                expect(result).not.toContain("\r");
+            });
         });
     });
 
