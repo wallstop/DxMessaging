@@ -178,6 +178,7 @@ repos:
         pass_filenames: false
         files: '^\.lychee\.toml$'
         stages:
+          - pre-commit
           - pre-push
         description: Validate .lychee.toml fields against lychee v0.23.0 valid options.
 

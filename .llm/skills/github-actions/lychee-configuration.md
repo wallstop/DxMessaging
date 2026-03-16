@@ -2,7 +2,7 @@
 title: "Lychee Link Checker Configuration Management"
 id: "lychee-configuration"
 category: "github-actions"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-03-16"
 updated: "2026-03-16"
 
@@ -134,9 +134,12 @@ node scripts/validate-lychee-config.js
 The script:
 
 1. Reads `.lychee.toml` and parses top-level TOML keys
+   (including `[table]` and `[[array_of_tables]]` headers by extracting the top-level
+   table segment)
 1. Checks each key against a `VALID_FIELDS` set containing all valid v0.23.0 options
 1. Validates field values where applicable (e.g., `verbose` must be one of the allowed
-   string enum values: "error", "warn", "info", "debug", "trace")
+   string enum values: "error", "warn", "info", "debug", "trace", including when
+   key-value pairs are defined inside TOML tables)
 1. Reports errors for any unrecognized fields
 1. Reports warnings for duplicate fields
 1. Exits with code 1 on validation failure
@@ -144,9 +147,9 @@ The script:
 When a field is invalid, the script prints the full list of valid fields, making it
 straightforward to find the correct replacement.
 
-### 2. Pre-Push Hook Integration
+### 2. Git Hook Integration
 
-The validation runs as a pre-push hook via `.pre-commit-config.yaml`:
+The validation runs in both `pre-commit` and `pre-push` via `.pre-commit-config.yaml`:
 
 ```yaml
 - repo: local
@@ -158,13 +161,14 @@ The validation runs as a pre-push hook via `.pre-commit-config.yaml`:
       pass_filenames: false
       files: '^\.lychee\.toml$'
       stages:
+        - pre-commit
         - pre-push
 ```
 
 Key design decisions:
 
-- **Pre-push, not pre-commit**: Validation only runs when pushing, not on every commit,
-  to avoid slowing down the development loop
+- **Runs on both commit and push**: Catches config errors early (`pre-commit`) while still
+  enforcing at push boundaries (`pre-push`)
 - **File filter**: Only triggers when `.lychee.toml` is in the changeset
 - **Non-interactive**: Uses `pass_filenames: false` since the script finds the config itself
 
@@ -242,14 +246,16 @@ the valid field list, also update test expectations.
 
 ## Common Mistakes
 
-| Mistake                                     | Problem                                          | Fix                                                           |
-| ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
-| Using `exclude_mail = true`                 | Deprecated in v0.23.0                            | Use `include_mail = false`                                    |
-| Using `retries = 3`                         | Renamed in v0.23.0                               | Use `max_retries = 3`                                         |
-| Using `verbosity = 1`                       | Changed to string enum in v0.23.0                | Use `verbose = "info"` (or "error", "warn", "debug", "trace") |
-| Skipping validation in CI                   | Config errors surface as cryptic lychee failures | Add validation step before lychee-action                      |
-| Not updating VALID_FIELDS after lychee bump | New valid fields flagged as errors               | Sync the set with upstream example config                     |
-| Pinning to `@v2` without validation         | New lychee versions can break config silently    | Always pair floating tags with config validation              |
+| Mistake                                     | Problem                                                | Fix                                                           |
+| ------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| Using `exclude_mail = true`                 | Deprecated in v0.23.0                                  | Use `include_mail = false`                                    |
+| Using `retries = 3`                         | Renamed in v0.23.0                                     | Use `max_retries = 3`                                         |
+| Using `verbosity = 1`                       | Changed to string enum in v0.23.0                      | Use `verbose = "info"` (or "error", "warn", "debug", "trace") |
+| Skipping validation in CI                   | Config errors surface as cryptic lychee failures       | Add validation step before lychee-action                      |
+| Not updating VALID_FIELDS after lychee bump | New valid fields flagged as errors                     | Sync the set with upstream example config                     |
+| Pinning to `@v2` without validation         | New lychee versions can break config silently          | Always pair floating tags with config validation              |
+| Ignoring TOML table headers in validators   | Invalid table-based config bypasses validation         | Parse `[table]` and `[[array]]` headers as top-level fields   |
+| Reading config files at test module scope   | Jest can fail during test collection with poor context | Read files in `beforeAll` with an existence guard             |
 
 ## Validation Checklist
 

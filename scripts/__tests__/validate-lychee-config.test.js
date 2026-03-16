@@ -58,7 +58,7 @@ describe("parseTopLevelKeys", () => {
         expect(keys).toEqual(["verbose", "timeout"]);
     });
 
-    test("should skip TOML table headers", () => {
+    test("should parse TOML table headers as top-level keys", () => {
         const content = [
             '[section]',
             'verbose = true',
@@ -67,7 +67,20 @@ describe("parseTopLevelKeys", () => {
         ].join("\n");
 
         const keys = parseTopLevelKeys(content);
-        expect(keys).toEqual(["verbose", "timeout"]);
+        expect(keys).toEqual(["section", "array_section"]);
+    });
+
+    test("should parse first segment of dotted table headers", () => {
+        const content = [
+            '[basic_auth."example.com"]',
+            'username = "user"',
+            'password = "pass"',
+            '[[hosts.production]]',
+            'url = "https://example.com"',
+        ].join("\n");
+
+        const keys = parseTopLevelKeys(content);
+        expect(keys).toEqual(["basic_auth", "hosts"]);
     });
 
     test("should handle inline comments after values", () => {
@@ -147,11 +160,7 @@ describe("parseTopLevelKeys", () => {
         expect(keys).toEqual(["verbose"]);
     });
 
-    test("should not parse TOML dotted keys or keys with hyphens (known limitation)", () => {
-        // parseTopLevelKeys only matches bare keys matching [A-Za-z_][A-Za-z0-9_]*.
-        // Dotted keys (e.g., header.Accept) and hyphenated keys (e.g., my-key) are
-        // silently ignored. This is acceptable because lychee's configuration format
-        // does not use these patterns for top-level fields.
+    test("should parse dotted, hyphenated, and quoted keys", () => {
         const content = [
             'header.Accept = "text/html"',
             'my-key = "value"',
@@ -160,9 +169,7 @@ describe("parseTopLevelKeys", () => {
         ].join("\n");
 
         const keys = parseTopLevelKeys(content);
-        // Only the simple bare key "verbose" is parsed; dotted, hyphenated, and
-        // quoted keys are all ignored by the regex
-        expect(keys).toEqual(["verbose"]);
+        expect(keys).toEqual(["header", "my-key", "quoted.key", "verbose"]);
     });
 });
 
@@ -250,7 +257,7 @@ describe("parseTopLevelKeyValues", () => {
         expect(pairs).toEqual([{ key: "user_agent", value: '"Mozilla/5.0 # not a comment"' }]);
     });
 
-    test("should skip comments, blank lines, and table headers", () => {
+    test("should parse keys in table context with keyPath metadata", () => {
         const content = [
             '# Comment',
             '',
@@ -259,7 +266,16 @@ describe("parseTopLevelKeyValues", () => {
         ].join("\n");
 
         const pairs = parseTopLevelKeyValues(content);
-        expect(pairs).toEqual([{ key: "verbose", value: '"debug"' }]);
+        expect(pairs).toEqual([
+            { key: "verbose", value: '"debug"', table: "section", keyPath: "section.verbose" },
+        ]);
+    });
+
+    test("should strip inline comments while preserving hashes in quoted values", () => {
+        const content = 'description = "Feature #123" # trailing comment';
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([{ key: "description", value: '"Feature #123"' }]);
     });
 
     test("should handle CRLF line endings", () => {
@@ -367,6 +383,17 @@ describe("validateFieldValues", () => {
 
         expect(errors).toHaveLength(1);
         expect(errors[0]).toContain("verbose");
+    });
+
+    test("should validate verbose value when defined inside a table", () => {
+        const keyValues = [
+            { key: "verbose", value: "true", table: "logging", keyPath: "logging.verbose" },
+        ];
+        const { errors } = validateFieldValues(keyValues);
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toContain("logging.verbose");
+        expect(errors[0]).toContain("must be a quoted string");
     });
 });
 
@@ -544,8 +571,19 @@ describe("End-to-end validation", () => {
 });
 
 describe("actual .lychee.toml config file validation", () => {
-    const configContent = fs.readFileSync(LYCHEE_CONFIG_PATH, "utf8");
-    const configKeys = parseTopLevelKeys(configContent);
+    let configContent;
+    let configKeys;
+
+    beforeAll(() => {
+        if (!fs.existsSync(LYCHEE_CONFIG_PATH)) {
+            throw new Error(
+                `Expected .lychee.toml at ${LYCHEE_CONFIG_PATH}, but the file does not exist`
+            );
+        }
+
+        configContent = fs.readFileSync(LYCHEE_CONFIG_PATH, "utf8");
+        configKeys = parseTopLevelKeys(configContent);
+    });
 
     test("config file should exist", () => {
         expect(fs.existsSync(LYCHEE_CONFIG_PATH)).toBe(true);
@@ -560,8 +598,10 @@ describe("actual .lychee.toml config file validation", () => {
     });
 
     describe("all config keys are valid for lychee v0.23.0", () => {
-        test.each(configKeys)("'%s' should be a recognized lychee v0.23.0 field", (key) => {
-            expect(VALID_FIELDS.has(key)).toBe(true);
+        test("each parsed key should be a recognized lychee v0.23.0 field", () => {
+            for (const key of configKeys) {
+                expect(VALID_FIELDS.has(key)).toBe(true);
+            }
         });
     });
 

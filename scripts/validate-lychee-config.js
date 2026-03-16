@@ -100,88 +100,212 @@ const VALID_FIELDS = new Set([
 const VALID_VERBOSE_VALUES = ["error", "warn", "info", "debug", "trace"];
 
 /**
+ * Split a TOML dotted path into segments while respecting quoted segments.
+ *
+ * Examples:
+ *   basic_auth.example.com -> ["basic_auth", "example", "com"]
+ *   "my.section".key -> ["my.section", "key"]
+ *
+ * @param {string} pathExpression - TOML key or table expression
+ * @returns {string[]} Path segments (quotes stripped)
+ */
+function splitTomlPath(pathExpression) {
+    const segments = [];
+    let current = "";
+    let quoteChar = null;
+
+    for (let i = 0; i < pathExpression.length; i += 1) {
+        const char = pathExpression[i];
+
+        if (quoteChar !== null) {
+            // Keep escaped characters inside quoted segments.
+            if (char === "\\" && i + 1 < pathExpression.length) {
+                current += char + pathExpression[i + 1];
+                i += 1;
+                continue;
+            }
+
+            if (char === quoteChar) {
+                quoteChar = null;
+                continue;
+            }
+
+            current += char;
+            continue;
+        }
+
+        if (char === '"' || char === "'") {
+            quoteChar = char;
+            continue;
+        }
+
+        if (char === ".") {
+            segments.push(current.trim());
+            current = "";
+            continue;
+        }
+
+        current += char;
+    }
+
+    segments.push(current.trim());
+    return segments.filter((segment) => segment.length > 0);
+}
+
+/**
+ * Parse TOML table header names from lines like [section] and [[array_section]].
+ *
+ * @param {string} line - TOML line with comments already stripped
+ * @returns {{ tableName: string, isArrayTable: boolean } | null}
+ */
+function parseTomlTableHeader(line) {
+    const arrayTableMatch = line.match(/^\[\[(.+)\]\]$/);
+    if (arrayTableMatch) {
+        return { tableName: arrayTableMatch[1].trim(), isArrayTable: true };
+    }
+
+    const tableMatch = line.match(/^\[(.+)\]$/);
+    if (tableMatch) {
+        return { tableName: tableMatch[1].trim(), isArrayTable: false };
+    }
+
+    return null;
+}
+
+/**
+ * Strip inline TOML comments while preserving hash characters inside quoted values.
+ *
+ * @param {string} line - TOML line
+ * @returns {string} TOML line without trailing inline comments
+ */
+function stripInlineTomlComment(line) {
+    let quoteChar = null;
+
+    for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+
+        if (quoteChar !== null) {
+            if (char === "\\" && i + 1 < line.length) {
+                i += 1;
+                continue;
+            }
+
+            if (char === quoteChar) {
+                quoteChar = null;
+            }
+            continue;
+        }
+
+        if (char === '"' || char === "'") {
+            quoteChar = char;
+            continue;
+        }
+
+        if (char === "#") {
+            return line.slice(0, i).trimEnd();
+        }
+    }
+
+    return line;
+}
+
+/**
+ * Parse a TOML file into top-level keys and key-value entries with optional table context.
+ *
+ * @param {string} content - The TOML file content
+ * @returns {{ keys: string[], keyValues: Array<{ key: string, value: string, table?: string, keyPath?: string }> }}
+ */
+function parseTomlForLycheeValidation(content) {
+    const keys = [];
+    const keyValues = [];
+    const lines = content.split(/\r?\n/);
+    let currentTable = null;
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed === "" || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        const lineWithoutComment = stripInlineTomlComment(trimmed).trim();
+        if (lineWithoutComment === "") {
+            continue;
+        }
+
+        const tableHeader = parseTomlTableHeader(lineWithoutComment);
+        if (tableHeader) {
+            currentTable = tableHeader.tableName;
+            const tableSegments = splitTomlPath(tableHeader.tableName);
+            if (tableSegments.length > 0) {
+                keys.push(tableSegments[0]);
+            }
+            continue;
+        }
+
+        const equalsIndex = lineWithoutComment.indexOf("=");
+        if (equalsIndex === -1) {
+            continue;
+        }
+
+        const rawKey = lineWithoutComment.slice(0, equalsIndex).trim();
+        if (rawKey.length === 0) {
+            continue;
+        }
+
+        const value = lineWithoutComment.slice(equalsIndex + 1).trim();
+        const keySegments = splitTomlPath(rawKey);
+        if (keySegments.length === 0) {
+            continue;
+        }
+
+        const parsedKey = keySegments[keySegments.length - 1];
+
+        if (currentTable !== null) {
+            keyValues.push({
+                key: parsedKey,
+                value,
+                table: currentTable,
+                keyPath: `${currentTable}.${rawKey}`,
+            });
+            continue;
+        }
+
+        keys.push(keySegments[0]);
+        keyValues.push({ key: parsedKey, value });
+    }
+
+    return { keys, keyValues };
+}
+
+/**
  * Parse top-level keys from a TOML file.
- * Handles simple key = value lines at the top level (not inside table headers).
+ * Handles top-level assignments and TOML table headers.
  * Ignores comments and blank lines.
  *
- * Limitation: This parser only handles simple `key = value` patterns where the
- * key is a bare identifier matching [A-Za-z_][A-Za-z0-9_]*. It does NOT handle:
- *   - TOML dotted keys (e.g., `header.Accept = "text/html"`)
- *   - Keys containing hyphens (e.g., `my-key = "value"`)
- *   - Quoted keys (e.g., `"special.key" = "value"`)
- * These patterns are not currently used in lychee's configuration format, but
- * this limitation should be revisited if lychee adds support for them.
+ * For table headers such as [basic_auth] or [[hosts]], the first table segment
+ * is treated as the top-level field key.
  *
  * @param {string} content - The TOML file content
  * @returns {string[]} Array of top-level key names
  */
 function parseTopLevelKeys(content) {
-    const keys = [];
-    const lines = content.split(/\r?\n/);
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-
-        // Skip empty lines and comments
-        if (trimmed === "" || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        // Skip TOML table headers like [section]
-        if (trimmed.startsWith("[")) {
-            continue;
-        }
-
-        // Match key = value pattern (top-level TOML key)
-        // Only matches bare keys with underscores; see JSDoc for limitations
-        const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-        if (match) {
-            keys.push(match[1]);
-        }
-    }
-
-    return keys;
+    return parseTomlForLycheeValidation(content).keys;
 }
 
 /**
  * Parse top-level key-value pairs from a TOML file.
  * Returns an array of { key, value } objects where value is the raw string
- * after the equals sign (trimmed, with surrounding quotes removed for strings).
+ * after the equals sign (trimmed).
+ *
+ * If a key is defined inside a TOML table, the pair also includes:
+ *   - table: table path (e.g., basic_auth, hosts, basic_auth."example.com")
+ *   - keyPath: fully-qualified key path (e.g., basic_auth.username)
  *
  * @param {string} content - The TOML file content
- * @returns {{ key: string, value: string }[]} Array of top-level key-value pairs
+ * @returns {{ key: string, value: string, table?: string, keyPath?: string }[]} Array of key-value pairs
  */
 function parseTopLevelKeyValues(content) {
-    const pairs = [];
-    const lines = content.split(/\r?\n/);
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-
-        // Skip empty lines, comments, and TOML table headers
-        if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("[")) {
-            continue;
-        }
-
-        // Match key = value pattern (top-level TOML key)
-        // Only matches bare keys with underscores; see parseTopLevelKeys JSDoc for limitations
-        const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
-        if (match) {
-            let value = match[2].trim();
-            // Strip inline comments (not inside quotes)
-            // Simple heuristic: if value doesn't start with a quote or bracket,
-            // strip everything after the first #
-            if (!value.startsWith('"') && !value.startsWith("'") && !value.startsWith("[")) {
-                const commentIndex = value.indexOf("#");
-                if (commentIndex !== -1) {
-                    value = value.substring(0, commentIndex).trim();
-                }
-            }
-            pairs.push({ key: match[1], value });
-        }
-    }
-
-    return pairs;
+    return parseTomlForLycheeValidation(content).keyValues;
 }
 
 /**
@@ -199,20 +323,21 @@ function validateFieldValues(keyValues) {
     const errors = [];
     const warnings = [];
 
-    for (const { key, value } of keyValues) {
+    for (const { key, value, keyPath } of keyValues) {
         if (key === "verbose") {
             // verbose must be a quoted string matching one of the valid log levels
             // Strip surrounding quotes for comparison
             const unquoted = value.replace(/^["']|["']$/g, "");
             const isQuotedString = value.startsWith('"') || value.startsWith("'");
+            const keyDisplay = keyPath || key;
 
             if (!isQuotedString) {
                 errors.push(
-                    `Invalid value for 'verbose': ${value} (must be a quoted string, one of: ${VALID_VERBOSE_VALUES.join(", ")})`
+                    `Invalid value for '${keyDisplay}': ${value} (must be a quoted string, one of: ${VALID_VERBOSE_VALUES.join(", ")})`
                 );
             } else if (!VALID_VERBOSE_VALUES.includes(unquoted)) {
                 errors.push(
-                    `Invalid value for 'verbose': ${value} (must be one of: ${VALID_VERBOSE_VALUES.join(", ")})`
+                    `Invalid value for '${keyDisplay}': ${value} (must be one of: ${VALID_VERBOSE_VALUES.join(", ")})`
                 );
             }
         }
