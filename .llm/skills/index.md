@@ -55,7 +55,7 @@
 | ---------------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ------------------------------- |
 | [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md)       | ✅ 232 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, git, ci-cd      |
 | [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)          | ✅ 347 | 🟡 Intermediate | ✅ Stable | ●●○○○       | github-actions, ci-cd, workflow |
-| [Lychee Link Checker Configuration Management](./github-actions/lychee-configuration.md) | ✅ 278 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, ci-cd, lychee   |
+| [Lychee Link Checker Configuration Management](./github-actions/lychee-configuration.md) | ✅ 280 | 🟡 Intermediate | ✅ Stable | ●○○○○       | github-actions, ci-cd, lychee   |
 
 ## Packaging
 

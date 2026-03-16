@@ -97,7 +97,7 @@ When lychee upgrades from one version to the next, configuration field names may
 
 - **Renamed** for clarity (e.g., `retries` became `max_retries`)
 - **Inverted** in semantics (e.g., `exclude_mail` became `include_mail`)
-- **Changed in type** (e.g., `verbosity` as an integer became `verbose` as a boolean)
+- **Changed in type** (e.g., `verbosity` as an integer became `verbose` as a string enum)
 - **Removed entirely** when features are dropped
 
 Lychee treats unknown fields as hard errors, so any deprecated field causes an immediate
@@ -113,11 +113,11 @@ The `lycheeverse/lychee-action@v2` action uses a floating major version tag. Thi
 
 ### Known Deprecated Field Mappings (pre-v0.23.0 to v0.23.0)
 
-| Deprecated Field | Replacement Field | Change Type        |
-| ---------------- | ----------------- | ------------------ |
-| `exclude_mail`   | `include_mail`    | Inverted boolean   |
-| `retries`        | `max_retries`     | Renamed            |
-| `verbosity`      | `verbose`         | Type change (bool) |
+| Deprecated Field | Replacement Field | Change Type                                                          |
+| ---------------- | ----------------- | -------------------------------------------------------------------- |
+| `exclude_mail`   | `include_mail`    | Inverted boolean                                                     |
+| `retries`        | `max_retries`     | Renamed                                                              |
+| `verbosity`      | `verbose`         | Type change (string enum: "error", "warn", "info", "debug", "trace") |
 
 ## Solution
 
@@ -135,6 +135,8 @@ The script:
 
 1. Reads `.lychee.toml` and parses top-level TOML keys
 1. Checks each key against a `VALID_FIELDS` set containing all valid v0.23.0 options
+1. Validates field values where applicable (e.g., `verbose` must be one of the allowed
+   string enum values: "error", "warn", "info", "debug", "trace")
 1. Reports errors for any unrecognized fields
 1. Reports warnings for duplicate fields
 1. Exits with code 1 on validation failure
@@ -192,7 +194,7 @@ with a clear error message instead of a cryptic lychee parse failure.
 The `.lychee.toml` file should use these field names (v0.23.0):
 
 ```toml
-verbose = true               # boolean, not "verbosity = 1"
+verbose = "info"              # string enum ("error","warn","info","debug","trace"), not "verbosity = 1"
 no_progress = true
 max_concurrency = 4
 include_mail = false          # inverted from "exclude_mail = true"
@@ -240,14 +242,14 @@ the valid field list, also update test expectations.
 
 ## Common Mistakes
 
-| Mistake                                     | Problem                                          | Fix                                              |
-| ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ |
-| Using `exclude_mail = true`                 | Deprecated in v0.23.0                            | Use `include_mail = false`                       |
-| Using `retries = 3`                         | Renamed in v0.23.0                               | Use `max_retries = 3`                            |
-| Using `verbosity = 1`                       | Changed to boolean in v0.23.0                    | Use `verbose = true`                             |
-| Skipping validation in CI                   | Config errors surface as cryptic lychee failures | Add validation step before lychee-action         |
-| Not updating VALID_FIELDS after lychee bump | New valid fields flagged as errors               | Sync the set with upstream example config        |
-| Pinning to `@v2` without validation         | New lychee versions can break config silently    | Always pair floating tags with config validation |
+| Mistake                                     | Problem                                          | Fix                                                           |
+| ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
+| Using `exclude_mail = true`                 | Deprecated in v0.23.0                            | Use `include_mail = false`                                    |
+| Using `retries = 3`                         | Renamed in v0.23.0                               | Use `max_retries = 3`                                         |
+| Using `verbosity = 1`                       | Changed to string enum in v0.23.0                | Use `verbose = "info"` (or "error", "warn", "debug", "trace") |
+| Skipping validation in CI                   | Config errors surface as cryptic lychee failures | Add validation step before lychee-action                      |
+| Not updating VALID_FIELDS after lychee bump | New valid fields flagged as errors               | Sync the set with upstream example config                     |
+| Pinning to `@v2` without validation         | New lychee versions can break config silently    | Always pair floating tags with config validation              |
 
 ## Validation Checklist
 
@@ -255,7 +257,7 @@ Before modifying `.lychee.toml`:
 
 - [ ] All field names are in the `VALID_FIELDS` set in `validate-lychee-config.js`
 - [ ] No deprecated field names used (check the mapping table above)
-- [ ] Boolean fields use `true`/`false`, not integers
+- [ ] Boolean fields use `true`/`false`, not integers; `verbose` uses a string enum value
 - [ ] Validation script passes: `node scripts/validate-lychee-config.js`
 - [ ] Unit tests pass: `npx jest scripts/__tests__/validate-lychee-config.test.js`
 

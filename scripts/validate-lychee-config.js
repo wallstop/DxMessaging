@@ -94,6 +94,11 @@ const VALID_FIELDS = new Set([
     "verbose",
 ]);
 
+// SYNC: Keep in sync with lychee v0.23.0 valid verbose values.
+// Source: https://github.com/lycheeverse/lychee/blob/master/lychee.example.toml
+// SYNC: Tests in validate-lychee-config.test.js validateFieldValues describe block reference this constant
+const VALID_VERBOSE_VALUES = ["error", "warn", "info", "debug", "trace"];
+
 /**
  * Parse top-level keys from a TOML file.
  * Handles simple key = value lines at the top level (not inside table headers).
@@ -136,6 +141,84 @@ function parseTopLevelKeys(content) {
     }
 
     return keys;
+}
+
+/**
+ * Parse top-level key-value pairs from a TOML file.
+ * Returns an array of { key, value } objects where value is the raw string
+ * after the equals sign (trimmed, with surrounding quotes removed for strings).
+ *
+ * @param {string} content - The TOML file content
+ * @returns {{ key: string, value: string }[]} Array of top-level key-value pairs
+ */
+function parseTopLevelKeyValues(content) {
+    const pairs = [];
+    const lines = content.split(/\r?\n/);
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Skip empty lines, comments, and TOML table headers
+        if (trimmed === "" || trimmed.startsWith("#") || trimmed.startsWith("[")) {
+            continue;
+        }
+
+        // Match key = value pattern (top-level TOML key)
+        // Only matches bare keys with underscores; see parseTopLevelKeys JSDoc for limitations
+        const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)/);
+        if (match) {
+            let value = match[2].trim();
+            // Strip inline comments (not inside quotes)
+            // Simple heuristic: if value doesn't start with a quote or bracket,
+            // strip everything after the first #
+            if (!value.startsWith('"') && !value.startsWith("'") && !value.startsWith("[")) {
+                const commentIndex = value.indexOf("#");
+                if (commentIndex !== -1) {
+                    value = value.substring(0, commentIndex).trim();
+                }
+            }
+            pairs.push({ key: match[1], value });
+        }
+    }
+
+    return pairs;
+}
+
+/**
+ * Validate field values against known constraints.
+ * Currently validates:
+ *   - verbose: must be one of "error", "warn", "info", "debug", "trace"
+ *
+ * This function is designed to be extended with additional field validations
+ * as lychee evolves.
+ *
+ * @param {{ key: string, value: string }[]} keyValues - Array of key-value pairs from the TOML file
+ * @returns {{ errors: string[], warnings: string[] }} Validation results
+ */
+function validateFieldValues(keyValues) {
+    const errors = [];
+    const warnings = [];
+
+    for (const { key, value } of keyValues) {
+        if (key === "verbose") {
+            // verbose must be a quoted string matching one of the valid log levels
+            // Strip surrounding quotes for comparison
+            const unquoted = value.replace(/^["']|["']$/g, "");
+            const isQuotedString = value.startsWith('"') || value.startsWith("'");
+
+            if (!isQuotedString) {
+                errors.push(
+                    `Invalid value for 'verbose': ${value} (must be a quoted string, one of: ${VALID_VERBOSE_VALUES.join(", ")})`
+                );
+            } else if (!VALID_VERBOSE_VALUES.includes(unquoted)) {
+                errors.push(
+                    `Invalid value for 'verbose': ${value} (must be one of: ${VALID_VERBOSE_VALUES.join(", ")})`
+                );
+            }
+        }
+    }
+
+    return { errors, warnings };
 }
 
 /**
@@ -194,6 +277,12 @@ function main() {
 
     const { errors, warnings } = validateFields(keys);
 
+    // Phase 2: Validate field values
+    const keyValues = parseTopLevelKeyValues(content);
+    const valueResult = validateFieldValues(keyValues);
+    errors.push(...valueResult.errors);
+    warnings.push(...valueResult.warnings);
+
     for (const warning of warnings) {
         console.log(`  Warning: ${warning}`);
     }
@@ -232,14 +321,20 @@ function main() {
  * Used by pre-push hooks and CI pipelines to catch deprecated or misspelled fields.
  *
  * @exports {Function} parseTopLevelKeys - Parses top-level key names from TOML content
+ * @exports {Function} parseTopLevelKeyValues - Parses top-level key-value pairs from TOML content
  * @exports {Function} validateFields - Validates field names against the known valid set
+ * @exports {Function} validateFieldValues - Validates field values against known constraints
  * @exports {Set<string>} VALID_FIELDS - Set of valid lychee v0.23.0 configuration field names
+ * @exports {string[]} VALID_VERBOSE_VALUES - Array of valid verbose log level values
  */
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
         parseTopLevelKeys,
+        parseTopLevelKeyValues,
         validateFields,
+        validateFieldValues,
         VALID_FIELDS,
+        VALID_VERBOSE_VALUES,
     };
 }
 

@@ -1,4 +1,4 @@
-verbose = true
+verbose = "info"
 no_progress = true
 max_concurrency = 4
 include_mail = false

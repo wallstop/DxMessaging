@@ -13,8 +13,11 @@ const path = require("path");
 
 const {
     parseTopLevelKeys,
+    parseTopLevelKeyValues,
     validateFields,
+    validateFieldValues,
     VALID_FIELDS,
+    VALID_VERBOSE_VALUES,
 } = require("../validate-lychee-config.js");
 
 const LYCHEE_CONFIG_PATH = path.resolve(__dirname, "../../.lychee.toml");
@@ -217,6 +220,176 @@ describe("validateFields", () => {
     });
 });
 
+describe("parseTopLevelKeyValues", () => {
+    test("should parse key-value pairs from simple lines", () => {
+        const content = [
+            'verbose = "info"',
+            'no_progress = true',
+            'max_concurrency = 4',
+        ].join("\n");
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([
+            { key: "verbose", value: '"info"' },
+            { key: "no_progress", value: "true" },
+            { key: "max_concurrency", value: "4" },
+        ]);
+    });
+
+    test("should strip inline comments from unquoted values", () => {
+        const content = 'timeout = 20            # seconds per request';
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([{ key: "timeout", value: "20" }]);
+    });
+
+    test("should preserve quoted string values", () => {
+        const content = 'user_agent = "Mozilla/5.0 # not a comment"';
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([{ key: "user_agent", value: '"Mozilla/5.0 # not a comment"' }]);
+    });
+
+    test("should skip comments, blank lines, and table headers", () => {
+        const content = [
+            '# Comment',
+            '',
+            '[section]',
+            'verbose = "debug"',
+        ].join("\n");
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([{ key: "verbose", value: '"debug"' }]);
+    });
+
+    test("should handle CRLF line endings", () => {
+        const content = 'verbose = "info"\r\ntimeout = 20\r\n';
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([
+            { key: "verbose", value: '"info"' },
+            { key: "timeout", value: "20" },
+        ]);
+    });
+
+    test("should return empty array for empty content", () => {
+        const pairs = parseTopLevelKeyValues("");
+        expect(pairs).toEqual([]);
+    });
+});
+
+describe("validateFieldValues", () => {
+    describe("verbose field validation", () => {
+        test.each(VALID_VERBOSE_VALUES)(
+            "should accept valid verbose value '%s'",
+            (level) => {
+                const keyValues = [{ key: "verbose", value: `"${level}"` }];
+                const { errors } = validateFieldValues(keyValues);
+                expect(errors).toEqual([]);
+            }
+        );
+
+        test("should reject boolean true (old format)", () => {
+            const keyValues = [{ key: "verbose", value: "true" }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("Invalid value for 'verbose'");
+            expect(errors[0]).toContain("true");
+            expect(errors[0]).toContain("must be a quoted string");
+        });
+
+        test("should reject boolean false", () => {
+            const keyValues = [{ key: "verbose", value: "false" }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("Invalid value for 'verbose'");
+            expect(errors[0]).toContain("must be a quoted string");
+        });
+
+        test("should reject unquoted string value", () => {
+            const keyValues = [{ key: "verbose", value: "info" }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("must be a quoted string");
+        });
+
+        test("should reject invalid quoted string value", () => {
+            const keyValues = [{ key: "verbose", value: '"verbose"' }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("Invalid value for 'verbose'");
+            expect(errors[0]).toContain("must be one of");
+        });
+
+        test("should reject numeric value", () => {
+            const keyValues = [{ key: "verbose", value: "1" }];
+            const { errors } = validateFieldValues(keyValues);
+
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toContain("must be a quoted string");
+        });
+
+        test("should accept single-quoted valid verbose value", () => {
+            const keyValues = [{ key: "verbose", value: "'info'" }];
+            const { errors } = validateFieldValues(keyValues);
+            expect(errors).toEqual([]);
+        });
+    });
+
+    test("should not produce errors for non-verbose fields", () => {
+        const keyValues = [
+            { key: "timeout", value: "20" },
+            { key: "no_progress", value: "true" },
+            { key: "max_concurrency", value: "4" },
+        ];
+        const { errors, warnings } = validateFieldValues(keyValues);
+        expect(errors).toEqual([]);
+        expect(warnings).toEqual([]);
+    });
+
+    test("should handle empty key-value array", () => {
+        const { errors, warnings } = validateFieldValues([]);
+        expect(errors).toEqual([]);
+        expect(warnings).toEqual([]);
+    });
+
+    test("should validate verbose among other fields", () => {
+        const keyValues = [
+            { key: "timeout", value: "20" },
+            { key: "verbose", value: "true" },
+            { key: "max_retries", value: "3" },
+        ];
+        const { errors } = validateFieldValues(keyValues);
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toContain("verbose");
+    });
+});
+
+// SYNC: VALID_VERBOSE_VALUES is the source of truth defined in validate-lychee-config.js VALID_VERBOSE_VALUES constant
+describe("VALID_VERBOSE_VALUES", () => {
+    test("should be a non-empty array", () => {
+        expect(Array.isArray(VALID_VERBOSE_VALUES)).toBe(true);
+        expect(VALID_VERBOSE_VALUES.length).toBeGreaterThan(0);
+    });
+
+    test("should contain expected log levels", () => {
+        expect(VALID_VERBOSE_VALUES).toContain("error");
+        expect(VALID_VERBOSE_VALUES).toContain("warn");
+        expect(VALID_VERBOSE_VALUES).toContain("info");
+        expect(VALID_VERBOSE_VALUES).toContain("debug");
+        expect(VALID_VERBOSE_VALUES).toContain("trace");
+    });
+
+    test("should contain exactly 5 values", () => {
+        expect(VALID_VERBOSE_VALUES).toHaveLength(5);
+    });
+});
+
 // SYNC: VALID_FIELDS is the source of truth defined in validate-lychee-config.js VALID_FIELDS constant
 describe("VALID_FIELDS", () => {
     test("should be a non-empty Set", () => {
@@ -282,7 +455,7 @@ describe("VALID_FIELDS", () => {
 describe("End-to-end validation", () => {
     test("should validate a configuration matching this repository's .lychee.toml", () => {
         const content = [
-            'verbose = true',
+            'verbose = "info"',
             'no_progress = true',
             'max_concurrency = 4',
             'include_mail = false',
@@ -310,9 +483,39 @@ describe("End-to-end validation", () => {
         expect(warnings).toEqual([]);
     });
 
+    test("should validate field values in a valid configuration", () => {
+        const content = [
+            'verbose = "info"',
+            'no_progress = true',
+            'max_concurrency = 4',
+            'include_mail = false',
+            '',
+            '# Network tuning',
+            'timeout = 20            # seconds per request',
+            'max_retries = 3         # retry transient failures',
+            'retry_wait_time = 2     # seconds between retries',
+            'max_redirects = 10',
+            'user_agent = "Mozilla/5.0"',
+            '',
+            'accept = ["200..=299", 429, 502]',
+            '',
+            'scheme = ["https", "http"]',
+            '',
+            'exclude = [',
+            '  "^https?://localhost",',
+            ']',
+        ].join("\n");
+
+        const keyValues = parseTopLevelKeyValues(content);
+        const { errors, warnings } = validateFieldValues(keyValues);
+
+        expect(errors).toEqual([]);
+        expect(warnings).toEqual([]);
+    });
+
     test("should catch a configuration with deprecated or invalid fields", () => {
         const content = [
-            'verbose = true',
+            'verbose = "info"',
             'max_connections = 4',
             'exclude_mail = true',
         ].join("\n");
@@ -323,6 +526,20 @@ describe("End-to-end validation", () => {
         expect(errors).toHaveLength(2);
         expect(errors.some((e) => e.includes("max_connections"))).toBe(true);
         expect(errors.some((e) => e.includes("exclude_mail"))).toBe(true);
+    });
+
+    test("should catch invalid verbose value via value validation", () => {
+        const content = [
+            'verbose = true',
+            'timeout = 20',
+        ].join("\n");
+
+        const keyValues = parseTopLevelKeyValues(content);
+        const { errors } = validateFieldValues(keyValues);
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toContain("verbose");
+        expect(errors[0]).toContain("must be a quoted string");
     });
 });
 
@@ -352,7 +569,7 @@ describe("actual .lychee.toml config file validation", () => {
         const deprecatedFieldMappings = [
             ["exclude_mail", "use 'include_mail = false' instead"],
             ["retries", "renamed to 'max_retries'"],
-            ["verbosity", "removed; use 'verbose = true' instead"],
+            ["verbosity", "removed; use 'verbose = \"info\"' instead"],
         ];
 
         test.each(deprecatedFieldMappings)(
@@ -383,5 +600,25 @@ describe("actual .lychee.toml config file validation", () => {
     test("config should pass full validation with no errors", () => {
         const { errors } = validateFields(configKeys);
         expect(errors).toEqual([]);
+    });
+
+    test("config should pass value validation with no errors", () => {
+        const configKeyValues = parseTopLevelKeyValues(configContent);
+        const { errors } = validateFieldValues(configKeyValues);
+
+        expect(errors).toEqual(
+            [],
+            "actual .lychee.toml should have no field value errors"
+        );
+    });
+
+    test("config should pass value validation with no warnings", () => {
+        const configKeyValues = parseTopLevelKeyValues(configContent);
+        const { warnings } = validateFieldValues(configKeyValues);
+
+        expect(warnings).toEqual(
+            [],
+            "actual .lychee.toml should have no field value warnings"
+        );
     });
 });
