@@ -4,6 +4,7 @@ const {
   generateLlmsTxt,
   countSkillFiles,
   getSkillCategories,
+  normalizeForComparison,
 } = require("../update-llms-txt");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
@@ -148,9 +149,7 @@ describe("update-llms-txt.js", () => {
     test("llms.txt should be up to date", () => {
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
       const expectedContent = generateLlmsTxt();
-      // Normalize line endings for comparison (support both LF and CRLF)
-      const normalize = (str) => str.replace(/\r\n/g, '\n').trim();
-      expect(normalize(currentContent)).toBe(normalize(expectedContent));
+      expect(normalizeForComparison(currentContent)).toBe(normalizeForComparison(expectedContent));
     });
   });
 });

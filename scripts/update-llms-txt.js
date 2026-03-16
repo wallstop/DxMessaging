@@ -402,9 +402,7 @@ function main() {
       }
 
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
-      // Normalize line endings for comparison (support both LF and CRLF)
-      const normalizeLineEndings = (str) => str.replace(/\r\n/g, '\n');
-      if (normalizeLineEndings(currentContent.trim()) !== normalizeLineEndings(newContent.trim())) {
+      if (normalizeForComparison(currentContent) !== normalizeForComparison(newContent)) {
         console.error("ERROR: llms.txt is out of date");
         console.error("Run: node scripts/update-llms-txt.js");
         process.exit(1);
@@ -431,4 +429,15 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories };
+// Normalize content for comparison by stripping the date line, normalizing
+// line endings, and trimming whitespace.
+function normalizeForComparison(str) {
+  return str
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter((line) => !line.startsWith('**Last Updated:**'))
+    .join('\n')
+    .trim();
+}
+
+module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories, normalizeForComparison };
