@@ -24,6 +24,10 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+    hasMatchingBoundaryQuotes,
+    stripMatchingBoundaryQuotes,
+} = require("./lib/quote-parser");
 
 const CONFIG_PATH = path.join(__dirname, "..", ".lychee.toml");
 
@@ -156,17 +160,17 @@ function splitTomlPath(pathExpression) {
  * Parse TOML table header names from lines like [section] and [[array_section]].
  *
  * @param {string} line - TOML line with comments already stripped
- * @returns {{ tableName: string, isArrayTable: boolean } | null}
+ * @returns {string | null}
  */
 function parseTomlTableHeader(line) {
     const arrayTableMatch = line.match(/^\[\[(.+)\]\]$/);
     if (arrayTableMatch) {
-        return { tableName: arrayTableMatch[1].trim(), isArrayTable: true };
+        return arrayTableMatch[1].trim();
     }
 
     const tableMatch = line.match(/^\[(.+)\]$/);
     if (tableMatch) {
-        return { tableName: tableMatch[1].trim(), isArrayTable: false };
+        return tableMatch[1].trim();
     }
 
     return null;
@@ -210,10 +214,10 @@ function stripInlineTomlComment(line) {
 }
 
 /**
- * Parse a TOML file into top-level keys and key-value entries with optional table context.
+ * Parse a TOML file into top-level keys and key-value entries with optional keyPath context.
  *
  * @param {string} content - The TOML file content
- * @returns {{ keys: string[], keyValues: Array<{ key: string, value: string, table?: string, keyPath?: string }> }}
+ * @returns {{ keys: string[], keyValues: Array<{ key: string, value: string, keyPath?: string }> }}
  */
 function parseTomlForLycheeValidation(content) {
     const keys = [];
@@ -234,8 +238,8 @@ function parseTomlForLycheeValidation(content) {
 
         const tableHeader = parseTomlTableHeader(lineWithoutComment);
         if (tableHeader) {
-            currentTable = tableHeader.tableName;
-            const tableSegments = splitTomlPath(tableHeader.tableName);
+            currentTable = tableHeader;
+            const tableSegments = splitTomlPath(tableHeader);
             if (tableSegments.length > 0) {
                 keys.push(tableSegments[0]);
             }
@@ -264,7 +268,6 @@ function parseTomlForLycheeValidation(content) {
             keyValues.push({
                 key: parsedKey,
                 value,
-                table: currentTable,
                 keyPath: `${currentTable}.${rawKey}`,
             });
             continue;
@@ -297,49 +300,14 @@ function parseTopLevelKeys(content) {
  * Returns an array of { key, value } objects where value is the raw string
  * after the equals sign (trimmed).
  *
- * If a key is defined inside a TOML table, the pair also includes:
- *   - table: table path (e.g., basic_auth, hosts, basic_auth."example.com")
+ * If a key is defined inside a TOML table, the pair includes:
  *   - keyPath: fully-qualified key path (e.g., basic_auth.username)
  *
  * @param {string} content - The TOML file content
- * @returns {{ key: string, value: string, table?: string, keyPath?: string }[]} Array of key-value pairs
+ * @returns {{ key: string, value: string, keyPath?: string }[]} Array of key-value pairs
  */
 function parseTopLevelKeyValues(content) {
     return parseTomlForLycheeValidation(content).keyValues;
-}
-
-/**
- * Returns true when a value has matching quote boundaries using the same quote character.
- *
- * @param {string} value - Raw value from TOML
- * @returns {boolean} True when value starts and ends with matching single or double quotes
- */
-function hasMatchingBoundaryQuotes(value) {
-    const trimmed = value.trim();
-    if (trimmed.length < 2) {
-        return false;
-    }
-
-    const firstChar = trimmed[0];
-    const lastChar = trimmed[trimmed.length - 1];
-    const isQuote = firstChar === '"' || firstChar === "'";
-
-    return isQuote && firstChar === lastChar;
-}
-
-/**
- * Strip wrapping quotes only when both boundary quotes match.
- *
- * @param {string} value - Raw value from TOML
- * @returns {string} Trimmed value with matching boundary quotes removed
- */
-function stripMatchingBoundaryQuotes(value) {
-    const trimmed = value.trim();
-    if (!hasMatchingBoundaryQuotes(trimmed)) {
-        return trimmed;
-    }
-
-    return trimmed.slice(1, -1);
 }
 
 /**
@@ -350,8 +318,8 @@ function stripMatchingBoundaryQuotes(value) {
  * This function is designed to be extended with additional field validations
  * as lychee evolves.
  *
- * @param {Array<{ key: string, value: string, table?: string, keyPath?: string }>} keyValues
- *   - Array of key-value pairs from the TOML file, including optional table/keyPath metadata
+ * @param {Array<{ key: string, value: string, keyPath?: string }>} keyValues
+ *   - Array of key-value pairs from the TOML file, including optional keyPath metadata
  * @returns {{ errors: string[], warnings: string[] }} Validation results
  */
 function validateFieldValues(keyValues) {

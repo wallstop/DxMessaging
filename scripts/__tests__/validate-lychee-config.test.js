@@ -267,7 +267,7 @@ describe("parseTopLevelKeyValues", () => {
 
         const pairs = parseTopLevelKeyValues(content);
         expect(pairs).toEqual([
-            { key: "verbose", value: '"debug"', table: "section", keyPath: "section.verbose" },
+            { key: "verbose", value: '"debug"', keyPath: "section.verbose" },
         ]);
     });
 
@@ -411,7 +411,7 @@ describe("validateFieldValues", () => {
 
     test("should validate verbose value when defined inside a table", () => {
         const keyValues = [
-            { key: "verbose", value: "true", table: "logging", keyPath: "logging.verbose" },
+            { key: "verbose", value: "true", keyPath: "logging.verbose" },
         ];
         const { errors } = validateFieldValues(keyValues);
 

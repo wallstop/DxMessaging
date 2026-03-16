@@ -56,6 +56,7 @@ All scripts in `scripts/` must have corresponding test coverage in `scripts/__te
 - **Shared helpers**: If a test or another module imports a script helper, export that helper explicitly and treat it as part of the module contract.
 - **Match runtime inputs**: When a test reuses a runtime validation helper, pass the same shape of input that production code passes. Do not narrow a whole-document validator down to a single extracted line unless that narrower contract is the one production uses.
 - **Quote-boundary parsing**: When unquoting TOML/YAML values, only strip quotes if both boundaries are present and use the same quote character. Never use start-or-end-only regex stripping.
+- **Shared quote parsing helper**: Reuse `scripts/lib/quote-parser.js` (`hasMatchingBoundaryQuotes`, `stripMatchingBoundaryQuotes`) instead of re-implementing quote-boundary logic in individual scripts.
 - **Malformed quote tests**: Parser-related tests must include malformed quote cases (mismatched and unclosed quotes) to ensure invalid config/frontmatter is surfaced instead of normalized silently.
 - **Dead helpers**: Remove unused helpers promptly unless a committed caller or test uses them. Do not leave validation helpers orphaned.
 - **File paths**: Include tests that verify referenced file paths exist with correct case.

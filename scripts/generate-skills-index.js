@@ -25,6 +25,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { stripMatchingBoundaryQuotes } = require("./lib/quote-parser");
 
 const SKILLS_DIR = path.join(__dirname, "..", ".llm", "skills");
 const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
@@ -152,26 +153,6 @@ function formatWithPrettier(content) {
     }
 
     return result.stdout;
-}
-
-/**
- * Strip wrapping quotes only when both boundary quotes match.
- */
-function stripMatchingBoundaryQuotes(value) {
-    const trimmed = value.trim();
-    if (trimmed.length < 2) {
-        return trimmed;
-    }
-
-    const firstChar = trimmed[0];
-    const lastChar = trimmed[trimmed.length - 1];
-    const hasMatchingQuotes = (firstChar === '"' || firstChar === "'") && firstChar === lastChar;
-
-    if (!hasMatchingQuotes) {
-        return trimmed;
-    }
-
-    return trimmed.slice(1, -1);
 }
 
 /**
