@@ -53,6 +53,26 @@ function countSkillFiles() {
 }
 
 /**
+ * Validate that content has exactly one "**Last Updated:**" line
+ * and that it contains a non-empty ISO date (YYYY-MM-DD).
+ */
+function hasValidLastUpdatedLine(content) {
+  const lines = content.split(/\r?\n/);
+  const lastUpdatedLines = lines.filter((line) =>
+    line.startsWith("**Last Updated:**")
+  );
+
+  if (lastUpdatedLines.length !== 1) {
+    return false;
+  }
+
+  const line = lastUpdatedLines[0];
+  // Require an ISO date after the label, e.g. "**Last Updated:** 2024-01-31"
+  const isoDatePattern = /^\*\*Last Updated:\*\*\s+\d{4}-\d{2}-\d{2}(?:\b|$)/;
+  return isoDatePattern.test(line);
+}
+
+/**
  * Get skill categories from .llm/skills directory
  */
 function getSkillCategories() {
@@ -428,11 +448,9 @@ function main() {
 
       const currentContent = fs.readFileSync(LLMS_TXT_PATH, "utf8");
 
-      // Validate that both contents contain exactly one "**Last Updated:**" line
-      const currentLastUpdatedCount = countLastUpdatedLines(currentContent);
-      const newLastUpdatedCount = countLastUpdatedLines(newContent);
-      if (currentLastUpdatedCount !== 1 || newLastUpdatedCount !== 1) {
-        console.error("ERROR: llms.txt is missing or has an invalid '**Last Updated:**' line");
+      // Validate that both contents contain a correctly formatted "**Last Updated:**" line
+      if (!hasValidLastUpdatedLine(currentContent) || !hasValidLastUpdatedLine(newContent)) {
+        console.error("ERROR: llms.txt is missing or has an invalid '**Last Updated:**' line (expected ISO date)");
         process.exit(1);
       }
 
