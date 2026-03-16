@@ -21,6 +21,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { normalizeToLf } = require("./lib/quote-parser");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const LLMS_TXT_PATH = path.join(ROOT_DIR, "llms.txt");
@@ -28,10 +29,6 @@ const PACKAGE_JSON_PATH = path.join(ROOT_DIR, "package.json");
 const LLM_SKILLS_DIR = path.join(ROOT_DIR, ".llm", "skills");
 const NON_SKILL_FILES = new Set(["index.md", "specification.md"]);
 const NON_SKILL_DIRECTORIES = new Set(["templates"]);
-
-function normalizeToLf(content) {
-  return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
 
 function isCountedSkillPath(fullPath) {
   const relativePath = path.relative(LLM_SKILLS_DIR, fullPath).split(path.sep).join("/");

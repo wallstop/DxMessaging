@@ -25,7 +25,10 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { stripMatchingBoundaryQuotes } = require("./lib/quote-parser");
+const {
+    stripMatchingBoundaryQuotes,
+    normalizeToLf,
+} = require("./lib/quote-parser");
 
 const SKILLS_DIR = path.join(__dirname, "..", ".llm", "skills");
 const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
@@ -107,11 +110,6 @@ function categoryToTitle(category) {
         .join(" ");
 }
 
-function normalizeToLf(text) {
-    let normalized = text.replace(/\r\n/g, "\n");
-    return normalized.replace(/\r/g, "\n");
-}
-
 function getLatestSkillDate(skills) {
     const dates = skills
         .map((skill) => skill.updated || skill.created)
@@ -161,14 +159,15 @@ function formatWithPrettier(content) {
  * Returns null if no valid frontmatter found.
  */
 function parseFrontmatter(content) {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    const normalizedContent = normalizeToLf(content);
+    const match = normalizedContent.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
         return null;
     }
 
     const yaml = match[1];
     const result = {};
-    const lines = yaml.split(/\r?\n/);
+    const lines = yaml.split("\n");
 
     // Stack-based parser for arbitrary nesting depth
     // Each stack entry: { obj, key, indent, isArray }
@@ -310,7 +309,7 @@ function loadSkill(skillFile) {
         return null;
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split("\n").length;
     const frontmatter = parseFrontmatter(content);
 
     if (!frontmatter) {
@@ -588,7 +587,6 @@ if (typeof module !== 'undefined' && module.exports) {
         applyBrandCapitalization,
         categoryToTitle,
         parseFrontmatter,
-        normalizeToLf,
         BRAND_NAMES,
     };
 }

@@ -26,7 +26,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { stripMatchingBoundaryQuotes } = require('./lib/quote-parser');
+const {
+    stripMatchingBoundaryQuotes,
+    normalizeToLf,
+} = require('./lib/quote-parser');
 
 const SKILLS_DIR = path.join(__dirname, '..', '.llm', 'skills');
 const CONTEXT_FILE = path.join(__dirname, '..', '.llm', 'context.md');
@@ -203,14 +206,15 @@ function validatePerformanceRating(frontmatter, relativePath) {
  * Returns null if no valid frontmatter found.
  */
 function parseFrontmatter(content) {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    const normalizedContent = normalizeToLf(content);
+    const match = normalizedContent.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
         return null;
     }
 
     const yaml = match[1];
     const result = {};
-    const lines = yaml.split(/\r?\n/);
+    const lines = yaml.split('\n');
 
     // Stack-based parser for arbitrary nesting depth
     // Each stack entry: { obj, key, indent, isArray }
@@ -389,7 +393,7 @@ function validateSkill(skillFile) {
         return { errors, warnings, lineCount: 0 };
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split('\n').length;
     const frontmatter = parseFrontmatter(content);
 
     // Check line count limits
@@ -592,7 +596,7 @@ function validateContextFile() {
         return { errors, warnings, lineCount: 0 };
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split('\n').length;
 
     if (lineCount > LINE_LIMIT_HARD_MAX) {
         errors.push(

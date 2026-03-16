@@ -187,11 +187,13 @@ repos:
           npx jest --runTestsByPath scripts/__tests__/validate-lychee-config.test.js
           scripts/__tests__/generate-skills-index.test.js
           scripts/__tests__/validate-skills-required-fields.test.js
+          scripts/__tests__/validate-workflows.test.js
+          scripts/__tests__/check-eol.test.js
           scripts/__tests__/quote-parser.test.js
           scripts/__tests__/update-llms-txt.test.js
         language: system
         pass_filenames: false
-        files: '^(scripts/(validate-lychee-config|validate-skills|generate-skills-index|update-llms-txt)\.js|scripts/lib/quote-parser\.js|scripts/__tests__/(validate-lychee-config|validate-skills-required-fields|generate-skills-index|quote-parser|update-llms-txt)\.test\.js)$'
+        files: '^(scripts/(check-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/quote-parser\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
         stages:
           - pre-commit
         description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.

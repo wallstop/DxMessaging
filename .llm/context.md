@@ -57,7 +57,9 @@ All scripts in `scripts/` must have corresponding test coverage in `scripts/__te
 - **Match runtime inputs**: When a test reuses a runtime validation helper, pass the same shape of input that production code passes. Do not narrow a whole-document validator down to a single extracted line unless that narrower contract is the one production uses.
 - **Quote-boundary parsing**: When unquoting TOML/YAML values, only strip quotes if both boundaries are present and use the same quote character. Never use start-or-end-only regex stripping.
 - **Shared quote parsing helper**: Reuse `scripts/lib/quote-parser.js` (`hasMatchingBoundaryQuotes`, `stripMatchingBoundaryQuotes`) instead of re-implementing quote-boundary logic in individual scripts.
+- **Shared newline normalization helper**: Reuse `scripts/lib/quote-parser.js` `normalizeToLf()` before parser line splitting or multiline boundary matching; do not rely on `/\r?\n/` alone because lone `\r` line endings will be missed.
 - **Malformed quote tests**: Parser-related tests must include malformed quote cases (mismatched and unclosed quotes) to ensure invalid config/frontmatter is surfaced instead of normalized silently.
+- **Malformed newline tests**: Parser-related tests must include lone-CR and mixed-line-ending inputs to guard against silent parsing failures.
 - **Dead helpers**: Remove unused helpers promptly unless a committed caller or test uses them. Do not leave validation helpers orphaned.
 - **File paths**: Include tests that verify referenced file paths exist with correct case.
 - **PowerShell logic**: Implement equivalent JavaScript functions to test PowerShell script logic.
@@ -109,7 +111,7 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 
 ### Mixed Line Ending Policies
 
-This project uses CRLF for most files but LF for shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`). When working with line endings:
+This project uses LF for most text files and CRLF only for C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) per `.gitattributes`. When working with line endings:
 
 - **Prefer `fix-eol.js` for working tree fixes**: Run `node scripts/fix-eol.js` to directly fix line endings in your working tree. This is the recommended approach after cloning or when files have incorrect endings.
 - **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.

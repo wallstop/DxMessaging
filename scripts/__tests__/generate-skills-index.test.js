@@ -14,9 +14,9 @@ const {
     applyBrandCapitalization,
     categoryToTitle,
     parseFrontmatter,
-    normalizeToLf,
     BRAND_NAMES,
 } = require('../generate-skills-index.js');
+const { normalizeToLf } = require('../lib/quote-parser');
 
 describe("generate-skills-index", () => {
     describe("BRAND_NAMES mapping", () => {
@@ -450,6 +450,30 @@ describe("generate-skills-index", () => {
 
             const frontmatter = parseFrontmatter(content);
             expect(frontmatter.tags).toEqual(['"alpha', "beta"]);
+        });
+
+        test("should parse frontmatter with lone CR line endings", () => {
+            const content = [
+                "---",
+                "title: Test Skill",
+                "id: test-skill",
+                "---",
+                "# Content",
+            ].join("\r");
+
+            const frontmatter = parseFrontmatter(content);
+            expect(frontmatter).not.toBeNull();
+            expect(frontmatter.title).toBe("Test Skill");
+            expect(frontmatter.id).toBe("test-skill");
+        });
+
+        test("should parse frontmatter with mixed line endings", () => {
+            const content = "---\r\ntitle: Mixed\rid: mixed-skill\n---\r\n# Content";
+
+            const frontmatter = parseFrontmatter(content);
+            expect(frontmatter).not.toBeNull();
+            expect(frontmatter.title).toBe("Mixed");
+            expect(frontmatter.id).toBe("mixed-skill");
         });
     });
 

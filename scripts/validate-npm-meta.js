@@ -19,6 +19,21 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { normalizeToLf } = require("./lib/quote-parser");
+
+/**
+ * Parse tar listing output into package-relative file paths.
+ *
+ * @param {string} tarOutput - Raw `tar -tzf` output
+ * @returns {string[]} Package-relative file list
+ */
+function parseTarListingOutput(tarOutput) {
+    return normalizeToLf(tarOutput)
+        .split("\n")
+        .filter((line) => line.trim())
+        .map((line) => line.replace(/^package\//, ""))
+        .filter((line) => line); // Remove empty strings
+}
 
 /**
  * Get list of files that would be included in the npm package
@@ -53,11 +68,7 @@ function getPackageFiles() {
         });
 
         // Parse file list, removing the "package/" prefix and empty lines
-        const files = tarOutput
-            .split("\n")
-            .filter((line) => line.trim())
-            .map((line) => line.replace(/^package\//, ""))
-            .filter((line) => line); // Remove empty strings
+        const files = parseTarListingOutput(tarOutput);
 
         // Clean up tarball
         fs.unlinkSync(tarballPath);
@@ -223,6 +234,7 @@ if (require.main === module) {
 // Export for testing
 module.exports = {
     getPackageFiles,
+    parseTarListingOutput,
     validateMetaFilesHaveTargets,
     validateFilesHaveMetaFiles,
     validateNpmMeta,

@@ -223,4 +223,28 @@ describe("validate-skills parseFrontmatter quote boundary handling", () => {
         const frontmatter = parseFrontmatter(content);
         expect(frontmatter.tags).toEqual(["'alpha", "beta"]);
     });
+
+    test("should parse frontmatter with lone CR line endings", () => {
+        const content = [
+            "---",
+            "title: Sample Skill",
+            "id: sample-skill",
+            "---",
+            "# Content",
+        ].join("\r");
+
+        const frontmatter = parseFrontmatter(content);
+        expect(frontmatter).not.toBeNull();
+        expect(frontmatter.title).toBe("Sample Skill");
+        expect(frontmatter.id).toBe("sample-skill");
+    });
+
+    test("should parse frontmatter with mixed line endings", () => {
+        const content = "---\r\ntitle: Mixed\rid: mixed-skill\n---\r\n# Content";
+
+        const frontmatter = parseFrontmatter(content);
+        expect(frontmatter).not.toBeNull();
+        expect(frontmatter.title).toBe("Mixed");
+        expect(frontmatter.id).toBe("mixed-skill");
+    });
 });

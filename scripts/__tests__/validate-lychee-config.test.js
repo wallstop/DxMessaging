@@ -146,6 +146,20 @@ describe("parseTopLevelKeys", () => {
         expect(keys).toEqual(["verbose", "timeout"]);
     });
 
+    test("should handle lone CR line endings", () => {
+        const content = "verbose = true\rtimeout = 20\r";
+
+        const keys = parseTopLevelKeys(content);
+        expect(keys).toEqual(["verbose", "timeout"]);
+    });
+
+    test("should handle mixed line endings", () => {
+        const content = "verbose = true\r\ntimeout = 20\rmax_retries = 3\n";
+
+        const keys = parseTopLevelKeys(content);
+        expect(keys).toEqual(["verbose", "timeout", "max_retries"]);
+    });
+
     test("should handle keys with no spaces around equals", () => {
         const content = "verbose=true";
 
@@ -280,6 +294,16 @@ describe("parseTopLevelKeyValues", () => {
 
     test("should handle CRLF line endings", () => {
         const content = 'verbose = "info"\r\ntimeout = 20\r\n';
+
+        const pairs = parseTopLevelKeyValues(content);
+        expect(pairs).toEqual([
+            { key: "verbose", value: '"info"' },
+            { key: "timeout", value: "20" },
+        ]);
+    });
+
+    test("should handle lone CR line endings", () => {
+        const content = 'verbose = "info"\rtimeout = 20\r';
 
         const pairs = parseTopLevelKeyValues(content);
         expect(pairs).toEqual([

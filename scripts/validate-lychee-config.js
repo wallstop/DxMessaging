@@ -27,6 +27,7 @@ const path = require("path");
 const {
     hasMatchingBoundaryQuotes,
     stripMatchingBoundaryQuotes,
+    normalizeToLf,
 } = require("./lib/quote-parser");
 
 const CONFIG_PATH = path.join(__dirname, "..", ".lychee.toml");
@@ -222,7 +223,7 @@ function stripInlineTomlComment(line) {
 function parseTomlForLycheeValidation(content) {
     const keys = [];
     const keyValues = [];
-    const lines = content.split(/\r?\n/);
+    const lines = normalizeToLf(content).split("\n");
     let currentTable = null;
 
     for (const line of lines) {
