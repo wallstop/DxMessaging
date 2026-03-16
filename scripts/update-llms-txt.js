@@ -454,6 +454,16 @@ function main() {
         process.exit(1);
       }
 
+      // Ensure there is exactly one "**Last Updated:**" line in both contents
+      const currentLastUpdatedCount = countLastUpdatedLines(currentContent);
+      const newLastUpdatedCount = countLastUpdatedLines(newContent);
+      if (currentLastUpdatedCount !== 1 || newLastUpdatedCount !== 1) {
+        console.error(
+          "ERROR: llms.txt must contain exactly one '**Last Updated:**' line in both existing and generated content"
+        );
+        process.exit(1);
+      }
+
       if (normalizeForComparison(currentContent) !== normalizeForComparison(newContent)) {
         console.error("ERROR: llms.txt is out of date");
         console.error("Run: node scripts/update-llms-txt.js");
@@ -481,4 +491,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories, normalizeForComparison };
+module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories, normalizeForComparison, countLastUpdatedLines };
