@@ -117,6 +117,7 @@ const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 
 This project uses LF for most text files and CRLF only for C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) per `.gitattributes`. When working with line endings:
 
+- **Describe policy precisely in comments/docs**: Do not use shorthand like "enforce CRLF line endings" for EOL tooling in this repo. State the mixed policy explicitly: CRLF for C#/.NET files, LF for all other text files.
 - **Prefer `fix-eol.js` for working tree fixes**: Run `node scripts/fix-eol.js` to directly fix line endings in your working tree. This is the recommended approach after cloning or when files have incorrect endings.
 - **`git add --renormalize` only updates the index**: This command updates the git staging area based on `.gitattributes` but does **not** modify working tree files. Use it only when you need to re-stage files with updated normalization rules.
 - **`git add --renormalize` must target specific paths**: Never use `git add --renormalize .` as it stages all files. Always specify exact patterns like `git add --renormalize -- '*.md' '**/*.md'`.

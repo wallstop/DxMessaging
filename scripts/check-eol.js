@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /*
-  Enforce CRLF line endings and no UTF-8 BOM on text files.
-  Mirrors the behavior of scripts/check-eol.ps1 used in CI.
+  Enforce mixed line-ending policy and no UTF-8 BOM on text files.
+  C#/.NET files (.cs, .csproj, .sln, .props) must use CRLF.
+  All other tracked text files must use LF.
+  Mirrors scripts/check-eol.ps1 behavior used in CI.
+  Source of truth for extension lists: scripts/lib/eol-policy.js and .gitattributes.
 */
 const fs = require('fs');
 const path = require('path');
@@ -53,8 +56,8 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// SYNC: Keep in sync with scripts/check-eol.ps1 $crlfExtensions and .gitattributes EOL policy.
-// crlfExts and lfExts are centralized in scripts/lib/eol-policy.js.
+// SYNC (bidirectional): Keep extension policy in sync with scripts/lib/eol-policy.js
+// (source of truth), scripts/check-eol.ps1 extension lists, and .gitattributes.
 
 // Git hooks directory - files here need LF regardless of extension
 const hooksDir = path.join('scripts', 'hooks');

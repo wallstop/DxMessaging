@@ -72,7 +72,8 @@ $excludePatterns = @(
     "[\\/]site[\\/]"
 )
 
-# SYNC: Keep in sync with scripts/lib/eol-policy.js crlfExts and .gitattributes EOL policy.
+# SYNC (bidirectional): Keep in sync with scripts/lib/eol-policy.js crlfExts/lfExts
+# (consumed by scripts/check-eol.js and scripts/fix-eol.js), and .gitattributes EOL policy.
 # File extensions that require CRLF (C# and .NET files only)
 $crlfExtensions = @(
     '.cs', '.csproj', '.sln', '.props'

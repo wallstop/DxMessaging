@@ -8,7 +8,7 @@ Before committing, please enable our git hooks and local linters so you catch is
 - Install hooks: `pre-commit install`
 - Run on all files: `pre-commit run --all-files`
 
-Line endings: Git normalizes most text files to CRLF through `.gitattributes`. **Exception:** Shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`) use LF for Unix compatibility. Run this once after cloning (especially on Windows) to fix your working tree:
+Line endings: Git normalizes most text files to **LF** through `.gitattributes`. **Exception:** C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) use CRLF per .NET conventions. Run this once after cloning (especially on Windows) to fix your working tree:
 
 ```bash
 git config core.autocrlf false

@@ -1,6 +1,7 @@
 "use strict";
 
-// SYNC: Keep in sync with scripts/check-eol.ps1 $crlfExtensions and .gitattributes EOL policy.
+// SYNC (bidirectional): Keep in sync with scripts/check-eol.ps1 $crlfExtensions,
+// scripts/check-eol.js, scripts/fix-eol.js, and .gitattributes EOL policy.
 const crlfExts = new Set([
   ".cs",
   ".csproj",
@@ -8,7 +9,8 @@ const crlfExts = new Set([
   ".props",
 ]);
 
-// SYNC: Keep in sync with scripts/check-eol.ps1 $lfExtensions and .gitattributes EOL policy.
+// SYNC (bidirectional): Keep in sync with scripts/check-eol.ps1 $lfExtensions,
+// scripts/check-eol.js, scripts/fix-eol.js, and .gitattributes EOL policy.
 const lfExts = new Set([
   ".js", ".cjs", ".mjs",
   ".json", ".jsonc", ".toml",

@@ -14,6 +14,12 @@ const {
 } = require("../check-eol.js");
 const { crlfExts, lfExts } = require("../lib/eol-policy.js");
 
+function getLeadingBlockComment(filePath) {
+    const content = fs.readFileSync(filePath, "utf8");
+    const match = content.match(/\/\*[\s\S]*?\*\//);
+    return match ? match[0] : "";
+}
+
 describe("check-eol helpers", () => {
     describe("splitNormalizedLines", () => {
         test("normalizes lone CR and CRLF before splitting", () => {
@@ -123,7 +129,7 @@ describe("check-eol helpers", () => {
             const ps1Path = path.resolve(__dirname, "../check-eol.ps1");
             const content = fs.readFileSync(ps1Path, "utf8");
 
-            const match = content.match(/\$crlfExtensions\s*=\s*@\(([^)]*)\)/m);
+            const match = content.match(/\$crlfExtensions\s*=\s*@\(([\s\S]*?)\)/);
             expect(match).not.toBeNull();
 
             const fromPs1 = new Set(
@@ -141,7 +147,7 @@ describe("check-eol helpers", () => {
             const ps1Path = path.resolve(__dirname, "../check-eol.ps1");
             const content = fs.readFileSync(ps1Path, "utf8");
 
-            const match = content.match(/\$lfExtensions\s*=\s*@\(([^)]*)\)/m);
+            const match = content.match(/\$lfExtensions\s*=\s*@\(([\s\S]*?)\)/);
             expect(match).not.toBeNull();
 
             const fromPs1 = new Set(
@@ -158,6 +164,61 @@ describe("check-eol helpers", () => {
         test("does not overlap CRLF and LF extension sets", () => {
             const overlap = [...crlfExts].filter((ext) => lfExts.has(ext));
             expect(overlap).toEqual([]);
+        });
+
+        test("documents bidirectional sync references in shared policy files", () => {
+            const eolPolicyPath = path.resolve(__dirname, "../lib/eol-policy.js");
+            const checkEolPath = path.resolve(__dirname, "../check-eol.js");
+            const fixEolPath = path.resolve(__dirname, "../fix-eol.js");
+            const checkEolPs1Path = path.resolve(__dirname, "../check-eol.ps1");
+
+            const eolPolicyContent = fs.readFileSync(eolPolicyPath, "utf8");
+            expect(eolPolicyContent).toMatch(/scripts\/check-eol\.ps1/);
+            expect(eolPolicyContent).toMatch(/scripts\/check-eol\.js/);
+            expect(eolPolicyContent).toMatch(/scripts\/fix-eol\.js/);
+
+            const checkEolContent = fs.readFileSync(checkEolPath, "utf8");
+            expect(checkEolContent).toMatch(/scripts\/lib\/eol-policy\.js/);
+            expect(checkEolContent).toMatch(/scripts\/check-eol\.ps1/);
+
+            const fixEolContent = fs.readFileSync(fixEolPath, "utf8");
+            expect(fixEolContent).toMatch(/scripts\/lib\/eol-policy\.js/);
+            expect(fixEolContent).toMatch(/scripts\/check-eol\.ps1/);
+
+            const checkEolPs1Content = fs.readFileSync(checkEolPs1Path, "utf8");
+            expect(checkEolPs1Content).toMatch(/scripts\/lib\/eol-policy\.js/);
+            expect(checkEolPs1Content).toMatch(/scripts\/check-eol\.js/);
+            expect(checkEolPs1Content).toMatch(/scripts\/fix-eol\.js/);
+        });
+    });
+
+    describe("EOL policy documentation", () => {
+        test("describes mixed EOL policy in check and fix script headers", () => {
+            const checkEolPath = path.resolve(__dirname, "../check-eol.js");
+            const fixEolPath = path.resolve(__dirname, "../fix-eol.js");
+
+            const checkEolHeader = getLeadingBlockComment(checkEolPath);
+            const fixEolHeader = getLeadingBlockComment(fixEolPath);
+
+            expect(checkEolHeader).toMatch(/mixed line-ending policy/i);
+            expect(checkEolHeader).toMatch(/\.cs.*\.csproj.*\.sln.*\.props/i);
+            expect(checkEolHeader).toMatch(/all other tracked text files.*LF/i);
+            expect(checkEolHeader).not.toMatch(/Enforce CRLF line endings/i);
+
+            expect(fixEolHeader).toMatch(/mixed line-ending policy/i);
+            expect(fixEolHeader).toMatch(/converted to CRLF/i);
+            expect(fixEolHeader).toMatch(/normalized to LF/i);
+            expect(fixEolHeader).not.toMatch(/Fix CRLF line endings/i);
+        });
+
+        test("contributing guide states LF default and CRLF .NET exceptions", () => {
+            const contributingPath = path.resolve(__dirname, "../../CONTRIBUTING.md");
+            const content = fs.readFileSync(contributingPath, "utf8");
+
+            expect(content).toMatch(/most text files to\s+\*\*LF\*\*/i);
+            expect(content).toMatch(/C#\/\.NET files/i);
+            expect(content).toMatch(/\.cs.*\.csproj.*\.sln.*\.props/i);
+            expect(content).not.toMatch(/most text files to CRLF/i);
         });
     });
 });
