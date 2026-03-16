@@ -29,6 +29,10 @@ const LLM_SKILLS_DIR = path.join(ROOT_DIR, ".llm", "skills");
 const NON_SKILL_FILES = new Set(["index.md", "specification.md"]);
 const NON_SKILL_DIRECTORIES = new Set(["templates"]);
 
+function normalizeToLf(content) {
+  return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
 function isCountedSkillPath(fullPath) {
   const relativePath = path.relative(LLM_SKILLS_DIR, fullPath).split(path.sep).join("/");
 
@@ -82,7 +86,7 @@ function countSkillFiles() {
  * and that it contains a non-empty ISO date (YYYY-MM-DD).
  */
 function hasValidLastUpdatedLine(content) {
-  const lines = content.split(/\r?\n/);
+  const lines = normalizeToLf(content).split("\n");
   const lastUpdatedLines = lines.filter((line) =>
     line.startsWith("**Last Updated:**")
   );
@@ -342,7 +346,7 @@ npx cspell "**/*"
 ### Project Standards
 
 - **Code Style:** 4-space indent, explicit types (no \`var\`), PascalCase for public APIs
-- **Line Endings:** CRLF for most files, LF for shell scripts
+- **Line Endings:** LF by default, CRLF for C#/.NET project files
 - **Tests:** NUnit + Unity Test Framework, no underscores in test names
 - **Documentation:** MkDocs Material, lazy numbering for ordered lists
 - **Commits:** Imperative mood, reference issues/PRs
@@ -436,7 +440,8 @@ Copyright (c) 2017-2026 Wallstop Studios
  * correctness without failing due to the date changing each day.
  */
 function normalizeForComparison(str) {
-  const normalized = str.replace(/\r\n/g, "\n");
+  // Normalize all line endings (CRLF, LF, lone CR) to LF for stable comparison.
+  const normalized = normalizeToLf(str);
 
   // Normalize the Last Updated line by replacing the date with a fixed placeholder,
   // while keeping the marker text so that structural differences are still detected.
@@ -482,7 +487,7 @@ function main() {
 
     // Update mode - write the file
     // Normalize to LF line endings to match .gitattributes for *.txt files
-    const contentWithLF = newContent.replace(/\r\n/g, "\n");
+    const contentWithLF = normalizeToLf(newContent);
     fs.writeFileSync(LLMS_TXT_PATH, contentWithLF, "utf8");
     console.log("✓ Updated llms.txt");
     process.exit(0);
@@ -503,4 +508,5 @@ module.exports = {
   getSkillCategories,
   hasValidLastUpdatedLine,
   normalizeForComparison,
+  normalizeToLf,
 };

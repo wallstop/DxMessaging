@@ -198,7 +198,7 @@ npx cspell "**/*"
 ### Project Standards
 
 - **Code Style:** 4-space indent, explicit types (no `var`), PascalCase for public APIs
-- **Line Endings:** CRLF for most files, LF for shell scripts
+- **Line Endings:** LF by default, CRLF for C#/.NET project files
 - **Tests:** NUnit + Unity Test Framework, no underscores in test names
 - **Documentation:** MkDocs Material, lazy numbering for ordered lists
 - **Commits:** Imperative mood, reference issues/PRs

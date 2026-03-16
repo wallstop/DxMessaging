@@ -183,13 +183,17 @@ repos:
         description: Validate .lychee.toml fields against lychee v0.23.0 valid options.
       - id: script-parser-tests
         name: Run parser script tests
-        entry: npx jest --runTestsByPath scripts/__tests__/validate-lychee-config.test.js scripts/__tests__/generate-skills-index.test.js scripts/__tests__/validate-skills-required-fields.test.js
+        entry: >-
+          npx jest --runTestsByPath scripts/__tests__/validate-lychee-config.test.js
+          scripts/__tests__/generate-skills-index.test.js
+          scripts/__tests__/validate-skills-required-fields.test.js
+          scripts/__tests__/update-llms-txt.test.js
         language: system
         pass_filenames: false
-        files: '^(scripts/(validate-lychee-config|validate-skills|generate-skills-index)\.js|scripts/__tests__/(validate-lychee-config|validate-skills-required-fields|generate-skills-index)\.test\.js)$'
+        files: '^(scripts/(validate-lychee-config|validate-skills|generate-skills-index|update-llms-txt)\.js|scripts/__tests__/(validate-lychee-config|validate-skills-required-fields|generate-skills-index|update-llms-txt)\.test\.js)$'
         stages:
           - pre-commit
-        description: Fail fast on parser regressions (quote handling, frontmatter/TOML parsing) before push.
+        description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.
 
   - repo: local
     hooks:
