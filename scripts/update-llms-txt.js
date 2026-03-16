@@ -481,4 +481,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories, normalizeForComparison, countLastUpdatedLines };
+module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories, normalizeForComparison };
