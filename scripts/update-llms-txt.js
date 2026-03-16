@@ -68,7 +68,7 @@ function hasValidLastUpdatedLine(content) {
 
   const line = lastUpdatedLines[0];
   // Require an ISO date after the label, e.g. "**Last Updated:** 2024-01-31"
-  const isoDatePattern = /^\*\*Last Updated:\*\*\s+\d{4}-\d{2}-\d{2}(?:\b|$)/;
+  const isoDatePattern = /^\*\*Last Updated:\*\*\s+\d{4}-\d{2}-\d{2}\s*$/;
   return isoDatePattern.test(line);
 }
 
