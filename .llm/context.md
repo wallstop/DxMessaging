@@ -53,6 +53,9 @@ All scripts in `scripts/` must have corresponding test coverage in `scripts/__te
 
 - **Naming**: `script-name.test.js` for each script.
 - **Coverage**: Test core logic, input validation, edge cases, and error handling.
+- **Shared helpers**: If a test or another module imports a script helper, export that helper explicitly and treat it as part of the module contract.
+- **Match runtime inputs**: When a test reuses a runtime validation helper, pass the same shape of input that production code passes. Do not narrow a whole-document validator down to a single extracted line unless that narrower contract is the one production uses.
+- **Dead helpers**: Remove unused helpers promptly unless a committed caller or test uses them. Do not leave validation helpers orphaned.
 - **File paths**: Include tests that verify referenced file paths exist with correct case.
 - **PowerShell logic**: Implement equivalent JavaScript functions to test PowerShell script logic.
 

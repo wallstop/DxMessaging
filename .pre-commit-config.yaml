@@ -139,6 +139,24 @@ repos:
           - pre-commit
           - pre-push
         description: Regenerate index.md and stage it for commit.
+      - id: update-llms-txt
+        name: Update llms.txt
+        entry: bash -c 'node scripts/update-llms-txt.js && { git add llms.txt 2>/dev/null || true; }'
+        language: system
+        pass_filenames: false
+        files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|\.llm/skills/.*)$'
+        stages:
+          - pre-commit
+        description: Regenerate llms.txt and stage it when llms inputs change.
+      - id: validate-llms-txt
+        name: Validate llms.txt generator contract
+        entry: npm run validate:llms-txt
+        language: system
+        pass_filenames: false
+        files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|scripts/__tests__/update-llms-txt\.test\.js|\.llm/skills/.*)$'
+        stages:
+          - pre-push
+        description: Run llms.txt generator tests and freshness checks before push.
 
   - repo: local
     hooks:
@@ -162,6 +180,15 @@ repos:
         stages:
           - pre-push
         description: Validate GitHub Actions workflow syntax before push.
+      - id: script-tests
+        name: Run JavaScript script tests
+        entry: npm run test:scripts
+        language: system
+        pass_filenames: false
+        files: '^(package\.json|package-lock\.json|scripts/.*\.js|scripts/__tests__/.*\.js)$'
+        stages:
+          - pre-push
+        description: Run Jest script tests before push when script files change.
 
   - repo: local
     hooks:
