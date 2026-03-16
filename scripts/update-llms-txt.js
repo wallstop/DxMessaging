@@ -385,6 +385,21 @@ Copyright (c) 2017-2026 Wallstop Studios
 }
 
 /**
+ * Normalize content for comparison by stripping the auto-generated date line,
+ * normalizing line endings, and trimming whitespace. This allows the --check
+ * mode (and tests) to verify content correctness without failing due to the
+ * date changing each day.
+ */
+function normalizeForComparison(str) {
+  return str
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter((line) => !line.startsWith('**Last Updated:**'))
+    .join('\n')
+    .trim();
+}
+
+/**
  * Main execution
  */
 function main() {
@@ -427,17 +442,6 @@ function main() {
 // Only run if executed directly (not required as module)
 if (require.main === module) {
   main();
-}
-
-// Normalize content for comparison by stripping the date line, normalizing
-// line endings, and trimming whitespace.
-function normalizeForComparison(str) {
-  return str
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .filter((line) => !line.startsWith('**Last Updated:**'))
-    .join('\n')
-    .trim();
 }
 
 module.exports = { generateLlmsTxt, countSkillFiles, getSkillCategories, normalizeForComparison };
