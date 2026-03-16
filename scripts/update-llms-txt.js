@@ -392,10 +392,10 @@ Copyright (c) 2017-2026 Wallstop Studios
  */
 function normalizeForComparison(str) {
   return str
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .filter((line) => !line.startsWith('**Last Updated:**'))
-    .join('\n')
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .filter((line) => !line.startsWith("**Last Updated:**"))
+    .join("\n")
     .trim();
 }
 
@@ -429,7 +429,7 @@ function main() {
 
     // Update mode - write the file
     // Convert LF to CRLF for Windows/gitattributes compatibility
-    const contentWithCRLF = newContent.replace(/\r?\n/g, '\r\n');
+    const contentWithCRLF = newContent.replace(/\r?\n/g, "\r\n");
     fs.writeFileSync(LLMS_TXT_PATH, contentWithCRLF, "utf8");
     console.log("✓ Updated llms.txt");
     process.exit(0);
