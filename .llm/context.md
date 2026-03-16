@@ -74,15 +74,19 @@ When scripts exist in both PowerShell and JavaScript, keep these values synchron
 - **Exclude patterns**: Directory exclusion patterns (`.git`, `node_modules`, `Library`, etc.) must match.
 - **Validation logic**: Error categories and reporting must use the same structure.
 
-When modifying one script, search for and update the corresponding script. Use comments to mark synchronized sections:
+When modifying one script, search for and update the corresponding script. For EOL policy, treat
+`scripts/lib/eol-policy.js` as the JavaScript source of truth and keep PowerShell plus
+`.gitattributes` aligned. Note that `.gitattributes` enforces LF primarily via the default
+`* text=auto eol=lf` rule and explicit CRLF overrides for .NET file types. Use comments to mark
+synchronized sections:
 
 ```powershell
-# SYNC: Keep in sync with check-eol.js crlfExts
+# SYNC: Keep in sync with scripts/lib/eol-policy.js crlfExts and .gitattributes EOL policy
 $extensions = @('.cs', '.csproj', '.sln', ...)
 ```
 
 ```javascript
-// SYNC: Keep in sync with check-eol.ps1 $extensions
+// SYNC: Keep in sync with scripts/check-eol.ps1 $crlfExtensions and .gitattributes EOL policy
 const crlfExts = new Set(['.cs', '.csproj', '.sln', ...]);
 ```
 

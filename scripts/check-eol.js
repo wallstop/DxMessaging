@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { normalizeToLf } = require('./lib/quote-parser');
+const { crlfExts, lfExts } = require('./lib/eol-policy');
 
 function splitNormalizedLines(text) {
   return normalizeToLf(text).split('\n');
@@ -52,23 +53,8 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// Text file extensions that require CRLF line endings (C# and .NET files only)
-const crlfExts = new Set([
-  '.cs', '.csproj', '.sln'
-]);
-
-// All other text file extensions use LF line endings
-const lfExts = new Set([
-  '.js', '.cjs', '.mjs',
-  '.json', '.jsonc', '.toml',
-  '.yaml', '.yml',
-  '.md', '.markdown',
-  '.xml', '.uxml', '.uss',
-  '.shader', '.hlsl', '.compute', '.cginc',
-  '.asmdef', '.asmref', '.meta',
-  '.ps1',
-  '.sh', '.bash', '.zsh', '.ksh', '.fish'
-]);
+// SYNC: Keep in sync with scripts/check-eol.ps1 $crlfExtensions and .gitattributes EOL policy.
+// crlfExts and lfExts are centralized in scripts/lib/eol-policy.js.
 
 // Git hooks directory - files here need LF regardless of extension
 const hooksDir = path.join('scripts', 'hooks');

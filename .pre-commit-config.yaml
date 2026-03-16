@@ -193,7 +193,7 @@ repos:
           scripts/__tests__/update-llms-txt.test.js
         language: system
         pass_filenames: false
-        files: '^(scripts/(check-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/quote-parser\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
+        files: '^(scripts/(check-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
         stages:
           - pre-commit
         description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.

@@ -5,6 +5,7 @@
 */
 const fs = require('fs');
 const path = require('path');
+const { crlfExts, lfExts } = require('./lib/eol-policy');
 
 const repoRoot = process.cwd();
 const argv = process.argv.slice(2);
@@ -26,23 +27,8 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// Text file extensions that require CRLF line endings (C# and .NET files only)
-const crlfExts = new Set([
-  '.cs', '.csproj', '.sln'
-]);
-
-// All other text file extensions use LF line endings
-const lfExts = new Set([
-  '.js', '.cjs', '.mjs',
-  '.json', '.jsonc', '.toml',
-  '.yaml', '.yml',
-  '.md', '.markdown',
-  '.xml', '.uxml', '.uss',
-  '.shader', '.hlsl', '.compute', '.cginc',
-  '.asmdef', '.asmref', '.meta',
-  '.ps1',
-  '.sh', '.bash', '.zsh', '.ksh', '.fish'
-]);
+// SYNC: Keep in sync with scripts/check-eol.ps1 extension lists and .gitattributes EOL policy.
+// crlfExts and lfExts are centralized in scripts/lib/eol-policy.js.
 
 // Git hooks directory - files here need LF regardless of extension
 const hooksDir = path.join('scripts', 'hooks');
@@ -162,5 +148,5 @@ for (const file of allFiles) {
 
 console.log(`Scanned ${scanned} text files. Updated ${changed}.`);
 if (changed > 0) {
-  console.log('All changes written with correct line endings (CRLF for most files, LF for shell scripts) and no BOM.');
+  console.log('All changes written with correct line endings (CRLF for C#/.NET files, LF for all other text files) and no BOM.');
 }

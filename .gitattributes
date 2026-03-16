@@ -12,7 +12,8 @@
 *.sln       text eol=crlf
 *.props     text eol=crlf
 
-# All other text files use LF
+# Explicit LF entries for common text file types.
+# Other text files also use LF via the default rule: * text=auto eol=lf
 *.json      text eol=lf
 *.yaml      text eol=lf
 *.yml       text eol=lf
