@@ -137,8 +137,16 @@ repos:
         files: '^\.llm/.*\.md$'
         stages:
           - pre-commit
-          - pre-push
         description: Regenerate index.md and stage it for commit.
+      - id: skills-index-check
+        name: Validate skills index.md is current
+        entry: node scripts/generate-skills-index.js --check
+        language: system
+        pass_filenames: false
+        files: '^\.llm/.*\.md$'
+        stages:
+          - pre-push
+        description: Fail push when generated skills index is stale.
       - id: update-llms-txt
         name: Update llms.txt
         entry: bash -c 'node scripts/update-llms-txt.js && { git add llms.txt 2>/dev/null || true; }'
@@ -190,10 +198,11 @@ repos:
           scripts/__tests__/validate-workflows.test.js
           scripts/__tests__/check-eol.test.js
           scripts/__tests__/quote-parser.test.js
+          scripts/__tests__/validate-skills-llm-policy.test.js
           scripts/__tests__/update-llms-txt.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
         stages:
           - pre-commit
         description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.

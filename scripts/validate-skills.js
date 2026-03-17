@@ -31,8 +31,9 @@ const {
     normalizeToLf,
 } = require('./lib/quote-parser');
 
-const SKILLS_DIR = path.join(__dirname, '..', '.llm', 'skills');
-const CONTEXT_FILE = path.join(__dirname, '..', '.llm', 'context.md');
+const LLM_DIR = path.join(__dirname, '..', '.llm');
+const SKILLS_DIR = path.join(LLM_DIR, 'skills');
+const CONTEXT_FILE = path.join(LLM_DIR, 'context.md');
 const EXCLUDED_FILES = ['index.md', 'specification.md'];
 const EXCLUDED_DIRS = ['templates'];
 
@@ -42,10 +43,12 @@ const SHORT_FILE_EXCLUDES = ['context.md'];
 // Required fields that must be present in all skill files
 const REQUIRED_FIELDS = ['title', 'id', 'category', 'version', 'created', 'updated', 'status'];
 
-// File size limits (in lines)
-const LINE_LIMIT_IDEAL_MIN = 200;
-const LINE_LIMIT_IDEAL_MAX = 350;
-const LINE_LIMIT_HARD_MAX = 500;
+// File size limits (in lines) for all markdown files under .llm/
+const LINE_LIMIT_IDEAL_MIN = 120;
+const LINE_LIMIT_IDEAL_MAX = 260;
+const LINE_LIMIT_HARD_MAX = 300;
+
+const CONTEXT_INDEX_LINK_FRAGMENT = './skills/index.md';
 
 const VALID_CATEGORIES = [
     'performance',
@@ -60,6 +63,7 @@ const VALID_CATEGORIES = [
     'documentation',
     'scripting',
     'github-actions',
+    'packaging',
 ];
 
 const VALID_COMPLEXITY_LEVELS = ['basic', 'intermediate', 'advanced', 'expert'];
@@ -396,25 +400,6 @@ function validateSkill(skillFile) {
     const lineCount = normalizeToLf(content).split('\n').length;
     const frontmatter = parseFrontmatter(content);
 
-    // Check line count limits
-    if (lineCount > LINE_LIMIT_HARD_MAX) {
-        errors.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'size',
-                `File has ${lineCount} lines (max: ${LINE_LIMIT_HARD_MAX}). Split into smaller focused skills.`
-            )
-        );
-    } else if (lineCount > LINE_LIMIT_IDEAL_MAX) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'size',
-                `File has ${lineCount} lines (ideal: ${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}). Consider splitting.`
-            )
-        );
-    }
-
     // Store line count for reporting
     skillFile.lineCount = lineCount;
 
@@ -571,6 +556,127 @@ function validateSkill(skillFile) {
 }
 
 /**
+ * Recursively find all markdown files in .llm/.
+ */
+function findAllLlmMarkdownFiles(dir, rootDir = dir) {
+    const markdownFiles = [];
+
+    if (!fs.existsSync(dir)) {
+        return markdownFiles;
+    }
+
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+            markdownFiles.push(...findAllLlmMarkdownFiles(fullPath, rootDir));
+            continue;
+        }
+
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+            markdownFiles.push({
+                path: fullPath,
+                relativePath: path.relative(rootDir, fullPath).replace(/\\/g, '/'),
+            });
+        }
+    }
+
+    return markdownFiles;
+}
+
+/**
+ * Find duplicate `## See Also` headings in a single file.
+ *
+ * @param {string} content - Markdown content
+ * @param {string} relativePath - File path for diagnostics
+ * @returns {ValidationError[]} Array of duplicate-heading errors
+ */
+function validateDuplicateSeeAlsoHeadings(content, relativePath) {
+    const errors = [];
+    const lines = normalizeToLf(content).split('\n');
+    const headingLines = [];
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === '## See Also') {
+            headingLines.push(i + 1);
+        }
+    }
+
+    for (let i = 1; i < headingLines.length; i++) {
+        errors.push(
+            new ValidationError(
+                relativePath,
+                'headings',
+                `Line ${headingLines[i]}: Duplicate '## See Also' heading (first seen at line ${headingLines[0]}). Use a distinct heading for additional link sections.`
+            )
+        );
+    }
+
+    return errors;
+}
+
+/**
+ * Validate markdown line limits and context/index linkage for all .llm markdown files.
+ */
+function validateAllLlmMarkdownFiles(baseDir = LLM_DIR) {
+    const errors = [];
+    const warnings = [];
+    const fileSizeReport = [];
+
+    const markdownFiles = findAllLlmMarkdownFiles(baseDir);
+    for (const markdownFile of markdownFiles) {
+        let content;
+        try {
+            content = fs.readFileSync(markdownFile.path, 'utf8');
+        } catch (error) {
+            errors.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'file',
+                    `Cannot read file: ${error.message}`
+                )
+            );
+            continue;
+        }
+
+        const lineCount = normalizeToLf(content).split('\n').length;
+        fileSizeReport.push({ file: markdownFile.relativePath, lines: lineCount });
+
+        if (lineCount > LINE_LIMIT_HARD_MAX) {
+            errors.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'size',
+                    `File has ${lineCount} lines (max: ${LINE_LIMIT_HARD_MAX}). Split into focused companion files.`
+                )
+            );
+        } else if (lineCount > LINE_LIMIT_IDEAL_MAX) {
+            warnings.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'size',
+                    `File has ${lineCount} lines (ideal: ${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}). Consider splitting for tighter context.`
+                )
+            );
+        }
+
+        if (markdownFile.relativePath === 'context.md' && !content.includes(CONTEXT_INDEX_LINK_FRAGMENT)) {
+            errors.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'links',
+                    'context.md must link to ./skills/index.md so the generated index is discoverable.'
+                )
+            );
+        }
+
+        errors.push(...validateDuplicateSeeAlsoHeadings(content, markdownFile.relativePath));
+    }
+
+    return { errors, warnings, fileSizeReport };
+}
+
+/**
  * Validate context.md file for line count.
  * Returns validation results with errors, warnings, and line count.
  */
@@ -598,24 +704,6 @@ function validateContextFile() {
 
     const lineCount = normalizeToLf(content).split('\n').length;
 
-    if (lineCount > LINE_LIMIT_HARD_MAX) {
-        errors.push(
-            new ValidationError(
-                'context.md',
-                'size',
-                `File has ${lineCount} lines (max: ${LINE_LIMIT_HARD_MAX}). Consider extracting sections to skill files.`
-            )
-        );
-    } else if (lineCount > LINE_LIMIT_IDEAL_MAX) {
-        warnings.push(
-            new ValidationError(
-                'context.md',
-                'size',
-                `File has ${lineCount} lines (ideal: ${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}). Consider extracting sections.`
-            )
-        );
-    }
-
     return { errors, warnings, lineCount };
 }
 
@@ -626,19 +714,28 @@ function main() {
     console.log('Validating skills in', SKILLS_DIR);
     console.log();
 
+    const llmFilesResult = validateAllLlmMarkdownFiles();
+    let totalErrors = llmFilesResult.errors.length;
+    let totalWarnings = llmFilesResult.warnings.length;
+    const fileSizeReport = llmFilesResult.fileSizeReport.slice();
+
+    if (llmFilesResult.errors.length > 0 || llmFilesResult.warnings.length > 0) {
+        console.log('📁 .llm markdown policy checks');
+        for (const error of llmFilesResult.errors) {
+            console.log(`  ❌ [${error.file}] ${error.field}: ${error.message}`);
+        }
+        for (const warning of llmFilesResult.warnings) {
+            console.log(`  ⚠️  [${warning.file}] ${warning.field}: ${warning.message}`);
+        }
+        console.log();
+    }
+
     const skillFiles = findSkillFiles(SKILLS_DIR);
     console.log(`Found ${skillFiles.length} skill files to validate`);
     console.log();
 
-    let totalErrors = 0;
-    let totalWarnings = 0;
-    const fileSizeReport = [];
-
     // Validate context.md
     const contextResult = validateContextFile();
-    if (contextResult.lineCount > 0) {
-        fileSizeReport.push({ file: 'context.md', lines: contextResult.lineCount });
-    }
     for (const error of contextResult.errors) {
         console.log(`📄 context.md`);
         console.log(`  ❌ ${error.field}: ${error.message}`);
@@ -655,8 +752,6 @@ function main() {
     // Validate skill files
     for (const skillFile of skillFiles) {
         const { errors, warnings, lineCount } = validateSkill(skillFile);
-
-        fileSizeReport.push({ file: skillFile.relativePath, lines: lineCount });
 
         if (errors.length > 0 || warnings.length > 0) {
             console.log(`📄 ${skillFile.relativePath}`);
@@ -700,7 +795,7 @@ function main() {
     console.log();
     console.log(
         `  Legend: ✅ Ideal (${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}) | ` +
-            `⚠️  Warning (>${LINE_LIMIT_IDEAL_MAX}) | ❌ Error (>${LINE_LIMIT_HARD_MAX}) | 📝 Short (<${LINE_LIMIT_IDEAL_MIN})`
+            `⚠️  Warning (${LINE_LIMIT_IDEAL_MAX + 1}-${LINE_LIMIT_HARD_MAX}) | ❌ Error (>${LINE_LIMIT_HARD_MAX}) | 📝 Short (<${LINE_LIMIT_IDEAL_MIN})`
     );
 
     console.log();
@@ -753,6 +848,13 @@ if (typeof module !== 'undefined' && module.exports) {
         validateComplexityLevel,
         validatePerformanceRating,
         isValidImpactObject,
+        findAllLlmMarkdownFiles,
+        validateAllLlmMarkdownFiles,
+        validateDuplicateSeeAlsoHeadings,
+        LINE_LIMIT_HARD_MAX,
+        LINE_LIMIT_IDEAL_MAX,
+        LINE_LIMIT_IDEAL_MIN,
+        CONTEXT_INDEX_LINK_FRAGMENT,
     };
 }
 

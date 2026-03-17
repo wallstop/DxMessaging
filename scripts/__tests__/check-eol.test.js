@@ -125,6 +125,24 @@ describe("check-eol helpers", () => {
             }
         });
 
+        test("LF extension policy includes all explicit .gitattributes LF entries", () => {
+            const gitattributesPath = path.resolve(__dirname, "../../.gitattributes");
+            const content = fs.readFileSync(gitattributesPath, "utf8");
+            const explicitLfExts = new Set(
+                content
+                    .split(/\r\n|\r|\n/)
+                    .map((line) => line.trim())
+                    .filter((line) => line && !line.startsWith("#"))
+                    .map((line) => line.split(/\s+/))
+                    .filter((parts) => parts[0].startsWith("*.") && parts.includes("eol=lf"))
+                    .map((parts) => `.${parts[0].slice(2).toLowerCase()}`)
+            );
+
+            for (const ext of explicitLfExts) {
+                expect(lfExts.has(ext)).toBe(true);
+            }
+        });
+
         test("matches check-eol.ps1 CRLF extension policy", () => {
             const ps1Path = path.resolve(__dirname, "../check-eol.ps1");
             const content = fs.readFileSync(ps1Path, "utf8");
@@ -159,6 +177,15 @@ describe("check-eol helpers", () => {
             );
 
             expect(new Set(lfExts)).toEqual(fromPs1);
+        });
+
+        test("check-eol.ps1 enforces LF policy for extensionless git hooks", () => {
+            const ps1Path = path.resolve(__dirname, "../check-eol.ps1");
+            const content = fs.readFileSync(ps1Path, "utf8");
+
+            expect(content).toMatch(/scripts\/hooks\//);
+            expect(content).toMatch(/Test-IsGitHookPath/);
+            expect(content).toMatch(/\$lfExtensions -contains \$ext -or \$isGitHook/);
         });
 
         test("does not overlap CRLF and LF extension sets", () => {

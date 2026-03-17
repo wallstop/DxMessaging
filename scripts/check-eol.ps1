@@ -10,6 +10,21 @@ function Write-VerboseLine {
     if ($VerboseOutput) { Write-Host $Message }
 }
 
+function Test-IsGitHookPath {
+    param([string]$PathValue)
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return $false
+    }
+
+    $normalizedPath = $PathValue -replace '\\', '/'
+    if (-not $normalizedPath.StartsWith('scripts/hooks/')) {
+        return $false
+    }
+
+    return [string]::IsNullOrEmpty([System.IO.Path]::GetExtension($normalizedPath))
+}
+
 function Get-GitIndexEolIssues {
     param([string[]]$Extensions)
 
@@ -41,7 +56,8 @@ function Get-GitIndexEolIssues {
         $meta = $parts[0].Trim()
         $relPath = $parts[1].Trim()
         $ext = [System.IO.Path]::GetExtension($relPath).ToLowerInvariant()
-        if ($Extensions -notcontains $ext) { continue }
+        $isGitHook = Test-IsGitHookPath -PathValue $relPath
+        if ($Extensions -notcontains $ext -and -not $isGitHook) { continue }
 
         # git ls-files --eol output format: i/[eol] w/[eol] attr/[attrs] [path]
         $tokens = $meta -split '\s+'
@@ -89,6 +105,7 @@ $lfExtensions = @(
     '.shader', '.hlsl', '.compute', '.cginc',
     '.asmdef', '.asmref', '.meta',
     '.ps1',
+    '.txt',
     '.sh',
     '.bash',
     '.zsh',
@@ -114,7 +131,9 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
         foreach ($pat in $excludePatterns) { if ($path -match $pat) { return } }
 
         $ext = [System.IO.Path]::GetExtension($path).ToLowerInvariant()
-        if ($allExtensions -notcontains $ext) { return }
+        $relativePath = [System.IO.Path]::GetRelativePath($rootPath, $path)
+        $isGitHook = Test-IsGitHookPath -PathValue $relativePath
+        if ($allExtensions -notcontains $ext -and -not $isGitHook) { return }
 
         try {
             $bytes = [System.IO.File]::ReadAllBytes($path)
@@ -140,7 +159,7 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -File -Force |
                 $crlfViolations.Add($path)
             }
         }
-        elseif ($lfExtensions -contains $ext) {
+        elseif ($lfExtensions -contains $ext -or $isGitHook) {
             # All other text files should have LF only (no CRLF or bare CR)
             $crlfCount = [regex]::Matches($text, '\r\n').Count
             $crOnly = [regex]::Matches($text, '\r(?!\n)').Count

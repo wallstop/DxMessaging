@@ -1,0 +1,9 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "pre-commit": true,
+    "/^cd /workspaces/com\\.wallstop-studios\\.dxmessaging && node - <<'NODE'\nconst fs=require\\('fs'\\);const path=require\\('path'\\);\nconst root='\\.llm/skills';\nfunction walk\\(d\\)\\{for\\(const e of fs\\.readdirSync\\(d,\\{withFileTypes:true\\}\\)\\)\\{const p=path\\.join\\(d,e\\.name\\);if\\(e\\.isDirectory\\(\\)\\)walk\\(p\\);else if\\(e\\.isFile\\(\\)&&p\\.endsWith\\('\\.md'\\)\\)\\{const lines=fs\\.readFileSync\\(p,'utf8'\\)\\.replace\\(/\\\\r\\\\n/g,'\\\\n'\\)\\.split\\('\\\\n'\\);const idx=\\[\\];lines\\.forEach\\(\\(l,i\\)=>\\{if\\(l\\.trim\\(\\)==='## See Also'\\) idx\\.push\\(i\\+1\\);\\}\\);if\\(idx\\.length>1\\) console\\.log\\(`\\$\\{p\\}:\\$\\{idx\\.join\\(','\\)\\}`\\);\\}\\}\\}\nwalk\\(root\\);\nNODE$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

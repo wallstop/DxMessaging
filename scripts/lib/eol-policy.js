@@ -20,6 +20,7 @@ const lfExts = new Set([
   ".shader", ".hlsl", ".compute", ".cginc",
   ".asmdef", ".asmref", ".meta",
   ".ps1",
+  ".txt",
   ".sh", ".bash", ".zsh", ".ksh", ".fish",
 ]);
 

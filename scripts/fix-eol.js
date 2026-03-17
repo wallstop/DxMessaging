@@ -46,7 +46,12 @@ function isGitHook(filePath) {
 }
 
 function walk(dir, files = []) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return files;
+  }
   for (const ent of entries) {
     const full = path.join(dir, ent.name);
     if (excludeRegexes.some((re) => re.test(full))) {

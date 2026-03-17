@@ -365,23 +365,23 @@ function getImpactIndicator(rating) {
 }
 
 /**
- * Get line size indicator based on file size limits.
- * < 200: 📝 (short)
- * 200-350: ✅ (ideal)
- * 351-500: ⚠️ (warning)
- * > 500: ❌ (error)
+ * Get line size indicator based on repository .llm limits.
+ * < 120: 📝 (short)
+ * 120-260: ✅ (ideal)
+ * 261-300: ⚠️ (warning)
+ * > 300: ❌ (error)
  */
 function getLineSizeIndicator(lineCount) {
     if (typeof lineCount !== "number") {
         return "?";
     }
-    if (lineCount > 500) {
+    if (lineCount > 300) {
         return "❌";
     }
-    if (lineCount > 350) {
+    if (lineCount > 260) {
         return "⚠️";
     }
-    if (lineCount >= 200) {
+    if (lineCount >= 120) {
         return "✅";
     }
     return "📝";
@@ -409,16 +409,7 @@ function generateIndex(skills) {
         byCategory[cat].sort((a, b) => (a.title || "").localeCompare(b.title || ""));
     }
 
-    // Collect all tags
-    const tagCounts = {};
-    for (const skill of skills) {
-        const tags = Array.isArray(skill.tags) ? skill.tags : [];
-        for (const tag of tags) {
-            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-        }
-    }
-
-    // Build index
+    // Build compact index
     let content = `# Skills Index
 
 > **Auto-generated** on ${indexDate}. Do not edit manually.
@@ -432,7 +423,6 @@ function generateIndex(skills) {
 |--------|-------|
 | Total Skills | ${skills.length} |
 | Categories | ${sortedCategories.length} |
-| Unique Tags | ${Object.keys(tagCounts).length} |
 
 ---
 
@@ -444,9 +434,6 @@ function generateIndex(skills) {
         const catTitle = categoryToTitle(cat);
         content += `- [${catTitle}](#${cat}) (${byCategory[cat].length})\n`;
     }
-
-    content += `- [Tag Cloud](#tag-cloud)\n`;
-    content += `- [All Skills by Complexity](#all-skills-by-complexity)\n`;
 
     content += `\n---\n\n`;
 
@@ -470,56 +457,9 @@ function generateIndex(skills) {
             const perfImpact = skill.impact?.performance?.rating
                 ? getImpactIndicator(skill.impact.performance.rating)
                 : "?";
-            const tags = Array.isArray(skill.tags) ? skill.tags.slice(0, 3).join(", ") : "";
+            const tags = Array.isArray(skill.tags) ? skill.tags.slice(0, 2).join(", ") : "";
 
             content += `| [${title}](${link}) | ${lineIndicator} ${lineCount} | ${complexity} | ${status} | ${perfImpact} | ${tags} |\n`;
-        }
-
-        content += `\n`;
-    }
-
-    // Tag cloud
-    content += `---\n\n## Tag Cloud\n\n`;
-
-    const sortedTags = Object.entries(tagCounts).sort((a, b) => {
-        if (b[1] !== a[1]) {
-            return b[1] - a[1];
-        }
-        return a[0].localeCompare(b[0]);
-    });
-
-    for (const [tag, count] of sortedTags) {
-        content += `\`${tag}\`×${count} `;
-    }
-
-    content += `\n\n`;
-
-    // All skills by complexity
-    content += `---\n\n## All Skills by Complexity\n\n`;
-
-    const byComplexity = { basic: [], intermediate: [], advanced: [], expert: [] };
-    for (const skill of skills) {
-        const level = skill.complexity?.level || "intermediate";
-        if (byComplexity[level]) {
-            byComplexity[level].push(skill);
-        }
-    }
-
-    for (const level of ["basic", "intermediate", "advanced", "expert"]) {
-        if (byComplexity[level].length === 0) {
-            continue;
-        }
-
-        content += `### ${getComplexityBadge(level)}\n\n`;
-
-        const sortedSkills = byComplexity[level].slice().sort((a, b) => {
-            return (a.title || "").localeCompare(b.title || "");
-        });
-
-        for (const skill of sortedSkills) {
-            const title = skill.title || skill.filename;
-            const link = `./${skill.relativePath.replace(/\\/g, "/")}`;
-            content += `- [${title}](${link}) _(${skill.category})_\n`;
         }
 
         content += `\n`;

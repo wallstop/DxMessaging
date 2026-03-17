@@ -94,19 +94,19 @@ Apply strict line count limits with graduated enforcement:
 
 | Range         | Status     | Action                                     |
 | ------------- | ---------- | ------------------------------------------ |
-| < 200 lines   | 📝 Short   | Consider adding more examples or detail    |
-| 200-350 lines | ✅ Ideal   | Target range for skill files               |
-| 351-500 lines | ⚠️ Warning | Consider splitting into focused sub-skills |
-| > 500 lines   | ❌ Error   | Must split; blocks CI/pre-commit           |
+| < 120 lines   | 📝 Short   | Consider adding more examples or detail    |
+| 120-260 lines | ✅ Ideal   | Target range for skill files               |
+| 261-300 lines | ⚠️ Warning | Consider splitting into focused sub-skills |
+| > 300 lines   | ❌ Error   | Must split; blocks CI/pre-commit           |
 
 ### Implementation
 
 Line count validation is automated via `scripts/validate-skills.js`:
 
 ```javascript
-const LINE_LIMIT_IDEAL_MIN = 200;
-const LINE_LIMIT_IDEAL_MAX = 350;
-const LINE_LIMIT_HARD_MAX = 500;
+const LINE_LIMIT_IDEAL_MIN = 120;
+const LINE_LIMIT_IDEAL_MAX = 260;
+const LINE_LIMIT_HARD_MAX = 300;
 ```
 
 Run validation manually:
@@ -117,8 +117,8 @@ node scripts/validate-skills.js
 
 ### Enforcement Points
 
-1. **Pre-commit hook**: Warns on files exceeding 350 lines, blocks on 500+
-1. **CI/CD pipeline**: Fails PRs that introduce files exceeding 500 lines
+1. **Pre-commit hook**: Warns on files exceeding 260 lines, blocks on 300+
+1. **CI/CD pipeline**: Fails PRs that introduce files exceeding 300 lines
 1. **Index generation**: Reports line counts in `index.md`
 
 ## Variations
@@ -163,6 +163,7 @@ Group related skills under a common category with cross-references:
 ```markdown
 ## See Also
 
+- [skill file sizing part 1](./skill-file-sizing-part-1.md)
 - [Array Pooling](./array-pooling.md) - Specialized pooling for arrays
 - [Collection Pooling](./collection-pooling.md) - List and Dictionary pooling
 ```
@@ -241,7 +242,7 @@ File size limits improve:
 - **Index generation speed**: Smaller files parse faster
 - **PR review efficiency**: Reviewers can assess changes quickly
 
-## See Also
+## Related Links
 
 - [Documentation Updates](./documentation-updates.md)
 - [Changelog Management](./changelog-management.md)
@@ -252,9 +253,3 @@ File size limits improve:
 - [Skill Specification](../specification.md)
 - Validation script: [scripts/validate-skills.js](../../../scripts/validate-skills.js)
 - Pre-commit config: [.pre-commit-config.yaml](../../../.pre-commit-config.yaml)
-
-## Changelog
-
-| Version | Date       | Changes                                     |
-| ------- | ---------- | ------------------------------------------- |
-| 1.0.0   | 2026-01-22 | Initial version with 200-350 ideal, 500 max |

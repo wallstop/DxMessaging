@@ -207,56 +207,6 @@ _messageRegistrationToken.RegisterGameObjectTargeted<DamageMessage>(gameObject, 
 private void OnDamage(DamageMessage msg) { ... }  // Wrong signature and missing context
 ```
 
-## Testing Considerations
-
-### Verifying Code Samples Compile
-
-Extract and compile samples in CI where possible:
-
-```csharp
-[Test]
-public void DocumentedDamageMessagePatternCompiles()
-{
-    MessageBus messageBus = new MessageBus();
-    MessageRegistrationToken token = messageBus.CreateRegistrationToken();
-
-    int damageReceived = 0;
-    MessageRegistrationHandle handle = token.RegisterUntargeted<SimpleUntargetedMessage>(
-        (ref SimpleUntargetedMessage msg) => damageReceived++
-    );
-
-    SimpleUntargetedMessage message = new SimpleUntargetedMessage();
-    messageBus.UntargetedEmit(ref message);
-
-    Assert.AreEqual(1, damageReceived, "Handler should have been invoked exactly once");
-
-    handle.Dispose();
-    token.Dispose();
-}
-```
-
-### Documentation Review Checklist
-
-- [ ] All code samples paste into a real project without errors
-- [ ] API method names match the actual codebase
-- [ ] Handler signatures use `ref TMessage` pattern
-- [ ] Version annotations are accurate
-- [ ] Links to related docs work
-
 ## See Also
 
-- [Documentation Updates](documentation-updates.md)
-- [Documentation Style Guide](documentation-style-guide.md)
-- [Documentation Update Workflow](documentation-update-workflow.md)
-- [Link Quality Guidelines](link-quality-guidelines.md)
-
-## References
-
-- [Unity Best Practice Guides](https://docs.unity3d.com/Manual/best-practice-guides.html)
-
-## Changelog
-
-| Version | Date       | Changes                                                  |
-| ------- | ---------- | -------------------------------------------------------- |
-| 1.1.0   | 2026-01-22 | Added guidance on code fence languages for anti-patterns |
-| 1.0.0   | 2026-01-22 | Initial version                                          |
+- [documentation code samples part 1](./documentation-code-samples-part-1.md)
