@@ -248,4 +248,29 @@ describe("check-eol helpers", () => {
             expect(content).not.toMatch(/most text files to CRLF/i);
         });
     });
+
+    describe("script walker safety", () => {
+        test("fix-eol walk warns instead of silently swallowing readdirSync errors", () => {
+            const fixEolPath = path.resolve(__dirname, "../fix-eol.js");
+            const content = fs.readFileSync(fixEolPath, "utf8");
+
+            expect(content).toMatch(/Warning: Unable to read directory/);
+            expect(content).not.toMatch(/catch\s*\{\s*return files;\s*\}/);
+        });
+
+        test("recursive script scanners guard readdirSync with error handling", () => {
+            const scriptPaths = [
+                path.resolve(__dirname, "../generate-skills-index.js"),
+                path.resolve(__dirname, "../validate-skills.js"),
+                path.resolve(__dirname, "../update-llms-txt.js"),
+                path.resolve(__dirname, "../validate-workflows.js"),
+            ];
+
+            for (const scriptPath of scriptPaths) {
+                const content = fs.readFileSync(scriptPath, "utf8");
+                expect(content).toMatch(/readdirSync\([\s\S]*?\}\s*catch\s*\(error\)\s*\{/);
+                expect(content).toMatch(/Unable to read (directory|workflows directory)/);
+            }
+        });
+    });
 });

@@ -49,7 +49,8 @@ function walk(dir, files = []) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    console.warn(`Warning: Unable to read directory ${dir}: ${err.code || err.message}`);
     return files;
   }
   for (const ent of entries) {
@@ -134,7 +135,10 @@ for (const file of allFiles) {
   let buf;
   try {
     buf = fs.readFileSync(file);
-  } catch {
+  } catch (err) {
+    if (verbose) {
+      console.warn(`Warning: cannot read file, skipping: ${path.relative(repoRoot, file)} (${err.code || err.message})`);
+    }
     continue;
   }
   scanned++;

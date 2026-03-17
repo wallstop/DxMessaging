@@ -282,7 +282,13 @@ function transformFile(content, filePath) {
 
 function getAllMarkdownFiles(dir) {
     const files = [];
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+        return files;
+    }
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -300,7 +306,13 @@ function getAllMarkdownFiles(dir) {
 
 function copyImages(sourceDir, targetDir, copiedImages = new Map()) {
     const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'];
-    const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${sourceDir}: ${error.message}`);
+        return copiedImages;
+    }
 
     for (const entry of entries) {
         const fullPath = path.join(sourceDir, entry.name);

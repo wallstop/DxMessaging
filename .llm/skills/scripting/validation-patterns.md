@@ -2,9 +2,9 @@
 title: "Validation Patterns and Duplicate Warning Prevention"
 id: "validation-patterns"
 category: "scripting"
-version: "1.2.0"
+version: "1.3.0"
 created: "2026-01-30"
-updated: "2026-03-16"
+updated: "2026-03-17"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -24,6 +24,8 @@ tags:
   - "truthiness"
   - "type-coercion"
   - "quote-validation"
+  - "filesystem"
+  - "git"
 
 complexity:
   level: "intermediate"
@@ -90,6 +92,52 @@ confuses users and makes debugging harder.
 1. **Write integration tests** that verify exactly one warning per field condition
 1. **Include malformed quote tests** - cover mismatched and unclosed quotes so parsers do not silently normalize invalid input
 1. **Use explicit presence checks** - avoid truthiness-based validation that conflates different issues
+1. **Never silently swallow `readdirSync` failures** - catch and log warnings for skipped directories
+1. **Gate repository policy checks to tracked files** - skip untracked gitignored local files in pre-commit/pre-push validators
+
+## Filesystem and Hook Safety
+
+When scripts recursively scan directories, silent catch-and-return patterns can hide partial scans and
+create false success messages. Always surface directory read failures to users.
+
+Use this pattern:
+
+```javascript
+function walk(dir, files = []) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (error) {
+    console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+    return files;
+  }
+
+  for (const entry of entries) {
+    // ... recursion and filtering
+  }
+
+  return files;
+}
+```
+
+For pre-commit/pre-push validators, do not validate local untracked files that are intentionally
+gitignored. Confirm the target path is tracked first:
+
+```javascript
+const result = childProcess.spawnSync("git", [
+  "ls-files",
+  "--error-unmatch",
+  "--",
+  ".vscode/settings.json"
+]);
+
+if (result.status !== 0) {
+  console.log("Found local settings file, but it is not tracked by git; skipping validation.");
+  return;
+}
+```
+
+This prevents unrelated commits from failing because of personal local workspace settings.
 
 ## Quote-Boundary Validation
 

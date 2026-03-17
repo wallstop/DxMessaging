@@ -7,13 +7,25 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const childProcess = require("child_process");
 const {
+    isGitTracked,
     validateSettingsContent,
     validateVscodeSettings,
     toLineNumber,
 } = require("../validate-vscode-settings.js");
 
 describe("validate-vscode-settings", () => {
+    let spawnSyncSpy;
+
+    beforeEach(() => {
+        spawnSyncSpy = jest.spyOn(childProcess, "spawnSync");
+    });
+
+    afterEach(() => {
+        spawnSyncSpy.mockRestore();
+    });
+
     test("toLineNumber handles first line and multiline indexes", () => {
         const content = ["line1", "line2", "line3"].join("\n");
 
@@ -62,6 +74,7 @@ describe("validate-vscode-settings", () => {
             const result = validateVscodeSettings(fakePath);
 
             expect(result.fileExists).toBe(false);
+            expect(result.tracked).toBe(false);
             expect(result.violations).toHaveLength(0);
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });
@@ -84,8 +97,56 @@ describe("validate-vscode-settings", () => {
             const result = validateVscodeSettings(settingsPath);
 
             expect(result.fileExists).toBe(true);
+            expect(result.tracked).toBe(true);
             expect(result.violations).toHaveLength(1);
             expect(result.violations[0].line).toBe(2);
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test("isGitTracked returns true when git reports a tracked path", () => {
+        spawnSyncSpy.mockReturnValue({ status: 0, stdout: ".vscode/settings.json\n" });
+
+        const tracked = isGitTracked("/repo/.vscode/settings.json", "/repo");
+
+        expect(tracked).toBe(true);
+        expect(spawnSyncSpy).toHaveBeenCalledWith(
+            "git",
+            ["ls-files", "--error-unmatch", "--", ".vscode/settings.json"],
+            expect.objectContaining({ cwd: "/repo", encoding: "utf8" })
+        );
+    });
+
+    test("validateVscodeSettings skips untracked file when requireTracked is true", () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vscode-settings-"));
+        try {
+            const settingsPath = path.join(tempDir, "settings.json");
+            fs.writeFileSync(settingsPath, '{"chat.tools.terminal.autoApprove":true}', "utf8");
+
+            spawnSyncSpy.mockReturnValue({ status: 1, stdout: "", stderr: "" });
+            const result = validateVscodeSettings(settingsPath, { requireTracked: true });
+
+            expect(result.fileExists).toBe(true);
+            expect(result.tracked).toBe(false);
+            expect(result.violations).toHaveLength(0);
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test("validateVscodeSettings validates tracked file when requireTracked is true", () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vscode-settings-"));
+        try {
+            const settingsPath = path.join(tempDir, "settings.json");
+            fs.writeFileSync(settingsPath, '{"chat.tools.terminal.autoApprove":true}', "utf8");
+
+            spawnSyncSpy.mockReturnValue({ status: 0, stdout: "settings.json\n", stderr: "" });
+            const result = validateVscodeSettings(settingsPath, { requireTracked: true });
+
+            expect(result.fileExists).toBe(true);
+            expect(result.tracked).toBe(true);
+            expect(result.violations).toHaveLength(1);
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }

@@ -58,7 +58,13 @@ function countSkillFiles() {
   let count = 0;
 
   function walkDir(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+      console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+      return;
+    }
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -105,7 +111,13 @@ function getSkillCategories() {
   const categories = [];
 
   if (fs.existsSync(LLM_SKILLS_DIR)) {
-    const entries = fs.readdirSync(LLM_SKILLS_DIR, { withFileTypes: true });
+    let entries;
+    try {
+      entries = fs.readdirSync(LLM_SKILLS_DIR, { withFileTypes: true });
+    } catch (error) {
+      console.warn(`Warning: Unable to read directory ${LLM_SKILLS_DIR}: ${error.message}`);
+      return categories;
+    }
     for (const entry of entries) {
       if (entry.isDirectory() && !NON_SKILL_DIRECTORIES.has(entry.name)) {
         categories.push(entry.name);

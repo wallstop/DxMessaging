@@ -318,7 +318,13 @@ function findSkillFiles(dir) {
         return skills;
     }
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+        return skills;
+    }
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -565,7 +571,13 @@ function findAllLlmMarkdownFiles(dir, rootDir = dir) {
         return markdownFiles;
     }
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+        return markdownFiles;
+    }
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
 

@@ -133,7 +133,7 @@
 | [Regex Pattern Documentation Part 2](./scripting/regex-documentation-part-2.md)                          | ✅ 180 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split                 |
 | [Shell Scripting Best Practices](./scripting/shell-best-practices.md)                                    | ✅ 218 | 🟡 Intermediate | ✅ Stable | ○○○○○       | shell, bash                      |
 | [Shell Scripting Best Practices Part 1](./scripting/shell-best-practices-part-1.md)                      | ✅ 201 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split                 |
-| [Validation Patterns and Duplicate Warning Prevention](./scripting/validation-patterns.md)               | ✅ 192 | 🟡 Intermediate | ✅ Stable | ○○○○○       | validation, javascript           |
+| [Validation Patterns and Duplicate Warning Prevention](./scripting/validation-patterns.md)               | ✅ 240 | 🟡 Intermediate | ✅ Stable | ○○○○○       | validation, javascript           |
 | [Validation Patterns and Duplicate Warning Prevention Part 1](./scripting/validation-patterns-part-1.md) | ✅ 204 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split                 |
 | [Validation Patterns and Duplicate Warning Prevention Part 2](./scripting/validation-patterns-part-2.md) | 📝 116 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split                 |
 

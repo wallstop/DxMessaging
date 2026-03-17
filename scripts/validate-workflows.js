@@ -204,9 +204,16 @@ function main() {
         process.exit(0);
     }
 
-    const workflowFiles = fs.readdirSync(WORKFLOWS_DIR).filter((file) =>
-        file.endsWith(".yml") || file.endsWith(".yaml")
-    );
+    let workflowFiles;
+    try {
+        workflowFiles = fs
+            .readdirSync(WORKFLOWS_DIR)
+            .filter((file) => file.endsWith(".yml") || file.endsWith(".yaml"));
+    } catch (error) {
+        // Unlike recursive scanners, this validator cannot proceed without the workflows root.
+        console.error(`Unable to read workflows directory: ${error.message}`);
+        process.exit(1);
+    }
 
     if (workflowFiles.length === 0) {
         console.log("No workflow files found.");
