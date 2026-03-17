@@ -23,6 +23,8 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - When changing behavior, add or update tests in the same change.
 - Prefer small focused edits over broad refactors unless required.
 - Preserve existing naming and architectural patterns.
+- Never commit repository settings that auto-approve chat-invoked terminal commands.
+- Ensure fenced markdown examples are closed and do not swallow real sections (for example `## See Also`).
 
 ## Build and Test Commands
 

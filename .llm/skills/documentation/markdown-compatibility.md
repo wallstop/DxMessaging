@@ -2,9 +2,9 @@
 title: "Markdown Compatibility Guidelines"
 id: "markdown-compatibility"
 category: "documentation"
-version: "1.2.0"
+version: "1.3.0"
 created: "2026-01-29"
-updated: "2026-01-29"
+updated: "2026-03-17"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -121,6 +121,11 @@ For deeper nesting, keep increasing: outer uses 5, middle uses 4, inner uses 3.
 | Same backtick count | Inner fence closes outer prematurely | More backticks on outer        |
 | Spaces in fence     | ` ``` ` may not parse                | No spaces in backtick sequence |
 | Mismatched closing  | Opening with 4, closing with 3       | Count must match exactly       |
+| Missing closing     | Following headings render as code    | Always close the outer fence   |
+
+### Guardrail: Keep Real Sections Outside Fenced Examples
+
+If a heading like `## See Also` belongs to the actual document structure, do not place it inside a fenced markdown example. A useful check is: if removing the fence would change document structure, that heading likely belongs outside the code sample.
 
 ---
 

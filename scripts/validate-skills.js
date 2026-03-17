@@ -594,13 +594,8 @@ function findAllLlmMarkdownFiles(dir, rootDir = dir) {
  */
 function validateDuplicateSeeAlsoHeadings(content, relativePath) {
     const errors = [];
-    const lines = normalizeToLf(content).split('\n');
-    const headingLines = [];
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].trim() === '## See Also') {
-            headingLines.push(i + 1);
-        }
-    }
+    const { seeAlsoOutsideFenceLines } = analyzeMarkdownFenceState(content);
+    const headingLines = seeAlsoOutsideFenceLines;
 
     for (let i = 1; i < headingLines.length; i++) {
         errors.push(
@@ -608,6 +603,111 @@ function validateDuplicateSeeAlsoHeadings(content, relativePath) {
                 relativePath,
                 'headings',
                 `Line ${headingLines[i]}: Duplicate '## See Also' heading (first seen at line ${headingLines[0]}). Use a distinct heading for additional link sections.`
+            )
+        );
+    }
+
+    return errors;
+}
+
+/**
+ * Track fenced-code state and See Also heading placement for markdown diagnostics.
+ *
+ * @param {string} content - Markdown content
+ * @returns {{seeAlsoOutsideFenceLines:number[], seeAlsoInsideFenceLines:number[], unclosedFenceStartLine:number|null}}
+ */
+function analyzeMarkdownFenceState(content) {
+    const lines = normalizeToLf(content).split('\n');
+    const seeAlsoOutsideFenceLines = [];
+    const seeAlsoInsideFenceLines = [];
+
+    let activeFenceMarker = null;
+    let activeFenceLength = 0;
+    let activeFenceStartLine = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.trim() === '## See Also') {
+            if (activeFenceMarker === null) {
+                seeAlsoOutsideFenceLines.push(i + 1);
+            } else {
+                seeAlsoInsideFenceLines.push(i + 1);
+            }
+        }
+
+        if (activeFenceMarker === null) {
+            const openMatch = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
+            if (!openMatch) {
+                continue;
+            }
+
+            activeFenceMarker = openMatch[1][0];
+            activeFenceLength = openMatch[1].length;
+            activeFenceStartLine = i + 1;
+            continue;
+        }
+
+        const closeRegex =
+            activeFenceMarker === '`'
+                ? new RegExp(`^\\s{0,3}\`{${activeFenceLength},}\\s*$`)
+                : new RegExp(`^\\s{0,3}~{${activeFenceLength},}\\s*$`);
+
+        if (closeRegex.test(line)) {
+            activeFenceMarker = null;
+            activeFenceLength = 0;
+            activeFenceStartLine = null;
+        }
+    }
+
+    return {
+        seeAlsoOutsideFenceLines,
+        seeAlsoInsideFenceLines,
+        unclosedFenceStartLine: activeFenceStartLine,
+    };
+}
+
+/**
+ * Detect unclosed fenced code blocks that swallow following markdown sections.
+ *
+ * @param {string} content - Markdown content
+ * @param {string} relativePath - File path for diagnostics
+ * @returns {ValidationError[]} Array of fence-balance errors
+ */
+function validateBalancedMarkdownFences(content, relativePath) {
+    const errors = [];
+    const { unclosedFenceStartLine } = analyzeMarkdownFenceState(content);
+
+    if (unclosedFenceStartLine !== null) {
+        errors.push(
+            new ValidationError(
+                relativePath,
+                'markdown',
+                `Line ${unclosedFenceStartLine}: Unclosed fenced code block. This can cause later headings to render as code.`
+            )
+        );
+    }
+
+    return errors;
+}
+
+/**
+ * Detect See Also headings accidentally placed inside code fences with no real section heading.
+ *
+ * @param {string} content - Markdown content
+ * @param {string} relativePath - File path for diagnostics
+ * @returns {ValidationError[]} Array of heading-placement errors
+ */
+function validateSeeAlsoHeadingPlacement(content, relativePath) {
+    const errors = [];
+    const { seeAlsoInsideFenceLines, seeAlsoOutsideFenceLines, unclosedFenceStartLine } = analyzeMarkdownFenceState(content);
+
+    if (unclosedFenceStartLine !== null && seeAlsoInsideFenceLines.length > 0 && seeAlsoOutsideFenceLines.length === 0) {
+        errors.push(
+            new ValidationError(
+                relativePath,
+                'headings',
+                `Line ${seeAlsoInsideFenceLines[0]}: '## See Also' appears only inside a code fence. Add a real section heading outside fenced blocks.`
             )
         );
     }
@@ -671,6 +771,11 @@ function validateAllLlmMarkdownFiles(baseDir = LLM_DIR) {
         }
 
         errors.push(...validateDuplicateSeeAlsoHeadings(content, markdownFile.relativePath));
+        errors.push(...validateBalancedMarkdownFences(content, markdownFile.relativePath));
+
+        if (markdownFile.relativePath.startsWith('skills/') && !markdownFile.relativePath.includes('/templates/')) {
+            errors.push(...validateSeeAlsoHeadingPlacement(content, markdownFile.relativePath));
+        }
     }
 
     return { errors, warnings, fileSizeReport };
@@ -851,6 +956,9 @@ if (typeof module !== 'undefined' && module.exports) {
         findAllLlmMarkdownFiles,
         validateAllLlmMarkdownFiles,
         validateDuplicateSeeAlsoHeadings,
+        analyzeMarkdownFenceState,
+        validateBalancedMarkdownFences,
+        validateSeeAlsoHeadingPlacement,
         LINE_LIMIT_HARD_MAX,
         LINE_LIMIT_IDEAL_MAX,
         LINE_LIMIT_IDEAL_MIN,

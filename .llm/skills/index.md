@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-03-16. Do not edit manually.
+> **Auto-generated** on 2026-03-17. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -30,7 +30,7 @@
 
 | Skill                                                                                                 | Lines  | Complexity      | Status    | Performance | Tags                         |
 | ----------------------------------------------------------------------------------------------------- | ------ | --------------- | --------- | ----------- | ---------------------------- |
-| [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | ✅ 258 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, release-notes     |
+| [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | ⚠️ 277 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, release-notes     |
 | [Changelog Entry Writing and Anti-Patterns Part 1](./documentation/changelog-entry-writing-part-1.md) | 📝 56  | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Changelog Management](./documentation/changelog-management.md)                                       | ✅ 229 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, documentation     |
 | [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                           | ✅ 250 | 🟢 Basic        | ✅ Stable | ○○○○○       | changelog, release-workflow  |
@@ -44,7 +44,7 @@
 | [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)                | ✅ 120 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links         |
 | [Link Quality and External URL Management Part 1](./documentation/link-quality-guidelines-part-1.md)  | ✅ 196 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Link Quality and External URL Management Part 2](./documentation/link-quality-guidelines-part-2.md)  | 📝 64  | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
-| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)                        | ✅ 131 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, markdown      |
+| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)                        | ✅ 136 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, markdown      |
 | [Markdown Compatibility Guidelines Part 1](./documentation/markdown-compatibility-part-1.md)          | ✅ 202 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Markdown Compatibility Guidelines Part 2](./documentation/markdown-compatibility-part-2.md)          | ✅ 210 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                                         | ✅ 199 | 🟡 Intermediate | ✅ Stable | ○○○○○       | documentation, mermaid       |

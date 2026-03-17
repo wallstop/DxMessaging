@@ -19,6 +19,12 @@ This directly converts files in your working directory to the correct line endin
 
 > **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area)—it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
 
+## VS Code Security Policy
+
+- Do not commit terminal auto-approval settings (for example `chat.tools.terminal.autoApprove`) to `.vscode/settings.json`.
+- Repository settings must not bypass command review prompts for chat-invoked terminal commands.
+- If you need personal auto-approval rules, keep them in local user settings, not repository-tracked files.
+
 What runs locally:
 
 - Markdown link text check: enforces human-readable link text (no raw file names/paths)

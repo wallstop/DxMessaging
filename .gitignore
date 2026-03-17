@@ -345,3 +345,4 @@ site.meta
 progress.meta
 
 .claude/
+.vscode/settings.json

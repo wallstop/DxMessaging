@@ -71,7 +71,8 @@
     "update:llms-txt": "node scripts/update-llms-txt.js",
     "check:llms-txt": "node scripts/update-llms-txt.js --check",
     "validate:llms-txt": "npm run test:llms-txt && npm run check:llms-txt",
-    "validate:npm-meta": "node scripts/validate-npm-meta.js --check"
+    "validate:npm-meta": "node scripts/validate-npm-meta.js --check",
+    "validate:vscode-settings": "node scripts/validate-vscode-settings.js"
   },
   "devDependencies": {
     "jest": "^30.3.0",

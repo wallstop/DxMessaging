@@ -179,6 +179,16 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-vscode-settings
+        name: Validate VS Code settings security
+        entry: node scripts/validate-vscode-settings.js
+        language: system
+        pass_filenames: false
+        files: '^((\.vscode/settings\.json)|(scripts/validate-vscode-settings\.js)|(scripts/__tests__/validate-vscode-settings\.test\.js)|(\.pre-commit-config\.yaml)|(\.github/workflows/llm-policy-check\.yml))$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Reject committed terminal auto-approval settings in repository VS Code config.
       - id: validate-lychee-config
         name: Validate lychee configuration
         entry: node scripts/validate-lychee-config.js
@@ -200,9 +210,10 @@ repos:
           scripts/__tests__/quote-parser.test.js
           scripts/__tests__/validate-skills-llm-policy.test.js
           scripts/__tests__/update-llms-txt.test.js
+          scripts/__tests__/validate-vscode-settings.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|validate-workflows|quote-parser|update-llms-txt)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/llm-policy-check\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|validate-workflows|quote-parser|update-llms-txt|validate-vscode-settings)\.test\.js)$'
         stages:
           - pre-commit
         description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.

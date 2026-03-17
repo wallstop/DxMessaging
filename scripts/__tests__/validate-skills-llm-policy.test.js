@@ -10,6 +10,8 @@ const path = require("path");
 const {
     validateAllLlmMarkdownFiles,
     validateDuplicateSeeAlsoHeadings,
+    validateBalancedMarkdownFences,
+    validateSeeAlsoHeadingPlacement,
     LINE_LIMIT_HARD_MAX,
     LINE_LIMIT_IDEAL_MAX,
     LINE_LIMIT_IDEAL_MIN,
@@ -130,6 +132,71 @@ describe("validate-skills .llm markdown policy", () => {
 
         expect(headingError).toBeDefined();
         expect(headingError.message).toContain("Duplicate '## See Also' heading");
+    });
+
+    test("validateBalancedMarkdownFences flags unclosed fenced code blocks", () => {
+        const content = [
+            "# Skill",
+            "",
+            "```markdown",
+            "## See Also",
+            "- one",
+        ].join("\n");
+
+        const errors = validateBalancedMarkdownFences(content, "skills/testing/unclosed.md");
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].field).toBe("markdown");
+        expect(errors[0].message).toContain("Unclosed fenced code block");
+    });
+
+    test("validateSeeAlsoHeadingPlacement flags swallowed See Also heading when fence is unclosed", () => {
+        const content = [
+            "# Skill",
+            "",
+            "```markdown",
+            "## See Also",
+            "- one",
+        ].join("\n");
+
+        const errors = validateSeeAlsoHeadingPlacement(content, "skills/testing/swallowed-see-also.md");
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].field).toBe("headings");
+        expect(errors[0].message).toContain("appears only inside a code fence");
+    });
+
+    test("validateSeeAlsoHeadingPlacement allows fenced examples when fence is closed", () => {
+        const content = [
+            "# Skill",
+            "",
+            "```markdown",
+            "## See Also",
+            "- sample",
+            "```",
+        ].join("\n");
+
+        const errors = validateSeeAlsoHeadingPlacement(content, "skills/testing/closed-sample.md");
+
+        expect(errors).toHaveLength(0);
+    });
+
+    test("validateSeeAlsoHeadingPlacement allows a real See Also section outside fences", () => {
+        const content = [
+            "# Skill",
+            "",
+            "```markdown",
+            "## See Also",
+            "- sample",
+            "```",
+            "",
+            "## See Also",
+            "- real link",
+        ].join("\n");
+
+        const errors = validateSeeAlsoHeadingPlacement(content, "skills/testing/real-see-also.md");
+
+        expect(errors).toHaveLength(0);
     });
 
     test("repository split skill files do not contain duplicate See Also headings", () => {

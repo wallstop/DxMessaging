@@ -4,7 +4,7 @@ id: "changelog-entry-writing"
 category: "documentation"
 version: "1.0.0"
 created: "2026-01-22"
-updated: "2026-01-22"
+updated: "2026-03-17"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -251,7 +251,26 @@ To upgrade from v2.x:
 ### Bad: Updating Changelog After Release
 
 ```markdown
+## [2.1.4] - 2026-01-15
+
+### Fixed
+
+- Fixed message ordering bug after release
+```
+
+**Why it's wrong**: Retroactively editing released notes breaks release traceability and can desync package release notes from what users saw at ship time.
+
+**Correct**:
+
+```markdown
+## [Unreleased]
+
+### Fixed
+
+- Fixed message delivery order when using priority handlers
+  ([#178](https://github.com/wallstop/DxMessaging/issues/178))
+```
+
 ## See Also
 
 - [changelog entry writing part 1](./changelog-entry-writing-part-1.md)
-```
