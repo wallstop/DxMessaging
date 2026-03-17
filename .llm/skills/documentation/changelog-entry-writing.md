@@ -4,7 +4,7 @@ id: "changelog-entry-writing"
 category: "documentation"
 version: "1.0.0"
 created: "2026-01-22"
-updated: "2026-01-22"
+updated: "2026-03-17"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -255,23 +255,22 @@ To upgrade from v2.x:
 
 ### Fixed
 
-- Fixed a bug (added after release when user reported it wasn't in notes)
+- Fixed message ordering bug after release
 ```
 
-**Why it's wrong**: Changelog should be updated during development, not retroactively.
+**Why it's wrong**: Retroactively editing released notes breaks release traceability and can desync package release notes from what users saw at ship time.
+
+**Correct**:
+
+```markdown
+## [Unreleased]
+
+### Fixed
+
+- Fixed message delivery order when using priority handlers
+  ([#178](https://github.com/wallstop/DxMessaging/issues/178))
+```
 
 ## See Also
 
-- [Changelog Management](changelog-management.md)
-- [Changelog Release Workflow](changelog-release-workflow.md)
-- [Documentation Updates](documentation-updates.md)
-
-## References
-
-- [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-
-## Changelog
-
-| Version | Date       | Changes         |
-| ------- | ---------- | --------------- |
-| 1.0.0   | 2026-01-22 | Initial version |
+- [changelog entry writing part 1](./changelog-entry-writing-part-1.md)

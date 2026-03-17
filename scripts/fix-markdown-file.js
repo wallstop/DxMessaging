@@ -18,7 +18,7 @@ if (process.argv.length < 3) {
 const filePath = path.resolve(process.cwd(), process.argv[2]);
 let src = fs.readFileSync(filePath, 'utf8');
 
-// Normalize Windows line endings in memory for regex ease; we will keep CRLF when writing via existing repo tooling
+// Normalize line endings in memory for regex ease; project tooling and attributes apply final EOL policy
 src = src.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
 // Ensure headings start on their own line
@@ -59,6 +59,6 @@ src = src.replace(/(#\s[^\n]+)\s*\n?\[← Back to Index\]/, '$1\n\n[← Back to 
 // De-dupe excessive blank lines (>2)
 src = src.replace(/\n{3,}/g, '\n\n');
 
-// Write back (no BOM); let .gitattributes/.editorconfig enforce CRLF on checkout
+// Write back (no BOM); let .gitattributes/.editorconfig enforce project EOL policy on checkout
 fs.writeFileSync(filePath, src);
 console.log(`Fixed markdown structure: ${path.relative(process.cwd(), filePath)}`);

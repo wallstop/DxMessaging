@@ -25,6 +25,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { normalizeToLf } = require("./lib/quote-parser");
 
 const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
 
@@ -148,7 +149,7 @@ function validateWorkflow(filePath) {
         return violations;
     }
 
-    const lines = content.split(/\r?\n/);
+    const lines = normalizeToLf(content).split("\n");
 
     lines.forEach((line, index) => {
         const lineNumber = index + 1;
@@ -203,9 +204,16 @@ function main() {
         process.exit(0);
     }
 
-    const workflowFiles = fs.readdirSync(WORKFLOWS_DIR).filter((file) =>
-        file.endsWith(".yml") || file.endsWith(".yaml")
-    );
+    let workflowFiles;
+    try {
+        workflowFiles = fs
+            .readdirSync(WORKFLOWS_DIR)
+            .filter((file) => file.endsWith(".yml") || file.endsWith(".yaml"));
+    } catch (error) {
+        // Unlike recursive scanners, this validator cannot proceed without the workflows root.
+        console.error(`Unable to read workflows directory: ${error.message}`);
+        process.exit(1);
+    }
 
     if (workflowFiles.length === 0) {
         console.log("No workflow files found.");
@@ -262,6 +270,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         isForbiddenRenormalizePattern,
         hasExistenceCheck,
+        validateWorkflow,
         Violation,
     };
 }

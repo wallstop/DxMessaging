@@ -235,47 +235,6 @@ namespace WallstopStudios.UnityHelpers.Core.DataStructure
 - **Memory**: 3x overhead (keys list + values list + dictionary)
 - **Editor**: Property drawer iteration is O(n)
 
-## Best Practices
+## See Also
 
-### Do
-
-- Use for configuration data edited in Inspector
-- Use with ScriptableObjects for shared config
-- Keep dictionaries reasonably sized (<1000 entries for editor performance)
-- Use meaningful key types (enums, strings)
-
-### Don't
-
-- Don't use for runtime-generated data (no serialization benefit)
-- Don't use for very large datasets (serialization overhead)
-- Don't duplicate keys in Inspector (later one wins)
-- Don't store UnityEngine.Object references that might become null
-
-### Handling Duplicates
-
-```csharp
-public void OnAfterDeserialize()
-{
-    dictionary.Clear();
-
-    HashSet<TKey> seen = new HashSet<TKey>();
-    for (int i = 0; i < keys.Count; i++)
-    {
-        TKey key = keys[i];
-        if (key != null && seen.Add(key)) // Skip duplicates
-        {
-            dictionary[key] = values[i];
-        }
-        else if (key != null)
-        {
-            Debug.LogWarning($"Duplicate key ignored: {key}");
-        }
-    }
-}
-```
-
-## Related Patterns
-
-- [ScriptableObject Patterns](../solid/scriptable-object-singleton.md) - Configuration with SO
-- [Serializable Dictionary Property Drawer](./serializable-dictionary-property-drawer.md) - Inspector UI
-- [Serializable Dictionary Usage Examples](./serializable-dictionary-usage-examples.md) - Common setups
+- [serializable dictionary part 1](./serializable-dictionary-part-1.md)

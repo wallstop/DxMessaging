@@ -12,7 +12,7 @@ on:
       - master
     paths:
       - package.json
-      - .llm/**
+      - .llm/skills/**
       - scripts/update-llms-txt.js
 
 concurrency:
@@ -52,6 +52,9 @@ jobs:
 
       - name: Update llms.txt
         run: npm run update:llms-txt
+
+      - name: Validate llms.txt generator contract
+        run: npm run validate:llms-txt
 
       - name: Check for changes
         id: git-check

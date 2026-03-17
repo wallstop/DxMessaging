@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /*
-  Fix CRLF line endings and remove UTF-8 BOM on text files.
+  Fix mixed line-ending policy and remove UTF-8 BOM on text files.
+  C#/.NET files (.cs, .csproj, .sln, .props) are converted to CRLF.
+  All other tracked text files are normalized to LF.
   Mirrors scope and rules from scripts/check-eol.js.
+  Source of truth for extension lists: scripts/lib/eol-policy.js and .gitattributes.
 */
 const fs = require('fs');
 const path = require('path');
+const { crlfExts, lfExts } = require('./lib/eol-policy');
 
 const repoRoot = process.cwd();
 const argv = process.argv.slice(2);
@@ -26,23 +30,8 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
-// Text file extensions that require CRLF line endings (C# and .NET files only)
-const crlfExts = new Set([
-  '.cs', '.csproj', '.sln'
-]);
-
-// All other text file extensions use LF line endings
-const lfExts = new Set([
-  '.js', '.cjs', '.mjs',
-  '.json', '.jsonc', '.toml',
-  '.yaml', '.yml',
-  '.md', '.markdown',
-  '.xml', '.uxml', '.uss',
-  '.shader', '.hlsl', '.compute', '.cginc',
-  '.asmdef', '.asmref', '.meta',
-  '.ps1',
-  '.sh', '.bash', '.zsh', '.ksh', '.fish'
-]);
+// SYNC (bidirectional): Keep extension policy in sync with scripts/lib/eol-policy.js
+// (source of truth), scripts/check-eol.ps1 extension lists, and .gitattributes.
 
 // Git hooks directory - files here need LF regardless of extension
 const hooksDir = path.join('scripts', 'hooks');
@@ -57,7 +46,13 @@ function isGitHook(filePath) {
 }
 
 function walk(dir, files = []) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    console.warn(`Warning: Unable to read directory ${dir}: ${err.code || err.message}`);
+    return files;
+  }
   for (const ent of entries) {
     const full = path.join(dir, ent.name);
     if (excludeRegexes.some((re) => re.test(full))) {
@@ -140,7 +135,10 @@ for (const file of allFiles) {
   let buf;
   try {
     buf = fs.readFileSync(file);
-  } catch {
+  } catch (err) {
+    if (verbose) {
+      console.warn(`Warning: cannot read file, skipping: ${path.relative(repoRoot, file)} (${err.code || err.message})`);
+    }
     continue;
   }
   scanned++;
@@ -162,5 +160,5 @@ for (const file of allFiles) {
 
 console.log(`Scanned ${scanned} text files. Updated ${changed}.`);
 if (changed > 0) {
-  console.log('All changes written with correct line endings (CRLF for most files, LF for shell scripts) and no BOM.');
+  console.log('All changes written with correct line endings (CRLF for C#/.NET files, LF for all other text files) and no BOM.');
 }

@@ -364,6 +364,16 @@ Line 3`;
         expect(lines).toHaveLength(3);
     });
 
+    test('handles lone CR line endings', () => {
+        const content = '[Guide](guide.md)\r\r[Section](#keep-anchor)\r';
+
+        const result = transformFile(content, 'index.md');
+        expect(result).toContain('[[Guide]]');
+        expect(result).toContain('[Section](#keep-anchor)');
+        expect(result).toContain('\n\n');
+        expect(result).not.toContain('\r');
+    });
+
     test('handles empty content', () => {
         const result = transformFile('', 'index.md');
         expect(result).toBe('');

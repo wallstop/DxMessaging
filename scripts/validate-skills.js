@@ -26,9 +26,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const {
+    stripMatchingBoundaryQuotes,
+    normalizeToLf,
+} = require('./lib/quote-parser');
 
-const SKILLS_DIR = path.join(__dirname, '..', '.llm', 'skills');
-const CONTEXT_FILE = path.join(__dirname, '..', '.llm', 'context.md');
+const LLM_DIR = path.join(__dirname, '..', '.llm');
+const SKILLS_DIR = path.join(LLM_DIR, 'skills');
+const CONTEXT_FILE = path.join(LLM_DIR, 'context.md');
 const EXCLUDED_FILES = ['index.md', 'specification.md'];
 const EXCLUDED_DIRS = ['templates'];
 
@@ -38,10 +43,12 @@ const SHORT_FILE_EXCLUDES = ['context.md'];
 // Required fields that must be present in all skill files
 const REQUIRED_FIELDS = ['title', 'id', 'category', 'version', 'created', 'updated', 'status'];
 
-// File size limits (in lines)
-const LINE_LIMIT_IDEAL_MIN = 200;
-const LINE_LIMIT_IDEAL_MAX = 350;
-const LINE_LIMIT_HARD_MAX = 500;
+// File size limits (in lines) for all markdown files under .llm/
+const LINE_LIMIT_IDEAL_MIN = 120;
+const LINE_LIMIT_IDEAL_MAX = 260;
+const LINE_LIMIT_HARD_MAX = 300;
+
+const CONTEXT_INDEX_LINK_FRAGMENT = './skills/index.md';
 
 const VALID_CATEGORIES = [
     'performance',
@@ -56,6 +63,7 @@ const VALID_CATEGORIES = [
     'documentation',
     'scripting',
     'github-actions',
+    'packaging',
 ];
 
 const VALID_COMPLEXITY_LEVELS = ['basic', 'intermediate', 'advanced', 'expert'];
@@ -105,7 +113,7 @@ function validateRequiredField(frontmatter, field, relativePath) {
 function validateTags(frontmatter, relativePath) {
     const warnings = [];
 
-    if (frontmatter.tags === undefined || frontmatter.tags === null) {
+    if (frontmatter.tags == null) {
         warnings.push(
             new ValidationError(
                 relativePath,
@@ -202,14 +210,15 @@ function validatePerformanceRating(frontmatter, relativePath) {
  * Returns null if no valid frontmatter found.
  */
 function parseFrontmatter(content) {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    const normalizedContent = normalizeToLf(content);
+    const match = normalizedContent.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
         return null;
     }
 
     const yaml = match[1];
     const result = {};
-    const lines = yaml.split(/\r?\n/);
+    const lines = yaml.split('\n');
 
     // Stack-based parser for arbitrary nesting depth
     // Each stack entry: { obj, key, indent, isArray }
@@ -242,7 +251,7 @@ function parseFrontmatter(content) {
             if (colonIndex > 0 && !arrayValue.startsWith('"') && !arrayValue.startsWith("'")) {
                 // Array of objects - parse as key: value
                 const itemKey = arrayValue.slice(0, colonIndex).trim();
-                let itemValue = arrayValue.slice(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
+                let itemValue = stripMatchingBoundaryQuotes(arrayValue.slice(colonIndex + 1).trim());
 
                 // Check if we need to create a new object in the array
                 if (currentContext.isArray) {
@@ -255,7 +264,7 @@ function parseFrontmatter(content) {
                 }
             } else {
                 // Simple array value
-                const value = arrayValue.replace(/^["']|["']$/g, '');
+                const value = stripMatchingBoundaryQuotes(arrayValue);
                 if (currentContext.isArray) {
                     currentContext.obj.push(value);
                 }
@@ -291,7 +300,7 @@ function parseFrontmatter(content) {
             }
         } else {
             // Simple key: value
-            value = value.replace(/^["']|["']$/g, '');
+            value = stripMatchingBoundaryQuotes(value);
             currentContext.obj[key] = value;
         }
     }
@@ -309,7 +318,13 @@ function findSkillFiles(dir) {
         return skills;
     }
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+        return skills;
+    }
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -388,27 +403,8 @@ function validateSkill(skillFile) {
         return { errors, warnings, lineCount: 0 };
     }
 
-    const lineCount = content.split(/\r?\n/).length;
+    const lineCount = normalizeToLf(content).split('\n').length;
     const frontmatter = parseFrontmatter(content);
-
-    // Check line count limits
-    if (lineCount > LINE_LIMIT_HARD_MAX) {
-        errors.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'size',
-                `File has ${lineCount} lines (max: ${LINE_LIMIT_HARD_MAX}). Split into smaller focused skills.`
-            )
-        );
-    } else if (lineCount > LINE_LIMIT_IDEAL_MAX) {
-        warnings.push(
-            new ValidationError(
-                skillFile.relativePath,
-                'size',
-                `File has ${lineCount} lines (ideal: ${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}). Consider splitting.`
-            )
-        );
-    }
 
     // Store line count for reporting
     skillFile.lineCount = lineCount;
@@ -566,6 +562,238 @@ function validateSkill(skillFile) {
 }
 
 /**
+ * Recursively find all markdown files in .llm/.
+ */
+function findAllLlmMarkdownFiles(dir, rootDir = dir) {
+    const markdownFiles = [];
+
+    if (!fs.existsSync(dir)) {
+        return markdownFiles;
+    }
+
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+        return markdownFiles;
+    }
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+            markdownFiles.push(...findAllLlmMarkdownFiles(fullPath, rootDir));
+            continue;
+        }
+
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+            markdownFiles.push({
+                path: fullPath,
+                relativePath: path.relative(rootDir, fullPath).replace(/\\/g, '/'),
+            });
+        }
+    }
+
+    return markdownFiles;
+}
+
+/**
+ * Find duplicate `## See Also` headings in a single file.
+ *
+ * @param {string} content - Markdown content
+ * @param {string} relativePath - File path for diagnostics
+ * @returns {ValidationError[]} Array of duplicate-heading errors
+ */
+function validateDuplicateSeeAlsoHeadings(content, relativePath) {
+    const errors = [];
+    const { seeAlsoOutsideFenceLines } = analyzeMarkdownFenceState(content);
+    const headingLines = seeAlsoOutsideFenceLines;
+
+    for (let i = 1; i < headingLines.length; i++) {
+        errors.push(
+            new ValidationError(
+                relativePath,
+                'headings',
+                `Line ${headingLines[i]}: Duplicate '## See Also' heading (first seen at line ${headingLines[0]}). Use a distinct heading for additional link sections.`
+            )
+        );
+    }
+
+    return errors;
+}
+
+/**
+ * Track fenced-code state and See Also heading placement for markdown diagnostics.
+ *
+ * @param {string} content - Markdown content
+ * @returns {{seeAlsoOutsideFenceLines:number[], seeAlsoInsideFenceLines:number[], unclosedFenceStartLine:number|null}}
+ */
+function analyzeMarkdownFenceState(content) {
+    const lines = normalizeToLf(content).split('\n');
+    const seeAlsoOutsideFenceLines = [];
+    const seeAlsoInsideFenceLines = [];
+
+    let activeFenceMarker = null;
+    let activeFenceLength = 0;
+    let activeFenceStartLine = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.trim() === '## See Also') {
+            if (activeFenceMarker === null) {
+                seeAlsoOutsideFenceLines.push(i + 1);
+            } else {
+                seeAlsoInsideFenceLines.push(i + 1);
+            }
+        }
+
+        if (activeFenceMarker === null) {
+            const openMatch = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
+            if (!openMatch) {
+                continue;
+            }
+
+            activeFenceMarker = openMatch[1][0];
+            activeFenceLength = openMatch[1].length;
+            activeFenceStartLine = i + 1;
+            continue;
+        }
+
+        const closeRegex =
+            activeFenceMarker === '`'
+                ? new RegExp(`^\\s{0,3}\`{${activeFenceLength},}\\s*$`)
+                : new RegExp(`^\\s{0,3}~{${activeFenceLength},}\\s*$`);
+
+        if (closeRegex.test(line)) {
+            activeFenceMarker = null;
+            activeFenceLength = 0;
+            activeFenceStartLine = null;
+        }
+    }
+
+    return {
+        seeAlsoOutsideFenceLines,
+        seeAlsoInsideFenceLines,
+        unclosedFenceStartLine: activeFenceStartLine,
+    };
+}
+
+/**
+ * Detect unclosed fenced code blocks that swallow following markdown sections.
+ *
+ * @param {string} content - Markdown content
+ * @param {string} relativePath - File path for diagnostics
+ * @returns {ValidationError[]} Array of fence-balance errors
+ */
+function validateBalancedMarkdownFences(content, relativePath) {
+    const errors = [];
+    const { unclosedFenceStartLine } = analyzeMarkdownFenceState(content);
+
+    if (unclosedFenceStartLine !== null) {
+        errors.push(
+            new ValidationError(
+                relativePath,
+                'markdown',
+                `Line ${unclosedFenceStartLine}: Unclosed fenced code block. This can cause later headings to render as code.`
+            )
+        );
+    }
+
+    return errors;
+}
+
+/**
+ * Detect See Also headings accidentally placed inside code fences with no real section heading.
+ *
+ * @param {string} content - Markdown content
+ * @param {string} relativePath - File path for diagnostics
+ * @returns {ValidationError[]} Array of heading-placement errors
+ */
+function validateSeeAlsoHeadingPlacement(content, relativePath) {
+    const errors = [];
+    const { seeAlsoInsideFenceLines, seeAlsoOutsideFenceLines, unclosedFenceStartLine } = analyzeMarkdownFenceState(content);
+
+    if (unclosedFenceStartLine !== null && seeAlsoInsideFenceLines.length > 0 && seeAlsoOutsideFenceLines.length === 0) {
+        errors.push(
+            new ValidationError(
+                relativePath,
+                'headings',
+                `Line ${seeAlsoInsideFenceLines[0]}: '## See Also' appears only inside a code fence. Add a real section heading outside fenced blocks.`
+            )
+        );
+    }
+
+    return errors;
+}
+
+/**
+ * Validate markdown line limits and context/index linkage for all .llm markdown files.
+ */
+function validateAllLlmMarkdownFiles(baseDir = LLM_DIR) {
+    const errors = [];
+    const warnings = [];
+    const fileSizeReport = [];
+
+    const markdownFiles = findAllLlmMarkdownFiles(baseDir);
+    for (const markdownFile of markdownFiles) {
+        let content;
+        try {
+            content = fs.readFileSync(markdownFile.path, 'utf8');
+        } catch (error) {
+            errors.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'file',
+                    `Cannot read file: ${error.message}`
+                )
+            );
+            continue;
+        }
+
+        const lineCount = normalizeToLf(content).split('\n').length;
+        fileSizeReport.push({ file: markdownFile.relativePath, lines: lineCount });
+
+        if (lineCount > LINE_LIMIT_HARD_MAX) {
+            errors.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'size',
+                    `File has ${lineCount} lines (max: ${LINE_LIMIT_HARD_MAX}). Split into focused companion files.`
+                )
+            );
+        } else if (lineCount > LINE_LIMIT_IDEAL_MAX) {
+            warnings.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'size',
+                    `File has ${lineCount} lines (ideal: ${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}). Consider splitting for tighter context.`
+                )
+            );
+        }
+
+        if (markdownFile.relativePath === 'context.md' && !content.includes(CONTEXT_INDEX_LINK_FRAGMENT)) {
+            errors.push(
+                new ValidationError(
+                    markdownFile.relativePath,
+                    'links',
+                    'context.md must link to ./skills/index.md so the generated index is discoverable.'
+                )
+            );
+        }
+
+        errors.push(...validateDuplicateSeeAlsoHeadings(content, markdownFile.relativePath));
+        errors.push(...validateBalancedMarkdownFences(content, markdownFile.relativePath));
+
+        if (markdownFile.relativePath.startsWith('skills/') && !markdownFile.relativePath.includes('/templates/')) {
+            errors.push(...validateSeeAlsoHeadingPlacement(content, markdownFile.relativePath));
+        }
+    }
+
+    return { errors, warnings, fileSizeReport };
+}
+
+/**
  * Validate context.md file for line count.
  * Returns validation results with errors, warnings, and line count.
  */
@@ -591,25 +819,7 @@ function validateContextFile() {
         return { errors, warnings, lineCount: 0 };
     }
 
-    const lineCount = content.split(/\r?\n/).length;
-
-    if (lineCount > LINE_LIMIT_HARD_MAX) {
-        errors.push(
-            new ValidationError(
-                'context.md',
-                'size',
-                `File has ${lineCount} lines (max: ${LINE_LIMIT_HARD_MAX}). Consider extracting sections to skill files.`
-            )
-        );
-    } else if (lineCount > LINE_LIMIT_IDEAL_MAX) {
-        warnings.push(
-            new ValidationError(
-                'context.md',
-                'size',
-                `File has ${lineCount} lines (ideal: ${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}). Consider extracting sections.`
-            )
-        );
-    }
+    const lineCount = normalizeToLf(content).split('\n').length;
 
     return { errors, warnings, lineCount };
 }
@@ -621,19 +831,28 @@ function main() {
     console.log('Validating skills in', SKILLS_DIR);
     console.log();
 
+    const llmFilesResult = validateAllLlmMarkdownFiles();
+    let totalErrors = llmFilesResult.errors.length;
+    let totalWarnings = llmFilesResult.warnings.length;
+    const fileSizeReport = llmFilesResult.fileSizeReport.slice();
+
+    if (llmFilesResult.errors.length > 0 || llmFilesResult.warnings.length > 0) {
+        console.log('📁 .llm markdown policy checks');
+        for (const error of llmFilesResult.errors) {
+            console.log(`  ❌ [${error.file}] ${error.field}: ${error.message}`);
+        }
+        for (const warning of llmFilesResult.warnings) {
+            console.log(`  ⚠️  [${warning.file}] ${warning.field}: ${warning.message}`);
+        }
+        console.log();
+    }
+
     const skillFiles = findSkillFiles(SKILLS_DIR);
     console.log(`Found ${skillFiles.length} skill files to validate`);
     console.log();
 
-    let totalErrors = 0;
-    let totalWarnings = 0;
-    const fileSizeReport = [];
-
     // Validate context.md
     const contextResult = validateContextFile();
-    if (contextResult.lineCount > 0) {
-        fileSizeReport.push({ file: 'context.md', lines: contextResult.lineCount });
-    }
     for (const error of contextResult.errors) {
         console.log(`📄 context.md`);
         console.log(`  ❌ ${error.field}: ${error.message}`);
@@ -650,8 +869,6 @@ function main() {
     // Validate skill files
     for (const skillFile of skillFiles) {
         const { errors, warnings, lineCount } = validateSkill(skillFile);
-
-        fileSizeReport.push({ file: skillFile.relativePath, lines: lineCount });
 
         if (errors.length > 0 || warnings.length > 0) {
             console.log(`📄 ${skillFile.relativePath}`);
@@ -695,7 +912,7 @@ function main() {
     console.log();
     console.log(
         `  Legend: ✅ Ideal (${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}) | ` +
-            `⚠️  Warning (>${LINE_LIMIT_IDEAL_MAX}) | ❌ Error (>${LINE_LIMIT_HARD_MAX}) | 📝 Short (<${LINE_LIMIT_IDEAL_MIN})`
+            `⚠️  Warning (${LINE_LIMIT_IDEAL_MAX + 1}-${LINE_LIMIT_HARD_MAX}) | ❌ Error (>${LINE_LIMIT_HARD_MAX}) | 📝 Short (<${LINE_LIMIT_IDEAL_MIN})`
     );
 
     console.log();
@@ -748,6 +965,16 @@ if (typeof module !== 'undefined' && module.exports) {
         validateComplexityLevel,
         validatePerformanceRating,
         isValidImpactObject,
+        findAllLlmMarkdownFiles,
+        validateAllLlmMarkdownFiles,
+        validateDuplicateSeeAlsoHeadings,
+        analyzeMarkdownFenceState,
+        validateBalancedMarkdownFences,
+        validateSeeAlsoHeadingPlacement,
+        LINE_LIMIT_HARD_MAX,
+        LINE_LIMIT_IDEAL_MAX,
+        LINE_LIMIT_IDEAL_MIN,
+        CONTEXT_INDEX_LINK_FRAGMENT,
     };
 }
 

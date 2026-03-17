@@ -1,11 +1,11 @@
-verbosity = "info"
+verbose = "info"
 no_progress = true
 max_concurrency = 4
-exclude_mail = true
+include_mail = false
 
 # Network tuning
 timeout = 20            # seconds per request
-retries = 3             # retry transient failures
+max_retries = 3         # retry transient failures
 retry_wait_time = 2     # seconds between retries
 max_redirects = 10
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"

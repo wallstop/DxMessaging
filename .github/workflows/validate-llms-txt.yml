@@ -5,7 +5,7 @@ on:
   pull_request:
     paths:
       - package.json
-      - .llm/**
+      - .llm/skills/**
       - scripts/update-llms-txt.js
       - llms.txt
   push:
@@ -14,7 +14,7 @@ on:
       - master
     paths:
       - package.json
-      - .llm/**
+      - .llm/skills/**
       - scripts/update-llms-txt.js
       - llms.txt
   workflow_dispatch:
@@ -54,5 +54,5 @@ jobs:
             npm i --no-audit --no-fund
           fi
 
-      - name: Check llms.txt is up-to-date
-        run: npm run check:llms-txt
+      - name: Validate llms.txt generator contract
+        run: npm run validate:llms-txt

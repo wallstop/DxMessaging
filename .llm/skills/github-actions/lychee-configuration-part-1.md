@@ -1,0 +1,71 @@
+---
+title: "Lychee Link Checker Configuration Management Part 1"
+id: "lychee-configuration-part-1"
+category: "github-actions"
+version: "1.1.0"
+created: "2026-03-16"
+updated: "2026-03-16"
+status: "stable"
+tags:
+  - migration
+  - split
+complexity:
+  level: "intermediate"
+impact:
+  performance:
+    rating: "low"
+---
+
+## Overview
+
+Continuation extracted from `lychee-configuration.md` to keep files within the repository line-budget policy.
+
+## Solution
+
+## Common Mistakes
+
+| Mistake                                     | Problem                                                | Fix                                                           |
+| ------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| Using `exclude_mail = true`                 | Deprecated in v0.23.0                                  | Use `include_mail = false`                                    |
+| Using `retries = 3`                         | Renamed in v0.23.0                                     | Use `max_retries = 3`                                         |
+| Using `verbosity = 1`                       | Changed to string enum in v0.23.0                      | Use `verbose = "info"` (or "error", "warn", "debug", "trace") |
+| Skipping validation in CI                   | Config errors surface as cryptic lychee failures       | Add validation step before lychee-action                      |
+| Not updating VALID_FIELDS after lychee bump | New valid fields flagged as errors                     | Sync the set with upstream example config                     |
+| Pinning to `@v2` without validation         | New lychee versions can break config silently          | Always pair floating tags with config validation              |
+| Ignoring TOML table headers in validators   | Invalid table-based config bypasses validation         | Parse `[table]` and `[[array]]` headers as top-level fields   |
+| Reading config files at test module scope   | Jest can fail during test collection with poor context | Read files in `beforeAll` with an existence guard             |
+
+Additional parser guard: malformed quoted values such as `"info` or `"info'`
+must be treated as invalid and rejected unless opening/closing quotes are present
+and use the same quote character.
+
+## Validation Checklist
+
+Before modifying `.lychee.toml`:
+
+- [ ] All field names are in the `VALID_FIELDS` set in `validate-lychee-config.js`
+- [ ] No deprecated field names used (check the mapping table above)
+- [ ] Boolean fields use `true`/`false`, not integers; `verbose` uses a string enum value
+- [ ] Validation script passes: `node scripts/validate-lychee-config.js`
+- [ ] Unit tests pass: `npx jest scripts/__tests__/validate-lychee-config.test.js`
+
+After a lychee version upgrade:
+
+- [ ] Compare upstream example config for new/removed/renamed fields
+- [ ] Update `VALID_FIELDS` in `validate-lychee-config.js`
+- [ ] Update version comment in the script
+- [ ] Run validation against existing `.lychee.toml`
+- [ ] Update unit tests if field list changed
+
+## See Also
+
+- [GitHub Actions Workflow Consistency](./workflow-consistency.md) -- consistent workflow
+  structure and security practices
+- [Link Quality and External URL Management](../documentation/link-quality-guidelines.md) --
+  guidelines for maintaining documentation links
+- [Validation Patterns](../scripting/validation-patterns.md) -- general validation script
+  patterns and duplicate warning prevention
+
+## Related Links
+
+- [Lychee Link Checker Configuration Management](./lychee-configuration.md)

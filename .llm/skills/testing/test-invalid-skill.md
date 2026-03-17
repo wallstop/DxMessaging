@@ -7,6 +7,10 @@ created: "2026-01-22"
 updated: "2026-01-22"
 status: "stable"
 
+tags:
+  - "testing"
+  - "fixtures"
+
 complexity:
   level: "expert"
 

@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { normalizeToLf } = require('../lib/quote-parser');
 
 const DOCS_DIR = path.join(__dirname, '..', '..', 'docs');
 
@@ -261,7 +262,7 @@ function transformLine(line, currentFilePath) {
 }
 
 function transformFile(content, filePath) {
-    const lines = content.split('\n');
+    const lines = normalizeToLf(content).split('\n');
     const tracker = new CodeBlockTracker();
     const result = [];
 
@@ -281,7 +282,13 @@ function transformFile(content, filePath) {
 
 function getAllMarkdownFiles(dir) {
     const files = [];
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${dir}: ${error.message}`);
+        return files;
+    }
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -299,7 +306,13 @@ function getAllMarkdownFiles(dir) {
 
 function copyImages(sourceDir, targetDir, copiedImages = new Map()) {
     const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'];
-    const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+    let entries;
+    try {
+        entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+    } catch (error) {
+        console.warn(`Warning: Unable to read directory ${sourceDir}: ${error.message}`);
+        return copiedImages;
+    }
 
     for (const entry of entries) {
         const fullPath = path.join(sourceDir, entry.name);

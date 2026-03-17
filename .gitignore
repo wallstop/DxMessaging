@@ -343,3 +343,6 @@ __pycache__.meta
 .venv/
 site.meta
 progress.meta
+
+.claude/
+.vscode/settings.json

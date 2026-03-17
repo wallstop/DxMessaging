@@ -8,7 +8,7 @@ Before committing, please enable our git hooks and local linters so you catch is
 - Install hooks: `pre-commit install`
 - Run on all files: `pre-commit run --all-files`
 
-Line endings: Git normalizes most text files to CRLF through `.gitattributes`. **Exception:** Shell scripts (`.sh`, `.bash`, `.zsh`, `.ksh`, `.fish`) use LF for Unix compatibility. Run this once after cloning (especially on Windows) to fix your working tree:
+Line endings: Git normalizes most text files to **LF** through `.gitattributes`. **Exception:** C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) use CRLF per .NET conventions. Run this once after cloning (especially on Windows) to fix your working tree:
 
 ```bash
 git config core.autocrlf false
@@ -18,6 +18,12 @@ node scripts/fix-eol.js
 This directly converts files in your working directory to the correct line endings. Add `-v` for verbose output showing each file fixed.
 
 > **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area)—it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
+
+## VS Code Security Policy
+
+- Do not commit terminal auto-approval settings (for example `chat.tools.terminal.autoApprove`) to `.vscode/settings.json`.
+- Repository settings must not bypass command review prompts for chat-invoked terminal commands.
+- If you need personal auto-approval rules, keep them in local user settings, not repository-tracked files.
 
 What runs locally:
 

@@ -56,6 +56,8 @@
   ],
   "scripts": {
     "test": "jest",
+    "test:scripts": "jest",
+    "test:llms-txt": "jest --runTestsByPath scripts/__tests__/update-llms-txt.test.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "format:md": "prettier --write \"**/*.{md,markdown}\"",
@@ -68,10 +70,12 @@
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\"",
     "update:llms-txt": "node scripts/update-llms-txt.js",
     "check:llms-txt": "node scripts/update-llms-txt.js --check",
-    "validate:npm-meta": "node scripts/validate-npm-meta.js --check"
+    "validate:llms-txt": "npm run test:llms-txt && npm run check:llms-txt",
+    "validate:npm-meta": "node scripts/validate-npm-meta.js --check",
+    "validate:vscode-settings": "node scripts/validate-vscode-settings.js"
   },
   "devDependencies": {
-    "jest": "^30.2.0",
+    "jest": "^30.3.0",
     "markdownlint-cli2": "^0.21.0",
     "prettier": "3.8.1"
   },
