@@ -63,7 +63,7 @@ jobs:
 
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore: update llms.txt"
           file_pattern: llms.txt
