@@ -13,6 +13,8 @@ Run these steps in order:
 
 `jest` does not need to be installed globally. Hooks and scripts route through `scripts/run-managed-jest.js` so they can use local devDependencies first, then a managed fallback when needed.
 
+Prettier hooks and npm scripts route through `scripts/run-managed-prettier.js` so format checks and writes use the same resolved Prettier version across local shells and CI.
+
 Windows note: if you use `nvm` or `fnm`, run commits from a shell where Node is initialized (PowerShell or Git Bash) and verify `npm --version` before running hooks.
 If you edit `.github/workflows/*.yml`, run `npm run preflight:pre-commit` in that same shell before `git commit`.
 
@@ -50,7 +52,7 @@ Handy commands:
 - Lint markdown (all files): `pre-commit run markdownlint --all-files`
 - Lint markdown (manual): `npx markdownlint-cli2@0.20.0 "**/*.md" --fix`
 - Format JSON/.asmdef (all files): `pre-commit run prettier --all-files`
-- Format JSON/.asmdef (manual): `npx prettier@3.8.1 --write "**/*.{json,asmdef}"`
+- Format JSON/.asmdef (manual): `node scripts/run-managed-prettier.js --write "**/*.{json,asmdef}"`
 - Format YAML (all files): `pre-commit run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
 - Run yamllint hook directly: `pre-commit run yamllint --all-files`

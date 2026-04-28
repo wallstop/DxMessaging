@@ -14,6 +14,11 @@ const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
 const { createRequire } = require("module");
+const {
+    toShellCommand,
+    isShellShimCommand,
+    spawnPlatformCommandSync,
+} = require("./lib/shell-command");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const REPO_NODE_MODULES = path.join(REPO_ROOT, "node_modules");
@@ -21,10 +26,6 @@ const PACKAGE_LOCK_PATH = path.join(REPO_ROOT, "package-lock.json");
 const LOCAL_JEST_BIN = path.join(REPO_ROOT, "node_modules", "jest", "bin", "jest.js");
 const FALLBACK_JEST_SPEC = "jest@30.3.0";
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
-
-function toShellCommand(command, platform = process.platform) {
-    return platform === "win32" ? `${command}.cmd` : command;
-}
 
 function parseNpmMajorVersion(versionText) {
     if (typeof versionText !== "string") {
@@ -40,7 +41,7 @@ function parseNpmMajorVersion(versionText) {
 }
 
 function getNpmMajorVersion() {
-    const result = childProcess.spawnSync(toShellCommand("npm"), ["--version"], {
+    const result = spawnPlatformCommandSync("npm", ["--version"], {
         cwd: REPO_ROOT,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
@@ -54,7 +55,11 @@ function getNpmMajorVersion() {
 }
 
 function runCommand(command, args) {
-    const result = childProcess.spawnSync(command, args, {
+    const spawnSyncImpl = isShellShimCommand(command)
+        ? spawnPlatformCommandSync
+        : childProcess.spawnSync;
+
+    const result = spawnSyncImpl(command, args, {
         cwd: REPO_ROOT,
         stdio: "inherit",
     });
@@ -88,7 +93,7 @@ function getPinnedFallbackJestSpec(
 
 function runNpmExecJest(args) {
     const jestSpec = getPinnedFallbackJestSpec();
-    return runCommand(toShellCommand("npm"), [
+    return runCommand("npm", [
         "exec",
         "--yes",
         `--package=${jestSpec}`,
@@ -100,7 +105,7 @@ function runNpmExecJest(args) {
 
 function runNpxJest(args) {
     const jestSpec = getPinnedFallbackJestSpec();
-    return runCommand(toShellCommand("npx"), [
+    return runCommand("npx", [
         "--yes",
         `--package=${jestSpec}`,
         "jest",
@@ -243,6 +248,8 @@ module.exports = {
     runLocalJest,
     runNpmExecJest,
     runNpxJest,
+    isShellShimCommand,
+    spawnPlatformCommandSync,
     isCommandUnavailable,
     runManagedJest,
     printManagedJestLaunchError,

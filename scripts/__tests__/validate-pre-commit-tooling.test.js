@@ -13,7 +13,9 @@ const {
     parseHookIds,
     hasNpxInstallPolicy,
     hasManagedJestInvocation,
+    hasManagedPrettierInvocation,
     validateYamllintPolicy,
+    validatePrettierVersionResolution,
     validateConfigContent,
     validateConfigFile,
 } = require("../validate-pre-commit-tooling.js");
@@ -89,6 +91,12 @@ describe("validate-pre-commit-tooling", () => {
         expect(hasManagedJestInvocation("script-tests", "node scripts/run-managed-jest.js")).toBe(true);
     });
 
+    test("hasManagedPrettierInvocation requires managed prettier wrapper for prettier hook", () => {
+        expect(hasManagedPrettierInvocation("prettier", "npx --yes prettier@3.8.3 --write")).toBe(false);
+        expect(hasManagedPrettierInvocation("prettier", "node scripts/run-managed-prettier.js --write")).toBe(true);
+        expect(hasManagedPrettierInvocation("other-hook", "npx --yes prettier@3.8.3 --write")).toBe(true);
+    });
+
     test("validateConfigContent reports missing npx policy and unmanaged jest", () => {
         const content = [
             "repos:",
@@ -148,6 +156,37 @@ describe("validate-pre-commit-tooling", () => {
         ).toBe(true);
     });
 
+    test("validatePrettierVersionResolution passes when configured and resolved specs match", () => {
+        const violations = validatePrettierVersionResolution(
+            () => "prettier@3.8.3",
+            () => "prettier@3.8.3"
+        );
+
+        expect(violations).toHaveLength(0);
+    });
+
+    test("validatePrettierVersionResolution reports mismatch between configured and resolved specs", () => {
+        const violations = validatePrettierVersionResolution(
+            () => "prettier@3.8.3",
+            () => "prettier@3.9.0"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("prettier-version");
+        expect(violations[0].message).toContain("must match package.json");
+    });
+
+    test("validatePrettierVersionResolution reports missing configured spec", () => {
+        const violations = validatePrettierVersionResolution(
+            () => null,
+            () => "prettier@3.8.3"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("prettier-version");
+        expect(violations[0].message).toContain("Missing pinned prettier version");
+    });
+
     test("validateConfigFile passes for repository pre-commit config", () => {
         const repoConfigPath = path.resolve(__dirname, "../../.pre-commit-config.yaml");
         const configContent = fs.readFileSync(repoConfigPath, "utf8");
@@ -158,16 +197,44 @@ describe("validate-pre-commit-tooling", () => {
         expect(violations).toHaveLength(0);
     });
 
-    test("package preflight script includes YAML validation gate", () => {
+    test("validateConfigContent reports unmanaged prettier hook", () => {
+        const content = [
+            "repos:",
+            "  - repo: https://github.com/adrienverge/yamllint",
+            "    rev: v1.38.0",
+            "    hooks:",
+            "      - id: yamllint",
+            "        args: [-c, .yamllint.yaml]",
+            "  - repo: local",
+            "    hooks:",
+            "      - id: prettier",
+            "        entry: npx --yes prettier@3.8.3 --write",
+        ].join("\n");
+
+        const violations = validateConfigContent(content);
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("prettier");
+        expect(violations[0].message).toContain("run-managed-prettier.js");
+    });
+
+    test("package preflight script includes YAML, runtime, and portability gates", () => {
         const packageJsonPath = path.resolve(__dirname, "../../package.json");
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+        const preflightScript = packageJson.scripts["preflight:pre-commit"];
 
+        expect(packageJson.scripts["check:prettier:hooks"]).toContain(
+            "node scripts/run-managed-prettier.js --check"
+        );
+        expect(preflightScript).toContain("npm run check:prettier:hooks");
         expect(packageJson.scripts["check:yaml"]).toContain(
             "pre-commit run yamllint --all-files"
         );
-        expect(packageJson.scripts["preflight:pre-commit"]).toContain(
-            "npm run check:yaml"
-        );
+        expect(preflightScript).toContain("npm run check:yaml");
+        expect(preflightScript).toContain("node scripts/generate-skills-index.js --check");
+        expect(preflightScript).toContain("npm run validate:npm-meta");
+        expect(preflightScript).toContain("scripts/__tests__/generate-skills-index.test.js");
+        expect(preflightScript).toContain("scripts/__tests__/shell-command.test.js");
     });
 
     test("validateConfigFile handles CRLF and lone CR line endings", () => {

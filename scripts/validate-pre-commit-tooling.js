@@ -13,6 +13,10 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("./lib/quote-parser");
+const {
+    getConfiguredPrettierSpec,
+    getPinnedPrettierSpec,
+} = require("./lib/prettier-version");
 
 const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
 
@@ -159,6 +163,10 @@ function usesManagedJestWrapper(entry) {
     return /\bnode\b\s+scripts\/run-managed-jest\.js\b/.test(entry);
 }
 
+function usesManagedPrettierWrapper(entry) {
+    return /\bnode\b\s+scripts\/run-managed-prettier\.js\b/.test(entry);
+}
+
 function isJestRelatedHook(hookId, entry) {
     return (
         usesManagedJestWrapper(entry) ||
@@ -176,6 +184,14 @@ function hasManagedJestInvocation(hookIdOrEntry, maybeEntry) {
     }
 
     return usesManagedJestWrapper(entry);
+}
+
+function hasManagedPrettierInvocation(hookId, entry) {
+    if (hookId !== "prettier") {
+        return true;
+    }
+
+    return usesManagedPrettierWrapper(entry);
 }
 
 function validateHookEntries(entries) {
@@ -199,6 +215,17 @@ function validateHookEntries(entries) {
                     hook.id,
                     hook.line,
                     "Jest-related hooks must invoke node scripts/run-managed-jest.js.",
+                    hook.entry
+                )
+            );
+        }
+
+        if (!hasManagedPrettierInvocation(hook.id, hook.entry)) {
+            violations.push(
+                new Violation(
+                    hook.id,
+                    hook.line,
+                    "Prettier hook must invoke node scripts/run-managed-prettier.js.",
                     hook.entry
                 )
             );
@@ -248,9 +275,47 @@ function validateYamllintPolicy(content) {
     return violations;
 }
 
+function validatePrettierVersionResolution(
+    getConfiguredPrettierSpecFn = getConfiguredPrettierSpec,
+    getPinnedPrettierSpecFn = getPinnedPrettierSpec
+) {
+    const violations = [];
+
+    const configuredSpec = getConfiguredPrettierSpecFn();
+    if (!configuredSpec) {
+        violations.push(
+            new Violation(
+                "prettier-version",
+                1,
+                "Missing pinned prettier version in package.json devDependencies.",
+                "(missing package.json devDependencies.prettier)"
+            )
+        );
+        return violations;
+    }
+
+    const resolvedSpec = getPinnedPrettierSpecFn();
+    if (resolvedSpec !== configuredSpec) {
+        violations.push(
+            new Violation(
+                "prettier-version",
+                1,
+                `Resolved managed Prettier spec (${resolvedSpec}) must match package.json (${configuredSpec}).`,
+                "scripts/lib/prettier-version.js"
+            )
+        );
+    }
+
+    return violations;
+}
+
 function validateConfigContent(content) {
     const hooks = parseHookEntries(content);
-    return [...validateHookEntries(hooks), ...validateYamllintPolicy(content)];
+    return [
+        ...validateHookEntries(hooks),
+        ...validateYamllintPolicy(content),
+        ...validatePrettierVersionResolution(),
+    ];
 }
 
 function validateConfigFile(filePath = PRE_COMMIT_CONFIG_PATH) {
@@ -283,10 +348,13 @@ module.exports = {
     tokenizeCommand,
     hasNpxInstallPolicy,
     usesManagedJestWrapper,
+    usesManagedPrettierWrapper,
     isJestRelatedHook,
     hasManagedJestInvocation,
+    hasManagedPrettierInvocation,
     validateHookEntries,
     validateYamllintPolicy,
+    validatePrettierVersionResolution,
     validateConfigContent,
     validateConfigFile,
 };

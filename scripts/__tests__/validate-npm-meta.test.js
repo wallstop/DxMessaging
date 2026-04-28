@@ -10,13 +10,22 @@
 
 "use strict";
 
+const childProcess = require("child_process");
+const { toShellCommand } = require("../lib/shell-command");
+
 const {
+    getPackageFiles,
+    parseNpmPackJsonOutput,
     parseTarListingOutput,
     validateMetaFilesHaveTargets,
     validateFilesHaveMetaFiles,
-} = require('../validate-npm-meta.js');
+} = require("../validate-npm-meta.js");
 
 describe("validate-npm-meta", () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
     describe("parseTarListingOutput", () => {
         test("parses package paths with LF line endings", () => {
             const tarOutput = [
@@ -38,6 +47,126 @@ describe("validate-npm-meta", () => {
 
             const files = parseTarListingOutput(tarOutput);
             expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+        });
+    });
+
+    describe("parseNpmPackJsonOutput", () => {
+        test("parses npm pack --json files with object entries", () => {
+            const packOutput = JSON.stringify([
+                {
+                    files: [
+                        { path: "Runtime/File.cs" },
+                        { path: "Runtime/File.cs.meta" },
+                    ],
+                },
+            ]);
+
+            const files = parseNpmPackJsonOutput(packOutput);
+            expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+        });
+
+        test("parses npm pack --json files with string entries", () => {
+            const packOutput = JSON.stringify([
+                {
+                    files: ["Runtime/File.cs", "Runtime/File.cs.meta"],
+                },
+            ]);
+
+            const files = parseNpmPackJsonOutput(packOutput);
+            expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+        });
+
+        test("parses npm pack JSON output with CRLF and surrounding whitespace", () => {
+            const packOutput =
+                "\r\n" +
+                JSON.stringify([
+                    {
+                        files: [
+                            { path: "Runtime/File.cs" },
+                            { path: "Runtime/File.cs.meta" },
+                        ],
+                    },
+                ]) +
+                "\r\n";
+
+            const files = parseNpmPackJsonOutput(packOutput);
+            expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+        });
+
+        test("throws when npm pack output is not valid JSON", () => {
+            expect(() => parseNpmPackJsonOutput("not-json")).toThrow(
+                "Unable to parse npm pack --json output"
+            );
+        });
+
+        test("throws when npm pack output does not include files", () => {
+            const packOutput = JSON.stringify([
+                {
+                    name: "com.wallstop-studios.dxmessaging",
+                },
+            ]);
+
+            expect(() => parseNpmPackJsonOutput(packOutput)).toThrow(
+                "did not include a files list"
+            );
+        });
+    });
+
+    describe("getPackageFiles", () => {
+        test("uses cross-platform npm pack invocation and returns file list", () => {
+            const spawnSyncSpy = jest.spyOn(childProcess, "spawnSync").mockReturnValue({
+                status: 0,
+                stdout: JSON.stringify([
+                    {
+                        files: [
+                            { path: "Runtime/File.cs" },
+                            { path: "Runtime/File.cs.meta" },
+                        ],
+                    },
+                ]),
+                stderr: "",
+            });
+
+            const files = getPackageFiles();
+
+            expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
+            expect(spawnSyncSpy).toHaveBeenCalledWith(
+                toShellCommand("npm"),
+                ["pack", "--json", "--dry-run"],
+                expect.objectContaining({
+                    cwd: expect.any(String),
+                    encoding: "utf8",
+                    stdio: ["ignore", "pipe", "pipe"],
+                })
+            );
+        });
+
+        test("uses npm.cmd command name on win32", () => {
+            expect(toShellCommand("npm", "win32")).toBe("npm.cmd");
+            expect(toShellCommand("npx", "win32")).toBe("npx.cmd");
+        });
+
+        test("throws when npm pack exits with non-zero status", () => {
+            jest.spyOn(childProcess, "spawnSync").mockReturnValue({
+                status: 1,
+                stdout: "",
+                stderr: "simulated failure",
+            });
+
+            expect(() => getPackageFiles()).toThrow(
+                "npm pack --json --dry-run failed with exit code 1"
+            );
+        });
+
+        test("throws when npm process spawn fails", () => {
+            jest.spyOn(childProcess, "spawnSync").mockReturnValue({
+                error: new Error("spawn failed"),
+                status: null,
+                stdout: "",
+                stderr: "",
+            });
+
+            expect(() => getPackageFiles()).toThrow("spawn failed");
         });
     });
 
@@ -156,6 +285,21 @@ describe("validate-npm-meta", () => {
             const files = [
                 "package.json",
                 "package-lock.json",
+                "Runtime/Core/MessageHandler.cs",
+                "Runtime/Core/MessageHandler.cs.meta",
+            ];
+
+            const result = validateFilesHaveMetaFiles(files);
+
+            expect(result.valid).toBe(true);
+            expect(result.errors).toHaveLength(0);
+        });
+
+        test("should allow .github, .git, and node_modules paths without .meta", () => {
+            const files = [
+                ".github/workflows/build.yml",
+                ".git/HEAD",
+                "node_modules/some-package/index.js",
                 "Runtime/Core/MessageHandler.cs",
                 "Runtime/Core/MessageHandler.cs.meta",
             ];
