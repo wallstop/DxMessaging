@@ -1,8 +1,14 @@
 using System.Collections.Immutable;
+using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 using WallstopStudios.DxMessaging.SourceGenerators;
+using WallstopStudios.DxMessaging.SourceGenerators.Analyzers;
 
 namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 
@@ -78,6 +84,112 @@ internal static class GeneratorTestUtilities
         return userTree.GetDiagnostics().ToImmutableArray();
     }
 
+    internal static ImmutableArray<Diagnostic> RunBaseCallAnalyzer(
+        string userSource,
+        params (string path, string contents)[] additionalFiles
+    )
+    {
+        return RunBaseCallAnalyzer(userSource, compilationOptions: null, additionalFiles);
+    }
+
+    /// <summary>
+    /// Variant accepting a custom <see cref="CSharpCompilationOptions"/> so tests can pass
+    /// <c>WithSpecificDiagnosticOptions(...)</c> to verify .editorconfig severity overrides
+    /// (item H in the adversarial review).
+    /// </summary>
+    internal static ImmutableArray<Diagnostic> RunBaseCallAnalyzer(
+        string userSource,
+        CSharpCompilationOptions? compilationOptions,
+        params (string path, string contents)[] additionalFiles
+    )
+    {
+        SyntaxTree stubs = CSharpSyntaxTree.ParseText(SharedStubs, ParseOptions);
+        SyntaxTree userTree = CSharpSyntaxTree.ParseText(userSource, ParseOptions);
+
+        CSharpCompilationOptions effectiveOptions =
+            compilationOptions ?? new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
+
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assemblyName: "AnalyzerTests",
+            syntaxTrees: new[] { stubs, userTree },
+            references: CoreReferences,
+            options: effectiveOptions
+        );
+
+        // B6. Refuse to return when the underlying compilation has errors — otherwise tests can
+        // silently bind nothing and pass. We exclude analyzer diagnostics here (we only want raw
+        // compile errors) by calling Compilation.GetDiagnostics rather than the analyzer pipeline.
+        ImmutableArray<Diagnostic> compileDiags = compilation.GetDiagnostics();
+        ImmutableArray<Diagnostic> errors = compileDiags
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToImmutableArray();
+        if (!errors.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                "Test source did not compile cleanly:\n"
+                    + string.Join("\n", errors.Select(d => d.ToString()))
+            );
+        }
+
+        ImmutableArray<AdditionalText> texts = (additionalFiles ?? Array.Empty<(string, string)>())
+            .Select(t => (AdditionalText)new InMemoryAdditionalText(t.path, t.contents))
+            .ToImmutableArray();
+
+        AnalyzerOptions analyzerOptions = new(texts);
+        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
+            ImmutableArray.Create<DiagnosticAnalyzer>(new MessageAwareComponentBaseCallAnalyzer()),
+            analyzerOptions
+        );
+
+        Task<ImmutableArray<Diagnostic>> task =
+            compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync(CancellationToken.None);
+        return task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Lenient variant of <see cref="RunBaseCallAnalyzer(string, CSharpCompilationOptions?, ValueTuple{string, string}[])"/>
+    /// that does NOT throw on compile errors. Used by <see cref="DocsSnippetCompilationTests"/>
+    /// where many doc fragments are not standalone-compilable (e.g. they reference types from the
+    /// runtime that the test compilation does not link). The base-call analyzer keys exclusively
+    /// off override syntax + the <c>MessageAwareComponent</c> base-symbol lookup, so it still
+    /// produces meaningful results when other parts of the snippet fail to bind.
+    /// </summary>
+    internal static ImmutableArray<Diagnostic> RunBaseCallAnalyzerLenient(string userSource)
+    {
+        SyntaxTree stubs = CSharpSyntaxTree.ParseText(SharedStubs, ParseOptions);
+        SyntaxTree userTree = CSharpSyntaxTree.ParseText(userSource, ParseOptions);
+
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assemblyName: "DocsSnippetAnalyzer",
+            syntaxTrees: new[] { stubs, userTree },
+            references: CoreReferences,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+        );
+
+        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
+            ImmutableArray.Create<DiagnosticAnalyzer>(new MessageAwareComponentBaseCallAnalyzer())
+        );
+
+        Task<ImmutableArray<Diagnostic>> task =
+            compilationWithAnalyzers.GetAnalyzerDiagnosticsAsync(CancellationToken.None);
+        return task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// S1. Builds an <see cref="AnalyzerOptions"/> wrapping the given in-memory additional files.
+    /// Exposed to tests that need to exercise <see cref="WallstopStudios.DxMessaging.SourceGenerators.Analyzers.IgnoreListReader"/>
+    /// directly (e.g. verifying the cache contract across repeat calls with different cancellation tokens).
+    /// </summary>
+    internal static AnalyzerOptions BuildAnalyzerOptions(
+        params (string path, string contents)[] additionalFiles
+    )
+    {
+        ImmutableArray<AdditionalText> texts = (additionalFiles ?? Array.Empty<(string, string)>())
+            .Select(t => (AdditionalText)new InMemoryAdditionalText(t.path, t.contents))
+            .ToImmutableArray();
+        return new AnalyzerOptions(texts);
+    }
+
     private static ImmutableArray<MetadataReference> BuildCoreReferences()
     {
         List<MetadataReference> references = new();
@@ -97,6 +209,24 @@ internal static class GeneratorTestUtilities
         AddAssembly(typeof(List<>).Assembly);
 
         return references.ToImmutableArray();
+    }
+
+    private sealed class InMemoryAdditionalText : AdditionalText
+    {
+        private readonly SourceText _sourceText;
+
+        public InMemoryAdditionalText(string path, string contents)
+        {
+            Path = path;
+            _sourceText = SourceText.From(contents ?? string.Empty);
+        }
+
+        public override string Path { get; }
+
+        public override SourceText GetText(CancellationToken cancellationToken = default)
+        {
+            return _sourceText;
+        }
     }
 
     private const string SharedStubs = """
@@ -125,6 +255,9 @@ namespace DxMessaging.Core.Attributes
 
     [AttributeUsage(AttributeTargets.Struct)]
     public sealed class DxBroadcastMessageAttribute : Attribute { }
+
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+    public sealed class DxIgnoreMissingBaseCallAttribute : Attribute { }
 }
 
 namespace DxMessaging.Core
@@ -149,6 +282,24 @@ namespace UnityEngine
     public struct Color
     {
         public static readonly Color green = default;
+    }
+
+    public class MonoBehaviour { }
+}
+
+namespace DxMessaging.Unity
+{
+    using UnityEngine;
+
+    public abstract class MessageAwareComponent : MonoBehaviour
+    {
+        protected virtual bool RegisterForStringMessages => true;
+
+        protected virtual void Awake() { }
+        protected virtual void OnEnable() { }
+        protected virtual void OnDisable() { }
+        protected virtual void OnDestroy() { }
+        protected virtual void RegisterMessageHandlers() { }
     }
 }
 """;

@@ -2,11 +2,19 @@
 
 Thanks for helping improve DxMessaging!
 
-Before committing, please enable our git hooks and local linters so you catch issues early:
+Before committing, please enable our git hooks and local linters so you catch issues early.
+Run these steps in order:
 
-- Install pre-commit: `pip install pre-commit` or `pipx install pre-commit`
-- Install hooks: `pre-commit install`
-- Run on all files: `pre-commit run --all-files`
+1. Install Node dependencies: `npm install`
+1. Install pre-commit: `pip install pre-commit` or `pipx install pre-commit`
+1. Install hooks: `pre-commit install`
+1. Run Node tooling preflight: `npm run preflight:pre-commit` (includes YAML formatting + yamllint checks)
+1. Run on all files: `pre-commit run --all-files`
+
+`jest` does not need to be installed globally. Hooks and scripts route through `scripts/run-managed-jest.js` so they can use local devDependencies first, then a managed fallback when needed.
+
+Windows note: if you use `nvm` or `fnm`, run commits from a shell where Node is initialized (PowerShell or Git Bash) and verify `npm --version` before running hooks.
+If you edit `.github/workflows/*.yml`, run `npm run preflight:pre-commit` in that same shell before `git commit`.
 
 Line endings: Git normalizes most text files to **LF** through `.gitattributes`. **Exception:** C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) use CRLF per .NET conventions. Run this once after cloning (especially on Windows) to fix your working tree:
 
@@ -45,7 +53,18 @@ Handy commands:
 - Format JSON/.asmdef (manual): `npx prettier@3.8.1 --write "**/*.{json,asmdef}"`
 - Format YAML (all files): `pre-commit run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
+- Run yamllint hook directly: `pre-commit run yamllint --all-files`
+
+Prettier keeps YAML formatting consistent but does not automatically wrap long YAML lines. `yamllint` is the authoritative check for the 200-character YAML line-length rule.
+
+If `npm run check:yaml` reports a YAML line-length failure:
+
+1. For workflow `run:` commands, use folded scalars (`run: >-`) to split long commands across readable lines.
+1. For non-command YAML values, break long strings into multiline YAML values where valid, or refactor the content so each line stays within 200 characters.
+
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`
+- Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
+- Run pre-commit Node preflight: `npm run preflight:pre-commit`
 - Validate NPM package: `npm run validate:npm-meta`
 
 ## NPM Package Validation

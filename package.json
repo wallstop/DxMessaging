@@ -55,24 +55,26 @@
     "SourceGenerators.meta"
   ],
   "scripts": {
-    "test": "jest",
-    "test:scripts": "jest",
-    "test:llms-txt": "jest --runTestsByPath scripts/__tests__/update-llms-txt.test.js",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test": "node scripts/run-managed-jest.js",
+    "test:scripts": "node scripts/run-managed-jest.js",
+    "test:llms-txt": "node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/update-llms-txt.test.js",
+    "test:watch": "node scripts/run-managed-jest.js --watch",
+    "test:coverage": "node scripts/run-managed-jest.js --coverage",
     "format:md": "prettier --write \"**/*.{md,markdown}\"",
     "format:md:check": "prettier --check \"**/*.{md,markdown}\"",
     "format:json": "prettier --write \"**/*.{json,asmdef,asmref}\"",
     "format:json:check": "prettier --check \"**/*.{json,asmdef,asmref}\"",
     "format:yaml": "prettier --write \"**/*.{yml,yaml}\"",
     "format:yaml:check": "prettier --check \"**/*.{yml,yaml}\"",
-    "check:yaml": "prettier --check \"**/*.{yml,yaml}\" && yamllint -c .yamllint.yaml .",
+    "check:yaml": "prettier --check \"**/*.{yml,yaml}\" && pre-commit run yamllint --all-files",
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\"",
     "update:llms-txt": "node scripts/update-llms-txt.js",
     "check:llms-txt": "node scripts/update-llms-txt.js --check",
     "validate:llms-txt": "npm run test:llms-txt && npm run check:llms-txt",
     "validate:npm-meta": "node scripts/validate-npm-meta.js --check",
-    "validate:vscode-settings": "node scripts/validate-vscode-settings.js"
+    "validate:pre-commit-tooling": "node scripts/validate-pre-commit-tooling.js",
+    "validate:vscode-settings": "node scripts/validate-vscode-settings.js",
+    "preflight:pre-commit": "npm run validate:pre-commit-tooling && npm run check:yaml && node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/validate-pre-commit-tooling.test.js scripts/__tests__/run-managed-jest.test.js"
   },
   "devDependencies": {
     "jest": "^30.3.0",

@@ -7,8 +7,8 @@
 **This sample demonstrates messaging concepts through a functional example.** It shows:
 
 1. How Player heals without UI knowing about Player (**zero coupling**)
-2. How Enemy broadcasts damage without knowing who cares (**observer pattern**)
-3. How settings changes update everything automatically (**global events**)
+1. How Enemy broadcasts damage without knowing who cares (**observer pattern**)
+1. How settings changes update everything automatically (**global events**)
 
 **No prior messaging experience needed** - this sample walks you through everything.
 
@@ -98,11 +98,11 @@ Here's what each script does:
 #### Want to see it work immediately?
 
 1. **Open Package Manager**: Window → Package Manager
-2. **Find DxMessaging** in the package list
-3. **Scroll to Samples** section → Find "Mini Combat" → Click **Import**
-4. **Navigate to** Assets/Samples/DxMessaging/.../Mini Combat/
-5. **Open the scene**
-6. **Press Play** 🎮
+1. **Find DxMessaging** in the package list
+1. **Scroll to Samples** section → Find "Mini Combat" → Click **Import**
+1. **Navigate to** Assets/Samples/DxMessaging/.../Mini Combat/
+1. **Open the scene**
+1. **Press Play** 🎮
 
 Watch the Console logs as messages flow.
 
@@ -150,8 +150,8 @@ Press Play! The Boot script will automatically:
 #### [Boot.cs](./Boot.cs) sends messages:
 
 1. `VideoSettingsChanged` (Untargeted) → [UIOverlay.cs](./UIOverlay.cs) receives
-2. `Heal` (Targeted to Player) → [Player.cs](./Player.cs) receives
-3. `TookDamage` (Broadcast from Enemy) → [UIOverlay.cs](./UIOverlay.cs) receives
+1. `Heal` (Targeted to Player) → [Player.cs](./Player.cs) receives
+1. `TookDamage` (Broadcast from Enemy) → [UIOverlay.cs](./UIOverlay.cs) receives
 
 ### Understanding Message Types
 

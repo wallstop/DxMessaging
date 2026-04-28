@@ -17,10 +17,10 @@
 After reading this walkthrough, you'll know:
 
 1. **Why each message type was chosen** - the reasoning behind Untargeted vs Targeted vs Broadcast
-2. **How the code flows** - step-by-step from [Boot.cs](./Boot.cs) through every script
-3. **Common patterns** - Observer, Broadcaster, Orchestrator, and more
-4. **Debugging strategies** - how to find and fix issues
-5. **How to extend it** - add your own messages and handlers
+1. **How the code flows** - step-by-step from [Boot.cs](./Boot.cs) through every script
+1. **Common patterns** - Observer, Broadcaster, Orchestrator, and more
+1. **Debugging strategies** - how to find and fix issues
+1. **How to extend it** - add your own messages and handlers
 
 **Estimated time:** 20-30 minutes for thorough understanding
 

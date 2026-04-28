@@ -37,7 +37,7 @@
 | [Documentation Code Samples](./documentation/documentation-code-samples.md)                           | ✅ 213 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, code-samples  |
 | [Documentation Code Samples Part 1](./documentation/documentation-code-samples-part-1.md)             | 📝 82  | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Documentation Style Guide](./documentation/documentation-style-guide.md)                             | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, style         |
-| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)                     | ✅ 149 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, workflow      |
+| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)                     | ✅ 155 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, workflow      |
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)                     | ✅ 149 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, code-comments |
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)               | ✅ 182 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links         |
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md)           | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | github-actions, ci-cd        |

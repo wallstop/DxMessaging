@@ -346,3 +346,8 @@ progress.meta
 
 .claude/
 .vscode/settings.json
+pre-commit.md*
+pre-commit.txt*
+pre-push.md*
+pre-push.txt*
+pr-description.md*

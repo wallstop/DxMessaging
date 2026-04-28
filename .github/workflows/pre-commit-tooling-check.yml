@@ -1,0 +1,96 @@
+name: Pre-commit Tooling Check
+
+on:
+  pull_request:
+    paths:
+      - ".pre-commit-config.yaml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**/*.js"
+      - "scripts/__tests__/**/*.js"
+      - "CONTRIBUTING.md"
+      - ".llm/context.md"
+      - ".yamllint.yaml"
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+      - ".github/workflows/pre-commit-tooling-check.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - ".pre-commit-config.yaml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**/*.js"
+      - "scripts/__tests__/**/*.js"
+      - "CONTRIBUTING.md"
+      - ".llm/context.md"
+      - ".yamllint.yaml"
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+      - ".github/workflows/pre-commit-tooling-check.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit-tooling:
+    name: Validate pre-commit tooling (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate pre-commit Node tooling policy
+        run: pre-commit run validate-pre-commit-tooling --all-files
+
+      - name: Validate YAML formatting and lint policy
+        run: pre-commit run yamllint --all-files
+
+      - name: Run parser script tests hook
+        run: pre-commit run script-parser-tests --all-files
+
+      - name: Remove managed Jest runner to force fallback path
+        run: node scripts/verify-managed-jest-fallback.js
+
+      - name: Verify managed Jest fallback test
+        run: >-
+          node scripts/run-managed-jest.js --runTestsByPath
+          scripts/__tests__/run-managed-jest.test.js --testNamePattern
+          "runManagedJest uses npm exec fallback when local jest install is unhealthy"

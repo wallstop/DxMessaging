@@ -7,8 +7,8 @@
 **Stop writing button click handlers!** This sample shows you how to:
 
 1. **Wire UI Buttons to messages** - directly from the Inspector (drag & drop)
-2. **See messages flow in real-time** - watch the Console as you click
-3. **Enable diagnostics** - see every message with timestamps and payloads
+1. **See messages flow in real-time** - watch the Console as you click
+1. **Enable diagnostics** - see every message with timestamps and payloads
 
 **Why this matters:** You can add new systems (analytics, audio, achievements) that react to button clicks WITHOUT touching existing code.
 
@@ -52,11 +52,11 @@ public class PlayButton : MonoBehaviour {
 ### Want to see it immediately?
 
 1. **Window → Package Manager**
-2. **Find DxMessaging** → Scroll to **Samples**
-3. **"UI Buttons + Inspector"** → Click **Import**
-4. **Navigate to** Assets/Samples/.../UI Buttons + Inspector/
-5. **Open the scene** → **Press Play**
-6. **Click the buttons** → Watch Console logs
+1. **Find DxMessaging** → Scroll to **Samples**
+1. **"UI Buttons + Inspector"** → Click **Import**
+1. **Navigate to** Assets/Samples/.../UI Buttons + Inspector/
+1. **Open the scene** → **Press Play**
+1. **Click the buttons** → Watch Console logs
 
 You are now seeing DxMessaging in action.
 
