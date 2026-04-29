@@ -187,11 +187,11 @@
 | [Test Failure Investigation Procedure](./testing/test-failure-investigation-procedure.md)             | ✅ 217 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, investigation       |
 | [Test Failure Root Causes and Anti-Patterns](./testing/test-failure-investigation-root-causes.md)     | ✅ 187 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, root-cause-analysis |
 | [Test Invalid Skill](./testing/test-invalid-skill.md)                                                 | 📝 31  | 🔴 Expert       | ✅ Stable | ●●●○○       | testing, fixtures            |
-| [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)                | ✅ 172 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions          |
+| [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)                | ✅ 174 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions          |
 | [Test Production Code Directly](./testing/test-production-code.md)                                    | ✅ 146 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, anti-patterns       |
 | [Test Production Code Directly Part 1](./testing/test-production-code-part-1.md)                      | ✅ 205 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Test Production Code Directly Part 2](./testing/test-production-code-part-2.md)                      | 📝 66  | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
-| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)         | ✅ 260 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity               |
+| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)         | ⚠️ 270 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity               |
 
 ---
 

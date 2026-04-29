@@ -35,7 +35,7 @@ public sealed class BaseCallIlInspectorTests
     // ---- BaseCallIlInspector unit tests ---------------------------------------------------
 
     [Test]
-    public void IlInspector_OnNullMethod_ReturnsTrueAssumeClean()
+    public void IlInspectorOnNullMethodReturnsTrueAssumeClean()
     {
         // Defensive default biases away from phantom warnings: when we can't reason, assume the
         // method is fine.
@@ -43,17 +43,17 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void IlInspector_OnEmptyMethodName_ReturnsTrueAssumeClean()
+    public void IlInspectorOnEmptyMethodNameReturnsTrueAssumeClean()
     {
         MethodInfo method = typeof(BaseCallTypeScannerTests).GetMethod(
-            nameof(IlInspector_OnEmptyMethodName_ReturnsTrueAssumeClean),
+            nameof(IlInspectorOnEmptyMethodNameReturnsTrueAssumeClean),
             BindingFlags.Public | BindingFlags.Instance
         )!;
         Assert.That(BaseCallIlInspector.MethodIlContainsBaseCall(method, string.Empty), Is.True);
     }
 
     [Test]
-    public void IlInspector_OnAbstractMethod_ReturnsTrueAssumeClean()
+    public void IlInspectorOnAbstractMethodReturnsTrueAssumeClean()
     {
         // Abstract methods have no IL body — GetMethodBody() returns null. The inspector must
         // treat this as assume-clean (cross-assembly third-party code paths exhibit the same
@@ -72,7 +72,7 @@ public sealed class BaseCallIlInspectorTests
     // ---- End-to-end via Roslyn-compiled assemblies ----------------------------------------
 
     [Test]
-    public void E2E_LeafCallsBaseCorrectly_ScannerReportsClean()
+    public void E2ELeafCallsBaseCorrectlyScannerReportsClean()
     {
         Assembly fixture = CompileFixture(
             """
@@ -101,7 +101,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_LeafMissingBaseCall_ScannerDetectsDxmsg006()
+    public void E2ELeafMissingBaseCallScannerDetectsDxmsg006()
     {
         Assembly fixture = CompileFixture(
             """
@@ -130,7 +130,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_LeafCallsUnrelatedSiblingMethod_NotMistakenForBaseCall()
+    public void E2ELeafCallsUnrelatedSiblingMethodNotMistakenForBaseCall()
     {
         // The leaf calls SOMETHING — but it's a method on a sibling class, not the parent's
         // OnEnable. The IsAssignableFrom check inside the inspector ensures we only count calls
@@ -167,7 +167,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_LeafCallsBaseAwakeButCheckingForOnEnable_DoesNotMatch()
+    public void E2ELeafCallsBaseAwakeButCheckingForOnEnableDoesNotMatch()
     {
         // The leaf overrides Awake correctly but does not declare OnEnable. We're asking about
         // "does this Awake body call base.OnEnable()" — which is a meaningless question, but the
@@ -202,7 +202,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_AllFiveGuardedMethodsCalledCorrectly()
+    public void E2EAllFiveGuardedMethodsCalledCorrectly()
     {
         Assembly fixture = CompileFixture(
             """
@@ -247,7 +247,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_BrokenIntermediateChain_DescendantBaseCallStillDetectedAtLeaf()
+    public void E2EBrokenIntermediateChainDescendantBaseCallStillDetectedAtLeaf()
     {
         // The leaf calls base.OnEnable() correctly — IL inspection of the leaf must report TRUE.
         // The DXMSG010 detection (the intermediate's broken chain) is the SCANNER's job, not the
@@ -306,7 +306,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_Callvirt_StillDetectedAsBaseCall()
+    public void E2ECallvirtStillDetectedAsBaseCall()
     {
         // C# emits `call` for non-virtual base method invocation, and `callvirt` for virtual ones
         // in some configurations. We accept both opcodes — covered by Roslyn's standard emission
@@ -338,7 +338,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_DeepChain_LeafBaseCallDetected()
+    public void E2EDeepChainLeafBaseCallDetected()
     {
         // Three-deep chain, each link calls base. The IL inspector at the leaf only inspects the
         // leaf's body — it must report TRUE because the leaf's IL contains a base.OnEnable() call.
@@ -380,7 +380,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_LeafCallsBaseConditionally_StillDetected()
+    public void E2ELeafCallsBaseConditionallyStillDetected()
     {
         // base.X() inside an `if` is still visible to the IL walker. The walker doesn't check
         // reachability — even an unreachable base call counts as "calls base". This matches the
@@ -416,7 +416,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_MultipleSeparateBaseCalls_StillDetectedAsCallsBase()
+    public void E2EMultipleSeparateBaseCallsStillDetectedAsCallsBase()
     {
         // Multiple invocations of base methods (e.g. base.OnEnable() called twice for some
         // reason) — the inspector returns true on the first match and short-circuits.
@@ -448,7 +448,7 @@ public sealed class BaseCallIlInspectorTests
     }
 
     [Test]
-    public void E2E_LeafWithSwitchInstruction_BeforeBaseCall_StillDetectsBaseCall()
+    public void E2ELeafWithSwitchInstructionBeforeBaseCallStillDetectsBaseCall()
     {
         // S2: regression guard for the OpCodes-table walker. The body emits a `switch` instruction
         // (variable-length jump table: 4-byte case count + N×4-byte targets) BEFORE the base
@@ -567,7 +567,7 @@ namespace DxMessaging.Unity
     // ---- Adversarial-audit additions -------------------------------------------------------
 
     [Test]
-    public void E2E_LdstrBeforeBaseCall_StillDetectsBaseCall()
+    public void E2ELdstrBeforeBaseCallStillDetectsBaseCall()
     {
         // Spec 4b: an `ldstr` opcode (0x72) carries a 4-byte metadata-token operand. If the
         // walker stepped 1 byte instead of 4, it would land inside the operand bytes — and one
@@ -608,7 +608,7 @@ namespace DxMessaging.Unity
     }
 
     [Test]
-    public void E2E_GenericMethodContext_ResolutionWorks()
+    public void E2EGenericMethodContextResolutionWorks()
     {
         // Spec 4c: an IL body that resolves a base method on a generic ancestor. The IL inspector
         // must pass the method's generic-arg context (declaring-type generic args + method generic
@@ -653,7 +653,7 @@ namespace DxMessaging.Unity
     }
 
     [Test]
-    public void E2E_UnrelatedClassCallingSameNamedStaticMethod_RejectedByIsAssignableFromGuard()
+    public void E2EUnrelatedClassCallingSameNamedStaticMethodRejectedByIsAssignableFromGuard()
     {
         // Spec 4e: the leaf calls a same-named method on a CONCRETE UNRELATED class (not via a
         // static-helper alias, but via the class type directly). The IsAssignableFrom guard inside
@@ -695,7 +695,7 @@ namespace DxMessaging.Unity
     }
 
     [Test]
-    public void E2E_SecondInstanceMethodNamedSameAsBase_OnUnrelatedInstance_AlsoRejected()
+    public void E2ESecondInstanceMethodNamedSameAsBaseOnUnrelatedInstanceAlsoRejected()
     {
         // Spec 4e (reinforced): the leaf calls `OnEnable` on a field of an unrelated REFERENCE
         // type — IsAssignableFrom must still reject. The reference type is not an ancestor of the
@@ -737,7 +737,7 @@ namespace DxMessaging.Unity
     }
 
     [Test]
-    public void E2E_VolatilePrefix_TwoByteOpcodeWalkerHandled()
+    public void E2EVolatilePrefixTwoByteOpcodeWalkerHandled()
     {
         // Spec 4a: a method body containing the two-byte 0xFE 0x13 (volatile.) prefix BEFORE
         // an instruction. The OpCodes-table walker has a separate two-byte branch that must
@@ -792,7 +792,7 @@ namespace DxMessaging.Unity
     }
 
     [Test]
-    public void E2E_ResolveMethodInvalidToken_WalkerSwallowsAndContinues()
+    public void E2EResolveMethodInvalidTokenWalkerSwallowsAndContinues()
     {
         // Spec 4d: synthesize a method whose IL contains a `call` opcode (0x28) followed by a
         // metadata token that does NOT bind in the runtime context (a clearly-invalid token like

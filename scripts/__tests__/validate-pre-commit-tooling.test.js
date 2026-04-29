@@ -11,11 +11,17 @@ const path = require("path");
 const {
     parseHookEntries,
     parseHookIds,
+    hasRequiredParserPrecheckCommand,
+    hasRequiredPackageJsonFormatCommand,
     hasNpxInstallPolicy,
     hasManagedJestInvocation,
     hasManagedPrettierInvocation,
     validateYamllintPolicy,
     validatePrettierVersionResolution,
+    validatePreflightScriptPolicy,
+    REQUIRED_PRECHECK_PARSER_COMMAND,
+    REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+    REQUIRED_PARSER_SUITE_HOOK_ID,
     validateConfigContent,
     validateConfigFile,
 } = require("../validate-pre-commit-tooling.js");
@@ -84,6 +90,38 @@ describe("validate-pre-commit-tooling", () => {
         expect(bad).toBe(false);
     });
 
+    test("hasRequiredParserPrecheckCommand detects parser command as chained step", () => {
+        const script = [
+            "npm run validate:pre-commit-tooling",
+            "npm run check:prettier:hooks",
+            REQUIRED_PRECHECK_PARSER_COMMAND,
+        ].join(" && ");
+
+        expect(hasRequiredParserPrecheckCommand(script)).toBe(true);
+    });
+
+    test("hasRequiredParserPrecheckCommand rejects substring-only matches", () => {
+        const script = "npm run validate:pre-commit-tooling && echo pre-commit run script-parser-tests --all-files";
+
+        expect(hasRequiredParserPrecheckCommand(script)).toBe(false);
+    });
+
+    test("hasRequiredPackageJsonFormatCommand detects package.json format precheck step", () => {
+        const script = [
+            REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+            "npm run check:prettier:hooks",
+            REQUIRED_PRECHECK_PARSER_COMMAND,
+        ].join(" && ");
+
+        expect(hasRequiredPackageJsonFormatCommand(script)).toBe(true);
+    });
+
+    test("hasRequiredPackageJsonFormatCommand rejects substring-only matches", () => {
+        const script = "npm run validate:pre-commit-tooling && echo npm run check:package-json-format";
+
+        expect(hasRequiredPackageJsonFormatCommand(script)).toBe(false);
+    });
+
     test("hasManagedJestInvocation detects unmanaged bare jest command", () => {
         expect(hasManagedJestInvocation("jest --runTestsByPath foo.test.js")).toBe(false);
         expect(hasManagedJestInvocation("node scripts/run-managed-jest.js --runTestsByPath foo.test.js")).toBe(true);
@@ -115,7 +153,33 @@ describe("validate-pre-commit-tooling", () => {
             "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/c.test.js",
         ].join("\n");
 
-        const violations = validateConfigContent(content);
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validateConfigContent(content, {
+            readFileSyncImpl: readFileSyncMock,
+            packageJsonPath: "/tmp/package.json",
+            preCommitConfigPath: "/tmp/pre-commit.yaml",
+        });
 
         expect(violations).toHaveLength(3);
         expect(violations.filter((violation) => violation.hookId === "bad-npx")).toHaveLength(2);
@@ -211,7 +275,33 @@ describe("validate-pre-commit-tooling", () => {
             "        entry: npx --yes prettier@3.8.3 --write",
         ].join("\n");
 
-        const violations = validateConfigContent(content);
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validateConfigContent(content, {
+            readFileSyncImpl: readFileSyncMock,
+            packageJsonPath: "/tmp/package.json",
+            preCommitConfigPath: "/tmp/pre-commit.yaml",
+        });
 
         expect(violations).toHaveLength(1);
         expect(violations[0].hookId).toBe("prettier");
@@ -226,6 +316,7 @@ describe("validate-pre-commit-tooling", () => {
         expect(packageJson.scripts["check:prettier:hooks"]).toContain(
             "node scripts/run-managed-prettier.js --check"
         );
+        expect(preflightScript).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
         expect(preflightScript).toContain("npm run check:prettier:hooks");
         expect(packageJson.scripts["check:yaml"]).toContain(
             "pre-commit run yamllint --all-files"
@@ -233,8 +324,144 @@ describe("validate-pre-commit-tooling", () => {
         expect(preflightScript).toContain("npm run check:yaml");
         expect(preflightScript).toContain("node scripts/generate-skills-index.js --check");
         expect(preflightScript).toContain("npm run validate:npm-meta");
-        expect(preflightScript).toContain("scripts/__tests__/generate-skills-index.test.js");
-        expect(preflightScript).toContain("scripts/__tests__/shell-command.test.js");
+        expect(preflightScript).toContain(REQUIRED_PRECHECK_PARSER_COMMAND);
+        expect(preflightScript).not.toContain("node scripts/run-managed-jest.js --runTestsByPath");
+    });
+
+    test("validatePreflightScriptPolicy passes when parser precheck command exists", () => {
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validatePreflightScriptPolicy(
+            readFileSyncMock,
+            "/tmp/package.json",
+            "/tmp/pre-commit.yaml"
+        );
+
+        expect(violations).toHaveLength(0);
+        expect(readFileSyncMock).toHaveBeenCalledWith("/tmp/package.json", "utf8");
+        expect(readFileSyncMock).toHaveBeenCalledWith("/tmp/pre-commit.yaml", "utf8");
+    });
+
+    test("validatePreflightScriptPolicy reports missing parser precheck command", () => {
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validatePreflightScriptPolicy(
+            readFileSyncMock,
+            "/tmp/package.json",
+            "/tmp/pre-commit.yaml"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("preflight-script");
+        expect(violations[0].message).toContain(REQUIRED_PRECHECK_PARSER_COMMAND);
+    });
+
+    test("validatePreflightScriptPolicy reports missing package.json format precheck command", () => {
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `npm run validate:pre-commit-tooling && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validatePreflightScriptPolicy(
+            readFileSyncMock,
+            "/tmp/package.json",
+            "/tmp/pre-commit.yaml"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("preflight-script");
+        expect(violations[0].message).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
+    });
+
+    test("validatePreflightScriptPolicy reports missing parser suite hook", () => {
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    "      - id: alpha",
+                    "        entry: node scripts/alpha.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validatePreflightScriptPolicy(
+            readFileSyncMock,
+            "/tmp/package.json",
+            "/tmp/pre-commit.yaml"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("preflight-script");
+        expect(violations[0].message).toContain(REQUIRED_PARSER_SUITE_HOOK_ID);
     });
 
     test("validateConfigFile handles CRLF and lone CR line endings", () => {
@@ -253,9 +480,10 @@ describe("validate-pre-commit-tooling", () => {
             fs.writeFileSync(filePath, content, "utf8");
             const violations = validateConfigFile(filePath);
 
-            expect(violations).toHaveLength(3);
+            expect(violations).toHaveLength(4);
             expect(violations.filter((violation) => violation.hookId === "bad")).toHaveLength(2);
             expect(violations.some((violation) => violation.hookId === "yamllint")).toBe(true);
+            expect(violations.some((violation) => violation.hookId === "preflight-script")).toBe(true);
         } finally {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }

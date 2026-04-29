@@ -65,10 +65,10 @@ namespace DxMessaging.Editor.Analyzers
             public string TypeName;
 
             /// <summary>Method names whose overrides are missing the corresponding <c>base.*()</c> call.</summary>
-            public List<string> MissingBaseFor = new();
+            public SortedSet<string> MissingBaseFor = new(StringComparer.Ordinal);
 
             /// <summary>Diagnostic IDs that contributed to this entry (DXMSG006 / DXMSG007 / DXMSG010).</summary>
-            public List<string> DiagnosticIds = new();
+            public HashSet<string> DiagnosticIds = new(StringComparer.Ordinal);
         }
 
         /// <summary>
@@ -201,8 +201,8 @@ namespace DxMessaging.Editor.Analyzers
             ScanEntry entry = new()
             {
                 TypeName = fullName,
-                MissingBaseFor = new List<string>(),
-                DiagnosticIds = new List<string>(),
+                MissingBaseFor = new SortedSet<string>(StringComparer.Ordinal),
+                DiagnosticIds = new HashSet<string>(StringComparer.Ordinal),
             };
 
             foreach (string methodName in GuardedMethodNames)
@@ -228,7 +228,7 @@ namespace DxMessaging.Editor.Analyzers
                 // Type does not declare this method at all — nothing to flag at this level.
                 return;
             }
-            if (!declared.ReturnType.Equals(typeof(void)))
+            if (declared.ReturnType != typeof(void))
             {
                 return;
             }
@@ -377,14 +377,8 @@ namespace DxMessaging.Editor.Analyzers
 
         private static void AddIfMissing(ScanEntry entry, string methodName, string diagnosticId)
         {
-            if (!entry.MissingBaseFor.Contains(methodName))
-            {
-                entry.MissingBaseFor.Add(methodName);
-            }
-            if (!entry.DiagnosticIds.Contains(diagnosticId))
-            {
-                entry.DiagnosticIds.Add(diagnosticId);
-            }
+            entry.MissingBaseFor.Add(methodName);
+            entry.DiagnosticIds.Add(diagnosticId);
         }
     }
 }

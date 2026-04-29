@@ -7,7 +7,6 @@ namespace DxMessaging.Editor.Analyzers
     using System;
     using System.Collections.Generic;
     using System.Globalization;
-    using System.Linq;
     using System.Text.RegularExpressions;
 
     /// <summary>
@@ -59,7 +58,7 @@ namespace DxMessaging.Editor.Analyzers
     {
         public string TypeFullName { get; set; }
 
-        public HashSet<string> MissingBaseFor { get; } = new(StringComparer.Ordinal);
+        public SortedSet<string> MissingBaseFor { get; } = new(StringComparer.Ordinal);
 
         public HashSet<string> DiagnosticIds { get; } = new(StringComparer.Ordinal);
 
@@ -277,10 +276,7 @@ namespace DxMessaging.Editor.Analyzers
 
                 report.DiagnosticIds.Add(entry.DiagnosticId);
 
-                if (
-                    !string.IsNullOrEmpty(entry.MethodName)
-                    && !report.MissingBaseFor.Contains(entry.MethodName, StringComparer.Ordinal)
-                )
+                if (!string.IsNullOrEmpty(entry.MethodName))
                 {
                     report.MissingBaseFor.Add(entry.MethodName);
                 }

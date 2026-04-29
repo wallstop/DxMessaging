@@ -51,7 +51,7 @@ public sealed class BaseCallTypeScannerTests
     // ---- Per-classification tests -----------------------------------------------------------
 
     [Test]
-    public void Scan_OverrideWithoutBase_ReportsDxmsg006_AndAddsMethodToMissingBaseFor()
+    public void ScanOverrideWithoutBaseReportsDxmsg006AndAddsMethodToMissingBaseFor()
     {
         Assembly fixture = CompileFixture(
             """
@@ -77,7 +77,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_OverrideWithBase_ReportsNothing()
+    public void ScanOverrideWithBaseReportsNothing()
     {
         Assembly fixture = CompileFixture(
             """
@@ -100,7 +100,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_NoModifierOnGuardedName_ReportsHidingDiagnostic()
+    public void ScanNoModifierOnGuardedNameReportsHidingDiagnostic()
     {
         // Acceptance contract: declaring a same-named lifecycle method without override or new
         // (C# CS0114) compiles to the same IL shape as `new void X()`. The scanner's IL-only
@@ -139,7 +139,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_ExplicitNewOnGuardedName_ReportsDxmsg007()
+    public void ScanExplicitNewOnGuardedNameReportsDxmsg007()
     {
         Assembly fixture = CompileFixture(
             """
@@ -165,7 +165,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_BrokenIntermediate_ReportsDxmsg010OnLeaf()
+    public void ScanBrokenIntermediateReportsDxmsg010OnLeaf()
     {
         // The user's canonical `BrokenThing : ddd : MessageAwareComponent` case: ddd's override
         // does not call base, BrokenThing's override does. The leaf is the type the user is
@@ -209,7 +209,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_ChainSkippingMiddleType_ReportsDxmsg010OnLeaf()
+    public void ScanChainSkippingMiddleTypeReportsDxmsg010OnLeaf()
     {
         // Four-level chain: BrokenThing : Middle : ddd : MessageAwareComponent. Middle does NOT
         // declare OnEnable, but ddd's override is broken. BrokenThing calls base correctly. The
@@ -262,7 +262,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_ClassLevelDxIgnoreMissingBaseCallAttribute_ExcludesFromSnapshot()
+    public void ScanClassLevelDxIgnoreMissingBaseCallAttributeExcludesFromSnapshot()
     {
         Assembly fixture = CompileFixture(
             """
@@ -287,7 +287,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_TypeInProjectIgnoreList_ExcludesFromSnapshot()
+    public void ScanTypeInProjectIgnoreListExcludesFromSnapshot()
     {
         Assembly fixture = CompileFixture(
             """
@@ -313,7 +313,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_AbstractType_IsSkipped()
+    public void ScanAbstractTypeIsSkipped()
     {
         // Abstract subclasses cannot exist as MonoBehaviour instances, so the inspector overlay
         // never shows their HelpBox. The scanner should not include them in the snapshot even if
@@ -339,7 +339,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_GenericTypeDefinition_IsSkipped()
+    public void ScanGenericTypeDefinitionIsSkipped()
     {
         // Open generic-type definitions cannot be instantiated as MonoBehaviour components.
         // Closed generic instantiations would be classified separately — but the open definition
@@ -368,7 +368,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_NestedTypeFqnUsesDots_NotPlusSign()
+    public void ScanNestedTypeFqnUsesDotsNotPlusSign()
     {
         // System.Type.FullName for nested types uses '+' as the separator (e.g.
         // "Outer+Nested"); the analyzer emits the dotted form so the inspector overlay can
@@ -407,7 +407,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_TwoTypesWithSameMethodIssues_BothInSnapshot()
+    public void ScanTwoTypesWithSameMethodIssuesBothInSnapshot()
     {
         Assembly fixture = CompileFixture(
             """
@@ -444,7 +444,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_MethodLevelDxIgnoreMissingBaseCallAttribute_ExcludesFromSnapshot()
+    public void ScanMethodLevelDxIgnoreMissingBaseCallAttributeExcludesFromSnapshot()
     {
         // Spec 2a: the class itself is NOT marked, but a single method has the
         // [DxIgnoreMissingBaseCall] attribute. The scanner's method-level check (over the five
@@ -473,7 +473,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_TwoBrokenMethodsOnSameType_FoldedIntoSingleEntry()
+    public void ScanTwoBrokenMethodsOnSameTypeFoldedIntoSingleEntry()
     {
         // Spec 2b: a single type with TWO broken overrides (Awake AND OnEnable) must produce
         // exactly ONE entry whose MissingBaseFor lists both methods. DiagnosticIds is the
@@ -516,7 +516,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_NullSettings_TreatsOptOutListAsEmpty_NoNullReferenceException()
+    public void ScanNullSettingsTreatsOptOutListAsEmptyNoNullReferenceException()
     {
         // Spec 2e: passing null for ignoredTypeNames must be treated as an empty opt-out list and
         // must not throw. This pins the defensive null-handling at the API boundary.
@@ -544,7 +544,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_OnExternMethod_TreatedAsCleanCrossAssembly()
+    public void ScanOnExternMethodTreatedAsCleanCrossAssembly()
     {
         // Spec 2d: a MessageAwareComponent subclass whose override is `extern` (no IL body) must
         // be treated as assume-clean. GetMethodBody() returns null for extern methods just like
@@ -595,7 +595,7 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void Scan_HealthyChain_ReportsNothing()
+    public void ScanHealthyChainReportsNothing()
     {
         // Three-deep healthy chain: every link calls base, no DXMSG006 / DXMSG010 should fire.
         Assembly fixture = CompileFixture(

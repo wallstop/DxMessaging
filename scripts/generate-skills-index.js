@@ -133,6 +133,7 @@ function formatWithPrettier(content, spawnSyncImpl = spawnPlatformCommandSync) {
         INDEX_PATH,
     ];
 
+    // Keep the base command token here; platform-specific shim resolution belongs in spawnPlatformCommandSync.
     const result = spawnSyncImpl("npx", prettierArgs, {
         cwd: REPO_ROOT,
         input: content,

@@ -109,6 +109,20 @@ describe("pre-commit hook stage policy", () => {
         expect(stages).toEqual(expect.arrayContaining(["pre-commit", "pre-push"]));
     });
 
+    test("fix-csharp-underscore-methods hook runs at pre-commit", () => {
+        const fixerBlock = findHookBlock(configLines, "fix-csharp-underscore-methods");
+        expect(fixerBlock).not.toBeNull();
+
+        const stages = extractStagesFromHookBlock(fixerBlock);
+        expect(stages).toEqual(expect.arrayContaining(["pre-commit"]));
+
+        const blockText = fixerBlock.lines.join("\n");
+        expect(blockText).toContain("scripts/fix-csharp-underscore-methods.js");
+        expect(blockText).toContain("git add \"$@\"");
+        expect(blockText).not.toContain("|| true");
+        expect(blockText).not.toContain("|| echo");
+    });
+
     test("script-parser-tests includes npm-meta and shell-safety regressions", () => {
         const parserTestsBlock = findHookBlock(configLines, "script-parser-tests");
         expect(parserTestsBlock).not.toBeNull();
@@ -119,5 +133,6 @@ describe("pre-commit hook stage policy", () => {
         expect(blockText).toContain("scripts/__tests__/prettier-version.test.js");
         expect(blockText).toContain("scripts/__tests__/shell-command.test.js");
         expect(blockText).toContain("scripts/__tests__/detect-shell-redirection-antipattern.test.js");
+        expect(blockText).toContain("scripts/__tests__/fix-csharp-underscore-methods.test.js");
     });
 });

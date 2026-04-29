@@ -25,10 +25,10 @@ namespace DxMessaging.Editor.Analyzers
         public string TypeName;
 
         /// <summary>Method names whose overrides are missing the corresponding <c>base.*()</c> call.</summary>
-        public List<string> MissingBaseFor = new();
+        public readonly SortedSet<string> MissingBaseFor = new(StringComparer.Ordinal);
 
         /// <summary>Diagnostic IDs that contributed to this entry (e.g., DXMSG006/007/008/009).</summary>
-        public HashSet<string> DiagnosticIds = new(StringComparer.Ordinal);
+        public readonly HashSet<string> DiagnosticIds = new(StringComparer.Ordinal);
 
         /// <summary>Source file path (best-effort) for "Open Script" actions in the inspector overlay.</summary>
         public string FilePath;
@@ -275,7 +275,7 @@ namespace DxMessaging.Editor.Analyzers
 
             foreach (string method in report.MissingBaseFor)
             {
-                if (!string.IsNullOrEmpty(method) && !existing.MissingBaseFor.Contains(method))
+                if (!string.IsNullOrEmpty(method))
                 {
                     // Dedupe across the dual-source merge: LogEntries and CompilerMessage may
                     // both surface the same `<type>.<method>` pair on Unity 2022+, where both
@@ -287,7 +287,7 @@ namespace DxMessaging.Editor.Analyzers
 
             foreach (string id in report.DiagnosticIds)
             {
-                if (!string.IsNullOrEmpty(id) && !existing.DiagnosticIds.Contains(id))
+                if (!string.IsNullOrEmpty(id))
                 {
                     // Mirror MissingBaseFor's dedup. Even though DiagnosticIds is a HashSet today,
                     // an explicit Contains check keeps the merge contract stable against future

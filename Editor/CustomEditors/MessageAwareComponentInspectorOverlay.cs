@@ -104,7 +104,7 @@ namespace DxMessaging.Editor.CustomEditors
         /// inspector's layout pass for this editor has already completed. Safe to gate on
         /// <see cref="EventType.Repaint"/> here — we are not inside an OnInspectorGUI body.
         /// </summary>
-        private static void RenderForHeaderHook(UnityEngine.Object target)
+        private static void RenderForHeaderHook(Object target)
         {
             if (target == null)
             {
@@ -147,7 +147,7 @@ namespace DxMessaging.Editor.CustomEditors
         /// Cross-path dedupe with the header-hook path is handled inside
         /// <see cref="DrawHeader"/>, which unconditionally skips when the editor is our fallback.
         /// </summary>
-        internal static void RenderInsideOnInspectorGUI(UnityEngine.Object target)
+        internal static void RenderInsideOnInspectorGUI(Object target)
         {
             if (target is not MessageAwareComponent messageAwareComponent)
             {

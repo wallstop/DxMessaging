@@ -20,7 +20,7 @@ const {
     BRAND_NAMES,
 } = require('../generate-skills-index.js');
 const { normalizeToLf } = require('../lib/quote-parser');
-const { toShellCommand } = require('../lib/shell-command');
+const { toShellCommand, spawnPlatformCommandSync } = require('../lib/shell-command');
 
 describe("generate-skills-index", () => {
     describe("BRAND_NAMES mapping", () => {
@@ -379,7 +379,7 @@ describe("generate-skills-index", () => {
     });
 
     describe("formatWithPrettier", () => {
-        test("invokes prettier via platform-aware shell command helper", () => {
+        test("passes base command to provided spawn implementation", () => {
             const spawnSyncMock = jest.fn(() => ({
                 status: 0,
                 stdout: "formatted output",
@@ -403,6 +403,62 @@ describe("generate-skills-index", () => {
                     cwd: expect.any(String),
                 })
             );
+        });
+
+        test("delegates platform resolution to spawn helper when wrapper enforces win32", () => {
+            const spawnSyncMock = jest.fn(() => ({
+                status: 0,
+                stdout: "formatted output",
+                stderr: "",
+            }));
+
+            const win32Wrapper = (command, args, options) =>
+                spawnPlatformCommandSync(command, args, options, spawnSyncMock, "win32");
+
+            const result = formatWithPrettier("raw input", win32Wrapper);
+
+            expect(result).toBe("formatted output");
+            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+            expect(spawnSyncMock).toHaveBeenCalledWith(
+                "npx.cmd",
+                expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]),
+                expect.objectContaining({
+                    input: "raw input",
+                    encoding: "utf8",
+                    cwd: expect.any(String),
+                    shell: true,
+                    windowsHide: true,
+                })
+            );
+        });
+
+        test("delegates platform resolution to spawn helper when wrapper enforces non-win32", () => {
+            const spawnSyncMock = jest.fn(() => ({
+                status: 0,
+                stdout: "formatted output",
+                stderr: "",
+            }));
+
+            const linuxWrapper = (command, args, options) =>
+                spawnPlatformCommandSync(command, args, options, spawnSyncMock, "linux");
+
+            const result = formatWithPrettier("raw input", linuxWrapper);
+
+            expect(result).toBe("formatted output");
+            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+
+            const [command, args, options] = spawnSyncMock.mock.calls[0];
+            expect(command).toBe("npx");
+            expect(args).toEqual(expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]));
+            expect(options).toEqual(
+                expect.objectContaining({
+                    input: "raw input",
+                    encoding: "utf8",
+                    cwd: expect.any(String),
+                })
+            );
+            expect(options.shell).toBeUndefined();
+            expect(options.windowsHide).toBeUndefined();
         });
 
         test("throws when prettier execution fails", () => {

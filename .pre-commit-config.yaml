@@ -20,6 +20,16 @@ repos:
           - post-checkout
           - post-rewrite
         description: Install the .NET tools listed at .config/dotnet-tools.json.
+      - id: fix-csharp-underscore-methods
+        name: Auto-fix C# method names (remove underscores)
+        entry: >-
+          bash -c 'node scripts/fix-csharp-underscore-methods.js "$@" && git add "$@"' --
+        language: system
+        types:
+          - c#
+        stages:
+          - pre-commit
+        description: Auto-fix C# method names by removing underscores and fail if restaging fails.
       - id: csharpier
         name: Run CSharpier on C# files
         entry: dotnet tool run csharpier format
@@ -240,6 +250,7 @@ repos:
           scripts/__tests__/validate-skills-llm-policy.test.js
           scripts/__tests__/update-llms-txt.test.js
           scripts/__tests__/fix-md029-md051.test.js
+          scripts/__tests__/fix-csharp-underscore-methods.test.js
           scripts/__tests__/validate-vscode-settings.test.js
           scripts/__tests__/validate-pre-commit-tooling.test.js
           scripts/__tests__/validate-npm-meta.test.js
@@ -249,7 +260,7 @@ repos:
           scripts/__tests__/verify-managed-jest-fallback.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|run-managed-jest|run-managed-prettier|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version)\.js|scripts/__tests__/(check-eol|fix-md029-md051|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|run-managed-prettier|validate-workflows|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|run-managed-jest|run-managed-prettier|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|run-managed-prettier|validate-workflows|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback)\.test\.js)$'
         stages:
           - pre-commit
         description: Fail fast on parser, npm-meta, and shell-safety regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.

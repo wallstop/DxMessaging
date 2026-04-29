@@ -1,0 +1,371 @@
+#!/usr/bin/env node
+/*
+  Fix C# method names containing underscores by converting them to PascalCase.
+  - Converts names like Parse_Line_Bare -> ParseLineBare.
+  - Skips names that start with op_ (operator overload metadata names).
+  - By default, processes staged C# files; accepts explicit file paths.
+*/
+
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+const METHOD_DECLARATION_PATTERN =
+    /^\s*(?:(?:\[[^\]\r\n]+\]\s*)*)(?:(?:public|private|protected|internal)\s+)?(?:(?:static|virtual|override|abstract|sealed|async|new|extern|partial|unsafe|readonly)\s+)*(?:[\w<>\[\],.?]+\s+)+(?<name>[A-Za-z_]\w*_[A-Za-z0-9_]+)\s*(?:<[^>\r\n]+>\s*)?\(/gm;
+
+const EXCLUDED_DIRECTORY_PATTERNS = [
+    /(^|[\\/])\.git([\\/]|$)/i,
+    /(^|[\\/])node_modules([\\/]|$)/i,
+    /(^|[\\/])Library([\\/]|$)/,
+    /(^|[\\/])(Obj|obj)([\\/]|$)/,
+    /(^|[\\/])Temp([\\/]|$)/i,
+    /(^|[\\/])\.vs([\\/]|$)/,
+    /(^|[\\/])\.venv([\\/]|$)/,
+    /(^|[\\/])\.artifacts([\\/]|$)/,
+    /(^|[\\/])site([\\/]|$)/,
+];
+
+function normalizeToLf(value) {
+    return String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function getGitRepoRoot() {
+    const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+    });
+
+    if (result.status === 0 && result.stdout) {
+        return result.stdout.trim();
+    }
+
+    if (result.status !== 0) {
+        console.error(
+            "Warning: unable to determine git repository root; defaulting to current working directory."
+        );
+    }
+
+    return process.cwd();
+}
+
+function parseArgs(argv) {
+    const fileArgs = [];
+    let checkOnly = false;
+    let allFiles = false;
+
+    for (const arg of argv) {
+        if (arg === "--check") {
+            checkOnly = true;
+            continue;
+        }
+
+        if (arg === "--all") {
+            allFiles = true;
+            continue;
+        }
+
+        fileArgs.push(arg);
+    }
+
+    return { checkOnly, allFiles, fileArgs };
+}
+
+function isExcludedPath(fullPath) {
+    return EXCLUDED_DIRECTORY_PATTERNS.some((pattern) => pattern.test(fullPath));
+}
+
+function isPathInsideRoot(rootDir, fullPath) {
+    const normalizedRootDir = path.resolve(rootDir);
+    const normalizedFullPath = path.resolve(fullPath);
+    const relativePath = path.relative(normalizedRootDir, normalizedFullPath);
+
+    if (relativePath === "") {
+        return true;
+    }
+
+    // On Windows, different drive letters can yield an absolute relative path.
+    return !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+}
+
+// INTERNAL ONLY: rootDir is expected to be the repository root.
+function walkCsharpFiles(rootDir, files = []) {
+    let entries;
+
+    try {
+        entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    } catch {
+        return files;
+    }
+
+    for (const entry of entries) {
+        const fullPath = path.join(rootDir, entry.name);
+
+        if (isExcludedPath(fullPath)) {
+            continue;
+        }
+
+        if (entry.isDirectory()) {
+            walkCsharpFiles(fullPath, files);
+            continue;
+        }
+
+        if (entry.isFile() && fullPath.endsWith(".cs") && !fullPath.endsWith(".meta")) {
+            files.push(fullPath);
+        }
+    }
+
+    return files;
+}
+
+function resolveExplicitFiles(repoRoot, fileArgs) {
+    const resolved = [];
+    const seen = new Set();
+
+    for (const rawArg of fileArgs) {
+        if (!rawArg.endsWith(".cs")) {
+            continue;
+        }
+
+        const candidatePath = path.resolve(repoRoot, rawArg);
+
+        if (!fs.existsSync(candidatePath)) {
+            continue;
+        }
+
+        // Apply excluded-directory patterns only for repo-local paths.
+        if (isPathInsideRoot(repoRoot, candidatePath) && isExcludedPath(candidatePath)) {
+            continue;
+        }
+
+        const stats = fs.statSync(candidatePath);
+        if (!stats.isFile() || candidatePath.endsWith(".meta")) {
+            continue;
+        }
+
+        if (!seen.has(candidatePath)) {
+            seen.add(candidatePath);
+            resolved.push(candidatePath);
+        }
+    }
+
+    return resolved;
+}
+
+function getStagedCsharpFiles(repoRoot) {
+    const result = spawnSync(
+        "git",
+        ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "--", "*.cs"],
+        {
+            cwd: repoRoot,
+            encoding: "utf8",
+        }
+    );
+
+    if (result.status !== 0) {
+        console.error(
+            "Warning: unable to read staged C# files from git; no files were processed."
+        );
+        return [];
+    }
+
+    if (!result.stdout) {
+        return [];
+    }
+
+    const files = [];
+    const seen = new Set();
+
+    for (const relativePath of normalizeToLf(result.stdout)
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)) {
+        const fullPath = path.resolve(repoRoot, relativePath);
+
+        if (!fullPath.endsWith(".cs") || fullPath.endsWith(".meta")) {
+            continue;
+        }
+
+        if (!fs.existsSync(fullPath)) {
+            continue;
+        }
+
+        if (isExcludedPath(fullPath)) {
+            continue;
+        }
+
+        if (!seen.has(fullPath)) {
+            seen.add(fullPath);
+            files.push(fullPath);
+        }
+    }
+
+    return files;
+}
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function convertMethodNameToPascalCase(methodName) {
+    return methodName
+        .split("_")
+        .filter((segment) => segment.length > 0)
+        .map((segment) => {
+            if (segment.length === 1) {
+                return segment.toUpperCase();
+            }
+
+            return `${segment[0].toUpperCase()}${segment.slice(1)}`;
+        })
+        .join("");
+}
+
+function collectMethodRenames(content) {
+    const methodRenames = new Map();
+    let match;
+
+    while ((match = METHOD_DECLARATION_PATTERN.exec(content)) !== null) {
+        const methodName = match.groups ? match.groups.name : "";
+
+        if (!methodName || methodName.startsWith("op_")) {
+            continue;
+        }
+
+        const newName = convertMethodNameToPascalCase(methodName);
+        if (!newName || newName === methodName) {
+            continue;
+        }
+
+        methodRenames.set(methodName, newName);
+    }
+
+    return methodRenames;
+}
+
+function applyMethodRenames(content, methodRenames) {
+    let updatedContent = content;
+    let renameCount = 0;
+
+    for (const [oldName, newName] of methodRenames.entries()) {
+        const namePattern = new RegExp(
+            `(?<![A-Za-z0-9_])${escapeRegExp(oldName)}(?![A-Za-z0-9_])`,
+            "g"
+        );
+
+        const candidateContent = updatedContent.replace(namePattern, newName);
+        if (candidateContent !== updatedContent) {
+            updatedContent = candidateContent;
+            renameCount += 1;
+        }
+    }
+
+    return { updatedContent, renameCount };
+}
+
+function processFile(filePath, checkOnly) {
+    let source;
+
+    try {
+        source = fs.readFileSync(filePath, "utf8");
+    } catch {
+        return { changed: false, renameCount: 0, methodRenames: new Map() };
+    }
+
+    const methodRenames = collectMethodRenames(source);
+    if (methodRenames.size === 0) {
+        return { changed: false, renameCount: 0, methodRenames };
+    }
+
+    const { updatedContent, renameCount } = applyMethodRenames(source, methodRenames);
+    if (updatedContent === source || renameCount === 0) {
+        return { changed: false, renameCount: 0, methodRenames };
+    }
+
+    if (!checkOnly) {
+        fs.writeFileSync(filePath, updatedContent, "utf8");
+    }
+
+    return { changed: true, renameCount, methodRenames };
+}
+
+function resolveTargetFiles(repoRoot, parsedArgs) {
+    if (parsedArgs.fileArgs.length > 0) {
+        return resolveExplicitFiles(repoRoot, parsedArgs.fileArgs);
+    }
+
+    if (parsedArgs.allFiles) {
+        return walkCsharpFiles(repoRoot);
+    }
+
+    return getStagedCsharpFiles(repoRoot);
+}
+
+function main() {
+    const repoRoot = getGitRepoRoot();
+    const parsedArgs = parseArgs(process.argv.slice(2));
+    const files = resolveTargetFiles(repoRoot, parsedArgs);
+
+    if (files.length === 0) {
+        console.log("No C# files to process.");
+        return 0;
+    }
+
+    const changedFiles = [];
+    let totalRenamed = 0;
+
+    for (const filePath of files) {
+        const result = processFile(filePath, parsedArgs.checkOnly);
+
+        if (!result.changed) {
+            continue;
+        }
+
+        changedFiles.push(path.relative(repoRoot, filePath));
+        totalRenamed += result.renameCount;
+    }
+
+    if (parsedArgs.checkOnly) {
+        if (changedFiles.length > 0) {
+            console.error("Found C# methods with underscores. Run fixer to update these files:");
+            for (const relativePath of changedFiles) {
+                console.error(`- ${relativePath}`);
+            }
+            console.error(
+                "Method names must use PascalCase without underscores (for example: ParseLineInput)."
+            );
+            return 1;
+        }
+
+        console.log("No C# method naming fixes required.");
+        return 0;
+    }
+
+    if (changedFiles.length > 0) {
+        console.log(
+            `Updated ${changedFiles.length} file(s); renamed ${totalRenamed} method identifier(s).`
+        );
+        for (const relativePath of changedFiles) {
+            console.log(`Fixed: ${relativePath}`);
+        }
+    } else {
+        console.log("No C# method naming fixes required.");
+    }
+
+    return 0;
+}
+
+module.exports = {
+    METHOD_DECLARATION_PATTERN,
+    convertMethodNameToPascalCase,
+    collectMethodRenames,
+    applyMethodRenames,
+    processFile,
+    parseArgs,
+    resolveTargetFiles,
+};
+
+if (require.main === module) {
+    process.exit(main());
+}

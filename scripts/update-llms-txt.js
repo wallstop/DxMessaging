@@ -173,7 +173,7 @@ DxMessaging is a high-performance messaging library for Unity (v2021.3+) that re
 - **Language:** C# (.NET Standard 2.0)
 - **Platform:** Unity 2021.3+
 - **Package Manager:** OpenUPM, npm, Unity Package Manager
-- **Tests:** NUnit + Unity Test Framework
+- **Tests:** NUnit + Unity Test Framework (PascalCase method names, no underscores)
 - **Documentation:** MkDocs Material
 
 ## Key Features
@@ -356,7 +356,7 @@ npx cspell "**/*"
 
 - **Code Style:** 4-space indent, explicit types (no \`var\`), PascalCase for public APIs
 - **Line Endings:** LF by default, CRLF for C#/.NET project files
-- **Tests:** NUnit + Unity Test Framework, no underscores in test names
+- **Tests:** NUnit + Unity Test Framework, no underscores in method names (enforced by pre-commit fixer)
 - **Documentation:** MkDocs Material, lazy numbering for ordered lists
 - **Commits:** Imperative mood, reference issues/PRs
 

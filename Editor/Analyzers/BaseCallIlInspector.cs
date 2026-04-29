@@ -114,6 +114,7 @@ namespace DxMessaging.Editor.Analyzers
                     // Abstract / extern / runtime-implemented / IL2CPP-stripped — cannot inspect.
                     return true;
                 }
+
                 byte[] il = body.GetILAsByteArray();
                 if (il == null || il.Length == 0)
                 {

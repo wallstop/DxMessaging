@@ -30,7 +30,7 @@ public sealed class BaseCallLogMessageParserTests
         + "does not chain to MessageAwareComponent.OnEnable; the messaging system will not function correctly on this component.";
 
     [Test]
-    public void ParseLine_BareDxmsg006_CapturesIdTypeAndMethod()
+    public void ParseLineBareDxmsg006CapturesIdTypeAndMethod()
     {
         ParsedEntry? parsed = BaseCallLogMessageParser.ParseLine(Dxmsg006Bare);
 
@@ -44,7 +44,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_BareDxmsg007_CapturesIdTypeAndMethod()
+    public void ParseLineBareDxmsg007CapturesIdTypeAndMethod()
     {
         ParsedEntry? parsed = BaseCallLogMessageParser.ParseLine(Dxmsg007Bare);
 
@@ -56,7 +56,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_BareDxmsg008_CapturesIdAndTypeWithEmptyMethod()
+    public void ParseLineBareDxmsg008CapturesIdAndTypeWithEmptyMethod()
     {
         ParsedEntry? parsed = BaseCallLogMessageParser.ParseLine(Dxmsg008Bare);
 
@@ -68,7 +68,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_PrefixedDxmsg006_PopulatesPathAndLine()
+    public void ParseLinePrefixedDxmsg006PopulatesPathAndLine()
     {
         const string line = "Assets/Sample/Player.cs(12,9): warning DXMSG006: " + Dxmsg006Bare;
 
@@ -84,7 +84,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_PrefixedDxmsg007_PopulatesPathAndLine()
+    public void ParseLinePrefixedDxmsg007PopulatesPathAndLine()
     {
         const string line = "Assets/Sample/Player.cs(34,5): warning DXMSG007: " + Dxmsg007Bare;
 
@@ -98,7 +98,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_PrefixedDxmsg008_PopulatesPathAndLine()
+    public void ParseLinePrefixedDxmsg008PopulatesPathAndLine()
     {
         const string line = "Assets/Sample/Player.cs(7,5): info DXMSG008: " + Dxmsg008Bare;
 
@@ -113,13 +113,13 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_NullInput_ReturnsNull()
+    public void ParseLineNullInputReturnsNull()
     {
         Assert.That(BaseCallLogMessageParser.ParseLine(null!), Is.Null);
     }
 
     [Test]
-    public void ParseLine_EmptyOrWhitespaceInput_ReturnsNull()
+    public void ParseLineEmptyOrWhitespaceInputReturnsNull()
     {
         Assert.That(BaseCallLogMessageParser.ParseLine(string.Empty), Is.Null);
         Assert.That(BaseCallLogMessageParser.ParseLine("    "), Is.Null);
@@ -127,7 +127,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_UnrelatedCompilerWarning_ReturnsNull()
+    public void ParseLineUnrelatedCompilerWarningReturnsNull()
     {
         Assert.That(
             BaseCallLogMessageParser.ParseLine(
@@ -138,7 +138,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_DebugLogStyleText_ReturnsNull()
+    public void ParseLineDebugLogStyleTextReturnsNull()
     {
         Assert.That(
             BaseCallLogMessageParser.ParseLine(
@@ -149,7 +149,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_DiagnosticIdInIsolationOrCommentForm_ReturnsNull()
+    public void ParseLineDiagnosticIdInIsolationOrCommentFormReturnsNull()
     {
         // A bare token mention in a comment / random log line must NOT match.
         Assert.That(BaseCallLogMessageParser.ParseLine("DXMSG006"), Is.Null);
@@ -164,7 +164,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_AnchorRejectsAnalyzerWordingMidString()
+    public void ParseLineAnchorRejectsAnalyzerWordingMidString()
     {
         // S7: body regexes anchor to ^ so a Debug.Log payload that happens to embed the
         // analyzer's wording mid-string is NOT surfaced as a real DXMSG006/007/008.
@@ -191,7 +191,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_DedupesSameTypeAndMethod()
+    public void AggregateDedupesSameTypeAndMethod()
     {
         List<string> lines = new() { Dxmsg006Bare, Dxmsg006Bare, Dxmsg006Bare };
 
@@ -204,7 +204,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_MergesDifferentMethodsOnSameType()
+    public void AggregateMergesDifferentMethodsOnSameType()
     {
         const string awakeLine =
             "'Sample.Player' overrides MessageAwareComponent.Awake but does not call base.Awake(); "
@@ -223,7 +223,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_SeparatesDifferentTypes()
+    public void AggregateSeparatesDifferentTypes()
     {
         const string a =
             "'Sample.PlayerA' overrides MessageAwareComponent.Awake but does not call base.Awake(); "
@@ -242,7 +242,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_AccumulatesIdsAcrossDxmsg006And007()
+    public void AggregateAccumulatesIdsAcrossDxmsg006And007()
     {
         const string awake006 =
             "'Sample.Player' overrides MessageAwareComponent.Awake but does not call base.Awake(); "
@@ -262,7 +262,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_Dxmsg008_ContributesIdButNoMethod()
+    public void AggregateDxmsg008ContributesIdButNoMethod()
     {
         Dictionary<string, ParsedTypeReport> result = BaseCallLogMessageParser.Aggregate(
             new[] { Dxmsg008Bare }
@@ -275,7 +275,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_Empty_ReturnsEmptyDictionary()
+    public void AggregateEmptyReturnsEmptyDictionary()
     {
         Dictionary<string, ParsedTypeReport> result = BaseCallLogMessageParser.Aggregate(
             System.Array.Empty<string>()
@@ -285,7 +285,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_OrderIndependent_For008ThenVs006Then008()
+    public void AggregateOrderIndependentFor008ThenVs006Then008()
     {
         const string awake006 =
             "'Sample.Player' overrides MessageAwareComponent.Awake but does not call base.Awake(); "
@@ -310,7 +310,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_BareDxmsg009_CapturesIdTypeAndMethod()
+    public void ParseLineBareDxmsg009CapturesIdTypeAndMethod()
     {
         ParsedEntry? parsed = BaseCallLogMessageParser.ParseLine(Dxmsg009Bare);
 
@@ -324,7 +324,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_PrefixedDxmsg009_CapturesPathAndLine()
+    public void ParseLinePrefixedDxmsg009CapturesPathAndLine()
     {
         const string line =
             "Assets/Scripts/BrokenThing.cs(7,22): warning DXMSG009: " + Dxmsg009Bare;
@@ -341,7 +341,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_AnchorRejectsDxmsg009MidString()
+    public void ParseLineAnchorRejectsDxmsg009MidString()
     {
         // Adversarial: the analyzer's wording embedded in a Debug.Log payload must not be parsed
         // as a real DXMSG009 warning.
@@ -354,7 +354,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_Dxmsg009ContributesToMissingBaseFor()
+    public void AggregateDxmsg009ContributesToMissingBaseFor()
     {
         Dictionary<string, ParsedTypeReport> result = BaseCallLogMessageParser.Aggregate(
             new[] { Dxmsg009Bare }
@@ -367,7 +367,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_Dxmsg009AccumulatesAlongsideDxmsg006()
+    public void AggregateDxmsg009AccumulatesAlongsideDxmsg006()
     {
         // Same type, two diagnostics on different methods → one entry, two methods, two ids.
         const string awake006 =
@@ -385,7 +385,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_Dxmsg009Dedups()
+    public void AggregateDxmsg009Dedups()
     {
         List<string> lines = new() { Dxmsg009Bare, Dxmsg009Bare, Dxmsg009Bare };
 
@@ -398,7 +398,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_BareDxmsg010_CapturesIdTypeAndMethod()
+    public void ParseLineBareDxmsg010CapturesIdTypeAndMethod()
     {
         ParsedEntry? parsed = BaseCallLogMessageParser.ParseLine(Dxmsg010Bare);
 
@@ -412,7 +412,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_PrefixedDxmsg010_CapturesPathAndLine()
+    public void ParseLinePrefixedDxmsg010CapturesPathAndLine()
     {
         const string line =
             "Assets/Scripts/BrokenThing.cs(11,33): warning DXMSG010: " + Dxmsg010Bare;
@@ -429,7 +429,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_AnchorRejectsDxmsg010MidString()
+    public void ParseLineAnchorRejectsDxmsg010MidString()
     {
         // Adversarial: the analyzer's wording embedded in a Debug.Log payload must not be parsed
         // as a real DXMSG010 warning. The body regex is anchored at ^ so any leading text
@@ -444,7 +444,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_Dxmsg010ContributesToMissingBaseFor()
+    public void AggregateDxmsg010ContributesToMissingBaseFor()
     {
         // DXMSG010 must contribute its method name to MissingBaseFor so the inspector overlay
         // surfaces it just like DXMSG006/007/009.
@@ -459,7 +459,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void ParseLine_Dxmsg010_BrokenAncestorIsNotSurfacedOnParsedEntry()
+    public void ParseLineDxmsg010BrokenAncestorIsNotSurfacedOnParsedEntry()
     {
         // Spec 5a: the DXMSG010 regex captures the broken-ancestor name in a `broken` group, but
         // the `ParsedEntry` struct does NOT expose it as a field. This test PINS the current
@@ -494,7 +494,7 @@ public sealed class BaseCallLogMessageParserTests
     }
 
     [Test]
-    public void Aggregate_KeepsFirstSeenFilePathAndLine()
+    public void AggregateKeepsFirstSeenFilePathAndLine()
     {
         const string prefixed =
             "Assets/Sample/Player.cs(12,9): warning DXMSG006: "

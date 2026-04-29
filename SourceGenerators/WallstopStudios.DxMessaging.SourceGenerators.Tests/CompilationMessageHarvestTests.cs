@@ -42,7 +42,7 @@ public sealed class CompilationMessageHarvestTests
         + "replace with 'override' and call base.OnEnable() so the messaging system continues to function.";
 
     [Test]
-    public void Aggregate_OnUnity2021Dxmsg009Line_ProducesEntryWithFilePathAndLine()
+    public void AggregateOnUnity2021Dxmsg009LineProducesEntryWithFilePathAndLine()
     {
         Dictionary<string, ParsedTypeReport> aggregated = BaseCallLogMessageParser.Aggregate(
             new[] { Unity2021Dxmsg009 }
@@ -58,7 +58,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void Aggregate_OnMixedDiagnosticsForSameType_DedupesMethodsAndUnionsIds()
+    public void AggregateOnMixedDiagnosticsForSameTypeDedupesMethodsAndUnionsIds()
     {
         // Player.cs raises both a DXMSG006 (override missing base) on Awake and a DXMSG007
         // (new hides) on OnEnable. The same type FQN appears in both, so the per-type report
@@ -78,7 +78,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void Aggregate_DropsLinesWithoutAnyDxmsgPrefix()
+    public void AggregateDropsLinesWithoutAnyDxmsgPrefix()
     {
         // The harvester's hot-path filter on `OnAssemblyCompilationFinished` skips lines that
         // don't contain "DXMSG00" before parsing. The parser itself must also be tolerant of
@@ -97,7 +97,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void Aggregate_OnEmptyInput_ReturnsEmptyDictionary()
+    public void AggregateOnEmptyInputReturnsEmptyDictionary()
     {
         // The harvester calls Aggregate even when an assembly produced zero matching messages
         // — the empty result is then used by ApplyCompilerMessageDrain to RETIRE the previous
@@ -110,7 +110,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void Aggregate_OnNullInput_ReturnsEmptyDictionary()
+    public void AggregateOnNullInputReturnsEmptyDictionary()
     {
         Dictionary<string, ParsedTypeReport> aggregated = BaseCallLogMessageParser.Aggregate(null);
 
@@ -124,7 +124,7 @@ public sealed class CompilationMessageHarvestTests
     // them in with deterministic dotnet-test coverage closes the gap.
 
     [Test]
-    public void ApplyAssemblyReports_NewType_AddedToBoth()
+    public void ApplyAssemblyReportsNewTypeAddedToBoth()
     {
         Dictionary<string, HashSet<string>> typesByAssembly = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, ParsedTypeReport> mergedReports = new(StringComparer.Ordinal);
@@ -153,7 +153,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_RecompileSameAssemblyDropsRetiredTypes()
+    public void ApplyAssemblyReportsRecompileSameAssemblyDropsRetiredTypes()
     {
         // Assembly A reports type X with method Awake. The user fixes the issue and recompiles —
         // A's next batch is empty. X must be removed from BOTH mergedReports AND
@@ -190,7 +190,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_TwoAssembliesReportSameTypeRetainAfterOneDrops()
+    public void ApplyAssemblyReportsTwoAssembliesReportSameTypeRetainAfterOneDrops()
     {
         // Cross-assembly survival: A and B both report type X (e.g., partial classes split across
         // assemblies, or duplicate type-name across modules). When A re-compiles without X, X
@@ -242,7 +242,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_DifferentMethodsOnSameTypeAcrossAssemblies()
+    public void ApplyAssemblyReportsDifferentMethodsOnSameTypeAcrossAssemblies()
     {
         // A reports X.Awake; B reports X.OnEnable. The merged view must carry both methods on a
         // single X entry — this is the partial-class / split-assembly case.
@@ -273,7 +273,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_UnknownAssemblyKeyDoesNotDisturbExistingState()
+    public void ApplyAssemblyReportsUnknownAssemblyKeyDoesNotDisturbExistingState()
     {
         // Sanity check: applying an empty batch for an assembly we've never seen leaves the
         // merged map untouched. A common refresh path on Unity 2021 is "every assembly fires
@@ -302,7 +302,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_NullArguments_ThrowOrTreatNullPayloadAsRetirement()
+    public void ApplyAssemblyReportsNullArgumentsThrowOrTreatNullPayloadAsRetirement()
     {
         Dictionary<string, HashSet<string>> typesByAssembly = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, ParsedTypeReport> mergedReports = new(StringComparer.Ordinal);
@@ -355,7 +355,7 @@ public sealed class CompilationMessageHarvestTests
     // ---------------------------------------------
 
     [Test]
-    public void BuildSnapshot_LogEntriesAndCompilerMessageAgree()
+    public void BuildSnapshotLogEntriesAndCompilerMessageAgree()
     {
         // Same type + same method reported via both paths: one entry, dedup'd diagnostic IDs,
         // method appears once.
@@ -378,7 +378,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void BuildSnapshot_LogEntriesOnlyVsCompilerMessageOnly()
+    public void BuildSnapshotLogEntriesOnlyVsCompilerMessageOnly()
     {
         // Each source independently produces a non-empty snapshot. Both halves of the dual-source
         // contract must work in isolation — Unity 2021 only feeds the CompilerMessage path,
@@ -405,7 +405,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void BuildSnapshot_KeepsFirstSeenFilePathLine()
+    public void BuildSnapshotKeepsFirstSeenFilePathLine()
     {
         // First seen wins. LogEntries reports first → its path/line stick even though merged
         // also has data for the same type with a different path/line.
@@ -424,7 +424,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void BuildSnapshot_UnionsMethodsAndDiagnosticIdsAcrossSources()
+    public void BuildSnapshotUnionsMethodsAndDiagnosticIdsAcrossSources()
     {
         // LogEntries says X.Awake / DXMSG006; merged says X.OnEnable / DXMSG009. The snapshot
         // union must carry both methods and both diagnostic IDs on a single X entry.
@@ -443,7 +443,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void BuildSnapshot_EmptyInputs_ReturnsEmptySnapshot()
+    public void BuildSnapshotEmptyInputsReturnsEmptySnapshot()
     {
         Dictionary<string, BaseCallReportEntryDto> snapshot =
             BaseCallReportAggregator.BuildSnapshot(null, null);
@@ -457,7 +457,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_ThreeAssembliesDisjointSetsRetireOneAndOverlap()
+    public void ApplyAssemblyReportsThreeAssembliesDisjointSetsRetireOneAndOverlap()
     {
         // Spec 3a: A reports {X, Y}, B reports {Y, Z}, C reports {W}. The merged snapshot must
         // contain {W, X, Y, Z}. Then A retires X (recompiles without it). The merged snapshot must
@@ -515,7 +515,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void Aggregate_SameAssemblyReportsSameFqnMultipleTimesInOneDrain_DedupesMethods()
+    public void AggregateSameAssemblyReportsSameFqnMultipleTimesInOneDrainDedupesMethods()
     {
         // Spec 3b: a single drain that contains the SAME line three times for the same FQN must
         // dedupe — Aggregate-then-merge always produces a single MissingBaseFor entry per method.
@@ -535,7 +535,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void BuildSnapshot_DictionaryWithNullValueDoesNotCrash()
+    public void BuildSnapshotDictionaryWithNullValueDoesNotCrash()
     {
         // Spec 3c: defensive — if either source dictionary contains a null ParsedTypeReport value
         // (a defensive shape we may see if the harvester's internal state ever decays), the
@@ -559,7 +559,7 @@ public sealed class CompilationMessageHarvestTests
     }
 
     [Test]
-    public void ApplyAssemblyReports_FilePathStickinessFirstSeenWinsAcrossAssemblies()
+    public void ApplyAssemblyReportsFilePathStickinessFirstSeenWinsAcrossAssemblies()
     {
         // Spec 3d: A reports type X with path=A.cs line=10. B then ALSO reports X with path=B.cs
         // line=20. The merged snapshot must keep A.cs/10 (first-assembly-seen wins). This pins

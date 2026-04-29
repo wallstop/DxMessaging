@@ -351,3 +351,8 @@ pre-commit.txt*
 pre-push.md*
 pre-push.txt*
 pr-description.md*
+
+SourceGenerators/WallstopStudios.DxMessaging.Analyzer/bin.meta
+SourceGenerators/WallstopStudios.DxMessaging.Analyzer/obj.meta
+Temp
+Temp.meta

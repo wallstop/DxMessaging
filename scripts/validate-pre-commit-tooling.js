@@ -19,6 +19,12 @@ const {
 } = require("./lib/prettier-version");
 
 const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
+const PACKAGE_JSON_PATH = path.join(__dirname, "..", "package.json");
+const REQUIRED_PRECHECK_PARSER_COMMAND =
+    "pre-commit run script-parser-tests --all-files";
+const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND =
+    "npm run check:package-json-format";
+const REQUIRED_PARSER_SUITE_HOOK_ID = "script-parser-tests";
 
 class Violation {
     constructor(hookId, line, message, entry) {
@@ -110,6 +116,35 @@ function parseHookIds(content) {
 function tokenizeCommand(entry) {
     const tokens = entry.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+/g) || [];
     return tokens.map((token) => token.replace(/^['"]|['"]$/g, ""));
+}
+
+function escapeRegexLiteral(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasRequiredPreflightCommand(preflightScript, requiredCommand) {
+    if (typeof preflightScript !== "string" || preflightScript.trim().length === 0) {
+        return false;
+    }
+
+    const normalizedScript = preflightScript.replace(/\s+/g, " ").trim();
+    const normalizedRequired = requiredCommand.replace(/\s+/g, " ").trim();
+    const commandRegex = new RegExp(
+        `(?:^|&&\\s*)${escapeRegexLiteral(normalizedRequired)}(?:\\s*&&|$)`
+    );
+
+    return commandRegex.test(normalizedScript);
+}
+
+function hasRequiredParserPrecheckCommand(preflightScript) {
+    return hasRequiredPreflightCommand(preflightScript, REQUIRED_PRECHECK_PARSER_COMMAND);
+}
+
+function hasRequiredPackageJsonFormatCommand(preflightScript) {
+    return hasRequiredPreflightCommand(
+        preflightScript,
+        REQUIRED_PACKAGE_JSON_FORMAT_COMMAND
+    );
 }
 
 function hasNpxInstallPolicy(entry) {
@@ -309,18 +344,135 @@ function validatePrettierVersionResolution(
     return violations;
 }
 
-function validateConfigContent(content) {
+function validatePreflightScriptPolicy(
+    readFileSyncImpl = fs.readFileSync,
+    packageJsonPath = PACKAGE_JSON_PATH,
+    preCommitConfigPath = PRE_COMMIT_CONFIG_PATH
+) {
+    const violations = [];
+    let packageJson;
+    let preCommitConfig;
+
+    try {
+        packageJson = JSON.parse(readFileSyncImpl(packageJsonPath, "utf8"));
+    } catch (error) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                "Unable to parse package.json while validating preflight script policy.",
+                error.message
+            )
+        );
+        return violations;
+    }
+
+    const preflightScript = packageJson?.scripts?.["preflight:pre-commit"];
+    if (typeof preflightScript !== "string" || preflightScript.trim().length === 0) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                "Missing package.json scripts.preflight:pre-commit command.",
+                "package.json"
+            )
+        );
+        return violations;
+    }
+
+    if (!hasRequiredPackageJsonFormatCommand(preflightScript)) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                `preflight:pre-commit must include '${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND}' so package.json formatting drift is caught before hooks.`,
+                preflightScript
+            )
+        );
+    }
+
+    if (!hasRequiredParserPrecheckCommand(preflightScript)) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                `preflight:pre-commit must include '${REQUIRED_PRECHECK_PARSER_COMMAND}' to match hook parser coverage.`,
+                preflightScript
+            )
+        );
+    }
+
+    try {
+        preCommitConfig = readFileSyncImpl(preCommitConfigPath, "utf8");
+    } catch (error) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                "Unable to read .pre-commit-config.yaml while validating preflight parser coverage.",
+                error.message
+            )
+        );
+        return violations;
+    }
+
+    const hasParserSuiteHook = parseHookIds(preCommitConfig).some(
+        (hook) => hook.id === REQUIRED_PARSER_SUITE_HOOK_ID
+    );
+    if (!hasParserSuiteHook) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                `Missing required '${REQUIRED_PARSER_SUITE_HOOK_ID}' hook in .pre-commit-config.yaml.`,
+                ".pre-commit-config.yaml"
+            )
+        );
+    }
+
+    return violations;
+}
+
+function validateConfigContent(
+    content,
+    {
+        readFileSyncImpl = fs.readFileSync,
+        packageJsonPath = PACKAGE_JSON_PATH,
+        preCommitConfigPath = PRE_COMMIT_CONFIG_PATH,
+    } = {}
+) {
     const hooks = parseHookEntries(content);
     return [
+        ...validatePreflightScriptPolicy(
+            readFileSyncImpl,
+            packageJsonPath,
+            preCommitConfigPath
+        ),
         ...validateHookEntries(hooks),
         ...validateYamllintPolicy(content),
         ...validatePrettierVersionResolution(),
     ];
 }
 
-function validateConfigFile(filePath = PRE_COMMIT_CONFIG_PATH) {
-    const content = fs.readFileSync(filePath, "utf8");
-    return validateConfigContent(content);
+function validateConfigFile(
+    filePath = PRE_COMMIT_CONFIG_PATH,
+    readFileSyncImpl = fs.readFileSync
+) {
+    const content = readFileSyncImpl(filePath, "utf8");
+    const resolvedFilePath = path.resolve(filePath);
+
+    const readFileSyncWithCachedConfig = (targetPath, encoding) => {
+        if (path.resolve(targetPath) === resolvedFilePath) {
+            return content;
+        }
+
+        return readFileSyncImpl(targetPath, encoding);
+    };
+
+    return validateConfigContent(content, {
+        readFileSyncImpl: readFileSyncWithCachedConfig,
+        preCommitConfigPath: filePath,
+    });
 }
 
 function main() {
@@ -346,6 +498,10 @@ module.exports = {
     parseHookEntries,
     parseHookIds,
     tokenizeCommand,
+    escapeRegexLiteral,
+    hasRequiredPreflightCommand,
+    hasRequiredParserPrecheckCommand,
+    hasRequiredPackageJsonFormatCommand,
     hasNpxInstallPolicy,
     usesManagedJestWrapper,
     usesManagedPrettierWrapper,
@@ -355,6 +511,11 @@ module.exports = {
     validateHookEntries,
     validateYamllintPolicy,
     validatePrettierVersionResolution,
+    validatePreflightScriptPolicy,
+    PACKAGE_JSON_PATH,
+    REQUIRED_PRECHECK_PARSER_COMMAND,
+    REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+    REQUIRED_PARSER_SUITE_HOOK_ID,
     validateConfigContent,
     validateConfigFile,
 };

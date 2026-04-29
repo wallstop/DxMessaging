@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added GitHub Actions workflows for automatic validation and updates of llms.txt
 - Added documentation about AI agent integration in README
 - Inspector overlay now shows yesterday's analyzer report immediately on Unity Editor startup (loaded from `Library/DxMessaging/baseCallReport.json`) instead of waiting for the first post-reload scan to complete. The HelpBox is annotated as `(cached from previous session — refreshing…)` until the first scan refreshes it. Eliminates the perceived flakiness where the warning sometimes appeared and sometimes didn't, depending on how fast the user clicked into the inspector after a domain reload.
+- Added `scripts/fix-csharp-underscore-methods.js` to auto-convert underscored C# method names to PascalCase.
+- Added pre-commit hook `fix-csharp-underscore-methods` to auto-fix and re-stage changed C# files before commit.
+- Added script tests and hook-policy checks that enforce no-underscore method naming in C# test code.
 
 ## [2.2.0]
 
