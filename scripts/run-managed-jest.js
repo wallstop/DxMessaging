@@ -127,6 +127,29 @@ function getIsolatedJestPaths(jestSpec) {
         installDir,
         packageJsonPath: path.join(installDir, "package.json"),
         jestBinPath: path.join(installDir, "node_modules", "jest", "bin", "jest.js"),
+        jestRunnerPath: path.join(installDir, "node_modules", "jest-circus", "build", "runner.js"),
+    };
+}
+
+function hasCliOption(args, optionName) {
+    const normalizedOption = optionName.startsWith("--")
+        ? optionName
+        : `--${optionName}`;
+
+    return args.some((arg) =>
+        arg === normalizedOption || arg.startsWith(`${normalizedOption}=`)
+    );
+}
+
+function buildNodePathEnv(isolatedNodeModulesPath, baseEnv = process.env) {
+    const existingNodePath = baseEnv.NODE_PATH;
+    const nextNodePath = existingNodePath
+        ? `${isolatedNodeModulesPath}${path.delimiter}${existingNodePath}`
+        : isolatedNodeModulesPath;
+
+    return {
+        ...baseEnv,
+        NODE_PATH: nextNodePath,
     };
 }
 
@@ -151,13 +174,21 @@ function prepareIsolatedFallbackJest(
         warnFn = console.warn,
     } = {}
 ) {
-    const { installDir, packageJsonPath, jestBinPath } = getIsolatedJestPaths(jestSpec);
+    const { installDir, packageJsonPath, jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
 
-    if (existsSyncFn(jestBinPath)) {
+    const hasCachedJestBin = existsSyncFn(jestBinPath);
+    const hasCachedJestRunner = existsSyncFn(jestRunnerPath);
+
+    if (hasCachedJestBin && hasCachedJestRunner) {
         return {
             jestBinPath,
+            jestRunnerPath,
             cacheHit: true,
         };
+    }
+
+    if (hasCachedJestBin && !hasCachedJestRunner) {
+        warnFn(`⚠️ Isolated fallback cache is missing Jest runner; reinstalling fallback: ${jestRunnerPath}`);
     }
 
     mkdirSyncFn(installDir, { recursive: true });
@@ -189,6 +220,7 @@ function prepareIsolatedFallbackJest(
         warnFn(`⚠️ Isolated fallback Jest install failed (${detail}).`);
         return {
             jestBinPath: null,
+            jestRunnerPath: null,
             cacheHit: false,
         };
     }
@@ -197,19 +229,51 @@ function prepareIsolatedFallbackJest(
         warnFn(`⚠️ Isolated fallback Jest binary missing after install: ${jestBinPath}`);
         return {
             jestBinPath: null,
+            jestRunnerPath: null,
+            cacheHit: false,
+        };
+    }
+
+    if (!existsSyncFn(jestRunnerPath)) {
+        warnFn(`⚠️ Isolated fallback Jest runner missing after install: ${jestRunnerPath}`);
+        return {
+            jestBinPath: null,
+            jestRunnerPath: null,
             cacheHit: false,
         };
     }
 
     return {
         jestBinPath,
+        jestRunnerPath,
         cacheHit: false,
     };
 }
 
-function printIsolatedFallbackSelection(jestBinPath, cacheHit) {
+function printIsolatedFallbackSelection(
+    jestBinPath,
+    cacheHit,
+    {
+        testRunnerPath = null,
+        testRunnerInjected = false,
+        callerProvidedTestRunner = false,
+        nodePathOverride = null,
+    } = {}
+) {
     const cacheLabel = cacheHit ? "cache hit" : "fresh install";
     console.warn(`⚠️ Using isolated fallback Jest (${cacheLabel}): ${jestBinPath}`);
+
+    if (testRunnerInjected && testRunnerPath) {
+        console.warn(`⚠️ Injected isolated Jest test runner: ${testRunnerPath}`);
+    }
+
+    if (callerProvidedTestRunner) {
+        console.warn("⚠️ Caller provided --testRunner; managed runner did not override it.");
+    }
+
+    if (nodePathOverride) {
+        console.warn(`⚠️ Injected NODE_PATH for isolated fallback: ${nodePathOverride}`);
+    }
 }
 
 function runIsolatedFallbackJest(
@@ -219,6 +283,9 @@ function runIsolatedFallbackJest(
         prepareIsolatedFallbackJestFn = prepareIsolatedFallbackJest,
         runCommandFn = runCommand,
         printIsolatedFallbackSelectionFn = printIsolatedFallbackSelection,
+        existsSyncFn = fs.existsSync,
+        hasCliOptionFn = hasCliOption,
+        warnFn = console.warn,
     } = {}
 ) {
     const jestSpec = getPinnedFallbackJestSpecFn();
@@ -228,8 +295,37 @@ function runIsolatedFallbackJest(
         return null;
     }
 
-    printIsolatedFallbackSelectionFn(prepared.jestBinPath, prepared.cacheHit);
-    return runCommandFn(process.execPath, [prepared.jestBinPath, ...args]);
+    const invocationArgs = [prepared.jestBinPath];
+    const callerProvidedTestRunner = hasCliOptionFn(args, "--testRunner");
+
+    let injectedRunnerPath = null;
+    if (!callerProvidedTestRunner) {
+        if (!prepared.jestRunnerPath || !existsSyncFn(prepared.jestRunnerPath)) {
+            warnFn(`⚠️ Isolated fallback Jest runner unavailable at expected path: ${prepared.jestRunnerPath}`);
+            return null;
+        }
+
+        invocationArgs.push("--testRunner", prepared.jestRunnerPath);
+        injectedRunnerPath = prepared.jestRunnerPath;
+    }
+
+    invocationArgs.push(...args);
+
+    const isolatedNodeModulesPath = path.dirname(
+        path.dirname(path.dirname(prepared.jestBinPath))
+    );
+    const isolatedNodePathEnv = buildNodePathEnv(isolatedNodeModulesPath);
+
+    printIsolatedFallbackSelectionFn(prepared.jestBinPath, prepared.cacheHit, {
+        testRunnerPath: injectedRunnerPath,
+        testRunnerInjected: Boolean(injectedRunnerPath),
+        callerProvidedTestRunner,
+        nodePathOverride: isolatedNodePathEnv.NODE_PATH,
+    });
+
+    return runCommandFn(process.execPath, invocationArgs, {
+        env: isolatedNodePathEnv,
+    });
 }
 
 function isCommandUnavailable(result) {
@@ -374,6 +470,8 @@ module.exports = {
     printLocalJestFallbackWarning,
     sanitizeCacheKey,
     getIsolatedJestPaths,
+    hasCliOption,
+    buildNodePathEnv,
     writeIsolatedJestCacheManifest,
     prepareIsolatedFallbackJest,
     printIsolatedFallbackSelection,

@@ -162,8 +162,63 @@ jobs:
           }
           NODE
 
+      - name: Diagnose isolated Jest fallback resolution inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("fs");
+          const {
+            getPinnedFallbackJestSpec,
+            getIsolatedJestPaths,
+          } = require("./scripts/run-managed-jest.js");
+
+          const spec = getPinnedFallbackJestSpec();
+          const isolatedPaths = getIsolatedJestPaths(spec);
+
+          console.log("fallback spec:", spec);
+          console.log("cwd:", process.cwd());
+          console.log("NODE_PATH:", process.env.NODE_PATH || "<unset>");
+          console.log("isolated install dir:", isolatedPaths.installDir);
+          console.log(
+            "isolated jest bin:",
+            isolatedPaths.jestBinPath,
+            "exists:",
+            fs.existsSync(isolatedPaths.jestBinPath)
+          );
+          console.log(
+            "isolated jest runner:",
+            isolatedPaths.jestRunnerPath,
+            "exists:",
+            fs.existsSync(isolatedPaths.jestRunnerPath)
+          );
+
+          try {
+            console.log("repo resolve jest-circus/runner:", require.resolve("jest-circus/runner"));
+          } catch (error) {
+            console.log(`repo resolve jest-circus/runner: unavailable (${error.message})`);
+          }
+          NODE
+
+      - name: Assert isolated Jest fallback path is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_file="$(mktemp)"
+          node scripts/run-managed-jest.js --version 2>&1 | tee "$output_file"
+
+          if ! grep -Fq "Using isolated fallback Jest" "$output_file"; then
+            echo "::error::Expected isolated fallback Jest to be used after removing local runner."
+            exit 1
+          fi
+
+          if ! grep -Fq "Injected isolated Jest test runner" "$output_file"; then
+            echo "::error::Expected isolated fallback test runner injection diagnostics."
+            exit 1
+          fi
+
       - name: Verify managed Jest fallback test
         run: >-
           node scripts/run-managed-jest.js --runTestsByPath
           scripts/__tests__/run-managed-jest.test.js --testNamePattern
-          "runManagedJest uses npm exec fallback when local jest install is unhealthy"
+          "runIsolatedFallbackJest injects isolated testRunner when caller did not provide one"

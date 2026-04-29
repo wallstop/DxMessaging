@@ -14,6 +14,8 @@ const {
     ISOLATED_JEST_CACHE_ROOT,
     getPinnedFallbackJestSpec,
     getIsolatedJestPaths,
+    hasCliOption,
+    buildNodePathEnv,
     prepareIsolatedFallbackJest,
     toShellCommand,
     parseNpmMajorVersion,
@@ -49,6 +51,35 @@ describe("run-managed-jest", () => {
         { input: {}, expected: null },
     ])("parseNpmMajorVersion($input) -> $expected", ({ input, expected }) => {
         expect(parseNpmMajorVersion(input)).toBe(expected);
+    });
+
+    test.each([
+        { args: ["--version"], option: "--testRunner", expected: false },
+        { args: ["--testRunner", "custom-runner.js"], option: "--testRunner", expected: true },
+        { args: ["--testRunner=custom-runner.js"], option: "--testRunner", expected: true },
+        { args: ["--watch"], option: "watch", expected: true },
+        { args: ["--watchAll"], option: "watch", expected: false },
+    ])("hasCliOption($args, $option) -> $expected", ({ args, option, expected }) => {
+        expect(hasCliOption(args, option)).toBe(expected);
+    });
+
+    test.each([
+        {
+            isolatedNodeModulesPath: path.join("/tmp", "isolated", "node_modules"),
+            baseEnv: {},
+            expectedNodePath: path.join("/tmp", "isolated", "node_modules"),
+        },
+        {
+            isolatedNodeModulesPath: path.join("/tmp", "isolated", "node_modules"),
+            baseEnv: { NODE_PATH: path.join("/tmp", "existing", "node_modules") },
+            expectedNodePath: [
+                path.join("/tmp", "isolated", "node_modules"),
+                path.join("/tmp", "existing", "node_modules"),
+            ].join(path.delimiter),
+        },
+    ])("buildNodePathEnv prepends isolated node_modules", ({ isolatedNodeModulesPath, baseEnv, expectedNodePath }) => {
+        const result = buildNodePathEnv(isolatedNodeModulesPath, baseEnv);
+        expect(result.NODE_PATH).toBe(expectedNodePath);
     });
 
     test("getPinnedFallbackJestSpec uses lockfile version when available", () => {
@@ -88,8 +119,10 @@ describe("run-managed-jest", () => {
 
     test("prepareIsolatedFallbackJest reuses cached isolated binary when available", () => {
         const jestSpec = "jest@30.3.0";
-        const { jestBinPath } = getIsolatedJestPaths(jestSpec);
-        const existsSyncFn = jest.fn((targetPath) => targetPath === jestBinPath);
+        const { jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
+        const existsSyncFn = jest.fn(
+            (targetPath) => targetPath === jestBinPath || targetPath === jestRunnerPath
+        );
         const runCommandFn = jest.fn();
 
         const result = prepareIsolatedFallbackJest(jestSpec, {
@@ -97,13 +130,38 @@ describe("run-managed-jest", () => {
             runCommandFn,
         });
 
-        expect(result).toEqual({ jestBinPath, cacheHit: true });
+        expect(result).toEqual({ jestBinPath, jestRunnerPath, cacheHit: true });
         expect(runCommandFn).not.toHaveBeenCalled();
+    });
+
+    test("prepareIsolatedFallbackJest reinstalls when cached runner is missing", () => {
+        const jestSpec = "jest@30.3.0";
+        const { installDir, jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
+        const existingPaths = new Set([jestBinPath]);
+
+        const existsSyncFn = jest.fn((targetPath) => existingPaths.has(targetPath));
+        const runCommandFn = jest.fn((_command, _args, options) => {
+            expect(options).toEqual(expect.objectContaining({ cwd: installDir }));
+            existingPaths.add(jestBinPath);
+            existingPaths.add(jestRunnerPath);
+            return { status: 0, error: null };
+        });
+
+        const result = prepareIsolatedFallbackJest(jestSpec, {
+            existsSyncFn,
+            mkdirSyncFn: jest.fn(),
+            writeFileSyncFn: jest.fn(),
+            runCommandFn,
+            warnFn: jest.fn(),
+        });
+
+        expect(result).toEqual({ jestBinPath, jestRunnerPath, cacheHit: false });
+        expect(runCommandFn).toHaveBeenCalledTimes(1);
     });
 
     test("prepareIsolatedFallbackJest installs isolated fallback when cache is missing", () => {
         const jestSpec = "jest@30.3.0";
-        const { installDir, packageJsonPath, jestBinPath } = getIsolatedJestPaths(jestSpec);
+        const { installDir, packageJsonPath, jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
         const existingPaths = new Set();
 
         const existsSyncFn = jest.fn((targetPath) => existingPaths.has(targetPath));
@@ -114,6 +172,7 @@ describe("run-managed-jest", () => {
         const runCommandFn = jest.fn((_command, _args, options) => {
             expect(options).toEqual(expect.objectContaining({ cwd: installDir }));
             existingPaths.add(jestBinPath);
+            existingPaths.add(jestRunnerPath);
             return { status: 0, error: null };
         });
 
@@ -124,7 +183,7 @@ describe("run-managed-jest", () => {
             runCommandFn,
         });
 
-        expect(result).toEqual({ jestBinPath, cacheHit: false });
+        expect(result).toEqual({ jestBinPath, jestRunnerPath, cacheHit: false });
         expect(mkdirSyncFn).toHaveBeenCalledWith(installDir, { recursive: true });
         expect(writeFileSyncFn).toHaveBeenCalledWith(
             packageJsonPath,
@@ -155,33 +214,106 @@ describe("run-managed-jest", () => {
             warnFn,
         });
 
-        expect(result).toEqual({ jestBinPath: null, cacheHit: false });
+        expect(result).toEqual({ jestBinPath: null, jestRunnerPath: null, cacheHit: false });
         expect(
             warnFn.mock.calls.some((call) => call[0].includes("install failed"))
         ).toBe(true);
     });
 
-    test("runIsolatedFallbackJest executes isolated binary when prepared", () => {
+    test("runIsolatedFallbackJest injects isolated testRunner when caller did not provide one", () => {
+        const jestSpec = "jest@30.3.0";
+        const { jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
         const runCommandFn = jest.fn(() => ({ status: 0, error: null }));
         const printIsolatedFallbackSelectionFn = jest.fn();
         const result = runIsolatedFallbackJest(["--version"], {
-            getPinnedFallbackJestSpecFn: () => "jest@30.3.0",
+            getPinnedFallbackJestSpecFn: () => jestSpec,
             prepareIsolatedFallbackJestFn: () => ({
-                jestBinPath: path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules", "jest", "bin", "jest.js"),
+                jestBinPath,
+                jestRunnerPath,
                 cacheHit: true,
             }),
             runCommandFn,
             printIsolatedFallbackSelectionFn,
+            existsSyncFn: () => true,
         });
 
         expect(result).toEqual({ status: 0, error: null });
         expect(printIsolatedFallbackSelectionFn).toHaveBeenCalledTimes(1);
+        expect(printIsolatedFallbackSelectionFn).toHaveBeenCalledWith(
+            jestBinPath,
+            true,
+            expect.objectContaining({
+                testRunnerPath: jestRunnerPath,
+                testRunnerInjected: true,
+                callerProvidedTestRunner: false,
+                nodePathOverride: expect.stringContaining(
+                    path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules")
+                ),
+            })
+        );
         expect(runCommandFn).toHaveBeenCalledWith(
             process.execPath,
             [
-                path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules", "jest", "bin", "jest.js"),
+                jestBinPath,
+                "--testRunner",
+                jestRunnerPath,
                 "--version",
-            ]
+            ],
+            expect.objectContaining({
+                env: expect.objectContaining({
+                    NODE_PATH: expect.stringContaining(
+                        path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules")
+                    ),
+                }),
+            })
+        );
+    });
+
+    test("runIsolatedFallbackJest preserves caller-provided --testRunner", () => {
+        const jestSpec = "jest@30.3.0";
+        const { jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
+        const runCommandFn = jest.fn(() => ({ status: 0, error: null }));
+        const printIsolatedFallbackSelectionFn = jest.fn();
+
+        runIsolatedFallbackJest(["--testRunner", "custom-runner.js", "--version"], {
+            getPinnedFallbackJestSpecFn: () => jestSpec,
+            prepareIsolatedFallbackJestFn: () => ({
+                jestBinPath,
+                jestRunnerPath,
+                cacheHit: false,
+            }),
+            runCommandFn,
+            printIsolatedFallbackSelectionFn,
+            existsSyncFn: () => true,
+        });
+
+        expect(runCommandFn).toHaveBeenCalledWith(
+            process.execPath,
+            [
+                jestBinPath,
+                "--testRunner",
+                "custom-runner.js",
+                "--version",
+            ],
+            expect.objectContaining({
+                env: expect.objectContaining({
+                    NODE_PATH: expect.stringContaining(
+                        path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules")
+                    ),
+                }),
+            })
+        );
+        expect(printIsolatedFallbackSelectionFn).toHaveBeenCalledWith(
+            jestBinPath,
+            false,
+            expect.objectContaining({
+                testRunnerPath: null,
+                testRunnerInjected: false,
+                callerProvidedTestRunner: true,
+                nodePathOverride: expect.stringContaining(
+                    path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules")
+                ),
+            })
         );
     });
 
@@ -198,6 +330,30 @@ describe("run-managed-jest", () => {
 
         expect(result).toBeNull();
         expect(runCommandFn).not.toHaveBeenCalled();
+    });
+
+    test("runIsolatedFallbackJest returns null when runner injection is required but unavailable", () => {
+        const jestSpec = "jest@30.3.0";
+        const runCommandFn = jest.fn();
+        const warnFn = jest.fn();
+
+        const result = runIsolatedFallbackJest(["--version"], {
+            getPinnedFallbackJestSpecFn: () => jestSpec,
+            prepareIsolatedFallbackJestFn: () => ({
+                jestBinPath: path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules", "jest", "bin", "jest.js"),
+                jestRunnerPath: null,
+                cacheHit: false,
+            }),
+            runCommandFn,
+            existsSyncFn: () => false,
+            warnFn,
+        });
+
+        expect(result).toBeNull();
+        expect(runCommandFn).not.toHaveBeenCalled();
+        expect(
+            warnFn.mock.calls.some((call) => call[0].includes("runner unavailable"))
+        ).toBe(true);
     });
 
     test("hasHealthyLocalJestInstall returns false when local jest binary is missing", () => {
