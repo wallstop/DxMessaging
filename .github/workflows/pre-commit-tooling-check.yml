@@ -128,8 +128,39 @@ jobs:
       - name: Run parser script tests hook
         run: pre-commit run script-parser-tests --all-files
 
+      - name: Diagnose managed Jest fallback environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Node: $(node --version)"
+          echo "npm: $(npm --version)"
+          node <<'NODE'
+          const fs = require("fs");
+          const runnerPath = "node_modules/jest-circus/build/runner.js";
+          console.log("runner exists before deletion:", fs.existsSync(runnerPath));
+          try {
+            console.log("resolved runner path:", require.resolve("jest-circus/runner"));
+          } catch (error) {
+            console.log(`resolved runner path: unavailable (${error.message})`);
+          }
+          NODE
+
       - name: Remove managed Jest runner to force fallback path
         run: node scripts/verify-managed-jest-fallback.js
+
+      - name: Confirm managed Jest runner was removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("fs");
+          const runnerPath = "node_modules/jest-circus/build/runner.js";
+          const exists = fs.existsSync(runnerPath);
+          console.log("runner exists after deletion:", exists);
+          if (exists) {
+              process.exit(1);
+          }
+          NODE
 
       - name: Verify managed Jest fallback test
         run: >-

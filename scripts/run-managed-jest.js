@@ -11,6 +11,7 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const childProcess = require("child_process");
 const { createRequire } = require("module");
@@ -25,6 +26,7 @@ const REPO_NODE_MODULES = path.join(REPO_ROOT, "node_modules");
 const PACKAGE_LOCK_PATH = path.join(REPO_ROOT, "package-lock.json");
 const LOCAL_JEST_BIN = path.join(REPO_ROOT, "node_modules", "jest", "bin", "jest.js");
 const FALLBACK_JEST_SPEC = "jest@30.3.0";
+const ISOLATED_JEST_CACHE_ROOT = path.join(os.tmpdir(), "dxmessaging-managed-jest");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
 
 function parseNpmMajorVersion(versionText) {
@@ -54,7 +56,7 @@ function getNpmMajorVersion() {
     return parseNpmMajorVersion(result.stdout);
 }
 
-function runCommand(command, args) {
+function runCommand(command, args, spawnOptions = {}) {
     const spawnSyncImpl = isShellShimCommand(command)
         ? spawnPlatformCommandSync
         : childProcess.spawnSync;
@@ -62,6 +64,7 @@ function runCommand(command, args) {
     const result = spawnSyncImpl(command, args, {
         cwd: REPO_ROOT,
         stdio: "inherit",
+        ...spawnOptions,
     });
 
     return {
@@ -111,6 +114,122 @@ function runNpxJest(args) {
         "jest",
         ...args,
     ]);
+}
+
+function sanitizeCacheKey(value) {
+    return String(value).replace(/[^a-zA-Z0-9._-]+/g, "_");
+}
+
+function getIsolatedJestPaths(jestSpec) {
+    const cacheKey = sanitizeCacheKey(jestSpec);
+    const installDir = path.join(ISOLATED_JEST_CACHE_ROOT, cacheKey);
+    return {
+        installDir,
+        packageJsonPath: path.join(installDir, "package.json"),
+        jestBinPath: path.join(installDir, "node_modules", "jest", "bin", "jest.js"),
+    };
+}
+
+function writeIsolatedJestCacheManifest(
+    packageJsonPath,
+    writeFileSyncFn = fs.writeFileSync
+) {
+    const manifest = {
+        name: "dxmessaging-managed-jest-fallback-cache",
+        private: true,
+    };
+    writeFileSyncFn(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+function prepareIsolatedFallbackJest(
+    jestSpec = getPinnedFallbackJestSpec(),
+    {
+        existsSyncFn = fs.existsSync,
+        mkdirSyncFn = fs.mkdirSync,
+        writeFileSyncFn = fs.writeFileSync,
+        runCommandFn = runCommand,
+        warnFn = console.warn,
+    } = {}
+) {
+    const { installDir, packageJsonPath, jestBinPath } = getIsolatedJestPaths(jestSpec);
+
+    if (existsSyncFn(jestBinPath)) {
+        return {
+            jestBinPath,
+            cacheHit: true,
+        };
+    }
+
+    mkdirSyncFn(installDir, { recursive: true });
+
+    if (!existsSyncFn(packageJsonPath)) {
+        writeIsolatedJestCacheManifest(packageJsonPath, writeFileSyncFn);
+    }
+
+    warnFn(`⚠️ Installing isolated fallback Jest (${jestSpec}).`);
+    const installResult = runCommandFn(
+        "npm",
+        [
+            "install",
+            "--no-audit",
+            "--no-fund",
+            "--no-package-lock",
+            "--no-save",
+            jestSpec,
+        ],
+        {
+            cwd: installDir,
+        }
+    );
+
+    if (installResult.error || installResult.status !== 0) {
+        const detail = installResult.error && installResult.error.message
+            ? installResult.error.message
+            : `status=${installResult.status}`;
+        warnFn(`⚠️ Isolated fallback Jest install failed (${detail}).`);
+        return {
+            jestBinPath: null,
+            cacheHit: false,
+        };
+    }
+
+    if (!existsSyncFn(jestBinPath)) {
+        warnFn(`⚠️ Isolated fallback Jest binary missing after install: ${jestBinPath}`);
+        return {
+            jestBinPath: null,
+            cacheHit: false,
+        };
+    }
+
+    return {
+        jestBinPath,
+        cacheHit: false,
+    };
+}
+
+function printIsolatedFallbackSelection(jestBinPath, cacheHit) {
+    const cacheLabel = cacheHit ? "cache hit" : "fresh install";
+    console.warn(`⚠️ Using isolated fallback Jest (${cacheLabel}): ${jestBinPath}`);
+}
+
+function runIsolatedFallbackJest(
+    args,
+    {
+        getPinnedFallbackJestSpecFn = getPinnedFallbackJestSpec,
+        prepareIsolatedFallbackJestFn = prepareIsolatedFallbackJest,
+        runCommandFn = runCommand,
+        printIsolatedFallbackSelectionFn = printIsolatedFallbackSelection,
+    } = {}
+) {
+    const jestSpec = getPinnedFallbackJestSpecFn();
+    const prepared = prepareIsolatedFallbackJestFn(jestSpec);
+
+    if (!prepared || !prepared.jestBinPath) {
+        return null;
+    }
+
+    printIsolatedFallbackSelectionFn(prepared.jestBinPath, prepared.cacheHit);
+    return runCommandFn(process.execPath, [prepared.jestBinPath, ...args]);
 }
 
 function isCommandUnavailable(result) {
@@ -172,7 +291,7 @@ function hasHealthyLocalJestInstall(
 
 function printLocalJestFallbackWarning() {
     console.warn(
-        "⚠️ Local Jest install appears incomplete; falling back to pinned npm exec Jest."
+        "⚠️ Local Jest install appears incomplete; falling back to managed Jest."
     );
     if (process.platform === "win32") {
         console.warn("Windows tip: run npm install/npm ci in the same shell used by git hooks.");
@@ -184,25 +303,37 @@ function runManagedJest(args, options = {}) {
         hasHealthyLocalJestInstallFn = hasHealthyLocalJestInstall,
         getNpmMajorVersionFn = getNpmMajorVersion,
         printLocalJestFallbackWarningFn = printLocalJestFallbackWarning,
+        runIsolatedFallbackJestFn = runIsolatedFallbackJest,
+        runNpmExecJestFn = runNpmExecJest,
+        runNpxJestFn = runNpxJest,
     } = options;
 
     if (hasHealthyLocalJestInstallFn()) {
         return runLocalJest(args);
     }
 
-    if (fs.existsSync(LOCAL_JEST_BIN)) {
+    const hasLocalJestBinary = fs.existsSync(LOCAL_JEST_BIN);
+
+    if (hasLocalJestBinary) {
         printLocalJestFallbackWarningFn();
+
+        const isolatedFallbackResult = runIsolatedFallbackJestFn(args);
+        if (isolatedFallbackResult) {
+            return isolatedFallbackResult;
+        }
+
+        console.warn("⚠️ Isolated fallback Jest was unavailable; trying npm exec/npx fallback.");
     }
 
     const npmMajor = getNpmMajorVersionFn();
 
     if (npmMajor === null || npmMajor < 7) {
-        return runNpxJest(args);
+        return runNpxJestFn(args);
     }
 
-    const npmExecResult = runNpmExecJest(args);
+    const npmExecResult = runNpmExecJestFn(args);
     if (isCommandUnavailable(npmExecResult)) {
-        return runNpxJest(args);
+        return runNpxJestFn(args);
     }
 
     return npmExecResult;
@@ -235,11 +366,18 @@ module.exports = {
     PACKAGE_LOCK_PATH,
     LOCAL_JEST_BIN,
     FALLBACK_JEST_SPEC,
+    ISOLATED_JEST_CACHE_ROOT,
     normalizeForPathComparison,
     isPathInsideDirectory,
     resolveLocalModule,
     hasHealthyLocalJestInstall,
     printLocalJestFallbackWarning,
+    sanitizeCacheKey,
+    getIsolatedJestPaths,
+    writeIsolatedJestCacheManifest,
+    prepareIsolatedFallbackJest,
+    printIsolatedFallbackSelection,
+    runIsolatedFallbackJest,
     toShellCommand,
     parseNpmMajorVersion,
     getNpmMajorVersion,
