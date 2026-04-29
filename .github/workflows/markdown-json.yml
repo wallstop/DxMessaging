@@ -14,7 +14,6 @@ on:
       - ".prettierrc*"
       - ".markdownlint*"
       - "package.json"
-      - "package-lock.json"
   pull_request:
     paths:
       - "**/*.md"
@@ -25,7 +24,6 @@ on:
       - ".prettierrc*"
       - ".markdownlint*"
       - "package.json"
-      - "package-lock.json"
   workflow_dispatch:
 
 permissions:

@@ -15,6 +15,10 @@ const { spawnSync } = require("child_process");
 const METHOD_DECLARATION_PATTERN =
     /^\s*(?:(?:\[[^\]\r\n]+\]\s*)*)(?:(?:public|private|protected|internal)\s+)?(?:(?:static|virtual|override|abstract|sealed|async|new|extern|partial|unsafe|readonly)\s+)*(?:[\w<>\[\],.?]+\s+)+(?<name>[A-Za-z_]\w*_[A-Za-z0-9_]+)\s*(?:<[^>\r\n]+>\s*)?\(/gm;
 
+const CSHARP_SOURCE_FILE_PATTERN = /\.cs$/i;
+const META_FILE_PATTERN = /\.meta$/i;
+const WINDOWS_POSIX_DRIVE_PATH_PATTERN = /^\/([A-Za-z])\/(.+)$/;
+
 const EXCLUDED_DIRECTORY_PATTERNS = [
     /(^|[\\/])\.git([\\/]|$)/i,
     /(^|[\\/])node_modules([\\/]|$)/i,
@@ -29,6 +33,83 @@ const EXCLUDED_DIRECTORY_PATTERNS = [
 
 function normalizeToLf(value) {
     return String(value).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function isCsharpSourceFile(filePath) {
+    if (typeof filePath !== "string" || filePath.trim().length === 0) {
+        return false;
+    }
+
+    return CSHARP_SOURCE_FILE_PATTERN.test(filePath) && !META_FILE_PATTERN.test(filePath);
+}
+
+function stripOptionalWrappingQuotes(value) {
+    if (value.length < 2) {
+        return value;
+    }
+
+    const firstChar = value[0];
+    const lastChar = value[value.length - 1];
+    if ((firstChar === '"' && lastChar === '"') || (firstChar === "'" && lastChar === "'")) {
+        return value.slice(1, -1);
+    }
+
+    return value;
+}
+
+function normalizeExplicitPathArg(rawArg) {
+    if (typeof rawArg !== "string") {
+        return "";
+    }
+
+    const withoutTrailingCarriageReturns = rawArg.replace(/\r+$/g, "");
+    const trimmed = withoutTrailingCarriageReturns.trim();
+    if (trimmed.length === 0) {
+        return "";
+    }
+
+    return stripOptionalWrappingQuotes(trimmed).replace(/\r+$/g, "").trim();
+}
+
+function toWindowsAbsolutePathFromPosixDrivePath(value) {
+    const match = WINDOWS_POSIX_DRIVE_PATH_PATTERN.exec(value);
+    if (!match) {
+        return "";
+    }
+
+    const driveLetter = match[1].toUpperCase();
+    const segments = match[2].replace(/\//g, "\\");
+    return `${driveLetter}:\\${segments}`;
+}
+
+function resolveCandidatePath(
+    repoRoot,
+    rawArg,
+    { platform = process.platform, existsSync = fs.existsSync } = {}
+) {
+    const normalizedArg = normalizeExplicitPathArg(rawArg);
+    if (normalizedArg.length === 0) {
+        return "";
+    }
+
+    const pathResolver = platform === "win32" ? path.win32 : path;
+    const directCandidatePath = pathResolver.resolve(repoRoot, normalizedArg);
+
+    if (existsSync(directCandidatePath) || platform !== "win32") {
+        return directCandidatePath;
+    }
+
+    const windowsAbsolutePath = toWindowsAbsolutePathFromPosixDrivePath(normalizedArg);
+    if (!windowsAbsolutePath) {
+        return directCandidatePath;
+    }
+
+    const convertedCandidatePath = pathResolver.resolve(windowsAbsolutePath);
+    if (existsSync(convertedCandidatePath)) {
+        return convertedCandidatePath;
+    }
+
+    return directCandidatePath;
 }
 
 function getGitRepoRoot() {
@@ -111,7 +192,7 @@ function walkCsharpFiles(rootDir, files = []) {
             continue;
         }
 
-        if (entry.isFile() && fullPath.endsWith(".cs") && !fullPath.endsWith(".meta")) {
+        if (entry.isFile() && isCsharpSourceFile(fullPath)) {
             files.push(fullPath);
         }
     }
@@ -124,11 +205,15 @@ function resolveExplicitFiles(repoRoot, fileArgs) {
     const seen = new Set();
 
     for (const rawArg of fileArgs) {
-        if (!rawArg.endsWith(".cs")) {
+        const normalizedArg = normalizeExplicitPathArg(rawArg);
+        if (!isCsharpSourceFile(normalizedArg)) {
             continue;
         }
 
-        const candidatePath = path.resolve(repoRoot, rawArg);
+        const candidatePath = resolveCandidatePath(repoRoot, normalizedArg);
+        if (candidatePath.length === 0) {
+            continue;
+        }
 
         if (!fs.existsSync(candidatePath)) {
             continue;
@@ -140,7 +225,7 @@ function resolveExplicitFiles(repoRoot, fileArgs) {
         }
 
         const stats = fs.statSync(candidatePath);
-        if (!stats.isFile() || candidatePath.endsWith(".meta")) {
+        if (!stats.isFile() || !isCsharpSourceFile(candidatePath)) {
             continue;
         }
 
@@ -183,7 +268,7 @@ function getStagedCsharpFiles(repoRoot) {
         .filter(Boolean)) {
         const fullPath = path.resolve(repoRoot, relativePath);
 
-        if (!fullPath.endsWith(".cs") || fullPath.endsWith(".meta")) {
+        if (!isCsharpSourceFile(fullPath)) {
             continue;
         }
 
@@ -225,6 +310,8 @@ function convertMethodNameToPascalCase(methodName) {
 function collectMethodRenames(content) {
     const methodRenames = new Map();
     let match;
+
+    METHOD_DECLARATION_PATTERN.lastIndex = 0;
 
     while ((match = METHOD_DECLARATION_PATTERN.exec(content)) !== null) {
         const methodName = match.groups ? match.groups.name : "";
@@ -358,6 +445,13 @@ function main() {
 
 module.exports = {
     METHOD_DECLARATION_PATTERN,
+    CSHARP_SOURCE_FILE_PATTERN,
+    META_FILE_PATTERN,
+    WINDOWS_POSIX_DRIVE_PATH_PATTERN,
+    isCsharpSourceFile,
+    normalizeExplicitPathArg,
+    toWindowsAbsolutePathFromPosixDrivePath,
+    resolveCandidatePath,
     convertMethodNameToPascalCase,
     collectMethodRenames,
     applyMethodRenames,

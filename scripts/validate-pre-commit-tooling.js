@@ -24,7 +24,12 @@ const REQUIRED_PRECHECK_PARSER_COMMAND =
     "pre-commit run script-parser-tests --all-files";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND =
     "npm run check:package-json-format";
+const REQUIRED_SCRIPTS_CSPELL_COMMAND =
+    "npm run check:cspell:scripts";
 const REQUIRED_PARSER_SUITE_HOOK_ID = "script-parser-tests";
+const REQUIRED_PARSER_SUITE_TEST_PATHS = [
+    "scripts/__tests__/fix-csharp-underscore-methods.test.js",
+];
 
 class Violation {
     constructor(hookId, line, message, entry) {
@@ -71,7 +76,7 @@ function parseHookEntries(content) {
         const entryValue = entryMatch[2].trim();
         let command;
 
-        if ([">", ">-", "|", "|-"] .includes(entryValue)) {
+        if ([">", ">-", "|", "|-"].includes(entryValue)) {
             const blockLines = [];
             let j = i + 1;
             while (j < lines.length) {
@@ -88,6 +93,9 @@ function parseHookEntries(content) {
 
                 j++;
             }
+
+            // Skip block lines that were consumed by this folded/literal entry.
+            i = j - 1;
             command = blockLines.join(" ").replace(/\s+/g, " ").trim();
         } else {
             command = entryValue;
@@ -144,6 +152,31 @@ function hasRequiredPackageJsonFormatCommand(preflightScript) {
     return hasRequiredPreflightCommand(
         preflightScript,
         REQUIRED_PACKAGE_JSON_FORMAT_COMMAND
+    );
+}
+
+function hasRequiredScriptsCspellCommand(preflightScript) {
+    return hasRequiredPreflightCommand(
+        preflightScript,
+        REQUIRED_SCRIPTS_CSPELL_COMMAND
+    );
+}
+
+function hasRequiredParserSuiteTestPaths(
+    preCommitConfigContent,
+    requiredTestPaths = REQUIRED_PARSER_SUITE_TEST_PATHS
+) {
+    const parserSuiteHook = parseHookEntries(preCommitConfigContent).find(
+        (hook) => hook.id === REQUIRED_PARSER_SUITE_HOOK_ID
+    );
+
+    if (!parserSuiteHook) {
+        return false;
+    }
+
+    const parserSuiteTokens = new Set(tokenizeCommand(parserSuiteHook.entry));
+    return requiredTestPaths.every((requiredTestPath) =>
+        parserSuiteTokens.has(requiredTestPath)
     );
 }
 
@@ -391,6 +424,17 @@ function validatePreflightScriptPolicy(
         );
     }
 
+    if (!hasRequiredScriptsCspellCommand(preflightScript)) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                `preflight:pre-commit must include '${REQUIRED_SCRIPTS_CSPELL_COMMAND}' so script spelling regressions are caught before hooks.`,
+                preflightScript
+            )
+        );
+    }
+
     if (!hasRequiredParserPrecheckCommand(preflightScript)) {
         violations.push(
             new Violation(
@@ -430,6 +474,22 @@ function validatePreflightScriptPolicy(
         );
     }
 
+    if (
+        hasParserSuiteHook &&
+        !hasRequiredParserSuiteTestPaths(preCommitConfig, REQUIRED_PARSER_SUITE_TEST_PATHS)
+    ) {
+        violations.push(
+            new Violation(
+                "preflight-script",
+                1,
+                `The '${REQUIRED_PARSER_SUITE_HOOK_ID}' hook entry must include required regression test path(s): ${REQUIRED_PARSER_SUITE_TEST_PATHS.join(
+                    ", "
+                )}.`,
+                REQUIRED_PARSER_SUITE_HOOK_ID
+            )
+        );
+    }
+
     return violations;
 }
 
@@ -439,6 +499,8 @@ function validateConfigContent(
         readFileSyncImpl = fs.readFileSync,
         packageJsonPath = PACKAGE_JSON_PATH,
         preCommitConfigPath = PRE_COMMIT_CONFIG_PATH,
+        getConfiguredPrettierSpecFn = getConfiguredPrettierSpec,
+        getPinnedPrettierSpecFn = getPinnedPrettierSpec,
     } = {}
 ) {
     const hooks = parseHookEntries(content);
@@ -450,7 +512,10 @@ function validateConfigContent(
         ),
         ...validateHookEntries(hooks),
         ...validateYamllintPolicy(content),
-        ...validatePrettierVersionResolution(),
+        ...validatePrettierVersionResolution(
+            getConfiguredPrettierSpecFn,
+            getPinnedPrettierSpecFn
+        ),
     ];
 }
 
@@ -502,6 +567,7 @@ module.exports = {
     hasRequiredPreflightCommand,
     hasRequiredParserPrecheckCommand,
     hasRequiredPackageJsonFormatCommand,
+    hasRequiredScriptsCspellCommand,
     hasNpxInstallPolicy,
     usesManagedJestWrapper,
     usesManagedPrettierWrapper,
@@ -515,7 +581,10 @@ module.exports = {
     PACKAGE_JSON_PATH,
     REQUIRED_PRECHECK_PARSER_COMMAND,
     REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+    REQUIRED_SCRIPTS_CSPELL_COMMAND,
     REQUIRED_PARSER_SUITE_HOOK_ID,
+    REQUIRED_PARSER_SUITE_TEST_PATHS,
+    hasRequiredParserSuiteTestPaths,
     validateConfigContent,
     validateConfigFile,
 };

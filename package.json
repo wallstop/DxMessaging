@@ -68,6 +68,7 @@
     "format:yaml:check": "node scripts/run-managed-prettier.js --check \"**/*.{yml,yaml}\"",
     "check:package-json-format": "node scripts/run-managed-prettier.js --check package.json",
     "check:prettier:hooks": "node scripts/run-managed-prettier.js --check \"**/*.{md,markdown,json,asmdef,asmref,yml,yaml}\"",
+    "check:cspell:scripts": "npx --yes cspell@9 --no-progress --no-summary \"scripts/**/*.js\"",
     "check:yaml": "npm run format:yaml:check && pre-commit run yamllint --all-files",
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\"",
     "update:llms-txt": "node scripts/update-llms-txt.js",
@@ -76,7 +77,7 @@
     "validate:npm-meta": "node scripts/validate-npm-meta.js --check",
     "validate:pre-commit-tooling": "node scripts/validate-pre-commit-tooling.js",
     "validate:vscode-settings": "node scripts/validate-vscode-settings.js",
-    "preflight:pre-commit": "npm run check:package-json-format && npm run check:prettier:hooks && npm run validate:pre-commit-tooling && npm run check:yaml && node scripts/generate-skills-index.js --check && npm run validate:npm-meta && pre-commit run script-parser-tests --all-files"
+    "preflight:pre-commit": "npm run check:package-json-format && npm run check:prettier:hooks && npm run validate:pre-commit-tooling && npm run check:cspell:scripts && npm run check:yaml && node scripts/generate-skills-index.js --check && npm run validate:npm-meta && pre-commit run script-parser-tests --all-files"
   },
   "devDependencies": {
     "jest": "^30.3.0",

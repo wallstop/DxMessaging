@@ -13,6 +13,8 @@ const {
     parseHookIds,
     hasRequiredParserPrecheckCommand,
     hasRequiredPackageJsonFormatCommand,
+    hasRequiredScriptsCspellCommand,
+    hasRequiredParserSuiteTestPaths,
     hasNpxInstallPolicy,
     hasManagedJestInvocation,
     hasManagedPrettierInvocation,
@@ -21,7 +23,9 @@ const {
     validatePreflightScriptPolicy,
     REQUIRED_PRECHECK_PARSER_COMMAND,
     REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+    REQUIRED_SCRIPTS_CSPELL_COMMAND,
     REQUIRED_PARSER_SUITE_HOOK_ID,
+    REQUIRED_PARSER_SUITE_TEST_PATHS,
     validateConfigContent,
     validateConfigFile,
 } = require("../validate-pre-commit-tooling.js");
@@ -53,6 +57,38 @@ describe("validate-pre-commit-tooling", () => {
             expect.objectContaining({
                 id: "beta",
                 entry: "npx --yes jest --runTestsByPath scripts/__tests__/beta.test.js scripts/__tests__/gamma.test.js",
+            })
+        );
+    });
+
+    test("parseHookEntries handles consecutive folded entries", () => {
+        const content = [
+            "repos:",
+            "  - repo: local",
+            "    hooks:",
+            "      - id: alpha",
+            "        entry: >-",
+            "          node scripts/run-managed-jest.js --runTestsByPath",
+            "          scripts/__tests__/alpha.test.js",
+            "      - id: beta",
+            "        entry: >-",
+            "          node scripts/run-managed-jest.js --runTestsByPath",
+            "          scripts/__tests__/beta.test.js",
+        ].join("\n");
+
+        const hooks = parseHookEntries(content);
+
+        expect(hooks).toHaveLength(2);
+        expect(hooks[0]).toEqual(
+            expect.objectContaining({
+                id: "alpha",
+                entry: "node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/alpha.test.js",
+            })
+        );
+        expect(hooks[1]).toEqual(
+            expect.objectContaining({
+                id: "beta",
+                entry: "node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/beta.test.js",
             })
         );
     });
@@ -122,6 +158,48 @@ describe("validate-pre-commit-tooling", () => {
         expect(hasRequiredPackageJsonFormatCommand(script)).toBe(false);
     });
 
+    test("hasRequiredScriptsCspellCommand detects script cspell command as chained step", () => {
+        const script = [
+            REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+            REQUIRED_SCRIPTS_CSPELL_COMMAND,
+            REQUIRED_PRECHECK_PARSER_COMMAND,
+        ].join(" && ");
+
+        expect(hasRequiredScriptsCspellCommand(script)).toBe(true);
+    });
+
+    test("hasRequiredScriptsCspellCommand rejects substring-only matches", () => {
+        const script = "npm run validate:pre-commit-tooling && echo npm run check:cspell:scripts";
+
+        expect(hasRequiredScriptsCspellCommand(script)).toBe(false);
+    });
+
+    test("hasRequiredParserSuiteTestPaths detects required parser regression test path", () => {
+        const content = [
+            "repos:",
+            "  - repo: local",
+            "    hooks:",
+            `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+            "        entry: >-",
+            "          node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+            `          ${REQUIRED_PARSER_SUITE_TEST_PATHS[0]}`,
+        ].join("\n");
+
+        expect(hasRequiredParserSuiteTestPaths(content)).toBe(true);
+    });
+
+    test("hasRequiredParserSuiteTestPaths rejects missing required parser regression test path", () => {
+        const content = [
+            "repos:",
+            "  - repo: local",
+            "    hooks:",
+            `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+            "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+        ].join("\n");
+
+        expect(hasRequiredParserSuiteTestPaths(content)).toBe(false);
+    });
+
     test("hasManagedJestInvocation detects unmanaged bare jest command", () => {
         expect(hasManagedJestInvocation("jest --runTestsByPath foo.test.js")).toBe(false);
         expect(hasManagedJestInvocation("node scripts/run-managed-jest.js --runTestsByPath foo.test.js")).toBe(true);
@@ -157,7 +235,7 @@ describe("validate-pre-commit-tooling", () => {
             if (filePath === "/tmp/package.json") {
                 return JSON.stringify({
                     scripts: {
-                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
                     },
                 });
             }
@@ -168,7 +246,7 @@ describe("validate-pre-commit-tooling", () => {
                     "  - repo: local",
                     "    hooks:",
                     `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js",
                 ].join("\n");
             }
 
@@ -179,6 +257,8 @@ describe("validate-pre-commit-tooling", () => {
             readFileSyncImpl: readFileSyncMock,
             packageJsonPath: "/tmp/package.json",
             preCommitConfigPath: "/tmp/pre-commit.yaml",
+            getConfiguredPrettierSpecFn: () => "prettier@3.8.3",
+            getPinnedPrettierSpecFn: () => "prettier@3.8.3",
         });
 
         expect(violations).toHaveLength(3);
@@ -279,7 +359,7 @@ describe("validate-pre-commit-tooling", () => {
             if (filePath === "/tmp/package.json") {
                 return JSON.stringify({
                     scripts: {
-                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
                     },
                 });
             }
@@ -290,7 +370,7 @@ describe("validate-pre-commit-tooling", () => {
                     "  - repo: local",
                     "    hooks:",
                     `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js",
                 ].join("\n");
             }
 
@@ -301,6 +381,8 @@ describe("validate-pre-commit-tooling", () => {
             readFileSyncImpl: readFileSyncMock,
             packageJsonPath: "/tmp/package.json",
             preCommitConfigPath: "/tmp/pre-commit.yaml",
+            getConfiguredPrettierSpecFn: () => "prettier@3.8.3",
+            getPinnedPrettierSpecFn: () => "prettier@3.8.3",
         });
 
         expect(violations).toHaveLength(1);
@@ -318,6 +400,7 @@ describe("validate-pre-commit-tooling", () => {
         );
         expect(preflightScript).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
         expect(preflightScript).toContain("npm run check:prettier:hooks");
+        expect(preflightScript).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
         expect(packageJson.scripts["check:yaml"]).toContain(
             "pre-commit run yamllint --all-files"
         );
@@ -333,7 +416,7 @@ describe("validate-pre-commit-tooling", () => {
             if (filePath === "/tmp/package.json") {
                 return JSON.stringify({
                     scripts: {
-                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
                     },
                 });
             }
@@ -344,7 +427,7 @@ describe("validate-pre-commit-tooling", () => {
                     "  - repo: local",
                     "    hooks:",
                     `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js",
                 ].join("\n");
             }
 
@@ -367,7 +450,7 @@ describe("validate-pre-commit-tooling", () => {
             if (filePath === "/tmp/package.json") {
                 return JSON.stringify({
                     scripts: {
-                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling`,
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND}`,
                     },
                 });
             }
@@ -378,7 +461,7 @@ describe("validate-pre-commit-tooling", () => {
                     "  - repo: local",
                     "    hooks:",
                     `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js",
                 ].join("\n");
             }
 
@@ -401,7 +484,7 @@ describe("validate-pre-commit-tooling", () => {
             if (filePath === "/tmp/package.json") {
                 return JSON.stringify({
                     scripts: {
-                        "preflight:pre-commit": `npm run validate:pre-commit-tooling && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                        "preflight:pre-commit": `npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
                     },
                 });
             }
@@ -412,7 +495,7 @@ describe("validate-pre-commit-tooling", () => {
                     "  - repo: local",
                     "    hooks:",
                     `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js",
                 ].join("\n");
             }
 
@@ -430,12 +513,46 @@ describe("validate-pre-commit-tooling", () => {
         expect(violations[0].message).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
     });
 
-    test("validatePreflightScriptPolicy reports missing parser suite hook", () => {
+    test("validatePreflightScriptPolicy reports missing scripts cspell precheck command", () => {
         const readFileSyncMock = jest.fn((filePath) => {
             if (filePath === "/tmp/package.json") {
                 return JSON.stringify({
                     scripts: {
                         "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validatePreflightScriptPolicy(
+            readFileSyncMock,
+            "/tmp/package.json",
+            "/tmp/pre-commit.yaml"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("preflight-script");
+        expect(violations[0].message).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
+    });
+
+    test("validatePreflightScriptPolicy reports missing parser suite hook", () => {
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
                     },
                 });
             }
@@ -462,6 +579,40 @@ describe("validate-pre-commit-tooling", () => {
         expect(violations).toHaveLength(1);
         expect(violations[0].hookId).toBe("preflight-script");
         expect(violations[0].message).toContain(REQUIRED_PARSER_SUITE_HOOK_ID);
+    });
+
+    test("validatePreflightScriptPolicy reports missing required parser regression test path", () => {
+        const readFileSyncMock = jest.fn((filePath) => {
+            if (filePath === "/tmp/package.json") {
+                return JSON.stringify({
+                    scripts: {
+                        "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`,
+                    },
+                });
+            }
+
+            if (filePath === "/tmp/pre-commit.yaml") {
+                return [
+                    "repos:",
+                    "  - repo: local",
+                    "    hooks:",
+                    `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+                    "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js",
+                ].join("\n");
+            }
+
+            return "";
+        });
+
+        const violations = validatePreflightScriptPolicy(
+            readFileSyncMock,
+            "/tmp/package.json",
+            "/tmp/pre-commit.yaml"
+        );
+
+        expect(violations).toHaveLength(1);
+        expect(violations[0].hookId).toBe("preflight-script");
+        expect(violations[0].message).toContain(REQUIRED_PARSER_SUITE_TEST_PATHS[0]);
     });
 
     test("validateConfigFile handles CRLF and lone CR line endings", () => {

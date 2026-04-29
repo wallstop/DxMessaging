@@ -45,6 +45,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Check C# method naming (no underscores): `node scripts/fix-csharp-underscore-methods.js --check --all`
 - Auto-fix C# method naming on selected files: `node scripts/fix-csharp-underscore-methods.js <changed-files...>`
 - File-scoped spellcheck: `npx --yes cspell@9 --no-progress --no-summary <changed-files...>`
+- Script-wide spellcheck preflight: `npm run check:cspell:scripts`
 - Note: Prettier does not auto-wrap long YAML lines; yamllint enforces the 200-character limit.
 - Auto-fix markdown fragments/lists: `node scripts/fix-md029-md051.js <changed-docs.md ...>`
 - Lint markdown: `npx markdownlint-cli2 <changed-docs.md ...>`
@@ -68,13 +69,17 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Keep JS and PowerShell behavior synchronized when dual implementations exist.
 - Add tests for parser changes and malformed input edge cases.
 - For path-exclusion logic in script CLIs, apply exclusion patterns only to repository-local paths and add paired tests for outside-repo explicit file args plus repo-internal excluded directories.
+- For pre-commit hooks that operate on staged files, remember pre-commit stashes unstaged changes and runs hooks against the staged snapshot on disk; reproduce failures through commit-equivalent hook runs when validating behavior.
 - For Jest in hooks or npm scripts, use `node scripts/run-managed-jest.js` instead of bare `jest` invocations.
 - For Prettier in hooks or npm scripts, use `node scripts/run-managed-prettier.js` instead of hardcoded `prettier@X.Y.Z` commands. The managed runner resolves versions in this order: package-lock.json, package.json, then static fallback.
 - For `npm`/`npx` child-process calls in `scripts/*.js` (`spawnSync`, `execFileSync`, `execSync`), use `spawnPlatformCommandSync()` from `scripts/lib/shell-command.js`. Do not call `spawnSync(toShellCommand(...))` directly; the helper applies Windows shell-shim execution rules consistently.
 - When editing `scripts/validate-npm-meta.js`, `scripts/__tests__/validate-npm-meta.test.js`, or npm package metadata, run `npm run validate:npm-meta` before finishing.
 - When editing `scripts/fix-csharp-underscore-methods.js` or its tests, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/fix-csharp-underscore-methods.test.js` and then `npm run preflight:pre-commit` before finishing.
+- For parser-script failures, verify both isolated and hook-parity execution before concluding root cause: run the focused Jest path first, then run `pre-commit run script-parser-tests --all-files` from the same shell used for commit operations.
 - On Windows, verify `npm --version` in the active shell before running hook-related checks (especially when using nvm/fnm).
 - On Windows hosts, run `npm run preflight:pre-commit` in the same shell you use for `git commit` so hook PATH/init, npm version drift, package.json formatting, and yamllint issues are caught before commit.
+- For command alternation regexes, avoid optional-suffix shorthands that split words into partial tokens; prefer explicit alternation forms like `(?:install|i)` to keep patterns readable and spellcheck-safe.
+- For temporary test directory/file labels, prefer full descriptive words (for example `carriage-return-arguments`) over opaque abbreviations to reduce avoidable cspell failures.
 
 ## Line Ending Policy
 

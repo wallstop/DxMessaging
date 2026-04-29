@@ -23,10 +23,12 @@
 
 "use strict";
 
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("./lib/quote-parser");
 
+const REPO_ROOT = path.join(__dirname, "..");
 const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
 
 /**
@@ -45,6 +47,14 @@ class Violation {
         const prefix = this.severity === "error" ? "ERROR" : "WARN";
         return `[${prefix}] ${this.file}:${this.line}: ${this.message}\n  Pattern: ${this.pattern}`;
     }
+}
+
+function getIndent(line) {
+    return line.length - line.trimStart().length;
+}
+
+function usesVariableExtensionPattern(line) {
+    return /\*\.\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/.test(line);
 }
 
 /**
@@ -67,20 +77,26 @@ function isForbiddenRenormalizePattern(line) {
     }
 
     // Skip lines that use shell variable expansion (part of a loop)
-    if (trimmed.includes("$ext") || trimmed.includes("${ext}")) {
+    if (usesVariableExtensionPattern(trimmed)) {
         return false;
     }
 
+    const commandMatch =
+        /git add --renormalize\s+--\s+(.+?)(?:\s*(?:&&|\|\||;|\|)\s*.+)?$/.exec(
+            trimmed
+        );
+    const renormalizeArgs = commandMatch ? commandMatch[1] : trimmed;
+
     // Skip lines that target a single specific file (e.g., '.config/dotnet-tools.json')
     // These are safe because the file definitely exists or the step would have failed earlier
-    const singleFilePattern = /git add --renormalize\s+--\s+'[^'*?]+'/;
-    if (singleFilePattern.test(trimmed)) {
+    const singleFilePattern = /^["']?[^"'*?\s]+["']?$/;
+    if (singleFilePattern.test(renormalizeArgs)) {
         return false;
     }
 
     // Count distinct file extension patterns (*.ext or **/*.ext)
     // Use a Set to count unique extensions
-    const extensionPatterns = trimmed.match(/\*\.(\w+)/g) || [];
+    const extensionPatterns = renormalizeArgs.match(/\*\.(\w+)/g) || [];
     const uniqueExtensions = new Set(
         extensionPatterns.map((p) => p.replace("*.", ""))
     );
@@ -101,7 +117,7 @@ function hasExistenceCheck(lines, lineIndex) {
     // Look backwards for an existence check pattern
     // Pattern: if git ls-files "*.ext" | grep -q .; then
     // or: if git ls-files "*.$ext" | grep -q .; then
-    const lookbackLines = 5;
+    const lookbackLines = 10;
     const startIndex = Math.max(0, lineIndex - lookbackLines);
 
     for (let i = lineIndex - 1; i >= startIndex; i--) {
@@ -126,14 +142,235 @@ function hasExistenceCheck(lines, lineIndex) {
     return false;
 }
 
+function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSync) {
+    if (typeof relativePath !== "string" || relativePath.trim().length === 0) {
+        return false;
+    }
+
+    try {
+        execFileSyncImpl(
+            "git",
+            ["check-ignore", "--quiet", "--no-index", relativePath],
+            {
+                cwd: repoRoot,
+                stdio: "ignore",
+            }
+        );
+        return true;
+    } catch (error) {
+        if (error && typeof error.status === "number" && error.status === 1) {
+            return false;
+        }
+
+        if (error && error.code === "ENOENT") {
+            return false;
+        }
+
+        const message = error && error.message ? error.message : String(error);
+        throw new Error(
+            `Unable to evaluate git ignore status for '${relativePath}': ${message}`
+        );
+    }
+}
+
+function extractWorkflowPathEntries(lines) {
+    const entries = [];
+    let inPathsBlock = false;
+    let pathsIndent = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (!inPathsBlock && /^\s*paths:\s*$/.test(line)) {
+            inPathsBlock = true;
+            pathsIndent = indent;
+            continue;
+        }
+
+        if (!inPathsBlock) {
+            continue;
+        }
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= pathsIndent && !/^\s*-\s+/.test(line)) {
+            inPathsBlock = false;
+            pathsIndent = -1;
+
+            if (/^\s*paths:\s*$/.test(line)) {
+                inPathsBlock = true;
+                pathsIndent = indent;
+            }
+            continue;
+        }
+
+        const pathEntry = /^\s*-\s*["']?([^"'#]+)["']?\s*(?:#.*)?$/.exec(line);
+        if (pathEntry) {
+            entries.push({
+                line: i + 1,
+                path: pathEntry[1].trim(),
+            });
+        }
+    }
+
+    return entries;
+}
+
+function isLiteralPath(pathValue) {
+    return !/[\*\?\[\]\{\}]|\$\{\{/.test(pathValue) && !pathValue.startsWith("!");
+}
+
+function findIgnoredPathViolations(
+    relativePath,
+    lines,
+    repoRoot = REPO_ROOT,
+    isIgnoredPathFn = isGitIgnoredPath
+) {
+    const violations = [];
+    const entries = extractWorkflowPathEntries(lines);
+
+    for (const entry of entries) {
+        if (!isLiteralPath(entry.path)) {
+            continue;
+        }
+
+        if (!isIgnoredPathFn(repoRoot, entry.path)) {
+            continue;
+        }
+
+        violations.push(
+            new Violation(
+                relativePath,
+                entry.line,
+                entry.path,
+                `Workflow trigger path '${entry.path}' is ignored by git and cannot trigger this workflow. Remove it from paths filters or update ignore policy.`,
+                "error"
+            )
+        );
+    }
+
+    return violations;
+}
+
+function extractRunBlocks(lines) {
+    const blocks = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const blockRunMatch = /^(\s*)(?:-\s+)?run:\s*[>|][+-]?\s*$/.exec(line);
+
+        if (blockRunMatch) {
+            const baseIndent = blockRunMatch[1].length;
+            const blockLines = [];
+            let j = i + 1;
+
+            while (j < lines.length) {
+                const nextLine = lines[j];
+                const trimmed = nextLine.trim();
+                const nextIndent = getIndent(nextLine);
+
+                if (trimmed.length > 0 && nextIndent <= baseIndent) {
+                    break;
+                }
+
+                blockLines.push(nextLine.trim());
+                j++;
+            }
+
+            blocks.push({
+                startLine: i + 1,
+                text: blockLines.join("\n").trim(),
+            });
+
+            i = j - 1;
+            continue;
+        }
+
+        const inlineRunMatch = /^\s*(?:-\s+)?run:\s*(.+?)\s*$/.exec(line);
+        if (inlineRunMatch) {
+            blocks.push({
+                startLine: i + 1,
+                text: inlineRunMatch[1].trim(),
+            });
+        }
+    }
+
+    return blocks;
+}
+
+function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) {
+    const violations = [];
+
+    if (!packageLockIgnored) {
+        return violations;
+    }
+
+    const runBlocks = extractRunBlocks(lines);
+
+    for (const block of runBlocks) {
+        if (!/(^|\n|;|&&)\s*npm\s+ci\b/m.test(block.text)) {
+            continue;
+        }
+
+        const hasLockfileCheck =
+            /\[\s*-f\s+package-lock\.json\s*\]/.test(block.text) ||
+            /\btest\s+-f\s+package-lock\.json\b/.test(block.text);
+        const hasAnyIfElseFallback =
+            /\bif\b[\s\S]*?\bnpm\s+ci\b[\s\S]*?\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
+        const hasElseFallbackInstall =
+            /\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
+        const hasOrFallbackInstall =
+            /\bnpm\s+ci\b\s*\|\|\s*\bnpm\s+(?:install|i)\b/.test(block.text);
+        const hasMissingLockfileHardFail =
+            /\[\s*!\s+-f\s+package-lock\.json\s*\][\s\S]*?\bexit\s+1\b/.test(block.text);
+
+        if (hasOrFallbackInstall) {
+            continue;
+        }
+
+        if (hasMissingLockfileHardFail) {
+            violations.push(
+                new Violation(
+                    relativePath,
+                    block.startLine,
+                    "npm ci",
+                    "Repository ignores package-lock.json, so workflows must not fail when the lockfile is absent. Use npm ci/npm install fallback.",
+                    "error"
+                )
+            );
+            continue;
+        }
+
+        if ((!hasLockfileCheck && !hasAnyIfElseFallback) || !hasElseFallbackInstall) {
+            violations.push(
+                new Violation(
+                    relativePath,
+                    block.startLine,
+                    "npm ci",
+                    "Repository ignores package-lock.json, so npm ci blocks must include a lockfile presence check and npm install fallback.",
+                    "error"
+                )
+            );
+        }
+    }
+
+    return violations;
+}
+
 /**
  * Validates a single workflow file.
  *
  * @param {string} filePath - Absolute path to the workflow file
  * @returns {Violation[]} Array of violations found
  */
-function validateWorkflow(filePath) {
+function validateWorkflow(filePath, options = {}) {
     const violations = [];
+    const repoRoot = options.repoRoot || REPO_ROOT;
+    const isIgnoredPathFn = options.isIgnoredPathFn || isGitIgnoredPath;
     const relativePath = path.relative(
         path.join(__dirname, ".."),
         filePath
@@ -171,8 +408,7 @@ function validateWorkflow(filePath) {
         if (
             line.includes("git add") &&
             line.includes("--renormalize") &&
-            !line.includes("$ext") &&
-            !line.includes("${ext}") &&
+            !usesVariableExtensionPattern(line) &&
             line.includes("*.")
         ) {
             if (!hasExistenceCheck(lines, index)) {
@@ -189,6 +425,32 @@ function validateWorkflow(filePath) {
         }
     });
 
+    try {
+        violations.push(
+            ...findIgnoredPathViolations(
+                relativePath,
+                lines,
+                repoRoot,
+                isIgnoredPathFn
+            )
+        );
+
+        const packageLockIgnored = isIgnoredPathFn(repoRoot, "package-lock.json");
+        violations.push(
+            ...findLockfileInstallViolations(relativePath, lines, packageLockIgnored)
+        );
+    } catch (error) {
+        violations.push(
+            new Violation(
+                relativePath,
+                0,
+                "git check-ignore",
+                `Workflow validation failed while evaluating ignore policy: ${error.message}`,
+                "error"
+            )
+        );
+    }
+
     return violations;
 }
 
@@ -196,7 +458,7 @@ function validateWorkflow(filePath) {
  * Main entry point.
  */
 function main() {
-    console.log("Validating workflow files for git add --renormalize patterns...\n");
+    console.log("Validating workflow files for policy and reliability patterns...\n");
 
     if (!fs.existsSync(WORKFLOWS_DIR)) {
         console.log(`Workflows directory not found: ${WORKFLOWS_DIR}`);
@@ -235,7 +497,7 @@ function main() {
 
     if (allViolations.length === 0) {
         console.log("✅ All workflow files passed validation.\n");
-        console.log("No forbidden git add --renormalize patterns detected.");
+        console.log("No workflow policy violations detected.");
         process.exit(0);
     }
 
@@ -256,7 +518,7 @@ function main() {
     if (errors.length > 0) {
         console.log("\nValidation FAILED. Please fix the errors above.");
         console.log(
-            "\nSee .llm/skills/github-actions/git-renormalize-patterns.md for the required pattern."
+            "\nSee .llm/skills/github-actions/git-renormalize-patterns.md for renormalize guidance."
         );
         process.exit(1);
     }
@@ -270,6 +532,11 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         isForbiddenRenormalizePattern,
         hasExistenceCheck,
+        isGitIgnoredPath,
+        extractWorkflowPathEntries,
+        findIgnoredPathViolations,
+        extractRunBlocks,
+        findLockfileInstallViolations,
         validateWorkflow,
         Violation,
     };
