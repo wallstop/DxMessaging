@@ -122,6 +122,7 @@ jobs:
       - name: Build documentation (strict mode)
         run: |
           echo "Building documentation in strict mode..."
+          set -o pipefail
           mkdocs build --strict --site-dir _site 2>&1 | tee build.log
 
           # Check for warnings in the build log
@@ -132,6 +133,20 @@ jobs:
 
           echo ""
           echo "✅ Documentation build completed successfully"
+
+      - name: Emit mkdocs diagnostics on failure
+        if: failure()
+        run: |
+          if [ -f build.log ]; then
+            echo "::group::MkDocs warnings and errors"
+            grep -nEi "warning|error|not found|aborted" build.log || true
+            echo "::endgroup::"
+            echo "::group::Last 120 lines of build.log"
+            tail -n 120 build.log || true
+            echo "::endgroup::"
+          else
+            echo "::warning::build.log was not generated."
+          fi
 
       - name: Validate build output
         run: |
@@ -172,7 +187,7 @@ jobs:
           LINK_COUNT=$(grep -roc 'href="[^"]*"' _site --include='*.html' | awk -F: '{sum+=$NF} END {print sum}' || echo "0")
           # For internal links, pipe through awk to count instead of grep -c which exits 1 on no match
           # shellcheck disable=SC2126  # wc -l intentional: grep -c exits 1 on no match, breaking CI
-          INTERNAL_LINKS=$(grep -roh 'href="[^"]*"' _site --include='*.html' 2>/dev/null | grep -v 'href="https\?://\|href="mailto:' | wc -l || echo "0")
+          INTERNAL_LINKS=$(grep -roh 'href="[^"]*"' _site --include='*.html' | grep -v 'href="https\?://\|href="mailto:' | wc -l || echo "0")
 
           echo "📊 Found $LINK_COUNT total links ($INTERNAL_LINKS internal)"
           echo "✅ Link structure scan completed"

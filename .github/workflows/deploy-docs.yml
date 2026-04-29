@@ -77,7 +77,23 @@ jobs:
           echo "✅ mkdocs.yml syntax validation passed"
 
       - name: Build documentation
-        run: mkdocs build --strict --site-dir _site
+        run: |
+          set -o pipefail
+          mkdocs build --strict --site-dir _site 2>&1 | tee build.log
+
+      - name: Emit mkdocs diagnostics on failure
+        if: failure()
+        run: |
+          if [ -f build.log ]; then
+            echo "::group::MkDocs warnings and errors"
+            grep -nEi "warning|error|not found|aborted" build.log || true
+            echo "::endgroup::"
+            echo "::group::Last 120 lines of build.log"
+            tail -n 120 build.log || true
+            echo "::endgroup::"
+          else
+            echo "::warning::build.log was not generated."
+          fi
 
       - name: Validate build output
         run: |

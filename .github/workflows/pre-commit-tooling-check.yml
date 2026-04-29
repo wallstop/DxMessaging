@@ -60,22 +60,53 @@ jobs:
           persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+
+      - name: Diagnose Node dependency files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Workspace: $PWD"
+          for file in package.json package-lock.json; do
+            if [ -f "$file" ]; then
+              echo "Found: $file"
+            else
+              echo "Missing: $file"
+            fi
+          done
+
+          if [ ! -f package.json ]; then
+            echo "::error::package.json is required for this workflow."
+            exit 1
+          fi
+
+          if [ ! -f package-lock.json ]; then
+            echo "::warning::package-lock.json is missing. npm ci will fail with a clear error in the next step."
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: package-lock.json
+          # Use package.json as a stable cache key input. package-lock.json path
+          # resolution has been flaky on hosted runners in this matrix job.
+          cache-dependency-path: package.json
 
       - name: Install pre-commit
         run: python -m pip install pre-commit
 
       - name: Install dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json is required for npm ci in this workflow."
+            exit 1
+          fi
+          npm ci
 
       - name: Validate pre-commit Node tooling policy
         run: pre-commit run validate-pre-commit-tooling --all-files

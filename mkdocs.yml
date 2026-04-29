@@ -197,4 +197,5 @@ nav:
       - FAQ: reference/faq.md
       - Glossary: reference/glossary.md
       - Troubleshooting: reference/troubleshooting.md
+      - Analyzers: reference/analyzers.md
       - Compatibility: reference/compatibility.md

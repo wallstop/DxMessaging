@@ -1,6 +1,6 @@
 # Roslyn Analyzers & Diagnostics
 
-[← Back to Index](../getting-started/index.md) | [Troubleshooting](troubleshooting.md) | [Quick Reference](quick-reference.md) | [FAQ](faq.md)
+[← Back to Reference](reference.md) | [Troubleshooting](troubleshooting.md) | [Quick Reference](quick-reference.md) | [FAQ](faq.md)
 
 ---
 
@@ -445,6 +445,6 @@ The Inspector overlay also has a Unity 2021 fallback: a `[CustomEditor(typeof(Me
 ## See also
 
 - [Troubleshooting](troubleshooting.md) — runtime symptoms and how they map to diagnostics.
-- [Inheritance Contract: `MessageAwareComponent`](../../README.md#inheritance-contract-messageawarecomponent) — the README's top-level write-up of the rule the analyzer enforces.
+- [Inheritance and base calls](../guides/unity-integration.md#important-inheritance-and-base-calls) — the inheritance contract this analyzer enforces.
 - [Unity Integration](../guides/unity-integration.md) — broader Unity-side guidance for inheritance and lifecycle.
 - [Quick Reference](quick-reference.md) — concise listing of all diagnostic IDs.
