@@ -5,6 +5,7 @@
  * Validates GitHub Actions workflow files for problematic patterns, specifically:
  * - Single-line multi-pattern `git add --renormalize` commands (FORBIDDEN)
  * - `git add --renormalize` commands without existence checks
+ * - Bash syntax in Windows-targeting jobs without Bash-compatible shell overrides
  *
  * @usage
  *   node scripts/validate-workflows.js
@@ -416,6 +417,461 @@ function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) 
     return violations;
 }
 
+function extractJobs(lines) {
+    const jobs = [];
+    let inJobsBlock = false;
+    let jobsIndent = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (!inJobsBlock && /^\s*jobs:\s*$/.test(line)) {
+            inJobsBlock = true;
+            jobsIndent = indent;
+            continue;
+        }
+
+        if (!inJobsBlock) {
+            continue;
+        }
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= jobsIndent) {
+            break;
+        }
+
+        const jobHeader = /^\s*([A-Za-z0-9_-]+):\s*$/.exec(line);
+        if (!jobHeader || indent !== jobsIndent + 2) {
+            continue;
+        }
+
+        let endLine = lines.length - 1;
+        for (let j = i + 1; j < lines.length; j++) {
+            const nextLine = lines[j];
+            const nextTrimmed = nextLine.trim();
+            const nextIndent = getIndent(nextLine);
+
+            if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
+                continue;
+            }
+
+            if (nextIndent <= jobsIndent) {
+                endLine = j - 1;
+                break;
+            }
+
+            if (
+                nextIndent === jobsIndent + 2
+                && /^\s*[A-Za-z0-9_-]+:\s*$/.test(nextLine)
+            ) {
+                endLine = j - 1;
+                break;
+            }
+        }
+
+        jobs.push({
+            id: jobHeader[1],
+            startLine: i + 1,
+            endLine: endLine + 1,
+            indent,
+        });
+
+        i = endLine;
+    }
+
+    return jobs;
+}
+
+function extractDefaultRunShellFromBlock(lines, startIndex, endIndex, defaultsIndent) {
+    let runIndent = -1;
+
+    for (let i = startIndex + 1; i <= endIndex && i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= defaultsIndent) {
+            break;
+        }
+
+        if (runIndent === -1 && /^\s*run:\s*$/.test(line) && indent === defaultsIndent + 2) {
+            runIndent = indent;
+            continue;
+        }
+
+        if (runIndent !== -1) {
+            if (indent <= runIndent) {
+                break;
+            }
+
+            const shellMatch = /^\s*shell:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
+            if (shellMatch && indent === runIndent + 2) {
+                return shellMatch[1].toLowerCase();
+            }
+        }
+    }
+
+    return null;
+}
+
+function extractWorkflowDefaultsShell(lines) {
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!/^\s*defaults:\s*$/.test(line) || getIndent(line) !== 0) {
+            continue;
+        }
+
+        return extractDefaultRunShellFromBlock(lines, i, lines.length - 1, 0);
+    }
+
+    return null;
+}
+
+function extractJobDefaultsShell(lines, job) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= job.indent) {
+            break;
+        }
+
+        if (!/^\s*defaults:\s*$/.test(line) || indent !== job.indent + 2) {
+            continue;
+        }
+
+        return extractDefaultRunShellFromBlock(lines, i, endIndex, indent);
+    }
+
+    return null;
+}
+
+function jobTargetsWindows(lines, job) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+    let runsOnValue = null;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= job.indent) {
+            break;
+        }
+
+        if (indent !== job.indent + 2) {
+            continue;
+        }
+
+        const runsOnMatch = /^\s*runs-on:\s*(.+?)\s*$/.exec(line);
+        if (!runsOnMatch) {
+            continue;
+        }
+
+        runsOnValue = runsOnMatch[1].trim();
+        break;
+    }
+
+    if (!runsOnValue) {
+        return false;
+    }
+
+    if (/\bwindows(?:-[a-z0-9]+)?\b/i.test(runsOnValue)) {
+        return true;
+    }
+
+    if (!/matrix\./i.test(runsOnValue)) {
+        return false;
+    }
+
+    let inMatrixBlock = false;
+    let matrixIndent = -1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (!inMatrixBlock && /^\s*matrix:\s*$/.test(line)) {
+            inMatrixBlock = true;
+            matrixIndent = indent;
+            continue;
+        }
+
+        if (!inMatrixBlock) {
+            continue;
+        }
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= matrixIndent) {
+            inMatrixBlock = false;
+            matrixIndent = -1;
+            continue;
+        }
+
+        if (/\bwindows(?:-[a-z0-9]+)?\b/i.test(line)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function extractStepRun(lines, stepStartIndex, stepEndIndex) {
+    for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+        const line = lines[i];
+        const blockRunMatch = /^(\s*)(?:-\s+)?run:\s*[>|][+-]?\s*$/.exec(line);
+
+        if (blockRunMatch) {
+            const baseIndent = blockRunMatch[1].length;
+            const blockLines = [];
+            let j = i + 1;
+
+            while (j <= stepEndIndex) {
+                const nextLine = lines[j];
+                const trimmed = nextLine.trim();
+                const nextIndent = getIndent(nextLine);
+
+                if (trimmed.length > 0 && nextIndent <= baseIndent) {
+                    break;
+                }
+
+                blockLines.push(nextLine.trim());
+                j++;
+            }
+
+            return {
+                line: i + 1,
+                text: blockLines.join("\n").trim(),
+            };
+        }
+
+        const inlineRunMatch = /^\s*(?:-\s+)?run:\s*(.+?)\s*$/.exec(line);
+        if (inlineRunMatch) {
+            return {
+                line: i + 1,
+                text: inlineRunMatch[1].trim(),
+            };
+        }
+    }
+
+    return null;
+}
+
+function extractStepShell(lines, stepStartIndex, stepEndIndex) {
+    for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+        const line = lines[i];
+        const shellMatch = /^\s*shell:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
+
+        if (shellMatch) {
+            return shellMatch[1].toLowerCase();
+        }
+    }
+
+    return null;
+}
+
+function extractJobSteps(lines, job) {
+    const steps = [];
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+    let stepsStartIndex = -1;
+    let stepsIndent = -1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        if (/^\s*steps:\s*$/.test(line) && getIndent(line) === job.indent + 2) {
+            stepsStartIndex = i;
+            stepsIndent = getIndent(line);
+            break;
+        }
+    }
+
+    if (stepsStartIndex === -1) {
+        return steps;
+    }
+
+    let i = stepsStartIndex + 1;
+    while (i <= endIndex) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            i++;
+            continue;
+        }
+
+        if (indent <= stepsIndent) {
+            break;
+        }
+
+        if (!(indent === stepsIndent + 2 && /^\s*-\s+/.test(line))) {
+            i++;
+            continue;
+        }
+
+        const stepStartIndex = i;
+        let stepEndIndex = endIndex;
+
+        for (let j = i + 1; j <= endIndex; j++) {
+            const nextLine = lines[j];
+            const nextTrimmed = nextLine.trim();
+            const nextIndent = getIndent(nextLine);
+
+            if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
+                continue;
+            }
+
+            if (nextIndent <= stepsIndent) {
+                stepEndIndex = j - 1;
+                break;
+            }
+
+            if (nextIndent === stepsIndent + 2 && /^\s*-\s+/.test(nextLine)) {
+                stepEndIndex = j - 1;
+                break;
+            }
+        }
+
+        const run = extractStepRun(lines, stepStartIndex, stepEndIndex);
+        steps.push({
+            shell: extractStepShell(lines, stepStartIndex, stepEndIndex),
+            run,
+        });
+
+        i = stepEndIndex + 1;
+    }
+
+    return steps;
+}
+
+const BASH_SYNTAX_PATTERNS = [
+    {
+        label: "if/elif [ ... ] conditional",
+        regex: /^(?:if|elif)\s+\[\[?/,
+    },
+    {
+        label: "for ... in loop",
+        regex: /^for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\b/,
+    },
+    {
+        label: "while [ ... ] loop",
+        regex: /^while\s+\[\[?/,
+    },
+    {
+        label: "until [ ... ] loop",
+        regex: /^until\s+\[\[?/,
+    },
+    {
+        label: "set -e/-o shell option",
+        regex: /^set\s+-[A-Za-z]/,
+    },
+    {
+        label: "test -f/-d shell check",
+        regex: /^test\s+-[A-Za-z]/,
+    },
+    {
+        label: "logical chaining operator (&&/||)",
+        regex: /&&|\|\|/,
+    },
+];
+
+function detectBashSyntaxPattern(runText) {
+    if (typeof runText !== "string" || runText.trim().length === 0) {
+        return null;
+    }
+
+    const runLines = runText.split("\n");
+
+    for (const rawLine of runLines) {
+        const line = rawLine.trim();
+        if (line.length === 0 || line.startsWith("#")) {
+            continue;
+        }
+
+        for (const pattern of BASH_SYNTAX_PATTERNS) {
+            if (pattern.regex.test(line)) {
+                return pattern.label;
+            }
+        }
+    }
+
+    return null;
+}
+
+function isBashCompatibleShell(shell) {
+    return shell === "bash" || shell === "sh";
+}
+
+function findWindowsBashPortabilityViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+    const workflowDefaultsShell = extractWorkflowDefaultsShell(lines);
+
+    for (const job of jobs) {
+        if (!jobTargetsWindows(lines, job)) {
+            continue;
+        }
+
+        const jobDefaultsShell = extractJobDefaultsShell(lines, job);
+        const steps = extractJobSteps(lines, job);
+
+        for (const step of steps) {
+            if (!step.run || typeof step.run.text !== "string") {
+                continue;
+            }
+
+            const bashPattern = detectBashSyntaxPattern(step.run.text);
+            if (!bashPattern) {
+                continue;
+            }
+
+            const effectiveShell = step.shell || jobDefaultsShell || workflowDefaultsShell;
+            if (isBashCompatibleShell(effectiveShell)) {
+                continue;
+            }
+
+            violations.push(
+                new Violation(
+                    relativePath,
+                    step.run.line,
+                    bashPattern,
+                    `Windows-targeting workflow job '${job.id}' uses Bash syntax (${bashPattern}) without a Bash-compatible shell. Add 'shell: bash' to the step or set 'defaults.run.shell: bash' at job/workflow scope.`,
+                    "error"
+                )
+            );
+        }
+    }
+
+    return violations;
+}
+
 /**
  * Validates a single workflow file.
  *
@@ -493,6 +949,10 @@ function validateWorkflow(filePath, options = {}) {
         const packageLockIgnored = isIgnoredPathFn(repoRoot, "package-lock.json");
         violations.push(
             ...findLockfileInstallViolations(relativePath, lines, packageLockIgnored)
+        );
+
+        violations.push(
+            ...findWindowsBashPortabilityViolations(relativePath, lines)
         );
     } catch (error) {
         violations.push(
@@ -592,6 +1052,13 @@ if (typeof module !== 'undefined' && module.exports) {
         findIgnoredPathViolations,
         extractRunBlocks,
         findLockfileInstallViolations,
+        extractJobs,
+        extractWorkflowDefaultsShell,
+        extractJobDefaultsShell,
+        jobTargetsWindows,
+        extractJobSteps,
+        detectBashSyntaxPattern,
+        findWindowsBashPortabilityViolations,
         validateWorkflow,
         Violation,
     };

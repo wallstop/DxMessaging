@@ -19,6 +19,8 @@ const {
     findIgnoredPathViolations,
     extractRunBlocks,
     findLockfileInstallViolations,
+    detectBashSyntaxPattern,
+    findWindowsBashPortabilityViolations,
     validateWorkflow,
 } = require('../validate-workflows.js');
 
@@ -437,6 +439,226 @@ describe("run block lockfile policy", () => {
         const optionalSuffixShorthand = `i(?:${"n" + "stall"})?`;
 
         expect(source).not.toContain(optionalSuffixShorthand);
+    });
+});
+
+describe("windows matrix bash shell portability policy", () => {
+    test.each([
+        {
+            name: "detects if bracket conditionals",
+            runText: "if [ -f package-lock.json ]; then\n  npm ci\nfi",
+            expected: "if/elif [ ... ] conditional",
+        },
+        {
+            name: "detects elif bracket conditionals",
+            runText: "if [ -f package-lock.json ]; then\n  npm ci\nelif [ -f npm-shrinkwrap.json ]; then\n  npm ci\nfi",
+            expected: "if/elif [ ... ] conditional",
+        },
+        {
+            name: "detects for-in loops",
+            runText: "for ext in md json; do\n  echo \"$ext\"\ndone",
+            expected: "for ... in loop",
+        },
+        {
+            name: "detects while loops",
+            runText: "while [ -f package-lock.json ]; do\n  break\ndone",
+            expected: "while [ ... ] loop",
+        },
+        {
+            name: "detects until loops",
+            runText: "until [ -f package-lock.json ]; do\n  break\ndone",
+            expected: "until [ ... ] loop",
+        },
+        {
+            name: "detects set shell options",
+            runText: "set -euo pipefail\nnpm ci",
+            expected: "set -e/-o shell option",
+        },
+        {
+            name: "detects test builtins",
+            runText: "test -f package-lock.json && npm ci",
+            expected: "test -f/-d shell check",
+        },
+        {
+            name: "detects logical chaining operators",
+            runText: "npm ci && npm run validate:npm-meta",
+            expected: "logical chaining operator (&&/||)",
+        },
+        {
+            name: "ignores commented bash snippets",
+            runText: "# if [ -f package-lock.json ]; then\nnpm ci",
+            expected: null,
+        },
+        {
+            name: "ignores plain npm command without chaining",
+            runText: "npm ci",
+            expected: null,
+        },
+    ])("detectBashSyntaxPattern: $name", ({ runText, expected }) => {
+        expect(detectBashSyntaxPattern(runText)).toBe(expected);
+    });
+
+    test.each([
+        {
+            name: "flags bash syntax in windows matrix job without shell override",
+            lines: [
+                "name: test",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ${{ matrix.os }}",
+                "    strategy:",
+                "      matrix:",
+                "        os:",
+                "          - ubuntu-latest",
+                "          - windows-latest",
+                "    steps:",
+                "      - name: Install",
+                "        run: |",
+                "          if [ -f package-lock.json ]; then",
+                "            npm ci",
+                "          else",
+                "            npm i --no-audit --no-fund",
+                "          fi",
+            ],
+            expectedViolationCount: 1,
+        },
+        {
+            name: "flags shell chaining operators in windows matrix job without shell override",
+            lines: [
+                "name: test",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ${{ matrix.os }}",
+                "    strategy:",
+                "      matrix:",
+                "        os:",
+                "          - ubuntu-latest",
+                "          - windows-latest",
+                "    steps:",
+                "      - name: Install",
+                "        run: npm ci && npm run validate:npm-meta",
+            ],
+            expectedViolationCount: 1,
+        },
+        {
+            name: "allows step-level shell override",
+            lines: [
+                "name: test",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ${{ matrix.os }}",
+                "    strategy:",
+                "      matrix:",
+                "        os:",
+                "          - ubuntu-latest",
+                "          - windows-latest",
+                "    steps:",
+                "      - name: Install",
+                "        shell: bash",
+                "        run: |",
+                "          if [ -f package-lock.json ]; then",
+                "            npm ci",
+                "          else",
+                "            npm i --no-audit --no-fund",
+                "          fi",
+            ],
+            expectedViolationCount: 0,
+        },
+        {
+            name: "allows job defaults.run.shell override",
+            lines: [
+                "name: test",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ${{ matrix.os }}",
+                "    strategy:",
+                "      matrix:",
+                "        os:",
+                "          - ubuntu-latest",
+                "          - windows-latest",
+                "    defaults:",
+                "      run:",
+                "        shell: bash",
+                "    steps:",
+                "      - name: Install",
+                "        run: |",
+                "          if [ -f package-lock.json ]; then",
+                "            npm ci",
+                "          else",
+                "            npm i --no-audit --no-fund",
+                "          fi",
+            ],
+            expectedViolationCount: 0,
+        },
+        {
+            name: "allows workflow defaults.run.shell override",
+            lines: [
+                "name: test",
+                "defaults:",
+                "  run:",
+                "    shell: bash",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ${{ matrix.os }}",
+                "    strategy:",
+                "      matrix:",
+                "        os:",
+                "          - ubuntu-latest",
+                "          - windows-latest",
+                "    steps:",
+                "      - name: Install",
+                "        run: |",
+                "          if [ -f package-lock.json ]; then",
+                "            npm ci",
+                "          else",
+                "            npm i --no-audit --no-fund",
+                "          fi",
+            ],
+            expectedViolationCount: 0,
+        },
+        {
+            name: "does not enforce bash-shell policy for ubuntu-only jobs",
+            lines: [
+                "name: test",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ubuntu-latest",
+                "    steps:",
+                "      - name: Install",
+                "        run: |",
+                "          if [ -f package-lock.json ]; then",
+                "            npm ci",
+                "          else",
+                "            npm i --no-audit --no-fund",
+                "          fi",
+            ],
+            expectedViolationCount: 0,
+        },
+        {
+            name: "does not flag non-bash run blocks in windows jobs",
+            lines: [
+                "name: test",
+                "jobs:",
+                "  validate:",
+                "    runs-on: ${{ matrix.os }}",
+                "    strategy:",
+                "      matrix:",
+                "        os:",
+                "          - ubuntu-latest",
+                "          - windows-latest",
+                "    steps:",
+                "      - name: Install",
+                "        run: npm ci",
+            ],
+            expectedViolationCount: 0,
+        },
+    ])("findWindowsBashPortabilityViolations: $name", ({ lines, expectedViolationCount }) => {
+        const violations = findWindowsBashPortabilityViolations(
+            "test.yml",
+            lines
+        );
+
+        expect(violations).toHaveLength(expectedViolationCount);
     });
 });
 
