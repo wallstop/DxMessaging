@@ -10,13 +10,17 @@
 
 "use strict";
 
+const childProcess = require("child_process");
+
 const {
     applyBrandCapitalization,
     categoryToTitle,
+    formatWithPrettier,
     parseFrontmatter,
     BRAND_NAMES,
 } = require('../generate-skills-index.js');
 const { normalizeToLf } = require('../lib/quote-parser');
+const { toShellCommand, spawnPlatformCommandSync } = require('../lib/shell-command');
 
 describe("generate-skills-index", () => {
     describe("BRAND_NAMES mapping", () => {
@@ -371,6 +375,140 @@ describe("generate-skills-index", () => {
             for (const [input, expected] of Object.entries(specialCases)) {
                 expect(BRAND_NAMES[input]).toBe(expected);
             }
+        });
+    });
+
+    describe("formatWithPrettier", () => {
+        test("passes base command to provided spawn implementation", () => {
+            const spawnSyncMock = jest.fn(() => ({
+                status: 0,
+                stdout: "formatted output",
+                stderr: "",
+            }));
+
+            const result = formatWithPrettier("raw input", spawnSyncMock);
+
+            expect(result).toBe("formatted output");
+            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+            const [command, args, options] = spawnSyncMock.mock.calls[0];
+            expect(command).toBe("npx");
+            expect(args[0]).toBe("--yes");
+            expect(args[1].startsWith("--package=prettier@")).toBe(true);
+            expect(args[2]).toBe("prettier");
+            expect(args).toContain("--stdin-filepath");
+            expect(options).toEqual(
+                expect.objectContaining({
+                    input: "raw input",
+                    encoding: "utf8",
+                    cwd: expect.any(String),
+                })
+            );
+        });
+
+        test("delegates platform resolution to spawn helper when wrapper enforces win32", () => {
+            const spawnSyncMock = jest.fn(() => ({
+                status: 0,
+                stdout: "formatted output",
+                stderr: "",
+            }));
+
+            const win32Wrapper = (command, args, options) =>
+                spawnPlatformCommandSync(command, args, options, spawnSyncMock, "win32");
+
+            const result = formatWithPrettier("raw input", win32Wrapper);
+
+            expect(result).toBe("formatted output");
+            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+            expect(spawnSyncMock).toHaveBeenCalledWith(
+                "npx.cmd",
+                expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]),
+                expect.objectContaining({
+                    input: "raw input",
+                    encoding: "utf8",
+                    cwd: expect.any(String),
+                    shell: true,
+                    windowsHide: true,
+                })
+            );
+        });
+
+        test("delegates platform resolution to spawn helper when wrapper enforces non-win32", () => {
+            const spawnSyncMock = jest.fn(() => ({
+                status: 0,
+                stdout: "formatted output",
+                stderr: "",
+            }));
+
+            const linuxWrapper = (command, args, options) =>
+                spawnPlatformCommandSync(command, args, options, spawnSyncMock, "linux");
+
+            const result = formatWithPrettier("raw input", linuxWrapper);
+
+            expect(result).toBe("formatted output");
+            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+
+            const [command, args, options] = spawnSyncMock.mock.calls[0];
+            expect(command).toBe("npx");
+            expect(args).toEqual(expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]));
+            expect(options).toEqual(
+                expect.objectContaining({
+                    input: "raw input",
+                    encoding: "utf8",
+                    cwd: expect.any(String),
+                })
+            );
+            expect(options.shell).toBeUndefined();
+            expect(options.windowsHide).toBeUndefined();
+        });
+
+        test("throws when prettier execution fails", () => {
+            const spawnSyncMock = jest.fn(() => ({
+                status: 1,
+                stdout: "",
+                stderr: "boom",
+            }));
+
+            expect(() => formatWithPrettier("raw", spawnSyncMock)).toThrow("Prettier failed: boom");
+        });
+
+        test("rethrows child process launch errors", () => {
+            const launchError = new Error("spawn failed");
+            const spawnSyncMock = jest.fn(() => ({
+                error: launchError,
+                status: null,
+                stdout: "",
+                stderr: "",
+            }));
+
+            expect(() => formatWithPrettier("raw", spawnSyncMock)).toThrow("spawn failed");
+        });
+
+        test("default invocation resolves npx via platform-aware spawn helper", () => {
+            const spawnSyncSpy = jest
+                .spyOn(childProcess, "spawnSync")
+                .mockReturnValue({ status: 0, stdout: "formatted output", stderr: "" });
+
+            const result = formatWithPrettier("raw input");
+
+            const expectedOptions = {
+                input: "raw input",
+                encoding: "utf8",
+                cwd: expect.any(String),
+            };
+
+            if (process.platform === "win32") {
+                expectedOptions.shell = true;
+                expectedOptions.windowsHide = true;
+            }
+
+            expect(result).toBe("formatted output");
+            expect(spawnSyncSpy).toHaveBeenCalledWith(
+                toShellCommand("npx"),
+                expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]),
+                expect.objectContaining(expectedOptions)
+            );
+
+            spawnSyncSpy.mockRestore();
         });
     });
 

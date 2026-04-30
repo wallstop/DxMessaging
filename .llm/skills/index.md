@@ -37,7 +37,7 @@
 | [Documentation Code Samples](./documentation/documentation-code-samples.md)                           | ✅ 213 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, code-samples  |
 | [Documentation Code Samples Part 1](./documentation/documentation-code-samples-part-1.md)             | 📝 82  | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Documentation Style Guide](./documentation/documentation-style-guide.md)                             | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, style         |
-| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)                     | ✅ 149 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, workflow      |
+| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)                     | ✅ 155 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, workflow      |
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)                     | ✅ 149 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, code-comments |
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)               | ✅ 182 | 🟢 Basic        | ✅ Stable | ○○○○○       | documentation, links         |
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md)           | ✅ 204 | 🟢 Basic        | ✅ Stable | ○○○○○       | github-actions, ci-cd        |
@@ -187,11 +187,11 @@
 | [Test Failure Investigation Procedure](./testing/test-failure-investigation-procedure.md)             | ✅ 217 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, investigation       |
 | [Test Failure Root Causes and Anti-Patterns](./testing/test-failure-investigation-root-causes.md)     | ✅ 187 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, root-cause-analysis |
 | [Test Invalid Skill](./testing/test-invalid-skill.md)                                                 | 📝 31  | 🔴 Expert       | ✅ Stable | ●●●○○       | testing, fixtures            |
-| [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)                | ✅ 172 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions          |
+| [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)                | ✅ 174 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, assertions          |
 | [Test Production Code Directly](./testing/test-production-code.md)                                    | ✅ 146 | 🟡 Intermediate | ✅ Stable | ○○○○○       | testing, anti-patterns       |
 | [Test Production Code Directly Part 1](./testing/test-production-code-part-1.md)                      | ✅ 205 | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
 | [Test Production Code Directly Part 2](./testing/test-production-code-part-2.md)                      | 📝 66  | 🟡 Intermediate | ✅ Stable | ●○○○○       | migration, split             |
-| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)         | ✅ 260 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity               |
+| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)         | ⚠️ 270 | 🟢 Basic        | ✅ Stable | ○○○○○       | testing, unity               |
 
 ---
 

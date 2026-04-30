@@ -13,6 +13,7 @@ on:
       - "package.json"
       - ".npmignore"
       - "scripts/validate-npm-meta.js"
+      - "scripts/__tests__/validate-npm-meta.test.js"
   push:
     branches:
       - main
@@ -28,6 +29,7 @@ on:
       - "package.json"
       - ".npmignore"
       - "scripts/validate-npm-meta.js"
+      - "scripts/__tests__/validate-npm-meta.test.js"
   workflow_dispatch:
 
 concurrency:
@@ -39,9 +41,20 @@ permissions:
 
 jobs:
   validate-npm-meta:
-    name: Validate NPM Meta Files
-    runs-on: ubuntu-latest
+    name: Validate NPM Meta Files (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    defaults:
+      run:
+        # This job uses POSIX shell conditionals in run blocks; keep shell
+        # explicit so windows-latest does not default to PowerShell.
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -55,11 +68,25 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package.json
 
+      - name: Diagnose shell and lockfile policy
+        run: |
+          set -euo pipefail
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Bash version: ${BASH_VERSION:-unknown}"
+          if [ -f package-lock.json ]; then
+            echo "Lockfile status: package-lock.json present (install mode: npm ci)"
+          else
+            echo "Lockfile status: package-lock.json absent (install mode: npm i --no-audit --no-fund)"
+          fi
+
       - name: Install dependencies
         run: |
+          set -euo pipefail
           if [ -f package-lock.json ]; then
+            echo "Install mode: npm ci"
             npm ci
           else
+            echo "Install mode: npm i --no-audit --no-fund"
             npm i --no-audit --no-fund
           fi
 

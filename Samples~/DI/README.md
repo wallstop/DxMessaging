@@ -5,11 +5,11 @@ These snippets illustrate how to consume `IMessageRegistrationBuilder` inside co
 ## Setup
 
 1. Install the relevant container package (Zenject/Extenject, VContainer, or Reflex) into your Unity project.
-2. Enable the matching scripting define symbol in **Project Settings › Player › Scripting Define Symbols**:
+1. Enable the matching scripting define symbol in **Project Settings › Player › Scripting Define Symbols**:
    - `ZENJECT_PRESENT`
    - `VCONTAINER_PRESENT`
    - `REFLEX_PRESENT`
-3. Import the sample folder you need into your Unity project (`Assets/Samples/DxMessaging/*`).
+1. Import the sample folder you need into your Unity project (`Assets/Samples/DxMessaging/*`).
 
 Each sample shows:
 
@@ -31,7 +31,7 @@ Each sample shows:
 1. **Place the prefab**  
    Drag `Prefabs/MessagingInstallerSample.prefab` into your test scene. The root object carries `MessagingComponentInstaller` with its provider handle already pointing at the global provider ScriptableObject.
 
-2. **Hook up the container**  
+1. **Hook up the container**  
    - **Zenject**:  
      - Add `DxMessagingRegistrationInstaller` (from [Runtime/Unity/Integrations](../../Runtime/Unity/Integrations/)) to your ProjectContext or scene installer list.  
      - Drop [SampleInstaller.cs](./Zenject/SampleInstaller.cs) into your project and register it alongside other installers. When the scene runs, the installer resolves `IMessageRegistrationBuilder`, stages a `PlayerSpawned` listener, and activates via the Zenject lifecycle.
@@ -42,10 +42,10 @@ Each sample shows:
      - Enable `REFLEX_PRESENT` and install `DxMessagingRegistrationInstaller` into your container bootstrap.  
      - Include [SampleInstaller.cs](./Reflex/SampleInstaller.cs) in your installer chain. The sample service resolves `IMessageRegistrationBuilder`, subscribes to `PlayerAlert`, and can emit alerts via `EmitAlertFor`.
 
-3. **Emit a message**  
+1. **Emit a message**  
    Use the service exposed by the container (e.g., call into `ScoreboardService` or `PlayerAlertService`) to emit a message. Because the prefab already configured `MessagingComponent` instances via the installer, the listeners run immediately.
 
-4. **Swap providers** (optional)  
+1. **Swap providers** (optional)  
    Duplicate [GlobalMessageBusProvider.asset](./Providers/GlobalMessageBusProvider.asset), modify it to return a custom bus, assign it on the prefab root, and observe how builder-created leases now resolve that bus instead.
 
 Feel free to duplicate these scripts into your own project and adjust lifecycles or message types as needed.

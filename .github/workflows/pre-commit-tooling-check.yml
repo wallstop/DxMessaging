@@ -1,0 +1,224 @@
+name: Pre-commit Tooling Check
+
+on:
+  pull_request:
+    paths:
+      - ".pre-commit-config.yaml"
+      - "package.json"
+      - "scripts/**/*.js"
+      - "scripts/__tests__/**/*.js"
+      - "CONTRIBUTING.md"
+      - ".llm/context.md"
+      - ".yamllint.yaml"
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+      - ".github/workflows/pre-commit-tooling-check.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - ".pre-commit-config.yaml"
+      - "package.json"
+      - "scripts/**/*.js"
+      - "scripts/__tests__/**/*.js"
+      - "CONTRIBUTING.md"
+      - ".llm/context.md"
+      - ".yamllint.yaml"
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+      - ".github/workflows/pre-commit-tooling-check.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit-tooling:
+    name: Validate pre-commit tooling (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Diagnose Node dependency files
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Workspace: $PWD"
+          for file in package.json package-lock.json; do
+            if [ -f "$file" ]; then
+              echo "Found: $file"
+              ls -l "$file"
+            else
+              echo "Missing: $file"
+            fi
+          done
+
+          if [ ! -f package.json ]; then
+            echo "::error::package.json is required for this workflow."
+            exit 1
+          fi
+
+          if [ ! -f package-lock.json ]; then
+            echo "::notice::package-lock.json not found; this workflow will use npm install fallback."
+          else
+            echo "::notice::package-lock.json found; this workflow will use npm ci."
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          # Use package.json as a stable cache key input. package-lock.json path
+          # resolution has been flaky on hosted runners in this matrix job.
+          cache-dependency-path: package.json
+
+      - name: Diagnose Node runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Node: $(node --version)"
+          echo "npm: $(npm --version)"
+          echo "npm cache: $(npm config get cache)"
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            echo "Install mode: npm ci (lockfile present)"
+            npm ci
+          else
+            echo "Install mode: npm install --no-audit --no-fund (lockfile absent)"
+            npm i --no-audit --no-fund
+          fi
+
+      - name: Validate pre-commit Node tooling policy
+        run: pre-commit run validate-pre-commit-tooling --all-files
+
+      - name: Validate YAML formatting and lint policy
+        run: pre-commit run yamllint --all-files
+
+      - name: Run parser script tests hook
+        run: pre-commit run script-parser-tests --all-files
+
+      - name: Diagnose managed Jest fallback environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Node: $(node --version)"
+          echo "npm: $(npm --version)"
+          node <<'NODE'
+          const fs = require("fs");
+          const runnerPath = "node_modules/jest-circus/build/runner.js";
+          console.log("runner exists before deletion:", fs.existsSync(runnerPath));
+          try {
+            console.log("resolved runner path:", require.resolve("jest-circus/runner"));
+          } catch (error) {
+            console.log(`resolved runner path: unavailable (${error.message})`);
+          }
+          NODE
+
+      - name: Remove managed Jest runner to force fallback path
+        run: node scripts/verify-managed-jest-fallback.js --force-delete-managed-runner
+
+      - name: Confirm managed Jest runner was removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("fs");
+          const runnerPath = "node_modules/jest-circus/build/runner.js";
+          const exists = fs.existsSync(runnerPath);
+          console.log("runner exists after deletion:", exists);
+          if (exists) {
+              process.exit(1);
+          }
+          NODE
+
+      - name: Diagnose isolated Jest fallback resolution inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("fs");
+          const {
+            getPinnedFallbackJestSpec,
+            getIsolatedJestPaths,
+          } = require("./scripts/run-managed-jest.js");
+
+          const spec = getPinnedFallbackJestSpec();
+          const isolatedPaths = getIsolatedJestPaths(spec);
+
+          console.log("fallback spec:", spec);
+          console.log("cwd:", process.cwd());
+          console.log("NODE_PATH:", process.env.NODE_PATH || "<unset>");
+          console.log("isolated install dir:", isolatedPaths.installDir);
+          console.log(
+            "isolated jest bin:",
+            isolatedPaths.jestBinPath,
+            "exists:",
+            fs.existsSync(isolatedPaths.jestBinPath)
+          );
+          console.log(
+            "isolated jest runner:",
+            isolatedPaths.jestRunnerPath,
+            "exists:",
+            fs.existsSync(isolatedPaths.jestRunnerPath)
+          );
+
+          try {
+            console.log("repo resolve jest-circus/runner:", require.resolve("jest-circus/runner"));
+          } catch (error) {
+            console.log(`repo resolve jest-circus/runner: unavailable (${error.message})`);
+          }
+          NODE
+
+      - name: Assert isolated Jest fallback path is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          output_file="$(mktemp)"
+          node scripts/run-managed-jest.js --version 2>&1 | tee "$output_file"
+
+          if ! grep -Fq "Using isolated fallback Jest" "$output_file"; then
+            echo "::error::Expected isolated fallback Jest to be used after removing local runner."
+            exit 1
+          fi
+
+          if ! grep -Fq "Injected isolated Jest test runner" "$output_file"; then
+            echo "::error::Expected isolated fallback test runner injection diagnostics."
+            exit 1
+          fi
+
+      - name: Verify managed Jest fallback test
+        run: >-
+          node scripts/run-managed-jest.js --runTestsByPath
+          scripts/__tests__/run-managed-jest.test.js --testNamePattern
+          "runIsolatedFallbackJest injects isolated testRunner when caller did not provide one"

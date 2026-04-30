@@ -24,18 +24,18 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
 const {
     stripMatchingBoundaryQuotes,
     normalizeToLf,
 } = require("./lib/quote-parser");
+const { spawnPlatformCommandSync } = require("./lib/shell-command");
+const { getPinnedPrettierSpec } = require("./lib/prettier-version");
 
 const SKILLS_DIR = path.join(__dirname, "..", ".llm", "skills");
 const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
 const EXCLUDED_FILES = ["index.md", "specification.md"];
 const EXCLUDED_DIRS = ["templates"];
 const REPO_ROOT = path.join(__dirname, "..");
-const PRETTIER_VERSION = "3.8.1";
 
 /**
  * Brand name capitalization mapping.
@@ -123,19 +123,18 @@ function getLatestSkillDate(skills) {
     return new Date().toISOString().split("T")[0];
 }
 
-function formatWithPrettier(content) {
+function formatWithPrettier(content, spawnSyncImpl = spawnPlatformCommandSync) {
+    const prettierSpec = getPinnedPrettierSpec();
     const prettierArgs = [
         "--yes",
-        `prettier@${PRETTIER_VERSION}`,
+        `--package=${prettierSpec}`,
+        "prettier",
         "--stdin-filepath",
         INDEX_PATH,
     ];
 
-    const isWindows = process.platform === "win32";
-    const command = isWindows ? "cmd.exe" : "npx";
-    const args = isWindows ? ["/d", "/s", "/c", "npx", ...prettierArgs] : prettierArgs;
-
-    const result = spawnSync(command, args, {
+    // Keep the base command token here; platform-specific shim resolution belongs in spawnPlatformCommandSync.
+    const result = spawnSyncImpl("npx", prettierArgs, {
         cwd: REPO_ROOT,
         input: content,
         encoding: "utf8",
@@ -532,6 +531,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         applyBrandCapitalization,
         categoryToTitle,
+        formatWithPrettier,
         parseFrontmatter,
         BRAND_NAMES,
     };

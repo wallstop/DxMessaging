@@ -16,10 +16,9 @@
 
 "use strict";
 
-const { execSync } = require("child_process");
-const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("./lib/quote-parser");
+const { spawnPlatformCommandSync } = require("./lib/shell-command");
 
 /**
  * Parse tar listing output into package-relative file paths.
@@ -36,46 +35,100 @@ function parseTarListingOutput(tarOutput) {
 }
 
 /**
- * Get list of files that would be included in the npm package
+ * Parse `npm pack --json --dry-run` output and return package-relative file paths.
+ *
+ * @param {string} packOutput - Raw JSON output from npm pack
+ * @returns {string[]} Package-relative file list
+ */
+function parseNpmPackJsonOutput(packOutput) {
+    const trimmedOutput = normalizeToLf(packOutput || "").trim();
+
+    if (!trimmedOutput) {
+        throw new Error("npm pack produced no output");
+    }
+
+    let parsedOutput;
+    try {
+        parsedOutput = JSON.parse(trimmedOutput);
+    } catch (error) {
+        throw new Error(`Unable to parse npm pack --json output: ${error.message}`);
+    }
+
+    if (
+        !Array.isArray(parsedOutput) ||
+        parsedOutput.length === 0 ||
+        parsedOutput[0] === null ||
+        typeof parsedOutput[0] !== "object"
+    ) {
+        throw new Error("npm pack --json output did not contain package metadata");
+    }
+
+    const packageInfo = parsedOutput[0];
+    if (!Array.isArray(packageInfo.files)) {
+        throw new Error("npm pack --json output did not include a files list");
+    }
+
+    const files = packageInfo.files
+        .map((entry) => {
+            if (typeof entry === "string") {
+                return entry;
+            }
+
+            if (entry && typeof entry.path === "string") {
+                return entry.path;
+            }
+
+            return "";
+        })
+        .filter((entry) => entry.length > 0);
+
+    if (files.length === 0) {
+        throw new Error("npm pack --json output contained an empty files list");
+    }
+
+    return files;
+}
+
+/**
+ * Get list of files that would be included in the npm package.
+ *
+ * Uses npm's JSON dry-run output so the check is shell-safe and cross-platform.
+ *
  * @returns {string[]} Array of file paths relative to package root
  */
 function getPackageFiles() {
     const repoRoot = path.resolve(__dirname, "..");
 
     try {
-        // Create a temporary tarball
-        console.log("Creating package tarball...");
-        execSync("npm pack > /dev/null 2>&1", {
+        console.log("Computing package file list via npm pack --json --dry-run...");
+        const packResult = spawnPlatformCommandSync("npm", ["pack", "--json", "--dry-run"], {
             encoding: "utf8",
             cwd: repoRoot,
+            stdio: ["ignore", "pipe", "pipe"],
         });
 
-        // Find the tarball file
-        const tarballs = fs
-            .readdirSync(repoRoot)
-            .filter((f) => f.endsWith(".tgz") || f.endsWith(".tar.gz"));
-
-        if (tarballs.length === 0) {
-            throw new Error("No tarball file found after npm pack");
+        if (packResult.error) {
+            throw packResult.error;
         }
 
-        const tarballPath = path.join(repoRoot, tarballs[0]);
+        if (packResult.status !== 0) {
+            const stderr = normalizeToLf(packResult.stderr || "").trim();
+            throw new Error(
+                `npm pack --json --dry-run failed with exit code ${packResult.status}${stderr ? `: ${stderr}` : ""}`
+            );
+        }
 
-        // Extract file list from tarball
-        const tarOutput = execSync(`tar -tzf "${tarballPath}"`, {
-            encoding: "utf8",
-            cwd: repoRoot,
-        });
-
-        // Parse file list, removing the "package/" prefix and empty lines
-        const files = parseTarListingOutput(tarOutput);
-
-        // Clean up tarball
-        fs.unlinkSync(tarballPath);
-
-        return files;
+        return parseNpmPackJsonOutput(packResult.stdout || "");
     } catch (error) {
-        console.error("Error creating or reading npm package:", error.message);
+        if (error && error.code === "ENOENT") {
+            console.error(
+                "Error creating or reading npm package:",
+                `${error.message}\n` +
+                    "npm was not found in this hook shell. Verify npm --version in the same shell used for git commits."
+            );
+        } else {
+            console.error("Error creating or reading npm package:", error.message);
+        }
         throw error;
     }
 }
@@ -121,7 +174,6 @@ function validateMetaFilesHaveTargets(files) {
  */
 function validateFilesHaveMetaFiles(files) {
     const errors = [];
-    const fileSet = new Set(files);
     const metaFiles = new Set(files.filter((f) => f.endsWith(".meta")));
 
     // Files that don't need .meta files (non-Unity assets)
@@ -234,6 +286,7 @@ if (require.main === module) {
 // Export for testing
 module.exports = {
     getPackageFiles,
+    parseNpmPackJsonOutput,
     parseTarListingOutput,
     validateMetaFilesHaveTargets,
     validateFilesHaveMetaFiles,

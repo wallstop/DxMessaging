@@ -20,6 +20,16 @@ repos:
           - post-checkout
           - post-rewrite
         description: Install the .NET tools listed at .config/dotnet-tools.json.
+      - id: fix-csharp-underscore-methods
+        name: Auto-fix C# method names (remove underscores)
+        entry: >-
+          bash -c 'node scripts/fix-csharp-underscore-methods.js "$@" && git add "$@"' --
+        language: system
+        types:
+          - c#
+        stages:
+          - pre-commit
+        description: Auto-fix C# method names by removing underscores and fail if restaging fails.
       - id: csharpier
         name: Run CSharpier on C# files
         entry: dotnet tool run csharpier format
@@ -44,10 +54,10 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-        entry: npx --yes prettier@3.8.1 --write
+        entry: node scripts/run-managed-prettier.js --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
-        description: Use pinned Prettier version to match CI.
+        description: Use managed Prettier wrapper for cross-platform version parity.
 
   - repo: local
     hooks:
@@ -60,19 +70,33 @@ repos:
 
   - repo: local
     hooks:
+      - id: markdown-link-fragment-list-fix
+        name: Markdown fragment/list auto-fix (MD051/MD029)
+        entry: node scripts/fix-md029-md051.js
+        language: system
+        files: '(?i)\.(md|markdown)$'
+        description: Auto-fix local heading fragment links and normalize ordered-list prefixes to 1.
+
+  - repo: local
+    hooks:
       - id: markdownlint
         name: markdownlint (respect repo config)
         entry: npx --yes markdownlint-cli2@0.17.1 --fix
         language: system
         files: '(?i)\.(md|markdown)$'
 
-  - repo: local
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
     hooks:
       - id: yamllint
-        name: yamllint (if available)
-        entry: bash -c 'if command -v yamllint >/dev/null 2>&1; then yamllint -c .yamllint.yaml "$@"; else echo "yamllint not installed; skipping"; fi' --
-        language: system
+        name: yamllint (pinned)
+        args:
+          - -c
+          - .yamllint.yaml
         files: '(?i)\.(ya?ml)$'
+        stages:
+          - pre-commit
+          - pre-push
 
   - repo: local
     hooks:
@@ -173,7 +197,9 @@ repos:
         entry: node scripts/validate-npm-meta.js --check
         language: system
         pass_filenames: false
+        files: '^(Editor/|Runtime/|Samples~/|SourceGenerators/|.*\.meta$|.*\.md$|package\.json$|\.npmignore$|scripts/validate-npm-meta\.js|scripts/__tests__/validate-npm-meta\.test\.js)$'
         stages:
+          - pre-commit
           - pre-push
         description: Validate that npm package includes all .meta files correctly.
 
@@ -189,6 +215,16 @@ repos:
           - pre-commit
           - pre-push
         description: Reject committed terminal auto-approval settings in repository VS Code config.
+      - id: validate-pre-commit-tooling
+        name: Validate pre-commit Node tooling policy
+        entry: node scripts/validate-pre-commit-tooling.js
+        language: system
+        pass_filenames: false
+        files: '^((\.pre-commit-config\.yaml)|(scripts/validate-pre-commit-tooling\.js)|(scripts/run-managed-jest\.js)|(scripts/__tests__/validate-pre-commit-tooling\.test\.js)|(scripts/__tests__/run-managed-jest\.test\.js))$'
+        stages:
+          - pre-commit
+          - pre-push
+        description: Enforce explicit npx install policy and managed Jest wrapper usage in local hooks.
       - id: validate-lychee-config
         name: Validate lychee configuration
         entry: node scripts/validate-lychee-config.js
@@ -202,21 +238,32 @@ repos:
       - id: script-parser-tests
         name: Run parser script tests
         entry: >-
-          npx jest --runTestsByPath scripts/__tests__/validate-lychee-config.test.js
+          node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/validate-lychee-config.test.js
           scripts/__tests__/generate-skills-index.test.js
+          scripts/__tests__/prettier-version.test.js
+          scripts/__tests__/run-managed-prettier.test.js
           scripts/__tests__/validate-skills-required-fields.test.js
           scripts/__tests__/validate-workflows.test.js
           scripts/__tests__/check-eol.test.js
           scripts/__tests__/quote-parser.test.js
+          scripts/__tests__/shell-command.test.js
           scripts/__tests__/validate-skills-llm-policy.test.js
           scripts/__tests__/update-llms-txt.test.js
+          scripts/__tests__/fix-md029-md051.test.js
+          scripts/__tests__/fix-csharp-underscore-methods.test.js
           scripts/__tests__/validate-vscode-settings.test.js
+          scripts/__tests__/validate-pre-commit-tooling.test.js
+          scripts/__tests__/validate-npm-meta.test.js
+          scripts/__tests__/detect-shell-redirection-antipattern.test.js
+          scripts/__tests__/pre-commit-hook-stage-policy.test.js
+          scripts/__tests__/run-managed-jest.test.js
+          scripts/__tests__/verify-managed-jest-fallback.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/llm-policy-check\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings)\.js|scripts/lib/(quote-parser|eol-policy)\.js|scripts/__tests__/(check-eol|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|validate-workflows|quote-parser|update-llms-txt|validate-vscode-settings)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|run-managed-jest|run-managed-prettier|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|run-managed-prettier|validate-workflows|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback)\.test\.js)$'
         stages:
           - pre-commit
-        description: Fail fast on parser and llms generator regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.
+        description: Fail fast on parser, npm-meta, and shell-safety regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.
 
   - repo: local
     hooks:
@@ -231,7 +278,7 @@ repos:
         description: Validate GitHub Actions workflow syntax before push.
       - id: script-tests
         name: Run JavaScript script tests
-        entry: npm run test:scripts
+        entry: node scripts/run-managed-jest.js
         language: system
         pass_filenames: false
         files: '^(package\.json|package-lock\.json|scripts/.*\.js|scripts/__tests__/.*\.js)$'
@@ -248,5 +295,6 @@ repos:
         files: '(?i)\.(md|cs|json|ya?ml|ps1|js)$'
         pass_filenames: true
         stages:
+          - pre-commit
           - pre-push
         description: Check spelling in changed files before push.
