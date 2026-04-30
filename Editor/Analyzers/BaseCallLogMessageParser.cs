@@ -49,8 +49,8 @@ namespace DxMessaging.Editor.Analyzers
     /// Per-type aggregate produced by <see cref="BaseCallLogMessageParser.Aggregate"/>.
     /// </summary>
     /// <remarks>
-    /// <see cref="MissingBaseFor"/> is deduplicated and ordered by first-occurrence (insertion order
-    /// of the underlying <see cref="List{T}"/>). <see cref="DiagnosticIds"/> uses ordinal comparison.
+    /// <see cref="MissingBaseFor"/> is deduplicated and stored in deterministic ordinal-sorted order
+    /// via <see cref="SortedSet{T}"/>. <see cref="DiagnosticIds"/> uses ordinal comparison.
     /// <see cref="FilePath"/> / <see cref="Line"/> hold the FIRST seen non-empty values so the
     /// inspector overlay's "Open Script" jump remains stable across repeated parses.
     /// </remarks>
@@ -249,8 +249,9 @@ namespace DxMessaging.Editor.Analyzers
 
         /// <summary>
         /// Aggregates many log lines into a per-type report keyed by FQN. Deduplicates methods and
-        /// diagnostic ids ordinally; preserves first-occurrence for <see cref="ParsedTypeReport.FilePath"/>
-        /// / <see cref="ParsedTypeReport.Line"/>.
+        /// diagnostic ids ordinally; method names are stored in deterministic ordinal-sorted order.
+        /// Preserves first-occurrence for <see cref="ParsedTypeReport.FilePath"/> /
+        /// <see cref="ParsedTypeReport.Line"/>.
         /// </summary>
         public static Dictionary<string, ParsedTypeReport> Aggregate(IEnumerable<string> logLines)
         {

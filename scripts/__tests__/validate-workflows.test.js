@@ -14,6 +14,7 @@ const path = require("path");
 const {
     isForbiddenRenormalizePattern,
     hasExistenceCheck,
+    isGitIgnoredPath,
     extractWorkflowPathEntries,
     findIgnoredPathViolations,
     extractRunBlocks,
@@ -239,6 +240,78 @@ describe("findIgnoredPathViolations", () => {
     });
 });
 
+describe("isGitIgnoredPath", () => {
+    test("uses git check-ignore with --no-index and -- separator", () => {
+        const execFileSyncMock = jest.fn();
+
+        const ignored = isGitIgnoredPath(
+            "/repo",
+            "package-lock.json",
+            execFileSyncMock
+        );
+
+        expect(ignored).toBe(true);
+        expect(execFileSyncMock).toHaveBeenCalledWith(
+            "git",
+            ["check-ignore", "--quiet", "--no-index", "--", "package-lock.json"],
+            expect.objectContaining({ cwd: "/repo" })
+        );
+    });
+
+    test("falls back when git does not support --no-index", () => {
+        const unsupportedNoIndexError = new Error("unknown option");
+        unsupportedNoIndexError.status = 129;
+        unsupportedNoIndexError.stderr = "error: unknown option `no-index`";
+
+        const execFileSyncMock = jest
+            .fn()
+            .mockImplementationOnce(() => {
+                throw unsupportedNoIndexError;
+            })
+            .mockImplementationOnce(() => {});
+
+        const ignored = isGitIgnoredPath(
+            "/repo",
+            "package-lock.json",
+            execFileSyncMock
+        );
+
+        expect(ignored).toBe(true);
+        expect(execFileSyncMock).toHaveBeenNthCalledWith(
+            2,
+            "git",
+            ["check-ignore", "--quiet", "--", "package-lock.json"],
+            expect.objectContaining({ cwd: "/repo" })
+        );
+    });
+
+    test("returns false when fallback check-ignore reports not ignored", () => {
+        const unsupportedNoIndexError = new Error("unknown option");
+        unsupportedNoIndexError.status = 129;
+        unsupportedNoIndexError.stderr = "error: unknown option `no-index`";
+
+        const notIgnoredError = new Error("not ignored");
+        notIgnoredError.status = 1;
+
+        const execFileSyncMock = jest
+            .fn()
+            .mockImplementationOnce(() => {
+                throw unsupportedNoIndexError;
+            })
+            .mockImplementationOnce(() => {
+                throw notIgnoredError;
+            });
+
+        const ignored = isGitIgnoredPath(
+            "/repo",
+            "package-lock.json",
+            execFileSyncMock
+        );
+
+        expect(ignored).toBe(false);
+    });
+});
+
 describe("run block lockfile policy", () => {
     test("extractRunBlocks handles folded and inline run definitions", () => {
         const lines = [
@@ -314,6 +387,27 @@ describe("run block lockfile policy", () => {
                 "  - run: npm ci || npm i --no-audit --no-fund",
             ],
             expectedViolations: 0,
+        },
+        {
+            name: "flags npm install-only blocks",
+            lines: [
+                "steps:",
+                "  - run: npm i --no-audit --no-fund",
+            ],
+            expectedViolations: 1,
+        },
+        {
+            name: "flags fallback with wrong lockfile guard",
+            lines: [
+                "steps:",
+                "  - run: |",
+                "      if [ -f npm-shrinkwrap.json ]; then",
+                "        npm ci",
+                "      else",
+                "        npm i --no-audit --no-fund",
+                "      fi",
+            ],
+            expectedViolations: 1,
         },
     ])("findLockfileInstallViolations: $name", ({ lines, expectedViolations }) => {
         const violations = findLockfileInstallViolations(

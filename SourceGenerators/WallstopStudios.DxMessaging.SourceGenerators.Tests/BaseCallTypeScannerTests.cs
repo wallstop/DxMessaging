@@ -368,6 +368,33 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
+    public void ScanSkipsMessageAwareComponentWhenCandidateListIncludesBaseType()
+    {
+        Assembly fixture = CompileFixture(
+            """
+            using DxMessaging.Unity;
+
+            public class BrokenLeaf : MessageAwareComponent
+            {
+                protected override void OnEnable()
+                {
+                    // No base call.
+                }
+            }
+            """
+        );
+
+        Type messageAwareComponent = fixture.GetType("DxMessaging.Unity.MessageAwareComponent")!;
+        Type brokenLeaf = fixture.GetType("BrokenLeaf")!;
+
+        Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
+            BaseCallTypeScannerCore.Scan(new[] { messageAwareComponent, brokenLeaf }, null);
+
+        Assert.That(snapshot, Does.Not.ContainKey("DxMessaging.Unity.MessageAwareComponent"));
+        Assert.That(snapshot, Contains.Key("BrokenLeaf"));
+    }
+
+    [Test]
     public void ScanNestedTypeFqnUsesDotsNotPlusSign()
     {
         // System.Type.FullName for nested types uses '+' as the separator (e.g.

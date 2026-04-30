@@ -145,6 +145,40 @@ describe("fix-csharp-underscore-methods", () => {
         expect(result.updatedContent).not.toContain("Method_Name");
     });
 
+    test("applyMethodRenames updates identifiers at the start of content", () => {
+        const source = [
+            "Method_Name();",
+            "nameof(Method_Name);",
+        ].join("\n");
+
+        const renames = new Map([["Method_Name", "MethodName"]]);
+        const result = applyMethodRenames(source, renames);
+
+        expect(result.renameCount).toBe(1);
+        expect(result.updatedContent).toContain("MethodName();");
+        expect(result.updatedContent).toContain("nameof(MethodName);");
+    });
+
+    test("applyMethodRenames does not rename identifier substrings", () => {
+        const source = [
+            "public sealed class NamingTests",
+            "{",
+            "    public void Method_Name()",
+            "    {",
+            "        Method_Name();",
+            "        Method_Name_Helper();",
+            "    }",
+            "}",
+        ].join("\n");
+
+        const renames = new Map([["Method_Name", "MethodName"]]);
+        const result = applyMethodRenames(source, renames);
+
+        expect(result.renameCount).toBe(1);
+        expect(result.updatedContent).toContain("MethodName();");
+        expect(result.updatedContent).toContain("Method_Name_Helper();");
+    });
+
     test("--check exits non-zero when a fix is required", () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "dxmsg-csharp-underscore-check-"));
         const filePath = path.join(tempDir, "NeedsFix.cs");

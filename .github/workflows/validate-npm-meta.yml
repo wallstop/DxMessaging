@@ -64,7 +64,12 @@ jobs:
           cache-dependency-path: package.json
 
       - name: Install dependencies
-        run: npm i --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i --no-audit --no-fund
+          fi
 
       - name: Validate NPM package meta files
         run: npm run validate:npm-meta

@@ -147,15 +147,29 @@ function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSyn
         return false;
     }
 
-    try {
-        execFileSyncImpl(
-            "git",
-            ["check-ignore", "--quiet", "--no-index", relativePath],
-            {
-                cwd: repoRoot,
-                stdio: "ignore",
-            }
+    const runCheckIgnore = (args) =>
+        execFileSyncImpl("git", args, {
+            cwd: repoRoot,
+            stdio: ["ignore", "ignore", "pipe"],
+        });
+
+    const isUnsupportedNoIndex = (error) => {
+        const stderr =
+            error && error.stderr
+                ? String(error.stderr)
+                : "";
+        const message = error && error.message ? String(error.message) : "";
+        const combined = `${message}\n${stderr}`;
+
+        return (
+            (error && typeof error.status === "number" && error.status === 129)
+            || /unknown option|unknown switch/i.test(combined)
+            || /check-ignore/i.test(combined) && /no-index/i.test(combined)
         );
+    };
+
+    try {
+        runCheckIgnore(["check-ignore", "--quiet", "--no-index", "--", relativePath]);
         return true;
     } catch (error) {
         if (error && typeof error.status === "number" && error.status === 1) {
@@ -164,6 +178,33 @@ function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSyn
 
         if (error && error.code === "ENOENT") {
             return false;
+        }
+
+        if (isUnsupportedNoIndex(error)) {
+            try {
+                runCheckIgnore(["check-ignore", "--quiet", "--", relativePath]);
+                return true;
+            } catch (fallbackError) {
+                if (
+                    fallbackError
+                    && typeof fallbackError.status === "number"
+                    && fallbackError.status === 1
+                ) {
+                    return false;
+                }
+
+                if (fallbackError && fallbackError.code === "ENOENT") {
+                    return false;
+                }
+
+                const fallbackMessage =
+                    fallbackError && fallbackError.message
+                        ? fallbackError.message
+                        : String(fallbackError);
+                throw new Error(
+                    `Unable to evaluate git ignore status for '${relativePath}' after falling back from --no-index: ${fallbackMessage}`
+                );
+            }
         }
 
         const message = error && error.message ? error.message : String(error);
@@ -312,7 +353,23 @@ function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) 
     const runBlocks = extractRunBlocks(lines);
 
     for (const block of runBlocks) {
-        if (!/(^|\n|;|&&)\s*npm\s+ci\b/m.test(block.text)) {
+        const hasNpmCi = /(^|\n|;|&&)\s*npm\s+ci\b/m.test(block.text);
+        const hasNpmInstall = /(^|\n|;|&&)\s*npm\s+(?:install|i)\b/m.test(block.text);
+
+        if (hasNpmInstall && !hasNpmCi) {
+            violations.push(
+                new Violation(
+                    relativePath,
+                    block.startLine,
+                    "npm install",
+                    "Repository ignores package-lock.json, so dependency install blocks must be lockfile-aware. Use npm ci when package-lock.json exists and npm install fallback when it does not.",
+                    "error"
+                )
+            );
+            continue;
+        }
+
+        if (!hasNpmCi) {
             continue;
         }
 
@@ -321,8 +378,6 @@ function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) 
             /\btest\s+-f\s+package-lock\.json\b/.test(block.text);
         const hasAnyIfElseFallback =
             /\bif\b[\s\S]*?\bnpm\s+ci\b[\s\S]*?\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
-        const hasElseFallbackInstall =
-            /\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
         const hasOrFallbackInstall =
             /\bnpm\s+ci\b\s*\|\|\s*\bnpm\s+(?:install|i)\b/.test(block.text);
         const hasMissingLockfileHardFail =
@@ -345,7 +400,7 @@ function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) 
             continue;
         }
 
-        if ((!hasLockfileCheck && !hasAnyIfElseFallback) || !hasElseFallbackInstall) {
+        if (!hasLockfileCheck || !hasAnyIfElseFallback) {
             violations.push(
                 new Violation(
                     relativePath,

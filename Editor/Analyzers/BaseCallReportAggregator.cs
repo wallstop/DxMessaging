@@ -122,7 +122,8 @@ namespace DxMessaging.Editor.Analyzers
             //    payload for each (assembly, FQN) pair.
             //
             //    Per-FQN merge semantics:
-            //    - Method list: union, deduplicated ordinally, first-seen order preserved.
+            //    - Method list: union, deduplicated ordinally, stored in deterministic
+            //      ordinal-sorted order.
             //    - Diagnostic IDs: union via HashSet.
             //    - File path / line: first non-empty wins (stable across recompiles).
             Dictionary<string, ParsedTypeReport> rebuilt = new(StringComparer.Ordinal);
@@ -279,8 +280,8 @@ namespace DxMessaging.Editor.Analyzers
                 {
                     // Dedupe across the dual-source merge: LogEntries and CompilerMessage may
                     // both surface the same `<type>.<method>` pair on Unity 2022+, where both
-                    // pipes are wired. Keeping MissingBaseFor a List<string> (rather than a
-                    // HashSet) preserves first-seen order for stable HelpBox output.
+                    // pipes are wired. MissingBaseFor is a SortedSet<string>, so duplicates are
+                    // removed and HelpBox output remains stable via deterministic ordinal sorting.
                     existing.MissingBaseFor.Add(method);
                 }
             }
@@ -289,11 +290,8 @@ namespace DxMessaging.Editor.Analyzers
             {
                 if (!string.IsNullOrEmpty(id))
                 {
-                    // Mirror MissingBaseFor's dedup. Even though DiagnosticIds is a HashSet today,
-                    // an explicit Contains check keeps the merge contract stable against future
-                    // shape changes (List<string> would silently start producing duplicate ids
-                    // without this guard). The dual-source merge — LogEntries + CompilerMessage on
-                    // Unity 2022+ — is the path that exercises this branch in practice.
+                    // HashSet dedupes repeated IDs surfaced by the dual-source merge
+                    // (LogEntries + CompilerMessage on Unity 2022+).
                     existing.DiagnosticIds.Add(id);
                 }
             }

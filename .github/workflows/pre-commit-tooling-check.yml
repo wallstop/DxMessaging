@@ -146,7 +146,7 @@ jobs:
           NODE
 
       - name: Remove managed Jest runner to force fallback path
-        run: node scripts/verify-managed-jest-fallback.js
+        run: node scripts/verify-managed-jest-fallback.js --force-delete-managed-runner
 
       - name: Confirm managed Jest runner was removed
         shell: bash

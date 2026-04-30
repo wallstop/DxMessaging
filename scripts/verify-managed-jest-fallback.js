@@ -2,9 +2,41 @@
 "use strict";
 
 const fs = require("fs");
+const path = require("path");
+
+const FORCE_DELETE_FLAG = "--force-delete-managed-runner";
 
 function resolveManagedRunnerPath(moduleResolver = require.resolve) {
     return moduleResolver("jest-circus/runner");
+}
+
+function isManagedRunnerPathSafe(runnerPath, { pathModule = path } = {}) {
+    if (typeof runnerPath !== "string" || runnerPath.trim().length === 0) {
+        return false;
+    }
+
+    const normalizedPath = pathModule
+        .resolve(runnerPath)
+        .replace(/\\/g, "/")
+        .toLowerCase();
+
+    return (
+        normalizedPath.includes("/node_modules/")
+        && normalizedPath.includes("/jest-circus/")
+        && normalizedPath.endsWith("/runner.js")
+    );
+}
+
+function assertManagedRunnerPathSafe(runnerPath, { pathModule = path } = {}) {
+    if (!isManagedRunnerPathSafe(runnerPath, { pathModule })) {
+        throw new Error(
+            `Refusing to delete unexpected runner path outside managed jest-circus target: ${runnerPath}`
+        );
+    }
+}
+
+function hasForcedDeletionOptIn(argv = process.argv.slice(2)) {
+    return Array.isArray(argv) && argv.includes(FORCE_DELETE_FLAG);
 }
 
 function removeManagedRunner(
@@ -13,8 +45,11 @@ function removeManagedRunner(
         existsSyncFn = fs.existsSync,
         rmSyncFn = fs.rmSync,
         logFn = console.log,
+        pathModule = path,
     } = {}
 ) {
+    assertManagedRunnerPathSafe(runnerPath, { pathModule });
+
     logFn(`Deleting managed Jest runner: ${runnerPath}`);
 
     if (!existsSyncFn(runnerPath)) {
@@ -34,6 +69,7 @@ function verifyManagedJestFallback(options = {}) {
         existsSyncFn,
         rmSyncFn,
         logFn,
+        pathModule,
     } = options;
 
     const runnerPath = resolveManagedRunnerPath(moduleResolver);
@@ -41,19 +77,41 @@ function verifyManagedJestFallback(options = {}) {
         existsSyncFn,
         rmSyncFn,
         logFn,
+        pathModule,
     });
+
+    return runnerPath;
 }
 
-function main() {
-    verifyManagedJestFallback();
+function main(
+    argv = process.argv.slice(2),
+    { verifyManagedJestFallbackFn = verifyManagedJestFallback } = {}
+) {
+    if (!hasForcedDeletionOptIn(argv)) {
+        throw new Error(
+            `Refusing to delete managed Jest runner without explicit opt-in. Re-run with ${FORCE_DELETE_FLAG}.`
+        );
+    }
+
+    verifyManagedJestFallbackFn();
 }
 
 module.exports = {
+    FORCE_DELETE_FLAG,
     resolveManagedRunnerPath,
+    isManagedRunnerPathSafe,
+    assertManagedRunnerPathSafe,
+    hasForcedDeletionOptIn,
     removeManagedRunner,
     verifyManagedJestFallback,
+    main,
 };
 
 if (require.main === module) {
-    main();
+    try {
+        main();
+    } catch (error) {
+        console.error(error.message || error);
+        process.exit(1);
+    }
 }

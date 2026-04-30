@@ -5,6 +5,7 @@ namespace DxMessaging.Editor.CustomEditors
     using System.Linq;
     using DxMessaging.Editor.Analyzers;
     using DxMessaging.Editor.Settings;
+    using DxMessaging.Unity;
     using Unity;
     using UnityEditor;
     using UnityEditorInternal;

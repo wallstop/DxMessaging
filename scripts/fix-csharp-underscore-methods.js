@@ -336,12 +336,17 @@ function applyMethodRenames(content, methodRenames) {
     let renameCount = 0;
 
     for (const [oldName, newName] of methodRenames.entries()) {
+        // Capture the non-identifier prefix so we can preserve it in the replacement without
+        // relying on lookbehind, which is unavailable on older Node runtimes.
         const namePattern = new RegExp(
-            `(?<![A-Za-z0-9_])${escapeRegExp(oldName)}(?![A-Za-z0-9_])`,
+            `(^|[^A-Za-z0-9_])(${escapeRegExp(oldName)})(?![A-Za-z0-9_])`,
             "g"
         );
 
-        const candidateContent = updatedContent.replace(namePattern, newName);
+        const candidateContent = updatedContent.replace(
+            namePattern,
+            (_match, prefix) => `${prefix}${newName}`
+        );
         if (candidateContent !== updatedContent) {
             updatedContent = candidateContent;
             renameCount += 1;

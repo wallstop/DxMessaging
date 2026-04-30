@@ -54,6 +54,9 @@ namespace DxMessaging.Editor.Analyzers
         private const string IgnoreAttributeFullName =
             "DxMessaging.Core.Attributes.DxIgnoreMissingBaseCallAttribute";
 
+        private const string MessageAwareComponentFullName =
+            "DxMessaging.Unity.MessageAwareComponent";
+
         /// <summary>
         /// Result row produced by <see cref="Scan"/>. Mirrors the Unity-facing
         /// <c>BaseCallReportEntry</c> shape but uses pure BCL collections so the helper is
@@ -125,12 +128,18 @@ namespace DxMessaging.Editor.Analyzers
                 {
                     continue;
                 }
+                if (
+                    string.Equals(fullName, MessageAwareComponentFullName, StringComparison.Ordinal)
+                )
+                {
+                    continue;
+                }
                 // FullName for nested types uses '+'; the analyzer (and the inspector overlay's
                 // lookup) emits the dotted form. Normalise here so the scanner-produced snapshot
                 // is keyed identically to the analyzer's identifiers.
                 fullName = fullName.Replace('+', '.');
 
-                bool optedOutByAttribute = TypeOrAncestorHasIgnoreAttribute(concrete);
+                bool optedOutByAttribute = TypeOrGuardedMethodHasIgnoreAttribute(concrete);
                 bool optedOutByList = projectIgnore.Contains(fullName);
 
                 ScanEntry entry = ScanOne(concrete, fullName);
@@ -155,10 +164,11 @@ namespace DxMessaging.Editor.Analyzers
             return result;
         }
 
-        private static bool TypeOrAncestorHasIgnoreAttribute(Type type)
+        private static bool TypeOrGuardedMethodHasIgnoreAttribute(Type type)
         {
             // [DxIgnoreMissingBaseCall] applies with Inherited=false (matches the analyzer's
-            // attribute declaration), so we only walk the type itself plus its declared methods.
+            // attribute declaration), so we inspect only the type itself plus its declared
+            // guarded lifecycle methods.
             foreach (object attr in type.GetCustomAttributes(inherit: false))
             {
                 if (attr.GetType().FullName == IgnoreAttributeFullName)

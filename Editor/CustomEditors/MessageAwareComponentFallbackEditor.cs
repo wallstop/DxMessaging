@@ -1,6 +1,7 @@
 namespace DxMessaging.Editor.CustomEditors
 {
 #if UNITY_EDITOR
+    using DxMessaging.Unity;
     using Unity;
     using UnityEditor;
 
