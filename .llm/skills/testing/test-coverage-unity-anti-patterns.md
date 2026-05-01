@@ -187,6 +187,16 @@ public void Message_Bus_Should_Handle_Null_Input() { }
 public void MessageBusHandlesNullInput() { }
 ```
 
+This rule is enforced by the pre-commit hook `fix-csharp-underscore-methods`, which auto-converts underscored method names to PascalCase before commit.
+
+Local validation helpers:
+
+- `node scripts/fix-csharp-underscore-methods.js --check <files...>`
+- `node scripts/fix-csharp-underscore-methods.js --check --all`
+- `node scripts/fix-csharp-underscore-methods.js <files...>`
+
+Note: `git commit --no-verify` bypasses pre-commit hooks, so avoid using it for regular development flows.
+
 ### Don't Use Regions
 
 ```csharp

@@ -56,8 +56,10 @@ theme:
     repo: fontawesome/brands/github
 
 # Extensions - Full suite for rich documentation
+
 markdown_extensions:
   # Python Markdown core extensions
+
   - abbr
   - admonition
   - attr_list
@@ -73,6 +75,7 @@ markdown_extensions:
           case: lower
 
   # PyMdownx extensions
+
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.betterem:
@@ -111,10 +114,12 @@ markdown_extensions:
   - pymdownx.tilde
 
 # Hooks for source code link transformation
+
 hooks:
   - docs/hooks.py
 
 # Plugins - Production-ready suite
+
 plugins:
   - search:
       separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
@@ -133,6 +138,7 @@ plugins:
         remove_comments: true
 
 # Extra configuration
+
 extra:
   social:
     - icon: fontawesome/brands/github
@@ -149,6 +155,7 @@ extra_javascript:
   - javascripts/csharp-highlight.js
 
 # Navigation structure
+
 nav:
   - Home: index.md
   - Getting Started:
@@ -170,6 +177,7 @@ nav:
       - Unity Integration: guides/unity-integration.md
       - Testing: guides/testing.md
       - Diagnostics: guides/diagnostics.md
+      - Inspector Overlay & Base-Call Warnings: guides/inspector-overlay.md
       - Advanced Topics: guides/advanced.md
       - Migration Guide: guides/migration-guide.md
   - Architecture:
@@ -197,4 +205,5 @@ nav:
       - FAQ: reference/faq.md
       - Glossary: reference/glossary.md
       - Troubleshooting: reference/troubleshooting.md
+      - Analyzers: reference/analyzers.md
       - Compatibility: reference/compatibility.md

@@ -28,7 +28,7 @@ complexity:
 impact:
   performance:
     rating: "high"
-    details: "Eliminates O(n²) string allocations in concatenation loops"
+    details: "Eliminates O(n^2) string allocations in concatenation loops"
   maintainability:
     rating: "high"
     details: "Cleaner than manual StringBuilder management"
@@ -71,12 +71,12 @@ status: "stable"
 
 ## Overview
 
-String concatenation with `+` or `+=` creates new string objects for each operation, causing O(n²) allocations for n concatenations. StringBuilder avoids this, but creating a new StringBuilder each time still allocates. Pooling StringBuilders eliminates even that allocation.
+String concatenation with `+` or `+=` creates new string objects for each operation, causing O(n^2) allocations for n concatenations. StringBuilder avoids this, but creating a new StringBuilder each time still allocates. Pooling StringBuilders eliminates even that allocation.
 
 ## Problem Statement
 
 ```csharp
-// BAD: O(n²) allocations
+// BAD: O(n^2) allocations
 public string BuildItemList(List<Item> items)
 {
     string result = "";
@@ -111,20 +111,20 @@ public string BuildItemList(List<Item> items)
 Pool StringBuilders and clear them on return:
 
 ```text
-┌────────────────────────────────────────┐
-│  StringBuilder Pool                     │
-│  ┌──────────┐ ┌──────────┐ ┌────────┐ │
-│  │ Cap:256  │ │ Cap:512  │ │Cap:1024│ │
-│  └──────────┘ └──────────┘ └────────┘ │
-└────────────────┬───────────────────────┘
-                 │ Get(capacity_hint)
-                 ▼
-           ┌───────────┐
-           │ Use & sb  │ sb.Clear() + Return
-           │ .Append() │────────────────────┐
-           └───────────┘                    │
-                 │ sb.ToString()            │
-                 ▼                          ▼
++----------------------------------------+
+|  StringBuilder Pool                    |
+|  +----------+ +----------+ +--------+  |
+|  | Cap:256  | | Cap:512  | |Cap:1024|  |
+|  +----------+ +----------+ +--------+  |
++----------------+-----------------------+
+                 | Get(capacity_hint)
+                 v
+           +-----------+
+           | Use & sb  | sb.Clear() + Return
+           | .Append() |--------------------+
+           +-----------+                    |
+                 | sb.ToString()            |
+                 v                          v
             "result"                    Pool
 ```
 

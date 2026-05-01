@@ -128,7 +128,7 @@ git add --renormalize -- "*.yaml"  # FAILS: pathspec did not match any files
 Use `yml` for non-dotfile YAML files.
 
 **Generalized rule**: Exclude any extension when ALL tracked files of that extension are
-dotfiles. Verify with: `git ls-files "*.$ext" "**/*.$ext"` — if all results start with `.`,
+dotfiles. Verify with: `git ls-files "*.$ext" "**/*.$ext"` -- if all results start with `.`,
 exclude that extension.
 
 ### `file_pattern` in `git-auto-commit-action`
@@ -146,7 +146,7 @@ file_pattern: "**/*.md **/*.json **/*.yml"
 | ---------------------------- | --------- |
 | All patterns match files     | 0         |
 | Any pattern matches no files | 128       |
-| No `.gitattributes` rules    | 0         |
+| `.gitattributes` rules       | 0         |
 
 ## Best Practices
 

@@ -1,6 +1,6 @@
 # DxMessaging + Reflex
 
-[← Back to Integrations Overview](index.md)
+[Back to Integrations Overview](index.md)
 
 ---
 
@@ -10,8 +10,8 @@
 
 - **Inject `IMessageBus`** in any class with minimal overhead
 - **Use DI for construction** + DxMessaging for events (best of both worlds)
-- **Minimal API surface** — small number of concepts to understand
-- **Compatible** — Reflex and DxMessaging can be used together
+- **Minimal API surface** -- small number of concepts to understand
+- **Compatible** -- Reflex and DxMessaging can be used together
 
 **Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected), combining both approaches.
 
@@ -312,6 +312,6 @@ public class DamageServiceTests
 
 ## Next Steps
 
-- **[Zenject Integration](zenject.md)** — Full-featured DI with extensive Unity support
-- **[VContainer Integration](vcontainer.md)** — Lightweight alternative with scoped lifetimes
-- **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs
+- **[Zenject Integration](zenject.md)** -- Full-featured DI with extensive Unity support
+- **[VContainer Integration](vcontainer.md)** -- Lightweight alternative with scoped lifetimes
+- **[Back to Documentation Hub](../getting-started/index.md)** -- Browse all docs

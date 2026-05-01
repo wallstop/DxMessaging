@@ -210,6 +210,25 @@ To upgrade from v2.x:
 - Fixed memory leak in MessageBus when used in Play Mode tests
 ```
 
+### Bad: Internal Tooling Framing
+
+```markdown
+### Added
+
+- Added automation script for agent prompt routing
+```
+
+**Why it's wrong**: This describes internal process/tooling, not user-facing product impact.
+
+**Correct**:
+
+```markdown
+### Changed
+
+- Improved AI-assistant onboarding for users by adding `llms.txt` and README guidance
+  so package docs and APIs are discovered with accurate context
+```
+
 ### Bad: Missing Breaking Change Warnings
 
 ```markdown

@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - package.json
-      - package-lock.json
       - scripts/**/*.js
       - scripts/__tests__/**/*.js
   push:
@@ -13,7 +12,6 @@ on:
       - master
     paths:
       - package.json
-      - package-lock.json
       - scripts/**/*.js
       - scripts/__tests__/**/*.js
   workflow_dispatch:

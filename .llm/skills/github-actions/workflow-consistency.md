@@ -81,7 +81,7 @@ are consistent, secure, and maintainable.
 
 Apply these requirements to every workflow file:
 
-1. Use consistent property ordering: `name` → `on` → `concurrency` → `permissions` → `jobs`
+1. Use consistent property ordering: `name` -> `on` -> `concurrency` -> `permissions` -> `jobs`
 1. Always include a concurrency group with `cancel-in-progress: true`
 1. Declare explicit minimal permissions
 1. Set `timeout-minutes` on every job
@@ -144,7 +144,7 @@ permissions:
   pull-requests: write
 ```
 
-**Never omit permissions**—implicit permissions are overly broad.
+**Never omit permissions** -- implicit permissions are overly broad.
 
 ### 3. Job Timeout
 

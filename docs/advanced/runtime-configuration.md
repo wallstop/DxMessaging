@@ -16,10 +16,10 @@ This guide covers how to configure message buses at runtime and retarget existin
 
 You'll use runtime configuration when you need to:
 
-- **Integrate with DI containers** — Replace the global bus with a container-managed instance
-- **Isolate tests** — Ensure each test uses its own bus to prevent interference
-- **Support multiple game modes** — Use different buses for different gameplay contexts (e.g., main game vs. mini-games)
-- **Dynamically reconfigure components** — Change which bus a component listens to after it's been created
+- **Integrate with DI containers** -- Replace the global bus with a container-managed instance
+- **Isolate tests** -- Ensure each test uses its own bus to prevent interference
+- **Support multiple game modes** -- Use different buses for different gameplay contexts (e.g., main game vs. mini-games)
+- **Dynamically reconfigure components** -- Change which bus a component listens to after it's been created
 
 If you're just getting started with DxMessaging, you probably don't need these features yet. The default global bus works great for most scenarios.
 
@@ -401,8 +401,8 @@ public class DynamicComponentManager
 
 ## See Also
 
-- **[Message Bus Providers](message-bus-providers.md)** — ScriptableObject-based provider system for design-time configuration
-- **[Registration Builders](registration-builders.md)** — Fluent API for building message registrations with priority and lifecycle control
-- **[DI Integration Guides](../integrations/index.md)** — Zenject, VContainer, and Reflex integration patterns
-- **[Testing Guide](../guides/testing.md)** — Comprehensive testing patterns with DxMessaging
-- **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs
+- **[Message Bus Providers](message-bus-providers.md)** -- ScriptableObject-based provider system for design-time configuration
+- **[Registration Builders](registration-builders.md)** -- Fluent API for building message registrations with priority and lifecycle control
+- **[DI Integration Guides](../integrations/index.md)** -- Zenject, VContainer, and Reflex integration patterns
+- **[Testing Guide](../guides/testing.md)** -- Comprehensive testing patterns with DxMessaging
+- **[Back to Documentation Hub](../getting-started/index.md)** -- Browse all docs

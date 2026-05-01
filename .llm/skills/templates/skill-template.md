@@ -108,7 +108,7 @@ Explain the fundamental idea.
 
 ## Anti-Patterns
 
-### ❌ Don't Do This
+### Don't Do This
 
 ```csharp
 // Bad example

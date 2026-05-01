@@ -8,11 +8,11 @@ These shorthands provide concise syntax for sending messages, but they come with
 
 Three methods that work on any message:
 
-| Method                 | Purpose                   | Message Type         | Example                                |
-| ---------------------- | ------------------------- | -------------------- | -------------------------------------- |
-| **`Emit()`**           | Send globally to everyone | `IUntargetedMessage` | `new SceneLoaded(1).Emit();`           |
-| **`EmitAt(target)`**   | Send to a specific target | `ITargetedMessage`   | `new Heal(10).EmitAt(playerId);`       |
-| **`EmitFrom(source)`** | Broadcast from a source   | `IBroadcastMessage`  | `new TookDamage(5).EmitFrom(enemyId);` |
+| Method                 | Purpose                   | Message Type         | Example                                           |
+| ---------------------- | ------------------------- | -------------------- | ------------------------------------------------- |
+| **`Emit()`**           | Send globally to everyone | `IUntargetedMessage` | `var m = new SceneLoaded(1); m.Emit();`           |
+| **`EmitAt(target)`**   | Send to a specific target | `ITargetedMessage`   | `var m = new Heal(10); m.EmitAt(playerId);`       |
+| **`EmitFrom(source)`** | Broadcast from a source   | `IBroadcastMessage`  | `var m = new TookDamage(5); m.EmitFrom(enemyId);` |
 
 ## Quick Start Examples
 
@@ -81,7 +81,7 @@ These helpers mirror the struct/class/targeted/broadcast overloads available on 
 
 ## Understanding Each Shorthand
 
-### `Emit()` — Global Broadcast (Untargeted)
+### `Emit()` -- Global Broadcast (Untargeted)
 
 **When to use:** Scene-wide notifications that everyone should know about.
 
@@ -109,7 +109,7 @@ MessageHandler.MessageBus.UntargetedBroadcast(ref msg);
 - Settings changed
 - Level-up notifications
 
-### `EmitAt(target)` — Targeted Message
+### `EmitAt(target)` -- Targeted Message
 
 **When to use:** Commands or notifications for a specific GameObject or Component.
 
@@ -130,7 +130,7 @@ heal.EmitAt(player); // Only the player receives this
 - UI updates for specific panels
 - State changes for specific objects
 
-### `EmitFrom(source)` — Broadcast from Source
+### `EmitFrom(source)` -- Broadcast from Source
 
 **When to use:** Announcements where the source identity matters.
 
@@ -157,11 +157,11 @@ damage.EmitFrom(enemy);  // Anyone interested in this enemy receives it
 ### Quick Example: The `this` Trap
 
 ```csharp
-// ❌ COMMON MISTAKE
+// No COMMON MISTAKE
 _ = token.RegisterGameObjectTargeted<Heal>(gameObject, OnHeal);
 heal.EmitAt(this);  // Won't work! 'this' is a Component, not a GameObject
 
-// ✅ FIXES
+// Yes FIXES
 // Option 1: Both use GameObject
 heal.EmitAt(gameObject);
 
@@ -203,7 +203,7 @@ void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
 
 ---
 
-##### 📖 For the full deep dive on GameObject vs Component targeting and global observers, see [Targeting & Context](../concepts/targeting-and-context.md)
+##### For the full deep dive on GameObject vs Component targeting and global observers, see [Targeting & Context](../concepts/targeting-and-context.md)
 
 ---
 
@@ -323,7 +323,7 @@ Unity distinguishes between GameObjects and Components. Targeted and Broadcast m
   - `EmitGameObjectTargeted` / `EmitComponentTargeted`
   - `EmitGameObjectBroadcast` / `EmitComponentBroadcast`
 
-If a handler isn’t firing, first suspect a GameObject vs Component mismatch. See the Troubleshooting checklist below.
+If a handler isn't firing, first suspect a GameObject vs Component mismatch. See the Troubleshooting checklist below.
 
 ## Troubleshooting
 
@@ -461,8 +461,8 @@ public class AchievementTracker : MessageAwareComponent
 
 ## See Also
 
-- **[Quick Reference](../reference/quick-reference.md)** — API cheat sheet for all emit methods
-- **[Message Types](../concepts/message-types.md)** — Understand Untargeted, Targeted, and Broadcast messages
-- **[Targeting & Context](../concepts/targeting-and-context.md)** — Deep dive into GameObject vs Component
-- **[String Messages](string-messages.md)** — More about string message helpers
-- **[Diagnostics](../guides/diagnostics.md)** — Debugging tools and Inspector integration
+- **[Quick Reference](../reference/quick-reference.md)** -- API cheat sheet for all emit methods
+- **[Message Types](../concepts/message-types.md)** -- Understand Untargeted, Targeted, and Broadcast messages
+- **[Targeting & Context](../concepts/targeting-and-context.md)** -- Deep dive into GameObject vs Component
+- **[String Messages](string-messages.md)** -- More about string message helpers
+- **[Diagnostics](../guides/diagnostics.md)** -- Debugging tools and Inspector integration

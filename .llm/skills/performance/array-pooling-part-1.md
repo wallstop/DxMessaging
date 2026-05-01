@@ -25,21 +25,21 @@ Continuation material extracted from `array-pooling.md` to keep .llm files withi
 ### Core Concept
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Array Pool Hierarchy                      │
-├─────────────────────────────────────────────────────────────┤
-│  WallstopArrayPool<T>     │ Exact size, cleared, safe       │
-│  WallstopFastArrayPool<T> │ Exact size, not cleared, fast   │
-│  SystemArrayPool<T>       │ May be larger, wraps Shared     │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                    Array Pool Hierarchy                      |
++-------------------------------------------------------------+
+|  WallstopArrayPool<T>     | Exact size, cleared, safe       |
+|  WallstopFastArrayPool<T> | Exact size, not cleared, fast   |
+|  SystemArrayPool<T>       | May be larger, wraps Shared     |
++-------------------------------------------------------------+
 
 Usage:
-┌──────────────────────────────────────────────────────────────┐
-│ using PooledArray<T> lease = Pool.Get(size, out T[] arr);   │
-│ // arr.Length == size (Wallstop) or >= size (System)        │
-│ // Use arr...                                                │
-│ // Dispose returns to pool                                   │
-└──────────────────────────────────────────────────────────────┘
++--------------------------------------------------------------+
+| using PooledArray<T> lease = Pool.Get(size, out T[] arr);    |
+| // arr.Length == size (Wallstop) or >= size (System)         |
+| // Use arr...                                                |
+| // Dispose returns to pool                                   |
++--------------------------------------------------------------+
 ```
 
 ### Implementation

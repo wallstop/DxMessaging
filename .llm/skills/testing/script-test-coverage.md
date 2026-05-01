@@ -92,11 +92,11 @@ JavaScript using Jest, even when testing PowerShell script logic.
 
 ```text
 scripts/
-├── sync-banner-version.ps1      # PowerShell script
-├── fix-eol.js                   # JavaScript script
-└── __tests__/
-    ├── sync-banner-version.test.js  # Tests for PowerShell logic
-    └── fix-eol.test.js              # Tests for JavaScript logic
++-- sync-banner-version.ps1      # PowerShell script
++-- fix-eol.js                   # JavaScript script
++-- __tests__/
+    +-- sync-banner-version.test.js  # Tests for PowerShell logic
+    +-- fix-eol.test.js              # Tests for JavaScript logic
 ```
 
 ### Naming Convention

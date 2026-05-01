@@ -25,18 +25,18 @@ Continuation material extracted from `readonly-struct-cached-hash.md` to keep .l
 ### Core Concept
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│  FastVector2Int (readonly struct)                            │
-├──────────────────────────────────────────────────────────────┤
-│  readonly int x = 5                                          │
-│  readonly int y = 10                                         │
-│  readonly int _hash = 0x7A3B2C1D  ← Computed ONCE in ctor   │
-├──────────────────────────────────────────────────────────────┤
-│  GetHashCode() → return _hash     ← O(1), no computation    │
-│  Equals(other) → if (_hash != other._hash) return false;    │
-│                   return x == other.x && y == other.y;       │
-│                   ↑ Early-out on hash mismatch              │
-└──────────────────────────────────────────────────────────────┘
++--------------------------------------------------------------+
+|  FastVector2Int (readonly struct)                            |
++--------------------------------------------------------------+
+|  readonly int x = 5                                          |
+|  readonly int y = 10                                         |
+|  readonly int _hash = 0x7A3B2C1D  <- Computed ONCE in ctor   |
++--------------------------------------------------------------+
+|  GetHashCode() -> return _hash    <- O(1), no computation    |
+|  Equals(other) -> if (_hash != other._hash) return false;    |
+|                   return x == other.x && y == other.y;       |
+|                   ^ Early-out on hash mismatch               |
++--------------------------------------------------------------+
 ```
 
 ### Implementation

@@ -9,7 +9,6 @@ on:
       - ".yamllint.yaml"
       - ".prettierrc*"
       - "package.json"
-      - "package-lock.json"
   push:
     branches:
       - main
@@ -21,7 +20,6 @@ on:
       - ".yamllint.yaml"
       - ".prettierrc*"
       - "package.json"
-      - "package-lock.json"
   workflow_dispatch:
 
 concurrency:

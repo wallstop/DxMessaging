@@ -35,11 +35,11 @@ CommonMark defines specific rules for code spans with multiple backticks:
 #### Examples
 
 ````markdown
-`code` → <code>code</code>
-`code` → <code>code</code>
-`` `code` `` → <code>`code`</code>
-```a`b`` → <code>a`b</code> (opened with ``, closed with ``)
-`` a ` b ``     → <code>a` b</code>
+`code` -> <code>code</code>
+`code` -> <code>code</code>
+`` `code` `` -> <code>`code`</code>
+```a`b`` -> <code>a`b</code> (opened with ``, closed with ``)
+`` a ` b ``      to  <code>a` b</code>
 ````
 
 ### Parsing Algorithm
@@ -77,7 +77,7 @@ When testing parsers, cover these categories:
 | Boundary      | Code at start/end, only code, adjacent spans   |
 | Nested        | ``` `` `nested` `` ```, unequal counts         |
 | Whitespace    | Leading/trailing spaces, only spaces, newlines |
-| Unicode       | `café`, emoji, zero-width characters           |
+| Unicode       | accented chars (U+00E9), emoji, zero-width     |
 
 ### Data-Driven Test Patterns
 
@@ -100,7 +100,7 @@ describe("inline code parsing", () => {
     ]
   ];
 
-  test.each(testCases)("%s → %j (%s)", (input, expected, _desc) => {
+  test.each(testCases)("%s  to  %j (%s)", (input, expected, _desc) => {
     expect(parseInlineCode(input)).toEqual(expected);
   });
 });
@@ -111,7 +111,7 @@ describe("inline code parsing", () => {
 For parser robustness, use property-based tests with libraries like `fast-check`:
 
 - **Never throws**: Parser should handle any input without throwing
-- **Content preservation**: Total output length ≤ input length (accounting for delimiters)
+- **Content preservation**: Total output length <= input length (accounting for delimiters)
 - **Idempotence**: Re-parsing output yields same structure
 
 ## CI/CD Integration Patterns

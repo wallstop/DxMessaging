@@ -22,9 +22,9 @@ namespace DxMessaging.Core.MessageBus
     /// </list>
     /// <para>Message categories:</para>
     /// <list type="bullet">
-    /// <item><description><see cref="Messages.IUntargetedMessage"/> — Global notifications.</description></item>
-    /// <item><description><see cref="Messages.ITargetedMessage"/> — Directed at a specific <see cref="InstanceId"/>.</description></item>
-    /// <item><description><see cref="Messages.IBroadcastMessage"/> — Emitted from a source for any listener.</description></item>
+    /// <item><description><see cref="Messages.IUntargetedMessage"/> -- Global notifications.</description></item>
+    /// <item><description><see cref="Messages.ITargetedMessage"/> -- Directed at a specific <see cref="InstanceId"/>.</description></item>
+    /// <item><description><see cref="Messages.IBroadcastMessage"/> -- Emitted from a source for any listener.</description></item>
     /// </list>
     /// </remarks>
     /// <example>

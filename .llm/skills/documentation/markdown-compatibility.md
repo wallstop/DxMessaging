@@ -90,7 +90,7 @@ MkDocs and its Material theme provide powerful extensions like admonitions, tabs
 This will not render correctly on GitHub.
 ```
 
-On GitHub, this displays as literal text: `!!! warning "Caution"` followed by an indented paragraph—not as a styled warning box.
+On GitHub, this displays as literal text: `!!! warning "Caution"` followed by an indented paragraph -- not as a styled warning box.
 
 ## Solution
 
@@ -116,12 +116,12 @@ For deeper nesting, keep increasing: outer uses 5, middle uses 4, inner uses 3.
 
 ### Common Mistakes
 
-| Mistake             | Problem                              | Fix                            |
-| ------------------- | ------------------------------------ | ------------------------------ |
-| Same backtick count | Inner fence closes outer prematurely | More backticks on outer        |
-| Spaces in fence     | ` ``` ` may not parse                | No spaces in backtick sequence |
-| Mismatched closing  | Opening with 4, closing with 3       | Count must match exactly       |
-| Missing closing     | Following headings render as code    | Always close the outer fence   |
+| Mistake             | Problem                              | Fix                          |
+| ------------------- | ------------------------------------ | ---------------------------- |
+| Same backtick count | Inner fence closes outer prematurely | More backticks on outer      |
+| Spaces in fence     | ` ``` ` may not parse                | spaces in backtick sequence  |
+| Mismatched closing  | Opening with 4, closing with 3       | Count must match exactly     |
+| Missing closing     | Following headings render as code    | Always close the outer fence |
 
 ### Guardrail: Keep Real Sections Outside Fenced Examples
 

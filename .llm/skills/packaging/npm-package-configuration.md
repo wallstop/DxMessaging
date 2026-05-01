@@ -40,7 +40,7 @@ npm uses two complementary mechanisms:
 1. **`.npmignore`**: An **exclusion list** for files within allowed directories
 
 ```text
-All Repository Files → "files" Allowlist → .npmignore Exclusions → Final Package
+All Repository Files -> "files" Allowlist -> .npmignore Exclusions -> Final Package
 ```
 
 **Key insight:** Items not matched by "files" are already excluded. However, `.npmignore` remains valuable for excluding subdirectories within included paths, handling complex patterns, and providing defense-in-depth.

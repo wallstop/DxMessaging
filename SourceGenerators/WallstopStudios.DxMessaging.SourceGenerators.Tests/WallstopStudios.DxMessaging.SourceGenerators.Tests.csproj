@@ -16,5 +16,29 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\WallstopStudios.DxMessaging.SourceGenerators\WallstopStudios.DxMessaging.SourceGenerators.csproj" />
+    <ProjectReference Include="..\WallstopStudios.DxMessaging.Analyzer\WallstopStudios.DxMessaging.Analyzer.csproj" />
+  </ItemGroup>
+  <!--
+    Linked sources from the Editor assembly. These files compile into the Editor asmdef inside
+    Unity (where they live), but for `dotnet test` we need them in the test compilation so the
+    parser, aggregator, IL inspector, and scanner core can be unit-tested without Unity APIs.
+  -->
+  <ItemGroup>
+    <Compile
+      Include="..\..\Editor\Analyzers\BaseCallLogMessageParser.cs"
+      Link="LinkedFromEditor\BaseCallLogMessageParser.cs"
+    />
+    <Compile
+      Include="..\..\Editor\Analyzers\BaseCallReportAggregator.cs"
+      Link="LinkedFromEditor\BaseCallReportAggregator.cs"
+    />
+    <Compile
+      Include="..\..\Editor\Analyzers\BaseCallIlInspector.cs"
+      Link="LinkedFromEditor\BaseCallIlInspector.cs"
+    />
+    <Compile
+      Include="..\..\Editor\Analyzers\BaseCallTypeScannerCore.cs"
+      Link="LinkedFromEditor\BaseCallTypeScannerCore.cs"
+    />
   </ItemGroup>
 </Project>

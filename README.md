@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://wallstop.github.io/DxMessaging/">
-    <img src="https://img.shields.io/badge/📖_Full_Documentation-Visit_the_Docs_Site-2ea44f?style=for-the-badge" alt="Full Documentation" />
+    <img src="https://img.shields.io/badge/Full_Documentation-Visit_the_Docs_Site-2ea44f?style=for-the-badge" alt="Full Documentation" />
   </a>
 </p>
 
@@ -33,7 +33,7 @@ Need install instructions? Try [OpenUPM](https://openupm.com/packages/com.wallst
 - [30-Second Elevator Pitch](#30-second-elevator-pitch)
 - [Mental Model: How to Think About DxMessaging](#mental-model-how-to-think-about-dxmessaging)
 - [Quick Start (5 Minutes)](#quick-start-5-minutes)
-- [Dependency Injection (DI) Compatible](#-dependency-injection-di-compatible)
+- [Dependency Injection (DI) Compatible](#dependency-injection-di-compatible)
 - [Is DxMessaging Right for You?](#is-dxmessaging-right-for-you)
 - [Why DxMessaging](#why-dxmessaging)
 - [Key Features](#key-features)
@@ -86,7 +86,7 @@ DxMessaging is built around one principle: **it gets out of your way**.
 
 You have data. You need to pass it around. That's the problem. DxMessaging provides fast, simple primitives as building blocks. You model changes as message types with optional context, using game primitives (GameObjects, components) as that context.
 
-**You don't build your game INTO the messaging system.** It's opt-in and optional—a tool you reach for when it helps.
+**You don't build your game INTO the messaging system.** It's opt-in and optional -- a tool you reach for when it helps.
 
 ### The Three Message Types: Real-World Analogies
 
@@ -94,11 +94,11 @@ You have data. You need to pass it around. That's the problem. DxMessaging provi
 
 Each message type maps to a real-world communication pattern:
 
-#### 1. Untargeted = PA System 📢
+#### 1. Untargeted = PA System
 
 ```mermaid
 flowchart LR
-    S[Someone] -->|announces| PA[📢 PA System]
+    S[Someone] -->|announces| PA[PA System]
     PA --> L1[Listener A]
     PA --> L2[Listener B]
     PA --> L3[Listener C]
@@ -108,11 +108,11 @@ Announcements with no specific recipient. Everyone who cares can hear it.
 
 **Examples:** "The game is paused", "Settings changed", "Scene finished loading"
 
-#### 2. Targeted = Addressed Letter 📬
+#### 2. Targeted = Addressed Letter
 
 ```mermaid
 flowchart LR
-    S[Sender] -->|"To: Player"| Letter[📬 Message Bus]
+    S[Sender] -->|"To: Player"| Letter[Message Bus]
     Letter --> Player[Player receives]
     Other1[Enemy A] -.->|ignores| Letter
     Other2[Enemy B] -.->|ignores| Letter
@@ -122,18 +122,18 @@ Commands to a specific recipient. Only that entity receives them.
 
 **Examples:** "Player, heal for 10 HP", "Door #7, open", "This enemy, take 25 damage"
 
-#### 3. Broadcast = Radio Station 📻
+#### 3. Broadcast = Radio Station
 
 ```mermaid
 flowchart LR
-    Source[Enemy] -->|"I took damage!"| Radio[📻 Message Bus]
+    Source[Enemy] -->|"I took damage!"| Radio[Message Bus]
     Radio --> L1[Damage Numbers UI]
     Radio --> L2[Achievement Tracker]
     Radio --> L3[Analytics]
     Radio --> L4[Combat Log]
 ```
 
-Facts emitted by a specific source. No intended recipient—just an origin. Anyone can tune in.
+Facts emitted by a specific source. No intended recipient -- just an origin. Anyone can tune in.
 
 **Examples:** "This enemy took 25 damage", "The player picked up item X", "This chest opened"
 
@@ -155,24 +155,24 @@ flowchart TD
 
 | Question                            | Untargeted | Targeted | Broadcast |
 | ----------------------------------- | :--------: | :------: | :-------: |
-| Has a specific sender that matters? |     ❌     |    ❌    |    ✅     |
-| Has a specific recipient?           |     ❌     |    ✅    |    ❌     |
-| Is it a command?                    |     ❌     |    ✅    |    ❌     |
-| Is it an observable fact?           |   Maybe    |    ❌    |    ✅     |
-| Is it a global announcement?        |     ✅     |    ❌    |    ❌     |
+| Has a specific sender that matters? |     No     |    No    |    Yes    |
+| Has a specific recipient?           |     No     |   Yes    |    No     |
+| Is it a command?                    |     No     |   Yes    |    No     |
+| Is it an observable fact?           |   Maybe    |    No    |    Yes    |
+| Is it a global announcement?        |    Yes     |    No    |    No     |
 
-> ⚠️ **Common Mistakes:**
+> **Common Mistakes:**
 >
-> - **Forgetting to enable the token** — Messages won't be received. Use `MessageAwareComponent` (auto-enables) or call `Token.Enable()` manually.
-> - **Targeting Component when you meant GameObject** — These are distinct registration paths. Component-targeted messages won't reach GameObject-level handlers.
-> - **Using Broadcast when you need Targeted** — Broadcasts have no recipient, just an origin. Use Targeted when commanding a specific entity.
-> - **Missing `[Dx*Message]` attribute** — The source generator won't process the struct without the marker attribute.
+> - **Forgetting to enable the token** -- Messages won't be received. Use `MessageAwareComponent` (auto-enables) or call `Token.Enable()` manually.
+> - **Targeting Component when you meant GameObject** -- These are distinct registration paths. Component-targeted messages won't reach GameObject-level handlers.
+> - **Using Broadcast when you need Targeted** -- Broadcasts have no recipient, just an origin. Use Targeted when commanding a specific entity.
+> - **Missing `[Dx*Message]` attribute** -- The source generator won't process the struct without the marker attribute.
 >
 > 📖 See [Troubleshooting](docs/reference/troubleshooting.md) for solutions to these and other issues.
 
-📖 **Want more depth?** See the full [Mental Model documentation](docs/concepts/mental-model.md) for detailed examples, lifecycle patterns, and edge cases.
+**Want more depth?** See the full [Mental Model documentation](docs/concepts/mental-model.md) for detailed examples, lifecycle patterns, and edge cases.
 
-📖 **Ready to code?** Jump to [Quick Start](#quick-start-5-minutes) to send your first message!
+**Ready to code?** Jump to [Quick Start](#quick-start-5-minutes) to send your first message!
 
 ---
 
@@ -242,7 +242,7 @@ No manual unsubscribe needed. Subscriptions are type-safe and lifecycle-managed.
 
 ---
 
-## 🔧 Dependency Injection (DI) Compatible
+## Dependency Injection (DI) Compatible
 
 **Using Zenject, VContainer, or Reflex?** DxMessaging is fully DI-compatible out of the box!
 
@@ -268,26 +268,26 @@ public class PlayerService : IInitializable, IDisposable
 
 ### Why use DI + Messaging?
 
-- **DI for construction** — Inject services, repositories, managers via constructors
-- **Messaging for events** — Reactive, decoupled communication for gameplay events
-- **Combined approach** — Clean architecture with testable, isolated buses
+- **DI for construction** -- Inject services, repositories, managers via constructors
+- **Messaging for events** -- Reactive, decoupled communication for gameplay events
+- **Combined approach** -- Clean architecture with testable, isolated buses
 
 #### Automatic integration for
 
-- ✅ **Zenject/Extenject** — Full-featured DI with extensive Unity support
-- ✅ **VContainer** — Lightweight, high-performance DI with scoped lifetimes
-- ✅ **Reflex** — Minimal API, high-performance dependency injection
+- [x] **Zenject/Extenject** -- Full-featured DI with extensive Unity support
+- [x] **VContainer** -- Lightweight, high-performance DI with scoped lifetimes
+- [x] **Reflex** -- Minimal API, high-performance dependency injection
 
 ##### Get started
 
-- [Zenject Integration Guide](docs/integrations/zenject.md) — Complete setup with examples
-- [VContainer Integration Guide](docs/integrations/vcontainer.md) — Scoped buses for scene isolation
-- [Reflex Integration Guide](docs/integrations/reflex.md) — Minimal, lightweight patterns
+- [Zenject Integration Guide](docs/integrations/zenject.md) -- Complete setup with examples
+- [VContainer Integration Guide](docs/integrations/vcontainer.md) -- Scoped buses for scene isolation
+- [Reflex Integration Guide](docs/integrations/reflex.md) -- Minimal, lightweight patterns
 
 ##### Core DI concepts
 
-- [Runtime Configuration](docs/advanced/runtime-configuration.md) — Setting message buses at runtime, re-binding registrations
-- [Message Bus Providers](docs/advanced/message-bus-providers.md) — Provider system for design-time and runtime bus configuration
+- [Runtime Configuration](docs/advanced/runtime-configuration.md) -- Setting message buses at runtime, re-binding registrations
+- [Message Bus Providers](docs/advanced/message-bus-providers.md) -- Provider system for design-time and runtime bus configuration
 
 **Not using DI?** No problem. DxMessaging works standalone with zero dependencies.
 
@@ -295,7 +295,7 @@ public class PlayerService : IInitializable, IDisposable
 
 ## Is DxMessaging Right for You?
 
-### ✅ Use DxMessaging When
+### Use DxMessaging When
 
 - **You have cross-system communication** - UI needs to react to gameplay, achievements track events, analytics observe everything
 - **You're building for scale** - 10+ systems that need to communicate, or growing from prototype to production
@@ -303,9 +303,9 @@ public class PlayerService : IInitializable, IDisposable
 - **You value observability** - Need to debug "what fired when?" or track message flow
 - **Teams/long-term maintenance** - Multiple developers, or you'll maintain this code for years
 - **You want decoupling** - When UI classes need references to many game systems
-- **You're using DI frameworks** - Compatible with Zenject/VContainer/Reflex (see [DI Compatible](#-dependency-injection-di-compatible))
+- **You're using DI frameworks** - Compatible with Zenject/VContainer/Reflex (see [DI Compatible](#dependency-injection-di-compatible))
 
-### ❌ Don't Use DxMessaging When
+### Don't Use DxMessaging When
 
 - **Tiny prototypes/game jams** - If your game is <1000 lines and will be done in a week, C# events are fine
 - **Simple, local communication** - A single button calling a single method? Just use UnityEvents or direct references
@@ -313,7 +313,7 @@ public class PlayerService : IInitializable, IDisposable
 - **Team is unfamiliar** - Learning curve exists; if the team isn't on board, it won't be used correctly
 - **You need synchronous return values** - DxMessaging is fire-and-forget; if you need bidirectional request/response, consider other patterns
 
-### ⚠️ Maybe Use DxMessaging (Start Small)
+### Maybe Use DxMessaging (Start Small)
 
 - **Existing large codebase** - Migrate incrementally: start with new features, refactor old code gradually (see [Migration Guide](docs/guides/migration-guide.md))
 - **Small team learning** - Try it for one system (e.g., achievements) before going all-in
@@ -332,8 +332,8 @@ flowchart TD
     Q2 -->|YES| Q3
 
     Q3{Do you need observable, decoupled,<br/>lifecycle-safe messaging?}
-    Q3 -->|YES| A3["✅ Use DxMessaging"]
-    Q3 -->|NO| A4["❌ Keep it simple"]
+    Q3 -->|YES| A3[" Use DxMessaging"]
+    Q3 -->|NO| A4[" Keep it simple"]
 ```
 
 **Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
@@ -353,7 +353,7 @@ public class GameUI : MonoBehaviour {
     void OnEnable() {
         GameManager.Instance.OnScoreChanged += UpdateScore;
     }
-    // Oops, forgot OnDisable... leak! 💀
+    // Oops, forgot OnDisable... leak!
 }
 ```
 
@@ -443,13 +443,13 @@ Open any `MessageAwareComponent` in the Inspector:
 
 ```text
 Message History (last 50):
-[12:34:56] HealthChanged (amount: 25) → Priority: 0
-[12:34:55] ItemAdded (id: 42, count: 1) → Priority: 5
-[12:34:54] WaveStarted (wave: 3) → Priority: 0
+[12:34:56] HealthChanged (amount: 25) -> Priority: 0
+[12:34:55] ItemAdded (id: 42, count: 1) -> Priority: 5
+[12:34:54] WaveStarted (wave: 3) -> Priority: 0
 
 Active Registrations:
-✓ HealthChanged (5 handlers)
-✓ ItemAdded (2 handlers)
+ HealthChanged (5 handlers)
+ ItemAdded (2 handlers)
 ```
 
 **See exactly what fired, when, and who handled it.** No guesswork.
@@ -482,13 +482,13 @@ heal.EmitComponentTargeted(playerComponent);
 
 #### What you get
 
-- ✅ **Automatic cleanup** - tokens clean up when components are destroyed
-- ✅ **Zero coupling** - no SerializeFields, no GetComponent, no direct references
-- ✅ **Full visibility** - see message flow in Inspector with timestamps and payloads
-- ✅ **Predictable order** - priority-based execution (no more mystery race conditions)
-- ✅ **Type-safe** - compile-time guarantees, refactor with confidence
-- ✅ **Intercept & validate** - enforce rules before handlers run (clamp damage, block invalid input)
-- ✅ **Extension points everywhere** - interceptors, handlers, post-processors with priorities
+- [x] **Automatic cleanup** - tokens clean up when components are destroyed
+- [x] **Zero coupling** - no SerializeFields, no GetComponent, no direct references
+- [x] **Full visibility** - see message flow in Inspector with timestamps and payloads
+- [x] **Predictable order** - priority-based execution (no more mystery race conditions)
+- [x] **Type-safe** - compile-time guarantees, refactor with confidence
+- [x] **Intercept & validate** - enforce rules before handlers run (clamp damage, block invalid input)
+- [x] **Extension points everywhere** - interceptors, handlers, post-processors with priorities
 
 ## Key Features
 
@@ -517,17 +517,17 @@ Most event systems force you into one pattern. DxMessaging gives you the right t
 // Untargeted: "Everyone, listen up!" (global announcements)
 [DxUntargetedMessage]
 public struct GamePaused { }
-// ↳ Perfect for: settings, scene transitions, global state
+// -> Perfect for: settings, scene transitions, global state
 
 // Targeted: "Hey Player, do this!" (commands to specific entities)
 [DxTargetedMessage]
 public struct Heal { public int amount; }
-// ↳ Perfect for: UI actions, direct commands, player input
+// -> Perfect for: UI actions, direct commands, player input
 
 // Broadcast: "I took damage!" (events others can observe)
 [DxBroadcastMessage]
 public struct TookDamage { public int amount; }
-// ↳ Perfect for: achievements, analytics, UI updates from entities
+// -> Perfect for: achievements, analytics, UI updates from entities
 ```
 
 **Why this matters:** You're not forcing everything through one generic "Event<T>" pattern. Each message type has clear semantics.
@@ -606,7 +606,7 @@ void OnDamage(ref TookDamage msg) {
 
 ### Built-in Inspector Diagnostics
 
-**The problem with normal events:** "Which event fired? When? Who handled it? In what order?" = 🤷
+**The problem with normal events:** "Which event fired? When? Who handled it? In what order?" = unknown
 
 **DxMessaging solution:** Click any `MessageAwareComponent` in the Inspector:
 
@@ -623,16 +623,16 @@ void OnDamage(ref TookDamage msg) {
 
 ##### Active Registrations
 
-- ✓ HealthChanged (priority: 0, called: 847 times)
-- ✓ ItemAdded (priority: 5, called: 23 times)
-- ✓ TookDamage (priority: 10, called: 1,203 times)
+- [x] HealthChanged (priority: 0, called: 847 times)
+- [x] ItemAdded (priority: 5, called: 23 times)
+- [x] TookDamage (priority: 10, called: 1,203 times)
 
 #### Real-world debugging scenarios
 
-- "Did my message fire?" → Check history, see timestamp
-- "Why didn't my handler run?" → Check registrations, see if it's active
-- "What's firing too often?" → Sort by call count
-- "What's the execution order?" → Sort by priority
+- "Did my message fire?" -> Check history, see timestamp
+- "Why didn't my handler run?" -> Check registrations, see if it's active
+- "What's firing too often?" -> Sort by call count
+- "What's the execution order?" -> Sort by priority
 
 **No more:** Setting 50 breakpoints and stepping through code for 30 minutes.
 
@@ -670,74 +670,74 @@ public void TestAchievementSystem() {
 
 ## Documentation
 
-- **[📖 Documentation Site](https://wallstop.github.io/DxMessaging/)** - Full searchable documentation
-- **[📚 Wiki](https://github.com/wallstop/DxMessaging/wiki)** - Quick reference wiki
-- **[📋 Changelog](CHANGELOG.md)** - Version history
+- **[Documentation Site](https://wallstop.github.io/DxMessaging/)** - Full searchable documentation
+- **[Wiki](https://github.com/wallstop/DxMessaging/wiki)** - Quick reference wiki
+- **[Changelog](CHANGELOG.md)** - Version history
 
-### 🎓 Learn
+### Learn
 
 - **New here?** Start with [Getting Started Guide](docs/getting-started/getting-started.md) (10 min read)
 - **Want patterns?** See [Common Patterns](docs/guides/patterns.md)
 - **Deep dive?** Read [Design & Architecture](docs/architecture/design-and-architecture.md)
 
-### 📚 Core Concepts
+### Core Concepts
 
-- [Overview](docs/getting-started/overview.md) — What and why
-- [Quick Start](docs/getting-started/quick-start.md) — First message in 5 minutes
-- [Message Types](docs/concepts/message-types.md) — When to use Untargeted/Targeted/Broadcast
-- [Interceptors & Ordering](docs/concepts/interceptors-and-ordering.md) — Control execution flow
-- [Listening Patterns](docs/concepts/listening-patterns.md) — All the ways to receive messages
+- [Overview](docs/getting-started/overview.md) -- What and why
+- [Quick Start](docs/getting-started/quick-start.md) -- First message in 5 minutes
+- [Message Types](docs/concepts/message-types.md) -- When to use Untargeted/Targeted/Broadcast
+- [Interceptors & Ordering](docs/concepts/interceptors-and-ordering.md) -- Control execution flow
+- [Listening Patterns](docs/concepts/listening-patterns.md) -- All the ways to receive messages
 
-### 🔧 Unity Integration
+### Unity Integration
 
-- [Unity Integration](docs/guides/unity-integration.md) — MessagingComponent deep dive
-- [Targeting & Context](docs/concepts/targeting-and-context.md) — GameObject vs Component
-- [Diagnostics](docs/guides/diagnostics.md) — Inspector tools and debugging
+- [Unity Integration](docs/guides/unity-integration.md) -- MessagingComponent deep dive
+- [Targeting & Context](docs/concepts/targeting-and-context.md) -- GameObject vs Component
+- [Diagnostics](docs/guides/diagnostics.md) -- Inspector tools and debugging
 
 Important: Inheritance with MessageAwareComponent
 
 - If you override lifecycle or registration hooks, call the base method.
-- Use `base.RegisterMessageHandlers()` to keep default string‑message registrations.
+- Use `base.RegisterMessageHandlers()` to keep default string-message registrations.
 - Use `base.OnEnable()` / `base.OnDisable()` to preserve token enable/disable.
 - If you need to opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
-- Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
+- Don't hide Unity methods with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
 
-### 🧩 DI Framework Integrations
+### DI Framework Integrations
 
 DxMessaging works standalone (zero dependencies) or with any major DI framework. For detailed setup guides and code examples:
 
-- **[Zenject Integration Guide](docs/integrations/zenject.md)** — Full-featured DI with extensive Unity support
-- **[VContainer Integration Guide](docs/integrations/vcontainer.md)** — Lightweight DI with scoped lifetimes for scene isolation
-- **[Reflex Integration Guide](docs/integrations/reflex.md)** — Minimal API, high-performance DI
+- **[Zenject Integration Guide](docs/integrations/zenject.md)** -- Full-featured DI with extensive Unity support
+- **[VContainer Integration Guide](docs/integrations/vcontainer.md)** -- Lightweight DI with scoped lifetimes for scene isolation
+- **[Reflex Integration Guide](docs/integrations/reflex.md)** -- Minimal API, high-performance DI
 
 #### Core DI concepts
 
-- **[Runtime Configuration](docs/advanced/runtime-configuration.md)** — Setting and overriding message buses at runtime, re-binding registrations
-- **[Message Bus Providers](docs/advanced/message-bus-providers.md)** — Provider system and MessageBusProviderHandle for flexible bus configuration
+- **[Runtime Configuration](docs/advanced/runtime-configuration.md)** -- Setting and overriding message buses at runtime, re-binding registrations
+- **[Message Bus Providers](docs/advanced/message-bus-providers.md)** -- Provider system and MessageBusProviderHandle for flexible bus configuration
 
 Each guide includes:
 
-- ✅ Complete setup instructions with installers
-- ✅ Multiple usage patterns (plain classes, MonoBehaviours, direct injection)
-- ✅ Testing examples with isolated buses
-- ✅ Advanced patterns (pooling, scene scopes, signal bridges)
+- [x] Complete setup instructions with installers
+- [x] Multiple usage patterns (plain classes, MonoBehaviours, direct injection)
+- [x] Testing examples with isolated buses
+- [x] Advanced patterns (pooling, scene scopes, signal bridges)
 
-See the [🔧 DI Compatible section](#-dependency-injection-di-compatible) above for a quick overview.
+See the [DI Compatible section](#dependency-injection-di-compatible) above for a quick overview.
 
-### 🆚 Comparisons
+### Comparisons
 
-- [Compare with Other Unity Messaging Frameworks](docs/architecture/comparisons.md) — In-depth comparison with UniRx, MessagePipe, Zenject Signals, C# events, UnityEvents, and more
-- [Scriptable Object Architecture (SOA) Compatibility](docs/guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa) — Migration patterns and interoperability with SOA
+- [Compare with Other Unity Messaging Frameworks](docs/architecture/comparisons.md) -- In-depth comparison with UniRx, MessagePipe, Zenject Signals, C# events, UnityEvents, and more
+- [Scriptable Object Architecture (SOA) Compatibility](docs/guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa) -- Migration patterns and interoperability with SOA
 
 #### Quick Framework Comparison
 
-| Framework           | Best For                          | Key Strength                     | Unity Support      | Learning Curve |
-| ------------------- | --------------------------------- | -------------------------------- | ------------------ | -------------- |
-| **DxMessaging**     | Unity pub/sub with lifecycle mgmt | Inspector debugging + control    | ✅ Built for Unity | ⭐⭐⭐         |
-| **UniRx**           | Complex event stream transforms   | Reactive operators (LINQ)        | ✅ Built for Unity | ⭐⭐           |
-| **MessagePipe**     | High-performance DI messaging     | Highest throughput (97M ops/sec) | ✅ Built for Unity | ⭐⭐⭐⭐       |
-| **Zenject Signals** | DI-integrated messaging           | Zenject ecosystem                | ✅ Built for Unity | ⭐⭐           |
-| **C# Events**       | Simple, local communication       | Minimal overhead                 | ✅ Native C#       | ⭐⭐⭐⭐⭐     |
+| Framework           | Best For                          | Key Strength                     | Unity Support   | Learning Curve |
+| ------------------- | --------------------------------- | -------------------------------- | --------------- | -------------- |
+| **DxMessaging**     | Unity pub/sub with lifecycle mgmt | Inspector debugging + control    | Built for Unity | Moderate       |
+| **UniRx**           | Complex event stream transforms   | Reactive operators (LINQ)        | Built for Unity | Easy           |
+| **MessagePipe**     | High-performance DI messaging     | Highest throughput (97M ops/sec) | Built for Unity | Steep          |
+| **Zenject Signals** | DI-integrated messaging           | Zenject ecosystem                | Built for Unity | Easy           |
+| **C# Events**       | Simple, local communication       | Minimal overhead                 | Native C#       | Steepest       |
 
 ##### Choose DxMessaging when you want
 
@@ -761,17 +761,17 @@ See [full comparison](docs/architecture/comparisons.md) for detailed analysis wi
 > - How to use both systems together (SOs for configs, DxMessaging for events)
 > - When to keep using ScriptableObjects (immutable design data)
 
-### 📖 Reference
+### Reference
 
-- [Install Guide](docs/getting-started/install.md) — All install options (OpenUPM, Git URL, scoped registry, tarball)
-- [Glossary](docs/reference/glossary.md) — All terms explained in plain English
-- [Quick Reference](docs/reference/quick-reference.md) — Cheat sheet
-- [API Reference](docs/reference/reference.md) — Complete API
-- [Helpers](docs/reference/helpers.md) — Source generators and utilities
-- [FAQ](docs/reference/faq.md) — Common questions
+- [Install Guide](docs/getting-started/install.md) -- All install options (OpenUPM, Git URL, scoped registry, tarball)
+- [Glossary](docs/reference/glossary.md) -- All terms explained in plain English
+- [Quick Reference](docs/reference/quick-reference.md) -- Cheat sheet
+- [API Reference](docs/reference/reference.md) -- Complete API
+- [Helpers](docs/reference/helpers.md) -- Source generators and utilities
+- [FAQ](docs/reference/faq.md) -- Common questions
 - [Troubleshooting](docs/reference/troubleshooting.md)
 
-### 📦 Full Documentation
+### Full Documentation
 
 Browse all docs: [Documentation Hub](docs/getting-started/index.md)
 
@@ -835,41 +835,41 @@ For OS-specific benchmark tables generated by PlayMode tests, see [Performance B
 
 ### Comparison with Unity Messaging Frameworks
 
-| Feature                  | DxMessaging        | UniRx              | MessagePipe        | Zenject Signals    |
-| ------------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| **Unity Compatibility**  | ✅ Built for Unity | ✅ Built for Unity | ✅ Built for Unity | ✅ Built for Unity |
-| **Decoupling**           | ✅ Full            | ✅ Full            | ✅ Full            | ✅ Full            |
-| **Lifecycle Safety**     | ✅ Auto            | ⚠️ Manual          | ⚠️ Manual          | ⚠️ DI-managed      |
-| **Execution Order**      | ✅ Priority        | ❌ None            | ❌ None            | ❌ None            |
-| **Type Safety**          | ✅ Strong          | ✅ Strong          | ✅ Strong          | ✅ Strong          |
-| **Inspector Debug**      | ✅ Built-in        | ❌ No              | ❌ No              | ❌ No              |
-| **GameObject Targeting** | ✅ Yes             | ❌ No              | ❌ No              | ❌ No              |
-| **Global Observers**     | ✅ Yes             | ❌ No              | ❌ No              | ❌ No              |
-| **Interceptors**         | ✅ Pipeline        | ❌ No              | ⚠️ Filters         | ❌ No              |
-| **Post-Processing**      | ✅ Dedicated       | ❌ No              | ⚠️ Filters         | ❌ No              |
-| **Stream Operators**     | ❌ No              | ✅ Extensive       | ❌ No              | ⚠️ With UniRx      |
-| **Performance**          | ✅ Good (10-17M)   | ✅ Good (18M)      | ✅ High (97M)      | ⚠️ Moderate (2.5M) |
-| **Dependencies**         | ✅ None            | ⚠️ UniTask         | ✅ None            | ⚠️ Zenject         |
+| Feature                  | DxMessaging     | UniRx           | MessagePipe     | Zenject Signals |
+| ------------------------ | --------------- | --------------- | --------------- | --------------- |
+| **Unity Compatibility**  | Built for Unity | Built for Unity | Built for Unity | Built for Unity |
+| **Decoupling**           | Full            | Full            | Full            | Full            |
+| **Lifecycle Safety**     | Auto            | Manual          | Manual          | DI-managed      |
+| **Execution Order**      | Priority        | None            | None            | None            |
+| **Type Safety**          | Strong          | Strong          | Strong          | Strong          |
+| **Inspector Debug**      | Built-in        | No              | No              | No              |
+| **GameObject Targeting** | Yes             | No              | No              | No              |
+| **Global Observers**     | Yes             | No              | No              | No              |
+| **Interceptors**         | Pipeline        | No              | Filters         | No              |
+| **Post-Processing**      | Dedicated       | No              | Filters         | No              |
+| **Stream Operators**     | No              | Extensive       | No              | With UniRx      |
+| **Performance**          | Good (10-17M)   | Good (18M)      | High (97M)      | Moderate (2.5M) |
+| **Dependencies**         | None            | UniTask         | None            | Zenject         |
 
 ### Comparison with Traditional Approaches
 
-| Feature                | DxMessaging   | C# Events    | UnityEvents   | Static Event Bus |
-| ---------------------- | ------------- | ------------ | ------------- | ---------------- |
-| **Decoupling**         | ✅ Full       | ❌ Tight     | ⚠️ Hidden     | ✅ Yes           |
-| **Lifecycle Safety**   | ✅ Auto       | ❌ Manual    | ⚠️ Unity-only | ❌ Manual        |
-| **Execution Order**    | ✅ Priority   | ❌ Undefined | ❌ Undefined  | ❌ Undefined     |
-| **Type Safety**        | ✅ Strong     | ✅ Strong    | ⚠️ Weak       | ⚠️ Weak          |
-| **Context (Who/What)** | ✅ Rich       | ❌ None      | ❌ None       | ❌ None          |
-| **Interception**       | ✅ Yes        | ❌ No        | ❌ No         | ❌ No            |
-| **Observability**      | ✅ Built-in   | ❌ No        | ❌ No         | ❌ No            |
-| **Performance**        | ✅ Zero-alloc | ✅ Good      | ⚠️ Boxing     | ✅ Good          |
+| Feature                | DxMessaging | C# Events | UnityEvents | Static Event Bus |
+| ---------------------- | ----------- | --------- | ----------- | ---------------- |
+| **Decoupling**         | Full        | Tight     | Hidden      | Yes              |
+| **Lifecycle Safety**   | Auto        | Manual    | Unity-only  | Manual           |
+| **Execution Order**    | Priority    | Undefined | Undefined   | Undefined        |
+| **Type Safety**        | Strong      | Strong    | Weak        | Weak             |
+| **Context (Who/What)** | Rich        | None      | None        | None             |
+| **Interception**       | Yes         | No        | No          | No               |
+| **Observability**      | Built-in    | No        | No          | No               |
+| **Performance**        | Zero-alloc  | Good      | Boxing      | Good             |
 
 ## Samples
 
 Import samples from Package Manager:
 
-- **[Mini Combat](Samples~/Mini%20Combat/README.md)** — Simple combat with Heal/Damage messages
-- **[UI Buttons + Inspector](Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** — Interactive diagnostics demo
+- **[Mini Combat](Samples~/Mini%20Combat/README.md)** -- Simple combat with Heal/Damage messages
+- **[UI Buttons + Inspector](Samples~/UI%20Buttons%20%2B%20Inspector/README.md)** -- Interactive diagnostics demo
 
 ## Requirements
 
@@ -893,20 +893,20 @@ Created and maintained by [wallstop studios](https://wallstopstudios.com)
 
 ## Links
 
-- 📦 [Package on GitHub](https://github.com/wallstop/DxMessaging)
-- 🐛 [Report Issues](https://github.com/wallstop/DxMessaging/issues)
-- 📖 [Documentation Site](https://wallstop.github.io/DxMessaging/)
-- 📚 [Wiki](https://github.com/wallstop/DxMessaging/wiki)
+- [Package on GitHub](https://github.com/wallstop/DxMessaging)
+- [Report Issues](https://github.com/wallstop/DxMessaging/issues)
+- [Documentation Site](https://wallstop.github.io/DxMessaging/)
+- [Wiki](https://github.com/wallstop/DxMessaging/wiki)
 
 ## AI Agent Integration
 
 DxMessaging provides comprehensive AI agent context through [llms.txt](llms.txt), following the [llmstxt.org](https://llmstxt.org/) standard for LLM-friendly documentation.
 
-### 🤖 For AI Agents
+### For AI Agents
 
-- **[llms.txt](llms.txt)** — Complete project overview, API reference, and context in a single file
-- **[Repository Guidelines](.llm/context.md)** — Coding standards and development workflows
-- **[AI Agent Skills](.llm/skills/)** — 90+ specialized skill documents covering documentation, testing, GitHub Actions, and more
+- **[llms.txt](llms.txt)** -- Complete project overview, API reference, and context in a single file
+- **[Repository Guidelines](.llm/context.md)** -- Coding standards and development workflows
+- **[AI Agent Skills](.llm/skills/)** -- 90+ specialized skill documents covering documentation, testing, GitHub Actions, and more
 
 The `llms.txt` file is automatically updated via CI/CD to stay current with project changes. It includes:
 

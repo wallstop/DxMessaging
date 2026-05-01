@@ -7,6 +7,8 @@ on:
       - "**/*.markdown"
       - ".github/scripts/check_markdown_links.py"
       - ".github/scripts/check_markdown_url_encoding.py"
+      - ".github/scripts/test_check_markdown_links.py"
+      - ".github/scripts/test_check_markdown_url_encoding.py"
   push:
     branches:
       - main
@@ -16,6 +18,8 @@ on:
       - "**/*.markdown"
       - ".github/scripts/check_markdown_links.py"
       - ".github/scripts/check_markdown_url_encoding.py"
+      - ".github/scripts/test_check_markdown_links.py"
+      - ".github/scripts/test_check_markdown_url_encoding.py"
   workflow_dispatch:
 
 jobs:
@@ -25,8 +29,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Run markdown link checker unit tests
+        run: >-
+          PYTHONPATH=.github/scripts
+          python3 -m unittest discover -s .github/scripts -p "test_check_markdown_*.py"
+
       - name: Validate link text for markdown-to-markdown links
-        run: python .github/scripts/check_markdown_links.py .
+        run: python3 .github/scripts/check_markdown_links.py .
 
       - name: Verify relative links are URL-encoded
-        run: python .github/scripts/check_markdown_url_encoding.py .
+        run: python3 .github/scripts/check_markdown_url_encoding.py .

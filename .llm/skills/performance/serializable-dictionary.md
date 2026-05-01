@@ -94,25 +94,25 @@ private Dictionary<string, int> itemCounts; // Never serialized!
 ### Core Concept
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  SerializableDictionary<TKey, TValue>                       │
-├─────────────────────────────────────────────────────────────┤
-│  [SerializeField] List<TKey> keys      ← Unity serializes   │
-│  [SerializeField] List<TValue> values  ← Unity serializes   │
-│                                                              │
-│  Dictionary<TKey, TValue> dictionary   ← Runtime access     │
-├─────────────────────────────────────────────────────────────┤
-│  OnBeforeSerialize():                                        │
-│    keys.Clear(); values.Clear();                            │
-│    foreach(kvp in dictionary):                              │
-│      keys.Add(kvp.Key);                                     │
-│      values.Add(kvp.Value);                                 │
-│                                                              │
-│  OnAfterDeserialize():                                       │
-│    dictionary.Clear();                                       │
-│    for(i = 0; i < keys.Count; i++):                         │
-│      dictionary[keys[i]] = values[i];                       │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  SerializableDictionary<TKey, TValue>                       |
++-------------------------------------------------------------+
+|  [SerializeField] List<TKey> keys      <- Unity serializes  |
+|  [SerializeField] List<TValue> values  <- Unity serializes  |
+|                                                             |
+|  Dictionary<TKey, TValue> dictionary   <- Runtime access    |
++-------------------------------------------------------------+
+|  OnBeforeSerialize():                                       |
+|    keys.Clear(); values.Clear();                            |
+|    foreach(kvp in dictionary):                              |
+|      keys.Add(kvp.Key);                                     |
+|      values.Add(kvp.Value);                                 |
+|                                                             |
+|  OnAfterDeserialize():                                      |
+|    dictionary.Clear();                                      |
+|    for(i = 0; i < keys.Count; i++):                         |
+|      dictionary[keys[i]] = values[i];                       |
++-------------------------------------------------------------+
 ```
 
 ### Implementation

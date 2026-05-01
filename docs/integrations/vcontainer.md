@@ -1,6 +1,6 @@
 # DxMessaging + VContainer
 
-[← Back to Integrations Overview](index.md)
+[Back to Integrations Overview](index.md)
 
 ---
 
@@ -11,7 +11,7 @@
 - **Inject `IMessageBus`** in any class with deterministic lifetimes
 - **Create per-scope buses** for scene isolation (perfect for additive scenes)
 - **Use DI for construction** + DxMessaging for events (best of both worlds)
-- **Compatible** — VContainer and DxMessaging can be used together
+- **Compatible** -- VContainer and DxMessaging can be used together
 
 **Why combine DI + Messaging?** Use constructor injection for service dependencies (repositories, managers) and messaging for reactive events (damage taken, item collected), combining both approaches. VContainer's scoped lifetimes support per-scene message buses.
 
@@ -328,6 +328,6 @@ public IEnumerator PlayMode_MessageBusIsolation()
 
 ## Next Steps
 
-- **[Zenject Integration](zenject.md)** — Full-featured DI with extensive Unity support
-- **[Reflex Integration](reflex.md)** — Minimal DI framework
-- **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs
+- **[Zenject Integration](zenject.md)** -- Full-featured DI with extensive Unity support
+- **[Reflex Integration](reflex.md)** -- Minimal DI framework
+- **[Back to Documentation Hub](../getting-started/index.md)** -- Browse all docs

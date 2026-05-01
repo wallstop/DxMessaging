@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - ".llm/**"
-      - ".vscode/settings.json"
       - "scripts/validate-skills.js"
       - "scripts/validate-vscode-settings.js"
       - "scripts/generate-skills-index.js"
@@ -16,7 +15,6 @@ on:
       - master
     paths:
       - ".llm/**"
-      - ".vscode/settings.json"
       - "scripts/validate-skills.js"
       - "scripts/validate-vscode-settings.js"
       - "scripts/generate-skills-index.js"

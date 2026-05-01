@@ -25,18 +25,18 @@ Continuation material extracted from `test-base-class-cleanup.md` to keep .llm f
 ### Core Concept
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│  CommonTestBase                                                  │
-├─────────────────────────────────────────────────────────────────┤
-│  List<Object> _trackedObjects                                   │
-│  List<IDisposable> _trackedDisposables                          │
-├─────────────────────────────────────────────────────────────────┤
-│  Track<T>(T obj) → adds to list, returns obj                    │
-│  TrackDisposable<T>(T d) → adds to list, returns d              │
-├─────────────────────────────────────────────────────────────────┤
-│  [TearDown] → Destroys all tracked objects                      │
-│  [UnityTearDown] → Yields for async destruction                 │
-└─────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------+
+|  CommonTestBase                                                 |
++-----------------------------------------------------------------+
+|  List<Object> _trackedObjects                                   |
+|  List<IDisposable> _trackedDisposables                          |
++-----------------------------------------------------------------+
+|  Track<T>(T obj) -> adds to list, returns obj                   |
+|  TrackDisposable<T>(T d) -> adds to list, returns d             |
++-----------------------------------------------------------------+
+|  [TearDown] -> Destroys all tracked objects                     |
+|  [UnityTearDown] -> Yields for async destruction                |
++-----------------------------------------------------------------+
 ```
 
 ### Implementation

@@ -27,7 +27,7 @@ These tell the source generator what KIND of message you're making:
 #### `[DxUntargetedMessage]` - Global Messages
 
 ```csharp
-[DxUntargetedMessage]  // ← Tells generator: "This is a global message"
+[DxUntargetedMessage]  // <- Tells generator: "This is a global message"
 public readonly partial struct GamePaused { }
 ```
 
@@ -40,7 +40,7 @@ public readonly partial struct GamePaused { }
 #### `[DxTargetedMessage]` - Messages to Specific Targets
 
 ```csharp
-[DxTargetedMessage]  // ← Tells generator: "This goes to one specific target"
+[DxTargetedMessage]  // <- Tells generator: "This goes to one specific target"
 public readonly partial struct Heal {
     public readonly int amount;
 }
@@ -55,7 +55,7 @@ public readonly partial struct Heal {
 #### `[DxBroadcastMessage]` - Messages from a Source
 
 ```csharp
-[DxBroadcastMessage]  // ← Tells generator: "This broadcasts from a source"
+[DxBroadcastMessage]  // <- Tells generator: "This broadcasts from a source"
 public readonly partial struct TookDamage {
     public readonly int amount;
 }
@@ -75,7 +75,7 @@ public readonly partial struct TookDamage {
 
 ```csharp
 [DxUntargetedMessage]
-[DxAutoConstructor]  // ← Magic happens here!
+[DxAutoConstructor]  // <- Magic happens here!
 public readonly partial struct VideoSettingsChanged
 {
     public readonly int width;
@@ -162,7 +162,7 @@ var settings4 = new SettingsChanged(0.8f, 2, brightness: 50);    // fullscreen=f
 
 The attribute provides constructor overloads for all common primitive types:
 
-> ℹ️ **Info: Built-in Type Support**
+> **Info: Built-in Type Support**
 >
 > **Numeric:**
 >
@@ -395,25 +395,27 @@ public readonly partial struct AudioSettingsChanged
 audioSettings.Emit();
 
 // Only change music volume
-new AudioSettingsChanged(musicVolume: 0.5f).Emit();
+var musicOnly = new AudioSettingsChanged(musicVolume: 0.5f);
+musicOnly.Emit();
 
 // Change multiple settings
-new AudioSettingsChanged(0.7f, 0.6f, 0.9f, false).Emit();
+var multi = new AudioSettingsChanged(0.7f, 0.6f, 0.9f, false);
+multi.Emit();
 ```
 
 #### Best Practices
 
-> ✅ **Success: Recommendations**
+> **Success: Recommendations**
 >
-> 1. **Order matters** — Place required fields before optional fields in your struct
-> 1. **Use meaningful defaults** — Choose defaults that represent the most common use case
-> 1. **Prefer explicit values** — Use `[DxOptionalParameter(0)]` instead of `[DxOptionalParameter]` when clarity helps
-> 1. **Use Expression for complex types** — Don't fight the type system; use `Expression` for enums and Unity types
-> 1. **Document unusual defaults** — If a default isn't obvious, add a comment explaining why
+> 1. **Order matters** -- Place required fields before optional fields in your struct
+> 1. **Use meaningful defaults** -- Choose defaults that represent the most common use case
+> 1. **Prefer explicit values** -- Use `[DxOptionalParameter(0)]` instead of `[DxOptionalParameter]` when clarity helps
+> 1. **Use Expression for complex types** -- Don't fight the type system; use `Expression` for enums and Unity types
+> 1. **Document unusual defaults** -- If a default isn't obvious, add a comment explaining why
 
 ## Why Use Attributes Instead of Manual Implementation
 
-### ✅ Attribute Definition (Clean, Automatic)
+### Attribute Definition (Clean, Automatic)
 
 ```csharp
 [DxTargetedMessage]
@@ -443,10 +445,10 @@ public readonly partial struct Heal : ITargetedMessage<Heal>
 
 #### Benefits
 
-- ✅ **Less code** - 50% fewer lines
-- ✅ **Fewer bugs** - Can't forget fields in constructor
-- ✅ **Focused** - Focus on data, not boilerplate
-- ✅ **Refactor-safe** - Add field? Constructor updates automatically!
+- [x] **Less code** - 50% fewer lines
+- [x] **Fewer bugs** - Can't forget fields in constructor
+- [x] **Focused** - Focus on data, not boilerplate
+- [x] **Refactor-safe** - Add field? Constructor updates automatically!
 
 ## Complete Example: Attribute Definition vs Generated Output
 
@@ -488,15 +490,15 @@ public readonly partial struct PlayerDamaged : IBroadcastMessage<PlayerDamaged>
 
 ### Result
 
-- ✅ Same functionality
-- ✅ Less code to maintain
-- ✅ Automatically updates when you add/remove fields
-- ✅ Works for class messages too
-- ✅ Zero effort once you mark the struct partial
+- [x] Same functionality
+- [x] Less code to maintain
+- [x] Automatically updates when you add/remove fields
+- [x] Works for class messages too
+- [x] Zero effort once you mark the struct partial
 
 ## Advanced: Manual Implementation (When Attributes Aren't Enough)
 
-Attributes cover almost every scenario. If you intentionally drop `[DxTargetedMessage]`, `[DxUntargetedMessage]`, or `[DxBroadcastMessage]`, you'll need to hand-write the interface implementations and constructors shown in the “generated output” examples. Keep the attributes unless you have a very specific data-backed reason not to.
+Attributes cover almost every scenario. If you intentionally drop `[DxTargetedMessage]`, `[DxUntargetedMessage]`, or `[DxBroadcastMessage]`, you'll need to hand-write the interface implementations and constructors shown in the "generated output" examples. Keep the attributes unless you have a very specific data-backed reason not to.
 
 ### Generic Message Interfaces (Zero-Boxing for Structs)
 
@@ -513,7 +515,7 @@ public readonly partial struct Heal
 
 ### "Do I HAVE to use attributes?"
 
-Technically no—but without them you must write the constructor, interface implementation, and `MessageType` property yourself (for speed, you can optionally leave this off, but it might box on certain call paths). Leaving the attributes on keeps everything consistent for the whole team.
+Technically no -- but without them you must write the constructor, interface implementation, and `MessageType` property yourself (for speed, you can optionally leave this off, but it might box on certain call paths). Leaving the attributes on keeps everything consistent for the whole team.
 
 ```csharp
 [DxUntargetedMessage]
@@ -562,7 +564,7 @@ public readonly partial struct MessageA
 DxMessaging provides extension methods to make emitting messages easy:
 
 ```csharp
-using DxMessaging.Core.Extensions;  // ← Don't forget this!
+using DxMessaging.Core.Extensions;  // <- Don't forget this!
 using UnityEngine;
 
 // Untargeted (global)
@@ -679,7 +681,7 @@ public readonly partial struct Damage
 
 Makes a constructor parameter optional. Three usage patterns:
 
-> 📋 **Example: Default Value (type default)**
+> **Example: Default Value (type default)**
 >
 > Uses the type's default value (`0`, `false`, `null`, etc.):
 >
@@ -689,7 +691,7 @@ Makes a constructor parameter optional. Three usage patterns:
 > // Generates: bool flag = default
 > ```
 >
-> 📋 **Example: Custom Value (primitive)**
+> **Example: Custom Value (primitive)**
 >
 > Provides a specific default value:
 >
@@ -699,7 +701,7 @@ Makes a constructor parameter optional. Three usage patterns:
 > // Generates: int count = 42
 > ```
 >
-> 📋 **Example: Expression (complex types)**
+> **Example: Expression (complex types)**
 >
 > Uses a verbatim expression for enums, Unity types, etc.:
 >
@@ -713,9 +715,9 @@ Makes a constructor parameter optional. Three usage patterns:
 
 These attributes work with:
 
-- **Top-level types** — public structs and classes
-- **Nested types** — types inside other classes
-- **Internal types** — assembly-private messages
+- **Top-level types** -- public structs and classes
+- **Nested types** -- types inside other classes
+- **Internal types** -- assembly-private messages
 
 ## Common Patterns with Attributes
 
@@ -901,7 +903,7 @@ If you truly need to hand-craft the constructor, drop `[DxAutoConstructor]` for 
 
 ### "Can I mix attributes and manual implementation?"
 
-Yes. Attribute-driven messages happily coexist with any legacy manual messages or string messages you already emit. Convert types gradually—one message at a time:
+Yes. Attribute-driven messages happily coexist with any legacy manual messages or string messages you already emit. Convert types gradually -- one message at a time:
 
 ```csharp
 [DxUntargetedMessage]
@@ -916,44 +918,44 @@ public readonly partial struct MessageA
 
 ## Troubleshooting Source Generators
 
-> ⚠️ **Warning: Attributes not working / code not generated**
+> **Warning: Attributes not working / code not generated**
 >
 > ### Checklist
 >
-> 1. ✅ Is type marked `partial`?
-> 1. ✅ Did you rebuild the project?
-> 1. ✅ Is Unity 2021.3+ (Roslyn source generator support)?
-> 1. ✅ Check `obj/` folder for `.g.cs` files
+> 1. Is type marked `partial`?
+> 1. Did you rebuild the project?
+> 1. Is Unity 2021.3+ (Roslyn source generator support)?
+> 1. Check `obj/` folder for `.g.cs` files
 >
 > #### Fix
 >
 > ```csharp
-> // ❌ Missing partial, will not compile
+> //  Missing partial, will not compile
 > [DxAutoConstructor]
 > public readonly struct MyMsg { }
 >
-> // ✅ Correct
+> //  Correct
 > [DxAutoConstructor]
 > public readonly partial struct MyMsg { }
 > ```
 >
-> ⚠️ **Warning: Constructor not generated**
+> **Warning: Constructor not generated**
 >
 > **Cause:** No public fields to generate from
 >
 > ```csharp
-> // ❌ No public fields
+> //  No public fields
 > [DxAutoConstructor]
 > public readonly partial struct Empty { }
 >
-> // ✅ Has public field
+> //  Has public field
 > [DxAutoConstructor]
 > public readonly partial struct WithData {
 >     public readonly int value;
 > }
 > ```
 >
-> ⚠️ **Warning: Unity can't find generated code**
+> **Warning: Unity can't find generated code**
 >
 > ##### Solution
 >
@@ -964,10 +966,10 @@ public readonly partial struct MessageA
 
 ## Related Documentation
 
-- **[API Reference](reference.md)** — Complete API documentation
-- **[Message Types](../concepts/message-types.md)** — When to use Untargeted/Targeted/Broadcast
-- **[Quick Reference](quick-reference.md)** — Cheat sheet
-- **[Design & Architecture](../architecture/design-and-architecture.md)** — How source generation works internally
+- **[API Reference](reference.md)** -- Complete API documentation
+- **[Message Types](../concepts/message-types.md)** -- When to use Untargeted/Targeted/Broadcast
+- **[Quick Reference](quick-reference.md)** -- Cheat sheet
+- **[Design & Architecture](../architecture/design-and-architecture.md)** -- How source generation works internally
 
 ## Summary
 
@@ -975,15 +977,15 @@ public readonly partial struct MessageA
 
 #### Use attributes for
 
-- ✅ Clean, maintainable code
-- ✅ Automatic constructor generation
-- ✅ Zero boilerplate
-- ✅ Refactor safety
+- [x] Clean, maintainable code
+- [x] Automatic constructor generation
+- [x] Zero boilerplate
+- [x] Refactor safety
 
 ##### Use manual implementation for
 
-- ✅ Custom constructor logic
-- ✅ Explicit control
-- ✅ Understanding exactly what happens
+- [x] Custom constructor logic
+- [x] Explicit control
+- [x] Understanding exactly what happens
 
 **Recommendation:** Start with attributes (they cover most cases), switch to manual only when needed.

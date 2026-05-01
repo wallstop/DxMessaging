@@ -7,7 +7,7 @@ namespace DxMessaging.Editor.Testing
     using Core;
     using Core.Diagnostics;
     using Core.MessageBus;
-    using Unity;
+    using DxMessaging.Unity;
     using UnityEngine;
 
     /// <summary>

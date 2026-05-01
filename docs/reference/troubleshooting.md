@@ -1,6 +1,6 @@
-# Troubleshooting — Common Issues & Solutions
+# Troubleshooting -- Common Issues & Solutions
 
-[← Back to Index](../getting-started/index.md) | [FAQ](faq.md) | [Getting Started](../getting-started/getting-started.md) | [Glossary](glossary.md)
+[Back to Index](../getting-started/index.md) | [FAQ](faq.md) | [Getting Started](../getting-started/getting-started.md) | [Glossary](glossary.md)
 
 ---
 
@@ -28,7 +28,7 @@ Unexpected ordering
 - Check `priority` values on registrations; lower runs earlier. Same priority is registration order.
 - Interceptors always precede handlers and can cancel; confirm interceptors return `true`.
 
-Double registration or over‑deregistration warnings
+Double registration or over-deregistration warnings
 
 - Avoid calling stage/enable multiple times; pair registrations and lifecycles consistently.
 - Review logs with `bus.Log.Enabled = true` to see the registration history.
@@ -36,7 +36,7 @@ Double registration or over‑deregistration warnings
 Allocations/boxing
 
 - Prefer struct messages implementing the generic interfaces: `I*Message<T>`.
-- Use by‑ref handler overloads to avoid copies.
+- Use by-ref handler overloads to avoid copies.
 
 Emitting while disabled
 
@@ -51,13 +51,13 @@ Diagnostics overhead
 ## Related Documentation
 
 - **Get Unstuck**
-  - → [FAQ](faq.md) — Common questions answered
-  - → [Getting Started](../getting-started/getting-started.md) — Learn the basics
-  - → [Glossary](glossary.md) — Understand the terminology
+  - to [FAQ](faq.md) -- Common questions answered
+  - to [Getting Started](../getting-started/getting-started.md) -- Learn the basics
+  - to [Glossary](glossary.md) -- Understand the terminology
 - **Debug & Inspect**
-  - → [Diagnostics](../guides/diagnostics.md) — Inspector tools and debugging
-  - → [Listening Patterns](../concepts/listening-patterns.md) — Verify you're listening correctly
-  - → [Message Types](../concepts/message-types.md) — Ensure you're using the right type
+  - to [Diagnostics](../guides/diagnostics.md) -- Inspector tools and debugging
+  - to [Listening Patterns](../concepts/listening-patterns.md) -- Verify you're listening correctly
+  - to [Message Types](../concepts/message-types.md) -- Ensure you're using the right type
 - **Examples**
-  - → [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) — See working code
-  - → [Common Patterns](../guides/patterns.md) — Real-world solutions
+  - to [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) -- See working code
+  - to [Common Patterns](../guides/patterns.md) -- Real-world solutions

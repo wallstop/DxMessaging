@@ -88,6 +88,8 @@ Without a workflow, documentation updates are inconsistent, and important refere
 1. **Add version notes**: Mark new/changed behavior with version
 1. **Update CHANGELOG**: Add entry under appropriate section
 1. **Cross-reference**: Ensure links and "See Also" sections are current
+1. **Auto-fix Markdown structure**: Run `node scripts/fix-md029-md051.js <changed-docs.md ...>`
+1. **Lint Markdown before commit**: Run `npx markdownlint-cli2 <changed-docs.md ...>`
 
 ### Example: Adding a New Emit Overload
 
@@ -122,6 +124,10 @@ Documentation updates needed:
 - [ ] No TODOs or placeholders in documentation
 - [ ] Links between related docs are bidirectional
 - [ ] Examples use current API, not deprecated patterns
+- [ ] Ordered lists use MD029 `one` style (`1.` prefixes)
+- [ ] Internal fragment links resolve correctly (MD051)
+- [ ] `node scripts/fix-md029-md051.js` run on changed docs
+- [ ] `npx markdownlint-cli2` passes for changed docs
 
 ## Performance Notes
 

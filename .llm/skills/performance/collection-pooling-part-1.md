@@ -25,12 +25,12 @@ Continuation material extracted from `collection-pooling.md` to keep .llm files 
 ### Core Concept
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  using (PooledResource<List<T>> lease = Pool.Get(out list)) │
-│  {                                                           │
-│      // Use list...                                          │
-│  } // <-- Dispose() called: list.Clear(), return to pool    │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|  using (PooledResource<List<T>> lease = Pool.Get(out list)) |
+|  {                                                          |
+|      // Use list...                                         |
+|  } // <-- Dispose() called: list.Clear(), return to pool    |
++-------------------------------------------------------------+
 ```
 
 ### Implementation

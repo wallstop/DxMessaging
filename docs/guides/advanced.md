@@ -2,17 +2,17 @@
 
 Short intro
 
-This page covers advanced patterns: manual lifetimes, token control, Unity integration switches, string message defaults, and safety tips. If you’re new, start with Quick Start, then return here as you scale up.
+This page covers advanced patterns: manual lifetimes, token control, Unity integration switches, string message defaults, and safety tips. If you're new, start with Quick Start, then return here as you scale up.
 
 Table of contents
 
 - Lifecycles and tokens
 - Manual enable/disable and UnregisterAll
 - Unity integration knobs: MessageAwareComponent and MessagingComponent
-- String messages opt‑in/out
+- String messages opt-in/out
 - Local bus islands (subsystems/tests)
 - Safety and troubleshooting
-- Side‑by‑side patterns: before vs after
+- Side-by-side patterns: before vs after
 - More advanced use cases
 
 Lifecycles and tokens
@@ -27,7 +27,7 @@ Lifecycles and tokens
   - `token.UnregisterAll()` disables and clears staged registrations.
   - `token.RemoveRegistration(handle)` removes a single registration.
 - Diagnostics
-  - `token.DiagnosticMode = true` to record per‑registration call counts and emissions.
+  - `token.DiagnosticMode = true` to record per-registration call counts and emissions.
 
 Example: manual lifetime
 
@@ -65,7 +65,7 @@ MessageAwareComponent
 - `protected virtual bool MessageRegistrationTiedToEnableStatus => true`.
   - Set to `false` to manage `Enable()`/`Disable()` yourself (e.g., persistent listeners on disabled components).
 - `protected virtual bool RegisterForStringMessages => true`.
-  - Set to `false` to not auto‑register string message demos.
+  - Set to `false` to not auto-register string message demos.
 
 ```csharp
 using DxMessaging.Unity;
@@ -111,7 +111,7 @@ public sealed class EmissionControl : MonoBehaviour
 }
 ```
 
-Emit while disabled (opt‑in)
+Emit while disabled (opt-in)
 
 ```csharp
 // Keep emitting even when this GameObject is disabled
@@ -119,7 +119,7 @@ messaging.emitMessagesWhenDisabled = true;
 // Now ToggleMessageHandler(false) will be ignored while emitMessagesWhenDisabled is true
 ```
 
-String messages: opt‑in/out
+String messages: opt-in/out
 
 - MessageAwareComponent registers string demos by default. Override `RegisterForStringMessages` to disable.
 - See String Messages page for using `StringMessage` and `GlobalStringMessage` during prototyping.
@@ -161,7 +161,7 @@ The scope throws if you pass `null` and guarantees the prior bus returns even if
 
 > **Editor note:** When the global bus is replaced with a decorated implementation, certain inspector diagnostics that rely on the concrete `MessageBus` type (e.g., registration graphs) are temporarily unavailable until the override scope ends.
 
-Need a stable reference to the original bus regardless of overrides? Use `InitialGlobalMessageBusProviderAsset` (Create Asset → “DxMessaging/Message Bus Providers/Initial Global Message Bus”) to expose the startup instance.
+Need a stable reference to the original bus regardless of overrides? Use `InitialGlobalMessageBusProviderAsset` (Create Asset -> "DxMessaging/Message Bus Providers/Initial Global Message Bus") to expose the startup instance.
 
 Scoped interceptors (debug)
 
@@ -198,18 +198,18 @@ Do's
 ## Important behavior note: Snapshot Semantics
 
 - When a message is emitted, DxMessaging takes a snapshot of all current listeners (handlers, interceptors, post-processors).
-- Listeners registered **during** an emission will **not** run for that emission — they only become active for the **next** emission.
+- Listeners registered **during** an emission will **not** run for that emission -- they only become active for the **next** emission.
 - This prevents infinite loops (e.g., a handler that registers itself won't recurse).
 - This applies to all message types (Untargeted, Targeted, Broadcast) and all listener types.
 - See [Interceptors & Ordering](../concepts/interceptors-and-ordering.md#snapshot-semantics-frozen-listener-lists) for detailed examples.
 
-Don’ts
+Don'ts
 
-- Don’t register in `Update`/`FixedUpdate` every frame.
-- Don’t double‑create tokens on the same component (MessagingComponent logs a warning).
-- Don’t forget to clear or disable tokens on destruction if you manage them manually.
+- Don't register in `Update`/`FixedUpdate` every frame.
+- Don't double-create tokens on the same component (MessagingComponent logs a warning).
+- Don't forget to clear or disable tokens on destruction if you manage them manually.
 
-Side‑by‑side: manual events vs DxMessaging
+Side-by-side: manual events vs DxMessaging
 
 Before (manual C# events)
 
@@ -250,7 +250,7 @@ void OnSpawned(ref Spawned m) => Refresh();
 
 More advanced use cases
 
-- Scene transitions: create a local bus per scene (or sub‑system), pass it to tokens. Emit globally for cross‑scene untargeted notifications, but isolate targeted/broadcast to the scene’s bus.
+- Scene transitions: create a local bus per scene (or sub-system), pass it to tokens. Emit globally for cross-scene untargeted notifications, but isolate targeted/broadcast to the scene's bus.
 - Analytics layer: use `RegisterTargetedWithoutTargeting` and `RegisterBroadcastWithoutSource` to observe all flows; record in a buffer or file; disable in release.
 - Pausable systems: set `emitMessagesWhenDisabled` for senders you want alive while disabled; use `ToggleMessageHandler` to pause entire listeners.
 

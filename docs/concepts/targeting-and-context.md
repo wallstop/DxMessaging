@@ -4,7 +4,7 @@
 
 ## Overview
 
-Targeted and broadcast messages carry context: an `InstanceId` for the target (targeted) or source (broadcast). In Unity, `InstanceId` can represent either a `GameObject` or a specific `Component`. **These are completely separate channels** — mixing them is the #1 cause of "why isn't my handler firing?" bugs.
+Targeted and broadcast messages carry context: an `InstanceId` for the target (targeted) or source (broadcast). In Unity, `InstanceId` can represent either a `GameObject` or a specific `Component`. **These are completely separate channels** -- mixing them is the #1 cause of "why isn't my handler firing?" bugs.
 
 ## Key Concepts
 
@@ -86,21 +86,21 @@ _ = uiToken.RegisterGameObjectTargeted<Heal>(player, ui.OnHeal);
 
 // Scenario 1: Target the GameObject
 heal.EmitGameObjectTargeted(player);
-// ✅ health.OnHeal() fires
-// ✅ ui.OnHeal() fires
+// Yes health.OnHeal() fires
+// Yes ui.OnHeal() fires
 // Both components receive it!
 
 // Scenario 2: Target a Component (but registered for GameObject)
 heal.EmitComponentTargeted(health);
-// ❌ health.OnHeal() does NOT fire (registered for GameObject, not Component)
-// ❌ ui.OnHeal() does NOT fire
+// No health.OnHeal() does NOT fire (registered for GameObject, not Component)
+// No ui.OnHeal() does NOT fire
 // Nothing happens! Wrong channel!
 
 // Scenario 3: Register for Component, emit to Component
 _ = healthToken.RegisterComponentTargeted<Heal>(health, health.OnHeal);
 heal.EmitComponentTargeted(health);
-// ✅ health.OnHeal() fires
-// ❌ ui.OnHeal() does NOT fire (different component)
+// Yes health.OnHeal() fires
+// No ui.OnHeal() does NOT fire (different component)
 ```
 
 ## Broadcast Messages: Same Rules Apply
@@ -118,11 +118,11 @@ damage.EmitGameObjectBroadcast(enemyGameObject);
 
 // Register for broadcasts from this GameObject
 _ = token.RegisterGameObjectBroadcast<TookDamage>(enemyGameObject, OnEnemyDamage);
-// ✅ OnEnemyDamage fires when damage.EmitGameObjectBroadcast(enemyGameObject) is called
+// Yes OnEnemyDamage fires when damage.EmitGameObjectBroadcast(enemyGameObject) is called
 
 // Register for broadcasts from this Component
 _ = token.RegisterComponentBroadcast<TookDamage>(enemyComponent, OnComponentDamage);
-// ❌ OnComponentDamage does NOT fire (registered for Component, but emitted from GameObject)
+// No OnComponentDamage does NOT fire (registered for Component, but emitted from GameObject)
 ```
 
 ## The `this` Trap
@@ -134,14 +134,14 @@ public class Enemy : MonoBehaviour
 {
     void Start()
     {
-        // ❌ WRONG: Registered for GameObject
+        // No WRONG: Registered for GameObject
         _ = token.RegisterGameObjectTargeted<TakeDamage>(gameObject, OnDamage);
     }
 
     void TakeDamageFrom(GameObject attacker)
     {
         var damage = new TakeDamage(10);
-        // ❌ WRONG: Emitting to Component (this)
+        // No WRONG: Emitting to Component (this)
         damage.EmitAt(this);  // WON'T BE RECEIVED!
     }
 
@@ -150,11 +150,11 @@ public class Enemy : MonoBehaviour
 
 // FIX 1: Both use GameObject
 _ = token.RegisterGameObjectTargeted<TakeDamage>(gameObject, OnDamage);
-damage.EmitAt(gameObject);  // ✅ Works!
+damage.EmitAt(gameObject);  // Yes Works!
 
 // FIX 2: Both use Component
 _ = token.RegisterComponentTargeted<TakeDamage>(this, OnDamage);
-damage.EmitAt(this);  // ✅ Works!
+damage.EmitAt(this);  // Yes Works!
 ```
 
 **Remember:** In Unity, `this` inside a `MonoBehaviour` is **always** a Component, never a GameObject!
@@ -165,9 +165,9 @@ damage.EmitAt(this);  // ✅ Works!
 
 This is useful for:
 
-- **Analytics** — Track every action in your game without coupling to individual objects
-- **Debugging** — See all events of a type in one place
-- **Cross-cutting concerns** — Achievements, logging, VFX that respond to any entity's events
+- **Analytics** -- Track every action in your game without coupling to individual objects
+- **Debugging** -- See all events of a type in one place
+- **Cross-cutting concerns** -- Achievements, logging, VFX that respond to any entity's events
 
 ### Why this is different from classic event buses
 
@@ -181,7 +181,7 @@ This is useful for:
 ### Classic Event Bus Anti-Pattern
 
 ```csharp
-// ❌ Traditional approach: Tight coupling, multiple subscriptions
+// No Traditional approach: Tight coupling, multiple subscriptions
 EventBus.PlayerDamaged += OnPlayerDamaged;
 EventBus.EnemyDamaged += OnEnemyDamaged;
 EventBus.NPCDamaged += OnNPCDamaged;
@@ -197,7 +197,7 @@ void OnBossDamaged(int amount) { RecordDamage("Boss", amount); }
 ### DxMessaging Global Observer Pattern
 
 ```csharp
-// ✅ DxMessaging: One subscription, zero coupling
+// Yes DxMessaging: One subscription, zero coupling
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
 
 void OnAnyDamage(ref InstanceId source, ref TookDamage msg)
@@ -283,14 +283,14 @@ _ = analyticsToken.RegisterBroadcastWithoutSource<TookDamage>(OnAnyDamage);
 
 // When player takes damage
 damage.EmitFrom(playerGameObject);
-// ✅ OnPlayerDamage fires (specific listener)
-// ✅ OnAnyDamage fires (global listener)
+// Yes OnPlayerDamage fires (specific listener)
+// Yes OnAnyDamage fires (global listener)
 // Both fire!
 
 // When enemy takes damage
 damage.EmitFrom(enemyGameObject);
-// ❌ OnPlayerDamage does NOT fire (wrong source)
-// ✅ OnAnyDamage fires (global listener catches everything)
+// No OnPlayerDamage does NOT fire (wrong source)
+// Yes OnAnyDamage fires (global listener catches everything)
 ```
 
 ### Real-World Example: Combat System
@@ -392,19 +392,19 @@ Global listeners (`RegisterTargetedWithoutTargeting` / `RegisterBroadcastWithout
 
 ### Do's
 
-✅ **Pick a context and be consistent** across emitters and listeners for that message type
-✅ **Prefer GameObject when in doubt** — easier coordination among components on the same object
-✅ **Use explicit helpers** (`EmitGameObjectTargeted`, `RegisterGameObjectTargeted`) to make intent clear
-✅ **Document** which context your message types use (add it to your message comments)
-✅ **Use global listeners** for analytics, debugging, and cross-cutting concerns
+Yes **Pick a context and be consistent** across emitters and listeners for that message type
+Yes **Prefer GameObject when in doubt** -- easier coordination among components on the same object
+Yes **Use explicit helpers** (`EmitGameObjectTargeted`, `RegisterGameObjectTargeted`) to make intent clear
+Yes **Document** which context your message types use (add it to your message comments)
+Yes **Use global listeners** for analytics, debugging, and cross-cutting concerns
 
 ### Don'ts
 
-❌ **Don't emit to GameObject** and expect Component-registered handlers to receive it (and vice versa)
-❌ **Don't assume `this` means GameObject** — it's always a Component in Unity
-❌ **Don't mix GameObject/Component** for the same message type across your codebase
-❌ **Don't register the same handler under both** unless you intend to handle both contexts
-❌ **Don't use global listeners** in performance-critical tight loops (thousands of messages/frame)
+No **Don't emit to GameObject** and expect Component-registered handlers to receive it (and vice versa)
+No **Don't assume `this` means GameObject** -- it's always a Component in Unity
+No **Don't mix GameObject/Component** for the same message type across your codebase
+No **Don't register the same handler under both** unless you intend to handle both contexts
+No **Don't use global listeners** in performance-critical tight loops (thousands of messages/frame)
 
 ## Troubleshooting
 
@@ -414,11 +414,11 @@ Global listeners (`RegisterTargetedWithoutTargeting` / `RegisterBroadcastWithout
 
 ```csharp
 // Check 1: Are you emitting and registering on the same type?
-// ❌ WRONG
+// No WRONG
 _ = token.RegisterGameObjectTargeted<Heal>(gameObject, OnHeal);
 heal.EmitAt(this);  // Component, not GameObject!
 
-// ✅ CORRECT
+// Yes CORRECT
 _ = token.RegisterGameObjectTargeted<Heal>(gameObject, OnHeal);
 heal.EmitAt(gameObject);  // Both GameObject
 ```
@@ -439,13 +439,13 @@ See [Troubleshooting](../reference/troubleshooting.md) for more debugging tips.
 | **Emit Broadcast**     | `msg.EmitGameObjectBroadcast(go)`              | `msg.EmitComponentBroadcast(comp)`             |
 | **Register Targeted**  | `RegisterGameObjectTargeted<T>(go, handler)`   | `RegisterComponentTargeted<T>(comp, handler)`  |
 | **Register Broadcast** | `RegisterGameObjectBroadcast<T>(go, handler)`  | `RegisterComponentBroadcast<T>(comp, handler)` |
-| **Global Targeted**    | `RegisterTargetedWithoutTargeting<T>(handler)` | (Same — no distinction)                        |
-| **Global Broadcast**   | `RegisterBroadcastWithoutSource<T>(handler)`   | (Same — no distinction)                        |
+| **Global Targeted**    | `RegisterTargetedWithoutTargeting<T>(handler)` | (Same -- no distinction)                       |
+| **Global Broadcast**   | `RegisterBroadcastWithoutSource<T>(handler)`   | (Same -- no distinction)                       |
 
 ## See Also
 
-- **[Emit Shorthands](../advanced/emit-shorthands.md)** — Concise ways to emit messages
-- **[Message Types](message-types.md)** — Understanding Untargeted, Targeted, and Broadcast
-- **[Unity Integration](../guides/unity-integration.md)** — MessageAwareComponent and lifecycle
-- **[Quick Reference](../reference/quick-reference.md)** — API cheat sheet
-- **[Troubleshooting](../reference/troubleshooting.md)** — Solving common issues
+- **[Emit Shorthands](../advanced/emit-shorthands.md)** -- Concise ways to emit messages
+- **[Message Types](message-types.md)** -- Understanding Untargeted, Targeted, and Broadcast
+- **[Unity Integration](../guides/unity-integration.md)** -- MessageAwareComponent and lifecycle
+- **[Quick Reference](../reference/quick-reference.md)** -- API cheat sheet
+- **[Troubleshooting](../reference/troubleshooting.md)** -- Solving common issues

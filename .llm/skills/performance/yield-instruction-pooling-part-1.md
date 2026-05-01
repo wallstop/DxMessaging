@@ -25,20 +25,20 @@ Continuation material extracted from `yield-instruction-pooling.md` to keep .llm
 ### Core Concept
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                 WaitForSeconds Cache                             │
-├─────────────────────────────────────────────────────────────────┤
-│  Key (quantized seconds) │ Value (WaitForSeconds instance)      │
-│  ───────────────────────────────────────────────────────────    │
-│  0.0f                    │ WaitForSeconds(0.0f)                 │
-│  0.1f                    │ WaitForSeconds(0.1f)                 │
-│  0.5f                    │ WaitForSeconds(0.5f)                 │
-│  1.0f                    │ WaitForSeconds(1.0f)                 │
-│  2.0f                    │ WaitForSeconds(2.0f)                 │
-│  ...                     │ ...                                   │
-└─────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------+
+|                 WaitForSeconds Cache                            |
++-----------------------------------------------------------------+
+|  Key (quantized seconds) | Value (WaitForSeconds instance)      |
+| ----------------------- | -----------------------------------  |
+|  0.0f                    | WaitForSeconds(0.0f)                 |
+|  0.1f                    | WaitForSeconds(0.1f)                 |
+|  0.5f                    | WaitForSeconds(0.5f)                 |
+|  1.0f                    | WaitForSeconds(1.0f)                 |
+|  2.0f                    | WaitForSeconds(2.0f)                 |
+|  ...                     | ...                                  |
++-----------------------------------------------------------------+
 
-GetWaitForSeconds(1.5f) → Quantize to 1.5f → Return cached instance
+GetWaitForSeconds(1.5f) -> Quantize to 1.5f -> Return cached instance
 ```
 
 ### Implementation

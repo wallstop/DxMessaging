@@ -11,19 +11,19 @@ description: High-performance type-safe messaging library for Unity
 
 ## Why DxMessaging?
 
-- ⚡ **High Performance** — Zero-allocation message dispatch with pooled handlers
-- 🛡️ **Type-Safe** — Compile-time message type checking prevents runtime errors
-- 📦 **Decoupled Architecture** — Components communicate without direct references
-- 🎯 **Flexible Targeting** — Untargeted, Targeted, and Broadcast message patterns
-- 🔧 **Unity-Native** — Built specifically for Unity with MonoBehaviour integration
+- **High Performance** -- Zero-allocation message dispatch with pooled handlers
+- **Type-Safe** -- Compile-time message type checking prevents runtime errors
+- **Decoupled Architecture** -- Components communicate without direct references
+- **Flexible Targeting** -- Untargeted, Targeted, and Broadcast message patterns
+- **Unity-Native** -- Built specifically for Unity with MonoBehaviour integration
 
 ## Quick Links
 
-- **[Mental Model](concepts/mental-model.md)** — How to think about DxMessaging
-- **[Visual Guide](getting-started/visual-guide.md)** — Beginner-friendly introduction with diagrams
-- **[Quick Start](getting-started/quick-start.md)** — Your first message in 5 minutes
-- **[Message Types](concepts/message-types.md)** — Untargeted, Targeted, Broadcast patterns
-- **[API Reference](reference/reference.md)** — Complete API documentation
+- **[Mental Model](concepts/mental-model.md)** -- How to think about DxMessaging
+- **[Visual Guide](getting-started/visual-guide.md)** -- Beginner-friendly introduction with diagrams
+- **[Quick Start](getting-started/quick-start.md)** -- Your first message in 5 minutes
+- **[Message Types](concepts/message-types.md)** -- Untargeted, Targeted, Broadcast patterns
+- **[API Reference](reference/reference.md)** -- Complete API documentation
 
 ## Installation
 

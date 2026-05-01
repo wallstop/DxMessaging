@@ -1,6 +1,6 @@
 # Unity Integration
 
-Unity‑centric helpers make registration lifecycles explicit and safe.
+Unity-centric helpers make registration lifecycles explicit and safe.
 
 ## MessagingComponent
 
@@ -11,9 +11,9 @@ Unity‑centric helpers make registration lifecycles explicit and safe.
 
 ## MessageAwareComponent
 
-- Derive for a batteries‑included pattern; it manages a token for you.
+- Derive for a batteries-included pattern; it manages a token for you.
 - Override `RegisterMessageHandlers()` to stage registrations.
-- The token is enabled/disabled with the component’s enable state.
+- The token is enabled/disabled with the component's enable state.
 - Call `ConfigureMessageBus(IMessageBus, MessageBusRebindMode)` before `base.Awake()` (or shortly after via a DI bootstrapper) to ensure the token is created against your container-provided bus.
 
 ```csharp
@@ -42,17 +42,20 @@ public sealed class HealthComponent : MessageAwareComponent
 
 ## Don'ts
 
-- Don’t register in Update; register once and enable/disable with component state.
-- Don’t forget to call `base.RegisterMessageHandlers()` if your subclass relies on base registrations.
+- Don't register in Update; register once and enable/disable with component state.
+- Don't forget to call `base.RegisterMessageHandlers()` if your subclass relies on base registrations.
 
 ## Important: Inheritance and base calls
 
 - `MessageAwareComponent` uses many virtual methods (e.g., `Awake`, `OnEnable`, `OnDisable`, `RegisterMessageHandlers`).
 - **CRITICAL**: If you override any of these, you MUST call the base method: `base.Awake()`, `base.OnEnable()`, `base.OnDisable()`, `base.RegisterMessageHandlers()`.
-- **Always call `base.RegisterMessageHandlers()` first** in your override—this ensures parent class registrations happen before yours.
-- Skipping base calls can break core setup (token creation/enable) and default string‑message registrations.
+- **Always call `base.RegisterMessageHandlers()` first** in your override -- this ensures parent class registrations happen before yours.
+- Skipping base calls can break core setup (token creation/enable) and default string-message registrations.
 - If you need to opt out of string demos, prefer overriding `RegisterForStringMessages => false` rather than removing the base call.
 - **Don't hide Unity methods** with `new` (e.g., `new void OnEnable()`); always `override` and call `base.*`.
+
+!!! tip "Diagnostics & Analyzer"
+DxMessaging ships a Roslyn analyzer + Inspector overlay that catches missing base calls at compile time and surfaces them as a HelpBox at the top of the offending component's Inspector. See the [Inspector Overlay & Base-Call Warnings](inspector-overlay.md) guide for the day-to-day workflow, or the [Roslyn Analyzers & Diagnostics](../reference/analyzers.md) reference for every diagnostic id and the suppression-precedence ordering.
 
 ## Registration timing
 
@@ -108,7 +111,7 @@ public sealed class AlwaysListening : MessageAwareComponent
 }
 ```
 
-## String message demos (opt‑out)
+## String message demos (opt-out)
 
 ```csharp
 public sealed class NoStringDemos : MessageAwareComponent

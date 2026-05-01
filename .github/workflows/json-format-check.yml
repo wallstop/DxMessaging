@@ -8,7 +8,6 @@ on:
       - "**/*.asmref"
       - ".prettierrc*"
       - "package.json"
-      - "package-lock.json"
   push:
     branches:
       - main
@@ -19,7 +18,6 @@ on:
       - "**/*.asmref"
       - ".prettierrc*"
       - "package.json"
-      - "package-lock.json"
   workflow_dispatch:
 
 concurrency:

@@ -80,7 +80,7 @@ Grab a copy of this repo (either `git clone` [this repo](https://github.com/wall
 
 ## Minimum Requirements
 
-- Unity 2021.3+ (LTS recommended). See [Compatibility](../reference/compatibility.md) for Unity × Render Pipeline support (Built‑In, URP, HDRP).
+- Unity 2021.3+ (LTS recommended). See [Compatibility](../reference/compatibility.md) for Unity x Render Pipeline support (Built-In, URP, HDRP).
 
 ## After Installation
 

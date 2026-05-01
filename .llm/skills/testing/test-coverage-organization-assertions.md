@@ -94,6 +94,8 @@ public void EmitUntargetedMessageInvokesAllRegisteredHandlers() { }
 public void Test_Emit_Works() { }
 ```
 
+Test method names must use PascalCase without underscores. The pre-commit hook `fix-csharp-underscore-methods` auto-fixes underscored method names when possible.
+
 ### Test Class Organization
 
 ```csharp

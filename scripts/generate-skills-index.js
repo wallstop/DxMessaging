@@ -24,18 +24,18 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
 const {
     stripMatchingBoundaryQuotes,
     normalizeToLf,
 } = require("./lib/quote-parser");
+const { spawnPlatformCommandSync } = require("./lib/shell-command");
+const { getPinnedPrettierSpec } = require("./lib/prettier-version");
 
 const SKILLS_DIR = path.join(__dirname, "..", ".llm", "skills");
 const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
 const EXCLUDED_FILES = ["index.md", "specification.md"];
 const EXCLUDED_DIRS = ["templates"];
 const REPO_ROOT = path.join(__dirname, "..");
-const PRETTIER_VERSION = "3.8.1";
 
 /**
  * Brand name capitalization mapping.
@@ -123,19 +123,18 @@ function getLatestSkillDate(skills) {
     return new Date().toISOString().split("T")[0];
 }
 
-function formatWithPrettier(content) {
+function formatWithPrettier(content, spawnSyncImpl = spawnPlatformCommandSync) {
+    const prettierSpec = getPinnedPrettierSpec();
     const prettierArgs = [
         "--yes",
-        `prettier@${PRETTIER_VERSION}`,
+        `--package=${prettierSpec}`,
+        "prettier",
         "--stdin-filepath",
         INDEX_PATH,
     ];
 
-    const isWindows = process.platform === "win32";
-    const command = isWindows ? "cmd.exe" : "npx";
-    const args = isWindows ? ["/d", "/s", "/c", "npx", ...prettierArgs] : prettierArgs;
-
-    const result = spawnSync(command, args, {
+    // Keep the base command token here; platform-specific shim resolution belongs in spawnPlatformCommandSync.
+    const result = spawnSyncImpl("npx", prettierArgs, {
         cwd: REPO_ROOT,
         input: content,
         encoding: "utf8",
@@ -335,10 +334,10 @@ function loadSkill(skillFile) {
  */
 function getComplexityBadge(level) {
     const badges = {
-        basic: "🟢 Basic",
-        intermediate: "🟡 Intermediate",
-        advanced: "🟠 Advanced",
-        expert: "🔴 Expert",
+        basic: "[basic]",
+        intermediate: "[intermediate]",
+        advanced: "[advanced]",
+        expert: "[expert]",
     };
     return badges[level] || level;
 }
@@ -348,10 +347,10 @@ function getComplexityBadge(level) {
  */
 function getStatusBadge(status) {
     const badges = {
-        draft: "📝 Draft",
-        review: "👀 Review",
-        stable: "✅ Stable",
-        deprecated: "⚠️ Deprecated",
+        draft: "[draft]",
+        review: "[review]",
+        stable: "[stable]",
+        deprecated: "[deprecated]",
     };
     return badges[status] || status;
 }
@@ -361,36 +360,36 @@ function getStatusBadge(status) {
  */
 function getImpactIndicator(rating) {
     const indicators = {
-        none: "○○○○○",
-        low: "●○○○○",
-        medium: "●●○○○",
-        high: "●●●○○",
-        critical: "●●●●●",
+        none: "[risk: none]",
+        low: "[risk: low]",
+        medium: "[risk: medium]",
+        high: "[risk: high]",
+        critical: "[risk: critical]",
     };
     return indicators[rating] || "?";
 }
 
 /**
  * Get line size indicator based on repository .llm limits.
- * < 120: 📝 (short)
- * 120-260: ✅ (ideal)
- * 261-300: ⚠️ (warning)
- * > 300: ❌ (error)
+ * < 120: [draft]
+ * 120-260: [ok]
+ * 261-300: [warn]
+ * > 300: [over]
  */
 function getLineSizeIndicator(lineCount) {
     if (typeof lineCount !== "number") {
         return "?";
     }
     if (lineCount > 300) {
-        return "❌";
+        return "[over]";
     }
     if (lineCount > 260) {
-        return "⚠️";
+        return "[warn]";
     }
     if (lineCount >= 120) {
-        return "✅";
+        return "[ok]";
     }
-    return "📝";
+    return "[draft]";
 }
 
 /**
@@ -532,6 +531,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         applyBrandCapitalization,
         categoryToTitle,
+        formatWithPrettier,
         parseFrontmatter,
         BRAND_NAMES,
     };

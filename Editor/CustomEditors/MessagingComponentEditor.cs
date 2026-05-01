@@ -8,7 +8,7 @@ namespace DxMessaging.Editor.CustomEditors
     using Core.MessageBus;
     using Core.Messages;
     using DxMessaging.Editor.Testing;
-    using Unity;
+    using DxMessaging.Unity;
     using UnityEditor;
     using UnityEngine;
     using Object = UnityEngine.Object;

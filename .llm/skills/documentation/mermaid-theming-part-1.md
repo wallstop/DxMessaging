@@ -122,7 +122,7 @@ The regex uses four flags: `g` (global) replaces all occurrences, `i` (case-inse
 ### Using Init Directives in docs/
 
 ````markdown
-<!-- ❌ WRONG: This bypasses theme switching -->
+<!--  WRONG: This bypasses theme switching -->
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%

@@ -125,11 +125,11 @@ npm install
 
 ### Error Handling Patterns
 
-- **`cmd || true`** — Silently ignore failure. Use for truly optional operations.
-- **`cmd || echo "..."`** — Log failure but continue. Use for optional with diagnostic output.
-- **`cmd || exit 1`** — Explicit fatal (redundant with `-e`). Use for self-documenting intent.
-- **`if cmd; then ... fi`** — Conditional execution. Use for different paths on success/fail.
-- **`cmd || { ...; }`** — Multi-statement error handling. Use for complex recovery logic.
+- **`cmd || true`** -- Silently ignore failure. Use for truly optional operations.
+- **`cmd || echo "..."`** -- Log failure but continue. Use for optional with diagnostic output.
+- **`cmd || exit 1`** -- Explicit fatal (redundant with `-e`). Use for self-documenting intent.
+- **`if cmd; then ... fi`** -- Conditional execution. Use for different paths on success/fail.
+- **`cmd || { ...; }`** -- Multi-statement error handling. Use for complex recovery logic.
 
 ### Validation Checklist for `set -e` Scripts
 
@@ -144,12 +144,12 @@ Before merging shell scripts that use `set -e`:
 
 These commands may fail in ways that aren't obvious:
 
-- **`grep`** — Fails with exit code 1 when no matches found. Use `grep ... || true` or `|| echo 0`.
-- **`diff`** — Fails with exit code 1 when files differ. Use `diff ... || true` for comparison.
-- **`git diff`** — Sometimes exits 1 when no changes. Check explicitly if needed.
-- **`rm file`** — Fails if file doesn't exist. Use `rm -f file` or `rm file || true`.
-- **`cd dir`** — Fails if directory doesn't exist. Check first or use `|| exit 1`.
-- **`read var`** — Fails with exit code 1 at EOF. Handle in loop condition.
+- **`grep`** -- Fails with exit code 1 when no matches found. Use `grep ... || true` or `|| echo 0`.
+- **`diff`** -- Fails with exit code 1 when files differ. Use `diff ... || true` for comparison.
+- **`git diff`** -- Sometimes exits 1 when no changes. Check explicitly if needed.
+- **`rm file`** -- Fails if file doesn't exist. Use `rm -f file` or `rm file || true`.
+- **`cd dir`** -- Fails if directory doesn't exist. Check first or use `|| exit 1`.
+- **`read var`** -- Fails with exit code 1 at EOF. Handle in loop condition.
 
 ## Case-Sensitive File Paths
 

@@ -8,9 +8,9 @@ namespace DxMessaging.Core
     /// <remarks>
     /// DxMessaging models three primary categories of messages:
     /// <list type="bullet">
-    /// <item><description><see cref="Messages.IUntargetedMessage"/> — global notifications (for example: settings changed).</description></item>
-    /// <item><description><see cref="Messages.ITargetedMessage"/> — commands or events directed at a specific target.</description></item>
-    /// <item><description><see cref="Messages.IBroadcastMessage"/> — events emitted by a specific source and consumable by any listener.</description></item>
+    /// <item><description><see cref="Messages.IUntargetedMessage"/> -- global notifications (for example: settings changed).</description></item>
+    /// <item><description><see cref="Messages.ITargetedMessage"/> -- commands or events directed at a specific target.</description></item>
+    /// <item><description><see cref="Messages.IBroadcastMessage"/> -- events emitted by a specific source and consumable by any listener.</description></item>
     /// </list>
     /// <para>
     /// Implementors typically use the generic variants (for example, <c>IUntargetedMessage&lt;T&gt;</c>) on <c>struct</c> messages

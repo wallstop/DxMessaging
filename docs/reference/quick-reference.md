@@ -2,7 +2,7 @@
 
 Use this as a rapid guide to define/emit/listen and manage lifecycles.
 
-Do’s
+Do's
 
 - Use attributes + `DxAutoConstructor` for clarity (or interfaces on structs for perf).
 - Bind struct messages to a variable before emitting.
@@ -13,11 +13,11 @@ Do’s
 
 ## Don'ts
 
-- Don’t emit from temporaries; use a local variable (e.g., `var msg = new M(...); msg.Emit();`).
-- Don’t mix Component vs GameObject targeting if you expect matches (see targeting notes below).
-- Don’t register in Update; use `Awake` for staging + `OnEnable`/`OnDisable` for lifecycle.
-- Don’t forget base calls when inheriting from `MessageAwareComponent` — call `base.RegisterMessageHandlers()` and `base.OnEnable()`/`base.OnDisable()`.
-- Don’t hide Unity methods with `new` (e.g., `new void OnEnable()`); prefer `override` and call `base.*`.
+- Don't emit from temporaries; use a local variable (e.g., `var msg = new M(...); msg.Emit();`).
+- Don't mix Component vs GameObject targeting if you expect matches (see targeting notes below).
+- Don't register in Update; use `Awake` for staging + `OnEnable`/`OnDisable` for lifecycle.
+- Don't forget base calls when inheriting from `MessageAwareComponent` -- call `base.RegisterMessageHandlers()` and `base.OnEnable()`/`base.OnDisable()`.
+- Don't hide Unity methods with `new` (e.g., `new void OnEnable()`); prefer `override` and call `base.*`.
 
 ## Define messages
 
@@ -108,7 +108,7 @@ public sealed class DamageSystem : IStartable, IDisposable
 
 Tip: Define `ZENJECT_PRESENT`, `VCONTAINER_PRESENT`, or `REFLEX_PRESENT` to enable the optional shims under [Runtime/Unity/Integrations](https://github.com/wallstop/DxMessaging/tree/master/Runtime/Unity/Integrations) that bind the builder automatically for those containers.
 
-## Interceptors and post‑processors
+## Interceptors and post-processors
 
 ```csharp
 using DxMessaging.Core;            // MessageHandler
@@ -143,7 +143,7 @@ void OnDisable() { token.Disable(); }
 - A targeted message matches if the emitted `InstanceId` equals the registered `InstanceId`.
 - Registering for a Component target listens for messages targeted at that specific Component.
 - Registering for a GameObject target listens for messages targeted at that GameObject.
-- Emitting to a GameObject will not reach Component‑targeted listeners (and vice‑versa). Use the matching helper.
+- Emitting to a GameObject will not reach Component-targeted listeners (and vice-versa). Use the matching helper.
 - Shorthands exist for strings too; be explicit about using a GameObject vs Component with `EmitAt`/`EmitFrom`.
 
 ## See also
@@ -158,23 +158,23 @@ void OnDisable() { token.Disable(); }
 ### Untargeted
 
 ```text
-Interceptors → Global Accept-All → Handlers<T> → Post-Processors<T>
+Interceptors -> Global Accept-All -> Handlers<T> -> Post-Processors<T>
 ```
 
 ### Targeted
 
 ```text
-Interceptors → Global Accept-All → Handlers<T> @ target
-    → Handlers<T> (All Targets) → Post-Processors<T> @ target
-    → Post-Processors<T> (All Targets)
+Interceptors -> Global Accept-All -> Handlers<T> @ target
+    -> Handlers<T> (All Targets) -> Post-Processors<T> @ target
+    -> Post-Processors<T> (All Targets)
 ```
 
 ### Broadcast
 
 ```text
-Interceptors → Global Accept-All → Handlers<T> @ source
-    → Handlers<T> (All Sources) → Post-Processors<T> @ source
-    → Post-Processors<T> (All Sources)
+Interceptors -> Global Accept-All -> Handlers<T> @ source
+    -> Handlers<T> (All Sources) -> Post-Processors<T> @ source
+    -> Post-Processors<T> (All Sources)
 ```
 
 > 📝 **Note: Priority Rules**

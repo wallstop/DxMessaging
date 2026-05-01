@@ -14,6 +14,8 @@ function Normalize-Name {
 }
 
 $issueCount = 0
+$scannedFileCount = 0
+$issuesByFile = @{}
 
 # Exclude typical directories that shouldn't be scanned
 $excludeDirs = @('.git', 'node_modules', '.vs', '.venv', '.artifacts', 'site', 'Library', 'Obj', 'Temp', 'Samples~')
@@ -28,6 +30,7 @@ $mdFiles = Get-ChildItem -Path $Root -Recurse -File -Filter *.md |
 $pattern = '(?<!\!)\[(?<text>[^\]]+)\]\((?<target>[^)\s]+)(?:\s+"[^"]*")?\)'
 
 foreach ($file in $mdFiles) {
+    $scannedFileCount++
     $lines = Get-Content -LiteralPath $file.FullName -Encoding UTF8
     $inCodeBlock = $false
     $codeFencePattern = $null
@@ -37,11 +40,12 @@ foreach ($file in $mdFiles) {
         
         # Skip fenced code blocks
         $trimmedLine = $line.TrimStart()
-        if ($trimmedLine -match '^(`{3,})') {
+        $trimmedFenceLine = $trimmedLine.Trim()
+        if ($trimmedLine -match '^(?<fence>`{3,}|~{3,})') {
             if (-not $inCodeBlock) {
                 $inCodeBlock = $true
-                $codeFencePattern = $Matches[1]
-            } elseif ($trimmedLine.StartsWith($codeFencePattern) -and $trimmedLine.Trim() -match "^$([regex]::Escape($codeFencePattern))") {
+                $codeFencePattern = $Matches['fence']
+            } elseif ($trimmedFenceLine -eq $codeFencePattern) {
                 $inCodeBlock = $false
                 $codeFencePattern = $null
             }
@@ -82,6 +86,10 @@ foreach ($file in $mdFiles) {
 
             if ($isExactFileName -or $looksLikePath -or $looksLikeMarkdownFileName) {
                 $issueCount++
+                if (-not $issuesByFile.ContainsKey($file.FullName)) {
+                    $issuesByFile[$file.FullName] = 0
+                }
+                $issuesByFile[$file.FullName]++
                 $lineNo = $i + 1
                 $msg = "Link text '$text' should be human-readable, not a raw file name or path"
                 # GitHub Actions annotation
@@ -92,10 +100,15 @@ foreach ($file in $mdFiles) {
 }
 
 if ($issueCount -gt 0) {
+    Write-Host "Scanned $scannedFileCount markdown file(s) under '$Root'." -ForegroundColor Yellow
+    Write-Host "Issue count by file:" -ForegroundColor Yellow
+    foreach ($entry in ($issuesByFile.GetEnumerator() | Sort-Object Name)) {
+        Write-Host "  - $($entry.Name): $($entry.Value)" -ForegroundColor Yellow
+    }
     Write-Host "Found $issueCount documentation link(s) with non-human-readable text." -ForegroundColor Red
     Write-Host "Use a descriptive phrase instead of the raw file name."
     exit 1
 }
 else {
-    Write-Host "All markdown links have human-readable text."
+    Write-Host "Scanned $scannedFileCount markdown file(s); all markdown-to-markdown links use human-readable text."
 }

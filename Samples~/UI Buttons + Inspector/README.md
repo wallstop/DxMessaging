@@ -7,8 +7,8 @@
 **Stop writing button click handlers!** This sample shows you how to:
 
 1. **Wire UI Buttons to messages** - directly from the Inspector (drag & drop)
-2. **See messages flow in real-time** - watch the Console as you click
-3. **Enable diagnostics** - see every message with timestamps and payloads
+1. **See messages flow in real-time** - watch the Console as you click
+1. **Enable diagnostics** - see every message with timestamps and payloads
 
 **Why this matters:** You can add new systems (analytics, audio, achievements) that react to button clicks WITHOUT touching existing code.
 
@@ -39,7 +39,8 @@ public class PlayButton : MonoBehaviour {
 ```csharp
 public class PlayButton : MonoBehaviour {
     public void OnClick() {
-        new ButtonClicked("Play").Emit();
+        var clicked = new ButtonClicked("Play");
+        clicked.Emit();
         // Done! Everything reacts automatically.
     }
 }
@@ -51,12 +52,12 @@ public class PlayButton : MonoBehaviour {
 
 ### Want to see it immediately?
 
-1. **Window → Package Manager**
-2. **Find DxMessaging** → Scroll to **Samples**
-3. **"UI Buttons + Inspector"** → Click **Import**
-4. **Navigate to** Assets/Samples/.../UI Buttons + Inspector/
-5. **Open the scene** → **Press Play**
-6. **Click the buttons** → Watch Console logs
+1. **Window  ->  Package Manager**
+1. **Find DxMessaging**  to  Scroll to **Samples**
+1. **"UI Buttons + Inspector"**  to  Click **Import**
+1. **Navigate to** Assets/Samples/.../UI Buttons + Inspector/
+1. **Open the scene**  to  **Press Play**
+1. **Click the buttons**  to  Watch Console logs
 
 You are now seeing DxMessaging in action.
 
@@ -65,20 +66,20 @@ You are now seeing DxMessaging in action.
 This sample includes `UIButtonEmitter` and `MessagingObserver` components:
 
 - `UIButtonEmitter` lives on a GameObject and exposes a `Click()` method.
-- Hook `Click()` to a Unity UI Button’s `OnClick` from the Inspector.
+- Hook `Click()` to a Unity UI Button's `OnClick` from the Inspector.
 - `MessagingObserver` logs incoming messages to the Console during Play Mode.
 
-Steps if you’re wiring your own Button:
+Steps if you're wiring your own Button:
 
 1. Add a `UIButtonEmitter` component to any GameObject.
 1. Select your UI Button in the scene.
-1. In the Button’s `On Click ()` list, click `+`.
+1. In the Button's `On Click ()` list, click `+`.
 1. Drag the GameObject with `UIButtonEmitter` into the new slot.
 1. Choose `UIButtonEmitter -> Click` in the function dropdown.
 1. (Optional) Set a friendly `buttonId` in the `UIButtonEmitter` Inspector.
-1. Press Play and click the Button — watch the Console logs.
+1. Press Play and click the Button  --  watch the Console logs.
 
-## What’s Happening Under The Hood
+## What's Happening Under The Hood
 
 When you click the Button, `UIButtonEmitter.Click()` constructs and emits messages using the simple two-line pattern:
 
@@ -119,7 +120,7 @@ MessageHandler.MessageBus.DiagnosticsMode = true;
 ## Try These Variations
 
 - Multiple buttons: Add more UI Buttons, add more `UIButtonEmitter`s, and give each a unique `buttonId`.
-- Targeted vs. untargeted: Notice the sample also sends a targeted `StringMessage` to the emitter’s `gameObject`.
+- Targeted vs. untargeted: Notice the sample also sends a targeted `StringMessage` to the emitter's `gameObject`.
 - Your own message type: Open [Messages.cs](./Messages.cs) to see how `ButtonClicked` is declared using attributes:
 
 ```csharp
@@ -133,7 +134,7 @@ Add your own partial struct next to it, then emit it from `UIButtonEmitter` usin
 ## Troubleshooting
 
 - Button click does nothing: Confirm the Button's `On Click ()` has the `UIButtonEmitter.Click` function assigned, and you're not editing while in Play Mode (changes revert when you exit Play Mode).
-- No logs in Console: Make sure a `MessagingObserver` exists in the scene and the Console isn't filtered. Diagnostics are optional — basic logs should still appear without them.
+- No logs in Console: Make sure a `MessagingObserver` exists in the scene and the Console isn't filtered. Diagnostics are optional  --  basic logs should still appear without them.
 - Button doesn't respond: Ensure there's an `EventSystem` in the scene (Unity auto-adds one with UI); make sure the Button is interactable and not occluded by other UI.
 
 ## CRITICAL: Inheriting from MessageAwareComponent
@@ -146,7 +147,7 @@ Add your own partial struct next to it, then emit it from `UIButtonEmitter` usin
 
    ```csharp
    protected override void RegisterMessageHandlers() {
-       base.RegisterMessageHandlers();  // ← MUST be first!
+       base.RegisterMessageHandlers();  // <- MUST be first!
        _ = Token.RegisterUntargeted<MyMessage>(OnMyMessage);
    }
    ```
@@ -161,10 +162,10 @@ Add your own partial struct next to it, then emit it from `UIButtonEmitter` usin
 1. **Use `override`, never `new`:**
 
    ```csharp
-   // ❌ WRONG - This hides the method, doesn't override it
+   //  WRONG - This hides the method, doesn't override it
    new void OnEnable() { }
 
-   // ✅ CORRECT - This properly overrides
+   //  CORRECT - This properly overrides
    protected override void OnEnable() {
        base.OnEnable();
    }
@@ -180,7 +181,7 @@ Add your own partial struct next to it, then emit it from `UIButtonEmitter` usin
 ### Common Pitfall Example
 
 ```csharp
-// ❌ WRONG - Forgot base.RegisterMessageHandlers()
+//  WRONG - Forgot base.RegisterMessageHandlers()
 public class MyObserver : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
         // Missing base call!
@@ -189,7 +190,7 @@ public class MyObserver : MessageAwareComponent {
 }
 // Result: String messages won't work, base class handlers missing
 
-// ✅ CORRECT
+//  CORRECT
 public class MyObserver : MessageAwareComponent {
     protected override void RegisterMessageHandlers() {
         base.RegisterMessageHandlers();  // Essential!

@@ -2,11 +2,21 @@
 
 Thanks for helping improve DxMessaging!
 
-Before committing, please enable our git hooks and local linters so you catch issues early:
+Before committing, please enable our git hooks and local linters so you catch issues early.
+Run these steps in order:
 
-- Install pre-commit: `pip install pre-commit` or `pipx install pre-commit`
-- Install hooks: `pre-commit install`
-- Run on all files: `pre-commit run --all-files`
+1. Install Node dependencies: `npm install`
+1. Install pre-commit: `pip install pre-commit` or `pipx install pre-commit`
+1. Install hooks: `pre-commit install`
+1. Run Node tooling preflight: `npm run preflight:pre-commit` (includes YAML formatting + yamllint checks)
+1. Run on all files: `pre-commit run --all-files`
+
+`jest` does not need to be installed globally. Hooks and scripts route through `scripts/run-managed-jest.js` so they can use local devDependencies first, then a managed fallback when needed.
+
+Prettier hooks and npm scripts route through `scripts/run-managed-prettier.js` so format checks and writes use the same resolved Prettier version across local shells and CI.
+
+Windows note: if you use `nvm` or `fnm`, run commits from a shell where Node is initialized (PowerShell or Git Bash) and verify `npm --version` before running hooks.
+If you edit `.github/workflows/*.yml`, run `npm run preflight:pre-commit` in that same shell before `git commit`.
 
 Line endings: Git normalizes most text files to **LF** through `.gitattributes`. **Exception:** C#/.NET files (`.cs`, `.csproj`, `.sln`, `.props`) use CRLF per .NET conventions. Run this once after cloning (especially on Windows) to fix your working tree:
 
@@ -17,7 +27,7 @@ node scripts/fix-eol.js
 
 This directly converts files in your working directory to the correct line endings. Add `-v` for verbose output showing each file fixed.
 
-> **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area)—it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
+> **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area) -- it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
 
 ## VS Code Security Policy
 
@@ -42,11 +52,31 @@ Handy commands:
 - Lint markdown (all files): `pre-commit run markdownlint --all-files`
 - Lint markdown (manual): `npx markdownlint-cli2@0.20.0 "**/*.md" --fix`
 - Format JSON/.asmdef (all files): `pre-commit run prettier --all-files`
-- Format JSON/.asmdef (manual): `npx prettier@3.8.1 --write "**/*.{json,asmdef}"`
+- Format JSON/.asmdef (manual): `node scripts/run-managed-prettier.js --write "**/*.{json,asmdef}"`
 - Format YAML (all files): `pre-commit run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
+- Run yamllint hook directly: `pre-commit run yamllint --all-files`
+
+Prettier keeps YAML formatting consistent but does not automatically wrap long YAML lines. `yamllint` is the authoritative check for the 200-character YAML line-length rule.
+
+If `npm run check:yaml` reports a YAML line-length failure:
+
+1. For workflow `run:` commands, use folded scalars (`run: >-`) to split long commands across readable lines.
+1. For non-command YAML values, break long strings into multiline YAML values where valid, or refactor the content so each line stays within 200 characters.
+
 - Format C#: `dotnet tool restore && dotnet tool run csharpier format`
+- Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
+- Run pre-commit Node preflight: `npm run preflight:pre-commit`
 - Validate NPM package: `npm run validate:npm-meta`
+
+## Documentation Style and Code Samples
+
+Two strict rules apply to all documentation (Markdown files and `///` XML doc comments) and to every C# code sample:
+
+1. **ASCII-only.** Pure ASCII is required. Real Unicode emojis are allowed only on callout lines (lines starting with `>`), capped at five per file. See the [ASCII-only documentation guideline](./.llm/skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` (or `node scripts/normalize-docs-ascii.js` to auto-fix).
+1. **Code samples must compile.** Every C# snippet - inline backticks, fenced blocks, table cells, and XML `<code>` blocks - must compile against the snippet harness. See the [Code samples must compile guideline](./.llm/skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite under `SourceGenerators/`.
+
+Both rules are enforced by pre-commit hooks (`validate-docs-ascii`, `validate-doc-code-patterns`) and the `.github/workflows/docs-lint.yml` CI job.
 
 ## NPM Package Validation
 

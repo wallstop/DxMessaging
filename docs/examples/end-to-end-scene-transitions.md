@@ -1,12 +1,12 @@
-# End‑to‑End Example: Scene Transitions + Overlay Pause
+# End-to-End Example: Scene Transitions + Overlay Pause
 
 Short intro
 
-An end‑to‑end pattern showing scene‑scoped buses, a global overlay that persists across scenes, and pausing emissions/listeners safely.
+An end-to-end pattern showing scene-scoped buses, a global overlay that persists across scenes, and pausing emissions/listeners safely.
 
 Scenario
 
-- Each scene has its own local MessageBus for scene‑scoped flows.
+- Each scene has its own local MessageBus for scene-scoped flows.
 - A global overlay persists across scenes and listens to global notifications.
 - During pause, some systems should stop processing (Disable tokens), but others still emit (emit while disabled).
 
@@ -79,7 +79,7 @@ public sealed class SceneDriver
         var info = new SceneLoaded(buildIndex);
         info.Emit();
 
-        // For scene‑local flows, pass the local bus to tokens
+        // For scene-local flows, pass the local bus to tokens
         // var token = MessageRegistrationToken.Create(handler, SceneBus.Current);
     }
 }
@@ -126,5 +126,5 @@ messaging.emitMessagesWhenDisabled = true;
 Notes
 
 - Use global untargeted messages to communicate scene transitions to global overlays.
-- Keep scene‑specific flows isolated on a per‑scene bus (pass to tokens for registrations and emit to it).
+- Keep scene-specific flows isolated on a per-scene bus (pass to tokens for registrations and emit to it).
 - Toggle listeners off to pause, and opt into emission while disabled for emitters that must remain active.
