@@ -247,8 +247,24 @@ describe("validate-changelog", () => {
     test("recognizes user-visible paths", () => {
       expect(isLikelyUserVisiblePath("Runtime/Core/MessageBus.cs")).toBe(true);
       expect(isLikelyUserVisiblePath("Editor/CustomEditors/FallbackEditor.cs")).toBe(true);
+      expect(
+        isLikelyUserVisiblePath(
+          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/MessageBusEmitterGenerator.cs"
+        )
+      ).toBe(true);
+      expect(
+        isLikelyUserVisiblePath(
+          "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/MessageAwareComponentBaseCallAnalyzer.cs"
+        )
+      ).toBe(true);
       expect(isLikelyUserVisiblePath("Runtime/Core/MessageBus.cs.meta")).toBe(false);
       expect(isLikelyUserVisiblePath("Editor/Analyzers/Analyzer.cs")).toBe(false);
+      expect(
+        isLikelyUserVisiblePath(
+          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/BaseCallScannerTests.cs"
+        )
+      ).toBe(false);
+      expect(isLikelyUserVisiblePath("SourceGenerators/Directory.Build.props")).toBe(false);
       expect(isLikelyUserVisiblePath("scripts/validate-changelog.js")).toBe(false);
       expect(isLikelyUserVisiblePath("CHANGELOG.md")).toBe(false);
     });
@@ -341,6 +357,24 @@ describe("validate-changelog", () => {
 
       expect(errors).toHaveLength(0);
     });
+
+    test("passes coverage for SourceGenerators test-only changes", () => {
+      const errors = validateCoverageRule([
+        "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/MessageBusGeneratorTests.cs"
+      ]);
+
+      expect(errors).toHaveLength(0);
+    });
+
+    test("fails coverage for shipped analyzer/source-generator changes without changelog", () => {
+      const errors = validateCoverageRule([
+        "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/MessageAwareComponentBaseCallAnalyzer.cs",
+        "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/MessageBusEmitterGenerator.cs"
+      ]);
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0].code).toBe("E004");
+    });
   });
 
   describe("integration", () => {
@@ -390,6 +424,7 @@ describe("validate-changelog", () => {
       });
 
       expect(result.errors).toHaveLength(0);
+      expect(result.warnings).toHaveLength(0);
     });
   });
 });

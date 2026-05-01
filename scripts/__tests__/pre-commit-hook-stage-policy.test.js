@@ -120,7 +120,10 @@ describe("pre-commit hook stage policy", () => {
         expect(blockText).toContain("entry: node scripts/validate-changelog.js --check-coverage");
         expect(blockText).toContain("pass_filenames: false");
         expect(blockText).toContain("files: '^(CHANGELOG\\.md|Runtime/|SourceGenerators/|Samples~/|Editor/)'");
-        expect(blockText).toMatch(/exclude:\s*['\"]\^Editor\/\(Analyzers\|Testing\)\/['\"]/);
+        expect(blockText).toContain("exclude:");
+        expect(blockText).toContain("Editor/(Analyzers|Testing)/");
+        expect(blockText).toContain("SourceGenerators/.*\\\\.Tests/");
+        expect(blockText).toContain("SourceGenerators/.*/(bin|obj)/");
     });
 
     test("fix-csharp-underscore-methods hook runs at pre-commit", () => {

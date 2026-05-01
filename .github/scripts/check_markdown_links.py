@@ -5,7 +5,18 @@ import sys
 import urllib.parse
 
 
-EXCLUDE_DIRS = {".git", "node_modules", ".vs"}
+EXCLUDE_DIRS = {
+    ".git",
+    "node_modules",
+    ".vs",
+    ".venv",
+    ".artifacts",
+    "site",
+    "Library",
+    "Obj",
+    "Temp",
+    "Samples~",
+}
 
 
 LINK_RE = re.compile(r"(?<!\!)\[(?P<text>[^\]]+)\]\((?P<target>[^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -66,17 +77,24 @@ def check_code_fence(stripped_line: str, in_code_block: bool, code_fence_pattern
     Returns:
         Tuple of (new_in_code_block, new_code_fence_pattern, is_fence_line)
     """
-    if not stripped_line.startswith("```"):
+    if not stripped_line:
         return in_code_block, code_fence_pattern, False
 
-    # Count the backticks at the start
-    backtick_count = 0
+    fence_char = stripped_line[0]
+    if fence_char not in ("`", "~"):
+        return in_code_block, code_fence_pattern, False
+
+    if not stripped_line.startswith(fence_char * 3):
+        return in_code_block, code_fence_pattern, False
+
+    # Count the fence characters at the start.
+    fence_count = 0
     for ch in stripped_line:
-        if ch == "`":
-            backtick_count += 1
+        if ch == fence_char:
+            fence_count += 1
         else:
             break
-    fence = "`" * backtick_count
+    fence = fence_char * fence_count
 
     if not in_code_block:
         # Entering a code block
@@ -148,37 +166,59 @@ def check_file_content(lines: list) -> list:
     return issues
 
 
-def main(root: str) -> int:
-    issues = 0
+def iter_markdown_files(root: str):
+    """Yield markdown files under root in deterministic order."""
     for dirpath, dirnames, filenames in os.walk(root):
-        # prune excluded directories
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        for filename in filenames:
-            if not filename.lower().endswith(".md"):
-                continue
-            path = os.path.join(dirpath, filename)
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-            except Exception:
-                # Skip files that cannot be read (permission errors, encoding issues, etc.)
-                continue
+        # Prune excluded directories and sort for deterministic output across platforms.
+        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDE_DIRS)
+        for filename in sorted(filenames):
+            if filename.lower().endswith(".md"):
+                yield os.path.join(dirpath, filename)
 
-            file_issues = check_file_content(lines)
-            for line_num, text, target in file_issues:
-                issues += 1
-                msg = f"{path}:{line_num}: Link text '{text}' should be human-readable, not a raw file name or path (target: {target})"
-                print(msg)
 
-    if issues:
+def main(root: str) -> int:
+    issue_count = 0
+    scanned_files = 0
+    file_issue_counts = {}
+
+    for path in iter_markdown_files(root):
+        scanned_files += 1
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:
+            # Skip files that cannot be read (permission errors, encoding issues, etc.)
+            continue
+
+        file_issues = check_file_content(lines)
+        if file_issues:
+            file_issue_counts[path] = len(file_issues)
+
+        for line_num, text, target in file_issues:
+            issue_count += 1
+            msg = f"{path}:{line_num}: Link text '{text}' should be human-readable, not a raw file name or path (target: {target})"
+            print(msg)
+
+    if issue_count:
         print(
-            f"Found {issues} documentation link(s) with non-human-readable text.",
+            f"Scanned {scanned_files} markdown file(s) under '{root}'.",
+            file=sys.stderr,
+        )
+        print("Issue count by file:", file=sys.stderr)
+        for path, count in sorted(file_issue_counts.items()):
+            print(f"  - {path}: {count}", file=sys.stderr)
+        print(
+            f"Found {issue_count} documentation link(s) with non-human-readable text.",
             file=sys.stderr,
         )
         print(
             "Use a descriptive phrase instead of the raw file name.", file=sys.stderr
         )
         return 1
+
+    print(
+        f"Scanned {scanned_files} markdown file(s); all markdown-to-markdown links use human-readable text."
+    )
     return 0
 
 

@@ -16,6 +16,30 @@ public sealed class MessageAwareComponentBaseCallAnalyzerTests
     // no more duplicated literal in the tests. Drift risk eliminated.
     private static readonly string IgnoreFileName = IgnoreListReader.IgnoreFileName;
 
+    [TestCase("DXMSG006", "dxmsg006")]
+    [TestCase("DXMSG007", "dxmsg007")]
+    [TestCase("DXMSG008", "dxmsg008")]
+    [TestCase("DXMSG009", "dxmsg009")]
+    [TestCase("DXMSG010", "dxmsg010")]
+    public void SupportedDiagnosticsUseCanonicalAnalyzerDocsLinks(
+        string diagnosticId,
+        string expectedAnchor
+    )
+    {
+        MessageAwareComponentBaseCallAnalyzer analyzer = new();
+        DiagnosticDescriptor descriptor = analyzer.SupportedDiagnostics.Single(d =>
+            d.Id == diagnosticId
+        );
+
+        string expectedLink =
+            $"https://github.com/wallstop/DxMessaging/blob/master/docs/reference/analyzers.md#{expectedAnchor}";
+        Assert.That(
+            descriptor.HelpLinkUri,
+            Is.EqualTo(expectedLink),
+            $"Unexpected help link for {diagnosticId}."
+        );
+    }
+
     [Test]
     public void OverrideAwakeWithoutBaseEmitsDxmsg006()
     {

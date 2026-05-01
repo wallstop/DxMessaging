@@ -5,6 +5,8 @@ Tests for check_markdown_links.py
 Run with: python3 -m pytest test_check_markdown_links.py -v
 Or: python3 -m unittest test_check_markdown_links -v
 """
+import os
+import tempfile
 import unittest
 
 from check_markdown_links import (
@@ -14,6 +16,7 @@ from check_markdown_links import (
     check_code_fence,
     check_line_for_issues,
     check_file_content,
+    iter_markdown_files,
     LINK_RE,
 )
 
@@ -94,6 +97,72 @@ class TestIsLinkTextProblematic(unittest.TestCase):
         self.assertFalse(is_link_text_problematic("docs / guide", "guide.md"))
 
 
+class TestDataDrivenMatrices(unittest.TestCase):
+    """Data-driven matrix tests for core link classification behavior."""
+
+    def test_should_check_target_matrix(self):
+        cases = [
+            ("README.md", True),
+            ("docs/guide.md#intro", True),
+            ("My%20Doc.md", True),
+            ("https://example.com/readme.md", False),
+            ("#top", False),
+            ("mailto:test@example.com", False),
+            ("guide.txt", False),
+        ]
+
+        for target, expected in cases:
+            with self.subTest(target=target):
+                self.assertEqual(should_check_target(target), expected)
+
+    def test_is_link_text_problematic_matrix(self):
+        cases = [
+            ("README.md", "README.md", True),
+            ("docs/README.md", "docs/README.md", True),
+            ("My File.md", "My%20File.md", True),
+            ("the README", "README.md", False),
+            ("Setup Guide", "docs/setup.md", False),
+            ("docs / setup", "docs/setup.md", False),
+        ]
+
+        for text, target, expected in cases:
+            with self.subTest(text=text, target=target):
+                self.assertEqual(is_link_text_problematic(text, target), expected)
+
+
+class TestIterMarkdownFiles(unittest.TestCase):
+    """Tests for deterministic markdown file iteration and directory exclusion."""
+
+    def test_iter_markdown_files_sorts_and_excludes_known_directories(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            docs_dir = os.path.join(tmp_dir, "docs")
+            node_modules_dir = os.path.join(tmp_dir, "node_modules")
+            temp_dir = os.path.join(tmp_dir, "Temp")
+            os.makedirs(docs_dir)
+            os.makedirs(node_modules_dir)
+            os.makedirs(temp_dir)
+
+            for rel_path in [
+                "b.md",
+                "a.md",
+                "docs/c.md",
+                "node_modules/ignored.md",
+                "Temp/ignored-temp.md",
+                "docs/not-markdown.txt",
+            ]:
+                full_path = os.path.join(tmp_dir, rel_path)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as handle:
+                    handle.write("placeholder")
+
+            discovered = [
+                os.path.relpath(path, tmp_dir).replace("\\", "/")
+                for path in iter_markdown_files(tmp_dir)
+            ]
+
+            self.assertEqual(discovered, ["a.md", "b.md", "docs/c.md"])
+
+
 class TestRemoveInlineCode(unittest.TestCase):
     """Tests for the remove_inline_code function."""
 
@@ -138,6 +207,18 @@ class TestCheckCodeFence(unittest.TestCase):
         self.assertIsNone(pattern)
         self.assertTrue(is_fence)
 
+    def test_entering_triple_tilde_code_block(self):
+        in_block, pattern, is_fence = check_code_fence("~~~markdown", False, None)
+        self.assertTrue(in_block)
+        self.assertEqual(pattern, "~~~")
+        self.assertTrue(is_fence)
+
+    def test_exiting_triple_tilde_code_block(self):
+        in_block, pattern, is_fence = check_code_fence("~~~", True, "~~~")
+        self.assertFalse(in_block)
+        self.assertIsNone(pattern)
+        self.assertTrue(is_fence)
+
     def test_entering_quad_backtick_code_block(self):
         in_block, pattern, is_fence = check_code_fence("````markdown", False, None)
         self.assertTrue(in_block)
@@ -155,6 +236,12 @@ class TestCheckCodeFence(unittest.TestCase):
         in_block, pattern, is_fence = check_code_fence("```", True, "````")
         self.assertTrue(in_block)
         self.assertEqual(pattern, "````")
+        self.assertFalse(is_fence)
+
+    def test_backticks_inside_tilde_block_do_not_exit(self):
+        in_block, pattern, is_fence = check_code_fence("```", True, "~~~")
+        self.assertTrue(in_block)
+        self.assertEqual(pattern, "~~~")
         self.assertFalse(is_fence)
 
     def test_non_fence_line_does_not_change_state(self):
@@ -266,6 +353,17 @@ class TestCheckFileContent(unittest.TestCase):
             "````\n",
             "[README.md](README.md)\n",
             "````\n",
+            "Normal text\n",
+        ]
+        issues = check_file_content(lines)
+        self.assertEqual(len(issues), 0)
+
+    def test_skips_triple_tilde_code_blocks(self):
+        lines = [
+            "# Header\n",
+            "~~~markdown\n",
+            "[README.md](README.md)\n",
+            "~~~\n",
             "Normal text\n",
         ]
         issues = check_file_content(lines)

@@ -26,6 +26,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Never commit repository settings that auto-approve chat-invoked terminal commands.
 - Ensure fenced markdown examples are closed and do not swallow real sections (for example `## See Also`).
 - Run file-scoped validation during editing; do not treat git hooks as the first signal of quality issues.
+- For user-visible code edits (`Runtime/`, `Samples~/`, user-facing `Editor/`, or shipped `SourceGenerators/` code), run `npm run validate:changelog:coverage` before finishing and resolve any `W002` warnings by rewriting entries around user impact.
 - When editing `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, or `.js` files, run file-scoped cspell on touched files and update `.cspell.json` in the same change for legitimate domain terms.
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
 - When editing `.pre-commit-config.yaml`, `scripts/*` hook tooling, `.github/workflows/*.yml`, or hook-related scripts in `package.json`, run `npm run preflight:pre-commit` before finishing.
@@ -107,7 +108,8 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Keep examples accurate and aligned with real usage.
 - Update `CHANGELOG.md` only for user-facing DxMessaging changes, not developer-only tooling/process updates.
 - For `## [Unreleased]` entries, mutate existing bullets as behavior evolves; do not stack separate `Added` then `Fixed` bullets for the same unreleased change.
-- When likely user-visible files change (`Runtime/`, `SourceGenerators/`, `Samples~/`, and user-facing `Editor/` code), ensure `CHANGELOG.md` is updated in the same change and run `npm run validate:changelog:coverage`.
+- When likely user-visible files change (`Runtime/`, `Samples~/`, user-facing `Editor/`, `SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/`, or `SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/`), ensure `CHANGELOG.md` is updated in the same change and run `npm run validate:changelog:coverage`.
+- If changelog validation raises `W002`, rewrite the entry to foreground user impact or move internal-only details to developer docs.
 - For edited Markdown files, run `node scripts/fix-md029-md051.js` and then `npx markdownlint-cli2` before finishing.
 - Ordered lists must follow MD029 `one` style (`1.` for each item).
 - Internal fragment links must match GitHub/markdownlint heading slugs exactly (MD051).

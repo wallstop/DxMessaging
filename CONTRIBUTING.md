@@ -73,8 +73,8 @@ If `npm run check:yaml` reports a YAML line-length failure:
 
 Two strict rules apply to all documentation (Markdown files and `///` XML doc comments) and to every C# code sample:
 
-1. **ASCII-only.** Pure ASCII is required. Real Unicode emojis are allowed only on callout lines (lines starting with `>`), capped at five per file. See [.llm/skills/documentation/ascii-only-docs.md](./.llm/skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` (or `node scripts/normalize-docs-ascii.js` to auto-fix).
-1. **Code samples must compile.** Every C# snippet - inline backticks, fenced blocks, table cells, and XML `<code>` blocks - must compile against the snippet harness. See [.llm/skills/documentation/code-samples-must-compile.md](./.llm/skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite under `SourceGenerators/`.
+1. **ASCII-only.** Pure ASCII is required. Real Unicode emojis are allowed only on callout lines (lines starting with `>`), capped at five per file. See the [ASCII-only documentation guideline](./.llm/skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` (or `node scripts/normalize-docs-ascii.js` to auto-fix).
+1. **Code samples must compile.** Every C# snippet - inline backticks, fenced blocks, table cells, and XML `<code>` blocks - must compile against the snippet harness. See the [Code samples must compile guideline](./.llm/skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite under `SourceGenerators/`.
 
 Both rules are enforced by pre-commit hooks (`validate-docs-ascii`, `validate-doc-code-patterns`) and the `.github/workflows/docs-lint.yml` CI job.
 

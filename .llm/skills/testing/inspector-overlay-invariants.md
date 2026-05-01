@@ -7,12 +7,12 @@ created: "2026-04-30"
 updated: "2026-04-30"
 
 source:
-  repository: "wallstop-studios/com.wallstop-studios.dxmessaging"
+  repository: "wallstop/DxMessaging"
   files:
     - path: "Editor/CustomEditors/MessageAwareComponentFallbackEditor.cs"
     - path: "Editor/CustomEditors/MessageAwareComponentInspectorOverlay.cs"
     - path: "Tests/Editor/MessageAwareComponentFallbackEditorTests.cs"
-  url: "https://github.com/wallstop-studios/com.wallstop-studios.dxmessaging"
+  url: "https://github.com/wallstop/DxMessaging"
 
 tags:
   - "testing"

@@ -31,7 +31,7 @@
 | Skill                                                                                                 | Lines      | Complexity     | Status   | Performance  | Tags                         |
 | ----------------------------------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | ---------------------------- |
 | [ASCII-Only Documentation Policy](./documentation/ascii-only-docs.md)                                 | [ok] 173   | [basic]        | [stable] | [risk: none] | documentation, ascii         |
-| [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | [warn] 277 | [basic]        | [stable] | [risk: none] | changelog, release-notes     |
+| [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | [warn] 296 | [basic]        | [stable] | [risk: none] | changelog, release-notes     |
 | [Changelog Entry Writing and Anti-Patterns Part 1](./documentation/changelog-entry-writing-part-1.md) | [draft] 56 | [intermediate] | [stable] | [risk: low]  | migration, split             |
 | [Changelog Management](./documentation/changelog-management.md)                                       | [ok] 229   | [basic]        | [stable] | [risk: none] | changelog, documentation     |
 | [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                           | [ok] 250   | [basic]        | [stable] | [risk: none] | changelog, release-workflow  |

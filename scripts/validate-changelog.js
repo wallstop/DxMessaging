@@ -565,7 +565,34 @@ function isLikelyUserVisiblePath(filePath) {
   }
 
   if (normalizedPath.startsWith("SourceGenerators/")) {
-    return true;
+    // Only shipped source-generator/analyzer code should require changelog coverage.
+    if (/\/(?:bin|obj)\//.test(normalizedPath)) {
+      return false;
+    }
+
+    if (/\.Tests(?:\/|$)/.test(normalizedPath)) {
+      return false;
+    }
+
+    if (normalizedPath === "SourceGenerators/Directory.Build.props") {
+      return false;
+    }
+
+    if (
+      normalizedPath.startsWith("SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/")
+    ) {
+      return true;
+    }
+
+    if (
+      normalizedPath.startsWith(
+        "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/"
+      )
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   if (normalizedPath.startsWith("Samples~/")) {

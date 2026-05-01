@@ -233,7 +233,7 @@ repos:
         language: system
         pass_filenames: false
         files: '^(CHANGELOG\.md|Runtime/|SourceGenerators/|Samples~/|Editor/)'
-        exclude: "^Editor/(Analyzers|Testing)/"
+        exclude: "^(Editor/(Analyzers|Testing)/|SourceGenerators/.*\\.Tests/|SourceGenerators/.*/(bin|obj)/)"
         stages:
           - pre-commit
           - pre-push
