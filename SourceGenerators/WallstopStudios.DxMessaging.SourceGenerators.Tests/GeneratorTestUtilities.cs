@@ -78,6 +78,26 @@ internal static class GeneratorTestUtilities
         return compilation.GetDiagnostics();
     }
 
+    /// <summary>
+    /// Compiles <paramref name="userSource"/> as a snippet with the standard
+    /// DxMessaging documentation usings prepended. Used by the doc-sample
+    /// compilation tests where snippets are expected to use these namespaces
+    /// implicitly.
+    /// </summary>
+    internal static ImmutableArray<Diagnostic> CompileDocSnippet(string userSource)
+    {
+        const string usings =
+            @"using System;
+using System.Collections.Generic;
+using DxMessaging.Core;
+using DxMessaging.Core.Attributes;
+using DxMessaging.Core.Messages;
+using DxMessaging.Unity;
+using UnityEngine;
+";
+        return CompileSnippet(usings + userSource);
+    }
+
     internal static ImmutableArray<Diagnostic> ParseSnippet(string userSource)
     {
         SyntaxTree userTree = CSharpSyntaxTree.ParseText(userSource, ParseOptions);
@@ -277,6 +297,63 @@ namespace DxMessaging.Core.Messages
     public interface IBroadcastMessage { }
 }
 
+namespace DxMessaging.Core.Extensions
+{
+    using DxMessaging.Core;
+    using DxMessaging.Core.Messages;
+
+    /// <summary>
+    /// Minimal stubs of the Emit shorthands. The "this ref TMessage" signature
+    /// is the load-bearing detail: with these stubs in place, the pattern
+    /// "new X().Emit()" will not compile (CS1612 / CS1510 depending on
+    /// context) -- which is the bug class the doc-snippet compilation tests
+    /// and validate-doc-code-patterns.js exist to catch.
+    /// </summary>
+    public static class MessageExtensions
+    {
+        // The "this ref TMessage" signature is the load-bearing detail. The
+        // "where struct" constraint is also kept (to mirror the real API),
+        // but interface constraints are intentionally dropped: doc snippets
+        // routinely omit explicit "I*Message" markers and rely on the
+        // [Dx*Message] attributes to auto-generate them. The auto-generators
+        // do not run inside this test compilation, so requiring the interface
+        // would surface as spurious CS0315 / CS0453 failures rather than the
+        // real "struct emit on a temporary" bug we want to catch (CS1612 /
+        // CS1510).
+        public static void Emit<TMessage>(this ref TMessage message)
+            where TMessage : struct { }
+
+        public static void EmitAt<TMessage>(this ref TMessage message, InstanceId target)
+            where TMessage : struct { }
+
+        public static void EmitFrom<TMessage>(this ref TMessage message, InstanceId source)
+            where TMessage : struct { }
+
+        public static void EmitUntargeted<TMessage>(this ref TMessage message)
+            where TMessage : struct { }
+
+        public static void EmitTargeted<TMessage>(this ref TMessage message, InstanceId target)
+            where TMessage : struct { }
+
+        public static void EmitBroadcast<TMessage>(this ref TMessage message, InstanceId source)
+            where TMessage : struct { }
+
+        public static void EmitGameObjectTargeted<TMessage>(this ref TMessage message, UnityEngine.GameObject target)
+            where TMessage : struct { }
+
+        public static void EmitComponentBroadcast<TMessage>(this ref TMessage message, UnityEngine.Component source)
+            where TMessage : struct { }
+    }
+}
+
+namespace DxMessaging.Core
+{
+    public readonly struct InstanceId
+    {
+        public InstanceId(int id) { }
+    }
+}
+
 namespace UnityEngine
 {
     public struct Color
@@ -284,7 +361,10 @@ namespace UnityEngine
         public static readonly Color green = default;
     }
 
-    public class MonoBehaviour { }
+    public class Object { }
+    public class GameObject : Object { }
+    public class Component : Object { public GameObject gameObject => default; }
+    public class MonoBehaviour : Component { }
 }
 
 namespace DxMessaging.Unity

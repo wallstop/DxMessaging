@@ -28,7 +28,7 @@ Continuation material extracted from `markdown-compatibility.md` to keep .llm fi
 
 Admonitions (callout boxes) are a common MkDocs extension that use `!!!` syntax.
 
-#### ❌ Forbidden: MkDocs Admonitions
+#### No Forbidden: MkDocs Admonitions
 
 ```markdown
 !!! note "Important"
@@ -47,12 +47,12 @@ This tip syntax is not standard markdown.
 Admonitions without titles are also forbidden.
 ```
 
-#### ✅ Correct: Blockquotes with Emoji
+#### Yes Correct: Blockquotes with Emoji
 
 ```markdown
 > ℹ️ **Note**: This is a note that renders everywhere.
 
-> ⚠️ **Caution**: This warning displays correctly on all platforms.
+> **Caution**: This warning displays correctly on all platforms.
 
 > 🚨 **Critical**: This danger callout works universally.
 
@@ -66,12 +66,12 @@ Admonitions without titles are also forbidden.
 | Type     | Emoji | Example                  |
 | -------- | ----- | ------------------------ |
 | Note     | ℹ️    | `> ℹ️ **Note**: ...`     |
-| Warning  | ⚠️    | `> ⚠️ **Warning**: ...`  |
+| Warning  |       | `>  **Warning**: ...`    |
 | Danger   | 🚨    | `> 🚨 **Danger**: ...`   |
 | Tip      | 💡    | `> 💡 **Tip**: ...`      |
 | Info     | 📝    | `> 📝 **Info**: ...`     |
-| Success  | ✅    | `> ✅ **Success**: ...`  |
-| Error    | ❌    | `> ❌ **Error**: ...`    |
+| Success  | Yes   | `> Yes **Success**: ...` |
+| Error    | No    | `> No **Error**: ...`    |
 | Example  | 📌    | `> 📌 **Example**: ...`  |
 | See Also | 🔗    | `> 🔗 **See Also**: ...` |
 
@@ -81,7 +81,7 @@ Admonitions without titles are also forbidden.
 
 MkDocs supports collapsible sections with `???` syntax.
 
-#### ❌ Forbidden: MkDocs Collapsibles
+#### No Forbidden: MkDocs Collapsibles
 
 ```markdown
 ??? note "Click to expand"
@@ -92,7 +92,7 @@ It appears as broken syntax elsewhere.
 The plus makes it expanded initially.
 ```
 
-#### ✅ Correct: Use Details/Summary HTML
+#### Yes Correct: Use Details/Summary HTML
 
 ```markdown
 <details>
@@ -119,7 +119,7 @@ This content is always visible, which is often clearer for users.
 
 MkDocs Material provides tabbed content with `===` syntax.
 
-#### ❌ Forbidden: MkDocs Tabs
+#### No Forbidden: MkDocs Tabs
 
 ```markdown
 === "Python"
@@ -138,7 +138,7 @@ MkDocs Material provides tabbed content with `===` syntax.
     `
 ```
 
-#### ✅ Correct: Use Headers
+#### Yes Correct: Use Headers
 
 ````markdown
 ### Python
@@ -168,7 +168,7 @@ For installation instructions or platform-specific content, headers provide clea
 
 MkDocs Material supports styled buttons via attribute syntax.
 
-#### ❌ Forbidden: Button Attributes
+#### No Forbidden: Button Attributes
 
 ```markdown
 [Get Started](getting-started.md){ .md-button }
@@ -178,7 +178,7 @@ MkDocs Material supports styled buttons via attribute syntax.
 [:fontawesome-brands-github: View on GitHub](https://github.com/example){ .md-button }
 ```
 
-#### ✅ Correct: Standard Links
+#### Yes Correct: Standard Links
 
 ```markdown
 [Get Started](getting-started.md)
@@ -191,7 +191,7 @@ MkDocs Material supports styled buttons via attribute syntax.
 If you need visual emphasis, use bold or place links prominently:
 
 ```markdown
-**[Get Started →](getting-started.md)**
+**[Get Started ->](getting-started.md)**
 ```
 
 ---

@@ -39,7 +39,8 @@ public class Player {
 public class Player : MessageAwareComponent {
     void Heal(int amount) {
         health += amount;
-        new PlayerHealed(amount).EmitBroadcast(this);
+        var healed = new PlayerHealed(amount);
+        healed.EmitBroadcast(this);
         // Done! UI, audio, analytics all react automatically.
     }
 }
@@ -97,16 +98,16 @@ Here's what each script does:
 
 #### Want to see it work immediately?
 
-1. **Open Package Manager**: Window → Package Manager
+1. **Open Package Manager**: Window  ->  Package Manager
 1. **Find DxMessaging** in the package list
-1. **Scroll to Samples** section → Find "Mini Combat" → Click **Import**
+1. **Scroll to Samples** section  ->  Find "Mini Combat"  ->  Click **Import**
 1. **Navigate to** Assets/Samples/DxMessaging/.../Mini Combat/
 1. **Open the scene**
-1. **Press Play** 🎮
+1. **Press Play**
 
 Watch the Console logs as messages flow.
 
-**Pro tip:** Enable diagnostics in the Inspector (MessagingComponent → Enable Diagnostics) to see message traffic in real-time.
+**Pro tip:** Enable diagnostics in the Inspector (MessagingComponent  ->  Enable Diagnostics) to see message traffic in real-time.
 
 ### Method 2: Manual Setup in Your Scene
 
@@ -123,21 +124,21 @@ Watch the Console logs as messages flow.
 For **each GameObject**, you need TWO components:
 
 1. **Add MessagingComponent** (DxMessaging's Unity component)
-   - Click GameObject → Add Component → "MessagingComponent"
+   - Click GameObject  ->  Add Component  ->  "MessagingComponent"
 
 1. **Add the sample script**:
-   - **Player** GameObject → Add [Player.cs](./Player.cs) script
-   - **Enemy** GameObject → Add [Enemy.cs](./Enemy.cs) script
-   - **UIOverlay** GameObject → Add [UIOverlay.cs](./UIOverlay.cs) script
-   - **Boot** GameObject → Add [Boot.cs](./Boot.cs) script
+   - **Player** GameObject  ->  Add [Player.cs](./Player.cs) script
+   - **Enemy** GameObject  ->  Add [Enemy.cs](./Enemy.cs) script
+   - **UIOverlay** GameObject  ->  Add [UIOverlay.cs](./UIOverlay.cs) script
+   - **Boot** GameObject  ->  Add [Boot.cs](./Boot.cs) script
 
 #### Step 3: Run and Observe
 
 Press Play! The Boot script will automatically:
 
-1. Send a settings change message → UI updates
-1. Send a heal message to the Player → Player's HP increases
-1. Trigger Enemy damage → UI displays the damage event
+1. Send a settings change message  ->  UI updates
+1. Send a heal message to the Player  ->  Player's HP increases
+1. Trigger Enemy damage  ->  UI displays the damage event
 
 **Pro Tip**: Enable **Diagnostics** on each MessagingComponent in the Inspector to see messages being sent and received in real-time!
 
@@ -149,9 +150,9 @@ Press Play! The Boot script will automatically:
 
 #### [Boot.cs](./Boot.cs) sends messages:
 
-1. `VideoSettingsChanged` (Untargeted) → [UIOverlay.cs](./UIOverlay.cs) receives
-1. `Heal` (Targeted to Player) → [Player.cs](./Player.cs) receives
-1. `TookDamage` (Broadcast from Enemy) → [UIOverlay.cs](./UIOverlay.cs) receives
+1. `VideoSettingsChanged` (Untargeted)  ->  [UIOverlay.cs](./UIOverlay.cs) receives
+1. `Heal` (Targeted to Player)  ->  [Player.cs](./Player.cs) receives
+1. `TookDamage` (Broadcast from Enemy)  ->  [UIOverlay.cs](./UIOverlay.cs) receives
 
 ### Understanding Message Types
 
@@ -168,7 +169,7 @@ Press Play! The Boot script will automatically:
 1. **Broadcast Messages** (`TookDamage`)
    - Announced from a GameObject to all listeners
    - Anyone listening for this message type will receive it
-   - Like shouting in a room—everyone hears it
+   - Like shouting in a room -- everyone hears it
 
 ---
 
@@ -205,7 +206,7 @@ Each script uses `MessagingComponent.Create(this)` to get a `MessageRegistration
 
    ```csharp
    protected override void RegisterMessageHandlers() {
-       base.RegisterMessageHandlers();  // ← MUST call this first!
+       base.RegisterMessageHandlers();  // <- MUST call this first!
        _ = Token.RegisterUntargeted<YourMessage>(OnYourMessage);
    }
    ```
@@ -243,7 +244,7 @@ This sample is designed for **learning** and **experimentation**:
 
 Ready to understand the implementation details?
 
-👉 **[Read the Complete Walkthrough](Walkthrough.md)** - Step-by-step explanation of how everything works
+**[Read the Complete Walkthrough](Walkthrough.md)** - Step-by-step explanation of how everything works
 
 ### Need Help
 
@@ -255,60 +256,60 @@ Ready to understand the implementation details?
 
 ## Common Pitfalls (Avoid These!)
 
-### ❌ Pitfall #1: Forgetting base.RegisterMessageHandlers()
+###  Pitfall #1: Forgetting base.RegisterMessageHandlers()
 
 ```csharp
-// ❌ WRONG - Missing base call
+//  WRONG - Missing base call
 protected override void RegisterMessageHandlers() {
     _ = Token.RegisterUntargeted<MyMessage>(OnMessage);
 }
 
-// ✅ CORRECT - Always call base first
+//  CORRECT - Always call base first
 protected override void RegisterMessageHandlers() {
     base.RegisterMessageHandlers();  // Essential!
     _ = Token.RegisterUntargeted<MyMessage>(OnMessage);
 }
 ```
 
-### ❌ Pitfall #2: Overriding Awake() without calling base
+###  Pitfall #2: Overriding Awake() without calling base
 
 ```csharp
-// ❌ WRONG - Token never created, handlers never fire
+//  WRONG - Token never created, handlers never fire
 protected override void Awake() {
     myCustomSetup();
 }
 
-// ✅ CORRECT - Call base.Awake()
+//  CORRECT - Call base.Awake()
 protected override void Awake() {
     base.Awake();  // Creates the token!
     myCustomSetup();
 }
 ```
 
-### ❌ Pitfall #3: Registering in Start() instead of Awake()
+###  Pitfall #3: Registering in Start() instead of Awake()
 
 ```csharp
-// ❌ WRONG - Might miss messages from other components
+//  WRONG - Might miss messages from other components
 void Start() {
     _ = Token.RegisterUntargeted<MyMessage>(OnMessage);
 }
 
-// ✅ CORRECT - Use Awake via RegisterMessageHandlers
+//  CORRECT - Use Awake via RegisterMessageHandlers
 protected override void RegisterMessageHandlers() {
     base.RegisterMessageHandlers();
     _ = Token.RegisterUntargeted<MyMessage>(OnMessage);
 }
 ```
 
-### ❌ Pitfall #4: Using 'new' instead of 'override'
+###  Pitfall #4: Using 'new' instead of 'override'
 
 ```csharp
-// ❌ WRONG - Hides the base method, breaks functionality
+//  WRONG - Hides the base method, breaks functionality
 new void OnEnable() {
     // This doesn't override, it hides!
 }
 
-// ✅ CORRECT - Always use override
+//  CORRECT - Always use override
 protected override void OnEnable() {
     base.OnEnable();
     // Your code here
@@ -317,7 +318,7 @@ protected override void OnEnable() {
 
 ## Quick Reference
 
-**Enable Diagnostics**: Select MessagingComponent in Inspector → Enable Diagnostics
+**Enable Diagnostics**: Select MessagingComponent in Inspector  ->  Enable Diagnostics
 **Message Types**: See [Messages.cs](./Messages.cs) for all available messages
 **Modify Behavior**: Edit handler methods in [Player.cs](./Player.cs), [Enemy.cs](./Enemy.cs), or [UIOverlay.cs](./UIOverlay.cs)
 **Extend Scripts**: Always call `base.RegisterMessageHandlers()` and other `base.*` methods

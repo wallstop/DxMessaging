@@ -23,7 +23,7 @@ repos:
       - id: fix-csharp-underscore-methods
         name: Auto-fix C# method names (remove underscores)
         entry: >-
-          bash -c 'node scripts/fix-csharp-underscore-methods.js "$@" && git add "$@"' --
+          bash -c 'node scripts/fix-csharp-underscore-methods.js "$@" && { git diff --quiet -- "$@" || git add "$@"; }' --
         language: system
         types:
           - c#
@@ -54,6 +54,7 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
+
         entry: node scripts/run-managed-prettier.js --write
         language: system
         files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
@@ -84,6 +85,27 @@ repos:
         entry: npx --yes markdownlint-cli2@0.17.1 --fix
         language: system
         files: '(?i)\.(md|markdown)$'
+
+  - repo: local
+    hooks:
+      - id: validate-docs-ascii
+        name: Validate docs are ASCII-only
+        entry: node scripts/validate-docs-ascii.js
+        language: system
+        files: '\.(md|cs)$'
+        pass_filenames: false
+        stages:
+          - pre-commit
+        description: Enforce ASCII-only policy across .md files and /// XML doc comments. See .llm/skills/documentation/ascii-only-docs.md.
+      - id: validate-doc-code-patterns
+        name: Validate doc code samples don't use banned patterns
+        entry: node scripts/validate-doc-code-patterns.js
+        language: system
+        files: '\.(md|cs)$'
+        pass_filenames: false
+        stages:
+          - pre-commit
+        description: Enforce the doc-sample pattern catalog (e.g. no "new X().Emit()"). See .llm/skills/documentation/code-samples-must-compile.md.
 
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
@@ -205,6 +227,20 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-changelog-policy
+        name: Validate changelog policy
+        entry: node scripts/validate-changelog.js --check-coverage
+        language: system
+        pass_filenames: false
+        files: '^(CHANGELOG\.md|Runtime/|SourceGenerators/|Samples~/|Editor/)'
+        exclude: "^Editor/(Analyzers|Testing)/"
+        stages:
+          - pre-commit
+          - pre-push
+        description: Enforce changelog structure and require changelog updates for likely user-visible changes.
+
+  - repo: local
+    hooks:
       - id: validate-vscode-settings
         name: Validate VS Code settings security
         entry: node scripts/validate-vscode-settings.js
@@ -251,6 +287,7 @@ repos:
           scripts/__tests__/update-llms-txt.test.js
           scripts/__tests__/fix-md029-md051.test.js
           scripts/__tests__/fix-csharp-underscore-methods.test.js
+          scripts/__tests__/validate-changelog.test.js
           scripts/__tests__/validate-vscode-settings.test.js
           scripts/__tests__/validate-pre-commit-tooling.test.js
           scripts/__tests__/validate-npm-meta.test.js
@@ -260,7 +297,7 @@ repos:
           scripts/__tests__/verify-managed-jest-fallback.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|run-managed-jest|run-managed-prettier|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|run-managed-prettier|validate-workflows|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|validate-changelog|run-managed-jest|run-managed-prettier|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|run-managed-prettier|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback)\.test\.js)$'
         stages:
           - pre-commit
         description: Fail fast on parser, npm-meta, and shell-safety regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.

@@ -1,6 +1,6 @@
 # String Messages (Prototyping & Debugging)
 
-Sometimes you just want to fire a quick string without defining a formal message. DxMessaging provides three built‑in types:
+Sometimes you just want to fire a quick string without defining a formal message. DxMessaging provides three built-in types:
 
 - `StringMessage`: targeted string message (to a specific recipient)
 - `GlobalStringMessage`: untargeted string message (global broadcast)
@@ -13,7 +13,7 @@ When to use
 
 When not to use
 
-- Shipping gameplay code that benefits from compile‑time safety and structure. Prefer explicit message structs.
+- Shipping gameplay code that benefits from compile-time safety and structure. Prefer explicit message structs.
 
 Examples
 
@@ -63,7 +63,7 @@ void OnTextToMe(ref StringMessage m)       => Debug.Log($"To me: {m.message}");
 Tips
 
 - Strings are great for glue and debugging; convert hot paths to typed messages for performance and clarity.
-- You can combine with interceptors/post‑processors for logging and filtering.
+- You can combine with interceptors/post-processors for logging and filtering.
 
 Related
 

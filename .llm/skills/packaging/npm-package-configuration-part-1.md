@@ -93,7 +93,7 @@ scripts.meta
 
 ### Key principles
 
-1. Use "files" as a pure allowlist—no negated patterns
+1. Use "files" as a pure allowlist -- no negated patterns
 1. Use specific patterns for complex structures (e.g., `SourceGenerators/Foo/*.cs`)
 1. Use `.npmignore` for subdirectory exclusions and defense-in-depth
 1. For Unity: include `.meta` files for included items, exclude for excluded items

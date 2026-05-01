@@ -1,6 +1,6 @@
-# Glossary — DxMessaging Terms Explained
+# Glossary -- DxMessaging Terms Explained
 
-[← Back to Index](../getting-started/index.md) | [Getting Started](../getting-started/getting-started.md) | [Visual Guide](../getting-started/visual-guide.md)
+[Back to Index](../getting-started/index.md) | [Getting Started](../getting-started/getting-started.md) | [Visual Guide](../getting-started/visual-guide.md)
 
 ---
 
@@ -38,7 +38,7 @@ void OnHeal(ref Heal msg) {
 
 A **registration handle** that manages the lifecycle of your message handlers. It automatically enables/disables handlers when your component is active/inactive.
 
-Think of it like a subscription card — when you destroy it, all your subscriptions end automatically.
+Think of it like a subscription card -- when you destroy it, all your subscriptions end automatically.
 
 ### MessageAwareComponent
 
@@ -103,7 +103,7 @@ _ = token.RegisterUntargeted<GameExit>(ShowUI, priority: 10);   // Runs third
 
 A **unique identifier** for a GameObject or Component. Used internally to route messages to the right place.
 
-You rarely use this directly — use the GameObject/Component helpers instead:
+You rarely use this directly -- use the GameObject/Component helpers instead:
 
 ```csharp
 msg.EmitGameObjectTargeted(gameObject); // Helper (use this)
@@ -254,14 +254,14 @@ public class UI : MessageAwareComponent {
 
 ### Learn More
 
-- → [Visual Guide](../getting-started/visual-guide.md) — See these concepts visualized
-- → [Getting Started](../getting-started/getting-started.md) — Full introduction with examples
-- → [Message Types](../concepts/message-types.md) — When to use each type
+- to [Visual Guide](../getting-started/visual-guide.md) -- See these concepts visualized
+- to [Getting Started](../getting-started/getting-started.md) -- Full introduction with examples
+- to [Message Types](../concepts/message-types.md) -- When to use each type
 
 #### Reference
 
-- → [Quick Reference](quick-reference.md) — API cheat sheet
-- → [API Reference](reference.md) — Complete API documentation
+- to [Quick Reference](quick-reference.md) -- API cheat sheet
+- to [API Reference](reference.md) -- Complete API documentation
 
-- → [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) — See concepts in action
-- → [Patterns](../guides/patterns.md) — Real-world usage patterns
+- to [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) -- See concepts in action
+- to [Patterns](../guides/patterns.md) -- Real-world usage patterns

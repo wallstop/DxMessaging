@@ -27,26 +27,26 @@ Continuation material extracted from `aggressive-inlining.md` to keep .llm files
 ### Good Candidates for AggressiveInlining
 
 ```csharp
-// ✅ Property getters (trivial)
+// Yes Property getters (trivial)
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public int Count => _count;
 
-// ✅ Simple arithmetic/logic
+// Yes Simple arithmetic/logic
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public static int Clamp(int value, int min, int max)
 {
     return value < min ? min : (value > max ? max : value);
 }
 
-// ✅ Hash/equality operations
+// Yes Hash/equality operations
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public override int GetHashCode() => _cachedHash;
 
-// ✅ Type checks
+// Yes Type checks
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public bool IsValid => _data != null;
 
-// ✅ Forwarding calls
+// Yes Forwarding calls
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public T Get(int index) => _array[index];
 ```
@@ -54,7 +54,7 @@ public T Get(int index) => _array[index];
 ### Poor Candidates
 
 ```csharp
-// ❌ Large method bodies
+// No Large method bodies
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public void ProcessData()
 {
@@ -62,11 +62,11 @@ public void ProcessData()
     // Inlining this everywhere bloats code size
 }
 
-// ❌ Virtual methods (can't inline)
+// No Virtual methods (can't inline)
 [MethodImpl(MethodImplOptions.AggressiveInlining)] // Ignored
 public virtual void Update() { }
 
-// ❌ Methods with try-catch
+// No Methods with try-catch
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public void DoSomething()
 {
@@ -74,11 +74,11 @@ public void DoSomething()
     catch { /* ... */ }
 }
 
-// ❌ Recursive methods
+// No Recursive methods
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public int Factorial(int n) => n <= 1 ? 1 : n * Factorial(n - 1);
 
-// ❌ Cold paths (rarely called)
+// No Cold paths (rarely called)
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 public void HandleError() { /* called 0.01% of time */ }
 ```

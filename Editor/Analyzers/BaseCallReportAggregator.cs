@@ -16,7 +16,7 @@ namespace DxMessaging.Editor.Analyzers
     /// <remarks>
     /// The harvester wraps every DTO in a <see cref="BaseCallReportEntry"/> (with the lowercase
     /// Unity-serialisable field names) before the snapshot crosses into Editor code. Keep this
-    /// shape in lock-step with that wrapper — fields added here must also flow through to the
+    /// shape in lock-step with that wrapper -- fields added here must also flow through to the
     /// Unity-facing entry or the inspector overlay won't see them.
     /// </remarks>
     public sealed class BaseCallReportEntryDto
@@ -50,7 +50,7 @@ namespace DxMessaging.Editor.Analyzers
     /// <list type="number">
     /// <item><description><c>typesByAssembly</c>: which FQNs each compiled assembly has reported.
     /// When an assembly recompiles WITHOUT reporting a previously-seen FQN, that FQN is retired
-    /// — the user fixed the offending base call.</description></item>
+    /// -- the user fixed the offending base call.</description></item>
     /// <item><description><c>mergedReports</c>: the per-FQN union of every assembly's latest
     /// report. The final snapshot merges this with whatever the LogEntries scan yielded.</description></item>
     /// </list>
@@ -71,7 +71,7 @@ namespace DxMessaging.Editor.Analyzers
         /// <param name="assemblyKey">Stable identifier for the source assembly (typically the
         /// assembly path Unity passes via <c>CompilationPipeline.assemblyCompilationFinished</c>).</param>
         /// <param name="latestReportsForAssembly">Reports parsed from this assembly's most recent
-        /// compilation. May be empty — that case is the retirement path (every FQN this assembly
+        /// compilation. May be empty -- that case is the retirement path (every FQN this assembly
         /// previously reported is dropped).</param>
         /// <param name="typesByAssembly">Per-assembly FQN bookkeeping. Mutated in place.</param>
         /// <param name="mergedReports">Per-FQN union across every assembly. Mutated in place;

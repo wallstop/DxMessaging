@@ -33,7 +33,7 @@ namespace DxMessaging.Editor.Analyzers
         /// <remarks>
         /// Note: the IL-reflection scanner classifies DXMSG009 as DXMSG007 because the two are
         /// indistinguishable at the IL level. The compile-time analyzer remains authoritative for
-        /// the precise ID classification — see the analyzer reference docs and the inspector
+        /// the precise ID classification -- see the analyzer reference docs and the inspector
         /// integration section of <c>docs/reference/analyzers.md</c>. DXMSG008 (audit-marker for
         /// opted-out types) is intentionally NOT included here: opted-out types are excluded from
         /// the snapshot so the overlay's "Stop ignoring" path can reason about them via the
@@ -58,7 +58,7 @@ namespace DxMessaging.Editor.Analyzers
 
     /// <summary>
     /// Builds the per-FQN snapshot consumed by the inspector overlay from a deterministic IL
-    /// reflection scanner (<see cref="BaseCallTypeScanner"/>) — and, optionally, a legacy
+    /// reflection scanner (<see cref="BaseCallTypeScanner"/>) -- and, optionally, a legacy
     /// console-scrape bridge for users who want the union of both data sources.
     /// </summary>
     /// <remarks>
@@ -66,7 +66,7 @@ namespace DxMessaging.Editor.Analyzers
     /// <b>Primary source (always-on): <see cref="BaseCallTypeScanner"/>.</b> Walks loaded
     /// <c>MessageAwareComponent</c> subclasses via Unity's <c>TypeCache</c> and inspects each
     /// override's IL body for the base-call shape. Deterministic across Unity 2021 cache hits,
-    /// incremental compiles, and arbitrary domain-reload sequences — the only inputs are the
+    /// incremental compiles, and arbitrary domain-reload sequences -- the only inputs are the
     /// loaded assemblies in the AppDomain, which do not depend on Unity's compile-pipeline
     /// state. Runs on every <see cref="AssemblyReloadEvents.afterAssemblyReload"/> and on every
     /// <c>CompilationPipeline.assemblyCompilationFinished</c> burst (debounced via
@@ -84,12 +84,12 @@ namespace DxMessaging.Editor.Analyzers
     /// </para>
     /// <para>
     /// The inspector overlay reads its snapshot from the unified per-FQN map populated here on
-    /// every rescan. Use the menu <c>Tools → DxMessaging → Rescan Base-Call Warnings</c> for a
+    /// every rescan. Use the menu <c>Tools > DxMessaging > Rescan Base-Call Warnings</c> for a
     /// manual force-rescan.
     /// </para>
     /// <para>
     /// <see cref="IsAvailable"/> stays <c>true</c> as long as the static constructor itself does
-    /// not throw — the IL scanner is always wired, so the overlay never falls back to its
+    /// not throw -- the IL scanner is always wired, so the overlay never falls back to its
     /// degraded "harvester unavailable" HelpBox in normal operation. <see cref="LogEntriesAvailable"/>
     /// continues to report whether the legacy reflection layer is bindable, for diagnostics only.
     /// </para>
@@ -202,7 +202,7 @@ namespace DxMessaging.Editor.Analyzers
         /// <summary>
         /// Direct read of the latest console-derived report by FQN. Returns <c>true</c> if an
         /// entry exists for the given fully-qualified type name. The <paramref name="entry"/>
-        /// reference points at the live snapshot row — callers must not mutate it.
+        /// reference points at the live snapshot row -- callers must not mutate it.
         /// </summary>
         /// <remarks>
         /// All mutation happens on the main thread inside <see cref="RescanNow"/>; the inspector
@@ -225,7 +225,7 @@ namespace DxMessaging.Editor.Analyzers
         /// </summary>
         /// <remarks>
         /// Each access returns a fresh dictionary copy. Prefer <see cref="TryGetEntry"/> in hot
-        /// paths (the inspector overlay) — this property exists for callers that need to enumerate
+        /// paths (the inspector overlay) -- this property exists for callers that need to enumerate
         /// the full snapshot.
         /// </remarks>
         public static IReadOnlyDictionary<string, BaseCallReportEntry> Snapshot =>
@@ -239,7 +239,7 @@ namespace DxMessaging.Editor.Analyzers
         /// unconditionally on every supported Unity version, so this property is effectively
         /// always <c>true</c> in normal operation; it only flips to <c>false</c> when the static
         /// constructor itself throws (a hard initialization failure). The LogEntries reflection
-        /// layer is the optional source — see <see cref="LogEntriesAvailable"/> for that flag.
+        /// layer is the optional source -- see <see cref="LogEntriesAvailable"/> for that flag.
         /// The inspector overlay reads this property to decide whether to render its degraded
         /// HelpBox, so the contract here is "should the overlay attempt to render at all".
         /// </remarks>
@@ -248,7 +248,7 @@ namespace DxMessaging.Editor.Analyzers
         /// <summary>
         /// <c>true</c> when the legacy <c>UnityEditor.LogEntries</c> reflection layer resolved
         /// successfully on this Unity version. The harvester does not require this to be true to
-        /// function — Unity 2021's analyzer warnings flow through the CompilerMessage feed
+        /// function -- Unity 2021's analyzer warnings flow through the CompilerMessage feed
         /// instead. Exposed primarily for diagnostics / tests.
         /// </summary>
         public static bool LogEntriesAvailable => !_logEntriesDisabled;
@@ -260,8 +260,8 @@ namespace DxMessaging.Editor.Analyzers
         /// </summary>
         /// <remarks>
         /// The inspector overlay reads this to annotate its HelpBox: when <c>false</c> AND a
-        /// warning is being shown, the overlay appends a "(cached from previous session —
-        /// refreshing…)" suffix so the user knows the data is from yesterday's scan and a fresh
+        /// warning is being shown, the overlay appends a "(cached from previous session --
+        /// refreshing...)" suffix so the user knows the data is from yesterday's scan and a fresh
         /// one is in flight. The flag is set inside <see cref="RescanNow"/> and never reset, so
         /// the suffix disappears as soon as the first post-reload scan lands and stays gone for
         /// the rest of the session.
@@ -368,7 +368,7 @@ namespace DxMessaging.Editor.Analyzers
         /// <see cref="EditorApplication.delayCall"/> so a re-enable repopulates the snapshot
         /// without waiting for the next polled tick.
         /// </summary>
-        [MenuItem("Tools/DxMessaging/Rescan Base-Call Warnings")]
+        [MenuItem("Tools/Wallstop Studios/DxMessaging/Rescan Base-Call Warnings")]
         public static void RescanNow()
         {
             if (!IsAvailable)

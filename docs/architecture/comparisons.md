@@ -34,10 +34,10 @@ These sections are auto-updated by the PlayMode comparison benchmarks in the [Co
 
 | Message Tech                       | Operations / Second | Allocations? |
 | ---------------------------------- | ------------------- | ------------ |
-| DxMessaging (Untargeted) - No-Copy | 19,886,000          | No           |
-| UniRx MessageBroker                | 18,002,000          | No           |
-| MessagePipe (Global)               | 97,748,000          | No           |
-| Zenject SignalBus                  | 2,350,000           | Yes          |
+| DxMessaging (Untargeted) - No-Copy | 19,842,500          | No           |
+| UniRx MessageBroker                | 17,904,822          | No           |
+| MessagePipe (Global)               | 97,610,562          | No           |
+| Zenject SignalBus                  | 2,569,043           | Yes          |
 
 ### Comparisons (macOS)
 
@@ -59,29 +59,29 @@ This section compares DxMessaging with other popular Unity messaging/eventing li
 
 ```text
 Need absolute simplest pub/sub setup (zero boilerplate)?
-  → Use UniRx MessageBroker (publish/receive in 2 lines)
+  -> Use UniRx MessageBroker (publish/receive in 2 lines)
 
 Need complex event stream transformations (debounce, throttle, combine)?
-  → Use UniRx (reactive programming paradigm)
+  -> Use UniRx (reactive programming paradigm)
 
 Already using Dependency Injection (Zenject, VContainer, Reflex)?
-  → Use MessagePipe (DI-first, best performance) or Zenject Signals (if on Zenject)
-  → Or DxMessaging (integrates with DI, see Integrations guides for Zenject/VContainer/Reflex)
+  -> Use MessagePipe (DI-first, best performance) or Zenject Signals (if on Zenject)
+  -> Or DxMessaging (integrates with DI, see Integrations guides for Zenject/VContainer/Reflex)
 
 Need Unity-specific features (GameObject targeting, Inspector debugging, global observers)?
-  → Use DxMessaging (Unity-first design)
+  -> Use DxMessaging (Unity-first design)
 
 Want plug-and-play with zero dependencies?
-  → Use DxMessaging (no setup required)
+  -> Use DxMessaging (no setup required)
 
 Maximum raw throughput is a top priority?
-  → Use MessagePipe (highest ops/sec in benchmarks)
+  -> Use MessagePipe (highest ops/sec in benchmarks)
 
 Need message validation, interception, or ordered execution?
-  → Use DxMessaging (interceptor pipeline, priority-based ordering)
+  -> Use DxMessaging (interceptor pipeline, priority-based ordering)
 
 Simple pub/sub with automatic lifecycle management and debugging?
-  → Use DxMessaging (automatic cleanup, priorities, validation, Inspector)
+  -> Use DxMessaging (automatic cleanup, priorities, validation, Inspector)
 ```
 
 ##### One-Line Summary for Each
@@ -167,20 +167,20 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### What Problems It Solves
 
-- ✅ **Complex event streams:** Chain, filter, combine, and transform events with operators
-- ✅ **Async operations:** Better async/await alternative with cancellation
-- ✅ **Temporal logic:** Time-based operations (throttle, debounce, sample)
-- ✅ **UI reactivity:** Bind UI elements to data streams reactively
-- ✅ **Memory management:** Disposable subscriptions prevent leaks
+- [x] **Complex event streams:** Chain, filter, combine, and transform events with operators
+- [x] **Async operations:** Better async/await alternative with cancellation
+- [x] **Temporal logic:** Time-based operations (throttle, debounce, sample)
+- [x] **UI reactivity:** Bind UI elements to data streams reactively
+- [x] **Memory management:** Disposable subscriptions prevent leaks
 
 #### What Problems It Doesn't Solve Well
 
-- ⚠️ **Simple pub/sub:** MessageBroker handles this well, but reactive operators may add complexity for simple use cases
-- ❌ **Execution order control:** No built-in priority system for handler ordering
-- ❌ **Message validation/interception:** No pre-processing pipeline to validate or transform messages before handlers
-- ❌ **Unity Inspector debugging:** No Inspector integration to visualize message flow
-- ❌ **GameObject/Component targeting:** Not designed for Unity-specific targeting patterns
-- ❌ **Global message observation:** Cannot easily listen to all instances of a message type across different sources
+- **Simple pub/sub:** MessageBroker handles this well, but reactive operators may add complexity for simple use cases
+- [ ] **Execution order control:** No built-in priority system for handler ordering
+- [ ] **Message validation/interception:** No pre-processing pipeline to validate or transform messages before handlers
+- [ ] **Unity Inspector debugging:** No Inspector integration to visualize message flow
+- [ ] **GameObject/Component targeting:** Not designed for Unity-specific targeting patterns
+- [ ] **Global message observation:** Cannot easily listen to all instances of a message type across different sources
 
 #### Performance Characteristics
 
@@ -198,59 +198,59 @@ leftClick.Merge(rightClick).Subscribe(_ => Debug.Log("Any click!"));
 
 #### Ease of Understanding
 
-- ⭐⭐⭐⭐⭐ (Very easy) - MessageBroker pub/sub is intuitive and straightforward
-- ⭐⭐⭐ (Moderate to difficult) - Advanced reactive operators require learning
+- (5/5) (Very easy) - MessageBroker pub/sub is intuitive and straightforward
+- (3/5) (Moderate to difficult) - Advanced reactive operators require learning
 - Stream operator code is concise but requires understanding of reactive patterns
 - Hard to debug complex observable chains without Rx knowledge
 - For advanced features: Team buy-in essential; not intuitive for traditional event-driven developers
 
 #### When UniRx Wins
 
-- ✅ Simple pub/sub with minimal setup (MessageBroker is straightforward)
-- ✅ Complex event transformations (e.g., double-click, gesture detection)
-- ✅ Combining multiple input sources
-- ✅ Time-based logic (debounce, throttle, sample)
-- ✅ UI data binding with reactive updates
-- ✅ Teams familiar with reactive programming
+- [x] Simple pub/sub with minimal setup (MessageBroker is straightforward)
+- [x] Complex event transformations (e.g., double-click, gesture detection)
+- [x] Combining multiple input sources
+- [x] Time-based logic (debounce, throttle, sample)
+- [x] UI data binding with reactive updates
+- [x] Teams familiar with reactive programming
 
 #### When DxMessaging Wins
 
-- ✅ Need Unity-specific features (GameObject targeting, lifecycle management)
-- ✅ Execution order matters (priority-based ordering)
-- ✅ Message validation/interception needed (interceptor pipeline)
-- ✅ Inspector debugging required (message history, registration view)
-- ✅ Direct GameObject/Component targeting
-- ✅ Global message observation (listen to all instances of a message type)
-- ✅ Late-stage processing (post-processors after all handlers)
-- ✅ Automatic lifecycle management (prevents common memory leaks)
-- ✅ Teams unfamiliar with reactive programming (and don't need reactive features)
+- [x] Need Unity-specific features (GameObject targeting, lifecycle management)
+- [x] Execution order matters (priority-based ordering)
+- [x] Message validation/interception needed (interceptor pipeline)
+- [x] Inspector debugging required (message history, registration view)
+- [x] Direct GameObject/Component targeting
+- [x] Global message observation (listen to all instances of a message type)
+- [x] Late-stage processing (post-processors after all handlers)
+- [x] Automatic lifecycle management (prevents common memory leaks)
+- [x] Teams unfamiliar with reactive programming (and don't need reactive features)
 
 #### Direct Comparison
 
-| Aspect                   | UniRx                  | DxMessaging              |
-| ------------------------ | ---------------------- | ------------------------ |
-| **Primary Use Case**     | Stream transformations | Pub/sub messaging        |
-| **Unity Compatibility**  | ✅ Built for Unity     | ✅ Built for Unity       |
-| **Dependencies**         | ✅ Standalone          | ✅ Standalone            |
-| **Performance**          | 18M ops/sec            | 14M ops/sec              |
-| **Allocations**          | ⚠️ Can allocate        | ✅ Zero (structs)        |
-| **Learning Curve**       | ⭐ Steep (Rx paradigm) | ⭐⭐⭐ Moderate          |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Low         | ⭐⭐⭐⭐⭐ Plug-and-play |
-| **DI Integration**       | ⚠️ Optional            | ⚠️ Optional              |
-| **Async/Await**          | ✅ Observables         | ⚠️ Manual                |
-| **Type Safety**          | ✅ Strong              | ✅ Strong                |
-| **Lifecycle Management** | ⚠️ Manual dispose      | ✅ Automatic             |
-| **Execution Order**      | ❌ Not built-in        | ✅ Priority-based        |
-| **GameObject Targeting** | ❌ Not designed for    | ✅ Built-in              |
-| **Unity Integration**    | ⭐⭐⭐⭐ Good (UI)     | ⭐⭐⭐⭐⭐ Deep          |
-| **Inspector Debugging**  | ❌ No                  | ✅ History + stats       |
-| **Interceptors**         | ❌ Not built-in        | ✅ Full pipeline         |
-| **Global Observers**     | ❌ Not built-in        | ✅ Listen to all         |
-| **Post-Processing**      | ❌ Not built-in        | ✅ Dedicated stage       |
-| **Testability**          | ⭐⭐⭐⭐ Good          | ⭐⭐⭐⭐⭐ Excellent     |
-| **Decoupling**           | ⭐⭐⭐⭐⭐ Excellent   | ⭐⭐⭐⭐⭐ Excellent     |
-| **Temporal Operators**   | ✅ Extensive (Rx)      | ❌ Not built-in          |
-| **Complex Stream Logic** | ✅ LINQ-style          | ❌ Not designed for      |
+| Aspect                   | UniRx                  | DxMessaging       |
+| ------------------------ | ---------------------- | ----------------- |
+| **Primary Use Case**     | Stream transformations | Pub/sub messaging |
+| **Unity Compatibility**  | Built for Unity        | Built for Unity   |
+| **Dependencies**         | Standalone             | Standalone        |
+| **Performance**          | 18M ops/sec            | 14M ops/sec       |
+| **Allocations**          | Can allocate           | Zero (structs)    |
+| **Learning Curve**       | Steep (Rx paradigm)    | Moderate          |
+| **Setup Complexity**     | Low                    | Plug-and-play     |
+| **DI Integration**       | Optional               | Optional          |
+| **Async/Await**          | Observables            | Manual            |
+| **Type Safety**          | Strong                 | Strong            |
+| **Lifecycle Management** | Manual dispose         | Automatic         |
+| **Execution Order**      | Not built-in           | Priority-based    |
+| **GameObject Targeting** | Not designed for       | Built-in          |
+| **Unity Integration**    | Good (UI)              | Deep              |
+| **Inspector Debugging**  | No                     | History + stats   |
+| **Interceptors**         | Not built-in           | Full pipeline     |
+| **Global Observers**     | Not built-in           | Listen to all     |
+| **Post-Processing**      | Not built-in           | Dedicated stage   |
+| **Testability**          | Good                   | Excellent         |
+| **Decoupling**           | Excellent              | Excellent         |
+| **Temporal Operators**   | Extensive (Rx)         | Not built-in      |
+| **Complex Stream Logic** | LINQ-style             | Not designed for  |
 
 **Bottom Line:** UniRx is well-suited for complex event stream transformations and reactive programming patterns, with MessageBroker providing straightforward pub/sub setup. DxMessaging focuses on straightforward pub/sub communication with control, validation, debugging, and Unity-specific features. Both are viable options depending on your needs: choose UniRx when you need stream operators, reactive patterns, or simple zero-setup pub/sub; choose DxMessaging when you need Unity-native lifecycle integration, execution control, and debugging tools.
 
@@ -317,21 +317,21 @@ public class AchievementSystem
 
 #### What Problems It Solves
 
-- ✅ **Performance:** Zero allocations with struct-based messages (see [benchmarks](https://github.com/wallstop/DxMessaging/tree/master/Tests/Runtime/Benchmarks) for comparison data)
-- ✅ **DI integration:** First-class support for dependency injection
-- ✅ **Async messaging:** Native async/await without blocking
-- ✅ **Leak detection:** Analyzer catches forgotten subscriptions at compile-time
-- ✅ **Flexibility:** Keyed, keyless, buffered, request/response patterns
-- ✅ **Cross-platform:** Works in Unity, .NET, Blazor, etc.
+- [x] **Performance:** Zero allocations with struct-based messages (see [benchmarks](https://github.com/wallstop/DxMessaging/tree/master/Tests/Runtime/Benchmarks) for comparison data)
+- [x] **DI integration:** First-class support for dependency injection
+- [x] **Async messaging:** Native async/await without blocking
+- [x] **Leak detection:** Analyzer catches forgotten subscriptions at compile-time
+- [x] **Flexibility:** Keyed, keyless, buffered, request/response patterns
+- [x] **Cross-platform:** Works in Unity, .NET, Blazor, etc.
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **Unity-specific integration:** No built-in Unity MonoBehaviour lifecycle management or GameObject targeting
-- ❌ **Inspector debugging:** No visual debugging or message history in Unity Inspector
-- ❌ **Execution order control:** No priority system (handlers execute in subscription order)
-- ❌ **Setup complexity:** Requires DI container configuration (VContainer/Zenject setup needed)
-- ❌ **Global message observation:** No built-in way to listen to all instances of a message across different keys/sources
-- ❌ **Standalone use:** Designed for DI-first architecture (less suitable for non-DI projects)
+- [ ] **Unity-specific integration:** No built-in Unity MonoBehaviour lifecycle management or GameObject targeting
+- [ ] **Inspector debugging:** No visual debugging or message history in Unity Inspector
+- [ ] **Execution order control:** No priority system (handlers execute in subscription order)
+- [ ] **Setup complexity:** Requires DI container configuration (VContainer/Zenject setup needed)
+- [ ] **Global message observation:** No built-in way to listen to all instances of a message across different keys/sources
+- [ ] **Standalone use:** Designed for DI-first architecture (less suitable for non-DI projects)
 
 #### Performance Characteristics
 
@@ -349,57 +349,57 @@ public class AchievementSystem
 
 #### Ease of Understanding
 
-- ⭐⭐⭐⭐ (Moderate)
+- (4/5) (Moderate)
 - Clean, generic interfaces once you understand DI
 - Code is straightforward for developers familiar with DI patterns
 - Harder for teams without DI experience
 
 #### When MessagePipe Wins
 
-- ✅ Performance-critical applications (high message throughput)
-- ✅ Projects already using DI (VContainer, Zenject, etc.)
-- ✅ Cross-platform .NET projects (not Unity-only)
-- ✅ Need async messaging with cancellation
-- ✅ Large-scale projects with DI architecture
-- ✅ Teams experienced with DI patterns
+- [x] Performance-critical applications (high message throughput)
+- [x] Projects already using DI (VContainer, Zenject, etc.)
+- [x] Cross-platform .NET projects (not Unity-only)
+- [x] Need async messaging with cancellation
+- [x] Large-scale projects with DI architecture
+- [x] Teams experienced with DI patterns
 
 #### When DxMessaging Wins
 
-- ✅ Unity-first projects (not cross-platform .NET)
-- ✅ Unity lifecycle management needed (automatic MonoBehaviour cleanup)
-- ✅ Inspector debugging essential (message history visualization)
-- ✅ Execution order control needed (priority-based handlers)
-- ✅ Message validation/interception required (interceptor pipeline)
-- ✅ Global message observation needed (listen to all message instances)
-- ✅ Post-processing stage needed (analytics, logging after handlers)
-- ✅ Teams without DI experience or projects not using DI
-- ✅ Plug-and-play simplicity preferred over DI configuration
+- [x] Unity-first projects (not cross-platform .NET)
+- [x] Unity lifecycle management needed (automatic MonoBehaviour cleanup)
+- [x] Inspector debugging essential (message history visualization)
+- [x] Execution order control needed (priority-based handlers)
+- [x] Message validation/interception required (interceptor pipeline)
+- [x] Global message observation needed (listen to all message instances)
+- [x] Post-processing stage needed (analytics, logging after handlers)
+- [x] Teams without DI experience or projects not using DI
+- [x] Plug-and-play simplicity preferred over DI configuration
 
 #### Direct Comparison
 
-| Aspect                   | MessagePipe                 | DxMessaging              |
-| ------------------------ | --------------------------- | ------------------------ |
-| **Primary Use Case**     | High-perf DI messaging      | Pub/sub messaging        |
-| **Unity Compatibility**  | ✅ Built for Unity          | ✅ Built for Unity       |
-| **Dependencies**         | ⚠️ DI container required    | ✅ Standalone            |
-| **Performance**          | 97M ops/sec                 | 14M ops/sec              |
-| **Allocations**          | ✅ Zero (structs)           | ✅ Zero (structs)        |
-| **Learning Curve**       | ⭐⭐⭐⭐ Moderate (DI)      | ⭐⭐⭐ Moderate          |
-| **Setup Complexity**     | ⭐⭐⭐ DI setup required    | ⭐⭐⭐⭐⭐ Plug-and-play |
-| **DI Integration**       | ✅ First-class              | ⚠️ Optional              |
-| **Async/Await**          | ✅ Native                   | ⚠️ Manual                |
-| **Type Safety**          | ✅ Strong                   | ✅ Strong                |
-| **Lifecycle Management** | ⚠️ Manual dispose           | ✅ Automatic             |
-| **Execution Order**      | ❌ Subscription order       | ✅ Priority-based        |
-| **GameObject Targeting** | ❌ Not built-in             | ✅ Built-in              |
-| **Unity Integration**    | ⭐⭐⭐ Basic (no lifecycle) | ⭐⭐⭐⭐⭐ Deep          |
-| **Inspector Debugging**  | ❌ No                       | ✅ History + stats       |
-| **Interceptors**         | ⚠️ Filters                  | ✅ Full pipeline         |
-| **Global Observers**     | ❌ Not built-in             | ✅ Listen to all         |
-| **Post-Processing**      | ⚠️ Via filters              | ✅ Dedicated stage       |
-| **Testability**          | ⭐⭐⭐⭐⭐ DI mocking       | ⭐⭐⭐⭐⭐ Local buses   |
-| **Decoupling**           | ⭐⭐⭐⭐⭐ Excellent        | ⭐⭐⭐⭐⭐ Excellent     |
-| **Leak Detection**       | ✅ Roslyn analyzer          | ✅ Automatic lifecycle   |
+| Aspect                   | MessagePipe            | DxMessaging         |
+| ------------------------ | ---------------------- | ------------------- |
+| **Primary Use Case**     | High-perf DI messaging | Pub/sub messaging   |
+| **Unity Compatibility**  | Built for Unity        | Built for Unity     |
+| **Dependencies**         | DI container required  | Standalone          |
+| **Performance**          | 97M ops/sec            | 14M ops/sec         |
+| **Allocations**          | Zero (structs)         | Zero (structs)      |
+| **Learning Curve**       | Moderate (DI)          | Moderate            |
+| **Setup Complexity**     | DI setup required      | Plug-and-play       |
+| **DI Integration**       | First-class            | Optional            |
+| **Async/Await**          | Native                 | Manual              |
+| **Type Safety**          | Strong                 | Strong              |
+| **Lifecycle Management** | Manual dispose         | Automatic           |
+| **Execution Order**      | Subscription order     | Priority-based      |
+| **GameObject Targeting** | Not built-in           | Built-in            |
+| **Unity Integration**    | Basic (no lifecycle)   | Deep                |
+| **Inspector Debugging**  | No                     | History + stats     |
+| **Interceptors**         | Filters                | Full pipeline       |
+| **Global Observers**     | Not built-in           | Listen to all       |
+| **Post-Processing**      | Via filters            | Dedicated stage     |
+| **Testability**          | DI mocking             | Local buses         |
+| **Decoupling**           | Excellent              | Excellent           |
+| **Leak Detection**       | Roslyn analyzer        | Automatic lifecycle |
 
 **Bottom Line:** MessagePipe is the performance king with DI-first design. DxMessaging is Unity-first with lifecycle awareness and debugging. Use MessagePipe if you have DI infrastructure and need maximum performance. Use DxMessaging if you want Unity-native messaging with automatic lifecycle management.
 
@@ -482,23 +482,23 @@ public class AchievementSystem
 
 #### What Problems It Solves
 
-- ✅ **Decoupling:** Classes communicate without direct references
-- ✅ **DI integration:** Seamless with Zenject dependency injection
-- ✅ **Testability:** Easy to mock SignalBus in tests
-- ✅ **Type safety:** Strongly-typed signal classes
-- ✅ **Subscriber validation:** Can enforce required subscribers
-- ✅ **Async support:** Fire signals synchronously or asynchronously
+- [x] **Decoupling:** Classes communicate without direct references
+- [x] **DI integration:** Seamless with Zenject dependency injection
+- [x] **Testability:** Easy to mock SignalBus in tests
+- [x] **Type safety:** Strongly-typed signal classes
+- [x] **Subscriber validation:** Can enforce required subscribers
+- [x] **Async support:** Fire signals synchronously or asynchronously
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **Zenject dependency:** Must use Zenject/Extenject framework; not standalone
-- ❌ **Performance overhead:** Higher than lightweight messaging (DI resolution cost)
-- ❌ **Execution order control:** No priority system for handler ordering
-- ❌ **Inspector debugging:** No visual message history or flow visualization
-- ❌ **Allocations:** Signal parameters can cause allocations depending on usage
-- ❌ **Validation pipeline:** No built-in interceptor or pre-processing stage
-- ❌ **Global observation:** Cannot easily listen to all signal fires across the system
-- ❌ **Post-processing:** No dedicated after-handler stage for analytics/logging
+- [ ] **Zenject dependency:** Must use Zenject/Extenject framework; not standalone
+- [ ] **Performance overhead:** Higher than lightweight messaging (DI resolution cost)
+- [ ] **Execution order control:** No priority system for handler ordering
+- [ ] **Inspector debugging:** No visual message history or flow visualization
+- [ ] **Allocations:** Signal parameters can cause allocations depending on usage
+- [ ] **Validation pipeline:** No built-in interceptor or pre-processing stage
+- [ ] **Global observation:** Cannot easily listen to all signal fires across the system
+- [ ] **Post-processing:** No dedicated after-handler stage for analytics/logging
 
 #### Performance Characteristics
 
@@ -516,56 +516,56 @@ public class AchievementSystem
 
 #### Ease of Understanding
 
-- ⭐⭐⭐ (Moderate)
+- (3/5) (Moderate)
 - Clear once you understand Zenject
 - Signal concept is straightforward
 - Setup (installers, bindings) adds complexity
 
 #### When Zenject Signals Win
 
-- ✅ Already using Zenject for dependency injection
-- ✅ Testability is critical (DI makes mocking easy)
-- ✅ Need subscriber validation (ensure handlers exist)
-- ✅ Team experienced with Zenject
-- ✅ Want DI-managed lifecycle
+- [x] Already using Zenject for dependency injection
+- [x] Testability is critical (DI makes mocking easy)
+- [x] Need subscriber validation (ensure handlers exist)
+- [x] Team experienced with Zenject
+- [x] Want DI-managed lifecycle
 
 #### When DxMessaging Wins
 
-- ✅ Not using Zenject/Extenject (or prefer standalone solution)
-- ✅ Performance critical (lower overhead than DI-based signals)
-- ✅ Execution order control needed (priority-based handlers)
-- ✅ Inspector debugging required (message history visualization)
-- ✅ Message validation/interception needed (interceptor pipeline)
-- ✅ Global message observation needed (listen to all signal fires)
-- ✅ Post-processing stage needed (analytics after handlers)
-- ✅ Zero-allocation messaging essential (struct-based)
-- ✅ GameObject/Component targeting needed (Unity-specific patterns)
-- ✅ Plug-and-play simplicity preferred over DI setup
+- [x] Not using Zenject/Extenject (or prefer standalone solution)
+- [x] Performance critical (lower overhead than DI-based signals)
+- [x] Execution order control needed (priority-based handlers)
+- [x] Inspector debugging required (message history visualization)
+- [x] Message validation/interception needed (interceptor pipeline)
+- [x] Global message observation needed (listen to all signal fires)
+- [x] Post-processing stage needed (analytics after handlers)
+- [x] Zero-allocation messaging essential (struct-based)
+- [x] GameObject/Component targeting needed (Unity-specific patterns)
+- [x] Plug-and-play simplicity preferred over DI setup
 
 #### Direct Comparison
 
-| Aspect                   | Zenject Signals              | DxMessaging              |
-| ------------------------ | ---------------------------- | ------------------------ |
-| **Primary Use Case**     | DI-integrated messaging      | Pub/sub messaging        |
-| **Unity Compatibility**  | ✅ Built for Unity           | ✅ Built for Unity       |
-| **Dependencies**         | ❌ Zenject required          | ✅ Standalone            |
-| **Performance**          | 2.5M ops/sec                 | 14M ops/sec              |
-| **Allocations**          | ⚠️ Can allocate              | ✅ Zero (structs)        |
-| **Learning Curve**       | ⭐⭐ Steep (Zenject+Signals) | ⭐⭐⭐ Moderate          |
-| **Setup Complexity**     | ⭐⭐ Installers required     | ⭐⭐⭐⭐⭐ Plug-and-play |
-| **DI Integration**       | ✅ Required (Zenject)        | ⚠️ Optional              |
-| **Async/Await**          | ✅ RunAsync support          | ⚠️ Manual                |
-| **Type Safety**          | ✅ Strong                    | ✅ Strong                |
-| **Lifecycle Management** | ⚠️ DI-managed                | ✅ Automatic             |
-| **Execution Order**      | ❌ Not built-in              | ✅ Priority-based        |
-| **GameObject Targeting** | ❌ Not built-in              | ✅ Built-in              |
-| **Unity Integration**    | ⭐⭐⭐⭐ DI-managed          | ⭐⭐⭐⭐⭐ Deep          |
-| **Inspector Debugging**  | ❌ No                        | ✅ History + stats       |
-| **Interceptors**         | ⚠️ Subscriber validation     | ✅ Full pipeline         |
-| **Global Observers**     | ❌ Not built-in              | ✅ Listen to all         |
-| **Post-Processing**      | ❌ Not built-in              | ✅ Dedicated stage       |
-| **Testability**          | ⭐⭐⭐⭐⭐ DI mocking        | ⭐⭐⭐⭐⭐ Local buses   |
-| **Decoupling**           | ⭐⭐⭐⭐⭐ Excellent         | ⭐⭐⭐⭐⭐ Excellent     |
+| Aspect                   | Zenject Signals         | DxMessaging       |
+| ------------------------ | ----------------------- | ----------------- |
+| **Primary Use Case**     | DI-integrated messaging | Pub/sub messaging |
+| **Unity Compatibility**  | Built for Unity         | Built for Unity   |
+| **Dependencies**         | Zenject required        | Standalone        |
+| **Performance**          | 2.5M ops/sec            | 14M ops/sec       |
+| **Allocations**          | Can allocate            | Zero (structs)    |
+| **Learning Curve**       | Steep (Zenject+Signals) | Moderate          |
+| **Setup Complexity**     | Installers required     | Plug-and-play     |
+| **DI Integration**       | Required (Zenject)      | Optional          |
+| **Async/Await**          | RunAsync support        | Manual            |
+| **Type Safety**          | Strong                  | Strong            |
+| **Lifecycle Management** | DI-managed              | Automatic         |
+| **Execution Order**      | Not built-in            | Priority-based    |
+| **GameObject Targeting** | Not built-in            | Built-in          |
+| **Unity Integration**    | DI-managed              | Deep              |
+| **Inspector Debugging**  | No                      | History + stats   |
+| **Interceptors**         | Subscriber validation   | Full pipeline     |
+| **Global Observers**     | Not built-in            | Listen to all     |
+| **Post-Processing**      | Not built-in            | Dedicated stage   |
+| **Testability**          | DI mocking              | Local buses       |
+| **Decoupling**           | Excellent               | Excellent         |
 
 **Bottom Line:** Zenject Signals are well-suited if you're already invested in Zenject and value testability through DI. DxMessaging offers standalone messaging without requiring DI setup, and includes Unity-specific features.
 
@@ -579,17 +579,17 @@ public class AchievementSystem
 
 **Core Philosophy:** Designer-driven, asset-based communication where systems communicate through serialized SO assets instead of direct references.
 
-**⚠️ Contested Pattern:** SOA has both proponents and critics. Supporters value its designer-friendly workflow and Inspector-based event wiring. Critics raise concerns about scalability and maintainability at scale. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for one perspective on the criticisms. Unity recommends ScriptableObjects for **immutable design data**, not mutable runtime state.
+**Contested Pattern:** SOA has both proponents and critics. Supporters value its designer-friendly workflow and Inspector-based event wiring. Critics raise concerns about scalability and maintainability at scale. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for one perspective on the criticisms. Unity recommends ScriptableObjects for **immutable design data**, not mutable runtime state.
 
 ### Quick Comparison
 
-| Aspect               | SOA (GameEvent/Variables)                                                 | DxMessaging                         |
-| -------------------- | ------------------------------------------------------------------------- | ----------------------------------- |
-| **Designer Control** | ✅ High (create events in Inspector)                                      | ❌ Low (code-driven)                |
-| **Type Safety**      | ⚠️ Mixed (SO refs typed, but UnityEvent wiring loses compile-time safety) | ✅ Strong (compile-time validation) |
-| **Lifecycle**        | ⚠️ Manual (assets persist)                                                | ✅ Automatic (tokens clean up)      |
-| **Performance**      | ⚠️ List iteration, UnityAction overhead                                   | ✅ Zero-allocation structs          |
-| **Testability**      | ⚠️ Requires SO asset cleanup                                              | ✅ Isolated buses per test          |
+| Aspect               | SOA (GameEvent/Variables)                                              | DxMessaging                      |
+| -------------------- | ---------------------------------------------------------------------- | -------------------------------- |
+| **Designer Control** | High (create events in Inspector)                                      | Low (code-driven)                |
+| **Type Safety**      | Mixed (SO refs typed, but UnityEvent wiring loses compile-time safety) | Strong (compile-time validation) |
+| **Lifecycle**        | Manual (assets persist)                                                | Automatic (tokens clean up)      |
+| **Performance**      | List iteration, UnityAction overhead                                   | Zero-allocation structs          |
+| **Testability**      | Requires SO asset cleanup                                              | Isolated buses per test          |
 
 ### When to Use Each
 
@@ -616,7 +616,7 @@ public class AchievementSystem
 
 For detailed migration patterns, interoperability strategies, and code examples, see:
 
-#### → [SOA Compatibility Guide](../guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa)
+#### to [SOA Compatibility Guide](../guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa)
 
 Includes:
 
@@ -687,22 +687,22 @@ public class UI : MonoBehaviour
 
 #### What Problems It Solves
 
-- ✅ **Simple callbacks:** Straightforward notification pattern
-- ✅ **Type safety:** Compile-time checking prevents errors
-- ✅ **Return values:** Can get feedback from event handlers
-- ✅ **Performance:** Minimal overhead, direct invocation
-- ✅ **Familiarity:** Every C# developer knows events
-- ✅ **No dependencies:** Built into the language
+- [x] **Simple callbacks:** Straightforward notification pattern
+- [x] **Type safety:** Compile-time checking prevents errors
+- [x] **Return values:** Can get feedback from event handlers
+- [x] **Performance:** Minimal overhead, direct invocation
+- [x] **Familiarity:** Every C# developer knows events
+- [x] **No dependencies:** Built into the language
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **Memory leaks:** Forgetting to unsubscribe causes leaks
-- ❌ **Tight coupling:** Subscribers need direct references to event sources
-- ❌ **Execution order:** Undefined handler invocation order
-- ❌ **Lifecycle management:** Manual subscribe/unsubscribe in OnEnable/OnDisable
-- ❌ **Debugging:** No visibility into who's subscribed or when events fire
-- ❌ **Validation/interception:** No pipeline to modify or validate before handlers
-- ❌ **Global observation:** Cannot listen to all events across the system
+- [ ] **Memory leaks:** Forgetting to unsubscribe causes leaks
+- [ ] **Tight coupling:** Subscribers need direct references to event sources
+- [ ] **Execution order:** Undefined handler invocation order
+- [ ] **Lifecycle management:** Manual subscribe/unsubscribe in OnEnable/OnDisable
+- [ ] **Debugging:** No visibility into who's subscribed or when events fire
+- [ ] **Validation/interception:** No pipeline to modify or validate before handlers
+- [ ] **Global observation:** Cannot listen to all events across the system
 
 #### Performance Characteristics
 
@@ -719,59 +719,59 @@ public class UI : MonoBehaviour
 
 #### Ease of Understanding
 
-- ⭐⭐⭐⭐⭐ (Very easy)
+- (5/5) (Very easy)
 - Familiar to all C# developers
 - Straightforward mental model
 - Easy to debug with breakpoints
 
 #### When C# Events Win
 
-- ✅ Small, stable scope (5-10 events max)
-- ✅ Need return values or `out` parameters
-- ✅ Writing a library (DxMessaging is Unity-specific)
-- ✅ Simple, local communication within a class or module
-- ✅ Team is C# experts, Unity beginners
-- ✅ Performance is absolutely critical (lowest overhead)
-- ✅ Quick prototypes or game jams
+- [x] Small, stable scope (5-10 events max)
+- [x] Need return values or `out` parameters
+- [x] Writing a library (DxMessaging is Unity-specific)
+- [x] Simple, local communication within a class or module
+- [x] Team is C# experts, Unity beginners
+- [x] Performance is absolutely critical (lowest overhead)
+- [x] Quick prototypes or game jams
 
 #### When DxMessaging Wins
 
-- ✅ Memory leaks are a problem (automatic lifecycle management)
-- ✅ Need decoupling (systems don't reference each other)
-- ✅ Execution order matters (priority-based handlers)
-- ✅ Debugging "what fired when" (Inspector message history)
-- ✅ Message validation/interception needed (interceptor pipeline)
-- ✅ Global observation needed (listen to all message instances)
-- ✅ Cross-system communication (10+ systems)
-- ✅ Long-term maintenance (months/years)
-- ✅ GameObject/Component targeting needed
-- ✅ Post-processing stage needed (analytics after handlers)
+- [x] Memory leaks are a problem (automatic lifecycle management)
+- [x] Need decoupling (systems don't reference each other)
+- [x] Execution order matters (priority-based handlers)
+- [x] Debugging "what fired when" (Inspector message history)
+- [x] Message validation/interception needed (interceptor pipeline)
+- [x] Global observation needed (listen to all message instances)
+- [x] Cross-system communication (10+ systems)
+- [x] Long-term maintenance (months/years)
+- [x] GameObject/Component targeting needed
+- [x] Post-processing stage needed (analytics after handlers)
 
 #### Direct Comparison
 
-| Aspect                   | C# Events             | DxMessaging            |
-| ------------------------ | --------------------- | ---------------------- |
-| **Primary Use Case**     | Simple callbacks      | Pub/sub messaging      |
-| **Unity Compatibility**  | ✅ Built into C#      | ✅ Built for Unity     |
-| **Dependencies**         | ✅ None (language)    | ✅ Standalone          |
-| **Performance**          | ~50ns/call (fastest)  | ~60ns/call             |
-| **Allocations**          | ✅ Zero (basic)       | ✅ Zero (structs)      |
-| **Learning Curve**       | ⭐⭐⭐⭐⭐ None       | ⭐⭐⭐ Moderate        |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Minimal    | ⭐⭐⭐ Moderate        |
-| **DI Integration**       | ⚠️ Manual             | ⚠️ Optional            |
-| **Async/Await**          | ⚠️ Manual             | ⚠️ Manual              |
-| **Type Safety**          | ✅ Strong             | ✅ Strong              |
-| **Lifecycle Management** | ❌ Manual unsubscribe | ✅ Automatic           |
-| **Execution Order**      | ❌ Undefined          | ✅ Priority-based      |
-| **GameObject Targeting** | ❌ Not built-in       | ✅ Built-in            |
-| **Unity Integration**    | ⭐ None               | ⭐⭐⭐⭐⭐ Deep        |
-| **Inspector Debugging**  | ❌ No                 | ✅ History + stats     |
-| **Interceptors**         | ❌ Not built-in       | ✅ Full pipeline       |
-| **Global Observers**     | ❌ Not built-in       | ✅ Listen to all       |
-| **Post-Processing**      | ❌ Not built-in       | ✅ Dedicated stage     |
-| **Testability**          | ⭐⭐ Hard to isolate  | ⭐⭐⭐⭐⭐ Local buses |
-| **Decoupling**           | ⭐ Tight coupling     | ⭐⭐⭐⭐⭐ Excellent   |
-| **Return Values**        | ✅ Yes                | ❌ Fire-and-forget     |
+| Aspect                   | C# Events            | DxMessaging       |
+| ------------------------ | -------------------- | ----------------- |
+| **Primary Use Case**     | Simple callbacks     | Pub/sub messaging |
+| **Unity Compatibility**  | Built into C#        | Built for Unity   |
+| **Dependencies**         | None (language)      | Standalone        |
+| **Performance**          | ~50ns/call (fastest) | ~60ns/call        |
+| **Allocations**          | Zero (basic)         | Zero (structs)    |
+| **Learning Curve**       | None                 | Moderate          |
+| **Setup Complexity**     | Minimal              | Moderate          |
+| **DI Integration**       | Manual               | Optional          |
+| **Async/Await**          | Manual               | Manual            |
+| **Type Safety**          | Strong               | Strong            |
+| **Lifecycle Management** | Manual unsubscribe   | Automatic         |
+| **Execution Order**      | Undefined            | Priority-based    |
+| **GameObject Targeting** | Not built-in         | Built-in          |
+| **Unity Integration**    | None                 | Deep              |
+| **Inspector Debugging**  | No                   | History + stats   |
+| **Interceptors**         | Not built-in         | Full pipeline     |
+| **Global Observers**     | Not built-in         | Listen to all     |
+| **Post-Processing**      | Not built-in         | Dedicated stage   |
+| **Testability**          | Hard to isolate      | Local buses       |
+| **Decoupling**           | Tight coupling       | Excellent         |
+| **Return Values**        | Yes                  | Fire-and-forget   |
 
 **Bottom Line:** C# events are the fastest and simplest for basic callbacks. DxMessaging is better for complex, decoupled systems where lifecycle management, debugging, and execution control matter.
 
@@ -828,22 +828,22 @@ public class UI : MonoBehaviour
 
 #### What Problems It Solves
 
-- ✅ **Visual wiring:** See connections in Inspector
-- ✅ **No code required:** Designers can hook up events
-- ✅ **Persistence:** Connections saved with scenes/prefabs
-- ✅ **Rapid prototyping:** Quick iteration without scripting
-- ✅ **Prefab workflows:** Events work across prefab instances
+- [x] **Visual wiring:** See connections in Inspector
+- [x] **No code required:** Designers can hook up events
+- [x] **Persistence:** Connections saved with scenes/prefabs
+- [x] **Rapid prototyping:** Quick iteration without scripting
+- [x] **Prefab workflows:** Events work across prefab instances
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **Hidden dependencies:** Connections invisible in code, hard to find during refactoring
-- ❌ **Brittle at scale:** Renaming methods breaks wiring, no compile-time safety
-- ❌ **Execution order:** Undefined call order for multiple subscribers
-- ❌ **No validation:** No way to validate or intercept before invocation
-- ❌ **Performance:** Slower than C# events due to reflection and boxing
-- ❌ **Debugging:** Hard to trace "who called what" at runtime
-- ❌ **Merge conflicts:** Inspector changes cause git conflicts
-- ❌ **Refactoring challenges:** Renaming/moving methods silently breaks connections
+- [ ] **Hidden dependencies:** Connections invisible in code, hard to find during refactoring
+- [ ] **Brittle at scale:** Renaming methods breaks wiring, no compile-time safety
+- [ ] **Execution order:** Undefined call order for multiple subscribers
+- [ ] **No validation:** No way to validate or intercept before invocation
+- [ ] **Performance:** Slower than C# events due to reflection and boxing
+- [ ] **Debugging:** Hard to trace "who called what" at runtime
+- [ ] **Merge conflicts:** Inspector changes cause git conflicts
+- [ ] **Refactoring challenges:** Renaming/moving methods silently breaks connections
 
 #### Performance Characteristics
 
@@ -859,58 +859,58 @@ public class UI : MonoBehaviour
 
 #### Ease of Understanding
 
-- ⭐⭐⭐⭐ (Easy for wiring, hard for debugging)
+- (4/5) (Easy for wiring, hard for debugging)
 - Simple to connect in Inspector
 - Difficult to understand flow when reading code
 - Hard to track down at scale (where is this method called from?)
 
 #### When UnityEvents Win
 
-- ✅ Designers need to wire logic without code
-- ✅ Rapid prototyping with prefabs
-- ✅ Very simple games (mobile casual, hyper-casual)
-- ✅ UI interactions with minimal logic
-- ✅ Small projects (<5 scripts)
-- ✅ One-off connections that rarely change
+- [x] Designers need to wire logic without code
+- [x] Rapid prototyping with prefabs
+- [x] Very simple games (mobile casual, hyper-casual)
+- [x] UI interactions with minimal logic
+- [x] Small projects (<5 scripts)
+- [x] One-off connections that rarely change
 
 #### When DxMessaging Wins
 
-- ✅ Code-first development (programmers prefer code visibility)
-- ✅ Refactoring frequently (compile-time safety)
-- ✅ Execution order matters (priority-based handlers)
-- ✅ Need validation/interception (interceptor pipeline)
-- ✅ Performance-sensitive (zero allocation required)
-- ✅ Debugging observability (message history)
-- ✅ Cross-system communication (10+ components)
-- ✅ Team collaboration (merge-friendly code over Inspector)
-- ✅ Long-term maintenance (find usages, refactor safely)
+- [x] Code-first development (programmers prefer code visibility)
+- [x] Refactoring frequently (compile-time safety)
+- [x] Execution order matters (priority-based handlers)
+- [x] Need validation/interception (interceptor pipeline)
+- [x] Performance-sensitive (zero allocation required)
+- [x] Debugging observability (message history)
+- [x] Cross-system communication (10+ components)
+- [x] Team collaboration (merge-friendly code over Inspector)
+- [x] Long-term maintenance (find usages, refactor safely)
 
 #### Direct Comparison
 
-| Aspect                   | UnityEvents            | DxMessaging            |
-| ------------------------ | ---------------------- | ---------------------- |
-| **Primary Use Case**     | Inspector wiring       | Pub/sub messaging      |
-| **Unity Compatibility**  | ✅ Built into Unity    | ✅ Built for Unity     |
-| **Dependencies**         | ✅ None (Unity)        | ✅ Standalone          |
-| **Performance**          | Slow (serialization)   | ~60ns/call             |
-| **Allocations**          | ❌ Boxing              | ✅ Zero (structs)      |
-| **Learning Curve**       | ⭐⭐⭐⭐⭐ Minimal     | ⭐⭐⭐ Moderate        |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Inspector   | ⭐⭐⭐ Code-based      |
-| **DI Integration**       | ❌ No                  | ⚠️ Optional            |
-| **Async/Await**          | ❌ No                  | ⚠️ Manual              |
-| **Type Safety**          | ⭐⭐ Weak (serialized) | ✅ Strong              |
-| **Lifecycle Management** | ⚠️ Unity-managed       | ✅ Automatic           |
-| **Execution Order**      | ❌ Undefined           | ✅ Priority-based      |
-| **GameObject Targeting** | ⚠️ Manual references   | ✅ Built-in            |
-| **Unity Integration**    | ⭐⭐⭐ Inspector-based | ⭐⭐⭐⭐⭐ Deep        |
-| **Inspector Debugging**  | ⭐⭐ Connections only  | ✅ History + stats     |
-| **Interceptors**         | ❌ Not built-in        | ✅ Full pipeline       |
-| **Global Observers**     | ❌ Not possible        | ✅ Listen to all       |
-| **Post-Processing**      | ❌ Not built-in        | ✅ Dedicated stage     |
-| **Testability**          | ⭐⭐ Scene setup       | ⭐⭐⭐⭐⭐ Local buses |
-| **Decoupling**           | ⭐⭐ Hidden refs       | ⭐⭐⭐⭐⭐ Excellent   |
-| **Refactoring Safety**   | ❌ Silent breakage     | ✅ Compile-time errors |
-| **Code Visibility**      | ❌ Hidden in Inspector | ✅ Explicit in code    |
+| Aspect                   | UnityEvents          | DxMessaging         |
+| ------------------------ | -------------------- | ------------------- |
+| **Primary Use Case**     | Inspector wiring     | Pub/sub messaging   |
+| **Unity Compatibility**  | Built into Unity     | Built for Unity     |
+| **Dependencies**         | None (Unity)         | Standalone          |
+| **Performance**          | Slow (serialization) | ~60ns/call          |
+| **Allocations**          | Boxing               | Zero (structs)      |
+| **Learning Curve**       | Minimal              | Moderate            |
+| **Setup Complexity**     | Inspector            | Code-based          |
+| **DI Integration**       | No                   | Optional            |
+| **Async/Await**          | No                   | Manual              |
+| **Type Safety**          | Weak (serialized)    | Strong              |
+| **Lifecycle Management** | Unity-managed        | Automatic           |
+| **Execution Order**      | Undefined            | Priority-based      |
+| **GameObject Targeting** | Manual references    | Built-in            |
+| **Unity Integration**    | Inspector-based      | Deep                |
+| **Inspector Debugging**  | Connections only     | History + stats     |
+| **Interceptors**         | Not built-in         | Full pipeline       |
+| **Global Observers**     | Not possible         | Listen to all       |
+| **Post-Processing**      | Not built-in         | Dedicated stage     |
+| **Testability**          | Scene setup          | Local buses         |
+| **Decoupling**           | Hidden refs          | Excellent           |
+| **Refactoring Safety**   | Silent breakage      | Compile-time errors |
+| **Code Visibility**      | Hidden in Inspector  | Explicit in code    |
 
 **Bottom Line:** UnityEvents are well-suited for simple Inspector-based wiring and designer workflows. DxMessaging is better for code-first development, refactoring safety, and complex messaging needs.
 
@@ -968,22 +968,22 @@ public class Weapon : MonoBehaviour
 
 #### What Problems It Solves
 
-- ✅ **No references needed:** Call methods without GetComponent
-- ✅ **Hierarchy traversal:** Easy parent/child communication
-- ✅ **Simple API:** One-line method invocation
-- ✅ **Optional receivers:** Can call non-existent methods safely
-- ✅ **Built-in:** No setup or dependencies
+- [x] **No references needed:** Call methods without GetComponent
+- [x] **Hierarchy traversal:** Easy parent/child communication
+- [x] **Simple API:** One-line method invocation
+- [x] **Optional receivers:** Can call non-existent methods safely
+- [x] **Built-in:** No setup or dependencies
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **No type safety:** String-based, typos cause silent failures
-- ❌ **Slow performance:** Reflection overhead on every call
-- ❌ **Limited parameters:** Only 0 or 1 parameter supported
-- ❌ **Boxing allocations:** Value types boxed to object, causes GC
-- ❌ **Hard to debug:** No compile-time checking, no IDE "Find Usages"
-- ❌ **Refactoring difficulty:** Renaming methods breaks string references
-- ❌ **No validation:** No way to validate or intercept messages
-- ❌ **Execution order:** Undefined call order for multiple receivers
+- [ ] **No type safety:** String-based, typos cause silent failures
+- [ ] **Slow performance:** Reflection overhead on every call
+- [ ] **Limited parameters:** Only 0 or 1 parameter supported
+- [ ] **Boxing allocations:** Value types boxed to object, causes GC
+- [ ] **Hard to debug:** No compile-time checking, no IDE "Find Usages"
+- [ ] **Refactoring difficulty:** Renaming methods breaks string references
+- [ ] **No validation:** No way to validate or intercept messages
+- [ ] **Execution order:** Undefined call order for multiple receivers
 
 #### Performance Characteristics
 
@@ -999,57 +999,57 @@ public class Weapon : MonoBehaviour
 
 #### Ease of Understanding
 
-- ⭐⭐⭐ (Simple to use, hard to maintain)
+- (3/5) (Simple to use, hard to maintain)
 - Easy to write initially
 - Difficult to track method calls (no Find Usages)
 - Refactoring breaks string references silently
 
 #### When Unity SendMessage Wins
 
-- ✅ Legacy code that already uses it
-- ✅ Quick prototypes (throwaway code)
-- ✅ Simple tutorials or learning examples
-- ✅ Calling optional methods that may not exist
-- ✅ GameObject hierarchies with optional components (DontRequireReceiver pattern)
+- [x] Legacy code that already uses it
+- [x] Quick prototypes (throwaway code)
+- [x] Simple tutorials or learning examples
+- [x] Calling optional methods that may not exist
+- [x] GameObject hierarchies with optional components (DontRequireReceiver pattern)
 
 #### When DxMessaging Wins
 
-- ✅ Type safety required (compile-time checking)
-- ✅ Performance matters (zero allocation, no reflection)
-- ✅ Multiple parameters needed (struct fields)
-- ✅ Refactoring frequently (find usages, rename safely)
-- ✅ Debugging observability (message history)
-- ✅ Execution order control (priority-based handlers)
-- ✅ Message validation/interception (interceptor pipeline)
-- ✅ Production code (maintainability over simplicity)
-- ✅ Modern projects (avoid legacy patterns)
+- [x] Type safety required (compile-time checking)
+- [x] Performance matters (zero allocation, no reflection)
+- [x] Multiple parameters needed (struct fields)
+- [x] Refactoring frequently (find usages, rename safely)
+- [x] Debugging observability (message history)
+- [x] Execution order control (priority-based handlers)
+- [x] Message validation/interception (interceptor pipeline)
+- [x] Production code (maintainability over simplicity)
+- [x] Modern projects (avoid legacy patterns)
 
 #### Direct Comparison
 
-| Aspect                   | Unity SendMessage         | DxMessaging                  |
-| ------------------------ | ------------------------- | ---------------------------- |
-| **Primary Use Case**     | Legacy GameObject calls   | Pub/sub messaging            |
-| **Unity Compatibility**  | ✅ Built into Unity       | ✅ Built for Unity           |
-| **Dependencies**         | ✅ None (Unity)           | ✅ Standalone                |
-| **Performance**          | Very slow (reflection)    | ~60ns/call                   |
-| **Allocations**          | ❌ Heavy boxing           | ✅ Zero (structs)            |
-| **Learning Curve**       | ⭐⭐⭐⭐⭐ Minimal        | ⭐⭐⭐ Moderate              |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ None           | ⭐⭐⭐ Moderate              |
-| **DI Integration**       | ❌ No                     | ⚠️ Optional                  |
-| **Async/Await**          | ❌ No                     | ⚠️ Manual                    |
-| **Type Safety**          | ❌ String-based           | ✅ Strong                    |
-| **Lifecycle Management** | ❌ None                   | ✅ Automatic                 |
-| **Execution Order**      | ❌ Undefined              | ✅ Priority-based            |
-| **GameObject Targeting** | ✅ Hierarchy traversal    | ✅ Built-in (ID-based)       |
-| **Unity Integration**    | ⭐⭐ Legacy API           | ⭐⭐⭐⭐⭐ Deep              |
-| **Inspector Debugging**  | ❌ No                     | ✅ History + stats           |
-| **Interceptors**         | ❌ Not built-in           | ✅ Full pipeline             |
-| **Global Observers**     | ❌ Not possible           | ✅ Listen to all             |
-| **Post-Processing**      | ❌ Not built-in           | ✅ Dedicated stage           |
-| **Testability**          | ⭐⭐ Requires GameObjects | ⭐⭐⭐⭐⭐ Local buses       |
-| **Decoupling**           | ⭐⭐ String-based         | ⭐⭐⭐⭐⭐ Excellent         |
-| **Refactoring Safety**   | ❌ Silent breakage        | ✅ Compile-time errors       |
-| **Parameters**           | ⚠️ 0 or 1 only            | ✅ Unlimited (struct fields) |
+| Aspect                   | Unity SendMessage       | DxMessaging               |
+| ------------------------ | ----------------------- | ------------------------- |
+| **Primary Use Case**     | Legacy GameObject calls | Pub/sub messaging         |
+| **Unity Compatibility**  | Built into Unity        | Built for Unity           |
+| **Dependencies**         | None (Unity)            | Standalone                |
+| **Performance**          | Very slow (reflection)  | ~60ns/call                |
+| **Allocations**          | Heavy boxing            | Zero (structs)            |
+| **Learning Curve**       | Minimal                 | Moderate                  |
+| **Setup Complexity**     | None                    | Moderate                  |
+| **DI Integration**       | No                      | Optional                  |
+| **Async/Await**          | No                      | Manual                    |
+| **Type Safety**          | String-based            | Strong                    |
+| **Lifecycle Management** | None                    | Automatic                 |
+| **Execution Order**      | Undefined               | Priority-based            |
+| **GameObject Targeting** | Hierarchy traversal     | Built-in (ID-based)       |
+| **Unity Integration**    | Legacy API              | Deep                      |
+| **Inspector Debugging**  | No                      | History + stats           |
+| **Interceptors**         | Not built-in            | Full pipeline             |
+| **Global Observers**     | Not possible            | Listen to all             |
+| **Post-Processing**      | Not built-in            | Dedicated stage           |
+| **Testability**          | Requires GameObjects    | Local buses               |
+| **Decoupling**           | String-based            | Excellent                 |
+| **Refactoring Safety**   | Silent breakage         | Compile-time errors       |
+| **Parameters**           | 0 or 1 only             | Unlimited (struct fields) |
 
 **Bottom Line:** SendMessage is legacy Unity API. Use only for maintaining old code. DxMessaging provides all the same capabilities with type safety, performance, and modern tooling.
 
@@ -1134,22 +1134,22 @@ public class UI : MonoBehaviour
 
 #### What Problems It Solves
 
-- ✅ **Global decoupling:** No direct references between systems
-- ✅ **Easy to add events:** Just add to static class
-- ✅ **Simple pattern:** Straightforward to implement and understand
-- ✅ **No setup:** No DI container or framework needed
+- [x] **Global decoupling:** No direct references between systems
+- [x] **Easy to add events:** Just add to static class
+- [x] **Simple pattern:** Straightforward to implement and understand
+- [x] **No setup:** No DI container or framework needed
 
 #### What Problems It Doesn't Solve Well
 
-- ❌ **Memory leaks:** Still manual subscribe/unsubscribe (same as C# events)
-- ❌ **Global state:** Everything in one bag, hard to organize at scale
-- ❌ **Execution order:** Undefined handler invocation order
-- ❌ **Testing difficulty:** Global state makes unit testing hard
-- ❌ **Naming conflicts:** All events in same namespace, naming gets messy
-- ❌ **No validation:** No way to intercept or validate messages
-- ❌ **No observability:** Can't see who's subscribed or message history
-- ❌ **Ownership unclear:** Who manages what events?
-- ❌ **Lifecycle management:** Manual subscribe/unsubscribe required
+- [ ] **Memory leaks:** Still manual subscribe/unsubscribe (same as C# events)
+- [ ] **Global state:** Everything in one bag, hard to organize at scale
+- [ ] **Execution order:** Undefined handler invocation order
+- [ ] **Testing difficulty:** Global state makes unit testing hard
+- [ ] **Naming conflicts:** All events in same namespace, naming gets messy
+- [ ] **No validation:** No way to intercept or validate messages
+- [ ] **No observability:** Can't see who's subscribed or message history
+- [ ] **Ownership unclear:** Who manages what events?
+- [ ] **Lifecycle management:** Manual subscribe/unsubscribe required
 
 #### Performance Characteristics
 
@@ -1165,58 +1165,58 @@ public class UI : MonoBehaviour
 
 #### Ease of Understanding
 
-- ⭐⭐⭐⭐ (Easy initially, hard at scale)
+- (4/5) (Easy initially, hard at scale)
 - Simple pattern to grasp
 - Becomes messy with 20+ events
 - Hard to track ownership and responsibilities
 
 #### When Static Event Bus Wins
 
-- ✅ You've already built one and it works
-- ✅ Very simple use cases (just need globals)
-- ✅ Small projects (<10 events)
-- ✅ No framework dependencies desired
-- ✅ Quick prototypes
+- [x] You've already built one and it works
+- [x] Very simple use cases (just need globals)
+- [x] Small projects (<10 events)
+- [x] No framework dependencies desired
+- [x] Quick prototypes
 
 #### When DxMessaging Wins
 
-- ✅ More than 10-15 events (organization becomes important)
-- ✅ Memory leaks are a concern (automatic lifecycle management)
-- ✅ Execution order matters (priority-based handlers)
-- ✅ Need message validation/interception (interceptor pipeline)
-- ✅ Testing is important (local buses for isolation)
-- ✅ Observability needed (Inspector debugging, message history)
-- ✅ Multiple subsystems (namespacing and organization)
-- ✅ GameObject/Component targeting needed
-- ✅ Global observation needed (listen to all message instances)
-- ✅ Post-processing needed (analytics after handlers)
-- ✅ Long-term maintenance (structure prevents chaos)
+- [x] More than 10-15 events (organization becomes important)
+- [x] Memory leaks are a concern (automatic lifecycle management)
+- [x] Execution order matters (priority-based handlers)
+- [x] Need message validation/interception (interceptor pipeline)
+- [x] Testing is important (local buses for isolation)
+- [x] Observability needed (Inspector debugging, message history)
+- [x] Multiple subsystems (namespacing and organization)
+- [x] GameObject/Component targeting needed
+- [x] Global observation needed (listen to all message instances)
+- [x] Post-processing needed (analytics after handlers)
+- [x] Long-term maintenance (structure prevents chaos)
 
 #### Direct Comparison
 
-| Aspect                   | Static Event Bus      | DxMessaging            |
-| ------------------------ | --------------------- | ---------------------- |
-| **Primary Use Case**     | Global event hub      | Pub/sub messaging      |
-| **Unity Compatibility**  | ✅ Works in Unity     | ✅ Built for Unity     |
-| **Dependencies**         | ✅ None (custom)      | ✅ Standalone          |
-| **Performance**          | ~50ns/call (fast)     | ~60ns/call             |
-| **Allocations**          | ✅ Zero (basic)       | ✅ Zero (structs)      |
-| **Learning Curve**       | ⭐⭐⭐⭐⭐ Minimal    | ⭐⭐⭐ Moderate        |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Minimal    | ⭐⭐⭐ Moderate        |
-| **DI Integration**       | ⚠️ Manual             | ⚠️ Optional            |
-| **Async/Await**          | ⚠️ Manual             | ⚠️ Manual              |
-| **Type Safety**          | ✅ Strong             | ✅ Strong              |
-| **Lifecycle Management** | ❌ Manual unsubscribe | ✅ Automatic           |
-| **Execution Order**      | ❌ Undefined          | ✅ Priority-based      |
-| **GameObject Targeting** | ❌ Not built-in       | ✅ Built-in            |
-| **Unity Integration**    | ⭐ None               | ⭐⭐⭐⭐⭐ Deep        |
-| **Inspector Debugging**  | ❌ No                 | ✅ History + stats     |
-| **Interceptors**         | ❌ Not built-in       | ✅ Full pipeline       |
-| **Global Observers**     | ❌ Not built-in       | ✅ Listen to all       |
-| **Post-Processing**      | ❌ Not built-in       | ✅ Dedicated stage     |
-| **Testability**          | ⭐ Hard (global)      | ⭐⭐⭐⭐⭐ Local buses |
-| **Decoupling**           | ⭐⭐⭐⭐ Good         | ⭐⭐⭐⭐⭐ Excellent   |
-| **Organization**         | ⭐⭐ One big class    | ⭐⭐⭐⭐⭐ Structured  |
+| Aspect                   | Static Event Bus   | DxMessaging       |
+| ------------------------ | ------------------ | ----------------- |
+| **Primary Use Case**     | Global event hub   | Pub/sub messaging |
+| **Unity Compatibility**  | Works in Unity     | Built for Unity   |
+| **Dependencies**         | None (custom)      | Standalone        |
+| **Performance**          | ~50ns/call (fast)  | ~60ns/call        |
+| **Allocations**          | Zero (basic)       | Zero (structs)    |
+| **Learning Curve**       | Minimal            | Moderate          |
+| **Setup Complexity**     | Minimal            | Moderate          |
+| **DI Integration**       | Manual             | Optional          |
+| **Async/Await**          | Manual             | Manual            |
+| **Type Safety**          | Strong             | Strong            |
+| **Lifecycle Management** | Manual unsubscribe | Automatic         |
+| **Execution Order**      | Undefined          | Priority-based    |
+| **GameObject Targeting** | Not built-in       | Built-in          |
+| **Unity Integration**    | None               | Deep              |
+| **Inspector Debugging**  | No                 | History + stats   |
+| **Interceptors**         | Not built-in       | Full pipeline     |
+| **Global Observers**     | Not built-in       | Listen to all     |
+| **Post-Processing**      | Not built-in       | Dedicated stage   |
+| **Testability**          | Hard (global)      | Local buses       |
+| **Decoupling**           | Good               | Excellent         |
+| **Organization**         | One big class      | Structured        |
 
 **Bottom Line:** Static event buses solve global access but inherit all the problems of C# events (leaks, undefined order, no observability). DxMessaging provides the same global access with lifecycle safety, structure, and debugging tools.
 
@@ -1248,17 +1248,17 @@ DxMessaging involves trade-offs like any architectural choice. This section desc
 
 #### What You Give Up
 
-- ❌ **Immediate productivity** - ~1-2 days to feel comfortable (reading docs, trying examples)
-- ❌ **Familiarity** - Your team knows C# events already; DxMessaging is new
-- ❌ **"Just works" intuition** - You need to think: "Which message type? What priority?"
+- [ ] **Immediate productivity** - ~1-2 days to feel comfortable (reading docs, trying examples)
+- [ ] **Familiarity** - Your team knows C# events already; DxMessaging is new
+- [ ] **"Just works" intuition** - You need to think: "Which message type? What priority?"
 
 Your first message will take 15 minutes. By the 10th message, you'll be faster than with events.
 
 #### What You Gain
 
-- ✅ **Long-term velocity** - Adding new features doesn't require touching 5 existing systems
-- ✅ **Debugging is faster** - Inspector shows "what fired when" instantly
-- ✅ **Onboarding is easier** - New devs see explicit message contracts, not hidden event chains
+- [x] **Long-term velocity** - Adding new features doesn't require touching 5 existing systems
+- [x] **Debugging is faster** - Inspector shows "what fired when" instantly
+- [x] **Onboarding is easier** - New devs see explicit message contracts, not hidden event chains
 
 **Example:** Junior dev asks "How does damage work?"
 
@@ -1267,7 +1267,7 @@ Your first message will take 15 minutes. By the 10th message, you'll be faster t
 
 ##### Verdict
 
-- Game jam (1 week project): Learning curve not worth it → Stick with C# events
+- Game jam (1 week project): Learning curve not worth it -> Stick with C# events
 - Mid-size game (1+ month): Pays off by week 2
 - Large game (6+ months): Highly beneficial
 
@@ -1275,14 +1275,14 @@ Your first message will take 15 minutes. By the 10th message, you'll be faster t
 
 #### What You Give Up
 
-- ❌ "One-liners" - C# events can be `public event Action OnClick;` done
-- ❌ Quick and dirty - Need to define message struct, attributes, handler registration
+- [ ] "One-liners" - C# events can be `public event Action OnClick;` done
+- [ ] Quick and dirty - Need to define message struct, attributes, handler registration
 
 #### What You Gain
 
-- ✅ Explicit contracts - Messages are discoverable types, not hidden delegates
-- ✅ Auto-generated code - `[DxAutoConstructor]` reduces boilerplate
-- ✅ Compile-time safety - Refactors update all usages
+- [x] Explicit contracts - Messages are discoverable types, not hidden delegates
+- [x] Auto-generated code - `[DxAutoConstructor]` reduces boilerplate
+- [x] Compile-time safety - Refactors update all usages
 
 #### Example Comparison
 
@@ -1306,15 +1306,15 @@ msg.EmitGameObjectBroadcast(gameObject);
 
 #### What You Give Up
 
-- ❌ Absolute minimal overhead - Raw C# events/delegates are faster (~10ns per call)
-- ❌ Zero abstraction cost - Direct calls can be inlined by the compiler
-- ❌ Simplicity in profiler - One extra layer in call stack
+- [ ] Absolute minimal overhead - Raw C# events/delegates are faster (~10ns per call)
+- [ ] Zero abstraction cost - Direct calls can be inlined by the compiler
+- [ ] Simplicity in profiler - One extra layer in call stack
 
 #### What You Gain
 
-- ✅ Zero-allocation struct messages - No GC pressure from boxing
-- ✅ Predictable performance - No hidden allocations from lambdas
-- ✅ Scalable diagnostics - Built-in profiling/logging without custom instrumentation
+- [x] Zero-allocation struct messages - No GC pressure from boxing
+- [x] Predictable performance - No hidden allocations from lambdas
+- [x] Scalable diagnostics - Built-in profiling/logging without custom instrumentation
 
 #### Hard Numbers
 
@@ -1322,22 +1322,22 @@ msg.EmitGameObjectBroadcast(gameObject);
 - DxMessaging handler: ~60ns (~10ns overhead)
 - Memory: Zero allocations for struct messages
 
-**Verdict:** For UI, gameplay events, scene management → DxMessaging overhead is negligible. For ECS architectures processing millions of events per frame → consider raw delegates or native code, which are better suited for that specific use case.
+**Verdict:** For UI, gameplay events, scene management -> DxMessaging overhead is negligible. For ECS architectures processing millions of events per frame -> consider raw delegates or native code, which are better suited for that specific use case.
 
 ### Flexibility
 
 #### What You Give Up
 
-- ❌ Return values - DxMessaging is fire-and-forget (no synchronous responses)
-- ❌ Out parameters - Can't use `out` or `ref` for bidirectional communication
-- ❌ Dynamic subscriptions - Can't easily pass lambdas inline
+- [ ] Return values - DxMessaging is fire-and-forget (no synchronous responses)
+- [ ] Out parameters - Can't use `out` or `ref` for bidirectional communication
+- [ ] Dynamic subscriptions - Can't easily pass lambdas inline
 
 #### What You Gain
 
-- ✅ Interception - Validate/transform messages before handlers
-- ✅ Post-processing - Analytics/logging without polluting handlers
-- ✅ Priority control - Explicit execution order
-- ✅ Context - Always know who sent/received
+- [x] Interception - Validate/transform messages before handlers
+- [x] Post-processing - Analytics/logging without polluting handlers
+- [x] Priority control - Explicit execution order
+- [x] Context - Always know who sent/received
 
 #### When Limitations Hurt
 
@@ -1359,15 +1359,15 @@ if (OnValidateDamage?.Invoke(damage) == true) {
 
 #### What You Give Up
 
-- ❌ Simplicity - Stack traces show message bus internals
-- ❌ Step-through - Can't F11 directly from emit to handler (need breakpoints)
+- [ ] Simplicity - Stack traces show message bus internals
+- [ ] Step-through - Can't F11 directly from emit to handler (need breakpoints)
 
 #### What You Gain
 
-- ✅ Message history - See last N messages in Inspector
-- ✅ Registration view - Know exactly who's listening
-- ✅ Global observability - Track all messages without instrumenting code
-- ✅ Filtering - Intercept messages for debugging without changing code
+- [x] Message history - See last N messages in Inspector
+- [x] Registration view - Know exactly who's listening
+- [x] Global observability - Track all messages without instrumenting code
+- [x] Filtering - Intercept messages for debugging without changing code
 
 #### Example: Finding Who Fired a Message
 
@@ -1387,30 +1387,30 @@ _ = debugToken.RegisterBroadcastWithoutSource<TookDamage>(
 
 #### What You Give Up
 
-- ❌ Quick hacks - Can't just `GetComponent<T>().DoThing()` anymore
-- ❌ Direct inspector wiring - Can't drag-and-drop references to emit messages
+- [ ] Quick hacks - Can't just `GetComponent<T>().DoThing()` anymore
+- [ ] Direct inspector wiring - Can't drag-and-drop references to emit messages
 
 #### What You Gain
 
-- ✅ True decoupling - Systems don't know about each other
-- ✅ Testability - Easy to isolate with local buses
-- ✅ Refactorability - Move/rename components without breaking wiring
+- [x] True decoupling - Systems don't know about each other
+- [x] Testability - Easy to isolate with local buses
+- [x] Refactorability - Move/rename components without breaking wiring
 
 #### Impact on Architecture
 
 Before (tight coupling):
 
 ```text
-UI → References 15 systems
-System A → References System B, C, D
+UI -> References 15 systems
+System A -> References System B, C, D
 Every change ripples through dependencies
 ```
 
 After (loose coupling):
 
 ```text
-All systems → Emit messages
-All systems → Listen to messages
+All systems -> Emit messages
+All systems -> Listen to messages
 Add/remove systems without affecting others
 ```
 
@@ -1420,13 +1420,13 @@ Add/remove systems without affecting others
 
 #### What You Give Up
 
-- ❌ Simplicity - Can't just mock an event subscription
+- [ ] Simplicity - Can't just mock an event subscription
 
 #### What You Gain
 
-- ✅ Isolation - Local buses per test, zero global state
-- ✅ Observability - Count messages, inspect payloads easily
-- ✅ Determinism - Priority-based ordering eliminates flakiness
+- [x] Isolation - Local buses per test, zero global state
+- [x] Observability - Count messages, inspect payloads easily
+- [x] Determinism - Priority-based ordering eliminates flakiness
 
 ##### Example
 
@@ -1450,47 +1450,47 @@ public void TestAchievementSystem() {
 
 ### Unity Messaging Frameworks Comparison
 
-| Aspect                   | DxMessaging                  | UniRx                    | MessagePipe                 | Zenject Signals            |
-| ------------------------ | ---------------------------- | ------------------------ | --------------------------- | -------------------------- |
-| **Primary Use Case**     | Pub/sub messaging            | Stream transformations   | High-perf DI messaging      | DI-integrated messaging    |
-| **Unity Compatibility**  | ✅ Built for Unity           | ✅ Built for Unity       | ✅ Built for Unity          | ✅ Built for Unity         |
-| **Performance**          | ⭐⭐⭐⭐ Good (14M)          | ⭐⭐⭐⭐ Good (18M)      | ⭐⭐⭐⭐⭐ Best (97M)       | ⭐⭐ Moderate (2.5M)       |
-| **Zero Allocations**     | ✅ Yes (structs)             | ⚠️ Can allocate          | ✅ Yes (structs)            | ⚠️ Can allocate            |
-| **Unity Integration**    | ⭐⭐⭐⭐⭐ Deep (lifecycle)  | ⭐⭐⭐⭐ Good (UI/async) | ⭐⭐⭐ Basic (no lifecycle) | ⭐⭐⭐⭐ Good (DI-managed) |
-| **Inspector Debugging**  | ✅ Yes (history + stats)     | ❌ No                    | ❌ No                       | ❌ No                      |
-| **Execution Order**      | ✅ Priority-based            | ❌ Not built-in          | ❌ Subscription order       | ❌ Not built-in            |
-| **Lifecycle Management** | ✅ Automatic (MonoBehaviour) | ⚠️ Manual dispose        | ⚠️ Manual dispose           | ⚠️ DI-managed              |
-| **Learning Curve**       | ⭐⭐⭐ Moderate              | ⭐⭐ Steep (Rx paradigm) | ⭐⭐⭐⭐ Moderate (DI)      | ⭐⭐ Steep (DI+Signals)    |
-| **Setup Complexity**     | ⭐⭐⭐⭐⭐ Plug-and-play     | ⭐⭐⭐⭐⭐ Low           | ⭐⭐⭐ DI setup required    | ⭐⭐ Installers required   |
-| **DI Integration**       | ⚠️ Optional                  | ⚠️ Optional              | ✅ First-class              | ✅ Required (Zenject)      |
-| **Async/Await**          | ⚠️ Manual                    | ✅ Native (observables)  | ✅ Native                   | ✅ Yes                     |
-| **Message Validation**   | ✅ Interceptor pipeline      | ❌ Not built-in          | ⚠️ Filters (middleware)     | ❌ Not built-in            |
-| **GameObject Targeting** | ✅ Built-in                  | ❌ Not designed for      | ❌ Not built-in             | ❌ Not built-in            |
-| **Global Observers**     | ✅ Listen to all sources     | ❌ Not built-in          | ❌ Not built-in             | ❌ Not built-in            |
-| **Post-Processing**      | ✅ Dedicated stage           | ❌ Not built-in          | ⚠️ Via filters              | ❌ Not built-in            |
-| **Stream Operators**     | ❌ Not built-in              | ✅ Extensive (LINQ)      | ❌ Not built-in             | ⚠️ With UniRx              |
-| **Testability**          | ⭐⭐⭐⭐⭐ Local buses       | ⭐⭐⭐⭐ Good            | ⭐⭐⭐⭐⭐ DI mocking       | ⭐⭐⭐⭐⭐ DI mocking      |
-| **Decoupling**           | ⭐⭐⭐⭐⭐ Excellent         | ⭐⭐⭐⭐⭐ Excellent     | ⭐⭐⭐⭐⭐ Excellent        | ⭐⭐⭐⭐⭐ Excellent       |
-| **Type Safety**          | ⭐⭐⭐⭐⭐ Strong            | ⭐⭐⭐⭐⭐ Strong        | ⭐⭐⭐⭐⭐ Strong           | ⭐⭐⭐⭐⭐ Strong          |
-| **Dependencies**         | ✅ None                      | ✅ None                  | ⚠️ MessagePipe package      | ❌ Zenject required        |
+| Aspect                   | DxMessaging               | UniRx                  | MessagePipe            | Zenject Signals         |
+| ------------------------ | ------------------------- | ---------------------- | ---------------------- | ----------------------- |
+| **Primary Use Case**     | Pub/sub messaging         | Stream transformations | High-perf DI messaging | DI-integrated messaging |
+| **Unity Compatibility**  | Built for Unity           | Built for Unity        | Built for Unity        | Built for Unity         |
+| **Performance**          | Good (14M)                | Good (18M)             | Best (97M)             | Moderate (2.5M)         |
+| **Zero Allocations**     | (structs)                 | Can allocate           | (structs)              | Can allocate            |
+| **Unity Integration**    | Deep (lifecycle)          | Good (UI/async)        | Basic (no lifecycle)   | Good (DI-managed)       |
+| **Inspector Debugging**  | (history + stats)         | No                     | No                     | No                      |
+| **Execution Order**      | Priority-based            | Not built-in           | Subscription order     | Not built-in            |
+| **Lifecycle Management** | Automatic (MonoBehaviour) | Manual dispose         | Manual dispose         | DI-managed              |
+| **Learning Curve**       | Moderate                  | Steep (Rx paradigm)    | Moderate (DI)          | Steep (DI+Signals)      |
+| **Setup Complexity**     | Plug-and-play             | Low                    | DI setup required      | Installers required     |
+| **DI Integration**       | Optional                  | Optional               | First-class            | Required (Zenject)      |
+| **Async/Await**          | Manual                    | Native (observables)   | Native                 | Yes                     |
+| **Message Validation**   | Interceptor pipeline      | Not built-in           | Filters (middleware)   | Not built-in            |
+| **GameObject Targeting** | Built-in                  | Not designed for       | Not built-in           | Not built-in            |
+| **Global Observers**     | Listen to all sources     | Not built-in           | Not built-in           | Not built-in            |
+| **Post-Processing**      | Dedicated stage           | Not built-in           | Via filters            | Not built-in            |
+| **Stream Operators**     | Not built-in              | Extensive (LINQ)       | Not built-in           | With UniRx              |
+| **Testability**          | Local buses               | Good                   | DI mocking             | DI mocking              |
+| **Decoupling**           | Excellent                 | Excellent              | Excellent              | Excellent               |
+| **Type Safety**          | Strong                    | Strong                 | Strong                 | Strong                  |
+| **Dependencies**         | None                      | None                   | MessagePipe package    | Zenject required        |
 
 ### Traditional Approaches Comparison
 
-| Aspect               | C# Events          | UnityEvents          | SOA (GameEvent)     | Static Bus      | DxMessaging               |
-| -------------------- | ------------------ | -------------------- | ------------------- | --------------- | ------------------------- |
-| **Setup Complexity** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Simple      | ⭐⭐ Asset creation | ⭐⭐⭐ Moderate | ⭐⭐⭐ Moderate           |
-| **Boilerplate**      | ⭐⭐⭐⭐⭐ Low     | ⭐⭐⭐⭐⭐ Low       | ⭐⭐ High           | ⭐⭐⭐ Medium   | ⭐⭐⭐ Medium             |
-| **Performance**      | ⭐⭐⭐⭐⭐ Fastest | ⭐⭐ Slow (boxing)   | ⭐⭐⭐ Moderate     | ⭐⭐⭐⭐ Fast   | ⭐⭐⭐⭐ Fast             |
-| **Decoupling**       | ⭐ Tight           | ⭐⭐ Hidden          | ⭐⭐⭐⭐ Good       | ⭐⭐⭐⭐ Good   | ⭐⭐⭐⭐⭐ Excellent      |
-| **Designer Control** | ⭐ None            | ⭐⭐⭐⭐⭐ High      | ⭐⭐⭐⭐⭐ High     | ⭐ None         | ⭐ None                   |
-| **Lifecycle Safety** | ⭐ Manual          | ⭐⭐⭐ Unity-managed | ⭐⭐ Manual persist | ⭐ Manual       | ⭐⭐⭐⭐⭐ Automatic      |
-| **Observability**    | ⭐ None            | ⭐ None              | ⭐ Inspector only   | ⭐ None         | ⭐⭐⭐⭐⭐ Built-in       |
-| **Execution Order**  | ⭐ Undefined       | ⭐ Undefined         | ⭐ Undefined        | ⭐ Undefined    | ⭐⭐⭐⭐⭐ Priority-based |
-| **Type Safety**      | ⭐⭐⭐⭐⭐ Strong  | ⭐⭐ Weak            | ⭐⭐⭐ Mixed        | ⭐⭐⭐ Varies   | ⭐⭐⭐⭐⭐ Strong         |
-| **Testability**      | ⭐⭐ Hard          | ⭐⭐ Hard            | ⭐ Very Hard        | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Easy           |
-| **Learning Curve**   | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐⭐ Minimal   | ⭐⭐⭐ Moderate     | ⭐⭐⭐⭐ Low    | ⭐⭐⭐ Moderate           |
-| **Memory Safety**    | ⭐ Leak-prone      | ⭐⭐⭐ Unity-managed | ⭐⭐ Asset persist  | ⭐ Leak-prone   | ⭐⭐⭐⭐⭐ Leak-free      |
-| **Debugging**        | ⭐⭐ Hard at scale | ⭐⭐ Hard at scale   | ⭐⭐ Inspector-only | ⭐ Very Hard    | ⭐⭐⭐⭐⭐ Excellent      |
+| Aspect               | C# Events     | UnityEvents   | SOA (GameEvent) | Static Bus | DxMessaging    |
+| -------------------- | ------------- | ------------- | --------------- | ---------- | -------------- |
+| **Setup Complexity** | Minimal       | Simple        | Asset creation  | Moderate   | Moderate       |
+| **Boilerplate**      | Low           | Low           | High            | Medium     | Medium         |
+| **Performance**      | Fastest       | Slow (boxing) | Moderate        | Fast       | Fast           |
+| **Decoupling**       | Tight         | Hidden        | Good            | Good       | Excellent      |
+| **Designer Control** | None          | High          | High            | None       | None           |
+| **Lifecycle Safety** | Manual        | Unity-managed | Manual persist  | Manual     | Automatic      |
+| **Observability**    | None          | None          | Inspector only  | None       | Built-in       |
+| **Execution Order**  | Undefined     | Undefined     | Undefined       | Undefined  | Priority-based |
+| **Type Safety**      | Strong        | Weak          | Mixed           | Varies     | Strong         |
+| **Testability**      | Hard          | Hard          | Very Hard       | Very Hard  | Easy           |
+| **Learning Curve**   | Minimal       | Minimal       | Moderate        | Low        | Moderate       |
+| **Memory Safety**    | Leak-prone    | Unity-managed | Asset persist   | Leak-prone | Leak-free      |
+| **Debugging**        | Hard at scale | Hard at scale | Inspector-only  | Very Hard  | Excellent      |
 
 ### Overall Verdict by Use Case
 
@@ -1511,76 +1511,76 @@ public void TestAchievementSystem() {
 
 ### DxMessaging Wins When
 
-- ✅ Unity-first projects (MonoBehaviour lifecycle integration)
-- ✅ 10+ systems that communicate (pub/sub decoupling)
-- ✅ Observability essential (Inspector debugging, message history)
-- ✅ Memory leaks are a concern (automatic lifecycle management)
-- ✅ Cross-team development (clear message contracts)
-- ✅ Long-term maintenance (years, not weeks)
-- ✅ GameObject/Component targeting needed (Unity-specific patterns)
-- ✅ Execution order control essential (priority-based handlers)
-- ✅ Message validation/transformation needed (interceptor pipeline)
-- ✅ Global observation needed (listen to all message instances)
-- ✅ Post-processing needed (analytics, logging after handlers)
-- ✅ Late update semantics needed (timing-specific processing)
-- ✅ Teams without DI experience (no framework dependencies)
-- ✅ Want plug-and-play solution (zero dependencies, immediate use)
+- [x] Unity-first projects (MonoBehaviour lifecycle integration)
+- [x] 10+ systems that communicate (pub/sub decoupling)
+- [x] Observability essential (Inspector debugging, message history)
+- [x] Memory leaks are a concern (automatic lifecycle management)
+- [x] Cross-team development (clear message contracts)
+- [x] Long-term maintenance (years, not weeks)
+- [x] GameObject/Component targeting needed (Unity-specific patterns)
+- [x] Execution order control essential (priority-based handlers)
+- [x] Message validation/transformation needed (interceptor pipeline)
+- [x] Global observation needed (listen to all message instances)
+- [x] Post-processing needed (analytics, logging after handlers)
+- [x] Late update semantics needed (timing-specific processing)
+- [x] Teams without DI experience (no framework dependencies)
+- [x] Want plug-and-play solution (zero dependencies, immediate use)
 
 ### UniRx Wins When
 
-- ✅ Simple pub/sub with minimal setup (MessageBroker is straightforward)
-- ✅ Complex event stream transformations needed
-- ✅ Time-based operations (throttle, debounce, buffer)
-- ✅ Combining multiple input sources
-- ✅ Reactive UI data binding
-- ✅ Team familiar with reactive programming
-- ✅ Need LINQ-style query operators on events
-- ✅ Async operations with cancellation and composition
+- [x] Simple pub/sub with minimal setup (MessageBroker is straightforward)
+- [x] Complex event stream transformations needed
+- [x] Time-based operations (throttle, debounce, buffer)
+- [x] Combining multiple input sources
+- [x] Reactive UI data binding
+- [x] Team familiar with reactive programming
+- [x] Need LINQ-style query operators on events
+- [x] Async operations with cancellation and composition
 
 ### MessagePipe Wins When
 
-- ✅ Performance is THE priority (highest throughput)
-- ✅ Already using DI (VContainer, Zenject, etc.)
-- ✅ Cross-platform .NET projects (not Unity-only)
-- ✅ Need native async/await support
-- ✅ Large-scale projects with DI architecture
-- ✅ Want compile-time leak detection (Roslyn analyzer)
-- ✅ High message frequency (thousands/frame)
+- [x] Performance is THE priority (highest throughput)
+- [x] Already using DI (VContainer, Zenject, etc.)
+- [x] Cross-platform .NET projects (not Unity-only)
+- [x] Need native async/await support
+- [x] Large-scale projects with DI architecture
+- [x] Want compile-time leak detection (Roslyn analyzer)
+- [x] High message frequency (thousands/frame)
 
 ### Zenject Signals Win When
 
-- ✅ Already using Zenject for dependency injection
-- ✅ Testability through DI is critical
-- ✅ Need subscriber validation (ensure handlers exist)
-- ✅ Team experienced with Zenject
-- ✅ Want DI-managed lifecycle
-- ✅ Integration with existing Zenject architecture
+- [x] Already using Zenject for dependency injection
+- [x] Testability through DI is critical
+- [x] Need subscriber validation (ensure handlers exist)
+- [x] Team experienced with Zenject
+- [x] Want DI-managed lifecycle
+- [x] Integration with existing Zenject architecture
 
 ### C# Events Win When
 
-- ✅ You need return values or out parameters
-- ✅ Writing a library (DxMessaging is Unity-specific)
-- ✅ Small, stable scope (5-10 events max)
-- ✅ Team is C# experts, Unity beginners
+- [x] You need return values or out parameters
+- [x] Writing a library (DxMessaging is Unity-specific)
+- [x] Small, stable scope (5-10 events max)
+- [x] Team is C# experts, Unity beginners
 
 ### UnityEvents Win When
 
-- ✅ Designers need to wire logic without code
-- ✅ Rapid prototyping with prefabs
-- ✅ Very simple games (mobile casual, hyper-casual)
+- [x] Designers need to wire logic without code
+- [x] Rapid prototyping with prefabs
+- [x] Very simple games (mobile casual, hyper-casual)
 
 ### SOA (GameEvent/Variables) Wins When
 
-- ✅ Designers must create and wire events without touching code
-- ✅ Team is already heavily invested in SOA with many existing assets
-- ✅ Designer empowerment is the absolute top priority
-- ⚠️ **BUT:** Consider migration costs and maintainability issues (see [Anti-SOA critique](https://github.com/cathei/AntiScriptableObjectArchitecture))
-- ⚠️ **Alternative:** Use ScriptableObjects for configs only + DxMessaging for events (Pattern B in [SOA Guide](../guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa))
+- [x] Designers must create and wire events without touching code
+- [x] Team is already heavily invested in SOA with many existing assets
+- [x] Designer empowerment is the absolute top priority
+- **BUT:** Consider migration costs and maintainability issues (see [Anti-SOA critique](https://github.com/cathei/AntiScriptableObjectArchitecture))
+- **Alternative:** Use ScriptableObjects for configs only + DxMessaging for events (Pattern B in [SOA Guide](../guides/patterns.md#14-compatibility-with-scriptable-object-architecture-soa))
 
 ### Static Event Bus Wins When
 
-- ✅ You've already built one and it works
-- ✅ Very simple use cases (just need globals)
+- [x] You've already built one and it works
+- [x] Very simple use cases (just need globals)
 
 ## Cost-Benefit Summary
 
@@ -1608,53 +1608,53 @@ public void TestAchievementSystem() {
 
 ### 1. Project Lifespan?
 
-- **<1 week (game jam):** Skip DxMessaging → Use C# events or direct calls
-- **1-4 weeks (prototype):** Maybe → If you plan to continue, use DxMessaging
-- **1+ months (real project):** Yes → DxMessaging will save you time
-- **6+ months (production):** Absolutely → You'll thank yourself later
+- **<1 week (game jam):** Skip DxMessaging -> Use C# events or direct calls
+- **1-4 weeks (prototype):** Maybe -> If you plan to continue, use DxMessaging
+- **1+ months (real project):** Yes -> DxMessaging will save you time
+- **6+ months (production):** Absolutely -> You'll thank yourself later
 
 ### 2. Team Size?
 
-- **Solo dev:** Optional → Depends on project complexity
-- **2-3 devs:** Valuable → Reduces communication overhead
-- **4+ devs:** Highly recommended → Clear contracts between systems
-- **Remote/distributed team:** Essential → Explicit message contracts prevent miscommunication
+- **Solo dev:** Optional -> Depends on project complexity
+- **2-3 devs:** Valuable -> Reduces communication overhead
+- **4+ devs:** Highly recommended -> Clear contracts between systems
+- **Remote/distributed team:** Essential -> Explicit message contracts prevent miscommunication
 
 ### 3. Codebase Size?
 
-- **<1k lines:** Skip it → Direct method calls are fine
-- **1k-5k lines:** Consider it → If you're growing fast
-- **5k-20k lines:** Recommended → Coupling becomes painful
-- **20k+ lines:** Absolutely → Refactoring becomes significantly more challenging without it
+- **<1k lines:** Skip it -> Direct method calls are fine
+- **1k-5k lines:** Consider it -> If you're growing fast
+- **5k-20k lines:** Recommended -> Coupling becomes painful
+- **20k+ lines:** Absolutely -> Refactoring becomes significantly more challenging without it
 
 ### 4. How Many Systems Need to Communicate?
 
-- **1-2 systems:** Skip → Just call methods directly
-- **3-5 systems:** Consider → If they don't share references
-- **6-10 systems:** Recommended → Coupling becomes unmanageable
-- **10+ systems:** Essential → Managing many SerializeField references becomes difficult
+- **1-2 systems:** Skip -> Just call methods directly
+- **3-5 systems:** Consider -> If they don't share references
+- **6-10 systems:** Recommended -> Coupling becomes unmanageable
+- **10+ systems:** Essential -> Managing many SerializeField references becomes difficult
 
 ### 5. Have You Had Memory Leaks From Forgotten Unsubscribes?
 
-- **Never:** Optional → You may not need automatic lifecycle management
-- **Once or twice:** Consider it → Prevention is cheaper than debugging
-- **Multiple times:** Recommended → Automatic cleanup would help
-- **Currently debugging one:** Strongly recommended → Consider adopting DxMessaging
+- **Never:** Optional -> You may not need automatic lifecycle management
+- **Once or twice:** Consider it -> Prevention is cheaper than debugging
+- **Multiple times:** Recommended -> Automatic cleanup would help
+- **Currently debugging one:** Strongly recommended -> Consider adopting DxMessaging
 
 ### 6. How Often Do You Debug "What Fired When?"
 
-- **Never:** Likely not needed → Small projects may not require message debugging tools
+- **Never:** Likely not needed -> Small projects may not require message debugging tools
 - **Rarely:** Optional, but would help
-- **Monthly:** Recommended → Inspector diagnostics will save hours
-- **Weekly:** Strongly recommended → Debugging tools would provide significant time savings
+- **Monthly:** Recommended -> Inspector diagnostics will save hours
+- **Weekly:** Strongly recommended -> Debugging tools would provide significant time savings
 
 ### Quick Decision Matrix
 
 ```text
-Game Jam         → C# Events (speed over safety)
-Prototype        → DxMessaging IF continuing, else C# Events
-Production       → DxMessaging (unless <1k lines)
-Legacy codebase  → Migrate gradually (see Migration Guide)
+Game Jam         -> C# Events (speed over safety)
+Prototype        -> DxMessaging IF continuing, else C# Events
+Production       -> DxMessaging (unless <1k lines)
+Legacy codebase  -> Migrate gradually (see Migration Guide)
 ```
 
 ### The Real Question
@@ -1673,9 +1673,9 @@ Legacy codebase  → Migrate gradually (see Migration Guide)
 
 If you're reading this and thinking:
 
-- **"I've experienced these pain points"** → DxMessaging will help
-- **"This seems like overkill"** → You probably don't need it yet
-- **"I need this yesterday"** → DxMessaging may be a good fit
+- **"I've experienced these pain points"** to DxMessaging will help
+- **"This seems like overkill"** to You probably don't need it yet
+- **"I need this yesterday"** to DxMessaging may be a good fit
 
 See also
 

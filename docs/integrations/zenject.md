@@ -1,6 +1,6 @@
 # DxMessaging + Zenject
 
-[← Back to Integrations Overview](index.md)
+[Back to Integrations Overview](index.md)
 
 ---
 
@@ -235,7 +235,7 @@ public sealed class DxToSignalBridge : IInitializable, IDisposable
         };
         _token = MessageRegistrationToken.Create(handler, _messageBus);
 
-        // Bridge DxMessaging → Zenject Signals
+        // Bridge DxMessaging -> Zenject Signals
         _ = _token.RegisterUntargeted<SceneTransition>(OnSceneTransition);
         _token.Enable();
     }
@@ -328,6 +328,6 @@ public class GameInitializerTests : ZenjectUnitTestFixture
 
 ## Next Steps
 
-- **[VContainer Integration](vcontainer.md)** — Lightweight alternative to Zenject
-- **[Reflex Integration](reflex.md)** — Minimal DI framework
-- **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs
+- **[VContainer Integration](vcontainer.md)** -- Lightweight alternative to Zenject
+- **[Reflex Integration](reflex.md)** -- Minimal DI framework
+- **[Back to Documentation Hub](../getting-started/index.md)** -- Browse all docs

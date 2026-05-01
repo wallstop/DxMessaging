@@ -78,9 +78,9 @@ namespace DxMessaging.Editor.Settings
         /// S3: toggling from <c>false</c> back to <c>true</c> pokes
         /// <see cref="DxMessaging.Editor.Analyzers.DxMessagingConsoleHarvester"/> on the next editor
         /// tick so the snapshot repopulates without waiting for the user to clear/re-emit warnings
-        /// or to manually invoke <c>Tools/DxMessaging/Rescan Base-Call Warnings</c>. The round-trip
-        /// is intentionally indirect (delayCall → RescanNow) to keep this property setter cheap and
-        /// safe to invoke from any editor context — including OnValidate, where AssetDatabase may
+        /// or to manually invoke <c>Tools/Wallstop Studios/DxMessaging/Rescan Base-Call Warnings</c>. The round-trip
+        /// is intentionally indirect (delayCall > RescanNow) to keep this property setter cheap and
+        /// safe to invoke from any editor context -- including OnValidate, where AssetDatabase may
         /// be transitional.
         /// </remarks>
         public bool BaseCallCheckEnabled
@@ -116,14 +116,14 @@ namespace DxMessaging.Editor.Settings
         /// <para>
         /// Default <c>false</c>. The IL-reflection scanner
         /// (<see cref="DxMessaging.Editor.Analyzers.BaseCallTypeScanner"/>) is the deterministic,
-        /// always-on primary source — it walks every loaded <c>MessageAwareComponent</c> subclass
+        /// always-on primary source -- it walks every loaded <c>MessageAwareComponent</c> subclass
         /// and inspects each override's IL body for the base-call shape, which is reliable across
         /// Unity 2021 cache hits, incremental compiles, and arbitrary domain-reload sequences.
         /// </para>
         /// <para>
         /// The legacy bridge predates the IL scanner and was the source of the intermittent
         /// "missing warnings" bug on Unity 2021. Enable it ONLY if you want the union of both
-        /// data sources — for example, to surface a regression in the IL byte-walker that is
+        /// data sources -- for example, to surface a regression in the IL byte-walker that is
         /// already correctly captured by the compile-time analyzer's console output.
         /// </para>
         /// <para>

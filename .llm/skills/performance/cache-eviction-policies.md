@@ -141,7 +141,7 @@ if (!cache.TryGet(playerId, out GameData data))
 | LFU    | Frequency matters    | Evicts least frequently accessed   |
 | SLRU   | Hot/cold data        | Protects frequently accessed items |
 | FIFO   | Time-based freshness | Evicts oldest regardless of access |
-| Random | Simple, uniform      | No tracking overhead               |
+| Random | Simple, uniform      | tracking overhead                  |
 
 ## Best Practices
 

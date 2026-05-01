@@ -10,7 +10,7 @@ namespace DxMessaging.Editor.Settings
     /// Project Settings provider for DxMessaging configuration.
     /// </summary>
     /// <remarks>
-    /// Exposes toggles for global diagnostics mode and message buffer size under Project Settings → DxMessaging.
+    /// Exposes toggles for global diagnostics mode and message buffer size under Project Settings > Wallstop Studios > DxMessaging.
     /// </remarks>
     public sealed class DxMessagingSettingsProvider : SettingsProvider
     {
@@ -41,53 +41,70 @@ namespace DxMessaging.Editor.Settings
         /// <param name="searchContext">Search text provided by the Project Settings window.</param>
         public override void OnGUI(string searchContext)
         {
-            SerializedProperty targetsProp = _messagingSettings.FindProperty(
-                nameof(DxMessagingSettings._diagnosticsTargets)
-            );
-            DiagnosticsTarget currentTargets = (DiagnosticsTarget)targetsProp.enumValueFlag;
-            DiagnosticsTarget updatedTargets = (DiagnosticsTarget)
-                EditorGUILayout.EnumFlagsField(
-                    new GUIContent(
-                        "Diagnostics Targets",
-                        "Select where global diagnostics should be enabled by default. Combine flags for multiple targets."
-                    ),
-                    currentTargets
-                );
-            if (updatedTargets != currentTargets)
+            float previousLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 240f;
+            try
             {
-                targetsProp.enumValueFlag = (int)updatedTargets;
-            }
-            EditorGUILayout.PropertyField(
-                _messagingSettings.FindProperty(nameof(DxMessagingSettings._messageBufferSize)),
-                new GUIContent(
-                    "Message Buffer Size",
-                    "Number of emissions kept per bus/token when diagnostics mode is active."
-                )
-            );
-            EditorGUILayout.PropertyField(
-                _messagingSettings.FindProperty(
-                    nameof(DxMessagingSettings._suppressDomainReloadWarning)
-                ),
-                new GUIContent(
-                    "Suppress Domain Reload Warning",
-                    "Disable the warning shown when Enter Play Mode Options skips domain reload; DxMessaging still resets its statics."
-                )
-            );
+                SerializedProperty targetsProp = _messagingSettings.FindProperty(
+                    nameof(DxMessagingSettings._diagnosticsTargets)
+                );
+                DiagnosticsTarget currentTargets = (DiagnosticsTarget)targetsProp.enumValueFlag;
+                DiagnosticsTarget updatedTargets = (DiagnosticsTarget)
+                    EditorGUILayout.EnumFlagsField(
+                        new GUIContent(
+                            "Diagnostics Targets",
+                            "Select where global diagnostics should be enabled by default. Combine flags for multiple targets."
+                        ),
+                        currentTargets
+                    );
+                if (updatedTargets != currentTargets)
+                {
+                    targetsProp.enumValueFlag = (int)updatedTargets;
+                }
+                EditorGUILayout.PropertyField(
+                    _messagingSettings.FindProperty(nameof(DxMessagingSettings._messageBufferSize)),
+                    new GUIContent(
+                        "Message Buffer Size",
+                        "Number of emissions kept per bus/token when diagnostics mode is active."
+                    )
+                );
+                EditorGUILayout.PropertyField(
+                    _messagingSettings.FindProperty(
+                        nameof(DxMessagingSettings._suppressDomainReloadWarning)
+                    ),
+                    new GUIContent(
+                        "Suppress Domain Reload Warning",
+                        "Disable the warning shown when Enter Play Mode Options skips domain reload; DxMessaging still resets its statics."
+                    )
+                );
 
-            _messagingSettings.ApplyModifiedProperties();
+                _messagingSettings.ApplyModifiedProperties();
+            }
+            finally
+            {
+                EditorGUIUtility.labelWidth = previousLabelWidth;
+            }
         }
 
-        [SettingsProvider]
         /// <summary>
         /// Factory used by Unity to register the DxMessaging project settings page.
         /// </summary>
         /// <returns>Configured settings provider instance.</returns>
+        [SettingsProvider]
         public static SettingsProvider CreateDxMessagingSettingsProvider()
         {
-            DxMessagingSettingsProvider provider = new("Project/DxMessaging")
+            DxMessagingSettingsProvider provider = new("Project/Wallstop Studios/DxMessaging")
             {
                 keywords = new HashSet<string>(
-                    new[] { "DxMessaging", "Diagnostics", "MessageBus", "Targets" }
+                    new[]
+                    {
+                        "DxMessaging",
+                        "Diagnostics",
+                        "MessageBus",
+                        "Targets",
+                        "Wallstop",
+                        "Wallstop Studios",
+                    }
                 ),
             };
 

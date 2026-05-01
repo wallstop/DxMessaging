@@ -3,7 +3,9 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 {
     using System;
     using System.Globalization;
+    using DxMessaging.Core;
     using DxMessaging.Tests.Runtime.Core;
+    using DxMessaging.Unity;
     using Scripts.Components;
     using UnityEngine;
     using Object = UnityEngine.Object;
@@ -78,18 +80,106 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 throw new ArgumentNullException(nameof(action));
             }
 
+            RunWithComponent((component, _) => action(component));
+        }
+
+        protected void RunWithComponent(
+            Action<EmptyMessageAwareComponent, MessageRegistrationToken> action
+        )
+        {
+            if (action == null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
             GameObject go = CreateBenchmarkGameObject();
+            MessageRegistrationToken token = null;
             try
             {
                 EmptyMessageAwareComponent component =
                     go.GetComponent<EmptyMessageAwareComponent>();
-                action(component);
+                if (component == null)
+                {
+                    throw new InvalidOperationException(
+                        "Benchmark GameObject was missing EmptyMessageAwareComponent."
+                    );
+                }
+
+                token = GetOrCreateEnabledToken(go, component);
+                PrepareBenchmarkGameObjectForSendMessage(go);
+                action(component, token);
             }
             finally
             {
+                token?.UnregisterAll();
                 _spawned.Remove(go);
-                Object.Destroy(go);
+                if (Application.isPlaying)
+                {
+                    Object.Destroy(go);
+                }
+                else
+                {
+                    Object.DestroyImmediate(go);
+                }
             }
+        }
+
+        private static MessageRegistrationToken GetOrCreateEnabledToken(
+            GameObject go,
+            EmptyMessageAwareComponent component
+        )
+        {
+            MessageRegistrationToken token = component.Token;
+            if (token == null)
+            {
+                MessagingComponent messagingComponent = go.GetComponent<MessagingComponent>();
+                if (messagingComponent == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Benchmark GameObject '{go.name}' is missing {nameof(MessagingComponent)}."
+                    );
+                }
+
+                token = messagingComponent.Create(component);
+                // Benchmarks register handlers explicitly per scenario, so they do not depend on
+                // MessageAwareComponent.RegisterMessageHandlers being invoked here.
+            }
+
+            if (!token.Enabled)
+            {
+                token.Enable();
+            }
+
+            return token;
+        }
+
+        protected static void PrepareBenchmarkGameObjectForSendMessage(GameObject target)
+        {
+            target.SetActive(true);
+
+            foreach (MonoBehaviour behaviour in target.GetComponents<MonoBehaviour>())
+            {
+                PrepareBenchmarkBehaviourForSendMessage(behaviour);
+            }
+        }
+
+        protected static void PrepareBenchmarkBehaviourForSendMessage(MonoBehaviour behaviour)
+        {
+            if (behaviour == null)
+            {
+                return;
+            }
+
+            behaviour.enabled = true;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                // EditMode SendMessage requires runnable behaviours, otherwise Unity logs
+                // repeated ShouldRunBehaviour assertions that fail benchmark tests.
+                behaviour.runInEditMode = true;
+            }
+#endif
         }
     }
 }

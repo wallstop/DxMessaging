@@ -234,7 +234,7 @@ public sealed class StringExtensionTests
 
 | Category    | Max Time | Description                 |
 | ----------- | -------- | --------------------------- |
-| Fast        | <100ms   | No I/O, no Unity lifecycle  |
+| Fast        | <100ms   | I/O, no Unity lifecycle     |
 | Slow        | <5s      | Unity objects, moderate I/O |
 | Integration | <30s     | External resources, network |
 

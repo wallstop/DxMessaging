@@ -30,10 +30,10 @@ This guide covers:
 
 Providers abstract away the details of how a message bus is resolved. This lets you:
 
-- **Swap buses at design time** — Change a ScriptableObject reference without modifying code
-- **Integrate with DI containers** — Resolve buses from your container
-- **Support runtime reconfiguration** — Change which bus a component uses dynamically
-- **Isolate scenes or features** — Use different buses for different parts of your game
+- **Swap buses at design time** -- Change a ScriptableObject reference without modifying code
+- **Integrate with DI containers** -- Resolve buses from your container
+- **Support runtime reconfiguration** -- Change which bus a component uses dynamically
+- **Isolate scenes or features** -- Use different buses for different parts of your game
 
 If you're using the default global bus everywhere, you probably don't need providers. They're most useful when you need flexibility or are integrating with DI frameworks.
 
@@ -175,7 +175,7 @@ IMessageBus bus = handle.ResolveBus();
 
 The handle has two fields:
 
-1. `Provider` — A serialized reference to a ScriptableObject provider (visible in Inspector)
+1. `Provider` -- A serialized reference to a ScriptableObject provider (visible in Inspector)
 1. A runtime provider instance (not serialized)
 
 When you call `TryGetProvider()` or `ResolveBus()`, it checks:
@@ -490,8 +490,8 @@ public class RuntimeReconfiguration : MonoBehaviour
 
 ## See Also
 
-- **[Runtime Configuration](runtime-configuration.md)** — Setting and overriding global buses, re-binding registrations
-- **[Registration Builders](registration-builders.md)** — Fluent API for building message registrations with priority and lifecycle control
-- **[DI Integration Guides](../integrations/index.md)** — Zenject, VContainer, and Reflex integration patterns
-- **[Unity Integration](../guides/unity-integration.md)** — MessagingComponent and MessageAwareComponent deep dive
-- **[Back to Documentation Hub](../getting-started/index.md)** — Browse all docs
+- **[Runtime Configuration](runtime-configuration.md)** -- Setting and overriding global buses, re-binding registrations
+- **[Registration Builders](registration-builders.md)** -- Fluent API for building message registrations with priority and lifecycle control
+- **[DI Integration Guides](../integrations/index.md)** -- Zenject, VContainer, and Reflex integration patterns
+- **[Unity Integration](../guides/unity-integration.md)** -- MessagingComponent and MessageAwareComponent deep dive
+- **[Back to Documentation Hub](../getting-started/index.md)** -- Browse all docs

@@ -74,7 +74,7 @@ status: "stable"
 
 ## Overview
 
-The `mkdocs.yml` file contains a `nav` section that defines the documentation site's navigation structure. When documentation files are added to the `docs/` directory but not added to the `nav` section, they become "orphaned"—the files exist but are not discoverable through the sidebar navigation.
+The `mkdocs.yml` file contains a `nav` section that defines the documentation site's navigation structure. When documentation files are added to the `docs/` directory but not added to the `nav` section, they become "orphaned" -- the files exist but are not discoverable through the sidebar navigation.
 
 This skill ensures that navigation stays synchronized with the actual documentation files.
 
@@ -115,7 +115,7 @@ nav:
 When a section has an `index.md` file, list it **without a title** to make the section header itself clickable:
 
 ```yaml
-# ✅ CORRECT: Section header is clickable, links to index.md
+#  CORRECT: Section header is clickable, links to index.md
 nav:
   - Getting Started:
       - getting-started/index.md # No title = clickable header
@@ -124,7 +124,7 @@ nav:
 ```
 
 ```yaml
-# ❌ WRONG: Section header is not clickable, index appears as separate item
+#  WRONG: Section header is not clickable, index appears as separate item
 nav:
   - Getting Started:
       - Overview: getting-started/index.md # Title makes it a separate item
@@ -210,7 +210,7 @@ done
 
 ## Anti-Patterns
 
-### ❌ Adding Files Without Nav Update
+### Adding Files Without Nav Update
 
 ```bash
 # Create new documentation
@@ -221,7 +221,7 @@ git commit -m "Add new feature docs"  # WRONG: mkdocs.yml not updated
 
 **Why it's wrong**: The page exists but users cannot navigate to it.
 
-### ❌ Incorrect Index Page Format
+### Incorrect Index Page Format
 
 ```yaml
 # WRONG: Index has a title, section header not clickable
@@ -233,7 +233,7 @@ nav:
 
 **Why it's wrong**: Users must click "Concepts Overview" to see the overview instead of clicking "Concepts" directly.
 
-### ❌ Random Page Order
+### Random Page Order
 
 ```yaml
 # WRONG: Advanced topic before basics

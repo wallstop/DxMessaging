@@ -169,6 +169,12 @@ function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSyn
         );
     };
 
+    const throwGitUnavailableError = (phase) => {
+        throw new Error(
+            `Unable to evaluate git ignore status for '${relativePath}': git executable was not found on PATH (${phase}).`
+        );
+    };
+
     try {
         runCheckIgnore(["check-ignore", "--quiet", "--no-index", "--", relativePath]);
         return true;
@@ -178,7 +184,7 @@ function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSyn
         }
 
         if (error && error.code === "ENOENT") {
-            return false;
+            throwGitUnavailableError("check-ignore --no-index");
         }
 
         if (isUnsupportedNoIndex(error)) {
@@ -195,7 +201,7 @@ function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSyn
                 }
 
                 if (fallbackError && fallbackError.code === "ENOENT") {
-                    return false;
+                    throwGitUnavailableError("check-ignore fallback");
                 }
 
                 const fallbackMessage =
@@ -882,10 +888,7 @@ function validateWorkflow(filePath, options = {}) {
     const violations = [];
     const repoRoot = options.repoRoot || REPO_ROOT;
     const isIgnoredPathFn = options.isIgnoredPathFn || isGitIgnoredPath;
-    const relativePath = path.relative(
-        path.join(__dirname, ".."),
-        filePath
-    );
+    const relativePath = path.relative(repoRoot, filePath).replace(/\\/g, "/");
 
     let content;
     try {

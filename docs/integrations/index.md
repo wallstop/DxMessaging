@@ -6,8 +6,8 @@ DxMessaging integrates seamlessly with popular Unity dependency injection (DI) f
 
 Use the best of both worlds:
 
-- **Constructor Injection** — for service dependencies (repositories, managers, configuration)
-- **Messaging** — for reactive events (damage taken, item collected, game state changes)
+- **Constructor Injection** -- for service dependencies (repositories, managers, configuration)
+- **Messaging** -- for reactive events (damage taken, item collected, game state changes)
 
 This combination provides:
 
@@ -48,19 +48,19 @@ Container.Singleton<IMessageBus>(MessageHandler.MessageBus);
 
 ## Choosing a Framework
 
-| Framework      | Best For                                     | Performance    |
-| -------------- | -------------------------------------------- | -------------- |
-| **VContainer** | Most projects, additive scenes               | ⭐⭐⭐ Fast    |
-| **Zenject**    | Complex projects, existing Zenject codebases | ⭐⭐ Good      |
-| **Reflex**     | Performance-critical, AOT platforms          | ⭐⭐⭐ Fastest |
+| Framework      | Best For                                     | Performance |
+| -------------- | -------------------------------------------- | ----------- |
+| **VContainer** | Most projects, additive scenes               | Fast        |
+| **Zenject**    | Complex projects, existing Zenject codebases | Good        |
+| **Reflex**     | Performance-critical, AOT platforms          | Fastest     |
 
 ## Common Patterns
 
 All frameworks support the same core patterns:
 
-1. **Global Bus** — Share `MessageHandler.MessageBus` across all systems
-1. **Scoped Bus** — Create per-scene buses for isolation
-1. **Builder Injection** — Inject `IMessageRegistrationBuilder` for flexible handler registration
-1. **Testable Design** — Mock `IMessageBus` in unit tests
+1. **Global Bus** -- Share `MessageHandler.MessageBus` across all systems
+1. **Scoped Bus** -- Create per-scene buses for isolation
+1. **Builder Injection** -- Inject `IMessageRegistrationBuilder` for flexible handler registration
+1. **Testable Design** -- Mock `IMessageBus` in unit tests
 
 See each framework's guide for detailed examples and best practices.

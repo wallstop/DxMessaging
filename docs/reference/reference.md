@@ -24,7 +24,7 @@ token.RemoveRegistration(handle);
 
 ### Untargeted Message Registration
 
-Register handlers for messages that have no specific target—system-wide events.
+Register handlers for messages that have no specific target -- system-wide events.
 
 ```csharp
 // Standard handler (allocation-friendly for simple cases)
@@ -329,7 +329,7 @@ public abstract class MessageAwareComponent : MessagingComponent
 }
 ```
 
-> ⚠️ **Warning: Inheritance Tip**
+> **Warning: Inheritance Tip**
 >
 > If you override any lifecycle hooks (`Awake`, `OnDestroy`, `OnEnable`, `OnDisable`) or `RegisterMessageHandlers`, always call the base method:
 >

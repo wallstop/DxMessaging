@@ -6,16 +6,16 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 
 ### Don't do this
 
-- L Rip out all C# events and rewrite everything
-- L Force the whole team to learn it before trying it
-- L Commit to full adoption before seeing benefits
+- Rip out all C# events and rewrite everything
+- Force the whole team to learn it before trying it
+- Commit to full adoption before seeing benefits
 
 #### Do this instead
 
--  Pick ONE system to migrate (low risk, high visibility)
--  Let old and new approaches coexist
--  Expand usage as team comfort grows
--  Evaluate after each migration step
+- Pick ONE system to migrate (low risk, high visibility)
+- Let old and new approaches coexist
+- Expand usage as team comfort grows
+- Evaluate after each migration step
 
 ## Phase 0: Install and Experiment (1-2 hours)
 
@@ -52,9 +52,9 @@ This guide helps you introduce DxMessaging into an existing Unity project **grad
 
 #### Best candidates for first adoption
 
--  **New UI system** - Add a new settings menu that reacts to game state
--  **Achievement/analytics system** - Listen to existing events without coupling
--  **New game mode** - Implement it with DxMessaging from scratch
+- **New UI system** - Add a new settings menu that reacts to game state
+- **Achievement/analytics system** - Listen to existing events without coupling
+- **New game mode** - Implement it with DxMessaging from scratch
 
 ### Example: Adding an Achievement System
 
@@ -96,10 +96,10 @@ public class Enemy : MonoBehaviour {
 
 #### Why this works
 
--  Old code still works (zero risk)
--  New system is decoupled
--  Team sees immediate value (achievements without wiring)
--  Easy to roll back if needed
+- Old code still works (zero risk)
+- New system is decoupled
+- Team sees immediate value (achievements without wiring)
+- Easy to roll back if needed
 
 ## Phase 2: Migrate High-Pain Areas (2-4 weeks)
 
@@ -189,23 +189,23 @@ System: _________________
 
 #### Team guidelines
 
--  All new cross-system communication uses DxMessaging
--  Old code migrates opportunistically (when touched)
--  Code reviews check for messaging best practices
+- All new cross-system communication uses DxMessaging
+- Old code migrates opportunistically (when touched)
+- Code reviews check for messaging best practices
 
 ##### Example team policy
 
 ```text
 When to use DxMessaging (for new code):
-- Any UI listening to game state � DxMessaging
-- Any analytics/logging � DxMessaging
-- Any cross-scene communication � DxMessaging
-- Any event with 2+ listeners � DxMessaging
+- Any UI listening to game state -> DxMessaging
+- Any analytics/logging -> DxMessaging
+- Any cross-scene communication -> DxMessaging
+- Any event with 2+ listeners -> DxMessaging
 
 When to use direct references/events:
-- Simple UI button � method call (use UnityEvents)
-- Single listener, same GameObject � direct reference
-- Private implementation details � keep internal
+- Simple UI button -> method call (use UnityEvents)
+- Single listener, same GameObject -> direct reference
+- Private implementation details -> keep internal
 ```
 
 ## Coexistence Patterns
@@ -260,7 +260,7 @@ public class Player : MonoBehaviour {
 
 // Phase 2: Remove direct references
 public class Player : MonoBehaviour {
-    // [SerializeField] private HealthBar healthBar; � DELETED
+    // [SerializeField] private HealthBar healthBar; -> DELETED
 
     void TakeDamage(int amount) {
         health -= amount;
@@ -288,7 +288,7 @@ public class Player : MonoBehaviour {
 
 ### DON'T Migrate (Keep As-Is)
 
-1. **Simple button onClick � method** - UnityEvents are fine
+1. **Simple button onClick -> method** - UnityEvents are fine
 1. **Private implementation details** - Internal events are okay
 1. **Single-listener, same-GameObject** - Direct references are clearer
 1. **Legacy systems about to be deleted** - Why bother?
@@ -369,8 +369,8 @@ Track these to validate migration is worthwhile:
 
 ##### Example
 
-> "Before: Adding achievement tracking required touching 12 files.
-> After: Added achievement system with zero changes to existing code."
+to "Before: Adding achievement tracking required touching 12 files.
+to After: Added achievement system with zero changes to existing code."
 
 ## Timeline Examples
 

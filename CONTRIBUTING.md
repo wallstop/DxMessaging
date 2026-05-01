@@ -27,7 +27,7 @@ node scripts/fix-eol.js
 
 This directly converts files in your working directory to the correct line endings. Add `-v` for verbose output showing each file fixed.
 
-> **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area)—it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
+> **Note:** You may see references to `git add --renormalize`, but that command only updates the git index (staging area) -- it does **not** modify your working tree files. Use `fix-eol.js` to actually fix files on disk.
 
 ## VS Code Security Policy
 
@@ -68,6 +68,15 @@ If `npm run check:yaml` reports a YAML line-length failure:
 - Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
 - Run pre-commit Node preflight: `npm run preflight:pre-commit`
 - Validate NPM package: `npm run validate:npm-meta`
+
+## Documentation Style and Code Samples
+
+Two strict rules apply to all documentation (Markdown files and `///` XML doc comments) and to every C# code sample:
+
+1. **ASCII-only.** Pure ASCII is required. Real Unicode emojis are allowed only on callout lines (lines starting with `>`), capped at five per file. See [.llm/skills/documentation/ascii-only-docs.md](./.llm/skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` (or `node scripts/normalize-docs-ascii.js` to auto-fix).
+1. **Code samples must compile.** Every C# snippet - inline backticks, fenced blocks, table cells, and XML `<code>` blocks - must compile against the snippet harness. See [.llm/skills/documentation/code-samples-must-compile.md](./.llm/skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite under `SourceGenerators/`.
+
+Both rules are enforced by pre-commit hooks (`validate-docs-ascii`, `validate-doc-code-patterns`) and the `.github/workflows/docs-lint.yml` CI job.
 
 ## NPM Package Validation
 

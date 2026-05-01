@@ -17,8 +17,8 @@ namespace DxMessaging.Editor.Analyzers
     /// <para>
     /// <b>Why IL reflection?</b> Unity's <c>CompilationPipeline.assemblyCompilationFinished</c> and
     /// the <c>LogEntries</c> console store are both downstream of Unity's decision to actually
-    /// surface analyzer warnings. On Bee/csc cache hits — which happen on most domain reloads
-    /// after the first — Unity skips that surface entirely, so the scrape returns nothing even
+    /// surface analyzer warnings. On Bee/csc cache hits -- which happen on most domain reloads
+    /// after the first -- Unity skips that surface entirely, so the scrape returns nothing even
     /// though the analyzer ran successfully on the first compile. By contrast, IL reflection over
     /// loaded types is deterministic: the assemblies are in the AppDomain, the methods have IL
     /// bodies, the same scan produces the same result on every reload regardless of whether the
@@ -27,16 +27,16 @@ namespace DxMessaging.Editor.Analyzers
     /// <para>
     /// <b>What it detects:</b>
     /// <list type="bullet">
-    /// <item><description>DXMSG006 — overrides one of the five guarded methods but the IL body
+    /// <item><description>DXMSG006 -- overrides one of the five guarded methods but the IL body
     /// lacks a <c>call</c>/<c>callvirt</c> to the parent's same-named method.</description></item>
-    /// <item><description>DXMSG007 — declares the method with the <c>new</c> modifier (IL: name
+    /// <item><description>DXMSG007 -- declares the method with the <c>new</c> modifier (IL: name
     /// shadows a base virtual but the descendant method itself is not in an override slot).</description></item>
-    /// <item><description>DXMSG009 — declares the method without override or new — same IL shape
+    /// <item><description>DXMSG009 -- declares the method without override or new -- same IL shape
     /// as DXMSG007 (both compile to a non-virtual hide-by-sig method). The scanner cannot
     /// distinguish the two perfectly from IL alone, so it conservatively classifies this case as
     /// DXMSG007. The compile-time analyzer is authoritative for the precise ID classification;
     /// the scanner's job is just to make sure the inspector overlay lights up.</description></item>
-    /// <item><description>DXMSG010 — overrides correctly (calls base) but an intermediate
+    /// <item><description>DXMSG010 -- overrides correctly (calls base) but an intermediate
     /// ancestor's override in the chain does NOT call base. Walks parent-by-parent and re-runs the
     /// IL check at every link until the chain terminates at <see cref="MessageAwareComponent"/>
     /// or hits a broken link.</description></item>
@@ -44,7 +44,7 @@ namespace DxMessaging.Editor.Analyzers
     /// </para>
     /// <para>
     /// <b>Cross-assembly assume-clean:</b> ancestors whose IL is unavailable
-    /// (<see cref="System.Reflection.MethodBase.GetMethodBody"/> returns null — e.g., abstract or
+    /// (<see cref="System.Reflection.MethodBase.GetMethodBody"/> returns null -- e.g., abstract or
     /// extern methods) are trusted. Emitting an unactionable warning against a closed-source
     /// third-party library would be hostile.
     /// </para>
@@ -65,7 +65,7 @@ namespace DxMessaging.Editor.Analyzers
         /// </summary>
         /// <remarks>
         /// Types opted out via <c>[DxIgnoreMissingBaseCall]</c> or via the project's ignored-types
-        /// list are intentionally NOT included in the returned dictionary — the overlay reads the
+        /// list are intentionally NOT included in the returned dictionary -- the overlay reads the
         /// project ignore list directly to render its "Stop ignoring" HelpBox, and the snapshot
         /// semantics here match the bridge path (DXMSG008-equivalent rows were never present in
         /// the snapshot's <c>missingBaseFor</c> either).

@@ -1,6 +1,6 @@
 # DxMessaging Patterns: Real-World Solutions
 
-[← Back to Index](../getting-started/index.md) | [Getting Started](../getting-started/getting-started.md) | [Message Types](../concepts/message-types.md) | [Samples](https://github.com/wallstop/DxMessaging/tree/master/Samples~)
+[Back to Index](../getting-started/index.md) | [Getting Started](../getting-started/getting-started.md) | [Message Types](../concepts/message-types.md) | [Samples](https://github.com/wallstop/DxMessaging/tree/master/Samples~)
 
 ---
 
@@ -83,7 +83,7 @@
 ### Important: Inheritance with MessageAwareComponent
 
 - Many examples derive from `MessageAwareComponent`. **When overriding hooks, you MUST call the base method.**
-- **Always call `base.RegisterMessageHandlers()` FIRST** in your override to preserve default string‑message registrations and parent class registrations.
+- **Always call `base.RegisterMessageHandlers()` FIRST** in your override to preserve default string-message registrations and parent class registrations.
 - **CRITICAL**: Call `base.OnEnable()` / `base.OnDisable()` if you override lifecycle methods; otherwise your token may never enable/disable.
 - **CRITICAL**: Call `base.Awake()` if you override `Awake()`; otherwise your token won't be created.
 - To opt out of string demos, override `RegisterForStringMessages => false` instead of skipping the base call.
@@ -91,7 +91,7 @@
 
 Registration timing (pit of success)
 
-- **Prefer `Awake()` for all message handler registration**—this is when `MessageAwareComponent` calls `RegisterMessageHandlers()`.
+- **Prefer `Awake()` for all message handler registration** -- this is when `MessageAwareComponent` calls `RegisterMessageHandlers()`.
 - Avoid registering in `Start()` unless you have a specific order-of-execution reason.
 - Early registration in `Awake()` ensures your handlers are ready before other components' `Start()` methods run.
 
@@ -183,7 +183,7 @@ _ = token.RegisterBroadcastInterceptor<TookDamage>((ref InstanceId source, ref T
 
 ## 5) Analytics/Logging (Post-Processors)
 
-Post-processors run after handlers—ideal for metrics.
+Post-processors run after handlers -- ideal for metrics.
 
 ```csharp
 _ = token.RegisterUntargetedPostProcessor<SceneLoaded>((ref SceneLoaded m) => Metrics.TrackScene(m.buildIndex));
@@ -205,15 +205,15 @@ var token = MessageRegistrationToken.Create(handler, localBus);
 
 - **Stage registrations in `Awake()`** (preferred) or `Start()` (only if order-dependent).
 - Call `token.Enable()` in `OnEnable` and `token.Disable()` in `OnDisable`.
-- Use `MessageAwareComponent` to avoid boilerplate—it handles all of this automatically.
+- Use `MessageAwareComponent` to avoid boilerplate -- it handles all of this automatically.
 
 Why Awake over Start?
 
 - `Awake()` runs before any `Start()` methods, ensuring your handlers are ready early.
-- Other components may emit messages in their `Start()` methods—registering in `Awake()` ensures you don't miss them.
+- Other components may emit messages in their `Start()` methods -- registering in `Awake()` ensures you don't miss them.
 - `MessageAwareComponent` automatically calls `RegisterMessageHandlers()` in `Awake()`, following this best practice.
 
-Side‑by‑side: lifecycle
+Side-by-side: lifecycle
 
 Before
 
@@ -257,9 +257,9 @@ _ = token.RegisterGlobalAcceptAll(
     (ref InstanceId source, ref IBroadcastMessage m) => Debug.Log($"Broadcast {m.MessageType} from {source}")
 );
 
-Do’s
+Do's
 
-- Use global accept‑all in tooling and debug inspectors.
+- Use global accept-all in tooling and debug inspectors.
 - Prefer specific registrations for gameplay code to avoid surprises.
 ```
 
@@ -267,7 +267,7 @@ Do’s
 
 - Enable `IMessageBus.GlobalDiagnosticsMode` in Editor or per-token.
 - Adjust `IMessageBus.GlobalMessageBufferSize` for deeper history (Editor settings UI provided).
-- Wire `MessagingDebug.LogFunction` to Unity’s console to see warnings/errors.
+- Wire `MessagingDebug.LogFunction` to Unity's console to see warnings/errors.
 
 ## 12) Testing
 
@@ -341,10 +341,10 @@ public class CombatAnalytics : MessageAwareComponent {
 
 #### Scale characteristics
 
-- ✅ Each entity broadcasts ~10-50 messages/second → No GC allocations (struct messages)
-- ✅ Targeted listeners (health bars) only receive relevant messages → O(1) lookup
-- ✅ Global listeners (analytics) receive all messages → Single handler, not N handlers
-- ✅ Adding/removing entities doesn't break registrations (no manual wiring)
+- [x] Each entity broadcasts ~10-50 messages/second -> No GC allocations (struct messages)
+- [x] Targeted listeners (health bars) only receive relevant messages -> O(1) lookup
+- [x] Global listeners (analytics) receive all messages -> Single handler, not N handlers
+- [x] Adding/removing entities doesn't break registrations (no manual wiring)
 
 ##### Performance notes
 
@@ -463,20 +463,20 @@ public class PlayerStats : MonoBehaviour {
 
 #### Benefits at scale
 
-- ✅ Add/remove panels without touching game logic
-- ✅ Panels can be enabled/disabled freely (tokens handle lifecycle)
-- ✅ Easy to add "observer panels" (e.g., debug overlays) without modifying existing code
+- [x] Add/remove panels without touching game logic
+- [x] Panels can be enabled/disabled freely (tokens handle lifecycle)
+- [x] Easy to add "observer panels" (e.g., debug overlays) without modifying existing code
 
 ##### Anti-pattern to avoid
 
 ```csharp
-// ❌ DON'T: Separate message per UI element (too granular)
+//  DON'T: Separate message per UI element (too granular)
 [DxUntargetedMessage] public struct HealthChanged { public int health; }
 [DxUntargetedMessage] public struct ManaChanged { public int mana; }
 [DxUntargetedMessage] public struct GoldChanged { public int gold; }
 // This creates 3x message traffic and registration overhead
 
-// ✅ DO: Batch related updates into one message
+//  DO: Batch related updates into one message
 [DxUntargetedMessage] public struct PlayerStatsChanged {
     public int health;
     public int mana;
@@ -625,14 +625,14 @@ IMessageBus.GlobalDiagnosticsMode = false; // Production builds
 #### Optimization 2: Use Specific Registrations Over GlobalAcceptAll
 
 ```csharp
-// ❌ SLOW: Receives ALL messages, even irrelevant ones
+//  SLOW: Receives ALL messages, even irrelevant ones
 _ = Token.RegisterGlobalAcceptAll(
     (ref IUntargetedMessage m) => { /* called for every untargeted */ },
     (ref InstanceId t, ref ITargetedMessage m) => { /* called for every targeted */ },
     (ref InstanceId s, ref IBroadcastMessage m) => { /* called for every broadcast */ }
 );
 
-// ✅ FAST: Only receives relevant messages
+//  FAST: Only receives relevant messages
 _ = Token.RegisterBroadcastWithoutSource<EntityDamaged>(OnDamage);
 _ = Token.RegisterUntargeted<LevelCompleted>(OnLevelComplete);
 ```
@@ -642,14 +642,14 @@ _ = Token.RegisterUntargeted<LevelCompleted>(OnLevelComplete);
 #### Optimization 3: Batch Message Emissions
 
 ```csharp
-// ❌ WASTEFUL: Emit after every tiny change
+//  WASTEFUL: Emit after every tiny change
 void TakeDamage(int amount) {
     health -= amount;
     var msg = new HealthChanged(health);
     msg.Emit(); // Emits every frame
 }
 
-// ✅ EFFICIENT: Batch updates, emit once per frame
+//  EFFICIENT: Batch updates, emit once per frame
 private bool healthDirty = false;
 
 void TakeDamage(int amount) {
@@ -762,7 +762,7 @@ public class MatchStats : MessageAwareComponent {
 - Kill feed UI: 1 registration, receives ALL kills (~5 messages/sec)
 - Match stats: Post-processor, doesn't affect gameplay latency
 
-**Total:** ~100 players × 10 damage/sec = 1000 messages/sec. DxMessaging handles this with negligible overhead (~0.06ms/frame).
+**Total:** ~100 players x 10 damage/sec = 1000 messages/sec. DxMessaging handles this with negligible overhead (~0.06ms/frame).
 
 ---
 
@@ -817,27 +817,27 @@ Use ScriptableObjects for their intended purpose: **immutable design-time data**
 
 **Yes, but with caveats.** DxMessaging and SOA solve similar problems (decoupling, communication) with different philosophies:
 
-| Aspect               | SOA                                                                                 | DxMessaging                               |
-| -------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
-| **Paradigm**         | Asset-based, persistent state                                                       | Runtime message passing, transient        |
-| **Designer-Centric** | ✅ High (create events in Inspector)                                                | ❌ Low (code-driven)                      |
-| **Type Safety**      | ⚠️ Mixed (SO refs typed, but UnityEvent inspector wiring loses compile-time safety) | ✅ Strong (compile-time validation)       |
-| **Lifecycle**        | ⚠️ Manual (SO assets persist)                                                       | ✅ Automatic (tokens clean up)            |
-| **Debugging**        | ⚠️ Inspector-dependent                                                              | ✅ Built-in diagnostics                   |
-| **Performance**      | ⚠️ List iteration, UnityAction overhead                                             | ✅ Zero-allocation structs                |
-| **Use Case**         | Shared state, designer-driven configs                                               | Event-driven communication, runtime logic |
-| **Testability**      | ⚠️ Requires SO asset cleanup                                                        | ✅ Isolated buses per test                |
+| Aspect               | SOA                                                                              | DxMessaging                               |
+| -------------------- | -------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Paradigm**         | Asset-based, persistent state                                                    | Runtime message passing, transient        |
+| **Designer-Centric** | High (create events in Inspector)                                                | Low (code-driven)                         |
+| **Type Safety**      | Mixed (SO refs typed, but UnityEvent inspector wiring loses compile-time safety) | Strong (compile-time validation)          |
+| **Lifecycle**        | Manual (SO assets persist)                                                       | Automatic (tokens clean up)               |
+| **Debugging**        | Inspector-dependent                                                              | Built-in diagnostics                      |
+| **Performance**      | List iteration, UnityAction overhead                                             | Zero-allocation structs                   |
+| **Use Case**         | Shared state, designer-driven configs                                            | Event-driven communication, runtime logic |
+| **Testability**      | Requires SO asset cleanup                                                        | Isolated buses per test                   |
 
 **Summary:** For new projects, evaluate DxMessaging, DI frameworks, or other messaging approaches based on your needs. If you have existing SOA code, the patterns below show coexistence strategies.
 
 ### Pattern Overview
 
-| Pattern | What it shows                                          | When to use                                           | SOA involvement              |
-| ------- | ------------------------------------------------------ | ----------------------------------------------------- | ---------------------------- |
-| **A**   | SOA Events (GameEvent) forwarding to DxMessaging       | Designer-created event assets, modern code downstream | ✅ Yes - SOA Event pattern   |
-| **B**   | ScriptableObjects for configs + DxMessaging for events | New projects / best practice                          | ❌ No - proper SO usage only |
+| Pattern | What it shows                                          | When to use                                           | SOA involvement           |
+| ------- | ------------------------------------------------------ | ----------------------------------------------------- | ------------------------- |
+| **A**   | SOA Events (GameEvent) forwarding to DxMessaging       | Designer-created event assets, modern code downstream | Yes - SOA Event pattern   |
+| **B**   | ScriptableObjects for configs + DxMessaging for events | New projects / best practice                          | No - proper SO usage only |
 
-### Pattern A: SOA → DxMessaging (Event Forwarding)
+### Pattern A: SOA -> DxMessaging (Event Forwarding)
 
 **Use case:** Designer-created SOA events, but you want DxMessaging benefits downstream.
 
@@ -876,7 +876,7 @@ public class GameEvent : ScriptableObject
 [DxUntargetedMessage]
 public readonly partial struct SceneTransitionRequested { }
 
-// Bridge: SOA Event → DxMessaging
+// Bridge: SOA Event -> DxMessaging
 public class SOAEventBridge : MonoBehaviour
 {
     [SerializeField] private GameEvent onSceneTransitionSO; // Designer-created asset
@@ -917,13 +917,13 @@ public class AudioSystem : MessageAwareComponent
 
 ##### Benefits
 
-- ✅ Designers create events in Inspector (SOA workflow preserved)
-- ✅ Code uses DxMessaging (type-safe, lifecycle-safe)
+- [x] Designers create events in Inspector (SOA workflow preserved)
+- [x] Code uses DxMessaging (type-safe, lifecycle-safe)
 
 ###### Drawbacks
 
-- ⚠️ Bridge boilerplate for each SOA event
-- ⚠️ Double registration (SOA listener + DxMessaging handler)
+- Bridge boilerplate for each SOA event
+- Double registration (SOA listener + DxMessaging handler)
 
 ### Pattern B: Proper ScriptableObject Usage (Recommended)
 
@@ -994,10 +994,10 @@ public class CombatAnalytics : MessageAwareComponent
 
 ##### Benefits
 
-- ✅ **Best of both worlds** - ScriptableObjects for static configs, DxMessaging for runtime events
-- ✅ No bridging overhead
-- ✅ Uses each system correctly: SOs for their intended purpose (immutable design data), messaging for runtime communication
-- ✅ This is NOT SOA - it's proper Unity architecture
+- [x] **Best of both worlds** - ScriptableObjects for static configs, DxMessaging for runtime events
+- [x] No bridging overhead
+- [x] Uses each system correctly: SOs for their intended purpose (immutable design data), messaging for runtime communication
+- [x] This is NOT SOA - it's proper Unity architecture
 
 ###### This pattern separates concerns clearly
 
@@ -1005,11 +1005,11 @@ public class CombatAnalytics : MessageAwareComponent
 
 | Pattern                     | Use When                                                | Complexity | Performance |
 | --------------------------- | ------------------------------------------------------- | ---------- | ----------- |
-| **A: SOA → DxMessaging**    | Designers create SOA events, modern code uses messaging | Medium     | ⚠️ Medium   |
-| **B: Proper SO Usage**      | Immutable configs only, messaging for events            | Low        | ✅ Good     |
-| **None (Pure DxMessaging)** | Greenfield project or full SOA migration                | Lowest     | ✅ Best     |
+| **A: SOA -> DxMessaging**   | Designers create SOA events, modern code uses messaging | Medium     | Medium      |
+| **B: Proper SO Usage**      | Immutable configs only, messaging for events            | Low        | Good        |
+| **None (Pure DxMessaging)** | Greenfield project or full SOA migration                | Lowest     | Best        |
 
-### Migration Path: SOA → DxMessaging
+### Migration Path: SOA -> DxMessaging
 
 If you're moving away from SOA:
 
@@ -1021,27 +1021,27 @@ If you're moving away from SOA:
 
 For SOA variables:
 
-1. Convert read-only SO configs → Keep as-is (correct SO usage) or move to JSON/ScriptableObjects for data
-1. Convert mutable SO variables → DxMessaging messages or DI-injected services
-1. Convert RuntimeSets → DxMessaging global observers (`RegisterBroadcastWithoutSource`)
+1. Convert read-only SO configs -> Keep as-is (correct SO usage) or move to JSON/ScriptableObjects for data
+1. Convert mutable SO variables -> DxMessaging messages or DI-injected services
+1. Convert RuntimeSets -> DxMessaging global observers (`RegisterBroadcastWithoutSource`)
 
 ### Final Recommendations
 
 #### If you're using SOA
 
-- ✅ **Do:** Use Pattern B (Proper SO Usage) - SOs for immutable configs ONLY, DxMessaging for runtime events
-- ✅ **Do:** Use Pattern A to bridge existing SOA GameEvent assets to DxMessaging during migration
-- ✅ **Do:** Read [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) to understand risks
-- ✅ **Do:** Consider gradual migration to DxMessaging or DI frameworks
-- ❌ **Don't:** Use SOs for mutable runtime state (health, scores, etc.)
-- ❌ **Don't:** Create new SOA event assets—use DxMessaging messages instead
+- [x] **Do:** Use Pattern B (Proper SO Usage) - SOs for immutable configs ONLY, DxMessaging for runtime events
+- [x] **Do:** Use Pattern A to bridge existing SOA GameEvent assets to DxMessaging during migration
+- [x] **Do:** Read [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) to understand risks
+- [x] **Do:** Consider gradual migration to DxMessaging or DI frameworks
+- [ ] **Don't:** Use SOs for mutable runtime state (health, scores, etc.)
+- [ ] **Don't:** Create new SOA event assets -- use DxMessaging messages instead
 
 ##### If you're starting fresh
 
-- ✅ **Do:** Use DxMessaging for all messaging/events
-- ✅ **Do:** Use ScriptableObjects ONLY for immutable design data (weapon stats, level configs)
-- ✅ **Do:** Consider DI frameworks (Zenject/VContainer) for service dependencies
-- ❌ **Don't:** Adopt SOA's GameEvent/Variable patterns—they're superseded by better tools
+- [x] **Do:** Use DxMessaging for all messaging/events
+- [x] **Do:** Use ScriptableObjects ONLY for immutable design data (weapon stats, level configs)
+- [x] **Do:** Consider DI frameworks (Zenject/VContainer) for service dependencies
+- [ ] **Don't:** Adopt SOA's GameEvent/Variable patterns -- they're superseded by better tools
 
 ###### Resources
 
@@ -1058,23 +1058,23 @@ For SOA variables:
 
 ### Learn the Basics First?
 
-- → [Getting Started](../getting-started/getting-started.md) (10 min) — Complete introduction
-- → [Message Types](../concepts/message-types.md) (10 min) — When to use what
-- → [Visual Guide](../getting-started/visual-guide.md) (5 min) — Beginner-friendly pictures
+- to [Getting Started](../getting-started/getting-started.md) (10 min) -- Complete introduction
+- to [Message Types](../concepts/message-types.md) (10 min) -- When to use what
+- to [Visual Guide](../getting-started/visual-guide.md) (5 min) -- Beginner-friendly pictures
 
 ### Try Real Examples
 
-- → [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) — Working combat example
-- → [UI Buttons + Inspector sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md) — Interactive diagnostics
-- → [End-to-End Example](../examples/end-to-end.md) — Complete feature walkthrough
+- to [Mini Combat sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md) -- Working combat example
+- to [UI Buttons + Inspector sample](https://github.com/wallstop/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md) -- Interactive diagnostics
+- to [End-to-End Example](../examples/end-to-end.md) -- Complete feature walkthrough
 
 ### Deep Dives
 
-- → [Interceptors & Ordering](../concepts/interceptors-and-ordering.md) — Control execution flow
-- → [Design & Architecture](../architecture/design-and-architecture.md) — Internals and optimizations
-- → [Performance](../architecture/performance.md) — Benchmarks and tuning
+- to [Interceptors & Ordering](../concepts/interceptors-and-ordering.md) -- Control execution flow
+- to [Design & Architecture](../architecture/design-and-architecture.md) -- Internals and optimizations
+- to [Performance](../architecture/performance.md) -- Benchmarks and tuning
 
 ### Reference
 
-- → [Quick Reference](../reference/quick-reference.md) — Cheat sheet
-- → [API Reference](../reference/reference.md) — Complete API
+- to [Quick Reference](../reference/quick-reference.md) -- Cheat sheet
+- to [API Reference](../reference/reference.md) -- Complete API

@@ -91,7 +91,7 @@ Fragment links can break silently or cause CI failures:
 
 1. **Navigate to the exact URL**: Open `https://example.com/page#fragment` in a browser
 1. **Verify scroll position**: Confirm the page scrolls to the expected section
-1. **Inspect the heading ID**: Right-click the heading → Inspect → Check the `id` attribute
+1. **Inspect the heading ID**: Right-click the heading -> Inspect -> Check the `id` attribute
 1. **Test with link checker**: Run `lychee --include-fragments "URL"` locally
 
 ### Fragment ID Discovery
@@ -100,14 +100,14 @@ Different sites generate fragment IDs differently:
 
 ```bash
 # GitHub generates IDs from heading text (lowercase, hyphens for spaces)
-## Getting Started → #getting-started
+## Getting Started -> #getting-started
 
 # Some sites use custom IDs
-<h2 id="quick-start">Getting Started</h2> → #quick-start
+<h2 id="quick-start">Getting Started</h2> -> #quick-start
 
 # Duplicate headings get suffixes
-## Links → #links
-## Links → #links-1  (second occurrence)
+## Links -> #links
+## Links -> #links-1  (second occurrence)
 ```
 
 ### Best Practices for Fragment URLs
@@ -130,13 +130,13 @@ See [here](https://www.markdownguide.org/basic-syntax/).
 
 ### Common Fragment Patterns by Site
 
-| Site            | ID Generation Pattern                                    |
-| --------------- | -------------------------------------------------------- |
-| GitHub          | Lowercase, spaces → hyphens, special chars removed       |
-| Unity Docs      | Custom IDs, often different from heading text            |
-| Microsoft Learn | Lowercase, spaces → hyphens, may include section numbers |
-| MDN Web Docs    | Lowercase, underscores for spaces                        |
-| Stack Overflow  | Numeric IDs for answers, text for sections               |
+| Site            | ID Generation Pattern                                     |
+| --------------- | --------------------------------------------------------- |
+| GitHub          | Lowercase, spaces -> hyphens, special chars removed       |
+| Unity Docs      | Custom IDs, often different from heading text             |
+| Microsoft Learn | Lowercase, spaces -> hyphens, may include section numbers |
+| MDN Web Docs    | Lowercase, underscores for spaces                         |
+| Stack Overflow  | Numeric IDs for answers, text for sections                |
 
 ### Automated Validation
 

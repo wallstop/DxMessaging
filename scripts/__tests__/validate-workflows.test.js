@@ -312,6 +312,49 @@ describe("isGitIgnoredPath", () => {
 
         expect(ignored).toBe(false);
     });
+
+    test("throws when git binary is unavailable for --no-index check", () => {
+        const missingGitError = new Error("git is not installed");
+        missingGitError.code = "ENOENT";
+
+        const execFileSyncMock = jest.fn().mockImplementationOnce(() => {
+            throw missingGitError;
+        });
+
+        expect(() =>
+            isGitIgnoredPath(
+                "/repo",
+                "package-lock.json",
+                execFileSyncMock
+            )
+        ).toThrow(/git executable was not found on PATH/i);
+    });
+
+    test("throws when fallback check-ignore cannot execute due to missing git", () => {
+        const unsupportedNoIndexError = new Error("unknown option");
+        unsupportedNoIndexError.status = 129;
+        unsupportedNoIndexError.stderr = "error: unknown option `no-index`";
+
+        const missingGitError = new Error("git is not installed");
+        missingGitError.code = "ENOENT";
+
+        const execFileSyncMock = jest
+            .fn()
+            .mockImplementationOnce(() => {
+                throw unsupportedNoIndexError;
+            })
+            .mockImplementationOnce(() => {
+                throw missingGitError;
+            });
+
+        expect(() =>
+            isGitIgnoredPath(
+                "/repo",
+                "package-lock.json",
+                execFileSyncMock
+            )
+        ).toThrow(/check-ignore fallback/i);
+    });
 });
 
 describe("run block lockfile policy", () => {
@@ -805,6 +848,42 @@ describe("validateWorkflow policy integration", () => {
             expect(
                 violations.some((violation) =>
                     violation.message.includes("Workflow validation failed while evaluating ignore policy")
+                )
+            ).toBe(true);
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    test("uses provided repoRoot when reporting violation file paths", () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-repo-root-"));
+        try {
+            const workflowDir = path.join(tempDir, ".github", "workflows");
+            fs.mkdirSync(workflowDir, { recursive: true });
+
+            const workflowPath = path.join(workflowDir, "relative-path.yml");
+            fs.writeFileSync(
+                workflowPath,
+                [
+                    "name: Relative Path",
+                    "jobs:",
+                    "  lint:",
+                    "    runs-on: ubuntu-latest",
+                    "    steps:",
+                    "      - run: git add --renormalize -- '*.md' '*.json'",
+                ].join("\n"),
+                "utf8"
+            );
+
+            const violations = validateWorkflow(workflowPath, {
+                repoRoot: tempDir,
+                isIgnoredPathFn: () => false,
+            });
+
+            expect(violations.length).toBeGreaterThan(0);
+            expect(
+                violations.every((violation) =>
+                    violation.file === ".github/workflows/relative-path.yml"
                 )
             ).toBe(true);
         } finally {

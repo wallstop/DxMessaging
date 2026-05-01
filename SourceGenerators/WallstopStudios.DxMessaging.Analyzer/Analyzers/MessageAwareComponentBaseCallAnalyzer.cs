@@ -464,11 +464,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
         /// <summary>
         /// Good-faith textual base-call detector. Returns <c>true</c> when any
         /// <c>InvocationExpressionSyntax</c> anywhere inside <paramref name="method"/>'s body
-        /// targets <c>base.&lt;methodName&gt;(...)</c> — including invocations nested inside
+        /// targets <c>base.&lt;methodName&gt;(...)</c> -- including invocations nested inside
         /// lambdas or local functions (<c>DescendantNodes()</c> walks both).
         /// </summary>
         /// <remarks>
-        /// We deliberately do NOT analyze reachability or data-flow — a single textual
+        /// We deliberately do NOT analyze reachability or data-flow -- a single textual
         /// <c>base.X()</c> call is treated as compliant. The known false-positive shape
         /// (helper-indirection: an override that delegates to a private method that itself
         /// calls <c>base.X()</c>) is documented and tested; users can suppress those with
@@ -532,7 +532,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
         /// surfaces a malformed symbol.
         /// </para>
         /// <para>
-        /// Known limitation: this reuses <see cref="ContainsBaseInvocation"/> — the same good-faith
+        /// Known limitation: this reuses <see cref="ContainsBaseInvocation"/> -- the same good-faith
         /// textual check DXMSG006 itself uses. If an ancestor's body literally contains
         /// <c>base.X()</c> after a <c>return;</c> (unreachable), the chain check will still
         /// consider it clean, mirroring DXMSG006's policy. This is documented as acceptable: both
@@ -612,7 +612,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
         }
 
         /// <summary>
-        /// Walks the containing type's inheritance chain (stopping at — and excluding —
+        /// Walks the containing type's inheritance chain (stopping at -- and excluding --
         /// <c>MessageAwareComponent</c>) looking for the most-derived override of
         /// <c>RegisterForStringMessages</c>. The most-derived override wins; if it returns
         /// unconditionally-literal <c>false</c>, the smart-case Info lowering applies. If a
@@ -680,7 +680,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
         /// <summary>
         /// Returns <c>true</c> only when the property body unconditionally yields the literal
         /// <c>false</c> constant. Anything that introduces a conditional, a non-literal expression,
-        /// or even one extra return statement returns <c>false</c> — the smart-case Info lowering
+        /// or even one extra return statement returns <c>false</c> -- the smart-case Info lowering
         /// must be a high-confidence call (B3 in the adversarial review).
         /// </summary>
         private static bool PropertyReturnsLiteralFalse(SyntaxNode propertySyntax)

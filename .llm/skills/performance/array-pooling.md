@@ -86,9 +86,9 @@ Three pool types serve different needs:
 
 | Pool Type                  | Exact Size | Clears Data | Best For                      |
 | -------------------------- | ---------- | ----------- | ----------------------------- |
-| `WallstopArrayPool<T>`     | ✅ Yes     | ✅ Yes      | Security-sensitive, exact-fit |
-| `WallstopFastArrayPool<T>` | ✅ Yes     | ❌ No       | Unmanaged types, max speed    |
-| `SystemArrayPool<T>`       | ❌ No      | ❌ No       | Variable sizes, standard .NET |
+| `WallstopArrayPool<T>`     | Yes        | Yes         | Security-sensitive, exact-fit |
+| `WallstopFastArrayPool<T>` | Yes        | No          | Unmanaged types, max speed    |
+| `SystemArrayPool<T>`       | No         | No          | Variable sizes, standard .NET |
 
 ## Problem Statement
 

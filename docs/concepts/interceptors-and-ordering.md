@@ -1,4 +1,4 @@
-# Interceptors, Ordering, and Post‑Processing
+# Interceptors, Ordering, and Post-Processing
 
 ## Snapshot Semantics: Frozen Listener Lists
 
@@ -48,38 +48,38 @@ DxMessaging runs emissions through a fixed pipeline. This section documents the 
 
 - Priority: lower numbers run earlier.
 - Same priority: registration order is preserved.
-- Within a priority group, fast handlers (by‑ref) run before action handlers.
+- Within a priority group, fast handlers (by-ref) run before action handlers.
 - Each category (Untargeted, Targeted, Broadcast) has its own pipeline.
 
 Untargeted pipeline
 
 1. Interceptors for `T` (ascending priority; within priority by registration order)
-1. Global Accept‑All Untargeted handlers (in the MessageHandler that registered them)
+1. Global Accept-All Untargeted handlers (in the MessageHandler that registered them)
 1. Untargeted handlers for `T` (ascending priority; within priority by registration order)
-1. Untargeted Post‑Processors for `T` (ascending priority; within priority by registration order)
+1. Untargeted Post-Processors for `T` (ascending priority; within priority by registration order)
 
 Targeted pipeline
 
 1. Interceptors for `T` (ascending priority)
-1. Global Accept‑All Targeted handlers (receive `(target, ITargetedMessage)`)
+1. Global Accept-All Targeted handlers (receive `(target, ITargetedMessage)`)
 1. Targeted handlers for `T` registered for the specific `target`
-1. Targeted‑Without‑Targeting handlers for `T` (listen for all targets)
-1. Targeted Post‑Processors for `T` registered for the specific `target`
-1. Targeted‑Without‑Targeting Post‑Processors for `T` (listen for all targets)
+1. Targeted-Without-Targeting handlers for `T` (listen for all targets)
+1. Targeted Post-Processors for `T` registered for the specific `target`
+1. Targeted-Without-Targeting Post-Processors for `T` (listen for all targets)
 
 Broadcast pipeline
 
 1. Interceptors for `T` (ascending priority)
-1. Global Accept‑All Broadcast handlers (receive `(source, IBroadcastMessage)`)
+1. Global Accept-All Broadcast handlers (receive `(source, IBroadcastMessage)`)
 1. Broadcast handlers for `T` registered for the specific `source`
-1. Broadcast‑Without‑Source handlers for `T` (listen for all sources)
-1. Broadcast Post‑Processors for `T` registered for the specific `source`
-1. Broadcast‑Without‑Source Post‑Processors for `T` (listen for all sources)
+1. Broadcast-Without-Source handlers for `T` (listen for all sources)
+1. Broadcast Post-Processors for `T` registered for the specific `source`
+1. Broadcast-Without-Source Post-Processors for `T` (listen for all sources)
 
 Notes on handler groups
 
-- Fast vs Action: At a given priority, fast handlers (by‑ref delegates) are invoked before action handlers, and within each group the registration order is preserved.
-- “Without Targeting/Source” registrations run in their own groups and do not replace the specific target/source groups.
+- Fast vs Action: At a given priority, fast handlers (by-ref delegates) are invoked before action handlers, and within each group the registration order is preserved.
+- "Without Targeting/Source" registrations run in their own groups and do not replace the specific target/source groups.
 
 Visual overview
 
@@ -87,27 +87,27 @@ Visual overview
 flowchart LR
   subgraph Untargeted["Untargeted Messages"]
     direction TB
-    U1["Interceptors(T)"] --> U2[Global Accept‑All Untargeted]
+    U1["Interceptors(T)"] --> U2[Global Accept-All Untargeted]
     U2 --> U3["Handlers(T)"]
-    U3 --> U4["Post‑Processors(T)"]
+    U3 --> U4["Post-Processors(T)"]
   end
 
   subgraph Targeted["Targeted Messages"]
     direction TB
-    T1["Interceptors(T)"] --> T2[Global Accept‑All Targeted]
+    T1["Interceptors(T)"] --> T2[Global Accept-All Targeted]
     T2 --> T3["Handlers(T) @ target"]
     T3 --> T4["Handlers(T) (All Targets)"]
-    T4 --> T5["Post‑Processors(T) @ target"]
-    T5 --> T6["Post‑Processors(T) (All Targets)"]
+    T4 --> T5["Post-Processors(T) @ target"]
+    T5 --> T6["Post-Processors(T) (All Targets)"]
   end
 
   subgraph Broadcast["Broadcast Messages"]
     direction TB
-    B1["Interceptors(T)"] --> B2[Global Accept‑All Broadcast]
+    B1["Interceptors(T)"] --> B2[Global Accept-All Broadcast]
     B2 --> B3["Handlers(T) @ source"]
     B3 --> B4["Handlers(T) (All Sources)"]
-    B4 --> B5["Post‑Processors(T) @ source"]
-    B5 --> B6["Post‑Processors(T) (All Sources)"]
+    B4 --> B5["Post-Processors(T) @ source"]
+    B5 --> B6["Post-Processors(T) (All Sources)"]
   end
 
   classDef neutral stroke-width:2px
@@ -128,12 +128,12 @@ Example sequence
 sequenceDiagram
     participant P as Producer
     participant I as Interceptor(s)
-    participant G as Global Accept‑All
+    participant G as Global Accept-All
     participant H as Handler(s)
-    participant PP as Post‑Processor(s)
+    participant PP as Post-Processor(s)
     P->>I: emit(ref message)
     I-->>P: false? cancel : continue
-    I->>G: message (category‑specific)
+    I->>G: message (category-specific)
     G->>H: message
     H->>PP: after all handlers complete
 ```
@@ -142,7 +142,7 @@ Interceptors
 
 - Mutate or cancel messages before any handler runs. Return `false` to cancel.
 - Define per category: `RegisterUntargetedInterceptor<T>`, `RegisterTargetedInterceptor<T>`, `RegisterBroadcastInterceptor<T>`.
-- Useful for validation, normalization, enrichment, and short‑circuiting.
+- Useful for validation, normalization, enrichment, and short-circuiting.
 
 ```csharp
 using DxMessaging.Core;               // MessageHandler, InstanceId
@@ -161,9 +161,9 @@ _ = bus.RegisterTargetedInterceptor<TookDamage>(
 );
 ```
 
-Real‑World Use Cases
+Real-World Use Cases
 
-#### State‑Based Message Cancellation
+#### State-Based Message Cancellation
 
 Prevent UI messages from being processed based on current UI state:
 
@@ -466,43 +466,43 @@ var cooldowns = new CooldownManager();
 cooldowns.RegisterInterceptors();
 
 var spell1 = new CastSpell("fireball");
-spell1.EmitTargeted(playerId);  // ✓ Allowed
+spell1.EmitTargeted(playerId);  // Yes Allowed
 var spell2 = new CastSpell("fireball");
-spell2.EmitTargeted(playerId);  // ✗ Blocked (too soon)
+spell2.EmitTargeted(playerId);  // No Blocked (too soon)
 // ... wait 1.5s ...
 var spell3 = new CastSpell("fireball");
-spell3.EmitTargeted(playerId);  // ✓ Allowed
+spell3.EmitTargeted(playerId);  // Yes Allowed
 ```
 
 When to Use Interceptors
 
-✅ **Good use cases:**
+Yes **Good use cases:**
 
 - Input validation and sanitization
 - Value clamping and normalization
 - Permission and authorization checks
-- State‑based message filtering
+- State-based message filtering
 - Rate limiting and cooldown enforcement
 - Message enrichment (adding timestamps, session IDs, etc.)
 - Early exit for duplicate or redundant messages
 - Logging suspicious or invalid message attempts
 
-⚠️ **Key principles:**
+Warning: **Key principles:**
 
-- **Run before handlers**: Interceptors execute before any type‑specific handlers, making them perfect for preprocessing
-- **Can mutate**: Unlike post‑processors, interceptors can modify message data
+- **Run before handlers**: Interceptors execute before any type-specific handlers, making them perfect for preprocessing
+- **Can mutate**: Unlike post-processors, interceptors can modify message data
 - **Can cancel**: Return `false` to prevent the message from reaching handlers
 - **Priority matters**: Lower priority values run first (use negative priorities for early interceptors)
 
-❌ **Avoid for:**
+No **Avoid for:**
 
-- Read‑only observation (use handlers or post‑processors instead)
-- Actions that should run after message processing (use post‑processors)
+- Read-only observation (use handlers or post-processors instead)
+- Actions that should run after message processing (use post-processors)
 - Heavy computation that doesn't need to block the message
 
-Post‑processors
+Post-processors
 
-- Observe after handlers. Great for logging, analytics, or follow‑up emission.
+- Observe after handlers. Great for logging, analytics, or follow-up emission.
 - Per category and scope (per target/source or all):
   - Untargeted: `RegisterUntargetedPostProcessor<T>`
   - Targeted (specific): `RegisterTargetedPostProcessor<T>(target, ...)`
@@ -510,11 +510,11 @@ Post‑processors
   - Broadcast (specific): `RegisterBroadcastPostProcessor<T>(source, ...)`
   - Broadcast (all): `RegisterBroadcastWithoutSourcePostProcessor<T>(...)`
 
-Global Accept‑All
+Global Accept-All
 
 - Register once and observe all messages on a handler.
 - Overloads exist for action and fast handlers.
-- Runs between interceptors and type‑specific handlers.
+- Runs between interceptors and type-specific handlers.
 
 Related
 

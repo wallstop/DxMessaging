@@ -4,9 +4,9 @@
 
 ## Who This Is For
 
-- ✅ **You've imported and run the sample** - now you want to understand it
-- ✅ **You want to build your own** - need to see the patterns in action
-- ✅ **You're debugging something** - need to understand the flow
+- [x] **You've imported and run the sample** - now you want to understand it
+- [x] **You want to build your own** - need to see the patterns in action
+- [x] **You're debugging something** - need to understand the flow
 
 **Haven't run the sample yet?** Go back to [the sample README](README.md) and press Play first. Come back when you've seen it work.
 
@@ -66,7 +66,7 @@ Let's understand what each script does:
 - Only *this specific Player instance* receives the heal
 - Other Player instances in the scene won't be affected
 
-**Real-world analogy**: Like having your name called in a doctor's office—only you respond.
+**Real-world analogy**: Like having your name called in a doctor's office -- only you respond.
 
 ### [Enemy.cs](./Enemy.cs)
 
@@ -78,7 +78,7 @@ Let's understand what each script does:
 - Any listener interested in damage events will hear it
 - The Enemy doesn't need to know who's listening
 
-**Real-world analogy**: Like ringing a bell—anyone nearby can hear it.
+**Real-world analogy**: Like ringing a bell -- anyone nearby can hear it.
 
 ### [UIOverlay.cs](./UIOverlay.cs)
 
@@ -137,7 +137,7 @@ Boot sends a `VideoSettingsChanged` message (untargeted).
 
 ### Why Untargeted
 
-Settings changes are **global events**—they don't target anyone specifically. Anyone interested in settings can listen.
+Settings changes are **global events** -- they don't target anyone specifically. Anyone interested in settings can listen.
 
 ### The Code Flow
 
@@ -161,7 +161,7 @@ Settings changes are **global events**—they don't target anyone specifically. 
 
 ###### Cons:
 
-- No targeting—everyone gets it
+- No targeting -- everyone gets it
 - Can't send to just one specific object
 
 ---

@@ -6,7 +6,6 @@ namespace DxMessaging.Editor.CustomEditors
     using DxMessaging.Editor.Analyzers;
     using DxMessaging.Editor.Settings;
     using DxMessaging.Unity;
-    using Unity;
     using UnityEditor;
     using UnityEditorInternal;
     using UnityEngine;
@@ -34,7 +33,7 @@ namespace DxMessaging.Editor.CustomEditors
     /// <list type="bullet">
     /// <item>
     /// <see cref="DrawHeader"/> (registered to <see cref="Editor.finishedDefaultHeaderGUI"/>) is
-    /// post-body and Unity has already settled layout for the inspector by the time it fires —
+    /// post-body and Unity has already settled layout for the inspector by the time it fires --
     /// gating on <c>EventType.Repaint</c> there is safe.
     /// </item>
     /// <item>
@@ -103,7 +102,7 @@ namespace DxMessaging.Editor.CustomEditors
         /// <summary>
         /// Header-hook entry point. Fires after Unity's default header has been drawn, so the
         /// inspector's layout pass for this editor has already completed. Safe to gate on
-        /// <see cref="EventType.Repaint"/> here — we are not inside an OnInspectorGUI body.
+        /// <see cref="EventType.Repaint"/> here -- we are not inside an OnInspectorGUI body.
         /// </summary>
         private static void RenderForHeaderHook(Object target)
         {

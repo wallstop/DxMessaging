@@ -2,7 +2,7 @@
 
 ## Targeted across all targets
 
-- Accept every targeted message of a given type regardless of who it’s for.
+- Accept every targeted message of a given type regardless of who it's for.
 
 ```csharp
 using DxMessaging.Core;   // InstanceId
@@ -12,7 +12,7 @@ using DxMessaging.Core.Messages;
 _ = token.RegisterTargetedWithoutTargeting<Heal>(OnAnyHeal);
 void OnAnyHeal(InstanceId target, Heal m) => Audit(target, m);
 
-// Post‑process all targeted of type
+// Post-process all targeted of type
 _ = token.RegisterTargetedWithoutTargetingPostProcessor<Heal>(OnAnyHealPost);
 void OnAnyHealPost(InstanceId target, Heal m) => Log(target, m);
 ```
@@ -29,12 +29,12 @@ using DxMessaging.Core.Messages;
 _ = token.RegisterBroadcastWithoutSource<TookDamage>(OnAnyTookDamage);
 void OnAnyTookDamage(InstanceId source, TookDamage m) => Track(source, m);
 
-// Post‑process all broadcast of type
+// Post-process all broadcast of type
 _ = token.RegisterBroadcastWithoutSourcePostProcessor<TookDamage>(OnAnyTookDamagePost);
 void OnAnyTookDamagePost(InstanceId source, TookDamage m) => Log(source, m);
 ```
 
-## Global accept‑all (debug/inspection)
+## Global accept-all (debug/inspection)
 
 - Receive every message of every type on a handler; useful for tooling.
 
@@ -47,7 +47,7 @@ var dereg = bus.RegisterGlobalAcceptAll(handler);
 // implement handler callbacks for generic categories on your MessageHandler
 ```
 
-## Real‑World Use Cases
+## Real-World Use Cases
 
 ### Development Debug Dump
 
@@ -69,12 +69,12 @@ public class DebugMessageLogger : MessageHandler
 
     public override void Handle(ref InstanceId target, ref ITargetedMessage message)
     {
-        Debug.Log($"[Targeted → {target}] {message.GetType().Name}: {message}");
+        Debug.Log($"[Targeted -> {target}] {message.GetType().Name}: {message}");
     }
 
     public override void Handle(ref InstanceId source, ref IBroadcastMessage message)
     {
-        Debug.Log($"[Broadcast ← {source}] {message.GetType().Name}: {message}");
+        Debug.Log($"[Broadcast <- {source}] {message.GetType().Name}: {message}");
     }
 }
 
@@ -85,7 +85,7 @@ _ = MessageHandler.MessageBus.RegisterGlobalAcceptAll(logger);
 #endif
 ```
 
-### Attribute‑Based Network Replication
+### Attribute-Based Network Replication
 
 Automatically replicate messages marked with custom attributes across the network:
 
@@ -236,20 +236,20 @@ public class MessageAnalytics : MessageHandler
 }
 ```
 
-When to Use Global Accept‑All
+When to Use Global Accept-All
 
-✅ **Good use cases:**
+Yes **Good use cases:**
 
-- Development‑time debugging and logging
-- Cross‑cutting concerns (analytics, telemetry, metrics)
-- Attribute‑based systems (networking, serialization, persistence)
+- Development-time debugging and logging
+- Cross-cutting concerns (analytics, telemetry, metrics)
+- Attribute-based systems (networking, serialization, persistence)
 - Testing and diagnostics tools
 - Message replay/recording systems
 
-⚠️ **Performance consideration:**
+Warning: **Performance consideration:**
 Global Accept-All handlers are invoked for **every** message of **every** type. For performance-sensitive gameplay logic, prefer type-specific registrations which use O(1) lookup instead of O(N) iteration.
 
-❌ **Avoid for:**
+No **Avoid for:**
 
 - Core gameplay logic that only needs specific message types
 - Hot paths with thousands of messages per frame
@@ -257,7 +257,7 @@ Global Accept-All handlers are invoked for **every** message of **every** type. 
 
 Tips
 
-- Use across‑all listeners for diagnostics, analytics, or cross‑cutting observers.
+- Use across-all listeners for diagnostics, analytics, or cross-cutting observers.
 - Prefer specific (target/source) registrations for gameplay logic.
 
 Related

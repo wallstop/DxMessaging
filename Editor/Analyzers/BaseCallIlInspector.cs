@@ -19,7 +19,7 @@ namespace DxMessaging.Editor.Analyzers
     /// <b>Why does this exist?</b> The console-scrape harvester is non-deterministic across Unity
     /// 2021 cache hits (Unity skips routing analyzer warnings to <c>LogEntries</c> /
     /// <c>CompilerMessage[]</c> on incremental compiles where Bee/csc reused a cached output).
-    /// IL reflection over the loaded assemblies in the AppDomain is deterministic — the bytes do
+    /// IL reflection over the loaded assemblies in the AppDomain is deterministic -- the bytes do
     /// not depend on Unity's compile-pipeline state. <see cref="BaseCallTypeScanner"/> uses this
     /// helper to classify every loaded <c>MessageAwareComponent</c> subclass on every domain
     /// reload.
@@ -30,7 +30,7 @@ namespace DxMessaging.Editor.Analyzers
     /// (single-byte and two-byte 0xFE-prefix forms) and steps the operand-size that the opcode
     /// declares (<see cref="OpCode.OperandType"/>). Misalignment past multi-byte-operand opcodes
     /// (<c>switch</c> jump tables, <c>ldstr</c> 4-byte tokens, 8-byte literal constants, etc.) is
-    /// therefore impossible — the walker either consumes every byte correctly or stops at the
+    /// therefore impossible -- the walker either consumes every byte correctly or stops at the
     /// first unrecognised opcode. Phantom DXMSG006 from a misread <c>0x28</c> inside a wider
     /// operand is no longer a failure mode.
     /// </para>
@@ -38,7 +38,7 @@ namespace DxMessaging.Editor.Analyzers
     /// <b>Defensive bias.</b> When we cannot reason at all (null method, empty name, inaccessible
     /// IL body, <c>GetMethodBody()</c> returns null on abstract / P/Invoke / IL2CPP-stripped
     /// targets, or any reflection exception), the inspector returns <c>true</c>
-    /// ("assume clean — calls base") so the scanner never invents a phantom warning. The
+    /// ("assume clean -- calls base") so the scanner never invents a phantom warning. The
     /// compile-time analyzer is the authoritative source for CI builds (DXMSG006/007/009/010 via
     /// full Roslyn semantic-model precision); the IL scanner exists only to make the editor
     /// overlay light up at edit-time, where a missed warning is far worse than a phantom one.
@@ -94,7 +94,7 @@ namespace DxMessaging.Editor.Analyzers
         /// <param name="methodName">The expected base method name (e.g. <c>"OnEnable"</c>).</param>
         /// <returns>
         /// <c>true</c> if the IL contains a base-call shape, OR the IL was inaccessible (safe
-        /// default — assume clean). <c>false</c> only when IL was readable AND no call/callvirt
+        /// default -- assume clean). <c>false</c> only when IL was readable AND no call/callvirt
         /// targeting a parent same-named method was found.
         /// </returns>
         public static bool MethodIlContainsBaseCall(MethodInfo method, string methodName)

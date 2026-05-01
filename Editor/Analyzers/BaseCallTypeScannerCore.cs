@@ -30,7 +30,7 @@ namespace DxMessaging.Editor.Analyzers
     /// <para>
     /// Diagnostic IDs produced match what the inspector overlay reads from the Unity-facing entry:
     /// <c>DXMSG006</c> (override missing base call), <c>DXMSG007</c> (hides via <c>new</c>; also
-    /// covers DXMSG009 since IL alone can't distinguish the two — see remarks on
+    /// covers DXMSG009 since IL alone can't distinguish the two -- see remarks on
     /// <see cref="BaseCallIlInspector"/>), and <c>DXMSG010</c> (override calls base but a chain
     /// link does not).
     /// </para>
@@ -77,11 +77,13 @@ namespace DxMessaging.Editor.Analyzers
         /// <summary>
         /// Classify every <paramref name="candidates"/> type and return a per-FQN snapshot keyed
         /// by fully-qualified type name (dot-form for nested types). Types opted out via
-        /// <c>[DxIgnoreMissingBaseCall]</c> or via <paramref name="ignoredTypeNames"/> are
-        /// intentionally NOT included in the returned dictionary — the inspector overlay reads
+        /// class-level <c>[DxIgnoreMissingBaseCall]</c> or via
+        /// <paramref name="ignoredTypeNames"/> are
+        /// intentionally NOT included in the returned dictionary -- the inspector overlay reads
         /// the project ignore list directly to render its "Stop ignoring" HelpBox, and the
         /// snapshot semantics here match the bridge path (DXMSG008-equivalent rows were never
-        /// present in the snapshot's <c>missingBaseFor</c> either).
+        /// present in the snapshot's <c>missingBaseFor</c> either). Method-level
+        /// <c>[DxIgnoreMissingBaseCall]</c> is applied per guarded method only.
         /// </summary>
         /// <param name="candidates">
         /// Strict subclasses of <c>MessageAwareComponent</c>. Abstract types and generic-type
@@ -139,14 +141,8 @@ namespace DxMessaging.Editor.Analyzers
                 // is keyed identically to the analyzer's identifiers.
                 fullName = fullName.Replace('+', '.');
 
-                bool optedOutByAttribute = TypeOrGuardedMethodHasIgnoreAttribute(concrete);
+                bool optedOutByAttribute = TypeHasIgnoreAttribute(concrete);
                 bool optedOutByList = projectIgnore.Contains(fullName);
-
-                ScanEntry entry = ScanOne(concrete, fullName);
-                if (entry == null || entry.MissingBaseFor.Count == 0)
-                {
-                    continue;
-                }
 
                 if (optedOutByAttribute || optedOutByList)
                 {
@@ -158,17 +154,24 @@ namespace DxMessaging.Editor.Analyzers
                     continue;
                 }
 
+                HashSet<string> methodLevelIgnore = GetGuardedMethodsWithIgnoreAttribute(concrete);
+
+                ScanEntry entry = ScanOne(concrete, fullName, methodLevelIgnore);
+                if (entry == null || entry.MissingBaseFor.Count == 0)
+                {
+                    continue;
+                }
+
                 result[fullName] = entry;
             }
 
             return result;
         }
 
-        private static bool TypeOrGuardedMethodHasIgnoreAttribute(Type type)
+        private static bool TypeHasIgnoreAttribute(Type type)
         {
             // [DxIgnoreMissingBaseCall] applies with Inherited=false (matches the analyzer's
-            // attribute declaration), so we inspect only the type itself plus its declared
-            // guarded lifecycle methods.
+            // attribute declaration), so we inspect only the type itself.
             foreach (object attr in type.GetCustomAttributes(inherit: false))
             {
                 if (attr.GetType().FullName == IgnoreAttributeFullName)
@@ -176,9 +179,12 @@ namespace DxMessaging.Editor.Analyzers
                     return true;
                 }
             }
-            // Method-level: any of the five guarded methods marked with the attribute also opts
-            // the entire type out from the inspector overlay (the analyzer applies the attribute
-            // per-method, but the overlay tracks types — opt out at the granularity we render).
+            return false;
+        }
+
+        private static HashSet<string> GetGuardedMethodsWithIgnoreAttribute(Type type)
+        {
+            HashSet<string> ignoredMethods = new(StringComparer.Ordinal);
             foreach (string methodName in GuardedMethodNames)
             {
                 MethodInfo m = type.GetMethod(
@@ -199,14 +205,19 @@ namespace DxMessaging.Editor.Analyzers
                 {
                     if (attr.GetType().FullName == IgnoreAttributeFullName)
                     {
-                        return true;
+                        ignoredMethods.Add(methodName);
+                        break;
                     }
                 }
             }
-            return false;
+            return ignoredMethods;
         }
 
-        private static ScanEntry ScanOne(Type concrete, string fullName)
+        private static ScanEntry ScanOne(
+            Type concrete,
+            string fullName,
+            HashSet<string> methodLevelIgnore
+        )
         {
             ScanEntry entry = new()
             {
@@ -217,14 +228,24 @@ namespace DxMessaging.Editor.Analyzers
 
             foreach (string methodName in GuardedMethodNames)
             {
-                ClassifyMethod(concrete, methodName, entry);
+                ClassifyMethod(concrete, methodName, entry, methodLevelIgnore);
             }
 
             return entry;
         }
 
-        private static void ClassifyMethod(Type concrete, string methodName, ScanEntry entry)
+        private static void ClassifyMethod(
+            Type concrete,
+            string methodName,
+            ScanEntry entry,
+            HashSet<string> methodLevelIgnore
+        )
         {
+            if (methodLevelIgnore.Contains(methodName))
+            {
+                return;
+            }
+
             // Walk the type chain: first the leaf (concrete), then ancestors via BaseType until we
             // leave the MessageAwareComponent inheritance subtree. For the leaf we determine which
             // of DXMSG006/007/009 fires (if any). If the leaf overrides correctly, we walk

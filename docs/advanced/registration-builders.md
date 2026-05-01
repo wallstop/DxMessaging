@@ -243,10 +243,10 @@ public readonly struct MessageRegistrationLifecycle
 
 ### Callback Order
 
-1. `OnBuild` — Immediately after lease creation, before activation
-1. `OnActivate` — When `Activate()` is called (or automatically if `ActivateOnBuild = true`)
-1. `OnDeactivate` — When `Deactivate()` is called or during disposal while active
-1. `OnDispose` — During `Dispose()`, after deactivation
+1. `OnBuild` -- Immediately after lease creation, before activation
+1. `OnActivate` -- When `Activate()` is called (or automatically if `ActivateOnBuild = true`)
+1. `OnDeactivate` -- When `Deactivate()` is called or during disposal while active
+1. `OnDispose` -- During `Dispose()`, after deactivation
 
 All callbacks receive the `MessageRegistrationToken` as a parameter.
 
@@ -440,5 +440,5 @@ MessageRegistrationBuildOptions options = new MessageRegistrationBuildOptions
 
 ## See Also
 
-- [Message Bus Providers](message-bus-providers.md) — More on the provider system
-- [Runtime Configuration](runtime-configuration.md) — Dynamic reconfiguration options
+- [Message Bus Providers](message-bus-providers.md) -- More on the provider system
+- [Runtime Configuration](runtime-configuration.md) -- Dynamic reconfiguration options

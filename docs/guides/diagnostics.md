@@ -1,6 +1,6 @@
 # Diagnostics
 
-DxMessaging emphasizes visibility. You can enable diagnostics globally or per token, inspect recent emissions, page through registrations, and even view contexts (targets/sources) — all from the MessagingComponent inspector.
+DxMessaging emphasizes visibility. You can enable diagnostics globally or per token, inspect recent emissions, page through registrations, and even view contexts (targets/sources) -- all from the MessagingComponent inspector.
 
 ## DiagnosticsTarget Enum
 
@@ -37,13 +37,13 @@ DxMessaging provides multiple levels of diagnostics control:
 
 ### Global Defaults
 
-- `IMessageBus.GlobalDiagnosticsTargets` — Sets the default diagnostics mode for newly created buses and tokens. Uses the `DiagnosticsTarget` flags enum.
-- `IMessageBus.GlobalMessageBufferSize` — Sets the default ring buffer size for emission history (default: 100).
+- `IMessageBus.GlobalDiagnosticsTargets` -- Sets the default diagnostics mode for newly created buses and tokens. Uses the `DiagnosticsTarget` flags enum.
+- `IMessageBus.GlobalMessageBufferSize` -- Sets the default ring buffer size for emission history (default: 100).
 
 ### Per-Bus and Per-Token
 
-- `IMessageBus.DiagnosticsMode` — Read-only property indicating whether diagnostics are active for a specific bus instance.
-- `MessageRegistrationToken.DiagnosticMode` — Controls diagnostics for an individual registration token.
+- `IMessageBus.DiagnosticsMode` -- Read-only property indicating whether diagnostics are active for a specific bus instance.
+- `MessageRegistrationToken.DiagnosticMode` -- Controls diagnostics for an individual registration token.
 
 ```csharp
 using DxMessaging.Core;
@@ -153,16 +153,16 @@ Each logged registration is stored as a `MessagingRegistration` struct containin
 
 The `RegistrationMethod` enum captures how the handler was wired up:
 
-- `Targeted` — Bound to a specific recipient
-- `Untargeted` — Global untargeted handler
-- `Broadcast` — Bound to a specific source
-- `BroadcastWithoutSource` — Broadcast handler without explicit source
-- `TargetedWithoutTargeting` — Targeted handler ignoring runtime target
-- `GlobalAcceptAll` — Catch-all handler
-- `Interceptor` — Message interceptor
-- `UntargetedPostProcessor`, `TargetedPostProcessor`, `BroadcastPostProcessor` — Post-processors
-- `TargetedWithoutTargetingPostProcessor` — Post-processor for targeted messages ignoring runtime target
-- `BroadcastWithoutSourcePostProcessor` — Post-processor for broadcasts without explicit source
+- `Targeted` -- Bound to a specific recipient
+- `Untargeted` -- Global untargeted handler
+- `Broadcast` -- Bound to a specific source
+- `BroadcastWithoutSource` -- Broadcast handler without explicit source
+- `TargetedWithoutTargeting` -- Targeted handler ignoring runtime target
+- `GlobalAcceptAll` -- Catch-all handler
+- `Interceptor` -- Message interceptor
+- `UntargetedPostProcessor`, `TargetedPostProcessor`, `BroadcastPostProcessor` -- Post-processors
+- `TargetedWithoutTargetingPostProcessor` -- Post-processor for targeted messages ignoring runtime target
+- `BroadcastWithoutSourcePostProcessor` -- Post-processor for broadcasts without explicit source
 
 ## Emission History
 

@@ -27,13 +27,13 @@ Continuation material extracted from `markdown-compatibility.md` to keep .llm fi
 | Feature     | MkDocs Syntax               | Standard Alternative               |
 | ----------- | --------------------------- | ---------------------------------- |
 | Note        | `!!! note`                  | `> ℹ️ **Note**: ...`               |
-| Warning     | `!!! warning`               | `> ⚠️ **Warning**: ...`            |
+| Warning     | `!!! warning`               | `>  **Warning**: ...`              |
 | Danger      | `!!! danger`                | `> 🚨 **Danger**: ...`             |
 | Tip         | `!!! tip`                   | `> 💡 **Tip**: ...`                |
 | Collapsible | `??? note`                  | `<details><summary>...</summary>`  |
 | Tabs        | `=== "Tab"`                 | `### Tab` headers                  |
 | Button      | `[text](url){ .md-button }` | `[text](url)` or `**[text](url)**` |
-| Emoji       | `:emoji:`                   | Unicode emoji: ⚠️ 🚀 ✅            |
+| Emoji       | `:emoji:`                   | Unicode emoji: 🚀 Yes              |
 
 ---
 
@@ -86,7 +86,7 @@ grep -rn --include='*.md' "%%{init.*theme" docs/
 
 MkDocs uses `:emoji_name:` shortcode syntax from the `pymdownx.emoji` extension.
 
-#### ❌ Forbidden: Emoji Shortcodes
+#### Forbidden: Emoji Shortcodes
 
 ```markdown
 :warning: This is a warning.
@@ -100,7 +100,7 @@ MkDocs uses `:emoji_name:` shortcode syntax from the `pymdownx.emoji` extension.
 :material-code-braces: Code example.
 ```
 
-> ⚠️ **Note**: Material for MkDocs provides icon shortcodes that must also be avoided:
+> **Note**: Material for MkDocs provides icon shortcodes that must also be avoided:
 >
 > - `:material-*:` patterns (e.g., `:material-code-braces:`, `:material-check:`)
 > - `:octicons-*:` patterns (e.g., `:octicons-git-branch-16:`)
@@ -109,14 +109,14 @@ MkDocs uses `:emoji_name:` shortcode syntax from the `pymdownx.emoji` extension.
 >
 > These render as literal text in standard markdown viewers.
 
-#### ✅ Correct: Unicode Emoji Directly
+#### Correct: Unicode Emoji Directly
 
 ```markdown
-⚠️ This is a warning.
+This is a warning.
 
 🚀 Fast performance!
 
-✅ Test passed.
+Test passed.
 
 GitHub integration (use text, not icon).
 
@@ -127,10 +127,10 @@ Code example (describe with words).
 
 | Shortcode              | Unicode | Copy-paste |
 | ---------------------- | ------- | ---------- |
-| `:warning:`            | ⚠️      | ⚠️         |
+| `:warning:`            |         |            |
 | `:rocket:`             | 🚀      | 🚀         |
-| `:white_check_mark:`   | ✅      | ✅         |
-| `:x:`                  | ❌      | ❌         |
+| `:white_check_mark:`   | Yes     | Yes        |
+| `:x:`                  | No      | No         |
 | `:bulb:`               | 💡      | 💡         |
 | `:information_source:` | ℹ️      | ℹ️         |
 | `:fire:`               | 🔥      | 🔥         |
@@ -142,7 +142,7 @@ Code example (describe with words).
 
 ### 6. Other MkDocs-Specific Syntax
 
-#### ❌ Forbidden: Annotations
+#### Forbidden: Annotations
 
 ```markdown
 Some code (1)
@@ -151,13 +151,13 @@ Some code (1)
 1.  This is an annotation that appears on hover.
 ```
 
-#### ❌ Forbidden: Keys Extension
+#### Forbidden: Keys Extension
 
 ```markdown
 Press ++ctrl+alt+del++ to restart.
 ```
 
-#### ❌ Forbidden: Critic Markup
+#### Forbidden: Critic Markup
 
 ```markdown
 {--deleted text--}
@@ -165,7 +165,7 @@ Press ++ctrl+alt+del++ to restart.
 {~~old~>new~~}
 ```
 
-#### ✅ Correct: Use Plain Descriptions
+#### Correct: Use Plain Descriptions
 
 ```markdown
 Some code <!-- Explanation in a comment or below -->

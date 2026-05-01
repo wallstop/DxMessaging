@@ -1,4 +1,4 @@
-# End‑to‑End Example: Combat + UI + Settings
+# End-to-End Example: Combat + UI + Settings
 
 Short intro
 
@@ -65,7 +65,7 @@ public sealed class Enemy : UnityEngine.MonoBehaviour
 }
 ```
 
-UI overlay (global + all‑sources)
+UI overlay (global + all-sources)
 
 ```csharp
 using DxMessaging.Unity;
@@ -87,7 +87,7 @@ public sealed class UIOverlay : MessageAwareComponent
 }
 ```
 
-Interceptors and post‑processing (ordering)
+Interceptors and post-processing (ordering)
 
 ```csharp
 using DxMessaging.Core;            // MessageHandler

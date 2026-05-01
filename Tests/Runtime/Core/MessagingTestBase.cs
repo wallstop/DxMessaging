@@ -55,11 +55,7 @@ namespace DxMessaging.Tests.Runtime.Core
         protected void LogMessageBusStatus()
         {
             IMessageBus messageBus = MessageHandler.MessageBus;
-            Debug.Log(
-                $"Untargeted registrations: {messageBus.RegisteredUntargeted}, "
-                    + $"targeted registrations: {messageBus.RegisteredTargeted}, "
-                    + $"broadcast registrations: {messageBus.RegisteredBroadcast}."
-            );
+            Debug.Log(DescribeMessageBusState(messageBus));
         }
 
         [TearDown]
@@ -72,7 +68,7 @@ namespace DxMessaging.Tests.Runtime.Core
                     continue;
                 }
 
-                Object.Destroy(spawned);
+                DestroyTrackedObject(spawned);
             }
 
             _spawned.Clear();
@@ -88,8 +84,11 @@ namespace DxMessaging.Tests.Runtime.Core
                     continue;
                 }
 
-                Object.Destroy(spawned);
-                yield return null;
+                DestroyTrackedObject(spawned);
+                if (Application.isPlaying)
+                {
+                    yield return null;
+                }
             }
 
             _spawned.Clear();
@@ -190,11 +189,10 @@ namespace DxMessaging.Tests.Runtime.Core
 
             Assert.IsFalse(
                 IsStale(),
-                "MessageHandler had {0} Untargeted registrations, {1} Targeted registrations, {2} Broadcast registrations. Registration log: {3}.",
-                messageBus.RegisteredUntargeted,
-                messageBus.RegisteredTargeted,
-                messageBus.RegisteredBroadcast,
-                messageBus.Log
+                "MessageHandler remained stale after waiting {0}ms (isPlaying={1}). {2}",
+                timer.Elapsed.TotalMilliseconds,
+                Application.isPlaying,
+                DescribeMessageBusState(messageBus, includeLog: true)
             );
             yield break;
 
@@ -204,6 +202,39 @@ namespace DxMessaging.Tests.Runtime.Core
                     || messageBus.RegisteredTargeted != 0
                     || messageBus.RegisteredBroadcast != 0;
             }
+        }
+
+        private static void DestroyTrackedObject(GameObject spawned)
+        {
+            if (Application.isPlaying)
+            {
+                Object.Destroy(spawned);
+                return;
+            }
+
+            Object.DestroyImmediate(spawned);
+        }
+
+        protected static string DescribeMessageBusState(
+            IMessageBus messageBus,
+            bool includeLog = false
+        )
+        {
+            if (messageBus == null)
+            {
+                return "MessageBus=<null>.";
+            }
+
+            string details =
+                $"Untargeted={messageBus.RegisteredUntargeted}, "
+                + $"Targeted={messageBus.RegisteredTargeted}, "
+                + $"Broadcast={messageBus.RegisteredBroadcast}.";
+            if (!includeLog)
+            {
+                return details;
+            }
+
+            return $"{details} Registration log: {messageBus.Log}.";
         }
     }
 }

@@ -53,7 +53,7 @@ pre-commit hooks.
 | "runs before each commit is created" | Executes prior to commit creation  | pre-commit hooks  |
 | "runs as a pre-commit hook"          | Explicitly names the hook type     | pre-commit hooks  |
 | "runs after each commit"             | Executes after commit is finalized | post-commit hooks |
-| "runs on every commit"               | Ambiguous—avoid this phrasing      | Neither           |
+| "runs on every commit"               | Ambiguous -- avoid this phrasing   | Neither           |
 | "runs when commits are pushed"       | Executes during push operation     | pre-push hooks    |
 
 ## .NET File Encoding Behaviors
@@ -77,10 +77,10 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 | Method                                   | Default Encoding | BOM     |
 | ---------------------------------------- | ---------------- | ------- |
-| `[System.IO.File]::WriteAllText()`       | UTF-8            | No BOM  |
+| `[System.IO.File]::WriteAllText()`       | UTF-8            | BOM     |
 | `Set-Content` (PS 5.1)                   | System default   | Varies  |
 | `Set-Content -Encoding UTF8` (PS 5.1)    | UTF-8            | Has BOM |
-| `Set-Content -Encoding utf8NoBOM` (PS 7) | UTF-8            | No BOM  |
+| `Set-Content -Encoding utf8NoBOM` (PS 7) | UTF-8            | BOM     |
 | `Out-File` (PS 5.1)                      | UTF-16 LE        | Has BOM |
 
 ### Anti-Pattern: "Fixing" Correct Code

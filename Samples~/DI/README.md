@@ -5,7 +5,7 @@ These snippets illustrate how to consume `IMessageRegistrationBuilder` inside co
 ## Setup
 
 1. Install the relevant container package (Zenject/Extenject, VContainer, or Reflex) into your Unity project.
-1. Enable the matching scripting define symbol in **Project Settings › Player › Scripting Define Symbols**:
+1. Enable the matching scripting define symbol in **Project Settings > Player > Scripting Define Symbols**:
    - `ZENJECT_PRESENT`
    - `VCONTAINER_PRESENT`
    - `REFLEX_PRESENT`
@@ -22,9 +22,9 @@ Each sample shows:
 - Zenject sample installer: [SampleInstaller.cs](./Zenject/SampleInstaller.cs)
 - VContainer sample lifetime scope: [SampleLifetimeScope.cs](./VContainer/SampleLifetimeScope.cs)
 - Reflex sample installer: [SampleInstaller.cs](./Reflex/SampleInstaller.cs)
-- Current global message bus provider asset: [GlobalMessageBusProvider.asset](./Providers/GlobalMessageBusProvider.asset) — ScriptableObject that resolves whichever bus is currently configured as global.
-- Initial global message bus provider asset: [InitialGlobalMessageBusProvider.asset](./Providers/InitialGlobalMessageBusProvider.asset) — ScriptableObject that always returns the original startup global bus, ignoring later overrides.
-- Prefab setup: [MessagingInstallerSample.prefab](./Prefabs/MessagingInstallerSample.prefab) — ready-to-use hierarchy with `MessagingComponentInstaller` configuring a child `MessagingComponent` using the provider asset. Drop it into a scene to see provider-driven wiring without writing setup code.
+- Current global message bus provider asset: [GlobalMessageBusProvider.asset](./Providers/GlobalMessageBusProvider.asset) -- ScriptableObject that resolves whichever bus is currently configured as global.
+- Initial global message bus provider asset: [InitialGlobalMessageBusProvider.asset](./Providers/InitialGlobalMessageBusProvider.asset) -- ScriptableObject that always returns the original startup global bus, ignoring later overrides.
+- Prefab setup: [MessagingInstallerSample.prefab](./Prefabs/MessagingInstallerSample.prefab) -- ready-to-use hierarchy with `MessagingComponentInstaller` configuring a child `MessagingComponent` using the provider asset. Drop it into a scene to see provider-driven wiring without writing setup code.
 
 ## Walkthrough
 

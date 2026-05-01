@@ -37,7 +37,7 @@ namespace DxMessaging.Editor.Settings
         /// <c>FilesDiffer</c>-style policy used elsewhere in this Editor assembly to avoid
         /// AssetDatabase churn during domain reload.
         /// </summary>
-        /// <param name="settings">The settings asset. May be <c>null</c> — no-op in that case.</param>
+        /// <param name="settings">The settings asset. May be <c>null</c> -- no-op in that case.</param>
         /// <remarks>
         /// When called while Unity is mid-compile or mid-asset-import (e.g., from a
         /// <c>ScriptableObject.OnValidate</c> that fires during a domain reload), the actual

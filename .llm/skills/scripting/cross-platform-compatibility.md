@@ -83,7 +83,7 @@ status: "stable"
 ## Overview
 
 Scripts that work locally on Windows or macOS often fail in CI/CD environments running Linux.
-The most common cause is **filename case sensitivity**—Linux filesystems are case-sensitive while
+The most common cause is **filename case sensitivity** -- Linux filesystems are case-sensitive while
 Windows and macOS are case-insensitive by default. This skill documents patterns to prevent these
 issues and ensure all scripts have proper test coverage.
 
@@ -174,7 +174,7 @@ done
 | Platform       | Filesystem | Case-Sensitive | CI Environment |
 | -------------- | ---------- | -------------- | -------------- |
 | Linux          | ext4, XFS  | Yes            | GitHub Actions |
-| macOS          | APFS       | No (default)   | Local dev      |
+| macOS          | APFS       | (default)      | Local dev      |
 | Windows        | NTFS       | No             | Local dev      |
 | WSL            | ext4       | Yes            | Local dev      |
 | Docker (Linux) | ext4       | Yes            | Local CI       |

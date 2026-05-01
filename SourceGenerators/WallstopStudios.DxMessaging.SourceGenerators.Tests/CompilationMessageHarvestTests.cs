@@ -10,15 +10,15 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 /// Regression coverage for the dual-source console harvester. Two layers are covered here:
 /// <list type="number">
 /// <item><description>The Unity 2021 CompilerMessage parse path (fed through
-/// <see cref="BaseCallLogMessageParser.Aggregate"/>) — the wire format the harvester sees on
+/// <see cref="BaseCallLogMessageParser.Aggregate"/>) -- the wire format the harvester sees on
 /// 2021 builds.</description></item>
 /// <item><description>The per-assembly merge + retirement bookkeeping in
-/// <see cref="BaseCallReportAggregator"/> — the most novel slice of the dual-source design and
+/// <see cref="BaseCallReportAggregator"/> -- the most novel slice of the dual-source design and
 /// the part most likely to silently corrupt the snapshot if regressed.</description></item>
 /// </list>
 /// </summary>
 /// <remarks>
-/// The harvester itself lives in the Editor assembly (which dotnet-test cannot load — it depends
+/// The harvester itself lives in the Editor assembly (which dotnet-test cannot load -- it depends
 /// on UnityEditor types), so we test the slices that ARE pure: feeding synthetic
 /// `CompilerMessage`-shaped log strings through the parser, and exercising the aggregator
 /// directly via its public static API.

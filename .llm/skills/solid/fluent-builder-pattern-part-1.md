@@ -134,7 +134,7 @@ namespace WallstopStudios.UnityHelpers.Core.Cache
         /// <summary>
         /// Adds random jitter to expiration times to prevent thundering herd.
         /// </summary>
-        /// <param name="factor">Jitter factor (0.0-1.0). E.g., 0.1 = ±10% variation.</param>
+        /// <param name="factor">Jitter factor (0.0-1.0). E.g., 0.1 = +/-10% variation.</param>
         public CacheBuilder<TKey, TValue> WithExpirationJitter(float factor)
         {
             if (factor < 0f || factor > 1f)

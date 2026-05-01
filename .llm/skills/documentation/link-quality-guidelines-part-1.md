@@ -130,7 +130,7 @@ https://docs.unity3d.com/2021.3/Documentation/Manual/PageName.html
 | URL returns 200             | Open in browser, verify no 404/redirect chain        |
 | Content matches expectation | Confirm the page contains the referenced information |
 | URL is HTTPS                | Avoid HTTP links; use HTTPS for security             |
-| No URL shorteners           | Use full URLs, not bit.ly or similar                 |
+| URL shorteners              | Use full URLs, not bit.ly or similar                 |
 | Versioned when possible     | Prefer `/v1.2.3/` over `/latest/` for stability      |
 
 #### High-Risk External Domains

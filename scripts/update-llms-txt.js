@@ -211,7 +211,7 @@ DxMessaging is a high-performance messaging library for Unity (v2021.3+) that re
 ### Message Flow
 
 \`\`\`text
-Emitter → MessageBus → Interceptors → Handlers (by priority)
+Emitter > MessageBus > Interceptors > Handlers (by priority)
 \`\`\`
 
 ## Project Structure
@@ -337,7 +337,7 @@ dotnet tool run csharpier .
 dotnet build SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.csproj
 
 # Run tests (Unity Test Runner)
-# Open Unity 2021.3+ project → Window → Test Runner → PlayMode
+# Open Unity 2021.3+ project > Window > Test Runner > PlayMode
 
 # Format markdown
 npm run format:md
@@ -490,7 +490,7 @@ function main() {
         process.exit(1);
       }
 
-      console.log("✓ llms.txt is up to date");
+      console.log("[ok] llms.txt is up to date");
       process.exit(0);
     }
 
@@ -498,7 +498,7 @@ function main() {
     // Normalize to LF line endings to match .gitattributes for *.txt files
     const contentWithLF = normalizeToLf(newContent);
     fs.writeFileSync(LLMS_TXT_PATH, contentWithLF, "utf8");
-    console.log("✓ Updated llms.txt");
+    console.log("[ok] Updated llms.txt");
     process.exit(0);
   } catch (error) {
     console.error("ERROR:", error.message);

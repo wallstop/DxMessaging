@@ -1,6 +1,6 @@
 # Mental Model: How to Think About DxMessaging
 
-[← Concepts Index](index.md) | [Message Types](message-types.md) | [Getting Started](../getting-started/getting-started.md)
+[Concepts Index](index.md) | [Message Types](message-types.md) | [Getting Started](../getting-started/getting-started.md)
 
 ---
 
@@ -22,12 +22,12 @@ In a typical Unity project, you face a common challenge:
 
 ```text
 Player takes damage
-    ├── Health bar needs updating
-    ├── Sound system plays damage audio
-    ├── Camera shakes
-    ├── Achievement system checks milestones
-    ├── Analytics logs the event
-    └── Tutorial system checks for tips
+    +-- Health bar needs updating
+    +-- Sound system plays damage audio
+    +-- Camera shakes
+    +-- Achievement system checks milestones
+    +-- Analytics logs the event
+    +-- Tutorial system checks for tips
 ```
 
 Traditional approaches require tight coupling: either the Player knows about all these systems, or they all hold references to the Player. Both paths lead to tangled dependencies.
@@ -42,7 +42,7 @@ DxMessaging models three fundamental patterns of communication. Each maps to a r
 
 ```mermaid
 flowchart LR
-    S[Someone] -->|announces| PA[📢 PA System]
+    S[Someone] -->|announces| PA[PA System]
     PA --> L1[Listener A]
     PA --> L2[Listener B]
     PA --> L3[Listener C]
@@ -86,7 +86,7 @@ public readonly partial struct SettingsChanged
 
 ```mermaid
 flowchart LR
-    S[Sender] -->|"To: Player"| Letter[📬 Message Bus]
+    S[Sender] -->|"To: Player"| Letter[Message Bus]
     Letter --> Player[Player receives]
     Other1[Enemy A] -.->|ignores| Letter
     Other2[Enemy B] -.->|ignores| Letter
@@ -121,7 +121,7 @@ heal.EmitGameObjectTargeted(playerGameObject);
 
 ```mermaid
 flowchart LR
-    Source[Enemy] -->|"I took damage!"| Radio[📻 Message Bus]
+    Source[Enemy] -->|"I took damage!"| Radio[Message Bus]
     Radio --> L1[Damage Numbers UI]
     Radio --> L2[Achievement Tracker]
     Radio --> L3[Analytics]
@@ -171,11 +171,11 @@ flowchart TD
 
 | Question                            | Untargeted | Targeted | Broadcast |
 | ----------------------------------- | :--------: | :------: | :-------: |
-| Has a specific sender that matters? |     ❌     |    ❌    |    ✅     |
-| Has a specific recipient?           |     ❌     |    ✅    |    ❌     |
-| Is it a command?                    |     ❌     |    ✅    |    ❌     |
-| Is it an observable fact?           |   Maybe    |    ❌    |    ✅     |
-| Is it a global announcement?        |     ✅     |    ❌    |    ❌     |
+| Has a specific sender that matters? |     No     |    No    |    Yes    |
+| Has a specific recipient?           |     No     |   Yes    |    No     |
+| Is it a command?                    |     No     |   Yes    |    No     |
+| Is it an observable fact?           |   Maybe    |    No    |    Yes    |
+| Is it a global announcement?        |    Yes     |    No    |    No     |
 
 ## Tokens and Lifecycle
 
@@ -200,7 +200,7 @@ public class HealthDisplay : MessageAwareComponent
 }
 ```
 
-> ⚠️ **Warning: Always call `base.RegisterMessageHandlers()`**
+> **Warning: Always call `base.RegisterMessageHandlers()`**
 >
 > When overriding `RegisterMessageHandlers()`, always call `base.RegisterMessageHandlers()` first. This ensures that any registrations from parent classes are preserved. Forgetting this call can silently break inherited behavior.
 

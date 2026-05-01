@@ -166,13 +166,13 @@ jobs:
 | Missing `persist-credentials: false`    | Git credentials persist unnecessarily        | Add to checkout step                              |
 | Missing `timeout-minutes`               | Jobs can run indefinitely                    | Add timeout to every job                          |
 | Single quotes for strings               | Inconsistent with Prettier                   | Use double quotes                                 |
-| Wrong property order                    | Hard to review, fails formatting             | Use: name → on → concurrency → permissions → jobs |
+| Wrong property order                    | Hard to review, fails formatting             | Use: name > on > concurrency > permissions > jobs |
 
 ## Validation Checklist
 
 Before committing a workflow, verify:
 
-- [ ] Properties ordered: `name` → `on` → `concurrency` → `permissions` → `jobs`
+- [ ] Properties ordered: `name` to `on` to `concurrency` to `permissions` to `jobs`
 - [ ] Concurrency group defined with `cancel-in-progress: true`
 - [ ] Explicit `permissions` block with minimal required permissions
 - [ ] Every job has `timeout-minutes`
@@ -183,11 +183,11 @@ Before committing a workflow, verify:
 
 ## See Also
 
-- [Git Renormalize Pattern Validation](./git-renormalize-patterns.md) — ensuring pathspec patterns
+- [Git Renormalize Pattern Validation](./git-renormalize-patterns.md) -- ensuring pathspec patterns
   match actual repository files to prevent CI failures
-- [Cross-Platform Compatibility](../scripting/cross-platform-compatibility.md) — handling platform
+- [Cross-Platform Compatibility](../scripting/cross-platform-compatibility.md) -- handling platform
   differences in CI scripts
-- [Shell Best Practices](../scripting/shell-best-practices.md) — patterns for shell commands in
+- [Shell Best Practices](../scripting/shell-best-practices.md) -- patterns for shell commands in
   workflow steps
 
 ## Related Links

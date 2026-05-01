@@ -109,6 +109,20 @@ describe("pre-commit hook stage policy", () => {
         expect(stages).toEqual(expect.arrayContaining(["pre-commit", "pre-push"]));
     });
 
+    test("validate-changelog-policy hook runs at pre-commit/pre-push and excludes internal Editor code", () => {
+        const changelogPolicyBlock = findHookBlock(configLines, "validate-changelog-policy");
+        expect(changelogPolicyBlock).not.toBeNull();
+
+        const stages = extractStagesFromHookBlock(changelogPolicyBlock);
+        expect(stages).toEqual(expect.arrayContaining(["pre-commit", "pre-push"]));
+
+        const blockText = changelogPolicyBlock.lines.join("\n");
+        expect(blockText).toContain("entry: node scripts/validate-changelog.js --check-coverage");
+        expect(blockText).toContain("pass_filenames: false");
+        expect(blockText).toContain("files: '^(CHANGELOG\\.md|Runtime/|SourceGenerators/|Samples~/|Editor/)'");
+        expect(blockText).toMatch(/exclude:\s*['\"]\^Editor\/\(Analyzers\|Testing\)\/['\"]/);
+    });
+
     test("fix-csharp-underscore-methods hook runs at pre-commit", () => {
         const fixerBlock = findHookBlock(configLines, "fix-csharp-underscore-methods");
         expect(fixerBlock).not.toBeNull();
@@ -118,7 +132,7 @@ describe("pre-commit hook stage policy", () => {
 
         const blockText = fixerBlock.lines.join("\n");
         expect(blockText).toContain("scripts/fix-csharp-underscore-methods.js");
-        expect(blockText).toContain("git add \"$@\"");
+        expect(blockText).toContain("git diff --quiet -- \"$@\" || git add \"$@\"");
         expect(blockText).not.toContain("|| true");
         expect(blockText).not.toContain("|| echo");
     });
@@ -134,5 +148,6 @@ describe("pre-commit hook stage policy", () => {
         expect(blockText).toContain("scripts/__tests__/shell-command.test.js");
         expect(blockText).toContain("scripts/__tests__/detect-shell-redirection-antipattern.test.js");
         expect(blockText).toContain("scripts/__tests__/fix-csharp-underscore-methods.test.js");
+        expect(blockText).toContain("scripts/__tests__/validate-changelog.test.js");
     });
 });

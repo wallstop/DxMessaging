@@ -410,25 +410,25 @@ Think of DxMessaging like a restaurant:
 
 ### Untargeted = Restaurant Announcement
 
-> "Attention all customers: We're closing in 10 minutes!"
->
-> -> Everyone hears it
+to "Attention all customers: We're closing in 10 minutes!"
+
+> to -> Everyone hears it
 
 ### Targeted = Waiter Delivering Food
 
-> "Order for table 5: Here's your burger"
->
-> -> Only table 5 gets it
+to "Order for table 5: Here's your burger"
+
+> to -> Only table 5 gets it
 
 ### Broadcast = Customer Calling Waiter
 
-> "Excuse me, I need a refill!" (from table 3)
+to "Excuse me, I need a refill!" (from table 3)
+
+> to -> Comes from table 3
 >
-> -> Comes from table 3
+> to -> Any available waiter can respond
 >
-> -> Any available waiter can respond
->
-> -> Manager might track it for statistics
+> to -> Manager might track it for statistics
 
 ## Debugging Visualized
 

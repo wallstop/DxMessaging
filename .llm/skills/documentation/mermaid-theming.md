@@ -77,7 +77,7 @@ This project uses Mermaid diagrams for visualizing architecture and message flow
 
 ## Critical: Never Hardcode Dark Themes
 
-> **⚠️ NEVER use `%%{init: {'theme': 'dark'}}%%` in ANY markdown file** - not in `docs/`, not in `README.md`, nowhere.
+> **NEVER use `%%{init: {'theme': 'dark'}}%%` in ANY markdown file** - not in `docs/`, not in `README.md`, nowhere.
 
 ### Why This Matters
 
@@ -93,7 +93,7 @@ GitHub and VS Code now respect `prefers-color-scheme` automatically for Mermaid 
 **Omit init directives entirely.** Let the renderer (GitHub, VS Code, MkDocs) choose the appropriate theme based on user preferences.
 
 ````markdown
-<!-- ✅ CORRECT: No init directive -->
+<!--  CORRECT: No init directive -->
 
 ```mermaid
 flowchart TD
@@ -103,7 +103,7 @@ flowchart TD
 ````
 
 ````markdown
-<!-- ❌ FORBIDDEN: Hardcoded dark theme -->
+<!--  FORBIDDEN: Hardcoded dark theme -->
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
@@ -157,7 +157,7 @@ This ensures diagrams always match the user's preferred theme.
 
 ## Solution
 
-### ✅ Correct: docs/ Files (MkDocs)
+### Correct: docs/ Files (MkDocs)
 
 ````markdown
 ```mermaid
@@ -169,7 +169,7 @@ flowchart TD
 
 No init directive needed. The global configuration handles theming automatically.
 
-### ✅ Correct: README.md (GitHub/VS Code)
+### Correct: README.md (GitHub/VS Code)
 
 ````markdown
 ```mermaid
@@ -181,7 +181,7 @@ flowchart TD
 
 No init directive needed. GitHub and VS Code automatically detect user theme preferences.
 
-### ❌ Forbidden: Any File with Hardcoded Theme Directive
+### Forbidden: Any File with Hardcoded Theme Directive
 
 ````markdown
 ```mermaid

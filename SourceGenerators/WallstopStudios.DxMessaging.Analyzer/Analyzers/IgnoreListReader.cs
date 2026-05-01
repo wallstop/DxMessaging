@@ -16,7 +16,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
     /// The sidecar file is auto-generated from <c>DxMessagingSettings.asset</c> by the Editor
     /// integration. This reader is tolerant of missing files, blank lines, surrounding whitespace,
     /// <c>#</c>-style comments, and an optional <c>global::</c> prefix on each entry (J in the
-    /// adversarial review — keeps the FQN comparison friendly to copy-paste from compiler output).
+    /// adversarial review -- keeps the FQN comparison friendly to copy-paste from compiler output).
     /// <para>
     /// Results are cached per <see cref="AnalyzerOptions"/> instance via a
     /// <see cref="ConditionalWeakTable{TKey, TValue}"/> + <see cref="Lazy{T}"/> pair so repeat callbacks
@@ -26,7 +26,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
     /// <para>
     /// IDE-reuse caveat: under incremental scenarios (Roslyn workspace edits, IDE typing) the host
     /// may construct a fresh <see cref="AnalyzerOptions"/> instance per snapshot. The cache is
-    /// keyed on identity, so a new instance simply re-parses on first Load — correct behaviour,
+    /// keyed on identity, so a new instance simply re-parses on first Load -- correct behaviour,
     /// just not maximally cached. Within the same options instance, only one parse ever runs.
     /// </para>
     /// </remarks>

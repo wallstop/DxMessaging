@@ -334,10 +334,10 @@ function loadSkill(skillFile) {
  */
 function getComplexityBadge(level) {
     const badges = {
-        basic: "🟢 Basic",
-        intermediate: "🟡 Intermediate",
-        advanced: "🟠 Advanced",
-        expert: "🔴 Expert",
+        basic: "[basic]",
+        intermediate: "[intermediate]",
+        advanced: "[advanced]",
+        expert: "[expert]",
     };
     return badges[level] || level;
 }
@@ -347,10 +347,10 @@ function getComplexityBadge(level) {
  */
 function getStatusBadge(status) {
     const badges = {
-        draft: "📝 Draft",
-        review: "👀 Review",
-        stable: "✅ Stable",
-        deprecated: "⚠️ Deprecated",
+        draft: "[draft]",
+        review: "[review]",
+        stable: "[stable]",
+        deprecated: "[deprecated]",
     };
     return badges[status] || status;
 }
@@ -360,36 +360,36 @@ function getStatusBadge(status) {
  */
 function getImpactIndicator(rating) {
     const indicators = {
-        none: "○○○○○",
-        low: "●○○○○",
-        medium: "●●○○○",
-        high: "●●●○○",
-        critical: "●●●●●",
+        none: "[risk: none]",
+        low: "[risk: low]",
+        medium: "[risk: medium]",
+        high: "[risk: high]",
+        critical: "[risk: critical]",
     };
     return indicators[rating] || "?";
 }
 
 /**
  * Get line size indicator based on repository .llm limits.
- * < 120: 📝 (short)
- * 120-260: ✅ (ideal)
- * 261-300: ⚠️ (warning)
- * > 300: ❌ (error)
+ * < 120: [draft]
+ * 120-260: [ok]
+ * 261-300: [warn]
+ * > 300: [over]
  */
 function getLineSizeIndicator(lineCount) {
     if (typeof lineCount !== "number") {
         return "?";
     }
     if (lineCount > 300) {
-        return "❌";
+        return "[over]";
     }
     if (lineCount > 260) {
-        return "⚠️";
+        return "[warn]";
     }
     if (lineCount >= 120) {
-        return "✅";
+        return "[ok]";
     }
-    return "📝";
+    return "[draft]";
 }
 
 /**

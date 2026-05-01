@@ -42,6 +42,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Check hook-managed Prettier targets: `npm run check:prettier:hooks`
 - Validate YAML formatting and lint policy: `npm run check:yaml`
 - Validate npm package meta integrity: `npm run validate:npm-meta`
+- Validate changelog structure plus changed-file coverage: `npm run validate:changelog:coverage`
 - Check C# method naming (no underscores): `node scripts/fix-csharp-underscore-methods.js --check --all`
 - Auto-fix C# method naming on selected files: `node scripts/fix-csharp-underscore-methods.js <changed-files...>`
 - File-scoped spellcheck: `npx --yes cspell@9 --no-progress --no-summary <changed-files...>`
@@ -59,6 +60,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Keep braces explicit.
 - Avoid regions.
 - Use PascalCase for all method names with no underscores (including test methods); this is auto-enforced by the `fix-csharp-underscore-methods` pre-commit hook.
+- For base-call analyzer suppression parity, method-level `[DxIgnoreMissingBaseCall]` suppresses only the annotated guarded method; class-level attribute or project ignore list suppresses the entire type.
 - Keep test names descriptive and readable.
 - Keep public API changes intentional and backward-compatible unless planned otherwise.
 
@@ -70,12 +72,15 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Add tests for parser changes and malformed input edge cases.
 - For path-exclusion logic in script CLIs, apply exclusion patterns only to repository-local paths and add paired tests for outside-repo explicit file args plus repo-internal excluded directories.
 - For pre-commit hooks that operate on staged files, remember pre-commit stashes unstaged changes and runs hooks against the staged snapshot on disk; reproduce failures through commit-equivalent hook runs when validating behavior.
+- For auto-fix hooks that restage files, guard restaging with `git diff --quiet -- "$@" || git add "$@"` so no-op runs do not touch the git index.
 - For Jest in hooks or npm scripts, use `node scripts/run-managed-jest.js` instead of bare `jest` invocations.
 - For Prettier in hooks or npm scripts, use `node scripts/run-managed-prettier.js` instead of hardcoded `prettier@X.Y.Z` commands. The managed runner resolves versions in this order: package-lock.json, package.json, then static fallback.
 - For `npm`/`npx` child-process calls in `scripts/*.js` (`spawnSync`, `execFileSync`, `execSync`), use `spawnPlatformCommandSync()` from `scripts/lib/shell-command.js`. Do not call `spawnSync(toShellCommand(...))` directly; the helper applies Windows shell-shim execution rules consistently.
+- For validators that depend on `git` metadata (for example ignore-policy checks), treat `ENOENT`/missing-git failures as hard errors; never silently default to permissive behavior.
 - When editing `scripts/validate-npm-meta.js`, `scripts/__tests__/validate-npm-meta.test.js`, or npm package metadata, run `npm run validate:npm-meta` before finishing.
 - When editing `scripts/fix-csharp-underscore-methods.js` or its tests, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/fix-csharp-underscore-methods.test.js` and then `npm run preflight:pre-commit` before finishing.
 - For parser-script failures, verify both isolated and hook-parity execution before concluding root cause: run the focused Jest path first, then run `pre-commit run script-parser-tests --all-files` from the same shell used for commit operations.
+- When editing `.pre-commit-config.yaml` or `scripts/validate-pre-commit-tooling.js`, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/pre-commit-hook-stage-policy.test.js scripts/__tests__/validate-pre-commit-tooling.test.js` before `npm run preflight:pre-commit`.
 - On Windows, verify `npm --version` in the active shell before running hook-related checks (especially when using nvm/fnm).
 - On Windows hosts, run `npm run preflight:pre-commit` in the same shell you use for `git commit` so hook PATH/init, npm version drift, package.json formatting, and yamllint issues are caught before commit.
 - For destructive test harness scripts (for example deleting files under `node_modules`), require explicit CLI opt-in flags and validate target paths defensively before mutation.
@@ -100,10 +105,14 @@ This file is intentionally concise. It contains only critical, high-signal guida
 
 - Update relevant docs after user-visible behavior changes.
 - Keep examples accurate and aligned with real usage.
-- Update `CHANGELOG.md` for user-facing changes.
+- Update `CHANGELOG.md` only for user-facing DxMessaging changes, not developer-only tooling/process updates.
+- For `## [Unreleased]` entries, mutate existing bullets as behavior evolves; do not stack separate `Added` then `Fixed` bullets for the same unreleased change.
+- When likely user-visible files change (`Runtime/`, `SourceGenerators/`, `Samples~/`, and user-facing `Editor/` code), ensure `CHANGELOG.md` is updated in the same change and run `npm run validate:changelog:coverage`.
 - For edited Markdown files, run `node scripts/fix-md029-md051.js` and then `npx markdownlint-cli2` before finishing.
 - Ordered lists must follow MD029 `one` style (`1.` for each item).
 - Internal fragment links must match GitHub/markdownlint heading slugs exactly (MD051).
+- Documentation and `///` XML doc comments must be pure ASCII; see [ASCII-Only Documentation Policy](./skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` before finishing.
+- Every C# code sample in docs - inline, fenced, and XML `<code>` blocks - must compile; see [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite before finishing.
 
 ## Skills to Prefer
 
@@ -124,5 +133,7 @@ Use the index above and then select the most relevant skill pages. Frequently us
 
 - [Skill File Sizing Guidelines](./skills/documentation/skill-file-sizing.md)
 - [Documentation Updates and Maintenance](./skills/documentation/documentation-updates.md)
+- [ASCII-Only Documentation Policy](./skills/documentation/ascii-only-docs.md)
+- [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md)
 - [Cross-Platform Script Compatibility](./skills/scripting/cross-platform-compatibility.md)
 - [Test Failure Investigation and Zero-Flaky Policy](./skills/testing/test-failure-investigation.md)

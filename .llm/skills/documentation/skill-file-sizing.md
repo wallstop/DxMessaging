@@ -92,12 +92,12 @@ Conversely, files that are too short may lack:
 
 Apply strict line count limits with graduated enforcement:
 
-| Range         | Status     | Action                                     |
-| ------------- | ---------- | ------------------------------------------ |
-| < 120 lines   | 📝 Short   | Consider adding more examples or detail    |
-| 120-260 lines | ✅ Ideal   | Target range for skill files               |
-| 261-300 lines | ⚠️ Warning | Consider splitting into focused sub-skills |
-| > 300 lines   | ❌ Error   | Must split; blocks CI/pre-commit           |
+| Range         | Status  | Action                                     |
+| ------------- | ------- | ------------------------------------------ |
+| < 120 lines   | Short   | Consider adding more examples or detail    |
+| 120-260 lines | Ideal   | Target range for skill files               |
+| 261-300 lines | Warning | Consider splitting into focused sub-skills |
+| > 300 lines   | Error   | Must split; blocks CI/pre-commit           |
 
 ### Implementation
 
@@ -143,17 +143,17 @@ If `object-pooling.md` exceeds 350 lines:
 
 ```text
 .llm/skills/performance/
-└── object-pooling.md (450 lines)
++-- object-pooling.md (450 lines)
 ```
 
 **After** (split by variation):
 
 ```text
 .llm/skills/performance/
-├── object-pooling.md (180 lines - core concept)
-├── array-pooling.md (200 lines - array-specific)
-├── collection-pooling.md (220 lines - collections)
-└── stringbuilder-pooling.md (190 lines - StringBuilder)
++-- object-pooling.md (180 lines - core concept)
++-- array-pooling.md (200 lines - array-specific)
++-- collection-pooling.md (220 lines - collections)
++-- stringbuilder-pooling.md (190 lines - StringBuilder)
 ```
 
 ### Example 2: Organizing Related Skills
@@ -170,7 +170,7 @@ Group related skills under a common category with cross-references:
 
 ## Anti-Patterns
 
-### ❌ Kitchen Sink Skills
+### Kitchen Sink Skills
 
 ```markdown
 # Everything About Performance
@@ -181,7 +181,7 @@ memory alignment, SIMD, async patterns, threading...
 
 **Why it's wrong**: Covers too many unrelated concepts. Split into focused skills.
 
-### ❌ Overly Terse Skills
+### Overly Terse Skills
 
 ```markdown
 # Object Pooling
@@ -195,7 +195,7 @@ Done.
 
 **Why it's wrong**: Lacks examples, context, anti-patterns, and edge cases.
 
-### ❌ Excessive Code Duplication
+### Excessive Code Duplication
 
 Including the same example code in multiple variations within one file. Extract to a referenced utility or create separate skill files.
 
@@ -208,8 +208,8 @@ Validation is automated:
 node scripts/validate-skills.js
 
 # Check output for size warnings/errors
-# ⚠️  size: File has 380 lines (ideal: 200-350)
-# ❌ size: File has 520 lines (max: 500)
+#   size: File has 380 lines (ideal: 200-350)
+#  size: File has 520 lines (max: 500)
 ```
 
 ## When to Split a Skill
@@ -226,10 +226,10 @@ Consider splitting when:
 
 ```text
 .llm/skills/{category}/
-├── {main-concept}.md           # Core pattern (200-350 lines)
-├── {concept}-{variation1}.md   # Specific variation
-├── {concept}-{variation2}.md   # Another variation
-└── {concept}-advanced.md       # Advanced usage
++-- {main-concept}.md           # Core pattern (200-350 lines)
++-- {concept}-{variation1}.md   # Specific variation
++-- {concept}-{variation2}.md   # Another variation
++-- {concept}-advanced.md       # Advanced usage
 ```
 
 Cross-reference using the `related` frontmatter field and `## See Also` sections.

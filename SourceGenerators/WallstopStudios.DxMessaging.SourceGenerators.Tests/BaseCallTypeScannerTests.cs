@@ -30,7 +30,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 /// <list type="bullet">
 /// <item><description>DXMSG006 attribution when an override does not call base.</description></item>
 /// <item><description>DXMSG007 attribution for <c>new</c>-shadowed lifecycle methods (and the
-/// fact that DXMSG009 is conservatively classified the same way — IL alone cannot distinguish
+/// fact that DXMSG009 is conservatively classified the same way -- IL alone cannot distinguish
 /// the two).</description></item>
 /// <item><description>DXMSG010 attribution at the LEAF when an intermediate ancestor's override
 /// fails to call base. Includes the four-level <c>Leaf : Middle : ddd : MAC</c> case to prove the
@@ -39,9 +39,9 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 /// project-level ignored-types list.</description></item>
 /// <item><description>Skipping abstract types and generic-type definitions (they aren't
 /// instantiable so their override shape doesn't matter to the runtime overlay).</description></item>
-/// <item><description>FQN normalisation (<c>Outer+Nested</c> → <c>Outer.Nested</c>) so the
+/// <item><description>FQN normalisation (<c>Outer+Nested</c>  to  <c>Outer.Nested</c>) so the
 /// snapshot key matches what the analyzer emits.</description></item>
-/// <item><description>Independence across types — two broken types both appear in the snapshot.</description></item>
+/// <item><description>Independence across types -- two broken types both appear in the snapshot.</description></item>
 /// <item><description>Healthy chains report nothing (no false positives).</description></item>
 /// </list>
 /// </remarks>
@@ -471,23 +471,26 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
-    public void ScanMethodLevelDxIgnoreMissingBaseCallAttributeExcludesFromSnapshot()
+    public void ScanMethodLevelDxIgnoreMissingBaseCallAttributeSuppressesOnlyAnnotatedMethod()
     {
-        // Spec 2a: the class itself is NOT marked, but a single method has the
-        // [DxIgnoreMissingBaseCall] attribute. The scanner's method-level check (over the five
-        // guarded methods) opts the entire type out from the inspector overlay — matching the
-        // attribute applied to a method on a non-attributed class.
+        // A method-level suppression applies only to that annotated guarded method. Other
+        // broken methods on the same type must still appear in the snapshot.
         Assembly fixture = CompileFixture(
             """
             using DxMessaging.Unity;
             using DxMessaging.Core.Attributes;
 
-            public class IgnoredViaMethod : MessageAwareComponent
+            public class PartiallyIgnored : MessageAwareComponent
             {
                 [DxIgnoreMissingBaseCall]
                 protected override void OnEnable()
                 {
-                    // Broken, but the method is opted out — this should suppress the type.
+                    // Broken, but explicitly suppressed at the method level.
+                }
+
+                protected override void OnDisable()
+                {
+                    // Broken and not suppressed.
                 }
             }
             """
@@ -496,7 +499,43 @@ public sealed class BaseCallTypeScannerTests
         Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
             BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
 
-        Assert.That(snapshot, Is.Empty);
+        Assert.That(snapshot, Contains.Key("PartiallyIgnored"));
+        BaseCallTypeScannerCore.ScanEntry entry = snapshot["PartiallyIgnored"];
+        Assert.That(entry.MissingBaseFor, Is.EquivalentTo(new[] { "OnDisable" }));
+        Assert.That(entry.DiagnosticIds, Is.EquivalentTo(new[] { "DXMSG006" }));
+    }
+
+    [Test]
+    public void ScanAllBrokenMethodsSuppressedByMethodLevelAttributesProducesNoEntry()
+    {
+        // If every broken method is method-level suppressed, the scanner should produce no row
+        // because MissingBaseFor is empty after suppression filtering.
+        Assembly fixture = CompileFixture(
+            """
+            using DxMessaging.Unity;
+            using DxMessaging.Core.Attributes;
+
+            public class AllSuppressed : MessageAwareComponent
+            {
+                [DxIgnoreMissingBaseCall]
+                protected override void OnEnable()
+                {
+                    // Broken, but explicitly suppressed.
+                }
+
+                [DxIgnoreMissingBaseCall]
+                protected override void OnDisable()
+                {
+                    // Broken, but explicitly suppressed.
+                }
+            }
+            """
+        );
+
+        Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
+            BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
+
+        Assert.That(snapshot, Does.Not.ContainKey("AllSuppressed"));
     }
 
     [Test]

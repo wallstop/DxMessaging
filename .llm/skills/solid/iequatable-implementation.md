@@ -200,7 +200,7 @@ namespace WallstopStudios.UnityHelpers.Core.DataStructure
 | Without IEquatable | With IEquatable |
 | ------------------ | --------------- |
 | 4MB allocations    | 0 allocations   |
-| GC pauses          | No GC pressure  |
+| GC pauses          | GC pressure     |
 
 ## Best Practices
 

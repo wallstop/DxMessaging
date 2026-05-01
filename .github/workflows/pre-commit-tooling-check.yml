@@ -125,6 +125,9 @@ jobs:
       - name: Validate YAML formatting and lint policy
         run: pre-commit run yamllint --all-files
 
+      - name: Validate changelog policy hook
+        run: pre-commit run validate-changelog-policy --all-files
+
       - name: Run parser script tests hook
         run: pre-commit run script-parser-tests --all-files
 

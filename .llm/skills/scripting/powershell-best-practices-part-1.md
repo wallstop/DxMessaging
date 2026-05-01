@@ -80,9 +80,9 @@ $pattern = '<!--.*?-->'    # Correct: use non-greedy for comments
 
 This distinction applies when:
 
-1. **Matching XML/SVG/HTML tag attributes**: `[^>]*` is safe—closing `>` is outside quotes
+1. **Matching XML/SVG/HTML tag attributes**: `[^>]*` is safe -- closing `>` is outside quotes
 1. **The file is controlled/validated**: Project-maintained assets with known format
-1. **Matching comments or CDATA**: Use `.*?` instead—these sections allow `>`
+1. **Matching comments or CDATA**: Use `.*?` instead -- these sections allow `>`
 
 ### Structural Completeness in XML/SVG Replacements
 
@@ -98,14 +98,14 @@ $pattern = '<g id="version-badge">.*?</text>'
 $replacement = '<g id="version-badge"><text>New Content</text>'
 
 # Input:  <g id="version-badge"><text>Old</text></g>
-# Result: <g id="version-badge"><text>New Content</text></g>  ← Works by accident!
+# Result: <g id="version-badge"><text>New Content</text></g>  <- Works by accident!
 
 # But what if there's whitespace or nested elements?
 # Input:  <g id="version-badge">
 #           <text>Old</text>
 #         </g>
 # Result: <g id="version-badge"><text>New Content</text>
-#         </g>  ← Broken indentation, fragile!
+#         </g>  <- Broken indentation, fragile!
 ```
 
 The pattern relies on `</g>` being immediately after `</text>`, which is an undocumented assumption.
@@ -176,7 +176,7 @@ $json = @"
     ""name"": ""value""
 }
 "@
-# Output: {"name": "value"} ← Wrong!
+# Output: {"name": "value"} <- Wrong!
 
 # CORRECT: Use single quotes naturally
 $json = @"
@@ -184,19 +184,19 @@ $json = @"
     "name": "value"
 }
 "@
-# Output: {"name": "value"} ← Correct!
+# Output: {"name": "value"} <- Correct!
 ```
 
 ### Single-Quote Here-Strings (@'...'@)
 
-In `@'...'@` here-strings, no escaping is possible—everything is literal.
+In `@'...'@` here-strings, no escaping is possible -- everything is literal.
 
 ### Here-String Syntax Rules
 
 | Type      | Variable Expansion | Quote Escaping Required | Use Case            |
 | --------- | ------------------ | ----------------------- | ------------------- |
-| `@"..."@` | Yes                | No (use single `"`)     | Dynamic content     |
-| `@'...'@` | No                 | No escaping possible    | Literal/static text |
+| `@"..."@` | Yes                | (use single `"`)        | Dynamic content     |
+| `@'...'@` | No                 | escaping possible       | Literal/static text |
 
 ## See Also
 

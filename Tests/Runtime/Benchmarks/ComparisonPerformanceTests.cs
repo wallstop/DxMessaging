@@ -61,42 +61,53 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             Stopwatch timer = Stopwatch.StartNew();
             SimpleUntargetedMessage message = new();
 
-            RunWithComponent(component =>
-            {
-                int count = 0;
-                MessageRegistrationToken token = GetToken(component);
-                token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
-
-                message.EmitUntargeted();
-
-                timer.Restart();
-                do
+            RunWithComponent(
+                (_, token) =>
                 {
-                    for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                    int count = 0;
+                    token.RegisterUntargeted<SimpleUntargetedMessage>(Handle);
+
+                    message.EmitUntargeted();
+
+                    timer.Restart();
+                    do
                     {
-                        message.EmitUntargeted();
+                        for (int i = 0; i < NumInvocationsPerIteration; ++i)
+                        {
+                            message.EmitUntargeted();
+                        }
+                    } while (timer.Elapsed < timeout);
+
+                    bool allocating;
+                    try
+                    {
+                        Assert.That(() => message.EmitUntargeted(), Is.Not.AllocatingGCMemory());
+                        allocating = false;
                     }
-                } while (timer.Elapsed < timeout);
+                    catch
+                    {
+                        allocating = true;
+                    }
 
-                bool allocating;
-                try
-                {
-                    Assert.That(() => message.EmitUntargeted(), Is.Not.AllocatingGCMemory());
-                    allocating = false;
-                }
-                catch
-                {
-                    allocating = true;
-                }
+                    Assert.Greater(
+                        count,
+                        0,
+                        "DxMessaging comparison benchmark should invoke handlers."
+                    );
+                    RecordBenchmark(
+                        "DxMessaging (Untargeted) - No-Copy",
+                        count,
+                        timer.Elapsed,
+                        allocating
+                    );
+                    return;
 
-                RecordBenchmark("DxMessaging (Untargeted) - No-Copy", count, timeout, allocating);
-                return;
-
-                void Handle(ref SimpleUntargetedMessage _)
-                {
-                    ++count;
+                    void Handle(ref SimpleUntargetedMessage _)
+                    {
+                        ++count;
+                    }
                 }
-            });
+            );
         }
 
 #if ZENJECT_PRESENT
@@ -135,7 +146,8 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 allocating = true;
             }
 
-            RecordBenchmark("Zenject SignalBus", count, timeout, allocating);
+            Assert.Greater(count, 0, "Zenject comparison benchmark should invoke handlers.");
+            RecordBenchmark("Zenject SignalBus", count, timer.Elapsed, allocating);
         }
 #else
         private void BenchmarkZenjectSignals(TimeSpan timeout)
@@ -180,7 +192,8 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 allocating = true;
             }
 
-            RecordBenchmark("UniRx MessageBroker", count, timeout, allocating);
+            Assert.Greater(count, 0, "UniRx comparison benchmark should invoke handlers.");
+            RecordBenchmark("UniRx MessageBroker", count, timer.Elapsed, allocating);
         }
 #else
         private void BenchmarkUniRx(TimeSpan timeout)
@@ -225,7 +238,8 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
                 allocating = true;
             }
 
-            RecordBenchmark("MessagePipe (Global)", count, timeout, allocating);
+            Assert.Greater(count, 0, "MessagePipe comparison benchmark should invoke handlers.");
+            RecordBenchmark("MessagePipe (Global)", count, timer.Elapsed, allocating);
         }
 #else
         private void BenchmarkMessagePipe(TimeSpan timeout)

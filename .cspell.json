@@ -69,6 +69,7 @@
     "methodimpl",
     "iequatable",
     "IEquatable",
+    "IMGUI",
     "inlinable",
     "inlines",
     "customisation",
@@ -97,6 +98,7 @@
     "pygments",
     "kwds",
     "arithmatex",
+    "apos",
     "linenums",
     "inlinehilite",
     "cairosvg",
@@ -173,6 +175,7 @@
     "Slru",
     "RAII",
     "raii",
+    "rvalue",
     "Configurator",
     "Initializable",
     "Hipple",
@@ -204,6 +207,7 @@
     "Fira",
     "APFS",
     "NTFS",
+    "ENOENT",
     "nocasematch",
     "émoji",
     "directx",
@@ -240,7 +244,8 @@
     "unconfigured",
     "unrecognised",
     "Unrecognised",
-    "unmatch"
+    "unmatch",
+    "unstubbed"
   ],
   "ignoreRegExpList": [
     "/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g",

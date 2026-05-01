@@ -26,11 +26,11 @@ Continuation material extracted from `aggressive-inlining.md` to keep .llm files
 
 ```text
 Without Inlining:                    With Inlining:
-─────────────────                    ────────────────
-call GetValue()  ─┐                  sum += _value;
-  push this       │ ~3-5 cycles      (directly inline)
-  push return     │
-  pop result     ─┘                  ~1 cycle
+----------------- ----------------
+call GetValue()    -+                sum += _value;
+  push this         |  ~3-5 cycles   (directly inline)
+  push return       |
+  pop result       -+                ~1 cycle
 ```
 
 ### Implementation
