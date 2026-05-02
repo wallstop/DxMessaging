@@ -99,8 +99,8 @@ public sealed class CompilationMessageHarvestTests
     [Test]
     public void AggregateOnEmptyInputReturnsEmptyDictionary()
     {
-        // The harvester calls Aggregate even when an assembly produced zero matching messages
-        //; the empty result is then used by ApplyCompilerMessageDrain to RETIRE the previous
+        // The harvester calls Aggregate even when an assembly produced zero matching messages;
+        // the empty result is then used by ApplyCompilerMessageDrain to RETIRE the previous
         // attribution for that assembly. Stable empty handling is load-bearing for that flow.
         Dictionary<string, ParsedTypeReport> aggregated = BaseCallLogMessageParser.Aggregate(
             Array.Empty<string>()
