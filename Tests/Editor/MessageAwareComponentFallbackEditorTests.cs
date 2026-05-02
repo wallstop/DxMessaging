@@ -81,7 +81,7 @@ namespace DxMessaging.Tests.Editor
             // The [CustomEditor] attribute MUST register this editor as a PRIMARY (non-fallback)
             // editor for every MessageAwareComponent subclass. Earlier attempts to use
             // isFallback = true caused Unity to skip our editor entirely and pick GenericInspector
-            // instead — which dropped the missing-base-call HelpBox warnings on every component
+            // instead; which dropped the missing-base-call HelpBox warnings on every component
             // because Unity 2021's Editor.finishedDefaultHeaderGUI hook does not reliably fire for
             // MonoBehaviour subclasses that have no registered [CustomEditor].
             //
@@ -91,7 +91,7 @@ namespace DxMessaging.Tests.Editor
             // every MonoBehaviour shows). There is no missing row to leave a gap.
             //
             // CustomEditor.isFallback has been a public field on UnityEditor.CustomEditor since
-            // at least Unity 2017.2 — we read it directly without reflection. The contract:
+            // at least Unity 2017.2; we read it directly without reflection. The contract:
             // isFallback MUST be false (default), editorForChildClasses MUST be true.
             Type fallbackType = typeof(MessageAwareComponentFallbackEditor);
             object[] attributes = fallbackType.GetCustomAttributes(
@@ -108,7 +108,7 @@ namespace DxMessaging.Tests.Editor
             Assert.That(
                 customEditor.isFallback,
                 Is.False,
-                "MessageAwareComponentFallbackEditor must register with isFallback = false (the default). Setting isFallback = true causes Unity to prefer GenericInspector for every MessageAwareComponent subclass, which silently drops the missing-base-call HelpBox warnings — the regression this test was added to prevent."
+                "MessageAwareComponentFallbackEditor must register with isFallback = false (the default). Setting isFallback = true causes Unity to prefer GenericInspector for every MessageAwareComponent subclass, which silently drops the missing-base-call HelpBox warnings; the regression this test was added to prevent."
             );
 
             FieldInfo editorForChildClassesField = typeof(CustomEditor).GetField(
@@ -118,7 +118,7 @@ namespace DxMessaging.Tests.Editor
             Assert.That(
                 editorForChildClassesField,
                 Is.Not.Null,
-                "Unity's CustomEditor.m_EditorForChildClasses field is missing — Unity may have renamed the field; update this test."
+                "Unity's CustomEditor.m_EditorForChildClasses field is missing; Unity may have renamed the field; update this test."
             );
             bool editorForChildClasses = (bool)editorForChildClassesField.GetValue(customEditor);
             Assert.That(
@@ -146,7 +146,7 @@ namespace DxMessaging.Tests.Editor
             Assert.That(
                 editor,
                 Is.Not.Null,
-                "Editor.CreateEditor returned null for the empty subclass — Unity could not resolve any editor."
+                "Editor.CreateEditor returned null for the empty subclass; Unity could not resolve any editor."
             );
             Assert.That(
                 editor,

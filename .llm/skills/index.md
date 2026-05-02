@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-04-30. Do not edit manually.
+> **Auto-generated** on 2026-05-01. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 135   |
+| Total Skills | 138   |
 | Categories   | 7     |
 
 ---
@@ -22,7 +22,7 @@
 - [Performance](#performance) (40)
 - [Scripting](#scripting) (15)
 - [Solid](#solid) (15)
-- [Testing](#testing) (32)
+- [Testing](#testing) (35)
 
 ---
 
@@ -161,40 +161,43 @@
 
 ## Testing
 
-| Skill                                                                                                 | Lines       | Complexity     | Status   | Performance    | Tags                         |
-| ----------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | -------------- | ---------------------------- |
-| [Comprehensive Test Coverage Requirements](./testing/comprehensive-test-coverage.md)                  | [ok] 142    | [intermediate] | [stable] | [risk: none]   | testing, coverage            |
-| [Data-Driven Coverage Patterns](./testing/test-coverage-data-driven.md)                               | [ok] 173    | [intermediate] | [stable] | [risk: none]   | testing, data-driven         |
-| [Data-Driven Test Sources](./testing/data-driven-tests-sources.md)                                    | [ok] 256    | [intermediate] | [stable] | [risk: none]   | testing, parameterized       |
-| [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md)                               | [draft] 108 | [intermediate] | [stable] | [risk: none]   | testing, parameterized       |
-| [Data-Driven Tests with TestCaseSource](./testing/data-driven-tests.md)                               | [ok] 198    | [intermediate] | [stable] | [risk: low]    | testing, parameterized       |
-| [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md)                            | [ok] 214    | [intermediate] | [stable] | [risk: none]   | testing, git                 |
-| [Git and Parser Robustness in CI/CD Part 1](./testing/git-workflow-robustness-part-1.md)              | [ok] 188    | [intermediate] | [stable] | [risk: low]    | migration, split             |
-| [Inspector Overlay Invariants for MessageAwareComponent](./testing/inspector-overlay-invariants.md)   | [ok] 152    | [intermediate] | [stable] | [risk: low]    | testing, editor              |
-| [Script Test Coverage Requirements](./testing/script-test-coverage.md)                                | [ok] 260    | [intermediate] | [stable] | [risk: none]   | testing, scripts             |
-| [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                       | [ok] 186    | [advanced]     | [stable] | [risk: high]   | testing, fixtures            |
-| [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)           | [ok] 253    | [advanced]     | [stable] | [risk: high]   | testing, fixtures            |
-| [Shared Test Fixtures with Reference Counting](./testing/shared-test-fixtures.md)                     | [ok] 166    | [advanced]     | [stable] | [risk: high]   | testing, fixtures            |
-| [Test Base Class Cleanup Usage](./testing/test-base-class-cleanup-usage.md)                           | [ok] 219    | [intermediate] | [stable] | [risk: low]    | testing, cleanup             |
-| [Test Base Class with Automatic Resource Cleanup](./testing/test-base-class-cleanup.md)               | [ok] 125    | [intermediate] | [stable] | [risk: low]    | testing, cleanup             |
-| [Test Base Class with Automatic Resource Cleanup Part 1](./testing/test-base-class-cleanup-part-1.md) | [ok] 232    | [intermediate] | [stable] | [risk: low]    | migration, split             |
-| [Test Categories for Selective Execution](./testing/test-categories.md)                               | [ok] 253    | [basic]        | [stable] | [risk: high]   | testing, organization        |
-| [Test Categories for Selective Execution Part 1](./testing/test-categories-part-1.md)                 | [draft] 67  | [intermediate] | [stable] | [risk: low]    | migration, split             |
-| [Test Category Execution](./testing/test-categories-execution.md)                                     | [ok] 143    | [basic]        | [stable] | [risk: none]   | testing, organization        |
-| [Test Code Quality and Accuracy](./testing/test-code-quality.md)                                      | [ok] 244    | [intermediate] | [stable] | [risk: medium] | testing, documentation       |
-| [Test Coverage Scenario Categories](./testing/test-coverage-scenario-categories.md)                   | [ok] 224    | [intermediate] | [stable] | [risk: none]   | testing, coverage            |
-| [Test Diagnostics and Investigation Patterns](./testing/test-diagnostics.md)                          | [ok] 248    | [intermediate] | [stable] | [risk: low]    | testing, diagnostics         |
-| [Test Diagnostics Patterns](./testing/test-diagnostics-patterns.md)                                   | [ok] 190    | [intermediate] | [stable] | [risk: low]    | testing, diagnostics         |
-| [Test Diagnostics Usage](./testing/test-diagnostics-usage.md)                                         | [ok] 197    | [intermediate] | [stable] | [risk: low]    | testing, diagnostics         |
-| [Test Failure Investigation and Zero-Flaky Policy](./testing/test-failure-investigation.md)           | [ok] 120    | [intermediate] | [stable] | [risk: none]   | testing, investigation       |
-| [Test Failure Investigation Procedure](./testing/test-failure-investigation-procedure.md)             | [ok] 217    | [intermediate] | [stable] | [risk: none]   | testing, investigation       |
-| [Test Failure Root Causes and Anti-Patterns](./testing/test-failure-investigation-root-causes.md)     | [ok] 187    | [intermediate] | [stable] | [risk: none]   | testing, root-cause-analysis |
-| [Test Invalid Skill](./testing/test-invalid-skill.md)                                                 | [draft] 31  | [expert]       | [stable] | [risk: high]   | testing, fixtures            |
-| [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)                | [ok] 174    | [basic]        | [stable] | [risk: none]   | testing, assertions          |
-| [Test Production Code Directly](./testing/test-production-code.md)                                    | [ok] 146    | [intermediate] | [stable] | [risk: none]   | testing, anti-patterns       |
-| [Test Production Code Directly Part 1](./testing/test-production-code-part-1.md)                      | [ok] 205    | [intermediate] | [stable] | [risk: low]    | migration, split             |
-| [Test Production Code Directly Part 2](./testing/test-production-code-part-2.md)                      | [draft] 66  | [intermediate] | [stable] | [risk: low]    | migration, split             |
-| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)         | [warn] 270  | [basic]        | [stable] | [risk: none]   | testing, unity               |
+| Skill                                                                                                   | Lines       | Complexity     | Status   | Performance      | Tags                         |
+| ------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ---------------- | ---------------------------- |
+| [Allocation Coverage Required for Dispatch](./testing/allocation-coverage-required-for-dispatch.md)     | [ok] 259    | [intermediate] | [stable] | [risk: critical] | testing, allocation          |
+| [Comprehensive Test Coverage Requirements](./testing/comprehensive-test-coverage.md)                    | [ok] 142    | [intermediate] | [stable] | [risk: none]     | testing, coverage            |
+| [Data-Driven Coverage Patterns](./testing/test-coverage-data-driven.md)                                 | [ok] 173    | [intermediate] | [stable] | [risk: none]     | testing, data-driven         |
+| [Data-Driven Test Sources](./testing/data-driven-tests-sources.md)                                      | [ok] 256    | [intermediate] | [stable] | [risk: none]     | testing, parameterized       |
+| [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md)                                 | [draft] 108 | [intermediate] | [stable] | [risk: none]     | testing, parameterized       |
+| [Data-Driven Tests with TestCaseSource](./testing/data-driven-tests.md)                                 | [ok] 198    | [intermediate] | [stable] | [risk: low]      | testing, parameterized       |
+| [Git and Parser Robustness in CI/CD](./testing/git-workflow-robustness.md)                              | [ok] 214    | [intermediate] | [stable] | [risk: none]     | testing, git                 |
+| [Git and Parser Robustness in CI/CD Part 1](./testing/git-workflow-robustness-part-1.md)                | [ok] 188    | [intermediate] | [stable] | [risk: low]      | migration, split             |
+| [Inspector Overlay Invariants for MessageAwareComponent](./testing/inspector-overlay-invariants.md)     | [ok] 152    | [intermediate] | [stable] | [risk: low]      | testing, editor              |
+| [Script Test Coverage Requirements](./testing/script-test-coverage.md)                                  | [ok] 260    | [intermediate] | [stable] | [risk: none]     | testing, scripts             |
+| [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                         | [ok] 186    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |
+| [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)             | [ok] 253    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |
+| [Shared Test Fixtures with Reference Counting](./testing/shared-test-fixtures.md)                       | [ok] 166    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |
+| [Single Thread Contract](./testing/single-thread-contract.md)                                           | [ok] 201    | [intermediate] | [stable] | [risk: high]     | testing, concurrency         |
+| [Test Base Class Cleanup Usage](./testing/test-base-class-cleanup-usage.md)                             | [ok] 219    | [intermediate] | [stable] | [risk: low]      | testing, cleanup             |
+| [Test Base Class with Automatic Resource Cleanup](./testing/test-base-class-cleanup.md)                 | [ok] 125    | [intermediate] | [stable] | [risk: low]      | testing, cleanup             |
+| [Test Base Class with Automatic Resource Cleanup Part 1](./testing/test-base-class-cleanup-part-1.md)   | [ok] 232    | [intermediate] | [stable] | [risk: low]      | migration, split             |
+| [Test Categories for Selective Execution](./testing/test-categories.md)                                 | [ok] 253    | [basic]        | [stable] | [risk: high]     | testing, organization        |
+| [Test Categories for Selective Execution Part 1](./testing/test-categories-part-1.md)                   | [draft] 67  | [intermediate] | [stable] | [risk: low]      | migration, split             |
+| [Test Category Execution](./testing/test-categories-execution.md)                                       | [ok] 143    | [basic]        | [stable] | [risk: none]     | testing, organization        |
+| [Test Code Quality and Accuracy](./testing/test-code-quality.md)                                        | [ok] 244    | [intermediate] | [stable] | [risk: medium]   | testing, documentation       |
+| [Test Coverage Scenario Categories](./testing/test-coverage-scenario-categories.md)                     | [ok] 224    | [intermediate] | [stable] | [risk: none]     | testing, coverage            |
+| [Test Diagnostics and Investigation Patterns](./testing/test-diagnostics.md)                            | [ok] 248    | [intermediate] | [stable] | [risk: low]      | testing, diagnostics         |
+| [Test Diagnostics Patterns](./testing/test-diagnostics-patterns.md)                                     | [ok] 190    | [intermediate] | [stable] | [risk: low]      | testing, diagnostics         |
+| [Test Diagnostics Usage](./testing/test-diagnostics-usage.md)                                           | [ok] 197    | [intermediate] | [stable] | [risk: low]      | testing, diagnostics         |
+| [Test Failure Investigation and Zero-Flaky Policy](./testing/test-failure-investigation.md)             | [ok] 120    | [intermediate] | [stable] | [risk: none]     | testing, investigation       |
+| [Test Failure Investigation Procedure](./testing/test-failure-investigation-procedure.md)               | [ok] 217    | [intermediate] | [stable] | [risk: none]     | testing, investigation       |
+| [Test Failure Root Causes and Anti-Patterns](./testing/test-failure-investigation-root-causes.md)       | [ok] 187    | [intermediate] | [stable] | [risk: none]     | testing, root-cause-analysis |
+| [Test Invalid Skill](./testing/test-invalid-skill.md)                                                   | [draft] 31  | [expert]       | [stable] | [risk: high]     | testing, fixtures            |
+| [Test Organization and Assertions](./testing/test-coverage-organization-assertions.md)                  | [ok] 174    | [basic]        | [stable] | [risk: none]     | testing, assertions          |
+| [Test Production Code Directly](./testing/test-production-code.md)                                      | [ok] 146    | [intermediate] | [stable] | [risk: none]     | testing, anti-patterns       |
+| [Test Production Code Directly Part 1](./testing/test-production-code-part-1.md)                        | [ok] 205    | [intermediate] | [stable] | [risk: low]      | migration, split             |
+| [Test Production Code Directly Part 2](./testing/test-production-code-part-2.md)                        | [draft] 66  | [intermediate] | [stable] | [risk: low]      | migration, split             |
+| [Tests Must Be Parameterized by Message Kind](./testing/tests-must-be-parameterized-by-message-kind.md) | [ok] 240    | [intermediate] | [stable] | [risk: none]     | testing, data-driven         |
+| [Unity Test Considerations and Anti-Patterns](./testing/test-coverage-unity-anti-patterns.md)           | [warn] 270  | [basic]        | [stable] | [risk: none]     | testing, unity               |
 
 ---
 

@@ -13,6 +13,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using UnityEngine.TestTools.Constraints;
     using Is = NUnit.Framework.Is;
 
+    [Category("Performance")]
     public sealed class PerformanceTests : BenchmarkTestBase
     {
         protected override bool MessagingDebugEnabled => false;

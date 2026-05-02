@@ -1977,6 +1977,13 @@ namespace DxMessaging.Core
             {
                 deregistrationAction?.Invoke();
             }
+
+            // Drop the matching staged registration and metadata so a later
+            // Disable()/Enable() cycle does not silently re-register the
+            // handler we were just asked to remove.
+            _ = _registrations?.Remove(handle);
+            _ = _metadata?.Remove(handle);
+            _ = _callCounts?.Remove(handle);
         }
 
         /// <summary>

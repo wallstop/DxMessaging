@@ -26,14 +26,14 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
     /// duplicate descriptor registrations for the same id.
     /// </para>
     /// </remarks>
-    // Diagnostic catalog (DxMessaging) — see docs/reference/analyzers.md for full details.
+    // Diagnostic catalog (DxMessaging); see docs/reference/analyzers.md for full details.
     // ----------------------------------------------------------------------------------
     // DXMSG002  Error    Multiple message attributes ([DxBroadcast/Targeted/Untargeted])
     //                    on a single type. Source: DxMessageIdGenerator.
     // DXMSG003  Warning  Type that needs source generation is nested inside non-partial
     //                    container(s). Source: both DxMessageIdGenerator and
     //                    DxAutoConstructorGenerator.
-    // DXMSG004  Info     Companion suggestion to DXMSG003 — add 'partial' to the named
+    // DXMSG004  Info     Companion suggestion to DXMSG003; add 'partial' to the named
     //                    container. Source: both generators.
     // DXMSG005  Error    [DxOptionalParameter] default expression is not a legal C# constant
     //                    for the field's type. Source: DxAutoConstructorGenerator.
@@ -49,7 +49,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
     //                    C# emits CS0114 for the same scenario; DXMSG009 is the project-
     //                    specific equivalent. Source: MessageAwareComponentBaseCallAnalyzer.
     // DXMSG010  Warning  This override correctly calls base.{method}(), but an intermediate
-    //                    ancestor's override of the same method does not — the chain is broken
+    //                    ancestor's override of the same method does not; the chain is broken
     //                    at the parent, so MessageAwareComponent's lifecycle work never runs
     //                    on this component. Source: MessageAwareComponentBaseCallAnalyzer.
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -139,7 +139,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
             category: Category,
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
-            description: "An override on this class correctly invokes base.X(), but the parent class's override of the same method does not itself call base — the chain is broken at the parent, so MessageAwareComponent's lifecycle work never runs. Fix the parent override to call base, OR override directly from MessageAwareComponent here, OR suppress with [DxIgnoreMissingBaseCall] if the broken chain is intentional.",
+            description: "An override on this class correctly invokes base.X(), but the parent class's override of the same method does not itself call base; the chain is broken at the parent, so MessageAwareComponent's lifecycle work never runs. Fix the parent override to call base, OR override directly from MessageAwareComponent here, OR suppress with [DxIgnoreMissingBaseCall] if the broken chain is intentional.",
             helpLinkUri: HelpLinkBase + "dxmsg010"
         );
 
@@ -164,7 +164,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 
         private static void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext context)
         {
-            // K. Defensive cast — protects against future syntax-kind reuse.
+            // K. Defensive cast; protects against future syntax-kind reuse.
             if (context.Node is not MethodDeclarationSyntax methodDecl)
             {
                 return;
@@ -208,8 +208,8 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 
             // DXMSG009: when neither 'override' nor 'new' is present, C# treats the method as
             // implicit hiding of the base lifecycle method (compiler emits CS0114). Fire only when
-            // the signature shape actually matches a Unity lifecycle method — parameter-less, void,
-            // non-static, non-generic — so unrelated overloads like `void OnEnable(int)`,
+            // the signature shape actually matches a Unity lifecycle method; parameter-less, void,
+            // non-static, non-generic; so unrelated overloads like `void OnEnable(int)`,
             // unrelated static helpers, and `void Awake<T>()` (which coexists with the base method
             // because of differing generic arity and does not trigger CS0114) all stay silent.
             bool wouldFireMissingModifier =
@@ -222,7 +222,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 
             // Bail when this method does not match any of our diagnostic shapes. This protects
             // unrelated methods on subclasses (e.g., a private helper named `Awake` that takes a
-            // parameter, or a static factory) from producing noise — including DXMSG008 on
+            // parameter, or a static factory) from producing noise; including DXMSG008 on
             // opted-out classes.
             if (!hasNewModifier && !hasOverrideModifier && !wouldFireMissingModifier)
             {
@@ -230,7 +230,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
             }
 
             // Pre-compute would-have-fired flags so the opt-out branches can avoid emitting
-            // DXMSG008 on clean overrides — pure noise per the adversarial review (B5). The
+            // DXMSG008 on clean overrides; pure noise per the adversarial review (B5). The
             // override / new / missing-modifier branches are mutually exclusive at the C# language
             // level (a method cannot have both `override` and `new`, and `wouldFireMissingModifier`
             // requires neither).
@@ -239,7 +239,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 hasOverrideModifier && !ContainsBaseInvocation(methodDecl, methodName);
 
             // Pre-compute the DXMSG010 (broken transitive chain) check. Only relevant when this
-            // method IS an override AND base.X() IS present syntactically — otherwise DXMSG006
+            // method IS an override AND base.X() IS present syntactically; otherwise DXMSG006
             // already fires on this method and DXMSG010 would be redundant noise on the same
             // location. We compute it here so the opt-out branches can lower it to DXMSG008 too.
             IMethodSymbol brokenChainAncestor = null;
@@ -253,7 +253,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 );
 
             // Opt-out via attribute on the method or the class. We still want the user to see that
-            // the suppression is active during build, so we emit DXMSG008 (Info) when bailing —
+            // the suppression is active during build, so we emit DXMSG008 (Info) when bailing;
             // BUT only when there is something we would have actually reported.
             if (HasIgnoreAttribute(methodSymbol) || HasIgnoreAttribute(containingType))
             {
@@ -309,7 +309,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 
             if (wouldFireMissingModifier)
             {
-                // Implicit hiding — C# would emit CS0114 alongside this. We surface a project-
+                // Implicit hiding; C# would emit CS0114 alongside this. We surface a project-
                 // specific diagnostic so the inspector overlay (which scopes to DXMSG006/007/009)
                 // also shows the warning above the user's component.
                 context.ReportDiagnostic(
@@ -340,7 +340,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 
             // From here on we know hasOverrideModifier is true.
             // I. base.X() inside a lambda or local function still counts as compliant per the
-            // good-faith policy — covered by `BaseCallInsideLocalFunctionIsAcceptedAsGoodFaith`.
+            // good-faith policy; covered by `BaseCallInsideLocalFunctionIsAcceptedAsGoodFaith`.
             if (!wouldFireMissingBase)
             {
                 // DXMSG010: base.X() IS present syntactically, but the inherited override on an
@@ -577,7 +577,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 ImmutableArray<SyntaxReference> refs = cursor.DeclaringSyntaxReferences;
                 if (refs.IsDefaultOrEmpty)
                 {
-                    return true; // cross-assembly / compiler-only symbol — assume clean
+                    return true; // cross-assembly / compiler-only symbol; assume clean
                 }
 
                 bool ancestorCallsBase = false;
@@ -603,7 +603,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 cursor = cursor.OverriddenMethod;
             }
 
-            // Walked off the top without hitting MessageAwareComponent — chain doesn't terminate
+            // Walked off the top without hitting MessageAwareComponent; chain doesn't terminate
             // at MessageAwareComponent. This shouldn't normally happen (the
             // StrictlyInheritsFromMessageAwareComponent gate at function entry guarantees the
             // containing type does inherit from MAC), but if it does, treat as clean to avoid
@@ -626,7 +626,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
             INamedTypeSymbol current = containingType;
             while (current is not null)
             {
-                // Stop walking once we've reached MessageAwareComponent itself — its virtual
+                // Stop walking once we've reached MessageAwareComponent itself; its virtual
                 // declaration is not an override and shouldn't count.
                 if (
                     string.Equals(
@@ -723,7 +723,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 return IsFalseLiteral(getterArrow.Expression);
             }
 
-            // Case 3: block-bodied getter — accept ONLY a single statement that is `return false;`
+            // Case 3: block-bodied getter; accept ONLY a single statement that is `return false;`
             // (no conditionals, no other statements). This avoids the false positive where any
             // branch happens to return false (e.g., `if (x) return false; return true;`).
             if (getter.Body is BlockSyntax block)
@@ -752,7 +752,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 
         // I. Sentinel comment: see HelperIndirectionFalsePositiveStillFires plus
         // BaseCallInsideLocalFunctionIsAcceptedAsGoodFaith for the documented "good faith"
-        // policy — any textual `base.X()` anywhere inside the override body (including local
+        // policy; any textual `base.X()` anywhere inside the override body (including local
         // functions / lambdas) counts as compliant; helper-indirection through a separate
         // method does not.
     }

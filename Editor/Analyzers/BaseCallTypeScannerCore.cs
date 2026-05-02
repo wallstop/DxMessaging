@@ -148,7 +148,7 @@ namespace DxMessaging.Editor.Analyzers
                 {
                     // Suppression makes the entry an audit-marker (DXMSG008-equivalent). The
                     // overlay's "ignored" branch handles this via the ignored-types list directly,
-                    // so we don't add it to the snapshot at all — the overlay reads the project
+                    // so we don't add it to the snapshot at all; the overlay reads the project
                     // list to render the "Stop ignoring" HelpBox. This matches the bridge path's
                     // snapshot semantics (DXMSG008 was never in MissingBaseFor either).
                     continue;
@@ -256,7 +256,7 @@ namespace DxMessaging.Editor.Analyzers
             MethodInfo declared = GetDeclaredZeroArgInstance(concrete, methodName);
             if (declared == null)
             {
-                // Type does not declare this method at all — nothing to flag at this level.
+                // Type does not declare this method at all; nothing to flag at this level.
                 return;
             }
             if (declared.ReturnType != typeof(void))
@@ -278,7 +278,7 @@ namespace DxMessaging.Editor.Analyzers
             // virtual we are hiding. The C# compiler emits the same IL for `new void X()` and
             // `void X()`-with-CS0114, so we cannot perfectly distinguish DXMSG007 from DXMSG009
             // from IL alone. The compile-time analyzer is authoritative for the precise ID;
-            // here we conservatively classify the case as DXMSG007 — both produce the same
+            // here we conservatively classify the case as DXMSG007; both produce the same
             // overlay outcome (method listed in HelpBox).
             bool isOverride = declared.GetBaseDefinition() != declared;
             bool hasNewKeyword =
@@ -290,7 +290,7 @@ namespace DxMessaging.Editor.Analyzers
                 {
                     AddIfMissing(entry, methodName, "DXMSG007");
                 }
-                // else: not an override, no base virtual to hide — not our concern.
+                // else: not an override, no base virtual to hide; not our concern.
                 return;
             }
 
@@ -305,13 +305,13 @@ namespace DxMessaging.Editor.Analyzers
             // Leaf calls base. Walk the inheritance chain to look for a broken intermediate
             // (DXMSG010). Each link's IL is inspected independently; the first broken link found
             // produces DXMSG010 on the leaf and we stop. Cross-assembly ancestors with no IL body
-            // are trusted (assume-clean) — the alternative would be unactionable warnings against
+            // are trusted (assume-clean); the alternative would be unactionable warnings against
             // closed-source code.
             MethodInfo cursorOverridden = GetOverriddenMethod(declared);
             HashSet<MethodInfo> visited = new();
             while (cursorOverridden != null && visited.Add(cursorOverridden))
             {
-                // Chain reached MessageAwareComponent itself — clean. We compare by full type
+                // Chain reached MessageAwareComponent itself; clean. We compare by full type
                 // name so the helper does not need a hard reference to the Unity-only type.
                 Type cursorDeclaring = cursorOverridden.DeclaringType;
                 if (
@@ -323,7 +323,7 @@ namespace DxMessaging.Editor.Analyzers
                 }
                 if (cursorOverridden.GetMethodBody() == null)
                 {
-                    // Cross-assembly / abstract — assume clean (cannot inspect).
+                    // Cross-assembly / abstract; assume clean (cannot inspect).
                     return;
                 }
                 bool ancestorCallsBase = BaseCallIlInspector.MethodIlContainsBaseCall(
@@ -380,7 +380,7 @@ namespace DxMessaging.Editor.Analyzers
         {
             // For an override, GetBaseDefinition() returns the most-base virtual (the originating
             // declaration). To walk the chain link-by-link we need the closest ancestor that
-            // declares the same-named method directly — we look up each BaseType in turn and
+            // declares the same-named method directly; we look up each BaseType in turn and
             // return the first match. This skips intermediate types that don't override the slot
             // (e.g. a generic intermediate that just passes through), which is exactly what the
             // chain walk needs to detect DXMSG010 at the broken link rather than the pass-through.

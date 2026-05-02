@@ -98,7 +98,7 @@ namespace DxMessaging.Editor.Analyzers
             }
 
             // 1. Replace this assembly's FQN set with the latest batch. Types absent from the new
-            //    batch are dropped from the assembly's row — that's the per-assembly retirement.
+            //    batch are dropped from the assembly's row; that's the per-assembly retirement.
             if (!typesByAssembly.TryGetValue(assemblyKey, out HashSet<string> typeSet))
             {
                 typeSet = new HashSet<string>(StringComparer.Ordinal);
@@ -137,7 +137,7 @@ namespace DxMessaging.Editor.Analyzers
                 }
 
                 // For the assembly we just updated, prefer the freshly-parsed payload. For other
-                // assemblies, we need the previous merge to still carry their data — but that
+                // assemblies, we need the previous merge to still carry their data; but that
                 // information is only retrievable from the OUTGOING mergedReports, so we read it
                 // before clearing.
                 IReadOnlyDictionary<string, ParsedTypeReport> source = string.Equals(
@@ -297,7 +297,7 @@ namespace DxMessaging.Editor.Analyzers
             }
 
             // First seen file/line wins so "Open Script" jumps to a stable location across
-            // rebuilds — which is what the user's eye lands on first in the console.
+            // rebuilds; which is what the user's eye lands on first in the console.
             if (string.IsNullOrEmpty(existing.FilePath) && !string.IsNullOrEmpty(report.FilePath))
             {
                 existing.FilePath = report.FilePath;

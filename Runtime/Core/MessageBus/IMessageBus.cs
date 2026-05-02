@@ -170,6 +170,16 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="messageHandler">MessageHandler to register the TargetedMessages of the specified type.</param>
         /// <param name="priority">Priority at which to run; lower runs earlier.</param>
         /// <returns>The deregistration action. Invoke when the handler no longer wants to receive the messages.</returns>
+        /// <remarks>
+        /// To preserve frozen dispatch snapshots during in-flight emissions, the per-MessageHandler
+        /// typed-cache for <c>(target, priority)</c> is NOT removed when the last registration at
+        /// that pair is deregistered. Empty entries persist for the lifetime of the owning
+        /// MessageHandler. For typical Unity usage with a small fixed set of priorities and a
+        /// bounded set of long-lived target ids the residual footprint is trivial; code that
+        /// registers per-ephemeral-target (e.g. a global service that listens to messages targeted
+        /// at every spawned GameObject) should prefer <see cref="RegisterTargetedWithoutTargeting{T}"/>
+        /// or recycle MessageHandlers to avoid unbounded inner-dictionary growth.
+        /// </remarks>
         Action RegisterTargeted<T>(
             InstanceId target,
             MessageHandler messageHandler,
@@ -196,6 +206,16 @@ namespace DxMessaging.Core.MessageBus
         /// <param name="messageHandler">MessageHandler to register to accept BroadcastMessages.</param>
         /// <param name="priority"></param>
         /// <returns>The deregistration action. Should be invoked when the handler no longer wants to receive messages.</returns>
+        /// <remarks>
+        /// To preserve frozen dispatch snapshots during in-flight emissions, the per-MessageHandler
+        /// typed-cache for <c>(source, priority)</c> is NOT removed when the last registration at
+        /// that pair is deregistered. Empty entries persist for the lifetime of the owning
+        /// MessageHandler. For typical Unity usage with a small fixed set of priorities and a
+        /// bounded set of long-lived source ids the residual footprint is trivial; code that
+        /// registers per-ephemeral-source (e.g. a global service that listens to broadcasts from
+        /// every spawned GameObject) should prefer <see cref="RegisterSourcedBroadcastWithoutSource{T}"/>
+        /// or recycle MessageHandlers to avoid unbounded inner-dictionary growth.
+        /// </remarks>
         Action RegisterSourcedBroadcast<T>(
             InstanceId source,
             MessageHandler messageHandler,

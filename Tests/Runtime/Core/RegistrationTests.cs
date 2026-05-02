@@ -14,11 +14,22 @@ namespace DxMessaging.Tests.Runtime.Core
     using UnityEngine;
     using UnityEngine.TestTools;
 
+    [Category("Stress")]
     public sealed class RegistrationTests : MessagingTestBase
     {
         private GameObject _test;
         private EmptyMessageAwareComponent _component;
         private MessageRegistrationToken _token;
+
+        [SetUp]
+        public override void Setup()
+        {
+            base.Setup();
+            // RunRegistrationTest validates ordering and dispatch correctness
+            // across every registered handler, so it relies on the legacy
+            // stress-scale count rather than the smoke-check default.
+            _numRegistrations = StressRegistrations;
+        }
 
         [UnitySetUp]
         public override IEnumerator UnitySetup()

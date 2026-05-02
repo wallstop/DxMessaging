@@ -47,7 +47,7 @@ namespace DxMessaging.Editor.Analyzers
     public static class BaseCallIlInspector
     {
         // CIL opcode tables, indexed by the low byte of OpCode.Value. Built once by reflecting over
-        // System.Reflection.Emit.OpCodes — every public static OpCode field there represents a
+        // System.Reflection.Emit.OpCodes; every public static OpCode field there represents a
         // canonical CIL instruction. The two-byte form of the table is used when a 0xFE prefix is
         // observed in the IL stream; otherwise we use the single-byte form. Because CIL specifies
         // exactly two prefix bytes (single-byte = direct, two-byte = 0xFE prefix), this division
@@ -111,7 +111,7 @@ namespace DxMessaging.Editor.Analyzers
                 MethodBody body = method.GetMethodBody();
                 if (body == null)
                 {
-                    // Abstract / extern / runtime-implemented / IL2CPP-stripped — cannot inspect.
+                    // Abstract / extern / runtime-implemented / IL2CPP-stripped; cannot inspect.
                     return true;
                 }
 
@@ -137,7 +137,7 @@ namespace DxMessaging.Editor.Analyzers
                     if (il[i] == 0xFE)
                     {
                         // Two-byte (0xFE-prefixed) opcode. Without a following byte we cannot
-                        // decode the instruction — bail out conservatively. Truncated IL is not a
+                        // decode the instruction; bail out conservatively. Truncated IL is not a
                         // shape Roslyn ever emits, so reaching this path means we mis-stepped and
                         // the safest answer is the assume-clean default.
                         if (i + 1 >= il.Length)
@@ -153,7 +153,7 @@ namespace DxMessaging.Editor.Analyzers
                         i += 1;
                     }
 
-                    // Unrecognised opcode (zero-initialised slot in the table) — abandon the walk
+                    // Unrecognised opcode (zero-initialised slot in the table); abandon the walk
                     // rather than risk the rest of the stream getting misread. Returning the
                     // assume-clean default keeps the scanner from inventing a phantom warning.
                     if (op.Size == 0)
@@ -185,7 +185,7 @@ namespace DxMessaging.Editor.Analyzers
                                 // Guard against false-positives: the resolved method must live on a
                                 // STRICT base type of the declaring class (not the declaring class
                                 // itself, not a sibling, not a generic-arg shadow). IsAssignableFrom
-                                // checks "is `declaring` assignable TO `resolved`" — i.e. is
+                                // checks "is `declaring` assignable TO `resolved`"; i.e. is
                                 // `resolved` an ancestor of `declaring`.
                                 if (
                                     declaring != null
@@ -204,7 +204,7 @@ namespace DxMessaging.Editor.Analyzers
                             // context (e.g. a MemberRef into a closed generic we can't resolve).
                             // The OpCodes-table walker means we can no longer land on a misaligned
                             // 0x28 inside a wider operand, so this catch only protects against
-                            // legitimate-but-unbindable tokens — we swallow and continue scanning.
+                            // legitimate-but-unbindable tokens; we swallow and continue scanning.
                         }
                         i += 4;
                         continue;
@@ -268,7 +268,7 @@ namespace DxMessaging.Editor.Analyzers
                     }
                     return 4 + caseCount * 4;
                 default:
-                    // Unknown OperandType — bail conservatively by consuming the rest of the
+                    // Unknown OperandType; bail conservatively by consuming the rest of the
                     // stream so the outer loop terminates without misaligning further.
                     return il.Length - operandStart;
             }

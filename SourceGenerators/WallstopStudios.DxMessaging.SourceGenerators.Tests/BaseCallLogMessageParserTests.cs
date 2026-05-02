@@ -8,7 +8,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 public sealed class BaseCallLogMessageParserTests
 {
     // The exact format strings the analyzer uses today. If these drift, both this test and the
-    // parser regexes must be updated in lockstep — the parser is downstream of the analyzer.
+    // parser regexes must be updated in lockstep; the parser is downstream of the analyzer.
     private const string Dxmsg006Bare =
         "'Sample.Player' overrides MessageAwareComponent.Awake but does not call base.Awake(); "
         + "the messaging system may not function correctly on this component.";
@@ -142,7 +142,7 @@ public sealed class BaseCallLogMessageParserTests
     {
         Assert.That(
             BaseCallLogMessageParser.ParseLine(
-                "Hello from Debug.Log — nothing analyzer-related here."
+                "Hello from Debug.Log; nothing analyzer-related here."
             ),
             Is.Null
         );
@@ -157,7 +157,7 @@ public sealed class BaseCallLogMessageParserTests
         // A line that says DXMSG006 but is not the analyzer's wording.
         Assert.That(
             BaseCallLogMessageParser.ParseLine(
-                "DXMSG006 fired earlier today on this assembly — investigate."
+                "DXMSG006 fired earlier today on this assembly; investigate."
             ),
             Is.Null
         );
@@ -466,7 +466,7 @@ public sealed class BaseCallLogMessageParserTests
         // limitation: future readers of the parsed entry have no way to surface the broken-ancestor
         // FQN to the inspector overlay's "broken chain via {broken}" message. If the struct gains
         // a BrokenAncestor field in a future change, this test should be updated to assert the
-        // captured value rather than the absence — but until then, this test keeps the limitation
+        // captured value rather than the absence; but until then, this test keeps the limitation
         // visible to drive a future enhancement and prevent silent regressions of the regex itself.
         ParsedEntry? parsed = BaseCallLogMessageParser.ParseLine(Dxmsg010Bare);
 

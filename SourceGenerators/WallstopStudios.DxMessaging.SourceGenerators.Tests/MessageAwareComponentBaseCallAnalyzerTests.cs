@@ -12,7 +12,7 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 [TestFixture]
 public sealed class MessageAwareComponentBaseCallAnalyzerTests
 {
-    // S2. Reference the analyzer's source-of-truth constant directly via InternalsVisibleTo —
+    // S2. Reference the analyzer's source-of-truth constant directly via InternalsVisibleTo;
     // no more duplicated literal in the tests. Drift risk eliminated.
     private static readonly string IgnoreFileName = IgnoreListReader.IgnoreFileName;
 
@@ -329,7 +329,7 @@ namespace Sample
     [Test]
     public void IgnoreAttributeOnClassEmitsDxmsg008Only()
     {
-        // B5. Two overrides: one clean, one dirty. DXMSG008 must fire ONCE — on the dirty one.
+        // B5. Two overrides: one clean, one dirty. DXMSG008 must fire ONCE; on the dirty one.
         // Clean overrides on opted-out classes must produce zero diagnostics (no noise).
         string source = """
 namespace Sample
@@ -392,7 +392,7 @@ namespace Sample
     [Test]
     public void ClassFullNameInIgnoreListEmitsDxmsg008Only()
     {
-        // B5. Two overrides — clean and dirty. DXMSG008 fires ONCE on the dirty one.
+        // B5. Two overrides; clean and dirty. DXMSG008 fires ONCE on the dirty one.
         string source = """
 namespace Sample
 {
@@ -531,7 +531,7 @@ namespace Sample
 }
 """;
 
-        // Documented false positive — analyzer is good-faith and only inspects the override body.
+        // Documented false positive; analyzer is good-faith and only inspects the override body.
         ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
 
         AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
@@ -624,7 +624,7 @@ namespace Sample
     [Test]
     public void MethodWithoutOverrideOrNewIsIgnored()
     {
-        // A new declaration named Awake that neither overrides nor hides — should not be flagged.
+        // A new declaration named Awake that neither overrides nor hides; should not be flagged.
         string source = """
 namespace Sample
 {
@@ -712,7 +712,7 @@ namespace Sample
     public void MoreDerivedRegisterForStringMessagesOverrideWinsAndPreventsSmartCase()
     {
         // B2. Most-derived override wins. Even though the grandparent returns literal false, the
-        // intermediate overrides it back to literal true — so the smart-case must NOT apply.
+        // intermediate overrides it back to literal true; so the smart-case must NOT apply.
         string source = """
 namespace Sample
 {
@@ -747,7 +747,7 @@ namespace Sample
     public void ConditionalReturnFalseInRegisterForStringMessagesGetterKeepsWarning()
     {
         // B3. Block-bodied getter with `if (...) return false; return true;` is NOT
-        // unconditional — smart-case must NOT apply.
+        // unconditional; smart-case must NOT apply.
         string source = """
 namespace Sample
 {
@@ -816,7 +816,7 @@ namespace Sample
     public void NonOverrideAwakeOnOptedOutClassProducesZeroDiagnostics()
     {
         // B (strong). A method named `Awake` with neither `override` nor `new` on an opted-out
-        // class must produce zero diagnostics — including DXMSG008. Before the reorder fix,
+        // class must produce zero diagnostics; including DXMSG008. Before the reorder fix,
         // DXMSG008 could fire here.
         string source = """
 namespace Sample
@@ -842,7 +842,7 @@ namespace Sample
     [Test]
     public void UsingAliasForMessageAwareComponentResolvesViaFullyQualifiedName()
     {
-        // G. Confirms FQN resolution survives `using` aliases — the analyzer walks BaseType
+        // G. Confirms FQN resolution survives `using` aliases; the analyzer walks BaseType
         // and compares against the symbol's display name, so aliases are transparent.
         string source = """
 using MAC = DxMessaging.Unity.MessageAwareComponent;
@@ -869,7 +869,7 @@ namespace Sample
     [Test]
     public void EditorConfigSuppressOnDxmsg006SilencesCanonicalCase()
     {
-        // H.1 — descriptor-based DXMSG006 path: WithSpecificDiagnosticOptions(Suppress) yields zero.
+        // H.1; descriptor-based DXMSG006 path: WithSpecificDiagnosticOptions(Suppress) yields zero.
         string source = """
 namespace Sample
 {
@@ -908,9 +908,9 @@ namespace Sample
     [Test]
     public void EditorConfigSuppressOnDxmsg006AlsoSilencesSmartCaseInfoPath()
     {
-        // H.2 — the runtime-built `Diagnostic.Create(string id, ...)` path used for the
+        // H.2; the runtime-built `Diagnostic.Create(string id, ...)` path used for the
         // smart-case Info lowering must also honour editorconfig severity overrides. This is the
-        // rubric-flagged "real gotcha" — without proper threading the Info diagnostic would slip
+        // rubric-flagged "real gotcha"; without proper threading the Info diagnostic would slip
         // through `Suppress`.
         string source = """
 namespace Sample
@@ -952,7 +952,7 @@ namespace Sample
     [Test]
     public void EditorConfigPromoteOnDxmsg006ProducesError()
     {
-        // H.3 — promotion (`Error`) must thread through the descriptor path.
+        // H.3; promotion (`Error`) must thread through the descriptor path.
         string source = """
 namespace Sample
 {
@@ -994,7 +994,7 @@ namespace Sample
     public void BaseCallInsideLocalFunctionIsAcceptedAsGoodFaith()
     {
         // I. base.X() inside a nested local function still satisfies the good-faith textual
-        // search — DescendantNodes() walks lambdas and local functions. Documents the policy.
+        // search; DescendantNodes() walks lambdas and local functions. Documents the policy.
         string source = """
 namespace Sample
 {
@@ -1077,7 +1077,7 @@ namespace Sample
         // S1. Verify the Lazy<T> cache contract: two calls to Load(...) with the same
         // AnalyzerOptions must return the same hashset instance (single-shot memoization),
         // and passing a different (or even already-cancelled) CancellationToken on the
-        // second call must NOT crash — the factory deliberately drops the outer token via
+        // second call must NOT crash; the factory deliberately drops the outer token via
         // CancellationToken.None to avoid the cached-cancellation-exception footgun.
         AnalyzerOptions options = GeneratorTestUtilities.BuildAnalyzerOptions(
             (IgnoreFileName, "Sample.Player\nSample.Other\n")
@@ -1089,7 +1089,7 @@ namespace Sample
         Assert.That(first, Does.Contain("Sample.Other"));
 
         // Second call uses an already-cancelled token. If the factory closure baked the
-        // first call's token, this would still return the cached value — fine. The footgun
+        // first call's token, this would still return the cached value; fine. The footgun
         // (which the fix prevents) is the inverse: a cancelled FIRST call caches an
         // OperationCanceledException and re-throws it forever. We can't easily simulate
         // that here without racing, so we settle for asserting the cache returns the same
@@ -1109,7 +1109,7 @@ namespace Sample
         // S4. When a class has BOTH the [DxIgnoreMissingBaseCall] opt-out AND a literal-false
         // RegisterForStringMessages override AND a missing-base RegisterMessageHandlers, the
         // opt-out path wins: exactly ONE DXMSG008 fires (because the underlying check would
-        // have produced a DXMSG006 diagnostic at *some* severity — would-have-fired counts as
+        // have produced a DXMSG006 diagnostic at *some* severity; would-have-fired counts as
         // needing suppression), and the smart-case Info-lowering path is bypassed entirely.
         string source = """
 namespace Sample
@@ -1257,7 +1257,7 @@ namespace Sample
     public void GenericMethodWithGuardedNameDoesNotFireDxmsg009()
     {
         // C# does NOT emit CS0114 for `void Awake<T>()` because the type-parameter arity differs
-        // from the base; both methods coexist. DXMSG009 must not fire either — flagging it would
+        // from the base; both methods coexist. DXMSG009 must not fire either; flagging it would
         // be a false positive misleading the user toward an incorrect "fix".
         string source = """
 namespace Sample
@@ -1278,7 +1278,7 @@ namespace Sample
     public void ExpressionBodiedNonOverrideOnEnableEmitsDxmsg009()
     {
         // Expression-bodied form of the implicit-hide pattern. The method is parameter-less,
-        // returns void, non-static, and has no override/new modifier — so DXMSG009 fires.
+        // returns void, non-static, and has no override/new modifier; so DXMSG009 fires.
         string source = """
 namespace Sample
 {
@@ -1620,7 +1620,7 @@ namespace Sample
 
         AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
         Diagnostic dxmsg006 = diagnostics.Single(d => d.Id == "DXMSG006");
-        // The emitted message must contain the dot-form of the nested FQN — that is the form
+        // The emitted message must contain the dot-form of the nested FQN; that is the form
         // the harvester ingests and keys the snapshot by.
         Assert.That(dxmsg006.GetMessage(), Does.Contain("Sample.Outer.Nested"));
         Assert.That(dxmsg006.GetMessage(), Does.Not.Contain("Outer+Nested"));
@@ -1632,7 +1632,7 @@ namespace Sample
     public void BrokenIntermediateAncestorEmitsDxmsg010OnDescendant()
     {
         // The exact user-reported case. `BrokenThing.OnEnable` correctly calls base.OnEnable(),
-        // but the inherited override on `ddd` has an empty body — so the chain stops at `ddd`
+        // but the inherited override on `ddd` has an empty body; so the chain stops at `ddd`
         // and never reaches `MessageAwareComponent.OnEnable`. DXMSG006 fires on `ddd`; DXMSG010
         // fires on `BrokenThing` so the user editing `BrokenThing` is told the chain is broken.
         string source = """
@@ -1640,7 +1640,7 @@ namespace Sample
 {
     public class ddd : DxMessaging.Unity.MessageAwareComponent
     {
-        // Field included in the user's literal report shape — exercised here for fidelity.
+        // Field included in the user's literal report shape; exercised here for fidelity.
         public int a;
         protected override void OnEnable() { }
     }
@@ -1730,7 +1730,7 @@ namespace Sample
     [Test]
     public void HealthyChainEmitsNoDiagnostics()
     {
-        // Sanity: when every override correctly calls base, no diagnostics fire — the chain
+        // Sanity: when every override correctly calls base, no diagnostics fire; the chain
         // walk must not produce false positives on a clean inheritance graph.
         string source = """
 namespace Sample
@@ -1906,7 +1906,7 @@ namespace Sample
     public void Dxmsg010StillFiresAtWarningEvenWhenSmartCaseLowersDxmsg006OnAncestor()
     {
         // The smart-case lowering (literal `RegisterForStringMessages => false`) takes DXMSG006
-        // on `ddd.RegisterMessageHandlers` from Warning to Info — but the chain is GENUINELY
+        // on `ddd.RegisterMessageHandlers` from Warning to Info; but the chain is GENUINELY
         // broken from BrokenThing's perspective. DXMSG010 must still fire at Warning on
         // BrokenThing: smart-case is a per-method per-class courtesy, descendants still need
         // the chain to be unbroken.
@@ -1955,8 +1955,8 @@ namespace Sample
     [Test]
     public void Dxmsg010MessageMentionsBrokenAncestorTypeName()
     {
-        // The DXMSG010 message must include the FQN of the broken ancestor — not a generic
-        // "an ancestor" placeholder — so the user knows exactly where the chain is broken.
+        // The DXMSG010 message must include the FQN of the broken ancestor; not a generic
+        // "an ancestor" placeholder; so the user knows exactly where the chain is broken.
         string source = """
 namespace Sample
 {
@@ -2015,7 +2015,7 @@ namespace Sample
             .GetSubText(dxmsg010.Location.SourceSpan)
             .ToString();
         Assert.That(spanText, Is.EqualTo("OnEnable"));
-        // Sanity: the source span for DXMSG010 must NOT point inside `ddd` — confirm by
+        // Sanity: the source span for DXMSG010 must NOT point inside `ddd`; confirm by
         // verifying the surrounding source contains "BrokenThing" (the descendant) within a
         // small window around the span.
         string fullText = dxmsg010.Location.SourceTree.GetText().ToString();
@@ -2031,7 +2031,7 @@ namespace Sample
     public void Dxmsg008AttributeAndIgnoreListBothPresentFiresOnce()
     {
         // Adversarial: BOTH the class-level [DxIgnoreMissingBaseCall] attribute AND the project
-        // ignore list claim Sample.Player. The opt-out path must coalesce — exactly ONE DXMSG008
+        // ignore list claim Sample.Player. The opt-out path must coalesce; exactly ONE DXMSG008
         // is emitted for the offending method, not two competing entries (one per opt-out source).
         string source = """
 namespace Sample
@@ -2061,7 +2061,7 @@ namespace Sample
     public void Dxmsg008MethodAndClassAttributeBothPresentFiresOnce()
     {
         // Adversarial: BOTH the class-level AND method-level [DxIgnoreMissingBaseCall] are set.
-        // Exactly ONE DXMSG008 should fire — the opt-out is binary, so duplicate sources do not
+        // Exactly ONE DXMSG008 should fire; the opt-out is binary, so duplicate sources do not
         // duplicate the diagnostic.
         string source = """
 namespace Sample
@@ -2089,8 +2089,8 @@ namespace Sample
     public void Dxmsg008ClassAttributeWithMixedCleanAndDirtyMethodsOnlyFiresForDirty()
     {
         // The class is opted out via [DxIgnoreMissingBaseCall]; one method is broken (would emit
-        // DXMSG006), another method is clean (calls base). DXMSG008 must fire EXACTLY ONCE — on
-        // the would-have-fired method only — and the clean method must not produce noise.
+        // DXMSG006), another method is clean (calls base). DXMSG008 must fire EXACTLY ONCE; on
+        // the would-have-fired method only; and the clean method must not produce noise.
         string source = """
 namespace Sample
 {
@@ -2143,7 +2143,7 @@ namespace Sample
     {
         // Spec 1b (clean variant): ancestor has literal `RegisterForStringMessages => false` AND
         // its RegisterMessageHandlers correctly calls base. Descendant overrides and calls base.
-        // The chain is genuinely clean — DXMSG010 must NOT fire (and DXMSG006 must NOT fire).
+        // The chain is genuinely clean; DXMSG010 must NOT fire (and DXMSG006 must NOT fire).
         string source = """
 namespace Sample
 {
@@ -2216,7 +2216,7 @@ namespace Sample
 
         ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
 
-        // ddd has DXMSG006. Inner and Leaf both have DXMSG010 — chain dies at ddd.
+        // ddd has DXMSG006. Inner and Leaf both have DXMSG010; chain dies at ddd.
         AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
         Assert.That(
             diagnostics.Single(d => d.Id == "DXMSG006").GetMessage(),
@@ -2237,8 +2237,8 @@ namespace Sample
     [Test]
     public void TernaryReturningFalseOnRegisterForStringMessagesDoesNotApplySmartCase()
     {
-        // Spec 1d: smart-case lowering applies ONLY for a literal `false`. A ternary expression —
-        // even one that always evaluates to false at runtime — must NOT lower DXMSG006 to Info.
+        // Spec 1d: smart-case lowering applies ONLY for a literal `false`. A ternary expression;
+        // even one that always evaluates to false at runtime; must NOT lower DXMSG006 to Info.
         // The analyzer's literal-shape check is syntactic; runtime evaluation is irrelevant.
         string source = """
 namespace Sample
@@ -2264,7 +2264,7 @@ namespace Sample
     [Test]
     public void IsFalsePatternOnRegisterForStringMessagesDoesNotApplySmartCase()
     {
-        // Spec 1d: an `is false` pattern is not a literal-false return — smart-case must not apply.
+        // Spec 1d: an `is false` pattern is not a literal-false return; smart-case must not apply.
         string source = """
 namespace Sample
 {
@@ -2290,7 +2290,7 @@ namespace Sample
     public void SwitchExpressionReturningFalseOnRegisterForStringMessagesDoesNotApplySmartCase()
     {
         // Spec 1d: a switch expression whose only arm returns literal false is still NOT a literal
-        // false return — smart-case must not apply.
+        // false return; smart-case must not apply.
         string source = """
 namespace Sample
 {
@@ -2309,5 +2309,173 @@ namespace Sample
         ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
 
         AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Phase D: positive (no-warning-noise) coverage of [DxIgnoreMissingBaseCall].
+    //
+    // Contract pinned (NOT brief's "ZERO diagnostics"): opt-out via [DxIgnoreMissingBaseCall]
+    // suppresses DXMSG006/007/009/010 entirely; the analyzer instead emits DXMSG008 (Info) on
+    // each method that WOULD otherwise have fired, so the user can still see the suppression is
+    // active during build. Clean methods on opted-out classes produce zero diagnostics.
+    // ------------------------------------------------------------------------------------------
+
+    [Test]
+    public void IgnoreMissingBaseCallAttributeAtClassScopeSuppressesAllGuardedMethods()
+    {
+        // Class-level attribute on a class that overrides EVERY guarded method without calling
+        // base. Expect: no DXMSG006/007/009/010, and one DXMSG008 (Info) per dirty override.
+        string source = """
+namespace Sample
+{
+    [DxMessaging.Core.Attributes.DxIgnoreMissingBaseCall]
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void Awake() { int a = 0; }
+        protected override void OnEnable() { int b = 0; }
+        protected override void OnDisable() { int c = 0; }
+        protected override void OnDestroy() { int d = 0; }
+        protected override void RegisterMessageHandlers() { int e = 0; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG006"), Is.Empty);
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG007"), Is.Empty);
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG009"), Is.Empty);
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG010"), Is.Empty);
+
+        Diagnostic[] dxmsg008 = diagnostics.Where(d => d.Id == "DXMSG008").ToArray();
+        Assert.That(
+            dxmsg008,
+            Has.Length.EqualTo(5),
+            "Class-level [DxIgnoreMissingBaseCall] should produce one DXMSG008 per dirty override."
+        );
+        string[] spans = dxmsg008
+            .Select(d =>
+                d.Location.SourceTree!.GetText().GetSubText(d.Location.SourceSpan).ToString()
+            )
+            .ToArray();
+        Assert.That(
+            spans,
+            Is.EquivalentTo(
+                new[] { "Awake", "OnEnable", "OnDisable", "OnDestroy", "RegisterMessageHandlers" }
+            )
+        );
+        foreach (Diagnostic d in dxmsg008)
+        {
+            Assert.That(d.Severity, Is.EqualTo(DiagnosticSeverity.Info));
+            Assert.That(d.GetMessage(), Does.Contain("[DxIgnoreMissingBaseCall]"));
+        }
+    }
+
+    [Test]
+    public void IgnoreMissingBaseCallAttributeAtMethodScopeSuppressesOnlyAnnotatedMethod()
+    {
+        // Class is NOT opted out; ONE method has the attribute. The annotated method must be
+        // exempt (DXMSG008 Info), the others must still fire DXMSG006.
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        [DxMessaging.Core.Attributes.DxIgnoreMissingBaseCall]
+        protected override void Awake() { int a = 0; }
+
+        protected override void OnEnable() { int b = 0; }
+        protected override void OnDisable() { int c = 0; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        // The annotated `Awake` becomes DXMSG008 (Info). The two unannotated methods stay as
+        // DXMSG006 (Warning).
+        Diagnostic[] dxmsg008 = diagnostics.Where(d => d.Id == "DXMSG008").ToArray();
+        Assert.That(dxmsg008, Has.Length.EqualTo(1));
+        Assert.That(
+            dxmsg008[0]
+                .Location.SourceTree!.GetText()
+                .GetSubText(dxmsg008[0].Location.SourceSpan)
+                .ToString(),
+            Is.EqualTo("Awake")
+        );
+
+        Diagnostic[] dxmsg006 = diagnostics.Where(d => d.Id == "DXMSG006").ToArray();
+        Assert.That(
+            dxmsg006,
+            Has.Length.EqualTo(2),
+            "Method-level opt-out must NOT suppress DXMSG006 on its sibling overrides."
+        );
+        string[] dxmsg006Spans = dxmsg006
+            .Select(d =>
+                d.Location.SourceTree!.GetText().GetSubText(d.Location.SourceSpan).ToString()
+            )
+            .ToArray();
+        Assert.That(dxmsg006Spans, Is.EquivalentTo(new[] { "OnEnable", "OnDisable" }));
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG007"), Is.Empty);
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG009"), Is.Empty);
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG010"), Is.Empty);
+    }
+
+    [Test]
+    public void IgnoreMissingBaseCallAttributeAtMethodScopeOnHiddenWithNewSuppressesDxmsg007()
+    {
+        // Method-level [DxIgnoreMissingBaseCall] on a `new`-hidden guarded method must downgrade
+        // the would-be DXMSG007 to a single DXMSG008 Info, with no other diagnostics.
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        [DxMessaging.Core.Attributes.DxIgnoreMissingBaseCall]
+        protected new void Awake() { int x = 0; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG006"), Is.Empty);
+        Assert.That(diagnostics.Where(d => d.Id == "DXMSG007"), Is.Empty);
+        AssertSingle(diagnostics, "DXMSG008", DiagnosticSeverity.Info);
+        Diagnostic dxmsg008 = diagnostics.Single(d => d.Id == "DXMSG008");
+        Assert.That(
+            dxmsg008
+                .Location.SourceTree!.GetText()
+                .GetSubText(dxmsg008.Location.SourceSpan)
+                .ToString(),
+            Is.EqualTo("Awake")
+        );
+        Assert.That(dxmsg008.GetMessage(), Does.Contain("[DxIgnoreMissingBaseCall]"));
+    }
+
+    [Test]
+    public void IgnoreMissingBaseCallAttributeAtClassScopeOnCleanOverridesProducesZeroDiagnostics()
+    {
+        // Belt-and-braces: class-level opt-out plus EVERY override calls base. No would-be
+        // DXMSG006/007/009/010 means no DXMSG008 either; clean overrides on opted-out classes
+        // must produce zero noise (matches the IgnoreAttributeOnClassEmitsDxmsg008Only contract).
+        string source = """
+namespace Sample
+{
+    [DxMessaging.Core.Attributes.DxIgnoreMissingBaseCall]
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void Awake() { base.Awake(); }
+        protected override void OnEnable() { base.OnEnable(); }
+        protected override void OnDisable() { base.OnDisable(); }
+        protected override void OnDestroy() { base.OnDestroy(); }
+        protected override void RegisterMessageHandlers() { base.RegisterMessageHandlers(); }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        Assert.That(diagnostics, Is.Empty);
     }
 }

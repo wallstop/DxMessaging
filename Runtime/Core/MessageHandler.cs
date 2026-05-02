@@ -331,6 +331,149 @@ namespace DxMessaging.Core
         }
 
         /// <summary>
+        /// Pre-freezes this handler's untargeted handler caches for the given message type and priority
+        /// for the specified emission id, so removals during the same emission are not observed.
+        /// </summary>
+        /// <typeparam name="T">Untargeted message type.</typeparam>
+        /// <param name="priority">Priority bucket to freeze.</param>
+        /// <param name="emissionId">Current emission id.</param>
+        /// <param name="messageBus">Bus whose typed handler mapping to use.</param>
+        internal void PrefreezeUntargetedHandlersForEmission<T>(
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : IUntargetedMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._untargetedFastHandlers != null
+                && handler._untargetedFastHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._untargetedHandlers != null
+                && handler._untargetedHandlers.TryGetValue(
+                    priority,
+                    out HandlerActionCache<Action<T>> cache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's targeted handler caches for the given message type, target, and priority
+        /// for the specified emission id, so removals during the same emission are not observed.
+        /// </summary>
+        /// <typeparam name="T">Targeted message type.</typeparam>
+        /// <param name="target">Target instance id.</param>
+        /// <param name="priority">Priority bucket to freeze.</param>
+        /// <param name="emissionId">Current emission id.</param>
+        /// <param name="messageBus">Bus whose typed handler mapping to use.</param>
+        internal void PrefreezeTargetedHandlersForEmission<T>(
+            InstanceId target,
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : ITargetedMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._targetedFastHandlers != null
+                && handler._targetedFastHandlers.TryGetValue(
+                    target,
+                    out Dictionary<int, HandlerActionCache<FastHandler<T>>> fastByPriority
+                )
+                && fastByPriority.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._targetedHandlers != null
+                && handler._targetedHandlers.TryGetValue(
+                    target,
+                    out Dictionary<int, HandlerActionCache<Action<T>>> byPriority
+                )
+                && byPriority.TryGetValue(priority, out HandlerActionCache<Action<T>> cache)
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
+        /// Pre-freezes this handler's broadcast handler caches for the given message type, source, and priority
+        /// for the specified emission id, so removals during the same emission are not observed.
+        /// </summary>
+        /// <typeparam name="T">Broadcast message type.</typeparam>
+        /// <param name="source">Source instance id.</param>
+        /// <param name="priority">Priority bucket to freeze.</param>
+        /// <param name="emissionId">Current emission id.</param>
+        /// <param name="messageBus">Bus whose typed handler mapping to use.</param>
+        internal void PrefreezeBroadcastHandlersForEmission<T>(
+            InstanceId source,
+            int priority,
+            long emissionId,
+            IMessageBus messageBus
+        )
+            where T : IBroadcastMessage
+        {
+            if (!GetHandlerForType(messageBus, out TypedHandler<T> handler))
+            {
+                return;
+            }
+
+            if (
+                handler._broadcastFastHandlers != null
+                && handler._broadcastFastHandlers.TryGetValue(
+                    source,
+                    out Dictionary<int, HandlerActionCache<FastHandler<T>>> fastByPriority
+                )
+                && fastByPriority.TryGetValue(
+                    priority,
+                    out HandlerActionCache<FastHandler<T>> fastCache
+                )
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(fastCache, emissionId);
+            }
+
+            if (
+                handler._broadcastHandlers != null
+                && handler._broadcastHandlers.TryGetValue(
+                    source,
+                    out Dictionary<int, HandlerActionCache<Action<T>>> byPriority
+                )
+                && byPriority.TryGetValue(priority, out HandlerActionCache<Action<T>> cache)
+            )
+            {
+                _ = TypedHandler<T>.GetOrAddNewHandlerStack(cache, emissionId);
+            }
+        }
+
+        /// <summary>
         /// High-performance handler that receives the message by reference (no boxing/copies).
         /// </summary>
         public delegate void FastHandler<TMessage>(ref TMessage message)
@@ -3079,7 +3222,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     target,
                     ref _targetedHandlers,
                     originalHandler,
@@ -3107,7 +3250,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     target,
                     ref _targetedFastHandlers,
                     originalHandler,
@@ -3183,7 +3326,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _untargetedHandlers,
                     originalHandler,
                     handler,
@@ -3208,7 +3351,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     ref _untargetedFastHandlers,
                     originalHandler,
                     handler,
@@ -3235,7 +3378,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     source,
                     ref _broadcastHandlers,
                     originalHandler,
@@ -3263,7 +3406,7 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
-                return AddHandler(
+                return AddHandlerPreservingPriorityKey(
                     source,
                     ref _broadcastFastHandlers,
                     originalHandler,
@@ -3708,7 +3851,21 @@ namespace DxMessaging.Core
                 );
             }
 
-            // Context-aware variant that preserves the priority key mapping on deregistration for the current emission.
+            // Context-aware variant that preserves the priority and context key
+            // mappings on deregistration so frozen dispatch snapshots remain valid
+            // for any in-flight emission. Trade-off: empty HandlerActionCache
+            // entries (and their enclosing per-priority Dictionary) are not
+            // reclaimed until either (a) a future registration at the same
+            // (context, priority) pair reuses the cache, or (b) the owning
+            // MessageHandler is destroyed. For typical Unity gameplay (a small
+            // fixed set of priorities and a bounded set of long-lived target /
+            // source InstanceIds) the residual footprint is on the order of
+            // hundreds of bytes per MessageHandler. Code that interacts with
+            // many transient InstanceIds (e.g. a global service that registers
+            // handlers per ephemeral GameObject) should prefer recycling
+            // MessageHandlers or routing through AddSourcedBroadcastWithoutSourceHandler /
+            // AddTargetedWithoutTargetingHandler to avoid the per-(context,priority)
+            // outer-dictionary growth.
             private static Action AddHandlerPreservingPriorityKey<TU>(
                 InstanceId context,
                 ref Dictionary<

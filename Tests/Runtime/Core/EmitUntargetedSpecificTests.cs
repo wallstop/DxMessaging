@@ -12,7 +12,15 @@ namespace DxMessaging.Tests.Runtime.Core
     using UnityEngine;
     using UnityEngine.TestTools;
 
-    public sealed class UntargetedTests : MessagingTestBase
+    /// <summary>
+    /// Untargeted-only emission tests preserved verbatim from the original
+    /// <c>UntargetedTests.cs</c>. Logic that is provably common across all three
+    /// message kinds is consolidated in <see cref="EmitTests"/>; the tests in
+    /// this file remain kind-specific because their assertion semantics do not
+    /// translate cleanly to targeted or broadcast dispatch (untargeted fan-out
+    /// to every registered handler differs from targeted/broadcast routing).
+    /// </summary>
+    public sealed class EmitUntargetedSpecificTests : MessagingTestBase
     {
         [UnityTest]
         public IEnumerator SimpleNormal()

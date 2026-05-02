@@ -72,7 +72,7 @@ public sealed class CompilationMessageHarvestTests
         Assert.That(report.MissingBaseFor, Is.EquivalentTo(new[] { "Awake", "OnEnable" }));
         Assert.That(report.DiagnosticIds, Is.EquivalentTo(new[] { "DXMSG006", "DXMSG007" }));
         // First-occurrence file path is stable so "Open Script" jumps to the first reported
-        // location — which is what the user's eye lands on first in the console.
+        // location; which is what the user's eye lands on first in the console.
         Assert.That(report.FilePath, Is.EqualTo("Assets/Sample/Player.cs"));
         Assert.That(report.Line, Is.EqualTo(8));
     }
@@ -100,7 +100,7 @@ public sealed class CompilationMessageHarvestTests
     public void AggregateOnEmptyInputReturnsEmptyDictionary()
     {
         // The harvester calls Aggregate even when an assembly produced zero matching messages
-        // — the empty result is then used by ApplyCompilerMessageDrain to RETIRE the previous
+        //; the empty result is then used by ApplyCompilerMessageDrain to RETIRE the previous
         // attribution for that assembly. Stable empty handling is load-bearing for that flow.
         Dictionary<string, ParsedTypeReport> aggregated = BaseCallLogMessageParser.Aggregate(
             Array.Empty<string>()
@@ -155,7 +155,7 @@ public sealed class CompilationMessageHarvestTests
     [Test]
     public void ApplyAssemblyReportsRecompileSameAssemblyDropsRetiredTypes()
     {
-        // Assembly A reports type X with method Awake. The user fixes the issue and recompiles —
+        // Assembly A reports type X with method Awake. The user fixes the issue and recompiles;
         // A's next batch is empty. X must be removed from BOTH mergedReports AND
         // typesByAssembly[A] (otherwise the inspector shows a phantom HelpBox for a fixed type).
         Dictionary<string, HashSet<string>> typesByAssembly = new(StringComparer.OrdinalIgnoreCase);
@@ -245,7 +245,7 @@ public sealed class CompilationMessageHarvestTests
     public void ApplyAssemblyReportsDifferentMethodsOnSameTypeAcrossAssemblies()
     {
         // A reports X.Awake; B reports X.OnEnable. The merged view must carry both methods on a
-        // single X entry — this is the partial-class / split-assembly case.
+        // single X entry; this is the partial-class / split-assembly case.
         Dictionary<string, HashSet<string>> typesByAssembly = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, ParsedTypeReport> mergedReports = new(StringComparer.Ordinal);
 
@@ -277,7 +277,7 @@ public sealed class CompilationMessageHarvestTests
     {
         // Sanity check: applying an empty batch for an assembly we've never seen leaves the
         // merged map untouched. A common refresh path on Unity 2021 is "every assembly fires
-        // assemblyCompilationFinished, even ones with no warnings" — those calls must not
+        // assemblyCompilationFinished, even ones with no warnings"; those calls must not
         // accidentally zero out the snapshot.
         Dictionary<string, HashSet<string>> typesByAssembly = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, ParsedTypeReport> mergedReports = new(StringComparer.Ordinal);
@@ -381,7 +381,7 @@ public sealed class CompilationMessageHarvestTests
     public void BuildSnapshotLogEntriesOnlyVsCompilerMessageOnly()
     {
         // Each source independently produces a non-empty snapshot. Both halves of the dual-source
-        // contract must work in isolation — Unity 2021 only feeds the CompilerMessage path,
+        // contract must work in isolation; Unity 2021 only feeds the CompilerMessage path,
         // Unity 2022+ predominantly feeds LogEntries.
         Dictionary<string, ParsedTypeReport> logOnly = MakeReports(
             ("Sample.A", new[] { "Awake" }, "DXMSG006", "A.cs", 1)
@@ -518,7 +518,7 @@ public sealed class CompilationMessageHarvestTests
     public void AggregateSameAssemblyReportsSameFqnMultipleTimesInOneDrainDedupesMethods()
     {
         // Spec 3b: a single drain that contains the SAME line three times for the same FQN must
-        // dedupe — Aggregate-then-merge always produces a single MissingBaseFor entry per method.
+        // dedupe; Aggregate-then-merge always produces a single MissingBaseFor entry per method.
         // This pins the parser-level dedup contract that the harvester depends on.
         Dictionary<string, ParsedTypeReport> aggregated = BaseCallLogMessageParser.Aggregate(
             new[] { Unity2021Dxmsg009, Unity2021Dxmsg009, Unity2021Dxmsg009 }
@@ -537,7 +537,7 @@ public sealed class CompilationMessageHarvestTests
     [Test]
     public void BuildSnapshotDictionaryWithNullValueDoesNotCrash()
     {
-        // Spec 3c: defensive — if either source dictionary contains a null ParsedTypeReport value
+        // Spec 3c: defensive; if either source dictionary contains a null ParsedTypeReport value
         // (a defensive shape we may see if the harvester's internal state ever decays), the
         // snapshot builder must not crash. The null entry is silently skipped.
         Dictionary<string, ParsedTypeReport> logEntries = new(StringComparer.Ordinal)
@@ -563,7 +563,7 @@ public sealed class CompilationMessageHarvestTests
     {
         // Spec 3d: A reports type X with path=A.cs line=10. B then ALSO reports X with path=B.cs
         // line=20. The merged snapshot must keep A.cs/10 (first-assembly-seen wins). This pins
-        // the cross-assembly first-seen contract — same-assembly recompile uses latest payload
+        // the cross-assembly first-seen contract; same-assembly recompile uses latest payload
         // (different code path; pinned implicitly by ApplyAssemblyReports_RecompileSameAssembly...).
         Dictionary<string, HashSet<string>> typesByAssembly = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, ParsedTypeReport> mergedReports = new(StringComparer.Ordinal);

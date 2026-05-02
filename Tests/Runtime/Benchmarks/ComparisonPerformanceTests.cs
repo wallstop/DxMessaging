@@ -20,6 +20,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using Zenject;
 #endif
 
+    [Category("Performance")]
     public sealed class ComparisonPerformanceTests : BenchmarkTestBase
     {
         protected override bool MessagingDebugEnabled => false;
