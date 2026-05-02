@@ -127,7 +127,7 @@ namespace DxMessaging.Editor.Analyzers
         // exclusively to keep the test surface and runtime behaviour identical.
         //
         // Note: starting in v2.3, the IL-reflection scanner (BaseCallTypeScanner) is the primary
-        // source of truth — it runs unconditionally on every rescan, regardless of bridge state.
+        // source of truth; it runs unconditionally on every rescan, regardless of bridge state.
         // The bridge only contributes ADDITIONAL data, never overrides the scanner.
         private static readonly Dictionary<string, HashSet<string>> _typesByAssembly = new(
             StringComparer.OrdinalIgnoreCase
@@ -186,14 +186,14 @@ namespace DxMessaging.Editor.Analyzers
         // Tracks whether the current snapshot has been refreshed by a scan in THIS Editor session,
         // or whether it was loaded eagerly from `Library/DxMessaging/baseCallReport.json` in the
         // static ctor and has not yet been overwritten. The inspector overlay reads this to
-        // distinguish "fresh-this-session" warnings from cached-from-previous-session warnings —
+        // distinguish "fresh-this-session" warnings from cached-from-previous-session warnings;
         // when the cache is showing, we annotate the HelpBox with a small suffix so the user
         // understands the data may be stale until the first post-reload scan completes.
         //
         // Default `false`: the static ctor's `LoadFromDisk` runs first, so by the time anything
         // observes the snapshot, either (a) the cache populated entries that pre-date this session,
         // or (b) the cache was empty (truly fresh). In case (b) the overlay renders no warning
-        // anyway — there are no entries to annotate — so the false default is correct for both.
+        // anyway; there are no entries to annotate; so the false default is correct for both.
         // Flipped to `true` after the first successful `RescanNow` post-startup; never flipped
         // back to `false`. Volatile so the editor-loop reader sees the write without a memory
         // barrier on Unity's pre-2022 mono runtime.
@@ -292,7 +292,7 @@ namespace DxMessaging.Editor.Analyzers
                     {
                         // S8: defensive value-type guard. If a future Unity version makes LogEntry
                         // a struct, Activator.CreateInstance would hand us a boxed copy and the
-                        // GetEntry call would mutate that copy in-place — harvest would silently
+                        // GetEntry call would mutate that copy in-place; harvest would silently
                         // report empty. Disable the LogEntries path rather than silently producing
                         // a wrong result; the CompilerMessage feed still runs.
                         LogOnce(
@@ -340,7 +340,7 @@ namespace DxMessaging.Editor.Analyzers
 
                 LoadFromDisk();
 
-                // AssetDatabase isn't fully ready inside the static ctor — defer the first scan one
+                // AssetDatabase isn't fully ready inside the static ctor; defer the first scan one
                 // editor tick so settings load doesn't fight a transitional asset-import state.
                 EditorApplication.delayCall += SafeRescanFromCallback;
                 AssemblyReloadEvents.afterAssemblyReload += SafeRescanFromCallback;
@@ -380,7 +380,7 @@ namespace DxMessaging.Editor.Analyzers
             // compile or mid-asset-update. Reading LogEntries during compilation contends with the
             // compiler's own log-buffer lock and can deadlock the editor. Touching AssetDatabase
             // (via TryLoadSettings → GetOrCreateSettings → CreateAsset) during compilation
-            // schedules an import that re-triggers compilation — an infinite-loop trap that
+            // schedules an import that re-triggers compilation; an infinite-loop trap that
             // permanently freezes script-compilation startup. Defer to the post-compile state
             // and let the polled tick (or the explicit afterAssemblyReload hook) pick it up.
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
@@ -406,7 +406,7 @@ namespace DxMessaging.Editor.Analyzers
                 _lastSeenCount = 0;
                 PersistToDisk();
                 // The "check disabled" path still represents a successful session-time decision
-                // about the snapshot — flip the freshness flag so the overlay never lingers in
+                // about the snapshot; flip the freshness flag so the overlay never lingers in
                 // "cached from previous session" mode after the user has explicitly silenced the
                 // check. Doing this BEFORE RaiseReportUpdated mirrors the main path's ordering.
                 _isFreshThisSession = true;
@@ -511,7 +511,7 @@ namespace DxMessaging.Editor.Analyzers
             }
 
             // Replace the live snapshot with the new view in one swap. The scanner runs over ALL
-            // loaded types every time, so this is a full-replace — types the user has fixed since
+            // loaded types every time, so this is a full-replace; types the user has fixed since
             // the last scan disappear, types newly broken appear.
             SnapshotInternal.Clear();
             foreach (KeyValuePair<string, BaseCallReportEntry> kvp in nextSnapshot)
@@ -532,7 +532,7 @@ namespace DxMessaging.Editor.Analyzers
         }
 
         // Unions the bridge-produced DTOs into the scanner-produced snapshot. The scanner is the
-        // authoritative source — the bridge can only contribute methods / diagnostic ids the
+        // authoritative source; the bridge can only contribute methods / diagnostic ids the
         // scanner missed for a type, OR a brand-new type entry the scanner did not produce (e.g.
         // a subclass the scanner couldn't classify because its IL was stripped). The first non-
         // empty file path / line wins, matching the bridge's pre-existing semantics.
@@ -596,7 +596,7 @@ namespace DxMessaging.Editor.Analyzers
         // Reads the editor console via LogEntries reflection. Returns the aggregated per-type
         // report, the current console count, and whether the harvest actually ran (false when
         // the LogEntries reflection layer is unavailable or threw). On Unity 2021 this returns
-        // an empty aggregate every time — the analyzer warnings flow through the CompilerMessage
+        // an empty aggregate every time; the analyzer warnings flow through the CompilerMessage
         // feed instead and arrive via ApplyCompilerMessageDrain.
         private static Dictionary<string, ParsedTypeReport> HarvestFromLogEntries(
             out int currentCount,
@@ -623,7 +623,7 @@ namespace DxMessaging.Editor.Analyzers
             // S4: console-clear handling. We always overwrite _lastSeenCount near the bottom of
             // RescanNow, so the only point of acting on a shrunken count here is to be explicit
             // about the semantic. The accumulator is rebuilt from scratch every rescan, so the
-            // clear case is naturally consistent — even an empty log produces an empty aggregate
+            // clear case is naturally consistent; even an empty log produces an empty aggregate
             // and a ReportUpdated fire that drops stale rows.
 
             // B2 + S6: enter the get/end pair only AFTER StartGettingEntries actually succeeded.
@@ -783,7 +783,7 @@ namespace DxMessaging.Editor.Analyzers
         private static void Tick()
         {
             // Tick is only registered when the LogEntries reflection layer is available, so we
-            // do NOT need to re-check _logEntriesDisabled here — but the IsAvailable guard
+            // do NOT need to re-check _logEntriesDisabled here; but the IsAvailable guard
             // protects against a future failure mode where IsAvailable is flipped to false at
             // runtime.
             if (!IsAvailable)
@@ -793,7 +793,7 @@ namespace DxMessaging.Editor.Analyzers
 
             // Defensive belt: never reflect into LogEntries while a compile or asset-import is
             // running. Even though RescanNow() itself bails on this state, we don't want to even
-            // call GetCount() — the lock contention is the source of the freeze, and GetCount
+            // call GetCount(); the lock contention is the source of the freeze, and GetCount
             // touches the same buffer.
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
             {
@@ -838,12 +838,12 @@ namespace DxMessaging.Editor.Analyzers
         {
             // CRITICAL: this fires for EVERY assembly compiled (10s of times per build). Running
             // RescanNow synchronously here invokes LogEntries reflection while OTHER assemblies
-            // are still compiling — the compiler holds its log-buffer lock and our reflection
+            // are still compiling; the compiler holds its log-buffer lock and our reflection
             // call blocks waiting for it. Combined with AssetDatabase touches inside RescanNow,
             // this caused permanent script-compilation freezes on Unity startup.
             //
             // S4: when the legacy console-bridge is OFF, we don't need to parse CompilerMessage
-            // payloads at all — the IL-reflection scanner is the sole data source and it runs
+            // payloads at all; the IL-reflection scanner is the sole data source and it runs
             // off the AssemblyReloadEvents.afterAssemblyReload hook that fires once per build,
             // not per-assembly. Bail out early so a 30-assembly build doesn't burn CPU running
             // the regex-heavy parser 30 times for output we'll never read. Read the setting once
@@ -908,7 +908,7 @@ namespace DxMessaging.Editor.Analyzers
             // Fix: schedule a single delayCall. delayCall fires AFTER the current event chain
             // unwinds and AFTER `EditorApplication.isCompiling` flips back to false. Multiple
             // delayCall registrations from the same compile burst are debounced by the
-            // _rescanScheduled latch — only one deferred RescanNow runs per build.
+            // _rescanScheduled latch; only one deferred RescanNow runs per build.
             if (_rescanScheduled)
             {
                 return;
@@ -921,7 +921,7 @@ namespace DxMessaging.Editor.Analyzers
         {
             _rescanScheduled = false;
             // delayCall can fire while still mid-compile if the editor is in a weird state.
-            // RescanNow has its own isCompiling/isUpdating guard — re-defer if needed.
+            // RescanNow has its own isCompiling/isUpdating guard; re-defer if needed.
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
             {
                 if (!_rescanScheduled)
@@ -948,7 +948,7 @@ namespace DxMessaging.Editor.Analyzers
 
         private static DxMessagingSettings TryLoadSettings()
         {
-            // CRITICAL: passive load only. We must NOT call GetOrCreateSettings here — that path
+            // CRITICAL: passive load only. We must NOT call GetOrCreateSettings here; that path
             // can call AssetDatabase.CreateAsset, which during script compilation schedules an
             // import → re-triggers compilation → permanent freeze. The Project Settings page and
             // the inspector overlay both call GetOrCreateSettings on demand (outside compilation),

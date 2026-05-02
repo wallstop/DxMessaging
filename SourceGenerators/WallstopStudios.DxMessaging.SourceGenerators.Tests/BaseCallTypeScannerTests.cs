@@ -106,7 +106,7 @@ public sealed class BaseCallTypeScannerTests
         // (C# CS0114) compiles to the same IL shape as `new void X()`. The scanner's IL-only
         // probe cannot distinguish DXMSG007 from DXMSG009; it conservatively classifies as
         // DXMSG007. The compile-time analyzer is authoritative for the precise ID. This test
-        // pins the conservative-classification contract — if a future scanner gains semantic
+        // pins the conservative-classification contract; if a future scanner gains semantic
         // insight, the assertion below should be updated alongside the doc note.
         Assembly fixture = CompileFixture(
             """
@@ -117,7 +117,7 @@ public sealed class BaseCallTypeScannerTests
             {
                 protected void OnEnable()
                 {
-                    // No `override`, no `new`. C# emits CS0114 — the analyzer would emit DXMSG009.
+                    // No `override`, no `new`. C# emits CS0114; the analyzer would emit DXMSG009.
                     // The scanner classifies as DXMSG007 because the IL is indistinguishable.
                 }
             }
@@ -169,7 +169,7 @@ public sealed class BaseCallTypeScannerTests
     {
         // The user's canonical `BrokenThing : ddd : MessageAwareComponent` case: ddd's override
         // does not call base, BrokenThing's override does. The leaf is the type the user is
-        // actively editing, so DXMSG010 should land on BrokenThing — not on ddd, which gets its
+        // actively editing, so DXMSG010 should land on BrokenThing; not on ddd, which gets its
         // own DXMSG006 row.
         Assembly fixture = CompileFixture(
             """
@@ -179,7 +179,7 @@ public sealed class BaseCallTypeScannerTests
             {
                 protected override void OnEnable()
                 {
-                    // No base call — chain dies here.
+                    // No base call; chain dies here.
                 }
             }
 
@@ -215,7 +215,7 @@ public sealed class BaseCallTypeScannerTests
         // declare OnEnable, but ddd's override is broken. BrokenThing calls base correctly. The
         // chain walker's GetOverriddenMethod must walk PAST Middle (which doesn't declare the
         // slot directly) to find ddd's broken override. If the walker stopped at Middle without
-        // finding the method on it, we would report nothing on BrokenThing — a missed DXMSG010.
+        // finding the method on it, we would report nothing on BrokenThing; a missed DXMSG010.
         Assembly fixture = CompileFixture(
             """
             using DxMessaging.Unity;
@@ -224,7 +224,7 @@ public sealed class BaseCallTypeScannerTests
             {
                 protected override void OnEnable()
                 {
-                    // Broken — no base call.
+                    // Broken; no base call.
                 }
             }
 
@@ -326,7 +326,7 @@ public sealed class BaseCallTypeScannerTests
             {
                 protected override void OnEnable()
                 {
-                    // Broken — but abstract types are skipped.
+                    // Broken; but abstract types are skipped.
                 }
             }
             """
@@ -342,7 +342,7 @@ public sealed class BaseCallTypeScannerTests
     public void ScanGenericTypeDefinitionIsSkipped()
     {
         // Open generic-type definitions cannot be instantiated as MonoBehaviour components.
-        // Closed generic instantiations would be classified separately — but the open definition
+        // Closed generic instantiations would be classified separately; but the open definition
         // itself is a TypeCache artifact we should not surface.
         Assembly fixture = CompileFixture(
             """
@@ -352,7 +352,7 @@ public sealed class BaseCallTypeScannerTests
             {
                 protected override void OnEnable()
                 {
-                    // Broken — but the generic-type-definition is skipped.
+                    // Broken; but the generic-type-definition is skipped.
                 }
             }
             """
@@ -616,7 +616,7 @@ public sealed class BaseCallTypeScannerTests
         // be treated as assume-clean. GetMethodBody() returns null for extern methods just like
         // it does for cross-assembly closed-source code; the scanner's defensive bias means no
         // diagnostic is emitted.
-        // Suppress CS0626 for the missing DllImport — we never actually call the method, we just
+        // Suppress CS0626 for the missing DllImport; we never actually call the method, we just
         // need a MethodInfo whose IL body is null.
         Assembly fixture = CompileFixture(
             """
@@ -651,7 +651,7 @@ public sealed class BaseCallTypeScannerTests
             BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
 
         // The IL inspector returns true (assume clean) when the body is null. The scanner records
-        // an entry only when MissingBaseFor is non-empty — so an assume-clean override produces
+        // an entry only when MissingBaseFor is non-empty; so an assume-clean override produces
         // no entry.
         Assert.That(
             snapshot,
@@ -709,7 +709,7 @@ public sealed class BaseCallTypeScannerTests
     {
         // Build a self-contained assembly that defines a MessageAwareComponent stub plus the
         // user's classes on top. The stub's chain terminator FQN ("DxMessaging.Unity.MessageAware
-        // Component") is the literal string the Core checks for to terminate the chain walk —
+        // Component") is the literal string the Core checks for to terminate the chain walk;
         // keep them in lock-step.
         const string Stubs = """
 namespace UnityEngine
@@ -746,7 +746,7 @@ namespace DxMessaging.Unity
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
         };
-        // Ensure System.Runtime is loaded — required for MetadataReference resolution on net9.0.
+        // Ensure System.Runtime is loaded; required for MetadataReference resolution on net9.0.
         Assembly runtime = Assembly.Load("System.Runtime");
         if (!string.IsNullOrEmpty(runtime.Location))
         {

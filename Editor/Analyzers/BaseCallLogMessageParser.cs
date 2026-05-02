@@ -91,7 +91,7 @@ namespace DxMessaging.Editor.Analyzers
     public static class BaseCallLogMessageParser
     {
         // Roslyn / Unity-style location prefix:  path(line,col): warning DXMSG006:
-        // We don't anchor to the diagnostic id here beyond the leading "DXMSG" — that lets the
+        // We don't anchor to the diagnostic id here beyond the leading "DXMSG"; that lets the
         // same prefix regex serve all five diagnostics (DXMSG006/007/008/009/010). The trailing
         // `: ` is consumed so the diagnostic-specific regexes only see the message body.
         private const RegexOptions SharedOptions =
@@ -125,7 +125,7 @@ namespace DxMessaging.Editor.Analyzers
 
         // DXMSG008 format:
         //   '{type}' is excluded from the DxMessaging base-call check ({source}).
-        // No method name in the message — MethodName is returned as the empty string.
+        // No method name in the message; MethodName is returned as the empty string.
         private static readonly Regex Dxmsg008Regex = new(
             @"^'(?<type>[^']+)'\s+is\s+excluded\s+from\s+the\s+DxMessaging\s+base-call\s+check\s+\([^)]*\)\.",
             SharedOptions

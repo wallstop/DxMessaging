@@ -1,17 +1,20 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.Messages;
+    using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Components;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using NUnit.Framework;
     using UnityEngine;
     using UnityEngine.TestTools;
 
+    [Category("Stress")]
     public sealed class OrderingManyRegistrationsTests : MessagingTestBase
     {
         private const int ManyRegistrationCount = 32;
@@ -40,15 +43,19 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedHandlersManyRegistrationsMaintainOrder()
+        public IEnumerator HandlersManyRegistrationsMaintainOrder(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedHandlersManyRegistrationsMaintainOrder),
+                nameof(HandlersManyRegistrationsMaintainOrder) + "_" + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId targetId = component;
 
             List<int> fastOrder = new(ManyRegistrationCount);
             List<int> actionOrder = new(ManyRegistrationCount);
@@ -56,27 +63,24 @@ namespace DxMessaging.Tests.Runtime.Core
             for (int i = 0; i < ManyRegistrationCount; i++)
             {
                 int index = i;
-                _ = token.RegisterUntargeted(
-                    (ref SimpleUntargetedMessage _) => fastOrder.Add(index)
-                );
+                _ = RegisterFastHandler(scenario, token, targetId, () => fastOrder.Add(index));
             }
 
             for (int i = 0; i < ManyRegistrationCount; i++)
             {
                 int index = i;
-                _ = token.RegisterUntargeted((SimpleUntargetedMessage _) => actionOrder.Add(index));
+                _ = RegisterActionHandler(scenario, token, targetId, () => actionOrder.Add(index));
             }
 
-            SimpleUntargetedMessage message = new();
-            message.EmitUntargeted();
+            EmitForScenario(scenario, targetId);
 
             AssertSequence(
                 fastOrder,
-                "Untargeted fast handlers should run in registration order even with many entries."
+                $"{scenario.Kind} fast handlers should run in registration order even with many entries."
             );
             AssertSequence(
                 actionOrder,
-                "Untargeted action handlers should run in registration order even with many entries."
+                $"{scenario.Kind} action handlers should run in registration order even with many entries."
             );
             yield break;
         }
@@ -108,52 +112,6 @@ namespace DxMessaging.Tests.Runtime.Core
             AssertSequence(
                 postProcessorOrder,
                 "Untargeted post-processors should run in registration order even with many entries."
-            );
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator TargetedHandlersManyRegistrationsMaintainOrder()
-        {
-            GameObject host = new(
-                nameof(TargetedHandlersManyRegistrationsMaintainOrder),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            List<int> fastOrder = new(ManyRegistrationCount);
-            List<int> actionOrder = new(ManyRegistrationCount);
-
-            for (int i = 0; i < ManyRegistrationCount; i++)
-            {
-                int index = i;
-                _ = token.RegisterComponentTargeted(
-                    component,
-                    (ref SimpleTargetedMessage _) => fastOrder.Add(index)
-                );
-            }
-
-            for (int i = 0; i < ManyRegistrationCount; i++)
-            {
-                int index = i;
-                _ = token.RegisterComponentTargeted(
-                    component,
-                    (SimpleTargetedMessage _) => actionOrder.Add(index)
-                );
-            }
-
-            SimpleTargetedMessage message = new();
-            message.EmitComponentTargeted(component);
-
-            AssertSequence(
-                fastOrder,
-                "Targeted fast handlers should run in registration order even with many entries."
-            );
-            AssertSequence(
-                actionOrder,
-                "Targeted action handlers should run in registration order even with many entries."
             );
             yield break;
         }
@@ -290,52 +248,6 @@ namespace DxMessaging.Tests.Runtime.Core
             AssertSequence(
                 actionOrder,
                 "Targeted-without-targeting action post-processors should run in registration order even with many entries."
-            );
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastHandlersManyRegistrationsMaintainOrder()
-        {
-            GameObject host = new(
-                nameof(BroadcastHandlersManyRegistrationsMaintainOrder),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            List<int> fastOrder = new(ManyRegistrationCount);
-            List<int> actionOrder = new(ManyRegistrationCount);
-
-            for (int i = 0; i < ManyRegistrationCount; i++)
-            {
-                int index = i;
-                _ = token.RegisterComponentBroadcast(
-                    component,
-                    (ref SimpleBroadcastMessage _) => fastOrder.Add(index)
-                );
-            }
-
-            for (int i = 0; i < ManyRegistrationCount; i++)
-            {
-                int index = i;
-                _ = token.RegisterComponentBroadcast(
-                    component,
-                    (SimpleBroadcastMessage _) => actionOrder.Add(index)
-                );
-            }
-
-            SimpleBroadcastMessage message = new();
-            message.EmitComponentBroadcast(component);
-
-            AssertSequence(
-                fastOrder,
-                "Broadcast fast handlers should run in registration order even with many entries."
-            );
-            AssertSequence(
-                actionOrder,
-                "Broadcast action handlers should run in registration order even with many entries."
             );
             yield break;
         }
@@ -575,23 +487,29 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedInterceptorsManyRegistrationsMaintainOrder()
+        public IEnumerator InterceptorsManyRegistrationsMaintainOrder(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedInterceptorsManyRegistrationsMaintainOrder),
+                nameof(InterceptorsManyRegistrationsMaintainOrder) + "_" + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId targetId = component;
 
             List<int> order = new(ManyRegistrationCount);
 
             for (int i = 0; i < ManyRegistrationCount; i++)
             {
                 int index = i;
-                _ = token.RegisterUntargetedInterceptor(
-                    (ref SimpleUntargetedMessage _) =>
+                _ = RegisterInterceptor(
+                    scenario,
+                    token,
+                    () =>
                     {
                         order.Add(index);
                         return true;
@@ -599,84 +517,169 @@ namespace DxMessaging.Tests.Runtime.Core
                 );
             }
 
-            SimpleUntargetedMessage message = new();
-            message.EmitUntargeted();
+            EmitForScenario(scenario, targetId);
 
             AssertSequence(
                 order,
-                "Untargeted interceptors should run in registration order even with many entries."
+                $"{scenario.Kind} interceptors should run in registration order even with many entries."
             );
             yield break;
         }
 
-        [UnityTest]
-        public IEnumerator TargetedInterceptorsManyRegistrationsMaintainOrder()
+        private static MessageRegistrationHandle RegisterFastHandler(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked
+        )
         {
-            GameObject host = new(
-                nameof(TargetedInterceptorsManyRegistrationsMaintainOrder),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            List<int> order = new(ManyRegistrationCount);
-
-            for (int i = 0; i < ManyRegistrationCount; i++)
+            switch (scenario.Kind)
             {
-                int index = i;
-                _ = token.RegisterTargetedInterceptor(
-                    (ref InstanceId _, ref SimpleTargetedMessage _) =>
-                    {
-                        order.Add(index);
-                        return true;
-                    }
-                );
+                case MessageKind.Untargeted:
+                {
+                    return token.RegisterUntargeted<SimpleUntargetedMessage>(
+                        (ref SimpleUntargetedMessage _) => onInvoked()
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return token.RegisterTargeted<SimpleTargetedMessage>(
+                        target,
+                        (ref SimpleTargetedMessage _) => onInvoked()
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return token.RegisterBroadcast<SimpleBroadcastMessage>(
+                        target,
+                        (ref SimpleBroadcastMessage _) => onInvoked()
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
             }
-
-            SimpleTargetedMessage message = new();
-            message.EmitComponentTargeted(component);
-
-            AssertSequence(
-                order,
-                "Targeted interceptors should run in registration order even with many entries."
-            );
-            yield break;
         }
 
-        [UnityTest]
-        public IEnumerator BroadcastInterceptorsManyRegistrationsMaintainOrder()
+        private static MessageRegistrationHandle RegisterActionHandler(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked
+        )
         {
-            GameObject host = new(
-                nameof(BroadcastInterceptorsManyRegistrationsMaintainOrder),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            List<int> order = new(ManyRegistrationCount);
-
-            for (int i = 0; i < ManyRegistrationCount; i++)
+            switch (scenario.Kind)
             {
-                int index = i;
-                _ = token.RegisterBroadcastInterceptor(
-                    (ref InstanceId _, ref SimpleBroadcastMessage _) =>
-                    {
-                        order.Add(index);
-                        return true;
-                    }
-                );
+                case MessageKind.Untargeted:
+                {
+                    return token.RegisterUntargeted<SimpleUntargetedMessage>(
+                        (SimpleUntargetedMessage _) => onInvoked()
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return token.RegisterTargeted<SimpleTargetedMessage>(
+                        target,
+                        (SimpleTargetedMessage _) => onInvoked()
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return token.RegisterBroadcast<SimpleBroadcastMessage>(
+                        target,
+                        (SimpleBroadcastMessage _) => onInvoked()
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
             }
+        }
 
-            SimpleBroadcastMessage message = new();
-            message.EmitComponentBroadcast(component);
+        private static MessageRegistrationHandle RegisterInterceptor(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            Func<bool> body
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    return ScenarioHarness.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => body()
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargetedInterceptor<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        (ref InstanceId _, ref SimpleTargetedMessage __) => body()
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        (ref InstanceId _, ref SimpleBroadcastMessage __) => body()
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
+        }
 
-            AssertSequence(
-                order,
-                "Broadcast interceptors should run in registration order even with many entries."
-            );
-            yield break;
+        private static void EmitForScenario(MessageScenario scenario, InstanceId target)
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    SimpleUntargetedMessage message = new();
+                    ScenarioHarness.EmitUntargeted(scenario, ref message);
+                    return;
+                }
+                case MessageKind.Targeted:
+                {
+                    SimpleTargetedMessage message = new();
+                    ScenarioHarness.EmitTargeted(scenario, ref message, target);
+                    return;
+                }
+                case MessageKind.Broadcast:
+                {
+                    SimpleBroadcastMessage message = new();
+                    ScenarioHarness.EmitBroadcast(scenario, ref message, target);
+                    return;
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
         }
     }
 }

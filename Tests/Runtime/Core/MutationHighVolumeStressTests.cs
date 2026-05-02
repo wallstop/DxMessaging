@@ -19,6 +19,7 @@ namespace DxMessaging.Tests.Runtime.Core
     /// emission they were created in, but must participate in subsequent emissions. These tests cover normal handlers,
     /// interceptors, global accept-all registrations, and post-processors.
     /// </summary>
+    [Category("Stress")]
     public sealed class MutationHighVolumeStressTests : MessagingTestBase
     {
         private const int InitialListenerCount = 32;

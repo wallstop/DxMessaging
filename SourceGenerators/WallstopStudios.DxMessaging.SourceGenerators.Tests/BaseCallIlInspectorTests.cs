@@ -55,7 +55,7 @@ public sealed class BaseCallIlInspectorTests
     [Test]
     public void IlInspectorOnAbstractMethodReturnsTrueAssumeClean()
     {
-        // Abstract methods have no IL body — GetMethodBody() returns null. The inspector must
+        // Abstract methods have no IL body; GetMethodBody() returns null. The inspector must
         // treat this as assume-clean (cross-assembly third-party code paths exhibit the same
         // shape and emitting an unactionable warning would be hostile).
         MethodInfo abstractMethod = typeof(AbstractFixture).GetMethod(
@@ -132,7 +132,7 @@ public sealed class BaseCallIlInspectorTests
     [Test]
     public void E2ELeafCallsUnrelatedSiblingMethodNotMistakenForBaseCall()
     {
-        // The leaf calls SOMETHING — but it's a method on a sibling class, not the parent's
+        // The leaf calls SOMETHING; but it's a method on a sibling class, not the parent's
         // OnEnable. The IsAssignableFrom check inside the inspector ensures we only count calls
         // to ancestors of the declaring type.
         Assembly fixture = CompileFixture(
@@ -170,7 +170,7 @@ public sealed class BaseCallIlInspectorTests
     public void E2ELeafCallsBaseAwakeButCheckingForOnEnableDoesNotMatch()
     {
         // The leaf overrides Awake correctly but does not declare OnEnable. We're asking about
-        // "does this Awake body call base.OnEnable()" — which is a meaningless question, but the
+        // "does this Awake body call base.OnEnable()"; which is a meaningless question, but the
         // inspector shouldn't false-positive on the base.Awake() call.
         Assembly fixture = CompileFixture(
             """
@@ -249,7 +249,7 @@ public sealed class BaseCallIlInspectorTests
     [Test]
     public void E2EBrokenIntermediateChainDescendantBaseCallStillDetectedAtLeaf()
     {
-        // The leaf calls base.OnEnable() correctly — IL inspection of the leaf must report TRUE.
+        // The leaf calls base.OnEnable() correctly; IL inspection of the leaf must report TRUE.
         // The DXMSG010 detection (the intermediate's broken chain) is the SCANNER's job, not the
         // raw IL inspector's; here we confirm the inspector primitive faithfully reports each
         // method's IL in isolation regardless of what its ancestors do.
@@ -261,7 +261,7 @@ public sealed class BaseCallIlInspectorTests
             {
                 protected override void OnEnable()
                 {
-                    // No base call — chain dies here.
+                    // No base call; chain dies here.
                 }
             }
 
@@ -298,7 +298,7 @@ public sealed class BaseCallIlInspectorTests
             BaseCallIlInspector.MethodIlContainsBaseCall(middleOnEnable, "OnEnable"),
             Is.False
         );
-        // Leaf calls middle.OnEnable() correctly via base — the inspector reports true.
+        // Leaf calls middle.OnEnable() correctly via base; the inspector reports true.
         Assert.That(
             BaseCallIlInspector.MethodIlContainsBaseCall(leafOnEnable, "OnEnable"),
             Is.True
@@ -309,7 +309,7 @@ public sealed class BaseCallIlInspectorTests
     public void E2ECallvirtStillDetectedAsBaseCall()
     {
         // C# emits `call` for non-virtual base method invocation, and `callvirt` for virtual ones
-        // in some configurations. We accept both opcodes — covered by Roslyn's standard emission
+        // in some configurations. We accept both opcodes; covered by Roslyn's standard emission
         // for `base.X()` overrides.
         Assembly fixture = CompileFixture(
             """
@@ -341,7 +341,7 @@ public sealed class BaseCallIlInspectorTests
     public void E2EDeepChainLeafBaseCallDetected()
     {
         // Three-deep chain, each link calls base. The IL inspector at the leaf only inspects the
-        // leaf's body — it must report TRUE because the leaf's IL contains a base.OnEnable() call.
+        // leaf's body; it must report TRUE because the leaf's IL contains a base.OnEnable() call.
         Assembly fixture = CompileFixture(
             """
             using DxMessaging.Unity;
@@ -383,7 +383,7 @@ public sealed class BaseCallIlInspectorTests
     public void E2ELeafCallsBaseConditionallyStillDetected()
     {
         // base.X() inside an `if` is still visible to the IL walker. The walker doesn't check
-        // reachability — even an unreachable base call counts as "calls base". This matches the
+        // reachability; even an unreachable base call counts as "calls base". This matches the
         // analyzer's conservative semantic check.
         Assembly fixture = CompileFixture(
             """
@@ -419,7 +419,7 @@ public sealed class BaseCallIlInspectorTests
     public void E2EMultipleSeparateBaseCallsStillDetectedAsCallsBase()
     {
         // Multiple invocations of base methods (e.g. base.OnEnable() called twice for some
-        // reason) — the inspector returns true on the first match and short-circuits.
+        // reason); the inspector returns true on the first match and short-circuits.
         Assembly fixture = CompileFixture(
             """
             using DxMessaging.Unity;
@@ -526,7 +526,7 @@ namespace DxMessaging.Unity
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
         };
-        // Ensure System.Runtime is loaded — required for MetadataReference resolution on net9.0.
+        // Ensure System.Runtime is loaded; required for MetadataReference resolution on net9.0.
         Assembly runtime = Assembly.Load("System.Runtime");
         if (!string.IsNullOrEmpty(runtime.Location))
         {
@@ -570,7 +570,7 @@ namespace DxMessaging.Unity
     public void E2ELdstrBeforeBaseCallStillDetectsBaseCall()
     {
         // Spec 4b: an `ldstr` opcode (0x72) carries a 4-byte metadata-token operand. If the
-        // walker stepped 1 byte instead of 4, it would land inside the operand bytes — and one
+        // walker stepped 1 byte instead of 4, it would land inside the operand bytes; and one
         // of those bytes could happen to be 0x28 (call). The OpCodes-table walker steps the
         // operand bytes per the opcode's declared OperandType, so the base call AFTER the ldstr
         // must still be detected correctly. This pins the misalignment-proofness of the walker.
@@ -657,7 +657,7 @@ namespace DxMessaging.Unity
     {
         // Spec 4e: the leaf calls a same-named method on a CONCRETE UNRELATED class (not via a
         // static-helper alias, but via the class type directly). The IsAssignableFrom guard inside
-        // MethodIlContainsBaseCall must reject this — the unrelated class is not an ancestor of
+        // MethodIlContainsBaseCall must reject this; the unrelated class is not an ancestor of
         // the leaf, so even though the method name matches, the call is not a base call.
         Assembly fixture = CompileFixture(
             """
@@ -698,7 +698,7 @@ namespace DxMessaging.Unity
     public void E2ESecondInstanceMethodNamedSameAsBaseOnUnrelatedInstanceAlsoRejected()
     {
         // Spec 4e (reinforced): the leaf calls `OnEnable` on a field of an unrelated REFERENCE
-        // type — IsAssignableFrom must still reject. The reference type is not an ancestor of the
+        // type; IsAssignableFrom must still reject. The reference type is not an ancestor of the
         // leaf's declaring type, so the same-named call must not be misclassified.
         Assembly fixture = CompileFixture(
             """
@@ -742,7 +742,7 @@ namespace DxMessaging.Unity
         // Spec 4a: a method body containing the two-byte 0xFE 0x13 (volatile.) prefix BEFORE
         // an instruction. The OpCodes-table walker has a separate two-byte branch that must
         // step over volatile. correctly so the subsequent instructions are walked correctly.
-        // We exercise the branch by building a method via Reflection.Emit — the resulting IL
+        // We exercise the branch by building a method via Reflection.Emit; the resulting IL
         // contains the two-byte prefix shape and the inspector must terminate without throwing.
         // We assert the method correctly does NOT report a base call (the synthesized method
         // doesn't call any same-named method).

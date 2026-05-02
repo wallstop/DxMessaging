@@ -429,11 +429,43 @@ namespace DxMessaging.Core.MessageBus
         private bool _diagnosticsMode = ShouldEnableDiagnostics();
         private bool _loggedReflexiveWarning;
 
+        // Bumped by ResetState. Deregister closures captured before the bump
+        // compare their captured generation to this field and silently skip
+        // when they no longer match, so a deferred Object.Destroy that lands
+        // after a Reset cannot log spurious over-deregistration errors.
+        private long _resetGeneration;
+
+        /// <summary>
+        /// Bumps the internal reset generation counter without clearing any registrations or sinks.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Deregister closures returned by the registration entry points capture the value of the
+        /// reset generation at registration time and silently no-op when the captured value differs
+        /// from the bus's current value. Calling this method invalidates every previously-issued
+        /// deregister closure for this bus, which is the desired behaviour after a logical "wipe"
+        /// performed by external state-management code (for example, a custom domain-reload-disabled
+        /// reset utility) that does not wish to clear registrations via <see cref="ResetState"/>.
+        /// </para>
+        /// <para>
+        /// <see cref="DxMessagingStaticState.Reset"/> uses this method to extend the destroy-then-Reset
+        /// race-safety guarantee to user-installed custom global buses without clobbering their state.
+        /// </para>
+        /// </remarks>
+        public void BumpResetGeneration()
+        {
+            unchecked
+            {
+                _resetGeneration++;
+            }
+        }
+
         internal void ResetState()
         {
             _emissionId = 0;
             _diagnosticsMode = ShouldEnableDiagnostics();
             _loggedReflexiveWarning = false;
+            BumpResetGeneration();
 
             _sinks.Clear();
             _targetedSinks.Clear();
@@ -574,8 +606,16 @@ namespace DxMessaging.Core.MessageBus
                 DispatchCategory.GlobalBroadcast
             );
 
+            long capturedGeneration = _resetGeneration;
             return () =>
             {
+                // Generation guard: see InternalRegisterUntargeted for the
+                // rationale. Skip silently when the closure outlived a Reset.
+                if (capturedGeneration != _resetGeneration)
+                {
+                    return;
+                }
+
                 _globalSinks.version++;
                 _log.Log(
                     new MessagingRegistration(
@@ -676,8 +716,16 @@ namespace DxMessaging.Core.MessageBus
                 )
             );
 
+            long capturedGeneration = _resetGeneration;
             return () =>
             {
+                // Generation guard: see InternalRegisterUntargeted for the
+                // rationale. Skip silently when the closure outlived a Reset.
+                if (capturedGeneration != _resetGeneration)
+                {
+                    return;
+                }
+
                 _log.Log(
                     new MessagingRegistration(
                         InstanceId.EmptyId,
@@ -798,8 +846,16 @@ namespace DxMessaging.Core.MessageBus
                 )
             );
 
+            long capturedGeneration = _resetGeneration;
             return () =>
             {
+                // Generation guard: see InternalRegisterUntargeted for the
+                // rationale. Skip silently when the closure outlived a Reset.
+                if (capturedGeneration != _resetGeneration)
+                {
+                    return;
+                }
+
                 _log.Log(
                     new MessagingRegistration(
                         InstanceId.EmptyId,
@@ -920,8 +976,16 @@ namespace DxMessaging.Core.MessageBus
                 )
             );
 
+            long capturedGeneration = _resetGeneration;
             return () =>
             {
+                // Generation guard: see InternalRegisterUntargeted for the
+                // rationale. Skip silently when the closure outlived a Reset.
+                if (capturedGeneration != _resetGeneration)
+                {
+                    return;
+                }
+
                 _log.Log(
                     new MessagingRegistration(
                         InstanceId.EmptyId,
@@ -1554,6 +1618,10 @@ namespace DxMessaging.Core.MessageBus
                     DispatchCategory.Targeted,
                     _emissionId
                 );
+                // Pre-freeze the typed-handler caches across every priority bucket so
+                // deregistrations performed by an earlier priority's handler cannot
+                // empty a later priority's stack mid-emission.
+                PrefreezeTargetedSnapshot<TMessage>(ref target, snapshot);
                 DispatchBucket[] buckets = snapshot.buckets;
                 int bucketCount = snapshot.bucketCount;
                 for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -1952,13 +2020,13 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : ITargetedMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: see comment on RunBroadcast.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
                 case 1:
@@ -2108,13 +2176,13 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : ITargetedMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: see comment on RunBroadcast.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
                 case 1:
@@ -2184,13 +2252,13 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : ITargetedMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: see comment on RunBroadcast.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
                 case 1:
@@ -2337,7 +2405,10 @@ namespace DxMessaging.Core.MessageBus
                 BroadcastGlobalSourcedBroadcast(ref source, ref broadcastMessage);
             }
 
-            // Pre-freeze broadcast-without-source handler stacks for this emission
+            // Pre-freeze broadcast-without-source handler stacks for this emission.
+            // Skip the prefreeze pass entirely when there is exactly one priority
+            // bucket with at most one MessageHandler entry; see the rationale on
+            // the snapshot-level Prefreeze*Snapshot fast-path short-circuit.
             if (
                 _sinks.TryGetValue<TMessage>(out HandlerCache<int, HandlerCache> bwsHandlers)
                 && bwsHandlers.handlers.Count > 0
@@ -2348,21 +2419,34 @@ namespace DxMessaging.Core.MessageBus
                     _emissionId
                 );
                 int frozenCount = frozen.Count;
-                for (int i = 0; i < frozenCount; ++i)
+                bool needsBwsPrefreeze = frozenCount > 1;
+                List<MessageHandler> singleBucketBwsHandlers = null;
+                if (!needsBwsPrefreeze && frozenCount == 1)
                 {
-                    KeyValuePair<int, HandlerCache> entry = frozen[i];
-                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
-                        entry.Value,
+                    singleBucketBwsHandlers = GetOrAddMessageHandlerStack(
+                        frozen[0].Value,
                         _emissionId
                     );
-                    for (int h = 0; h < mhList.Count; ++h)
+                    needsBwsPrefreeze = singleBucketBwsHandlers.Count > 1;
+                }
+                if (needsBwsPrefreeze)
+                {
+                    for (int i = 0; i < frozenCount; ++i)
                     {
-                        mhList[h]
-                            .PrefreezeBroadcastWithoutSourceHandlersForEmission<TMessage>(
-                                entry.Key,
-                                _emissionId,
-                                this
-                            );
+                        KeyValuePair<int, HandlerCache> entry = frozen[i];
+                        List<MessageHandler> mhList =
+                            (i == 0 && singleBucketBwsHandlers != null)
+                                ? singleBucketBwsHandlers
+                                : GetOrAddMessageHandlerStack(entry.Value, _emissionId);
+                        for (int h = 0; h < mhList.Count; ++h)
+                        {
+                            mhList[h]
+                                .PrefreezeBroadcastWithoutSourceHandlersForEmission<TMessage>(
+                                    entry.Key,
+                                    _emissionId,
+                                    this
+                                );
+                        }
                     }
                 }
             }
@@ -2386,6 +2470,56 @@ namespace DxMessaging.Core.MessageBus
                     _emissionId
                 );
                 int handlerListCount = handlerList.Count;
+                // Pre-freeze the typed-handler caches across every priority bucket so
+                // deregistrations performed by an earlier priority's handler cannot
+                // empty a later priority's stack mid-emission. The prefreeze pass is
+                // only required when at least one later-running handler reads from a
+                // cache that an earlier-running handler can mutate. That is the case
+                // when there are multiple priority buckets, OR when the single bucket
+                // holds more than one MessageHandler (each MessageHandler owns its
+                // own typed-handler cache, so a removal in one can blank another).
+                // Single-priority single-MessageHandler dispatch is already protected
+                // by the lazy GetOrAddNewHandlerStack inside the dispatch path;
+                // multiple delegate registrations within the same priority on the
+                // same MessageHandler share a HandlerActionCache that is frozen on
+                // first read by RunFastHandlersWithContext / RunHandlersWithContext.
+                bool needsPrefreeze = handlerListCount > 1;
+                List<MessageHandler> singleBucketFrozenHandlers = null;
+                if (!needsPrefreeze && handlerListCount == 1)
+                {
+                    // For the single-bucket case, count entries in the FROZEN
+                    // MessageHandler stack (not the live dict, which a concurrent
+                    // global/interceptor deregistration could shrink between snapshot
+                    // acquisition and this read). Reusing the frozen list also avoids
+                    // re-acquiring it inside the prefreeze loop below.
+                    singleBucketFrozenHandlers = GetOrAddMessageHandlerStack(
+                        handlerList[0].Value,
+                        _emissionId
+                    );
+                    needsPrefreeze = singleBucketFrozenHandlers.Count > 1;
+                }
+                if (needsPrefreeze)
+                {
+                    for (int i = 0; i < handlerListCount; ++i)
+                    {
+                        KeyValuePair<int, HandlerCache> prefreezeEntry = handlerList[i];
+                        List<MessageHandler> prefreezeHandlers =
+                            (i == 0 && singleBucketFrozenHandlers != null)
+                                ? singleBucketFrozenHandlers
+                                : GetOrAddMessageHandlerStack(prefreezeEntry.Value, _emissionId);
+                        int prefreezeHandlerCount = prefreezeHandlers.Count;
+                        for (int h = 0; h < prefreezeHandlerCount; ++h)
+                        {
+                            prefreezeHandlers[h]
+                                .PrefreezeBroadcastHandlersForEmission<TMessage>(
+                                    source,
+                                    prefreezeEntry.Key,
+                                    _emissionId,
+                                    this
+                                );
+                        }
+                    }
+                }
                 switch (handlerListCount)
                 {
                     case 1:
@@ -2776,12 +2910,13 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : IBroadcastMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: see comment on RunBroadcast.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
                 case 1:
@@ -2931,13 +3066,19 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : IBroadcastMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: dispatch must respect the per-emission frozen
+            // MessageHandler list, even if a handler running earlier in the same
+            // emission has emptied the live cache.handlers dictionary by removing
+            // its own (or a sibling priority's) registration. Reading the live
+            // dict here would skip handlers that the snapshot still includes.
+            // GetOrAddMessageHandlerStack returns the snapshot list; bail only
+            // when that snapshot is empty.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
                 case 1:
@@ -3426,7 +3567,7 @@ namespace DxMessaging.Core.MessageBus
         }
 
         private bool InternalUntargetedBroadcast<TMessage>(ref TMessage message)
-            where TMessage : IMessage
+            where TMessage : IUntargetedMessage
         {
             if (
                 !_sinks.TryGetValue<TMessage>(out HandlerCache<int, HandlerCache> sortedHandlers)
@@ -3449,6 +3590,11 @@ namespace DxMessaging.Core.MessageBus
             {
                 return false;
             }
+
+            // Pre-freeze the typed-handler caches across every priority bucket so
+            // deregistrations performed by an earlier priority's handler cannot
+            // empty a later priority's stack mid-emission.
+            PrefreezeUntargetedSnapshot<TMessage>(snapshot);
 
             bool invoked = false;
 
@@ -3559,6 +3705,18 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
+            // No fast-path short-circuit for post-processor prefreeze.
+            //
+            // The single-bucket/single-entry fast-path used by handler prefreeze
+            // (see PrefreezeUntargetedSnapshot) is unsafe for post-processors:
+            // post-processors run AFTER regular handlers, and a regular handler
+            // is allowed to register a NEW post-processor (or a new delegate on
+            // an existing post-processor cache) during its own execution. Without
+            // an unconditional prefreeze, the post-processor cache's first read
+            // happens lazily inside the post-processor dispatch; by which time
+            // the version has been bumped and the cache will be rebuilt with the
+            // newly-registered entry visible. Always prefreezing pins the
+            // emission-start snapshot before any handler can mutate it.
             DispatchBucket[] buckets = snapshot.buckets;
             int bucketCount = snapshot.bucketCount;
             for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -3576,6 +3734,55 @@ namespace DxMessaging.Core.MessageBus
                 {
                     entries[entryIndex]
                         .handler.PrefreezeUntargetedPostProcessorsForEmission<TMessage>(
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeUntargetedSnapshot<TMessage>(DispatchSnapshot snapshot)
+            where TMessage : IUntargetedMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            // Prefreeze fast-path short-circuit: if there is exactly one priority
+            // bucket with at most one MessageHandler entry, no later handler can
+            // observe a removal performed by an earlier one, so the inline lazy
+            // freeze inside the dispatch path is sufficient. Note: a single
+            // MessageHandler may still register multiple delegates at the same
+            // priority; those share a HandlerActionCache that is frozen on first
+            // read by the per-priority RunFastHandlers/RunHandlers, so the lazy
+            // freeze covers same-priority same-MessageHandler removals correctly.
+            // See the longer rationale on the broadcast inline prefreeze block
+            // in SourcedBroadcast.
+            if (snapshot.bucketCount == 1 && snapshot.buckets[0].entryCount <= 1)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeUntargetedHandlersForEmission<TMessage>(
                             priority,
                             _emissionId,
                             this
@@ -3608,6 +3815,41 @@ namespace DxMessaging.Core.MessageBus
             int bucketCount = snapshot.bucketCount;
             bool invoked = false;
 
+            // Hoist per-MessageHandler prefreeze across ALL priority buckets
+            // when there is more than one bucket. A handler running in an
+            // earlier bucket can deregister a delegate that lives in a later
+            // bucket's typed cache; if the later bucket's snapshot is taken
+            // lazily inside its own dispatch (after the deregistration), the
+            // rebuild will observe the mutation and the handler will be
+            // skipped, violating snapshot semantics. The single-bucket case
+            // is unchanged; no later bucket exists to be polluted, and the
+            // inline per-bucket prefreeze below covers it.
+            if (bucketCount > 1)
+            {
+                for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+                {
+                    DispatchBucket prefreezeBucket = buckets[bucketIndex];
+                    DispatchEntry[] prefreezeEntries = prefreezeBucket.entries;
+                    int prefreezeEntryCount = prefreezeBucket.entryCount;
+                    if (prefreezeEntryCount == 0)
+                    {
+                        continue;
+                    }
+
+                    if (
+                        prefreezeEntries[0].prefreeze.kind
+                        == PrefreezeKindTargetedWithoutTargetingHandlers
+                    )
+                    {
+                        PrefreezeTargetedWithoutTargetingEntries<TMessage>(
+                            prefreezeEntries,
+                            prefreezeEntryCount,
+                            prefreezeBucket.priority
+                        );
+                    }
+                }
+            }
+
             for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
             {
                 DispatchBucket bucket = buckets[bucketIndex];
@@ -3620,7 +3862,14 @@ namespace DxMessaging.Core.MessageBus
 
                 invoked = true;
                 int priority = bucket.priority;
-                if (entries[0].prefreeze.kind == PrefreezeKindTargetedWithoutTargetingHandlers)
+                // Inline per-bucket prefreeze for the single-bucket case only.
+                // When bucketCount > 1 the hoisted pass above has already
+                // prefrozen every bucket; running it again here would be
+                // harmless but redundant.
+                if (
+                    bucketCount == 1
+                    && entries[0].prefreeze.kind == PrefreezeKindTargetedWithoutTargetingHandlers
+                )
                 {
                     PrefreezeTargetedWithoutTargetingEntries<TMessage>(
                         entries,
@@ -3764,14 +4013,15 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : ITargetedMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: see comment on RunBroadcast.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
             // Freeze each handler's typed caches for this emission/priority to ensure snapshot semantics
-            for (int j = 0; j < messageHandlers.Count; ++j)
+            for (int j = 0; j < messageHandlersCount; ++j)
             {
                 messageHandlers[j]
                     .PrefreezeTargetedWithoutTargetingHandlersForEmission<TMessage>(
@@ -3780,7 +4030,6 @@ namespace DxMessaging.Core.MessageBus
                         this
                     );
             }
-            int messageHandlersCount = messageHandlers.Count;
             switch (messageHandlersCount)
             {
                 case 1:
@@ -3861,6 +4110,36 @@ namespace DxMessaging.Core.MessageBus
                 _emissionId
             );
             int handlerListCount = handlerList.Count;
+            // Hoist per-MessageHandler prefreeze across ALL priority buckets
+            // when there is more than one bucket. A handler running in an
+            // earlier bucket can deregister a delegate that lives in a later
+            // bucket's typed cache; if the later bucket's snapshot is taken
+            // lazily inside RunBroadcastWithoutSource (after the
+            // deregistration), the rebuild will observe the mutation and
+            // skip the handler, violating snapshot semantics. The
+            // single-bucket case is unchanged; RunBroadcastWithoutSource's
+            // inline prefreeze covers it.
+            if (handlerListCount > 1)
+            {
+                for (int i = 0; i < handlerListCount; ++i)
+                {
+                    KeyValuePair<int, HandlerCache> prefreezeEntry = handlerList[i];
+                    List<MessageHandler> mhList = GetOrAddMessageHandlerStack(
+                        prefreezeEntry.Value,
+                        _emissionId
+                    );
+                    int mhCount = mhList.Count;
+                    for (int h = 0; h < mhCount; ++h)
+                    {
+                        mhList[h]
+                            .PrefreezeBroadcastWithoutSourceHandlersForEmission<TMessage>(
+                                prefreezeEntry.Key,
+                                _emissionId,
+                                this
+                            );
+                    }
+                }
+            }
             switch (handlerListCount)
             {
                 case 1:
@@ -3932,13 +4211,19 @@ namespace DxMessaging.Core.MessageBus
         )
             where TMessage : IBroadcastMessage
         {
-            if (cache.handlers.Count == 0)
+            // Snapshot semantics: dispatch must respect the per-emission frozen
+            // MessageHandler list, even if a handler running earlier in the same
+            // emission has emptied the live cache.handlers dictionary by removing
+            // its own (or a sibling priority's) registration. Reading the live
+            // dict here would skip handlers that the snapshot still includes.
+            // GetOrAddMessageHandlerStack returns the snapshot list; bail only
+            // when that snapshot is empty.
+            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
+            int messageHandlersCount = messageHandlers.Count;
+            if (messageHandlersCount == 0)
             {
                 return;
             }
-
-            List<MessageHandler> messageHandlers = GetOrAddMessageHandlerStack(cache, _emissionId);
-            int messageHandlersCount = messageHandlers.Count;
             // Ensure each handler's typed no-source caches are frozen for this emission/priority
             for (int j = 0; j < messageHandlersCount; ++j)
             {
@@ -4139,8 +4424,18 @@ namespace DxMessaging.Core.MessageBus
                 )
             );
 
+            long capturedGeneration = _resetGeneration;
             return () =>
             {
+                // Generation guard: if ResetState() ran after this closure was
+                // captured (e.g. a deferred Object.Destroy fires after a
+                // domain-reload-style reset), silently no-op rather than
+                // logging a misleading over-deregistration error.
+                if (capturedGeneration != _resetGeneration)
+                {
+                    return;
+                }
+
                 cache.version++;
                 _log.Log(
                     new MessagingRegistration(
@@ -4273,8 +4568,16 @@ namespace DxMessaging.Core.MessageBus
             );
             StageDispatchSnapshot<T>(this, handlers, dispatchCategory);
 
+            long capturedGeneration = _resetGeneration;
             return () =>
             {
+                // Generation guard: see InternalRegisterUntargeted for the
+                // rationale. Skip silently when the closure outlived a Reset.
+                if (capturedGeneration != _resetGeneration)
+                {
+                    return;
+                }
+
                 cache.version++;
                 _log.Log(
                     new MessagingRegistration(
@@ -4833,6 +5136,12 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
+            // No fast-path short-circuit for post-processor prefreeze. See the
+            // detailed rationale on PrefreezeUntargetedPostSnapshot; a regular
+            // handler can register a new post-processor (same MessageHandler,
+            // same priority) during its own execution, and the lazy first-read
+            // inside post-processor dispatch would otherwise capture that newly
+            // added entry. Always prefreezing pins the emission-start snapshot.
             DispatchBucket[] buckets = snapshot.buckets;
             int bucketCount = snapshot.bucketCount;
             for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -4850,6 +5159,59 @@ namespace DxMessaging.Core.MessageBus
                 {
                     entries[entryIndex]
                         .handler.PrefreezeTargetedPostProcessorsForEmission<TMessage>(
+                            target,
+                            priority,
+                            _emissionId,
+                            this
+                        );
+                }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void PrefreezeTargetedSnapshot<TMessage>(
+            ref InstanceId target,
+            DispatchSnapshot snapshot
+        )
+            where TMessage : ITargetedMessage
+        {
+            if (snapshot.IsEmpty)
+            {
+                return;
+            }
+
+            // Prefreeze fast-path short-circuit: if there is exactly one priority
+            // bucket with at most one MessageHandler entry, no later handler can
+            // observe a removal performed by an earlier one, so the inline lazy
+            // freeze inside the dispatch path is sufficient. Note: a single
+            // MessageHandler may still register multiple delegates at the same
+            // priority; those share a HandlerActionCache that is frozen on first
+            // read by the per-priority RunFastHandlers/RunHandlers, so the lazy
+            // freeze covers same-priority same-MessageHandler removals correctly.
+            // See the longer rationale on the broadcast inline prefreeze block
+            // in SourcedBroadcast.
+            if (snapshot.bucketCount == 1 && snapshot.buckets[0].entryCount <= 1)
+            {
+                return;
+            }
+
+            DispatchBucket[] buckets = snapshot.buckets;
+            int bucketCount = snapshot.bucketCount;
+            for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
+            {
+                DispatchBucket bucket = buckets[bucketIndex];
+                DispatchEntry[] entries = bucket.entries;
+                int entryCount = bucket.entryCount;
+                if (entryCount == 0)
+                {
+                    continue;
+                }
+
+                int priority = bucket.priority;
+                for (int entryIndex = 0; entryIndex < entryCount; ++entryIndex)
+                {
+                    entries[entryIndex]
+                        .handler.PrefreezeTargetedHandlersForEmission<TMessage>(
                             target,
                             priority,
                             _emissionId,
@@ -5007,6 +5369,12 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
+            // No fast-path short-circuit for post-processor prefreeze. See the
+            // detailed rationale on PrefreezeUntargetedPostSnapshot; a regular
+            // handler can register a new post-processor (same MessageHandler,
+            // same priority) during its own execution, and the lazy first-read
+            // inside post-processor dispatch would otherwise capture that newly
+            // added entry. Always prefreezing pins the emission-start snapshot.
             DispatchBucket[] buckets = snapshot.buckets;
             int bucketCount = snapshot.bucketCount;
             for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -5084,6 +5452,12 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
+            // No fast-path short-circuit for post-processor prefreeze. See the
+            // detailed rationale on PrefreezeUntargetedPostSnapshot; a regular
+            // handler can register a new post-processor (same MessageHandler,
+            // same priority) during its own execution, and the lazy first-read
+            // inside post-processor dispatch would otherwise capture that newly
+            // added entry. Always prefreezing pins the emission-start snapshot.
             DispatchBucket[] buckets = snapshot.buckets;
             int bucketCount = snapshot.bucketCount;
             for (int bucketIndex = 0; bucketIndex < bucketCount; ++bucketIndex)
@@ -5173,6 +5547,13 @@ namespace DxMessaging.Core.MessageBus
             {
                 return;
             }
+
+            // No fast-path short-circuit for post-processor prefreeze. See the
+            // detailed rationale on PrefreezeUntargetedPostSnapshot; a regular
+            // handler can register a new post-processor (same MessageHandler,
+            // same priority) during its own execution, and the lazy first-read
+            // inside post-processor dispatch would otherwise capture that newly
+            // added entry. Always prefreezing pins the emission-start snapshot.
 
             DispatchBucket[] buckets = snapshot.buckets;
             int bucketCount = snapshot.bucketCount;

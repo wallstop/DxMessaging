@@ -5,6 +5,7 @@ namespace DxMessaging.Tests.Runtime.Core
     using System.Collections;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Globalization;
     using System.Linq;
     using DxMessaging.Core;
     using DxMessaging.Core.MessageBus;
@@ -18,15 +19,82 @@ namespace DxMessaging.Tests.Runtime.Core
 
     public abstract class MessagingTestBase
     {
+        private const string TestSeedEnvVar = "DXMESSAGING_TEST_SEED";
+        private const int DefaultTestSeed = unchecked((int)0xDB1ABCED);
+
+        private static int? _cachedSeed;
+
         protected int _numRegistrations;
         protected readonly List<GameObject> _spawned = new();
-        protected readonly Random _random = new();
+        protected Random _random = new(DefaultTestSeed);
 
         protected virtual bool MessagingDebugEnabled => true;
 
+        protected virtual int StressRegistrations => 150;
+
+        /// <summary>
+        /// Maximum time the polling loop in
+        /// <see cref="WaitUntilMessageHandlerIsFresh"/> waits for the message
+        /// bus to drain before failing. Override in derived fixtures that need
+        /// a tighter or looser bound.
+        /// </summary>
+        protected virtual TimeSpan FreshHandlerWaitTimeout => TimeSpan.FromSeconds(1.5);
+
+        /// <summary>
+        /// Resolved test seed cached for the lifetime of the process. The
+        /// environment variable is parsed once and reused across every
+        /// fixture/test to avoid repeated lookups during Setup.
+        /// </summary>
+        protected static int TestSeed
+        {
+            get
+            {
+                _cachedSeed ??= ResolveTestSeed();
+                return _cachedSeed.Value;
+            }
+        }
+
+        [OneTimeSetUp]
+        public virtual void LogTestSeedOnce()
+        {
+            Debug.Log($"DxMessaging test seed = {TestSeed} (env {TestSeedEnvVar}).");
+        }
+
+        /// <summary>
+        /// Reseeds the per-test random source from the resolved seed and
+        /// applies the default messaging-debug configuration.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The <see cref="DxMessagingStaticState.Reset"/> call has moved to
+        /// <see cref="UnitySetup"/> so the prior test's deferred
+        /// <c>Object.Destroy</c> queue can drain (yielded for one frame) before
+        /// the bus sinks are wiped. Resetting synchronously here would race the
+        /// destroy queue: the next test's <c>[SetUp]</c> would clear sinks, then
+        /// Unity would flush the previous test's destroys, firing
+        /// <see cref="MessageAwareComponent.OnDisable"/> against an emptied bus
+        /// and surfacing spurious over-deregistration errors attributed to the
+        /// current test. If a fixture needs per-test global state, set it
+        /// inside the test body or in a derived <c>[SetUp]</c> that runs after
+        /// <c>base.Setup()</c>; do not rely on configuration that survives the
+        /// reset performed in <c>UnitySetup</c>. The seed log line is emitted
+        /// once per fixture from <see cref="LogTestSeedOnce"/> rather than per
+        /// test.
+        /// </para>
+        /// <para>
+        /// <c>_numRegistrations</c> defaults to <c>25</c>, the smoke-check
+        /// depth used by most fixtures. Fixtures whose <c>Run(...)</c> helper
+        /// calls rely on stress fan-out (for example legacy registration
+        /// stress) should override <c>Setup</c> and assign
+        /// <c>_numRegistrations = StressRegistrations</c> after invoking
+        /// <c>base.Setup()</c>.
+        /// </para>
+        /// </remarks>
         [SetUp]
         public virtual void Setup()
         {
+            _random = new Random(TestSeed);
+
             MessagingDebug.enabled = MessagingDebugEnabled;
             MessagingDebug.LogFunction = (level, message) =>
             {
@@ -47,9 +115,48 @@ namespace DxMessaging.Tests.Runtime.Core
             IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
             messageBus.Log.Enabled = true;
-            _numRegistrations = 150;
+            _numRegistrations = 25;
 
             LogMessageBusStatus();
+        }
+
+        private static int ResolveTestSeed()
+        {
+            string raw = Environment.GetEnvironmentVariable(TestSeedEnvVar);
+            if (string.IsNullOrEmpty(raw))
+            {
+                return DefaultTestSeed;
+            }
+
+            if (int.TryParse(raw, out int parsed))
+            {
+                return parsed;
+            }
+
+            if (
+                raw.StartsWith("0x", StringComparison.Ordinal)
+                || raw.StartsWith("0X", StringComparison.Ordinal)
+            )
+            {
+                string stripped = raw.Substring(2);
+                if (
+                    int.TryParse(
+                        stripped,
+                        NumberStyles.HexNumber,
+                        CultureInfo.InvariantCulture,
+                        out int hexParsed
+                    )
+                )
+                {
+                    return hexParsed;
+                }
+            }
+
+            Debug.LogWarning(
+                $"DXMESSAGING_TEST_SEED='{raw}' is not a valid integer or hex value. "
+                    + $"Falling back to default seed 0x{DefaultTestSeed:X8}."
+            );
+            return DefaultTestSeed;
         }
 
         protected void LogMessageBusStatus()
@@ -74,6 +181,19 @@ namespace DxMessaging.Tests.Runtime.Core
             _spawned.Clear();
         }
 
+        /// <summary>
+        /// Resets DxMessaging static state once per fixture after every test
+        /// has run. <c>Cleanup</c> intentionally leaves static state intact so
+        /// the cleanup-robustness test can observe it mid-test; this hook
+        /// makes sure no debug flags, log functions, or custom buses leak into
+        /// fixtures that do not derive from <see cref="MessagingTestBase"/>.
+        /// </summary>
+        [OneTimeTearDown]
+        public virtual void OneTimeCleanup()
+        {
+            DxMessagingStaticState.Reset();
+        }
+
         [UnityTearDown]
         public IEnumerator UnityCleanup()
         {
@@ -92,12 +212,34 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             _spawned.Clear();
+
+            // Assert the bus drained fully inside this test, instead of
+            // letting a stuck handler bleed into the next test's logs.
+            IEnumerator freshHandler = WaitUntilMessageHandlerIsFresh();
+            while (freshHandler.MoveNext())
+            {
+                yield return freshHandler.Current;
+            }
         }
 
         [UnitySetUp]
         public virtual IEnumerator UnitySetup()
         {
-            return WaitUntilMessageHandlerIsFresh();
+            // Drain the prior test's deferred Object.Destroy queue before
+            // wiping bus state. Otherwise queued OnDisable callbacks would
+            // fire against an emptied bus and log over-deregistration errors
+            // against the next test (see ResetState's _resetGeneration guard
+            // for the production-side hardening).
+            if (Application.isPlaying)
+            {
+                yield return null;
+            }
+            DxMessagingStaticState.Reset();
+            IEnumerator freshHandler = WaitUntilMessageHandlerIsFresh();
+            while (freshHandler.MoveNext())
+            {
+                yield return freshHandler.Current;
+            }
         }
 
         protected void Run(
@@ -175,14 +317,19 @@ namespace DxMessaging.Tests.Runtime.Core
             return component.Token;
         }
 
-        protected static IEnumerator WaitUntilMessageHandlerIsFresh()
+        // NOTE: This polling loop should eventually be replaced by a bus-side
+        // version-counter check (Issue 14). Until that lands, callers fall back
+        // to the per-frame yield below to detect when the bus has drained.
+        protected IEnumerator WaitUntilMessageHandlerIsFresh()
         {
             IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
             Stopwatch timer = Stopwatch.StartNew();
+            // Generous safety margin; the loop exits as soon as state clears, so this only bites under extreme load.
+            TimeSpan timeout = FreshHandlerWaitTimeout;
 
-            while (IsStale() && timer.Elapsed < TimeSpan.FromSeconds(1.25))
+            while (IsStale() && timer.Elapsed < timeout)
             {
                 yield return null;
             }

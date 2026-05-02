@@ -1,9 +1,10 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
     using DxMessaging.Core;
-    using DxMessaging.Core.Extensions;
+    using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Components;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using NUnit.Framework;
@@ -13,31 +14,35 @@ namespace DxMessaging.Tests.Runtime.Core
     public sealed class InterceptorCancellationTests : MessagingTestBase
     {
         [UnityTest]
-        public IEnumerator UntargetedInterceptorCancelsHandlersAndPostProcessors()
+        public IEnumerator InterceptorCancelsHandlersAndPostProcessors(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedInterceptorCancelsHandlersAndPostProcessors),
+                nameof(InterceptorCancelsHandlersAndPostProcessors) + "_" + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
 
             int handled = 0;
             int postProcessed = 0;
+            int laterRan = 0;
 
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(_ => handled++);
-            _ = token.RegisterUntargetedPostProcessor(
-                (ref SimpleUntargetedMessage _) => postProcessed++
-            );
+            _ = RegisterHandler(scenario, token, hostId, () => handled++);
+            _ = RegisterPostProcessor(scenario, token, hostId, () => postProcessed++);
 
             // Register a canceling interceptor (always false)
-            _ = token.RegisterUntargetedInterceptor((ref SimpleUntargetedMessage _) => false);
+            _ = RegisterInterceptor(scenario, token, () => false);
 
             // Also register a later interceptor that would be skipped if earlier cancels
-            int laterRan = 0;
-            _ = token.RegisterUntargetedInterceptor(
-                (ref SimpleUntargetedMessage _) =>
+            _ = RegisterInterceptor(
+                scenario,
+                token,
+                () =>
                 {
                     laterRan++;
                     return true;
@@ -45,8 +50,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 priority: 10
             );
 
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
 
             Assert.AreEqual(0, handled, "Handlers must not run when interceptor cancels.");
             Assert.AreEqual(
@@ -58,114 +62,184 @@ namespace DxMessaging.Tests.Runtime.Core
             yield break;
         }
 
-        [UnityTest]
-        public IEnumerator TargetedInterceptorCancelsHandlersAndPostProcessors()
+        private static MessageRegistrationHandle RegisterHandler(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked,
+            int priority = 0
+        )
         {
-            GameObject host = new(
-                nameof(TargetedInterceptorCancelsHandlersAndPostProcessors),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int handled = 0;
-            int postProcessed = 0;
-
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(host, _ => handled++);
-            _ = token.RegisterGameObjectTargetedPostProcessor(
-                host,
-                (ref SimpleTargetedMessage _) => postProcessed++
-            );
-
-            // Cancel targeted messages
-            _ = token.RegisterTargetedInterceptor(
-                (ref InstanceId _, ref SimpleTargetedMessage _) => false
-            );
-
-            // A later interceptor that would not execute after cancellation
-            int laterRan = 0;
-            _ = token.RegisterTargetedInterceptor(
-                (ref InstanceId _, ref SimpleTargetedMessage _) =>
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
                 {
-                    laterRan++;
-                    return true;
-                },
-                priority: 10
-            );
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
-
-            Assert.AreEqual(0, handled, "Targeted handlers must not run when interceptor cancels.");
-            Assert.AreEqual(
-                0,
-                postProcessed,
-                "Targeted post-processors must not run when interceptor cancels."
-            );
-            Assert.AreEqual(
-                0,
-                laterRan,
-                "Later targeted interceptors must not run after cancellation."
-            );
-            yield break;
+                    return ScenarioHarness.RegisterUntargeted<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargeted<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleTargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcast<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleBroadcastMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
         }
 
-        [UnityTest]
-        public IEnumerator BroadcastInterceptorCancelsHandlersAndPostProcessors()
+        private static MessageRegistrationHandle RegisterPostProcessor(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked,
+            int priority = 0
+        )
         {
-            GameObject host = new(
-                nameof(BroadcastInterceptorCancelsHandlersAndPostProcessors),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int handled = 0;
-            int postProcessed = 0;
-
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(host, _ => handled++);
-            _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
-                host,
-                _ => postProcessed++
-            );
-
-            // Cancel broadcast messages
-            _ = token.RegisterBroadcastInterceptor(
-                (ref InstanceId _, ref SimpleBroadcastMessage _) => false
-            );
-
-            // A later interceptor that would not execute after cancellation
-            int laterRan = 0;
-            _ = token.RegisterBroadcastInterceptor(
-                (ref InstanceId _, ref SimpleBroadcastMessage _) =>
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
                 {
-                    laterRan++;
-                    return true;
-                },
-                priority: 10
-            );
+                    return ScenarioHarness.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargetedPostProcessor<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleTargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcastPostProcessor<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleBroadcastMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
+        }
 
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(host);
+        private static MessageRegistrationHandle RegisterInterceptor(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            Func<bool> body,
+            int priority = 0
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    return ScenarioHarness.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => body(),
+                        priority
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargetedInterceptor<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        (ref InstanceId _, ref SimpleTargetedMessage __) => body(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        (ref InstanceId _, ref SimpleBroadcastMessage __) => body(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
+        }
 
-            Assert.AreEqual(
-                0,
-                handled,
-                "Broadcast handlers must not run when interceptor cancels."
-            );
-            Assert.AreEqual(
-                0,
-                postProcessed,
-                "Broadcast post-processors must not run when interceptor cancels."
-            );
-            Assert.AreEqual(
-                0,
-                laterRan,
-                "Later broadcast interceptors must not run after cancellation."
-            );
-            yield break;
+        private static void EmitForScenario(MessageScenario scenario, InstanceId target)
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    SimpleUntargetedMessage message = new();
+                    ScenarioHarness.EmitUntargeted(scenario, ref message);
+                    return;
+                }
+                case MessageKind.Targeted:
+                {
+                    SimpleTargetedMessage message = new();
+                    ScenarioHarness.EmitTargeted(scenario, ref message, target);
+                    return;
+                }
+                case MessageKind.Broadcast:
+                {
+                    SimpleBroadcastMessage message = new();
+                    ScenarioHarness.EmitBroadcast(scenario, ref message, target);
+                    return;
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
         }
     }
 }

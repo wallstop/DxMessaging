@@ -1,10 +1,12 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Components;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using NUnit.Framework;
@@ -22,15 +24,20 @@ namespace DxMessaging.Tests.Runtime.Core
         private const int ManyCount = 6; // Forces default iteration paths (>5)
 
         [UnityTest]
-        public IEnumerator UntargetedAddLocalHandlerMany()
+        [Category("Stress")]
+        public IEnumerator AddLocalHandlerMany(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedAddLocalHandlerMany),
+                nameof(AddLocalHandlerMany) + "_" + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
 
             int[] counts = new int[ManyCount + 1];
             MessageRegistrationHandle[] handles = new MessageRegistrationHandle[ManyCount + 1];
@@ -40,21 +47,24 @@ namespace DxMessaging.Tests.Runtime.Core
             for (int i = 0; i < ManyCount; i++)
             {
                 int idx = i;
-                handles[idx] = token.RegisterUntargeted<SimpleUntargetedMessage>(_ =>
+                Action onInvoke = () =>
                 {
                     counts[idx]++;
                     if (!added && idx == 0)
                     {
                         added = true;
-                        handles[ManyCount] = token.RegisterUntargeted<SimpleUntargetedMessage>(_ =>
-                            counts[ManyCount]++
+                        handles[ManyCount] = RegisterCounter(
+                            scenario,
+                            token,
+                            hostId,
+                            () => counts[ManyCount]++
                         );
                     }
-                });
+                };
+                handles[idx] = RegisterCounter(scenario, token, hostId, onInvoke);
             }
 
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             int expected = ManyCount;
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
@@ -69,7 +79,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 "Newly added handler must not run in the same emission."
             );
 
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
             {
@@ -98,6 +108,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
+        [Category("Stress")]
         public IEnumerator UntargetedRemoveSelfMany()
         {
             GameObject host = new(
@@ -154,14 +165,31 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedAddHandlerAcrossHandlersMany()
+        [Category("Stress")]
+        public IEnumerator AddHandlerAcrossHandlersMany(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             // Many distinct MessageHandlers (bus-level list growth during iteration)
+            InstanceId targetId = default;
+            if (scenario.Kind != MessageKind.Untargeted)
+            {
+                GameObject targetGo = new(
+                    nameof(AddHandlerAcrossHandlersMany) + "_" + scenario + "_Target"
+                );
+                _spawned.Add(targetGo);
+                targetId = targetGo;
+            }
+
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
                 new();
             for (int i = 0; i < ManyCount; i++)
             {
-                GameObject go = new($"UntargetedBus_{i}", typeof(EmptyMessageAwareComponent));
+                GameObject go = new(
+                    $"{nameof(AddHandlerAcrossHandlersMany)}_{scenario}_Bus_{i}",
+                    typeof(EmptyMessageAwareComponent)
+                );
                 _spawned.Add(go);
                 EmptyMessageAwareComponent c = go.GetComponent<EmptyMessageAwareComponent>();
                 listeners.Add((c, GetToken(c)));
@@ -175,33 +203,40 @@ namespace DxMessaging.Tests.Runtime.Core
             for (int i = 0; i < listeners.Count; i++)
             {
                 int idx = i;
-                MessageRegistrationHandle handle = listeners[i]
-                    .token.RegisterUntargeted<SimpleUntargetedMessage>(_ =>
+                MessageRegistrationToken listenerToken = listeners[i].token;
+                Action onInvoke = () =>
+                {
+                    counts[idx]++;
+                    if (!added && idx == 0)
                     {
-                        counts[idx]++;
-                        if (!added && idx == 0)
-                        {
-                            added = true;
-                            GameObject extra = new(
-                                "UntargetedBus_Extra",
-                                typeof(EmptyMessageAwareComponent)
-                            );
-                            _spawned.Add(extra);
-                            EmptyMessageAwareComponent extraComp =
-                                extra.GetComponent<EmptyMessageAwareComponent>();
-                            MessageRegistrationToken extraToken = GetToken(extraComp);
-                            MessageRegistrationHandle extraHandle =
-                                extraToken.RegisterUntargeted<SimpleUntargetedMessage>(_ =>
-                                    counts[ManyCount]++
-                                );
-                            handles.Add((extraToken, extraHandle));
-                        }
-                    });
-                handles.Add((listeners[i].token, handle));
+                        added = true;
+                        GameObject extra = new(
+                            $"{nameof(AddHandlerAcrossHandlersMany)}_{scenario}_Bus_Extra",
+                            typeof(EmptyMessageAwareComponent)
+                        );
+                        _spawned.Add(extra);
+                        EmptyMessageAwareComponent extraComp =
+                            extra.GetComponent<EmptyMessageAwareComponent>();
+                        MessageRegistrationToken extraToken = GetToken(extraComp);
+                        MessageRegistrationHandle extraHandle = RegisterCounter(
+                            scenario,
+                            extraToken,
+                            targetId,
+                            () => counts[ManyCount]++
+                        );
+                        handles.Add((extraToken, extraHandle));
+                    }
+                };
+                MessageRegistrationHandle handle = RegisterCounter(
+                    scenario,
+                    listenerToken,
+                    targetId,
+                    onInvoke
+                );
+                handles.Add((listenerToken, handle));
             }
 
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, targetId);
 
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
@@ -220,7 +255,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 "Newly added MessageHandler must not run in the same emission."
             );
 
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, targetId);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
             {
@@ -248,173 +283,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator TargetedAddLocalHandlerMany()
-        {
-            GameObject host = new(
-                nameof(TargetedAddLocalHandlerMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] counts = new int[ManyCount + 1];
-            MessageRegistrationHandle[] handles = new MessageRegistrationHandle[ManyCount + 1];
-            bool added = false;
-
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                handles[idx] = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                    host,
-                    _ =>
-                    {
-                        counts[idx]++;
-                        if (!added && idx == 0)
-                        {
-                            added = true;
-                            handles[ManyCount] =
-                                token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                                    host,
-                                    _ => counts[ManyCount]++
-                                );
-                        }
-                    }
-                );
-            }
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
-            int total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(
-                ManyCount,
-                total,
-                "All baseline targeted handlers should run on first emission."
-            );
-            Assert.AreEqual(
-                0,
-                counts[ManyCount],
-                "Newly added handler must not run in the same targeted emission."
-            );
-
-            msg.EmitGameObjectTargeted(host);
-            total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(
-                ManyCount * 2,
-                total,
-                "Baseline targeted handlers should run again on second emission."
-            );
-            Assert.AreEqual(
-                1,
-                counts[ManyCount],
-                "New targeted handler should run starting on the second emission."
-            );
-
-            for (int i = 0; i < handles.Length; i++)
-            {
-                if (handles[i] != default)
-                {
-                    token.RemoveRegistration(handles[i]);
-                }
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastAddLocalHandlerMany()
-        {
-            GameObject source = new(
-                nameof(BroadcastAddLocalHandlerMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(source);
-            EmptyMessageAwareComponent component =
-                source.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] counts = new int[ManyCount + 1];
-            MessageRegistrationHandle[] handles = new MessageRegistrationHandle[ManyCount + 1];
-            bool added = false;
-
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                handles[idx] = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                    source,
-                    _ =>
-                    {
-                        counts[idx]++;
-                        if (!added && idx == 0)
-                        {
-                            added = true;
-                            handles[ManyCount] =
-                                token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                                    source,
-                                    _ => counts[ManyCount]++
-                                );
-                        }
-                    }
-                );
-            }
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(source);
-            int total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(
-                ManyCount,
-                total,
-                "All baseline broadcast handlers should run on first emission."
-            );
-            Assert.AreEqual(
-                0,
-                counts[ManyCount],
-                "Newly added broadcast handler must not run in the same emission."
-            );
-
-            msg.EmitGameObjectBroadcast(source);
-            total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(
-                ManyCount * 2,
-                total,
-                "Baseline broadcast handlers should run again on second emission."
-            );
-            Assert.AreEqual(
-                1,
-                counts[ManyCount],
-                "New broadcast handler should run starting on the second emission."
-            );
-
-            for (int i = 0; i < handles.Length; i++)
-            {
-                if (handles[i] != default)
-                {
-                    token.RemoveRegistration(handles[i]);
-                }
-            }
-            yield break;
-        }
-
-        [UnityTest]
+        [Category("Stress")]
         public IEnumerator TargetedWithoutTargetingAddLocalHandlerMany()
         {
             GameObject host = new(
@@ -496,6 +365,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
+        [Category("Stress")]
         public IEnumerator BroadcastWithoutSourceAddLocalHandlerMany()
         {
             GameObject host = new(
@@ -576,7 +446,163 @@ namespace DxMessaging.Tests.Runtime.Core
             yield break;
         }
 
+        /// <summary>
+        /// Snapshot semantics regression: a handler at one priority bucket must
+        /// be allowed to deregister a handler at a later priority bucket, and
+        /// the deregistered handler must still fire on the in-flight emission
+        /// because its delegate was captured by the snapshot taken before any
+        /// handler ran. The TargetedWithoutTargeting dispatch path used to
+        /// snapshot per-bucket lazily inside the dispatch loop, so the
+        /// later-bucket snapshot was rebuilt after the earlier bucket's
+        /// handler had already mutated the typed cache, dropping the entry.
+        /// </summary>
         [UnityTest]
+        public IEnumerator TargetedWithoutTargetingDeregisterAcrossPrioritiesIsHonouredOnCurrentSnapshot()
+        {
+            GameObject host = new(
+                nameof(
+                    TargetedWithoutTargetingDeregisterAcrossPrioritiesIsHonouredOnCurrentSnapshot
+                ),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int firstCount = 0;
+            int secondCount = 0;
+            MessageRegistrationHandle secondHandle = default;
+
+            _ = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                (_, _) =>
+                {
+                    ++firstCount;
+                    if (secondHandle != default)
+                    {
+                        token.RemoveRegistration(secondHandle);
+                        secondHandle = default;
+                    }
+                },
+                priority: 0
+            );
+
+            secondHandle = token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                (_, _) => ++secondCount,
+                priority: 1
+            );
+
+            SimpleTargetedMessage msg = new();
+            msg.EmitGameObjectTargeted(host);
+            Assert.AreEqual(
+                1,
+                firstCount,
+                "First emission must invoke primary exactly once. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+            Assert.AreEqual(
+                1,
+                secondCount,
+                "Snapshot frozen at emission start must invoke handler scheduled for removal. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+
+            msg.EmitGameObjectTargeted(host);
+            Assert.AreEqual(
+                2,
+                firstCount,
+                "Second emission must invoke primary again. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+            Assert.AreEqual(
+                1,
+                secondCount,
+                "Removed handler must not run on the next emission once snapshot is rebuilt. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+            yield break;
+        }
+
+        /// <summary>
+        /// Snapshot semantics regression mirror for BroadcastWithoutSource. The
+        /// dispatch path previously prefroze per-MessageHandler typed caches
+        /// only inside RunBroadcastWithoutSource (lazily, per priority bucket)
+        /// so a removal performed by an earlier bucket polluted the later
+        /// bucket's snapshot.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator BroadcastWithoutSourceDeregisterAcrossPrioritiesIsHonouredOnCurrentSnapshot()
+        {
+            GameObject host = new(
+                nameof(BroadcastWithoutSourceDeregisterAcrossPrioritiesIsHonouredOnCurrentSnapshot),
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+
+            int firstCount = 0;
+            int secondCount = 0;
+            MessageRegistrationHandle secondHandle = default;
+
+            _ = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                (_, _) =>
+                {
+                    ++firstCount;
+                    if (secondHandle != default)
+                    {
+                        token.RemoveRegistration(secondHandle);
+                        secondHandle = default;
+                    }
+                },
+                priority: 0
+            );
+
+            secondHandle = token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                (_, _) => ++secondCount,
+                priority: 1
+            );
+
+            SimpleBroadcastMessage msg = new();
+            msg.EmitComponentBroadcast(component);
+            Assert.AreEqual(
+                1,
+                firstCount,
+                "First emission must invoke primary exactly once. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+            Assert.AreEqual(
+                1,
+                secondCount,
+                "Snapshot frozen at emission start must invoke handler scheduled for removal. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+
+            msg.EmitComponentBroadcast(component);
+            Assert.AreEqual(
+                2,
+                firstCount,
+                "Second emission must invoke primary again. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+            Assert.AreEqual(
+                1,
+                secondCount,
+                "Removed handler must not run on the next emission once snapshot is rebuilt. firstCount={0}, secondCount={1}.",
+                firstCount,
+                secondCount
+            );
+            yield break;
+        }
+
+        [UnityTest]
+        [Category("Stress")]
         public IEnumerator GlobalAcceptAllAddDuringHandlerMany()
         {
             // Create several listeners that globally accept all; add one more during handling; ensure it runs next pass only
@@ -676,25 +702,36 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedAddInterceptorDuringInterceptorDoesNotRunInSameEmission()
+        public IEnumerator AddInterceptorDuringInterceptorDoesNotRunInSameEmission(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
-            GameObject host = new("InterceptorHost", typeof(EmptyMessageAwareComponent));
+            GameObject host = new(
+                nameof(AddInterceptorDuringInterceptorDoesNotRunInSameEmission) + "_" + scenario,
+                typeof(EmptyMessageAwareComponent)
+            );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
 
             int firstCount = 0;
             int secondCount = 0;
             MessageRegistrationHandle? second = null;
 
-            MessageRegistrationHandle first = token.RegisterUntargetedInterceptor(
-                (ref SimpleUntargetedMessage _) =>
+            MessageRegistrationHandle first = RegisterInterceptor(
+                scenario,
+                token,
+                () =>
                 {
                     firstCount++;
                     if (second == null)
                     {
-                        second = token.RegisterUntargetedInterceptor(
-                            (ref SimpleUntargetedMessage __) =>
+                        second = RegisterInterceptor(
+                            scenario,
+                            token,
+                            () =>
                             {
                                 secondCount++;
                                 return true;
@@ -706,8 +743,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 }
             );
 
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             Assert.AreEqual(
                 1,
                 firstCount,
@@ -715,7 +751,7 @@ namespace DxMessaging.Tests.Runtime.Core
             );
             Assert.AreEqual(0, secondCount, "New interceptor should not run in the same emission.");
 
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             Assert.AreEqual(
                 2,
                 firstCount,
@@ -736,48 +772,53 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedAddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany()
+        [Category("Stress")]
+        public IEnumerator AddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedAddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany),
+                nameof(AddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany) + "_" + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
 
             int[] handlerCounts = new int[ManyCount];
-            MessageRegistrationHandle[] handlerHandles = new MessageRegistrationHandle[ManyCount];
             int[] ppCounts = new int[ManyCount + 1];
+            MessageRegistrationHandle[] handlerHandles = new MessageRegistrationHandle[ManyCount];
             MessageRegistrationHandle ppHandle = default;
             bool added = false;
 
             for (int i = 0; i < ManyCount; i++)
             {
                 int idx = i;
-                handlerHandles[idx] = token.RegisterUntargeted<SimpleUntargetedMessage>(_ =>
-                {
-                    handlerCounts[idx]++;
-                    if (!added && idx == 0)
+                handlerHandles[idx] = RegisterCounter(
+                    scenario,
+                    token,
+                    hostId,
+                    () =>
                     {
-                        added = true;
-                        ppHandle = token.RegisterUntargetedPostProcessor(
-                            (ref SimpleUntargetedMessage _) => ppCounts[ManyCount]++
-                        );
+                        handlerCounts[idx]++;
+                        if (!added && idx == 0)
+                        {
+                            added = true;
+                            ppHandle = RegisterPostProcessor(
+                                scenario,
+                                token,
+                                hostId,
+                                () => ppCounts[ManyCount]++
+                            );
+                        }
                     }
-                });
-            }
-
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                _ = token.RegisterUntargetedPostProcessor(
-                    (ref SimpleUntargetedMessage _) => ppCounts[idx]++
                 );
+                _ = RegisterPostProcessor(scenario, token, hostId, () => ppCounts[idx]++);
             }
 
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
 
             int handlerTotal = 0;
             for (int i = 0; i < ManyCount; i++)
@@ -808,7 +849,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 "Newly added post-processor must not run in the same emission."
             );
 
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             ppTotal = 0;
             for (int i = 0; i < ManyCount; i++)
             {
@@ -838,45 +879,55 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedAddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany()
+        [Category("Stress")]
+        public IEnumerator AddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedAddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany),
+                nameof(AddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany)
+                    + "_"
+                    + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
 
             int[] ppCounts = new int[ManyCount + 1];
             MessageRegistrationHandle[] ppHandles = new MessageRegistrationHandle[ManyCount + 1];
-            bool added = false;
 
+            // Ensure there is at least one handler so post-processors will run
+            MessageRegistrationHandle hdl = RegisterCounter(scenario, token, hostId, () => { });
+
+            bool added = false;
             for (int i = 0; i < ManyCount; i++)
             {
                 int idx = i;
-                ppHandles[idx] = token.RegisterUntargetedPostProcessor(
-                    (ref SimpleUntargetedMessage _) =>
+                ppHandles[idx] = RegisterPostProcessor(
+                    scenario,
+                    token,
+                    hostId,
+                    () =>
                     {
                         ppCounts[idx]++;
                         if (!added && idx == 0)
                         {
                             added = true;
-                            ppHandles[ManyCount] = token.RegisterUntargetedPostProcessor(
-                                (ref SimpleUntargetedMessage _) => ppCounts[ManyCount]++
+                            ppHandles[ManyCount] = RegisterPostProcessor(
+                                scenario,
+                                token,
+                                hostId,
+                                () => ppCounts[ManyCount]++
                             );
                         }
                     }
                 );
             }
 
-            // Ensure there is at least one handler so post-processors will run
-            MessageRegistrationHandle hdl = token.RegisterUntargeted(
-                (ref SimpleUntargetedMessage _) => { }
-            );
-
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             int total = 0;
             for (int i = 0; i < ManyCount; i++)
             {
@@ -894,7 +945,7 @@ namespace DxMessaging.Tests.Runtime.Core
                 "Newly added post-processor must not run in the same emission."
             );
 
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, hostId);
             total = 0;
             for (int i = 0; i < ManyCount; i++)
             {
@@ -924,172 +975,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator TargetedAddHandlerAcrossHandlersMany()
-        {
-            GameObject target = new("TargetedAddHandlerAcrossHandlersMany_Target");
-            _spawned.Add(target);
-
-            List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
-                new();
-            for (int i = 0; i < ManyCount; i++)
-            {
-                GameObject go = new($"TargetedBus_{i}", typeof(EmptyMessageAwareComponent));
-                _spawned.Add(go);
-                EmptyMessageAwareComponent c = go.GetComponent<EmptyMessageAwareComponent>();
-                listeners.Add((c, GetToken(c)));
-            }
-
-            int[] counts = new int[ManyCount + 1];
-            List<(MessageRegistrationToken token, MessageRegistrationHandle handle)> handles =
-                new();
-            bool added = false;
-
-            for (int i = 0; i < listeners.Count; i++)
-            {
-                int idx = i;
-                MessageRegistrationHandle handle = listeners[i]
-                    .token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                        target,
-                        _ =>
-                        {
-                            counts[idx]++;
-                            if (!added && idx == 0)
-                            {
-                                added = true;
-                                GameObject extra = new(
-                                    "TargetedBus_Extra",
-                                    typeof(EmptyMessageAwareComponent)
-                                );
-                                _spawned.Add(extra);
-                                EmptyMessageAwareComponent extraComp =
-                                    extra.GetComponent<EmptyMessageAwareComponent>();
-                                MessageRegistrationToken extraToken = GetToken(extraComp);
-                                MessageRegistrationHandle extraHandle =
-                                    extraToken.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                                        target,
-                                        _ => counts[ManyCount]++
-                                    );
-                                handles.Add((extraToken, extraHandle));
-                            }
-                        }
-                    );
-                handles.Add((listeners[i].token, handle));
-            }
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(target);
-            int total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(ManyCount, total);
-            Assert.AreEqual(0, counts[ManyCount]);
-
-            msg.EmitGameObjectTargeted(target);
-            total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(ManyCount * 2, total);
-            Assert.AreEqual(1, counts[ManyCount]);
-
-            foreach (
-                (MessageRegistrationToken token, MessageRegistrationHandle handle) entry in handles
-            )
-            {
-                entry.token.RemoveRegistration(entry.handle);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastAddHandlerAcrossHandlersMany()
-        {
-            GameObject source = new(nameof(BroadcastAddHandlerAcrossHandlersMany));
-            _spawned.Add(source);
-
-            List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
-                new();
-            for (int i = 0; i < ManyCount; i++)
-            {
-                GameObject go = new($"BroadcastBus_{i}", typeof(EmptyMessageAwareComponent));
-                _spawned.Add(go);
-                EmptyMessageAwareComponent c = go.GetComponent<EmptyMessageAwareComponent>();
-                listeners.Add((c, GetToken(c)));
-            }
-
-            int[] counts = new int[ManyCount + 1];
-            List<(MessageRegistrationToken token, MessageRegistrationHandle handle)> handles =
-                new();
-            bool added = false;
-
-            for (int i = 0; i < listeners.Count; i++)
-            {
-                int idx = i;
-                MessageRegistrationHandle handle = listeners[i]
-                    .token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                        source,
-                        _ =>
-                        {
-                            counts[idx]++;
-                            if (!added && idx == 0)
-                            {
-                                added = true;
-                                GameObject extra = new(
-                                    "BroadcastBus_Extra",
-                                    typeof(EmptyMessageAwareComponent)
-                                );
-                                _spawned.Add(extra);
-                                EmptyMessageAwareComponent extraComp =
-                                    extra.GetComponent<EmptyMessageAwareComponent>();
-                                MessageRegistrationToken extraToken = GetToken(extraComp);
-                                MessageRegistrationHandle extraHandle =
-                                    extraToken.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                                        source,
-                                        _ => counts[ManyCount]++
-                                    );
-                                handles.Add((extraToken, extraHandle));
-                            }
-                        }
-                    );
-                handles.Add((listeners[i].token, handle));
-            }
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(source);
-            int total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(ManyCount, total);
-            Assert.AreEqual(0, counts[ManyCount]);
-
-            msg.EmitGameObjectBroadcast(source);
-            total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += counts[i];
-            }
-
-            Assert.AreEqual(ManyCount * 2, total);
-            Assert.AreEqual(1, counts[ManyCount]);
-
-            foreach (
-                (MessageRegistrationToken token, MessageRegistrationHandle handle) entry in handles
-            )
-            {
-                entry.token.RemoveRegistration(entry.handle);
-            }
-            yield break;
-        }
-
-        [UnityTest]
+        [Category("Stress")]
         public IEnumerator TargetedWithoutTargetingAddHandlerAcrossHandlersMany()
         {
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
@@ -1171,6 +1057,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
+        [Category("Stress")]
         public IEnumerator BroadcastWithoutSourceAddHandlerAcrossHandlersMany()
         {
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
@@ -1249,6 +1136,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
+        [Category("Stress")]
         public IEnumerator TargetedWithoutTargetingRemoveOtherAcrossHandlersDuringEmissionMany()
         {
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
@@ -1303,6 +1191,7 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
+        [Category("Stress")]
         public IEnumerator BroadcastWithoutSourceRemoveOtherAcrossHandlersDuringEmissionMany()
         {
             List<(EmptyMessageAwareComponent comp, MessageRegistrationToken token)> listeners =
@@ -1356,161 +1245,78 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [UnityTest]
-        public IEnumerator UntargetedPostProcessorRemoveOtherDuringPostProcessingMany()
-        {
-            GameObject host = new("U_PP_Remove", typeof(EmptyMessageAwareComponent));
-            _spawned.Add(host);
-            EmptyMessageAwareComponent comp = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(comp);
-
-            // Ensure processing stage reached
-            _ = token.RegisterUntargeted<SimpleUntargetedMessage>(_ => { });
-
-            MessageRegistrationHandle[] pp = new MessageRegistrationHandle[ManyCount];
-            int[] counts = new int[ManyCount];
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                pp[idx] = token.RegisterUntargetedPostProcessor(
-                    (ref SimpleUntargetedMessage _) =>
-                    {
-                        counts[idx]++;
-                        if (idx == 0)
-                        {
-                            token.RemoveRegistration(pp[1]);
-                        }
-                    }
-                );
-            }
-
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
-            Assert.AreEqual(1, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            msg.EmitUntargeted();
-            Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            for (int i = 0; i < pp.Length; i++)
-            {
-                if (i == 1)
-                {
-                    continue;
-                }
-                token.RemoveRegistration(pp[i]);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator TargetedPostProcessorRemoveOtherDuringPostProcessingMany()
-        {
-            GameObject host = new("T_PP_Remove", typeof(EmptyMessageAwareComponent));
-            _spawned.Add(host);
-            EmptyMessageAwareComponent comp = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(comp);
-
-            // Ensure processing stage reached
-            _ = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(host, _ => { });
-
-            MessageRegistrationHandle[] pp = new MessageRegistrationHandle[ManyCount];
-            int[] counts = new int[ManyCount];
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                pp[idx] = token.RegisterGameObjectTargetedPostProcessor(
-                    host,
-                    (ref SimpleTargetedMessage _) =>
-                    {
-                        counts[idx]++;
-                        if (idx == 0)
-                        {
-                            token.RemoveRegistration(pp[1]);
-                        }
-                    }
-                );
-            }
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
-            Assert.AreEqual(1, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            msg.EmitGameObjectTargeted(host);
-            Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            for (int i = 0; i < pp.Length; i++)
-            {
-                if (i == 1)
-                {
-                    continue;
-                }
-                token.RemoveRegistration(pp[i]);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastPostProcessorRemoveOtherDuringPostProcessingMany()
-        {
-            GameObject host = new("B_PP_Remove", typeof(EmptyMessageAwareComponent));
-            _spawned.Add(host);
-            EmptyMessageAwareComponent comp = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(comp);
-
-            // Ensure processing stage reached
-            _ = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(host, _ => { });
-
-            MessageRegistrationHandle[] pp = new MessageRegistrationHandle[ManyCount];
-            int[] counts = new int[ManyCount];
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                pp[idx] = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
-                    host,
-                    _ =>
-                    {
-                        counts[idx]++;
-                        if (idx == 0)
-                        {
-                            token.RemoveRegistration(pp[1]);
-                        }
-                    }
-                );
-            }
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(host);
-            Assert.AreEqual(1, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            msg.EmitGameObjectBroadcast(host);
-            Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            for (int i = 0; i < pp.Length; i++)
-            {
-                if (i == 1)
-                {
-                    continue;
-                }
-                token.RemoveRegistration(pp[i]);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator UntargetedRemoveOtherLocalHandlerDuringEmissionMany()
+        [Category("Stress")]
+        public IEnumerator PostProcessorRemoveOtherDuringPostProcessingMany(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject host = new(
-                nameof(UntargetedRemoveOtherLocalHandlerDuringEmissionMany),
+                nameof(PostProcessorRemoveOtherDuringPostProcessingMany) + "_" + scenario,
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent comp = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(comp);
+            InstanceId hostId = host;
+
+            // Ensure processing stage reached
+            _ = RegisterCounter(scenario, token, hostId, () => { });
+
+            MessageRegistrationHandle[] pp = new MessageRegistrationHandle[ManyCount];
+            int[] counts = new int[ManyCount];
+            for (int i = 0; i < ManyCount; i++)
+            {
+                int idx = i;
+                pp[idx] = RegisterPostProcessor(
+                    scenario,
+                    token,
+                    hostId,
+                    () =>
+                    {
+                        counts[idx]++;
+                        if (idx == 0)
+                        {
+                            token.RemoveRegistration(pp[1]);
+                        }
+                    }
+                );
+            }
+
+            EmitForScenario(scenario, hostId);
+            Assert.AreEqual(1, counts[0]);
+            Assert.AreEqual(1, counts[1]);
+
+            EmitForScenario(scenario, hostId);
+            Assert.AreEqual(2, counts[0]);
+            Assert.AreEqual(1, counts[1]);
+
+            for (int i = 0; i < pp.Length; i++)
+            {
+                if (i == 1)
+                {
+                    continue;
+                }
+                token.RemoveRegistration(pp[i]);
+            }
+            yield break;
+        }
+
+        [UnityTest]
+        [Category("Stress")]
+        public IEnumerator RemoveOtherLocalHandlerDuringEmissionMany(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            GameObject host = new(
+                nameof(RemoveOtherLocalHandlerDuringEmissionMany) + "_" + scenario,
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(host);
             EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
             MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
 
             int[] counts = new int[ManyCount];
             MessageRegistrationHandle[] handles = new MessageRegistrationHandle[ManyCount];
@@ -1518,56 +1324,11 @@ namespace DxMessaging.Tests.Runtime.Core
             for (int i = 0; i < ManyCount; i++)
             {
                 int idx = i;
-                handles[idx] = token.RegisterUntargeted<SimpleUntargetedMessage>(_ =>
-                {
-                    counts[idx]++;
-                    if (idx == 0)
-                    {
-                        token.RemoveRegistration(handles[1]);
-                    }
-                });
-            }
-
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
-            Assert.AreEqual(1, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            msg.EmitUntargeted();
-            Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            for (int i = 0; i < handles.Length; i++)
-            {
-                if (i == 1)
-                {
-                    continue;
-                }
-                token.RemoveRegistration(handles[i]);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator TargetedRemoveOtherLocalHandlerDuringEmissionMany()
-        {
-            GameObject host = new(
-                nameof(TargetedRemoveOtherLocalHandlerDuringEmissionMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] counts = new int[ManyCount];
-            MessageRegistrationHandle[] handles = new MessageRegistrationHandle[ManyCount];
-
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                handles[idx] = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                    host,
-                    _ =>
+                handles[idx] = RegisterCounter(
+                    scenario,
+                    token,
+                    hostId,
+                    () =>
                     {
                         counts[idx]++;
                         if (idx == 0)
@@ -1578,12 +1339,11 @@ namespace DxMessaging.Tests.Runtime.Core
                 );
             }
 
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
+            EmitForScenario(scenario, hostId);
             Assert.AreEqual(1, counts[0]);
             Assert.AreEqual(1, counts[1]);
 
-            msg.EmitGameObjectTargeted(host);
+            EmitForScenario(scenario, hostId);
             Assert.AreEqual(2, counts[0]);
             Assert.AreEqual(1, counts[1]);
 
@@ -1594,150 +1354,6 @@ namespace DxMessaging.Tests.Runtime.Core
                     continue;
                 }
                 token.RemoveRegistration(handles[i]);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastRemoveOtherLocalHandlerDuringEmissionMany()
-        {
-            GameObject host = new(
-                nameof(BroadcastRemoveOtherLocalHandlerDuringEmissionMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] counts = new int[ManyCount];
-            MessageRegistrationHandle[] handles = new MessageRegistrationHandle[ManyCount];
-
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                handles[idx] = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                    host,
-                    _ =>
-                    {
-                        counts[idx]++;
-                        if (idx == 0)
-                        {
-                            token.RemoveRegistration(handles[1]);
-                        }
-                    }
-                );
-            }
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(host);
-            Assert.AreEqual(1, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            msg.EmitGameObjectBroadcast(host);
-            Assert.AreEqual(2, counts[0]);
-            Assert.AreEqual(1, counts[1]);
-
-            for (int i = 0; i < handles.Length; i++)
-            {
-                if (i == 1)
-                {
-                    continue;
-                }
-                token.RemoveRegistration(handles[i]);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator TargetedAddInterceptorDuringInterceptorDoesNotRunInSameEmission()
-        {
-            GameObject host = new("TargetedInterceptorHost", typeof(EmptyMessageAwareComponent));
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int firstCount = 0;
-            int secondCount = 0;
-            MessageRegistrationHandle? second = null;
-
-            MessageRegistrationHandle first = token.RegisterTargetedInterceptor(
-                (ref InstanceId _, ref SimpleTargetedMessage __) =>
-                {
-                    firstCount++;
-                    if (second == null)
-                    {
-                        second = token.RegisterTargetedInterceptor(
-                            (ref InstanceId __1, ref SimpleTargetedMessage __2) =>
-                            {
-                                secondCount++;
-                                return true;
-                            }
-                        );
-                    }
-                    return true;
-                }
-            );
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
-            Assert.AreEqual(1, firstCount);
-            Assert.AreEqual(0, secondCount);
-
-            msg.EmitGameObjectTargeted(host);
-            Assert.AreEqual(2, firstCount);
-            Assert.AreEqual(1, secondCount);
-
-            token.RemoveRegistration(first);
-            if (second.HasValue)
-            {
-                token.RemoveRegistration(second.Value);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastAddInterceptorDuringInterceptorDoesNotRunInSameEmission()
-        {
-            GameObject host = new("BroadcastInterceptorHost", typeof(EmptyMessageAwareComponent));
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int firstCount = 0;
-            int secondCount = 0;
-            MessageRegistrationHandle? second = null;
-
-            MessageRegistrationHandle first = token.RegisterBroadcastInterceptor(
-                (ref InstanceId _, ref SimpleBroadcastMessage __) =>
-                {
-                    firstCount++;
-                    if (second == null)
-                    {
-                        second = token.RegisterBroadcastInterceptor(
-                            (ref InstanceId __1, ref SimpleBroadcastMessage __2) =>
-                            {
-                                secondCount++;
-                                return true;
-                            }
-                        );
-                    }
-                    return true;
-                }
-            );
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(host);
-            Assert.AreEqual(1, firstCount);
-            Assert.AreEqual(0, secondCount);
-
-            msg.EmitGameObjectBroadcast(host);
-            Assert.AreEqual(2, firstCount);
-            Assert.AreEqual(1, secondCount);
-
-            token.RemoveRegistration(first);
-            if (second.HasValue)
-            {
-                token.RemoveRegistration(second.Value);
             }
             yield break;
         }
@@ -1825,315 +1441,184 @@ namespace DxMessaging.Tests.Runtime.Core
             yield break;
         }
 
-        [UnityTest]
-        public IEnumerator TargetedAddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany()
+        private static MessageRegistrationHandle RegisterCounter(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked,
+            int priority = 0
+        )
         {
-            GameObject host = new(
-                nameof(TargetedAddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] handlerCounts = new int[ManyCount];
-            int[] ppCounts = new int[ManyCount + 1];
-            MessageRegistrationHandle[] handlerHandles = new MessageRegistrationHandle[ManyCount];
-            MessageRegistrationHandle ppHandle = default;
-            bool added = false;
-
-            for (int i = 0; i < ManyCount; i++)
+            switch (scenario.Kind)
             {
-                int idx = i;
-                handlerHandles[idx] = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                    host,
-                    _ =>
-                    {
-                        handlerCounts[idx]++;
-                        if (!added && idx == 0)
-                        {
-                            added = true;
-                            ppHandle = token.RegisterGameObjectTargetedPostProcessor(
-                                host,
-                                (ref SimpleTargetedMessage _) => ppCounts[ManyCount]++
-                            );
-                        }
-                    }
-                );
-                _ = token.RegisterGameObjectTargetedPostProcessor(
-                    host,
-                    (ref SimpleTargetedMessage _) => ppCounts[idx]++
-                );
-            }
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
-
-            int handlerTotal = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                handlerTotal += handlerCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount, handlerTotal);
-
-            int ppTotal = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                ppTotal += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount, ppTotal);
-            Assert.AreEqual(0, ppCounts[ManyCount]);
-
-            msg.EmitGameObjectTargeted(host);
-            ppTotal = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                ppTotal += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount * 2, ppTotal);
-            Assert.AreEqual(1, ppCounts[ManyCount]);
-
-            foreach (MessageRegistrationHandle h in handlerHandles)
-            {
-                token.RemoveRegistration(h);
-            }
-            if (ppHandle != default)
-            {
-                token.RemoveRegistration(ppHandle);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator TargetedAddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany()
-        {
-            GameObject host = new(
-                nameof(TargetedAddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] ppCounts = new int[ManyCount + 1];
-            MessageRegistrationHandle[] ppHandles = new MessageRegistrationHandle[ManyCount + 1];
-
-            // Ensure there is a handler so post processing will run
-            MessageRegistrationHandle hdl = token.RegisterGameObjectTargeted<SimpleTargetedMessage>(
-                host,
-                _ => { }
-            );
-
-            bool added = false;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                ppHandles[idx] = token.RegisterGameObjectTargetedPostProcessor(
-                    host,
-                    (ref SimpleTargetedMessage _) =>
-                    {
-                        ppCounts[idx]++;
-                        if (!added && idx == 0)
-                        {
-                            added = true;
-                            ppHandles[ManyCount] = token.RegisterGameObjectTargetedPostProcessor(
-                                host,
-                                (ref SimpleTargetedMessage __) => ppCounts[ManyCount]++
-                            );
-                        }
-                    }
-                );
-            }
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(host);
-            int total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount, total);
-            Assert.AreEqual(0, ppCounts[ManyCount]);
-
-            msg.EmitGameObjectTargeted(host);
-            total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount * 2, total);
-            Assert.AreEqual(1, ppCounts[ManyCount]);
-
-            token.RemoveRegistration(hdl);
-            for (int i = 0; i < ppHandles.Length; i++)
-            {
-                if (ppHandles[i] != default)
+                case MessageKind.Untargeted:
                 {
-                    token.RemoveRegistration(ppHandles[i]);
-                }
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastAddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany()
-        {
-            GameObject host = new(
-                nameof(BroadcastAddPostProcessorDuringHandlerDoesNotRunInSameEmissionMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] handlerCounts = new int[ManyCount];
-            int[] ppCounts = new int[ManyCount + 1];
-            MessageRegistrationHandle[] handlerHandles = new MessageRegistrationHandle[ManyCount];
-            MessageRegistrationHandle ppHandle = default;
-            bool added = false;
-
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                handlerHandles[idx] = token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(
-                    host,
-                    _ =>
-                    {
-                        handlerCounts[idx]++;
-                        if (!added && idx == 0)
-                        {
-                            added = true;
-                            ppHandle =
-                                token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
-                                    host,
-                                    _ => ppCounts[ManyCount]++
-                                );
-                        }
-                    }
-                );
-                _ = token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
-                    host,
-                    _ => ppCounts[idx]++
-                );
-            }
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(host);
-
-            int handlerTotal = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                handlerTotal += handlerCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount, handlerTotal);
-
-            int ppTotal = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                ppTotal += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount, ppTotal);
-            Assert.AreEqual(0, ppCounts[ManyCount]);
-
-            msg.EmitGameObjectBroadcast(host);
-            ppTotal = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                ppTotal += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount * 2, ppTotal);
-            Assert.AreEqual(1, ppCounts[ManyCount]);
-
-            foreach (MessageRegistrationHandle h in handlerHandles)
-            {
-                token.RemoveRegistration(h);
-            }
-            if (ppHandle != default)
-            {
-                token.RemoveRegistration(ppHandle);
-            }
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastAddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany()
-        {
-            GameObject host = new(
-                nameof(BroadcastAddPostProcessorDuringPostProcessorDoesNotRunInSameEmissionMany),
-                typeof(EmptyMessageAwareComponent)
-            );
-            _spawned.Add(host);
-            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken token = GetToken(component);
-
-            int[] ppCounts = new int[ManyCount + 1];
-            MessageRegistrationHandle[] ppHandles = new MessageRegistrationHandle[ManyCount + 1];
-
-            // Ensure at least one handler exists so post-processing runs
-            MessageRegistrationHandle hdl =
-                token.RegisterGameObjectBroadcast<SimpleBroadcastMessage>(host, _ => { });
-
-            bool added = false;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                int idx = i;
-                ppHandles[idx] =
-                    token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
-                        host,
-                        _ =>
-                        {
-                            ppCounts[idx]++;
-                            if (!added && idx == 0)
-                            {
-                                added = true;
-                                ppHandles[ManyCount] =
-                                    token.RegisterGameObjectBroadcastPostProcessor<SimpleBroadcastMessage>(
-                                        host,
-                                        _ => ppCounts[ManyCount]++
-                                    );
-                            }
-                        }
+                    return ScenarioHarness.RegisterUntargeted<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => onInvoked(),
+                        priority
                     );
-            }
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(host);
-            int total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount, total);
-            Assert.AreEqual(0, ppCounts[ManyCount]);
-
-            msg.EmitGameObjectBroadcast(host);
-            total = 0;
-            for (int i = 0; i < ManyCount; i++)
-            {
-                total += ppCounts[i];
-            }
-
-            Assert.AreEqual(ManyCount * 2, total);
-            Assert.AreEqual(1, ppCounts[ManyCount]);
-
-            token.RemoveRegistration(hdl);
-            for (int i = 0; i < ppHandles.Length; i++)
-            {
-                if (ppHandles[i] != default)
+                }
+                case MessageKind.Targeted:
                 {
-                    token.RemoveRegistration(ppHandles[i]);
+                    return ScenarioHarness.RegisterTargeted<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleTargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcast<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleBroadcastMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
                 }
             }
-            yield break;
+        }
+
+        private static MessageRegistrationHandle RegisterPostProcessor(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked,
+            int priority = 0
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    return ScenarioHarness.RegisterUntargetedPostProcessor<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargetedPostProcessor<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleTargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcastPostProcessor<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleBroadcastMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
+        }
+
+        private static MessageRegistrationHandle RegisterInterceptor(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            Func<bool> body,
+            int priority = 0
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    return ScenarioHarness.RegisterUntargetedInterceptor<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => body(),
+                        priority
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargetedInterceptor<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        (ref InstanceId _, ref SimpleTargetedMessage __) => body(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcastInterceptor<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        (ref InstanceId _, ref SimpleBroadcastMessage __) => body(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
+        }
+
+        private static void EmitForScenario(MessageScenario scenario, InstanceId target)
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    SimpleUntargetedMessage message = new();
+                    ScenarioHarness.EmitUntargeted(scenario, ref message);
+                    return;
+                }
+                case MessageKind.Targeted:
+                {
+                    SimpleTargetedMessage message = new();
+                    ScenarioHarness.EmitTargeted(scenario, ref message, target);
+                    return;
+                }
+                case MessageKind.Broadcast:
+                {
+                    SimpleBroadcastMessage message = new();
+                    ScenarioHarness.EmitBroadcast(scenario, ref message, target);
+                    return;
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
         }
     }
 }

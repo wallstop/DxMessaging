@@ -70,7 +70,7 @@ namespace DxMessaging.Editor.CustomEditors
             // control counts, so we can call it unconditionally here.
             MessageAwareComponentInspectorOverlay.RenderInsideOnInspectorGUI(target);
 
-            // Match Unity's GenericInspector exactly — including the disabled "Script" row that
+            // Match Unity's GenericInspector exactly; including the disabled "Script" row that
             // every MonoBehaviour inspector shows. This is intentional: skipping the script row
             // creates a visible empty gap below the header for subclasses with no
             // [SerializeField] fields.

@@ -356,3 +356,5 @@ SourceGenerators/WallstopStudios.DxMessaging.Analyzer/bin.meta
 SourceGenerators/WallstopStudios.DxMessaging.Analyzer/obj.meta
 Temp
 Temp.meta
+
+failed-tests.txt*

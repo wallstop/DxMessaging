@@ -15,8 +15,19 @@ namespace DxMessaging.Tests.Runtime.Core
     using UnityEngine.TestTools;
     using Object = UnityEngine.Object;
 
+    [Category("Stress")]
     public sealed class NominalTests : MessagingTestBase
     {
+        [SetUp]
+        public override void Setup()
+        {
+            base.Setup();
+            // Run(...) helpers below loop _numRegistrations times across many
+            // tests; restore the legacy stress fan-out so coverage matches the
+            // pre-Phase-A baseline.
+            _numRegistrations = StressRegistrations;
+        }
+
         [UnityTest]
         public IEnumerator Nominal()
         {

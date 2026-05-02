@@ -418,7 +418,7 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            // Register action first, then fast — fast should still run first
+            // Register action first, then fast; fast should still run first
             _ = token.RegisterGlobalAcceptAll(_ => order.Add("A"), (_, _) => { }, (_, _) => { });
             _ = token.RegisterGlobalAcceptAll(
                 (ref IUntargetedMessage _) => order.Add("F"),
@@ -506,7 +506,7 @@ namespace DxMessaging.Tests.Runtime.Core
             MessageRegistrationToken token = GetToken(comp);
 
             List<string> order = new();
-            // Register action then fast — fast should still be invoked first within the group
+            // Register action then fast; fast should still be invoked first within the group
             _ = token.RegisterTargetedWithoutTargeting(
                 (InstanceId _, SimpleTargetedMessage _) => order.Add("A"),
                 0

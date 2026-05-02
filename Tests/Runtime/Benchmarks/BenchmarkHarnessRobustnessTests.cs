@@ -13,6 +13,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using UnityEngine;
     using UnityEngine.TestTools;
 
+    [Category("Performance")]
     public sealed class BenchmarkHarnessRobustnessTests : BenchmarkTestBase
     {
         [TestCase("untargeted")]

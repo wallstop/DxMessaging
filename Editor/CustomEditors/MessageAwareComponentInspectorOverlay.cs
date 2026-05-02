@@ -52,10 +52,10 @@ namespace DxMessaging.Editor.CustomEditors
         //
         // NOTE: cross-path dedupe between the header hook and the OnInspectorGUI hook is
         // accomplished by an UNCONDITIONAL skip at the top of <see cref="DrawHeader"/> when the
-        // target editor is our fallback CustomEditor — see that method's comment. We do NOT use
+        // target editor is our fallback CustomEditor; see that method's comment. We do NOT use
         // a per-frame "header drew" set, because such a set would necessarily be populated only
         // on the Repaint pass of the header hook, while OnInspectorGUI runs on BOTH the Layout
-        // and Repaint passes — that asymmetry would corrupt the inspector's layout cache.
+        // and Repaint passes; that asymmetry would corrupt the inspector's layout cache.
         private static readonly HashSet<int> _renderedThisRepaint = new();
 
         static MessageAwareComponentInspectorOverlay()
@@ -89,7 +89,7 @@ namespace DxMessaging.Editor.CustomEditors
                 return;
             }
             // If our own fallback CustomEditor is the editor instance, skip the header path
-            // entirely — the editor's OnInspectorGUI will call RenderInsideOnInspectorGUI and we
+            // entirely; the editor's OnInspectorGUI will call RenderInsideOnInspectorGUI and we
             // would otherwise render twice. Unconditional skip (not gated on EventType) keeps
             // control counts balanced on both Layout and Repaint passes.
             if (editor is MessageAwareComponentFallbackEditor)
@@ -122,7 +122,7 @@ namespace DxMessaging.Editor.CustomEditors
             }
             if (currentEvent.type == EventType.Layout)
             {
-                // Start of a fresh GUI cycle — wipe the per-Repaint latch.
+                // Start of a fresh GUI cycle; wipe the per-Repaint latch.
                 _renderedThisRepaint.Clear();
                 return;
             }
@@ -293,9 +293,9 @@ namespace DxMessaging.Editor.CustomEditors
             // fires, the overlay redraws without the suffix.
             string freshnessSuffix = DxMessagingConsoleHarvester.IsFreshThisSession
                 ? string.Empty
-                : "\n(cached from previous session — refreshing…)";
+                : "\n(cached from previous session; refreshing…)";
             string message =
-                $"{fullName} has lifecycle methods that don't chain to MessageAwareComponent ({missingMethods}) — DxMessaging will not function on this component.\n"
+                $"{fullName} has lifecycle methods that don't chain to MessageAwareComponent ({missingMethods}); DxMessaging will not function on this component.\n"
                 + "See docs/reference/analyzers.md."
                 + freshnessSuffix;
 
@@ -386,7 +386,7 @@ namespace DxMessaging.Editor.CustomEditors
         {
             // Same reasoning as TryAddIgnoredType: defer mutation past the current GUI cycle so
             // the overlay's shape gating remains identical on Layout and Repaint passes of THIS
-            // frame. The next frame's Layout pass observes the new state — both passes agree.
+            // frame. The next frame's Layout pass observes the new state; both passes agree.
             EditorApplication.delayCall += () =>
             {
                 try

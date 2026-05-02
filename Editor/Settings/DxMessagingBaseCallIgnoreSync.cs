@@ -27,7 +27,7 @@ namespace DxMessaging.Editor.Settings
         public const string SidecarAssetPath = "Assets/Editor/DxMessaging.BaseCallIgnore.txt";
 
         private const string HeaderComment =
-            "# Auto-generated from Assets/Editor/DxMessagingSettings.asset — edit there instead.";
+            "# Auto-generated from Assets/Editor/DxMessagingSettings.asset; edit there instead.";
         private const string FormatComment =
             "# One fully-qualified type name per line. Lines starting with # are comments.";
 

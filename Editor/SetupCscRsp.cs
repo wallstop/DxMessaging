@@ -37,7 +37,7 @@ namespace DxMessaging.Editor
         // Both DLLs ship side-by-side and both need the RoslynAnalyzer label.
         private static readonly string AnalyzerDllName = "WallstopStudios.DxMessaging.Analyzer.dll";
 
-        // The analyzer DLLs and shared Roslyn surface ship unconditionally — they're light enough
+        // The analyzer DLLs and shared Roslyn surface ship unconditionally; they're light enough
         // and required for DXMSG002–DXMSG009 to function at all. The list intentionally references
         // a few transitive Roslyn deps that may or may not physically ship with the package; the
         // copy loop below silently skips any name that isn't on disk.
@@ -390,7 +390,7 @@ namespace DxMessaging.Editor
                         }
                         else
                         {
-                            // Stale entry pointing at a moved/renamed/deleted sidecar — drop it.
+                            // Stale entry pointing at a moved/renamed/deleted sidecar; drop it.
                             foundStale = true;
                         }
                     }

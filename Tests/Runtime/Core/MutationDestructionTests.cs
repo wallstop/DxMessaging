@@ -1,14 +1,17 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
+    using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Components;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using NUnit.Framework;
     using UnityEngine;
     using UnityEngine.TestTools;
+    using Object = UnityEngine.Object;
 
     /// <summary>
     /// Validates mutation semantics when a listener is explicitly destroyed during dispatch.
@@ -30,18 +33,31 @@ namespace DxMessaging.Tests.Runtime.Core
         private const int DestroyerPriority = -10; // ensure it runs before default priority 0
 
         [UnityTest]
-        public IEnumerator UntargetedDestroyOtherListenerDoesNotRun()
+        public IEnumerator DestroyOtherListenerDoesNotRun(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
         {
             GameObject a = new(
-                nameof(UntargetedDestroyOtherListenerDoesNotRun) + "_A",
+                nameof(DestroyOtherListenerDoesNotRun) + "_" + scenario + "_A",
                 typeof(EmptyMessageAwareComponent)
             );
             GameObject b = new(
-                nameof(UntargetedDestroyOtherListenerDoesNotRun) + "_B",
+                nameof(DestroyOtherListenerDoesNotRun) + "_" + scenario + "_B",
                 typeof(EmptyMessageAwareComponent)
             );
             _spawned.Add(a);
             _spawned.Add(b);
+
+            InstanceId targetId = default;
+            if (scenario.Kind != MessageKind.Untargeted)
+            {
+                GameObject target = new(
+                    nameof(DestroyOtherListenerDoesNotRun) + "_" + scenario + "_Target"
+                );
+                _spawned.Add(target);
+                targetId = target;
+            }
 
             EmptyMessageAwareComponent compA = a.GetComponent<EmptyMessageAwareComponent>();
             EmptyMessageAwareComponent compB = b.GetComponent<EmptyMessageAwareComponent>();
@@ -51,8 +67,11 @@ namespace DxMessaging.Tests.Runtime.Core
             int firstCount = 0;
             int secondCount = 0;
 
-            _ = tokenA.RegisterUntargeted(
-                (ref SimpleUntargetedMessage _) =>
+            _ = RegisterCounter(
+                scenario,
+                tokenA,
+                targetId,
+                () =>
                 {
                     firstCount++;
                     Object.Destroy(b);
@@ -60,74 +79,12 @@ namespace DxMessaging.Tests.Runtime.Core
                 DestroyerPriority
             );
 
-            _ = tokenB.RegisterUntargeted(
-                (ref SimpleUntargetedMessage _) =>
-                {
-                    secondCount++;
-                }
-            );
+            _ = RegisterCounter(scenario, tokenB, targetId, () => secondCount++);
 
-            SimpleUntargetedMessage msg = new();
-            msg.EmitUntargeted();
+            EmitForScenario(scenario, targetId);
 
             Assert.AreEqual(1, firstCount, "First handler should run exactly once.");
             Assert.AreEqual(0, secondCount, "Second handler must not act after it is destroyed.");
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator TargetedGameObjectDestroyOtherListenerDoesNotRun()
-        {
-            GameObject a = new(
-                nameof(TargetedGameObjectDestroyOtherListenerDoesNotRun) + "_A",
-                typeof(EmptyMessageAwareComponent)
-            );
-            GameObject b = new(
-                nameof(TargetedGameObjectDestroyOtherListenerDoesNotRun) + "_B",
-                typeof(EmptyMessageAwareComponent)
-            );
-            GameObject target = new(
-                nameof(TargetedGameObjectDestroyOtherListenerDoesNotRun) + "_Target"
-            );
-            _spawned.Add(a);
-            _spawned.Add(b);
-            _spawned.Add(target);
-
-            EmptyMessageAwareComponent compA = a.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent compB = b.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken tokenA = GetToken(compA);
-            MessageRegistrationToken tokenB = GetToken(compB);
-
-            int firstCount = 0;
-            int secondCount = 0;
-
-            _ = tokenA.RegisterGameObjectTargeted(
-                target,
-                (ref SimpleTargetedMessage _) =>
-                {
-                    firstCount++;
-                    Object.Destroy(b);
-                },
-                DestroyerPriority
-            );
-
-            _ = tokenB.RegisterGameObjectTargeted(
-                target,
-                (ref SimpleTargetedMessage _) =>
-                {
-                    secondCount++;
-                }
-            );
-
-            SimpleTargetedMessage msg = new();
-            msg.EmitGameObjectTargeted(target);
-
-            Assert.AreEqual(1, firstCount, "First targeted handler should run once.");
-            Assert.AreEqual(
-                0,
-                secondCount,
-                "Second targeted handler must not act after destruction."
-            );
             yield break;
         }
 
@@ -244,66 +201,6 @@ namespace DxMessaging.Tests.Runtime.Core
                 0,
                 secondCount,
                 "Second targeted-without-targeting handler must not act after destruction."
-            );
-            yield break;
-        }
-
-        [UnityTest]
-        public IEnumerator BroadcastGameObjectDestroyOtherListenerDoesNotRun()
-        {
-            GameObject a = new(
-                nameof(BroadcastGameObjectDestroyOtherListenerDoesNotRun) + "_A",
-                typeof(EmptyMessageAwareComponent)
-            );
-            GameObject b = new(
-                nameof(BroadcastGameObjectDestroyOtherListenerDoesNotRun) + "_B",
-                typeof(EmptyMessageAwareComponent)
-            );
-            GameObject source = new(
-                nameof(BroadcastGameObjectDestroyOtherListenerDoesNotRun) + "_Source"
-            );
-            _spawned.Add(a);
-            _spawned.Add(b);
-            _spawned.Add(source);
-
-            EmptyMessageAwareComponent compA = a.GetComponent<EmptyMessageAwareComponent>();
-            EmptyMessageAwareComponent compB = b.GetComponent<EmptyMessageAwareComponent>();
-            MessageRegistrationToken tokenA = GetToken(compA);
-            MessageRegistrationToken tokenB = GetToken(compB);
-
-            int firstCount = 0;
-            int secondCount = 0;
-
-            _ = tokenA.RegisterGameObjectBroadcast(
-                source,
-                (ref SimpleBroadcastMessage _) =>
-                {
-                    firstCount++;
-                    Object.Destroy(b);
-                },
-                DestroyerPriority
-            );
-
-            _ = tokenB.RegisterGameObjectBroadcast(
-                source,
-                (ref SimpleBroadcastMessage _) =>
-                {
-                    secondCount++;
-                }
-            );
-
-            SimpleBroadcastMessage msg = new();
-            msg.EmitGameObjectBroadcast(source);
-
-            Assert.AreEqual(
-                1,
-                firstCount,
-                "First GameObject-sourced broadcast handler should run once."
-            );
-            Assert.AreEqual(
-                0,
-                secondCount,
-                "Second GameObject-sourced broadcast handler must not act after destruction."
             );
             yield break;
         }
@@ -430,6 +327,89 @@ namespace DxMessaging.Tests.Runtime.Core
                 "Second broadcast-without-source handler must not act after destruction."
             );
             yield break;
+        }
+
+        private static MessageRegistrationHandle RegisterCounter(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            InstanceId target,
+            Action onInvoked,
+            int priority = 0
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    return ScenarioHarness.RegisterUntargeted<SimpleUntargetedMessage>(
+                        scenario,
+                        token,
+                        (ref SimpleUntargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    return ScenarioHarness.RegisterTargeted<SimpleTargetedMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleTargetedMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    return ScenarioHarness.RegisterBroadcast<SimpleBroadcastMessage>(
+                        scenario,
+                        token,
+                        target,
+                        (ref SimpleBroadcastMessage _) => onInvoked(),
+                        priority
+                    );
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
+        }
+
+        private static void EmitForScenario(MessageScenario scenario, InstanceId target)
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    SimpleUntargetedMessage message = new();
+                    ScenarioHarness.EmitUntargeted(scenario, ref message);
+                    return;
+                }
+                case MessageKind.Targeted:
+                {
+                    SimpleTargetedMessage message = new();
+                    ScenarioHarness.EmitTargeted(scenario, ref message, target);
+                    return;
+                }
+                case MessageKind.Broadcast:
+                {
+                    SimpleBroadcastMessage message = new();
+                    ScenarioHarness.EmitBroadcast(scenario, ref message, target);
+                    return;
+                }
+                default:
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(scenario),
+                        scenario.Kind,
+                        "Unsupported message kind."
+                    );
+                }
+            }
         }
     }
 }

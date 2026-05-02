@@ -8,6 +8,7 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using DxMessaging.Core.Messages;
     using NUnit.Framework;
 
+    [Category("Performance")]
     public sealed class ProviderResolutionBenchmarks : BenchmarkTestBase
     {
         private IMessageBus _originalBus;

@@ -136,7 +136,7 @@ using UnityEngine;
             options: effectiveOptions
         );
 
-        // B6. Refuse to return when the underlying compilation has errors — otherwise tests can
+        // B6. Refuse to return when the underlying compilation has errors; otherwise tests can
         // silently bind nothing and pass. We exclude analyzer diagnostics here (we only want raw
         // compile errors) by calling Compilation.GetDiagnostics rather than the analyzer pipeline.
         ImmutableArray<Diagnostic> compileDiags = compilation.GetDiagnostics();
