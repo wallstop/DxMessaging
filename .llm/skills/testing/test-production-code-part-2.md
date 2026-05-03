@@ -56,7 +56,7 @@ Before merging, verify tests exercise production code:
 
 ## See Also
 
-- [Comprehensive Test Coverage skill](comprehensive-test-coverage.md) - What to test
+- [Test Coverage Requirements](comprehensive-test-coverage.md) - What to test
 - [Script Test Coverage skill](script-test-coverage.md) - Testing scripts specifically
 - [Test Code Quality skill](test-code-quality.md) - Test documentation accuracy
 

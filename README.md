@@ -228,6 +228,8 @@ public class ChestController : MessageAwareComponent {
 }
 ```
 
+> **Heads-up:** When you override `Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, or `RegisterMessageHandlers`, call the base method first or handlers fail silently. See [DXMSG006](docs/reference/analyzers.md#dxmsg006-missing-base-call).
+
 ### 4. Send It
 
 ```csharp
@@ -336,7 +338,7 @@ flowchart TD
     Q3 -->|NO| A4[" Keep it simple"]
 ```
 
-**Rule of thumb:** If you're reading this README and thinking "this could address several challenges I'm facing," then DxMessaging may be a good fit. If you're thinking "this seems complicated," start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
+**Rule of thumb:** If decoupling, lifecycle leaks, or handler-ordering bugs match what you're hitting today, DxMessaging fits. If none of those describe your project, start with the [Visual Guide](docs/getting-started/visual-guide.md) or stick with simpler patterns.
 
 Looking for hard numbers? See OS-specific [Performance Benchmarks](docs/architecture/performance.md).
 
@@ -900,13 +902,13 @@ Created and maintained by [wallstop studios](https://wallstopstudios.com)
 
 ## AI Agent Integration
 
-DxMessaging provides comprehensive AI agent context through [llms.txt](llms.txt), following the [llmstxt.org](https://llmstxt.org/) standard for LLM-friendly documentation.
+DxMessaging publishes machine-readable context for AI agents through [llms.txt](llms.txt), following the [llmstxt.org](https://llmstxt.org/) standard. The file collects the project overview, API surface, conventions, and links into one document.
 
 ### For AI Agents
 
 - **[llms.txt](llms.txt)** -- Complete project overview, API reference, and context in a single file
 - **[Repository Guidelines](.llm/context.md)** -- Coding standards and development workflows
-- **[AI Agent Skills](.llm/skills/)** -- 90+ specialized skill documents covering documentation, testing, GitHub Actions, and more
+- **[AI Agent Skills](.llm/skills/)** -- 140+ specialized skill documents covering documentation, testing, GitHub Actions, and more
 
 The `llms.txt` file is automatically updated via CI/CD to stay current with project changes. It includes:
 

@@ -1,0 +1,28 @@
+extends: substitution
+message: "Marketing adjective: replace '%s' with a concrete claim (%s)."
+level: warning
+ignorecase: true
+nonword: false
+swap:
+  cutting-edge: "modern, current, or describe the specific feature"
+  cutting edge: "modern, current, or describe the specific feature"
+  blazing fast: "give a measurement or remove"
+  seamless: "describe what is integrated and how"
+  seamlessly: "describe the integration concretely"
+  seamlessness: "describe what is integrated and how"
+  powerful: "describe the capability concretely"
+  powerfully: "describe the capability concretely"
+  robust: "describe the failure modes it handles"
+  robustly: "describe the failure modes it handles"
+  elegant: "describe the design choice"
+  elegantly: "describe the design choice"
+  world-class: "describe the actual quality"
+  next-generation: "describe the version or capability"
+  industry-leading: "remove or cite a benchmark"
+  state-of-the-art: "describe the current technique"
+  comprehensive: "list what is covered"
+  comprehensively: "list what is covered"
+  unparalleled: "remove or cite a comparison"
+  revolutionary: "describe the change"
+  game-changing: "describe the impact"
+  best-in-class: "remove or cite a benchmark"

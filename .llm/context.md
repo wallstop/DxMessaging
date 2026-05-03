@@ -101,6 +101,10 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Treat failing tests as real defects until proven otherwise.
 - Prefer direct testing of production code rather than re-implementation in tests.
 - Cover normal, negative, and edge-case scenarios for new behavior.
+- Tests that exercise dispatch across more than one of `Untargeted`/`Targeted`/`Broadcast` MUST be parameterized via `MessageScenarios.AllKinds`; see [Tests Must Be Parameterized by Message Kind](./skills/testing/tests-must-be-parameterized-by-message-kind.md).
+- Bus dispatch-path changes must be covered by the canonical lifecycle edge-case set (scene unload mid-dispatch, DDOL transitions, prefab pooling churn, token disable / re-enable, post-Reset emit, OnApplicationQuit drain, cross-kind reentrancy); see [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md).
+- Tests that create and tear down message registrations should bracket the work in a `LeakWatcher` to assert no registrations survive; see [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md).
+- Benchmark and performance/allocation tests must stay isolated under `Tests/Runtime/Benchmarks` in asmdef `WallstopStudios.DxMessaging.Tests.00.Runtime.Benchmarks`; `.00` is a lexical prefix convention so the benchmark assembly sorts before peer test assemblies in Unity Test Runner. Keep `BenchmarkAssemblyContractTests` green when adding or moving perf tests.
 
 ## Documentation Expectations
 
@@ -115,6 +119,8 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Internal fragment links must match GitHub/markdownlint heading slugs exactly (MD051).
 - Documentation and `///` XML doc comments must be pure ASCII; see [ASCII-Only Documentation Policy](./skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` before finishing.
 - Every C# code sample in docs - inline, fenced, and XML `<code>` blocks - must compile; see [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite before finishing.
+- Documentation prose must avoid LLM-style filler, marketing adjectives, hedge transitions, and vague quantifiers; see [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md). Run `node scripts/validate-docs-prose.js` before finishing.
+- Subclasses of `MessageAwareComponent` MUST call `base.<method>()` from every guarded lifecycle override (`Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, `RegisterMessageHandlers`); see [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md). Five enforcement layers (Roslyn analyzer DXMSG006-010, IL scanner, Inspector overlay, runtime self-check, meta-test) keep the contract honest.
 
 ## Skills to Prefer
 
@@ -137,5 +143,9 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [Documentation Updates and Maintenance](./skills/documentation/documentation-updates.md)
 - [ASCII-Only Documentation Policy](./skills/documentation/ascii-only-docs.md)
 - [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md)
+- [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md)
 - [Cross-Platform Script Compatibility](./skills/scripting/cross-platform-compatibility.md)
 - [Test Failure Investigation and Zero-Flaky Policy](./skills/testing/test-failure-investigation.md)
+- [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md)
+- [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md)
+- [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md)

@@ -134,7 +134,7 @@ Before committing JavaScript code, verify:
 
 - [Script Test Coverage](../testing/script-test-coverage.md) - Test file structure and naming
 - [Cross-Platform Compatibility](cross-platform-compatibility.md) - Platform-specific considerations
-- [Comprehensive Test Coverage](../testing/comprehensive-test-coverage.md) - Test coverage requirements
+- [Test Coverage Requirements](../testing/comprehensive-test-coverage.md) - Coverage policy for new features and fixes
 
 ## Related Links
 

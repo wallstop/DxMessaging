@@ -284,6 +284,19 @@ namespace DxMessaging.Editor.CustomEditors
         )
         {
             string missingMethods = string.Join(", ", entry.missingBaseFor);
+            // Per-method consequence lines mirror the analyzer's DXMSG006 message text. Reading
+            // the dictionary on BaseCallTypeScannerCore keeps the overlay copy in lockstep with
+            // the analyzer; both are updated together when a new guarded method is added.
+            System.Text.StringBuilder consequenceBuilder = new();
+            foreach (string missingMethod in entry.missingBaseFor)
+            {
+                consequenceBuilder.Append("\n- ");
+                consequenceBuilder.Append(
+                    BaseCallTypeScannerCore.GetMissingBaseConsequenceLine(missingMethod, fullName)
+                );
+            }
+            string consequenceLines = consequenceBuilder.ToString();
+
             // Cached-vs-fresh suffix is appended to the SAME HelpBox string rather than emitted
             // as a sibling control, which keeps the Layout and Repaint passes emitting an
             // identical sequence of EditorGUILayout.* calls regardless of harvester freshness.
@@ -293,10 +306,11 @@ namespace DxMessaging.Editor.CustomEditors
             // fires, the overlay redraws without the suffix.
             string freshnessSuffix = DxMessagingConsoleHarvester.IsFreshThisSession
                 ? string.Empty
-                : "\n(cached from previous session; refreshing…)";
+                : "\n(cached from previous session; refreshing...)";
             string message =
-                $"{fullName} has lifecycle methods that don't chain to MessageAwareComponent ({missingMethods}); DxMessaging will not function on this component.\n"
-                + "See docs/reference/analyzers.md."
+                $"{fullName} has lifecycle methods that don't chain to MessageAwareComponent ({missingMethods}); DxMessaging will not function on this component."
+                + consequenceLines
+                + "\nSee docs/reference/analyzers.md."
                 + freshnessSuffix;
 
             EditorGUILayout.HelpBox(message, MessageType.Warning);

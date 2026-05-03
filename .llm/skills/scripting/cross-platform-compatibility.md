@@ -78,7 +78,7 @@ status: "stable"
 # Cross-Platform Script Compatibility
 
 > **One-line summary**: Ensure scripts work correctly across Windows, macOS, and Linux by handling
-> case-sensitive paths and maintaining comprehensive test coverage.
+> case-sensitive paths and covering each script with platform-specific tests.
 
 ## Overview
 
@@ -215,7 +215,7 @@ Before merging scripts:
 - [Script Test Coverage](../testing/script-test-coverage.md) - Test coverage requirements for scripts
 - [Shell Best Practices](./shell-best-practices.md) - Shell-specific case sensitivity patterns
 - [PowerShell Best Practices](./powershell-best-practices.md) - PowerShell scripting patterns
-- [Comprehensive Test Coverage](../testing/comprehensive-test-coverage.md) - General test coverage requirements
+- [Test Coverage Requirements](../testing/comprehensive-test-coverage.md) - General test coverage requirements
 
 ## Changelog
 

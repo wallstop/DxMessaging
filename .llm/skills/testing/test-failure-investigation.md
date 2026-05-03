@@ -72,7 +72,7 @@ status: "stable"
 
 # Test Failure Investigation and Zero-Flaky Policy
 
-> **One-line summary**: Every test failure reveals a real bug - investigate production behavior comprehensively before making any fix.
+> **One-line summary**: Every test failure reveals a real bug - investigate the production code path, the test setup, and any shared static state before making any fix.
 
 ## Overview
 
@@ -100,7 +100,7 @@ Ignoring or masking test failures leads to unreliable tests, hidden regressions,
 1. Understand expected behavior and assertions
 1. Inspect production code paths
 1. Identify root cause (production vs test)
-1. Fix comprehensively and verify repeatedly
+1. Fix the production or test root cause and verify the fix holds across repeated runs
 
 ## Summary
 

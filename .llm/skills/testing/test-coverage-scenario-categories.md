@@ -213,7 +213,7 @@ public sealed class MessageBusDefensiveTests
 
 ## See Also
 
-- [Comprehensive Test Coverage](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Data-Driven Coverage Patterns](test-coverage-data-driven.md)
 
 ## Changelog

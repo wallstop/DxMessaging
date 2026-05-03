@@ -259,7 +259,7 @@ public void CreateMessageBus()
 
 ## See Also
 
-- [Comprehensive Test Coverage](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Test Organization and Assertions](test-coverage-organization-assertions.md)
 
 ## Changelog

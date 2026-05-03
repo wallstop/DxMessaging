@@ -150,7 +150,7 @@ Categorize the failure:
 | **Timing Issue**      | Test has race conditions            | Async operation not awaited       |
 | **Environment Issue** | Test depends on environment         | File paths, time zones            |
 
-### Step 6: Fix Comprehensively
+### Step 6: Fix the Root Cause
 
 Fix the actual problem, not the symptom:
 

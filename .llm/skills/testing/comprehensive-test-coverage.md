@@ -1,5 +1,5 @@
 ---
-title: "Comprehensive Test Coverage Requirements"
+title: "Test Coverage Requirements"
 id: "comprehensive-test-coverage"
 category: "testing"
 version: "1.0.0"
@@ -33,7 +33,7 @@ impact:
     details: "Testing patterns only; no runtime impact"
   maintainability:
     rating: "critical"
-    details: "Comprehensive tests prevent regressions and document expected behavior"
+    details: "Thorough tests prevent regressions and document expected behavior"
   testability:
     rating: "critical"
     details: "Defines the standard for test quality across the codebase"
@@ -82,13 +82,13 @@ related:
 status: "stable"
 ---
 
-# Comprehensive Test Coverage Requirements
+# Test Coverage Requirements
 
 > **One-line summary**: Every new feature and bug fix requires tests covering happy paths, negative scenarios, edge cases, and "impossible" situations.
 
 ## Overview
 
-Comprehensive test coverage is not optional. Every code change must include tests that verify:
+Full test coverage is not optional. Every code change must include tests that verify:
 
 1. The feature works as intended (happy path)
 1. The feature handles errors gracefully (negative scenarios)

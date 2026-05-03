@@ -408,7 +408,7 @@ Try modifying the sample:
 ### Learn More
 
 - **[Message Types Documentation](../../docs/concepts/message-types.md)** - Complete message type reference
-- **[Targeting and Context Guide](../../docs/concepts/targeting-and-context.md)** - Deep dive into targeting
+- **[Targeting and Context Guide](../../docs/concepts/targeting-and-context.md)** - How GameObject and Component targets resolve to InstanceIds
 - **[Patterns Guide](../../docs/guides/patterns.md)** - Common messaging patterns
 - **[Performance Guide](../../docs/architecture/performance.md)** - Optimization tips
 

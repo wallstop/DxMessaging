@@ -38,9 +38,14 @@ namespace DxMessaging.Editor.Analyzers
     public static class BaseCallTypeScannerCore
     {
         /// <summary>
-        /// The five guarded lifecycle methods on <c>MessageAwareComponent</c>. Method names are
-        /// matched ordinally; only zero-parameter, void-returning, instance methods are
-        /// considered.
+        /// The guarded lifecycle methods on <c>MessageAwareComponent</c>. Method names are
+        /// matched ordinally. Most are zero-parameter, void-returning instance methods;
+        /// <c>OnApplicationFocus</c> and <c>OnApplicationPause</c> are guarded prospectively
+        /// for their canonical Unity <c>(bool)</c> signature even though the base class does
+        /// not currently declare them. See
+        /// <c>MessageAwareComponentBaseCallAnalyzer.GuardedMethodNames</c> /
+        /// <c>GuardedMethodsWithBoolSignature</c>; the two sets MUST stay in sync (a meta-test
+        /// in the dotnet-test project asserts set-equality).
         /// </summary>
         public static readonly string[] GuardedMethodNames =
         {
@@ -48,8 +53,97 @@ namespace DxMessaging.Editor.Analyzers
             "OnEnable",
             "OnDisable",
             "OnDestroy",
+            "OnApplicationFocus",
+            "OnApplicationPause",
             "RegisterMessageHandlers",
         };
+
+        /// <summary>
+        /// Guarded methods whose canonical Unity signature takes a single <c>bool</c>
+        /// (<c>OnApplicationFocus(bool focused)</c>, <c>OnApplicationPause(bool paused)</c>).
+        /// All other guarded methods are zero-argument.
+        /// </summary>
+        public static readonly HashSet<string> GuardedMethodsWithBoolSignature = new(
+            StringComparer.Ordinal
+        )
+        {
+            "OnApplicationFocus",
+            "OnApplicationPause",
+        };
+
+        /// <summary>
+        /// Per-method consequence text shown by the inspector overlay HelpBox when an override
+        /// is missing its base call. Mirrors
+        /// <c>MessageAwareComponentBaseCallAnalyzer.MissingBaseCallMessageFormatsByMethod</c>
+        /// keyed by method name. The two dictionaries MUST stay in sync; the inspector overlay
+        /// already calls <see cref="GetMissingBaseConsequenceLine"/> per missing-method row, and
+        /// the meta-test on the analyzer side keeps the analyzer's dictionary populated for every
+        /// guarded method, but a future contributor adding a new guarded method MUST update both.
+        /// ASCII-only by policy.
+        /// </summary>
+        public static readonly IReadOnlyDictionary<
+            string,
+            string
+        > MissingBaseCallMessageFormatsByMethod = new Dictionary<string, string>(
+            StringComparer.Ordinal
+        )
+        {
+            {
+                "Awake",
+                "'{0}' overrides MessageAwareComponent.Awake but does not call base.Awake(); the message registration token will never be created and handlers cannot register."
+            },
+            {
+                "OnEnable",
+                "'{0}' overrides MessageAwareComponent.OnEnable but does not call base.OnEnable(); handlers will not be re-enabled when this component is enabled."
+            },
+            {
+                "OnDisable",
+                "'{0}' overrides MessageAwareComponent.OnDisable but does not call base.OnDisable(); handlers will not be disabled when this component is disabled, causing unwanted message processing."
+            },
+            {
+                "OnDestroy",
+                "'{0}' overrides MessageAwareComponent.OnDestroy but does not call base.OnDestroy(); handlers will not be deregistered and the registration token will not be released, causing a memory leak."
+            },
+            {
+                "RegisterMessageHandlers",
+                "'{0}' overrides MessageAwareComponent.RegisterMessageHandlers but does not call base.RegisterMessageHandlers(); default string-message handlers will not be registered (override RegisterForStringMessages to suppress this warning)."
+            },
+            // Prospective entries. MessageAwareComponent does not currently declare these
+            // methods; entries exist so future changes immediately surface actionable
+            // consequence text. Keep aligned with the analyzer's dictionary.
+            {
+                "OnApplicationFocus",
+                "'{0}' overrides MessageAwareComponent.OnApplicationFocus but does not call base.OnApplicationFocus(); the messaging system may not function correctly on this component when focus changes."
+            },
+            {
+                "OnApplicationPause",
+                "'{0}' overrides MessageAwareComponent.OnApplicationPause but does not call base.OnApplicationPause(); the messaging system may not function correctly on this component when the application pauses."
+            },
+        };
+
+        private const string GenericMissingBaseCallMessageFormat =
+            "'{0}' overrides MessageAwareComponent.{1} but does not call base.{1}(); the messaging system may not function correctly on this component.";
+
+        /// <summary>
+        /// Returns the per-method consequence sentence for a given guarded method name, formatted
+        /// against the supplied type display string. Falls back to the generic format if the
+        /// method is unknown so that inserting a new guarded method does not blank the overlay.
+        /// </summary>
+        public static string GetMissingBaseConsequenceLine(string methodName, string typeDisplay)
+        {
+            string format = MissingBaseCallMessageFormatsByMethod.TryGetValue(
+                methodName ?? string.Empty,
+                out string perMethodFormat
+            )
+                ? perMethodFormat
+                : GenericMissingBaseCallMessageFormat;
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                format,
+                typeDisplay ?? string.Empty,
+                methodName ?? string.Empty
+            );
+        }
 
         private const string IgnoreAttributeFullName =
             "DxMessaging.Core.Attributes.DxIgnoreMissingBaseCallAttribute";
@@ -253,7 +347,7 @@ namespace DxMessaging.Editor.Analyzers
             // independent; we only record the FIRST classification for the leaf in
             // entry.MissingBaseFor since the overlay HelpBox shows one row per method per type.
 
-            MethodInfo declared = GetDeclaredZeroArgInstance(concrete, methodName);
+            MethodInfo declared = GetDeclaredInstance(concrete, methodName);
             if (declared == null)
             {
                 // Type does not declare this method at all; nothing to flag at this level.
@@ -349,6 +443,37 @@ namespace DxMessaging.Editor.Analyzers
                     | BindingFlags.DeclaredOnly,
                 null,
                 Type.EmptyTypes,
+                null
+            );
+        }
+
+        /// <summary>
+        /// Resolves the declared instance method for a guarded name. Most guarded methods are
+        /// zero-arg (and we look up via <see cref="GetDeclaredZeroArgInstance"/>), but the
+        /// canonical Unity signature for <c>OnApplicationFocus</c> / <c>OnApplicationPause</c>
+        /// takes a single <c>bool</c>; for those names we try the zero-arg lookup first
+        /// (defensive against an unusual subclass that declared a zero-arg variant) and fall
+        /// back to the bool variant.
+        /// </summary>
+        private static MethodInfo GetDeclaredInstance(Type type, string methodName)
+        {
+            MethodInfo zeroArg = GetDeclaredZeroArgInstance(type, methodName);
+            if (zeroArg != null)
+            {
+                return zeroArg;
+            }
+            if (!GuardedMethodsWithBoolSignature.Contains(methodName))
+            {
+                return null;
+            }
+            return type.GetMethod(
+                methodName,
+                BindingFlags.Public
+                    | BindingFlags.NonPublic
+                    | BindingFlags.Instance
+                    | BindingFlags.DeclaredOnly,
+                null,
+                new[] { typeof(bool) },
                 null
             );
         }

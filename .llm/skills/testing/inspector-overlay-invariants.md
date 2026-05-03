@@ -146,6 +146,7 @@ The invariants above depend on Unity-internal behavior. Revisit if any of these 
 
 ## See Also
 
+- [MessageAwareComponent Base-Call Contract](../unity/base-call-contract.md) -- the analyzer + IL-scanner contract whose output the inspector overlay renders.
 - `Editor/CustomEditors/MessageAwareComponentFallbackEditor.cs` -- fallback editor source and XML doc.
 - `Editor/CustomEditors/MessageAwareComponentInspectorOverlay.cs` -- overlay source with full Layout/Repaint invariant comments.
 - `Tests/Editor/MessageAwareComponentFallbackEditorTests.cs` -- regression tests.

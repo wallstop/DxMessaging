@@ -89,6 +89,12 @@ namespace DxMessaging.Tests.Runtime.Core
 
             public int RegisteredUntargeted => _inner.RegisteredUntargeted;
 
+            public int RegisteredInterceptors => _inner.RegisteredInterceptors;
+
+            public int RegisteredPostProcessors => _inner.RegisteredPostProcessors;
+
+            public int RegisteredGlobalAcceptAll => _inner.RegisteredGlobalAcceptAll;
+
             public RegistrationLog Log => _inner.Log;
 
             public long EmissionId => _inner.EmissionId;

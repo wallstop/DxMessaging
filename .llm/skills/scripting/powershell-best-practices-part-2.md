@@ -118,7 +118,7 @@ foreach ($case in $testCases) {
 }
 ```
 
-For comprehensive test coverage patterns, see [Script Test Coverage](../testing/script-test-coverage.md).
+For test coverage patterns specific to PowerShell scripts, see [Script Test Coverage](../testing/script-test-coverage.md).
 
 ## See Also
 

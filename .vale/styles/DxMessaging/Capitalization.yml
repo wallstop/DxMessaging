@@ -1,0 +1,25 @@
+extends: substitution
+message: "Use the canonical capitalization '%s' instead of '%s'."
+level: warning
+ignorecase: false
+nonword: true
+swap:
+  '\b(?:Github|github)\b': GitHub
+  '\bcsharp\b': C#
+  '\bMonobehaviour\b': MonoBehaviour
+  '\bMonobehavior\b': MonoBehaviour
+  '\bMonoBehavior\b': MonoBehaviour
+  '\bunity\b': Unity
+  '\bdxmessaging\b': DxMessaging
+  '\bDXMessaging\b': DxMessaging
+  '\bDxmessaging\b': DxMessaging
+  '\bopenupm\b': OpenUPM
+  '\bOpenUpm\b': OpenUPM
+  '\bvcontainer\b': VContainer
+  '\bVcontainer\b': VContainer
+  '\bzenject\b': Zenject
+  '\breflex\b': Reflex
+  '\broslyn\b': Roslyn
+  '\bnunit\b': NUnit
+  '\bNunit\b': NUnit
+  '\bmarkdown\b': Markdown

@@ -108,7 +108,7 @@ be treated as empty, add explicit `.trim()` checks.
 ## See Also
 
 - [JavaScript Code Quality](javascript-code-quality.md) - General JavaScript best practices
-- [Comprehensive Test Coverage](../testing/comprehensive-test-coverage.md) - Test coverage requirements
+- [Test Coverage Requirements](../testing/comprehensive-test-coverage.md) - Coverage policy for new features and fixes
 
 ## Related Links
 

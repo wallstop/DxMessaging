@@ -353,6 +353,89 @@ namespace DxMessaging.Core.MessageBus
             }
         }
 
+        public int RegisteredInterceptors
+        {
+            get
+            {
+                int count = 0;
+                count += SumInterceptorCache(_untargetedInterceptsByType);
+                count += SumInterceptorCache(_targetedInterceptsByType);
+                count += SumInterceptorCache(_broadcastInterceptsByType);
+                return count;
+            }
+        }
+
+        public int RegisteredPostProcessors
+        {
+            get
+            {
+                int count = 0;
+                foreach (HandlerCache<int, HandlerCache> entry in _postProcessingSinks)
+                {
+                    count += entry?.handlers?.Count ?? 0;
+                }
+                count += SumTargetedSinks(_postProcessingTargetedSinks);
+                count += SumTargetedSinks(_postProcessingBroadcastSinks);
+                foreach (
+                    HandlerCache<
+                        int,
+                        HandlerCache
+                    > entry in _postProcessingTargetedWithoutTargetingSinks
+                )
+                {
+                    count += entry?.handlers?.Count ?? 0;
+                }
+                foreach (
+                    HandlerCache<
+                        int,
+                        HandlerCache
+                    > entry in _postProcessingBroadcastWithoutSourceSinks
+                )
+                {
+                    count += entry?.handlers?.Count ?? 0;
+                }
+                return count;
+            }
+        }
+
+        public int RegisteredGlobalAcceptAll => _globalSinks.handlers.Count;
+
+        private static int SumInterceptorCache(MessageCache<InterceptorCache<object>> cache)
+        {
+            int count = 0;
+            foreach (InterceptorCache<object> entry in cache)
+            {
+                if (entry == null)
+                {
+                    continue;
+                }
+                foreach (KeyValuePair<int, List<object>> bucket in entry.handlers)
+                {
+                    count += bucket.Value?.Count ?? 0;
+                }
+            }
+            return count;
+        }
+
+        private static int SumTargetedSinks(
+            MessageCache<Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> cache
+        )
+        {
+            int count = 0;
+            foreach (Dictionary<InstanceId, HandlerCache<int, HandlerCache>> entry in cache)
+            {
+                if (entry == null)
+                {
+                    continue;
+                }
+                foreach (KeyValuePair<InstanceId, HandlerCache<int, HandlerCache>> kvp in entry)
+                {
+                    count += kvp.Value?.handlers?.Count ?? 0;
+                }
+            }
+            return count;
+        }
+
         public bool DiagnosticsMode
         {
             get => _diagnosticsMode;

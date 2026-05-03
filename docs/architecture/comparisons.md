@@ -34,10 +34,10 @@ These sections are auto-updated by the PlayMode comparison benchmarks in the [Co
 
 | Message Tech                       | Operations / Second | Allocations? |
 | ---------------------------------- | ------------------- | ------------ |
-| DxMessaging (Untargeted) - No-Copy | 19,410,250          | No           |
-| UniRx MessageBroker                | 17,983,998          | No           |
-| MessagePipe (Global)               | 97,769,139          | No           |
-| Zenject SignalBus                  | 2,420,160           | Yes          |
+| DxMessaging (Untargeted) - No-Copy | 19,177,424          | No           |
+| UniRx MessageBroker                | 17,990,754          | No           |
+| MessagePipe (Global)               | 97,475,572          | No           |
+| Zenject SignalBus                  | 2,381,081           | Yes          |
 
 ### Comparisons (macOS)
 
@@ -483,7 +483,7 @@ public class AchievementSystem
 #### What Problems It Solves
 
 - [x] **Decoupling:** Classes communicate without direct references
-- [x] **DI integration:** Seamless with Zenject dependency injection
+- [x] **DI integration:** Binds directly into Zenject containers
 - [x] **Testability:** Easy to mock SignalBus in tests
 - [x] **Type safety:** Strongly-typed signal classes
 - [x] **Subscriber validation:** Can enforce required subscribers

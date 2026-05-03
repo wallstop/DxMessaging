@@ -1,8 +1,11 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using NUnit.Framework;
 using WallstopStudios.DxMessaging.SourceGenerators.Analyzers;
@@ -185,6 +188,226 @@ namespace Sample
                 .ToString(),
             Is.EqualTo(methodName)
         );
+    }
+
+    // -- G3: DXMSG007 (new modifier) parametric coverage across all five guarded methods ------
+
+    [TestCase("Awake")]
+    [TestCase("OnEnable")]
+    [TestCase("OnDisable")]
+    [TestCase("OnDestroy")]
+    [TestCase("RegisterMessageHandlers")]
+    public void EachGuardedMethodWithNewModifierEmitsDxmsg007(string methodName)
+    {
+        // The pre-existing focused DXMSG007 test only covers Awake. This parametric test
+        // pins the same contract for every guarded method so a regression that changes the
+        // guarded set or the new-modifier classification cannot land silently for the other
+        // four methods.
+        string source = $$"""
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected new void {{methodName}}() { }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG007", DiagnosticSeverity.Warning);
+        AssertNoSiblings(diagnostics, "DXMSG007");
+        Diagnostic dxmsg007 = diagnostics.Single(d => d.Id == "DXMSG007");
+        Assert.That(
+            dxmsg007
+                .Location.SourceTree!.GetText()
+                .GetSubText(dxmsg007.Location.SourceSpan)
+                .ToString(),
+            Is.EqualTo(methodName)
+        );
+        Assert.That(dxmsg007.GetMessage(), Does.Contain(methodName));
+    }
+
+    // -- G4: focused DXMSG009 tests for OnDisable and OnDestroy --------------------------------
+    // Pre-existing focused tests cover OnEnable, Awake, RegisterMessageHandlers, and the no-
+    // accessibility variant. The two below mirror the OnEnable pattern so a regression that
+    // only breaks OnDisable or OnDestroy classification fails LOUDLY in a focused test rather
+    // than only in the parametric one. (Focused tests pin which method regressed; the
+    // parametric covers all methods uniformly.)
+
+    [Test]
+    public void PrivateOnDisableWithoutModifierEmitsDxmsg009()
+    {
+        string source = """
+namespace Sample
+{
+    public class BrokenThing : DxMessaging.Unity.MessageAwareComponent
+    {
+        private void OnDisable() { }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG009", DiagnosticSeverity.Warning);
+        AssertNoSiblings(diagnostics, "DXMSG009");
+        Diagnostic dxmsg009 = diagnostics.Single(d => d.Id == "DXMSG009");
+        Assert.That(dxmsg009.GetMessage(), Does.Contain("Sample.BrokenThing"));
+        Assert.That(dxmsg009.GetMessage(), Does.Contain("OnDisable"));
+        Assert.That(dxmsg009.GetMessage(), Does.Contain("CS0114"));
+        string spanText = dxmsg009
+            .Location.SourceTree!.GetText()
+            .GetSubText(dxmsg009.Location.SourceSpan)
+            .ToString();
+        Assert.That(spanText, Is.EqualTo("OnDisable"));
+    }
+
+    [Test]
+    public void PrivateOnDestroyWithoutModifierEmitsDxmsg009()
+    {
+        string source = """
+namespace Sample
+{
+    public class BrokenThing : DxMessaging.Unity.MessageAwareComponent
+    {
+        private void OnDestroy() { }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG009", DiagnosticSeverity.Warning);
+        AssertNoSiblings(diagnostics, "DXMSG009");
+        Diagnostic dxmsg009 = diagnostics.Single(d => d.Id == "DXMSG009");
+        Assert.That(dxmsg009.GetMessage(), Does.Contain("Sample.BrokenThing"));
+        Assert.That(dxmsg009.GetMessage(), Does.Contain("OnDestroy"));
+        Assert.That(dxmsg009.GetMessage(), Does.Contain("CS0114"));
+        string spanText = dxmsg009
+            .Location.SourceTree!.GetText()
+            .GetSubText(dxmsg009.Location.SourceSpan)
+            .ToString();
+        Assert.That(spanText, Is.EqualTo("OnDestroy"));
+    }
+
+    // -- G5: DXMSG006 per-method consequence text ---------------------------------------------
+    // The diagnostic message is per-method (G1); these tests pin the load-bearing consequence
+    // phrase for each method so a future generic rewrite cannot drop the actionable wording.
+
+    [Test]
+    public void Dxmsg006MessageForAwakeMentionsRegistrationToken()
+    {
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void Awake()
+        {
+            int x = 1;
+        }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
+        Diagnostic dxmsg006 = diagnostics.Single(d => d.Id == "DXMSG006");
+        Assert.That(
+            dxmsg006.GetMessage(),
+            Does.Contain("the message registration token will never be created")
+        );
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("Sample.Player"));
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("base.Awake()"));
+    }
+
+    [Test]
+    public void Dxmsg006MessageForOnEnableMentionsHandlersNotReEnabled()
+    {
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void OnEnable() { int x = 1; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
+        Diagnostic dxmsg006 = diagnostics.Single(d => d.Id == "DXMSG006");
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("handlers will not be re-enabled"));
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("base.OnEnable()"));
+    }
+
+    [Test]
+    public void Dxmsg006MessageForOnDisableMentionsUnwantedMessageProcessing()
+    {
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void OnDisable() { int x = 1; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
+        Diagnostic dxmsg006 = diagnostics.Single(d => d.Id == "DXMSG006");
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("unwanted message processing"));
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("base.OnDisable()"));
+    }
+
+    [Test]
+    public void Dxmsg006MessageForOnDestroyMentionsMemoryLeak()
+    {
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void OnDestroy() { int x = 1; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
+        Diagnostic dxmsg006 = diagnostics.Single(d => d.Id == "DXMSG006");
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("memory leak"));
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("base.OnDestroy()"));
+    }
+
+    [Test]
+    public void Dxmsg006MessageForRegisterMessageHandlersMentionsStringMessageHandlers()
+    {
+        string source = """
+namespace Sample
+{
+    public sealed class Player : DxMessaging.Unity.MessageAwareComponent
+    {
+        protected override void RegisterMessageHandlers() { int x = 1; }
+    }
+}
+""";
+
+        ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
+
+        AssertSingle(diagnostics, "DXMSG006", DiagnosticSeverity.Warning);
+        Diagnostic dxmsg006 = diagnostics.Single(d => d.Id == "DXMSG006");
+        Assert.That(
+            dxmsg006.GetMessage(),
+            Does.Contain("default string-message handlers will not be registered")
+        );
+        Assert.That(dxmsg006.GetMessage(), Does.Contain("RegisterForStringMessages"));
     }
 
     [Test]
@@ -2477,5 +2700,369 @@ namespace Sample
         ImmutableArray<Diagnostic> diagnostics = GeneratorTestUtilities.RunBaseCallAnalyzer(source);
 
         Assert.That(diagnostics, Is.Empty);
+    }
+
+    // -- G2: meta-test pinning the guarded-method invariant -----------------------------------
+
+    /// <summary>
+    /// Names recognised by Unity as engine-driven lifecycle hooks. The analyzer's guarded set is a
+    /// strict subset; any virtual-with-body lifecycle method on <c>MessageAwareComponent</c> that
+    /// is in this list AND not in the analyzer's allow-list MUST be in the guarded set.
+    /// </summary>
+    private static readonly ImmutableHashSet<string> KnownUnityLifecycleNames =
+        ImmutableHashSet.Create(
+            "Awake",
+            "Start",
+            "OnEnable",
+            "OnDisable",
+            "OnDestroy",
+            "OnApplicationQuit",
+            "OnApplicationPause",
+            "OnApplicationFocus",
+            "Reset",
+            "OnValidate",
+            "OnTransformParentChanged",
+            "OnTransformChildrenChanged",
+            "OnBecameVisible",
+            "OnBecameInvisible"
+        );
+
+    /// <summary>
+    /// Unity lifecycle hooks whose canonical signature takes a single <c>bool</c> argument.
+    /// All other Unity lifecycle hooks are zero-argument; the meta-test parameter filter accepts
+    /// either zero parameters or exactly one <c>bool</c> for these specific names.
+    /// </summary>
+    private static readonly ImmutableHashSet<string> KnownOneArgBoolLifecycleNames =
+        ImmutableHashSet.Create("OnApplicationFocus", "OnApplicationPause");
+
+    [Test]
+    public void GuardedMethodListMatchesAllVirtualLifecycleMethodsOnPublicBaseClasses()
+    {
+        // Locate the MessageAwareComponent source file by walking up from the test assembly's
+        // build output toward the repo root. The test project links the editor IL helpers; the
+        // runtime file lives at Runtime/Unity/MessageAwareComponent.cs at repo root. Going via
+        // the source file (rather than reflecting on a compiled assembly) avoids needing a Unity
+        // reference inside the dotnet-test project.
+        string macSourcePath = LocateRuntimeMessageAwareComponentSource();
+        Assert.That(
+            File.Exists(macSourcePath),
+            Is.True,
+            $"Could not locate Runtime/Unity/MessageAwareComponent.cs at expected path '{macSourcePath}'."
+        );
+
+        // The runtime file is gated on UNITY_2021_3_OR_NEWER; without that symbol the class
+        // declaration is preprocessed away and the test misses every method. Define the symbol
+        // explicitly so we see the same syntax tree the Unity compiler does.
+        CSharpParseOptions parseOptions = CSharpParseOptions.Default.WithPreprocessorSymbols(
+            "UNITY_2021_3_OR_NEWER",
+            "UNITY_EDITOR",
+            "DEBUG"
+        );
+        SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(macSourcePath), parseOptions);
+        ClassDeclarationSyntax macClass = tree.GetRoot()
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Single(c => c.Identifier.ValueText == "MessageAwareComponent");
+
+        // Enumerate every method declaration that LOOKS like a Unity lifecycle hook on the
+        // MessageAwareComponent class itself (not nested types). "Looks like" means: parameter-
+        // less, void-returning, non-static, non-generic, with a known Unity lifecycle name OR the
+        // project-specific RegisterMessageHandlers method (a framework hook the analyzer also
+        // guards). For each, classify as virtual-with-body (must be guarded) or empty
+        // intentionally (must be in the allow list).
+        HashSet<string> mustBeGuarded = new(System.StringComparer.Ordinal);
+        HashSet<string> emptyVirtuals = new(System.StringComparer.Ordinal);
+
+        foreach (
+            MethodDeclarationSyntax methodDecl in macClass.Members.OfType<MethodDeclarationSyntax>()
+        )
+        {
+            string name = methodDecl.Identifier.ValueText;
+            bool isLifecycleName = KnownUnityLifecycleNames.Contains(name);
+            bool isFrameworkHook = string.Equals(
+                name,
+                "RegisterMessageHandlers",
+                System.StringComparison.Ordinal
+            );
+            if (!isLifecycleName && !isFrameworkHook)
+            {
+                continue;
+            }
+
+            // Signature filter: only zero-arg void instance non-generic methods are Unity engine
+            // targets, EXCEPT for the canonical 1-arg-bool lifecycle hooks
+            // (`OnApplicationFocus(bool)`, `OnApplicationPause(bool)`) which are also valid Unity
+            // signatures. We accept either zero parameters or, for those specific names, exactly
+            // one bool parameter; everything else (e.g. `void OnEnable(int)`) stays filtered out.
+            int paramCount = methodDecl.ParameterList.Parameters.Count;
+            bool isOneArgBoolLifecycleHook =
+                paramCount == 1
+                && KnownOneArgBoolLifecycleNames.Contains(name)
+                && methodDecl.ParameterList.Parameters[0].Type is PredefinedTypeSyntax paramType
+                && paramType.Keyword.ValueText == "bool";
+            if (paramCount != 0 && !isOneArgBoolLifecycleHook)
+            {
+                continue;
+            }
+            if (
+                methodDecl.ReturnType is not PredefinedTypeSyntax pts
+                || pts.Keyword.ValueText != "void"
+            )
+            {
+                continue;
+            }
+            if (methodDecl.TypeParameterList is not null)
+            {
+                continue;
+            }
+            bool isStatic = methodDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.StaticKeyword));
+            bool isVirtual = methodDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.VirtualKeyword));
+            if (isStatic || !isVirtual)
+            {
+                continue;
+            }
+
+            bool bodyDoesFrameworkWork = MethodBodyHasMeaningfulStatements(methodDecl);
+            if (bodyDoesFrameworkWork)
+            {
+                mustBeGuarded.Add(name);
+            }
+            else
+            {
+                emptyVirtuals.Add(name);
+            }
+        }
+
+        // Assertion 1: every virtual method that performs framework work is in the guarded set.
+        // If a future contributor adds a new virtual `void OnApplicationFocus()` body that does
+        // framework work, this assertion fails until the guarded set, the consequence-text
+        // dictionary, and the IL scanner GuardedMethodNames are all updated together.
+        IEnumerable<string> shouldBeGuardedButIsNot = mustBeGuarded.Where(n =>
+            !MessageAwareComponentBaseCallAnalyzer.AllowListIntentionallyUnguarded.Contains(n)
+            && !ContainsOrdinal(GetGuardedMethodNamesViaReflection(), n)
+        );
+        Assert.That(
+            shouldBeGuardedButIsNot,
+            Is.Empty,
+            "MessageAwareComponent declares virtual lifecycle method(s) with a non-empty body that the analyzer does not guard. "
+                + "Add the method to GuardedMethodNames, populate MissingBaseCallMessageFormatsByMethod, "
+                + "mirror in BaseCallTypeScannerCore.GuardedMethodNames + MissingBaseCallMessageFormatsByMethod, "
+                + "OR add it to AllowListIntentionallyUnguarded if missing the base call is genuinely harmless. "
+                + "Offenders: "
+                + string.Join(", ", shouldBeGuardedButIsNot)
+        );
+
+        // Assertion 2: every method on the allow list is actually present on
+        // MessageAwareComponent and has an empty (intentionally-no-op) body. This catches the
+        // inverse drift: a refactor that renames or removes the OnApplicationQuit hook without
+        // updating the allow list.
+        foreach (
+            string allowed in MessageAwareComponentBaseCallAnalyzer.AllowListIntentionallyUnguarded
+        )
+        {
+            Assert.That(
+                emptyVirtuals.Contains(allowed) || mustBeGuarded.Contains(allowed),
+                Is.True,
+                $"Allow-list entry '{allowed}' is no longer declared as a virtual lifecycle method on MessageAwareComponent; "
+                    + "either remove it from AllowListIntentionallyUnguarded or restore the declaration."
+            );
+            Assert.That(
+                mustBeGuarded.Contains(allowed),
+                Is.False,
+                $"Allow-list entry '{allowed}' has acquired a non-empty body and now performs framework work; "
+                    + "remove from AllowListIntentionallyUnguarded and add to GuardedMethodNames + per-method consequence text."
+            );
+        }
+
+        // Assertion 3: every guarded method must have a per-method consequence-text entry. This
+        // is the safety net behind the fall-back-to-generic logic in AnalyzeMethodDeclaration:
+        // a guarded method without consequence text would emit the generic message (still useful)
+        // but signals incomplete authoring; we want this loud at test time.
+        IEnumerable<string> guardedWithoutConsequenceText = GetGuardedMethodNamesViaReflection()
+            .Where(n =>
+                !MessageAwareComponentBaseCallAnalyzer.MissingBaseCallMessageFormatsByMethod.ContainsKey(
+                    n
+                )
+            );
+        Assert.That(
+            guardedWithoutConsequenceText,
+            Is.Empty,
+            "Guarded method(s) lack a per-method consequence message in MissingBaseCallMessageFormatsByMethod. "
+                + "Add an entry describing what breaks when base.<method>() is missed. Offenders: "
+                + string.Join(", ", guardedWithoutConsequenceText)
+        );
+    }
+
+    /// <summary>
+    /// True if the method has a non-empty body that performs more than a single comment / empty
+    /// statement. We use a lenient definition: a body containing any statement at all counts as
+    /// "framework work" for the purposes of the guard contract. The only intentional zero-body
+    /// virtuals on MessageAwareComponent are <c>OnApplicationQuit</c> (which the comment marks
+    /// as "Intentionally left blank") and the demo handlers (which take a parameter and are
+    /// therefore filtered out at the signature stage).
+    /// </summary>
+    private static bool MethodBodyHasMeaningfulStatements(MethodDeclarationSyntax method)
+    {
+        if (method.ExpressionBody is not null)
+        {
+            return true;
+        }
+        if (method.Body is null)
+        {
+            return false;
+        }
+        return method.Body.Statements.Count > 0;
+    }
+
+    /// <summary>
+    /// Reflects on the analyzer's <c>GuardedMethodNames</c> field via the
+    /// InternalsVisibleTo bridge; the field is internal-static-readonly. Direct access
+    /// (without reflection) is also possible because the field is internal and the test
+    /// project sees it via InternalsVisibleTo; this helper kept the original meta-test
+    /// resilient to a rename of the field. Falls back to hard-coded names if reflection
+    /// fails (would only happen if the analyzer source rename breaks the field name; in
+    /// that case the meta-test must be updated alongside).
+    /// </summary>
+    private static IReadOnlyCollection<string> GetGuardedMethodNamesViaReflection()
+    {
+        System.Reflection.FieldInfo? field = typeof(MessageAwareComponentBaseCallAnalyzer).GetField(
+            "GuardedMethodNames",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic
+        );
+        if (field?.GetValue(null) is ImmutableHashSet<string> set)
+        {
+            return set;
+        }
+        return new[] { "Awake", "OnEnable", "OnDisable", "OnDestroy", "RegisterMessageHandlers" };
+    }
+
+    private static bool ContainsOrdinal(IReadOnlyCollection<string> set, string value)
+    {
+        foreach (string item in set)
+        {
+            if (string.Equals(item, value, System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Locates <c>Runtime/Unity/MessageAwareComponent.cs</c> by walking up from the test
+    /// assembly's load directory until a sibling <c>Runtime</c> folder appears. Resilient to
+    /// running in either <c>SourceGenerators/.../bin/Debug/...</c> or via <c>dotnet test</c>'s
+    /// alternative output layout.
+    /// </summary>
+    private static string LocateRuntimeMessageAwareComponentSource()
+    {
+        string? current =
+            Path.GetDirectoryName(
+                typeof(MessageAwareComponentBaseCallAnalyzerTests).Assembly.Location
+            ) ?? Directory.GetCurrentDirectory();
+        for (int hop = 0; hop < 10 && current is not null; hop++)
+        {
+            string candidate = Path.Combine(
+                current,
+                "Runtime",
+                "Unity",
+                "MessageAwareComponent.cs"
+            );
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+            current = Path.GetDirectoryName(current);
+        }
+        // Final fallback: assume tests run from repo root.
+        return Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "Runtime",
+            "Unity",
+            "MessageAwareComponent.cs"
+        );
+    }
+
+    // -- M2: parity tests between the analyzer's tables and the IL scanner's tables -----------
+
+    /// <summary>
+    /// The Roslyn analyzer (<see cref="MessageAwareComponentBaseCallAnalyzer"/>) and the IL
+    /// scanner (<see cref="global::DxMessaging.Editor.Analyzers.BaseCallTypeScannerCore"/>) each carry
+    /// their own copy of the per-method consequence dictionary because they live in different
+    /// assemblies (Roslyn analyzers must be self-contained; the editor scanner cannot reference
+    /// the analyzer DLL). Drift between the two would mean the inspector overlay HelpBox and
+    /// the compile-time diagnostic say different things for the same method. This test asserts
+    /// the two dictionaries are byte-for-byte equal so a single skill-page recommendation keeps
+    /// both surfaces aligned.
+    /// </summary>
+    [Test]
+    public void AnalyzerAndScannerCoreShareIdenticalMissingBaseCallMessageFormats()
+    {
+        IReadOnlyDictionary<string, string> analyzerFormats =
+            MessageAwareComponentBaseCallAnalyzer.MissingBaseCallMessageFormatsByMethod;
+        IReadOnlyDictionary<string, string> scannerFormats = global::DxMessaging
+            .Editor
+            .Analyzers
+            .BaseCallTypeScannerCore
+            .MissingBaseCallMessageFormatsByMethod;
+
+        // Set equality on keys.
+        HashSet<string> analyzerKeys = new(analyzerFormats.Keys, System.StringComparer.Ordinal);
+        HashSet<string> scannerKeys = new(scannerFormats.Keys, System.StringComparer.Ordinal);
+        Assert.That(
+            analyzerKeys.SetEquals(scannerKeys),
+            Is.True,
+            "MissingBaseCallMessageFormatsByMethod key sets diverged. Analyzer-only keys: ["
+                + string.Join(", ", analyzerKeys.Except(scannerKeys))
+                + "]; Scanner-only keys: ["
+                + string.Join(", ", scannerKeys.Except(analyzerKeys))
+                + "]. Update both dictionaries together when adding or removing a guarded method."
+        );
+
+        // Byte-for-byte value equality per key (Ordinal).
+        foreach (string key in analyzerKeys)
+        {
+            string analyzerValue = analyzerFormats[key];
+            string scannerValue = scannerFormats[key];
+            Assert.That(
+                string.Equals(analyzerValue, scannerValue, System.StringComparison.Ordinal),
+                Is.True,
+                $"MissingBaseCallMessageFormatsByMethod['{key}'] diverged between analyzer and scanner.\n"
+                    + $"  Analyzer: {analyzerValue}\n"
+                    + $"  Scanner:  {scannerValue}\n"
+                    + "Update both dictionaries to share the same per-method consequence text."
+            );
+        }
+    }
+
+    /// <summary>
+    /// Same parity contract for the guarded-method name list: the analyzer's
+    /// <c>GuardedMethodNames</c> immutable hash set must equal the scanner's
+    /// <c>GuardedMethodNames</c> array (treated as a set). Adding a guarded method without
+    /// updating both sides would mean the analyzer flags subclasses at compile time that the
+    /// IL scanner never sees, or vice versa.
+    /// </summary>
+    [Test]
+    public void AnalyzerAndScannerCoreShareIdenticalGuardedMethodNames()
+    {
+        IReadOnlyCollection<string> analyzerGuarded =
+            MessageAwareComponentBaseCallAnalyzer.GuardedMethodNames;
+        IReadOnlyCollection<string> scannerGuarded = global::DxMessaging
+            .Editor
+            .Analyzers
+            .BaseCallTypeScannerCore
+            .GuardedMethodNames;
+
+        HashSet<string> analyzerSet = new(analyzerGuarded, System.StringComparer.Ordinal);
+        HashSet<string> scannerSet = new(scannerGuarded, System.StringComparer.Ordinal);
+        Assert.That(
+            analyzerSet.SetEquals(scannerSet),
+            Is.True,
+            "GuardedMethodNames sets diverged. Analyzer-only: ["
+                + string.Join(", ", analyzerSet.Except(scannerSet))
+                + "]; Scanner-only: ["
+                + string.Join(", ", scannerSet.Except(analyzerSet))
+                + "]. Adding a guarded method requires updating both lists."
+        );
     }
 }

@@ -106,6 +106,15 @@ repos:
         stages:
           - pre-commit
         description: Enforce the doc-sample pattern catalog (e.g. no "new X().Emit()"). See .llm/skills/documentation/code-samples-must-compile.md.
+      - id: validate-docs-prose
+        name: Validate docs prose against the human-prose policy
+        entry: node scripts/validate-docs-prose.js
+        language: system
+        files: '\.(md|cs)$'
+        pass_filenames: false
+        stages:
+          - pre-commit
+        description: Enforce the human-prose policy across .md files and /// XML doc comments. See .llm/skills/documentation/human-prose-policy.md.
 
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0

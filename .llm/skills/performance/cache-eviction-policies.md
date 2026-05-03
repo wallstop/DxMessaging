@@ -72,7 +72,7 @@ status: "stable"
 
 # High-Performance Cache with Eviction Policies
 
-> **One-line summary**: Build production-ready caches with LRU/LFU/SLRU eviction, TTL expiration, and statistics using a fluent builder.
+> **One-line summary**: Build caches with LRU/LFU/SLRU eviction, TTL expiration, and statistics using a fluent builder.
 
 ## Overview
 

@@ -774,7 +774,7 @@ public class MatchStats : MessageAwareComponent {
 
 **Note:** Scriptable Object Architecture (SOA) is a debated pattern in the Unity community. It has both proponents who value its designer-friendly workflow and critics who raise concerns about scalability and maintainability. See [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptableObjectArchitecture) for one perspective on the criticisms. Teams should evaluate SOA based on their specific needs. Alternatives include dependency injection (Zenject, VContainer), reactive systems (UniRx), or messaging systems (DxMessaging, MessagePipe).
 
-That said, if your project uses or requires SOA, DxMessaging can work alongside it.
+If your project uses or requires SOA, DxMessaging can work alongside it.
 
 ### What is Scriptable Object Architecture?
 
@@ -800,7 +800,7 @@ From [Anti-ScriptableObject Architecture](https://github.com/cathei/AntiScriptab
 1. **Wrong Purpose** - ScriptableObjects are designed for immutable design data, not runtime mutable state
 1. **Redundant Complexity** - Standard C# objects achieve the same goals without SO restrictions
 1. **Inspector Dependency** - Binds architecture to Unity's GUI, complicating debugging and maintenance
-1. **Limited Scalability** - Runtime-created variables undermine the pattern; managing numerous assets becomes unwieldy
+1. **Limited Scalability** - Runtime-created variables undermine the pattern; managing hundreds of `*Variable` and `GameEvent` assets across scenes becomes unwieldy
 1. **Domain Reload Issues** - Disabled domain reloading causes ScriptableObjects to retain values unpredictably
 1. **Testability Concerns** - SO assets persist between tests, requiring manual cleanup
 
