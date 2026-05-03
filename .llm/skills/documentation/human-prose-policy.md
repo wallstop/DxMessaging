@@ -127,11 +127,12 @@ The validator's `--list-rules` flag prints the canonical set with full term list
 
 The policy is fully enforced going forward. There is no grandfather list: every violation reported by `scripts/validate-docs-prose.js` is a new defect to fix.
 
-| Layer                                     | What it covers                                             | When it runs                                 |
-| ----------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- |
-| `scripts/validate-docs-prose.js`          | All banned phrases, allow markers, exemptions              | Local pre-commit hook (CI integration TBD)   |
-| `validate-docs-prose` pre-commit hook     | Runs the JS validator on every commit touching `.md`/`.cs` | Local pre-commit                             |
-| `.vale.ini` + `.vale/styles/DxMessaging/` | Passive voice, weasel words, additional style rules        | Local-only until committed and wired into CI |
+| Layer                                     | What it covers                                            | When it runs                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/validate-docs-prose.js`          | All banned phrases, allow markers, exemptions             | Standalone CLI for ad-hoc runs; same module also called in-process by the consolidated runners below                          |
+| `run-staged-md-pipeline` pre-commit hook  | Runs the prose validator in-process on staged `.md` files | Local pre-commit (consolidated `.md` pipeline that also handles fixers, prettier, markdownlint, ascii, and code-pattern lint) |
+| `run-staged-validators` pre-commit hook   | Runs the prose validator in-process on staged `.cs` files | Local pre-commit (consolidated `.cs` validator runner that also handles ascii and code-pattern lint)                          |
+| `.vale.ini` + `.vale/styles/DxMessaging/` | Passive voice, weasel words, additional style rules       | Local-only until committed and wired into CI                                                                                  |
 
 The custom JS validator is the source of truth. The Vale configuration is additive and currently lives only in working trees; once it is committed and wired into a workflow, this row will move to "CI". File an issue if Vale flags something the JS validator missed so the `RULES` array can absorb the rule first.
 

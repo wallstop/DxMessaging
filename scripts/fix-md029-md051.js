@@ -182,10 +182,34 @@ function processMarkdownContent(content) {
     };
 }
 
-function main() {
-    const files = process.argv.slice(2);
+function printHelp() {
+    process.stdout.write(
+        [
+            "Usage: node scripts/fix-md029-md051.js <file1.md> [file2.md] ...",
+            "",
+            "Normalizes ordered-list prefixes to '1.' (MD029) and rewrites local",
+            "fragment links (#section) to match the slugged heading anchors that",
+            "GitHub and markdownlint produce (MD051).",
+            "",
+            "Options:",
+            "  -h, --help    Show this message.",
+            "",
+        ].join("\n"),
+    );
+}
+
+function main(argv) {
+    const args = argv || process.argv.slice(2);
+    const wantsHelp = args.some((arg) => arg === "-h" || arg === "--help");
+    const files = args.filter((arg) => arg !== "-h" && arg !== "--help");
+
+    if (wantsHelp) {
+        printHelp();
+        return 0;
+    }
+
     if (files.length === 0) {
-        process.exit(0);
+        return 0;
     }
 
     for (const relPath of files) {
@@ -211,6 +235,7 @@ function main() {
         fs.writeFileSync(absolutePath, result.content);
         console.log(`MD029/MD051 fixed: ${path.relative(process.cwd(), absolutePath)}`);
     }
+    return 0;
 }
 
 if (typeof module !== "undefined" && module.exports) {
@@ -220,9 +245,10 @@ if (typeof module !== "undefined" && module.exports) {
         processMarkdownContent,
         resolveFragment,
         simplifyFragment,
+        main,
     };
 }
 
 if (require.main === module) {
-    main();
+    process.exit(main(process.argv.slice(2)));
 }

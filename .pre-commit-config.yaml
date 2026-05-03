@@ -8,11 +8,12 @@ default_install_hook_types:
 repos:
   - repo: local
     hooks:
+      # perf-allow[scans-the-world-with-files]: gated to .config/dotnet-tools.json via files: regex; dotnet tool restore reads the manifest itself, so passing the staged path adds nothing
       - id: dotnet-tool-restore
         name: Install .NET tools
         entry: dotnet tool restore
         language: system
-        always_run: true
+        files: '^\.config/dotnet-tools\.json$'
         pass_filenames: false
         stages:
           - pre-commit
@@ -36,10 +37,12 @@ repos:
         language: system
         types:
           - c#
+        require_serial: true
         description: CSharpier is an opinionated C# formatter inspired by Prettier.
 
   - repo: local
     hooks:
+      # perf-allow[scans-the-world-with-files]: gated to package.json via files: regex; the bash entry reads exactly one SVG to keep the banner version in sync
       - id: sync-banner-version
         name: Sync banner version from package.json
         entry: bash scripts/sync-banner-version.sh
@@ -53,68 +56,56 @@ repos:
   - repo: local
     hooks:
       - id: prettier
-        name: Prettier (Markdown, JSON, asmdef, asmref, YAML)
-
-        entry: node scripts/run-managed-prettier.js --write
+        name: Prettier (JSON, asmdef, asmref, YAML)
+        entry: >-
+          bash -c 'if [ -f node_modules/prettier/bin/prettier.cjs ]; then
+          exec node node_modules/prettier/bin/prettier.cjs --write "$@";
+          else exec npx --yes --package=prettier@3.8.3 prettier --write "$@"; fi' --
         language: system
-        files: '(?i)\.(md|markdown|json|asmdef|asmref|ya?ml)$'
-        description: Use managed Prettier wrapper for cross-platform version parity.
-
-  - repo: local
-    hooks:
-      - id: markdown-structure-fix
-        name: Markdown structure auto-fix (headings, fences)
-        entry: node scripts/fix-md036-headings.js
-        language: system
-        files: '(?i)\.(md|markdown)$'
-        description: Auto-fix MD036 (no-emphasis-as-heading) by converting bold-only lines to headings.
-
-  - repo: local
-    hooks:
-      - id: markdown-link-fragment-list-fix
-        name: Markdown fragment/list auto-fix (MD051/MD029)
-        entry: node scripts/fix-md029-md051.js
-        language: system
-        files: '(?i)\.(md|markdown)$'
-        description: Auto-fix local heading fragment links and normalize ordered-list prefixes to 1.
-
-  - repo: local
-    hooks:
-      - id: markdownlint
-        name: markdownlint (respect repo config)
-        entry: npx --yes markdownlint-cli2@0.17.1 --fix
-        language: system
-        files: '(?i)\.(md|markdown)$'
-
-  - repo: local
-    hooks:
-      - id: validate-docs-ascii
-        name: Validate docs are ASCII-only
-        entry: node scripts/validate-docs-ascii.js
-        language: system
-        files: '\.(md|cs)$'
-        pass_filenames: false
+        files: '(?i)\.(json|asmdef|asmref|ya?ml)$'
         stages:
           - pre-commit
-        description: Enforce ASCII-only policy across .md files and /// XML doc comments. See .llm/skills/documentation/ascii-only-docs.md.
-      - id: validate-doc-code-patterns
-        name: Validate doc code samples don't use banned patterns
-        entry: node scripts/validate-doc-code-patterns.js
+        description: >-
+          Format staged JSON/YAML files in-process when local Prettier is
+          present, falling back to a pinned npx install only on cold caches.
+          Markdown files go through run-staged-md-pipeline.
+
+  - repo: local
+    hooks:
+      - id: run-staged-md-pipeline
+        name: Markdown pipeline (fixers + prettier + markdownlint + validators)
+        entry: node scripts/run-staged-md-pipeline.js
         language: system
-        files: '\.(md|cs)$'
-        pass_filenames: false
+        files: '(?i)\.(md|markdown)$'
+        exclude: "^(Library/|Temp/|node_modules/|obj/|bin/|.*/(bin|obj)/)"
+        pass_filenames: true
         stages:
           - pre-commit
-        description: Enforce the doc-sample pattern catalog (e.g. no "new X().Emit()"). See .llm/skills/documentation/code-samples-must-compile.md.
-      - id: validate-docs-prose
-        name: Validate docs prose against the human-prose policy
-        entry: node scripts/validate-docs-prose.js
+        description: >-
+          Single Node process that runs fix-md036-headings, fix-md029-md051,
+          prettier --write, markdownlint-cli2 --fix, and the three doc
+          validators (ASCII / code-patterns / prose) against staged markdown.
+          Replaces five separate hooks to eliminate per-hook Node startup cost.
+
+  - repo: local
+    hooks:
+      - id: run-staged-validators
+        name: Run staged-doc validators (ASCII / code-patterns / prose)
+        entry: node scripts/run-staged-validators.js
         language: system
-        files: '\.(md|cs)$'
-        pass_filenames: false
+        files: '\.cs$'
+        exclude: "^(Library/|Temp/|node_modules/|obj/|bin/|.*/(bin|obj)/)"
+        pass_filenames: true
         stages:
           - pre-commit
-        description: Enforce the human-prose policy across .md files and /// XML doc comments. See .llm/skills/documentation/human-prose-policy.md.
+          - pre-push
+        description: >-
+          Single Node process that batches validate-docs-ascii,
+          validate-doc-code-patterns, and validate-docs-prose against staged C#
+          files. Markdown files go through run-staged-md-pipeline at
+          pre-commit; this hook keeps validator coverage on C# XML doc comments
+          at both pre-commit and pre-push (catches changes that bypass the
+          markdown pipeline).
 
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
@@ -166,14 +157,15 @@ repos:
     hooks:
       - id: conflict-markers
         name: Fail on merge conflict markers
-        entry: bash -lc 'if rg -n -S -g "!**/.git/**" -e "^(<<<<<<<|=======|>>>>>>>)" .; then echo "Conflict markers found. Resolve merges before committing." >&2; exit 1; fi'
+        entry: bash -c 'for f in "$@"; do if grep -nE "^(<<<<<<<|=======|>>>>>>>)" "$f"; then echo "Conflict markers found in $f. Resolve merges before committing." >&2; exit 1; fi; done' --
         language: system
-        pass_filenames: false
+        pass_filenames: true
         stages:
           - pre-commit
 
   - repo: local
     hooks:
+      # perf-allow[scans-the-world-with-files]: cross-skill schema validation must read every .llm/ file to enforce ID and tag uniqueness; gated to .llm/*.md so it only fires on skill changes
       - id: validate-skills
         name: Validate LLM skill files
         entry: node scripts/validate-skills.js
@@ -184,6 +176,7 @@ repos:
           - pre-commit
           - pre-push
         description: Validate skill file schema compliance and file size limits.
+      # perf-allow[scans-the-world-with-files]: index regeneration must read every skill file to produce a stable sorted index.md; staged argv would only patch a subset
       - id: skills-index-regen
         name: Regenerate skills index.md
         entry: bash -c 'node scripts/generate-skills-index.js && { git add .llm/skills/index.md 2>/dev/null || true; }'
@@ -202,6 +195,7 @@ repos:
         stages:
           - pre-push
         description: Fail push when generated skills index is stale.
+      # perf-allow[scans-the-world-with-files]: regenerator must read package.json and the entire .llm/skills tree to compute per-category counts emitted into llms.txt; whole-tree by design
       - id: update-llms-txt
         name: Update llms.txt
         entry: bash -c 'node scripts/update-llms-txt.js && { git add llms.txt 2>/dev/null || true; }'
@@ -211,15 +205,15 @@ repos:
         stages:
           - pre-commit
         description: Regenerate llms.txt and stage it when llms inputs change.
-      - id: validate-llms-txt
-        name: Validate llms.txt generator contract
-        entry: npm run validate:llms-txt
+      - id: check-llms-txt-fresh
+        name: Verify llms.txt is up-to-date
+        entry: node scripts/update-llms-txt.js --check
         language: system
         pass_filenames: false
-        files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|scripts/__tests__/update-llms-txt\.test\.js|\.llm/skills/.*)$'
+        files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|\.llm/skills/.*)$'
         stages:
           - pre-push
-        description: Run llms.txt generator tests and freshness checks before push.
+        description: Cheap freshness check; full generator-contract tests run in CI (.github/workflows/validate-llms-txt.yml).
 
   - repo: local
     hooks:
@@ -228,14 +222,19 @@ repos:
         entry: node scripts/validate-npm-meta.js --check
         language: system
         pass_filenames: false
-        files: '^(Editor/|Runtime/|Samples~/|SourceGenerators/|.*\.meta$|.*\.md$|package\.json$|\.npmignore$|scripts/validate-npm-meta\.js|scripts/__tests__/validate-npm-meta\.test\.js)$'
+        # Triggers limited to inputs that actually change npm pack output:
+        # package.json (files array), .npmignore, .meta files, the validator
+        # itself, and source-shipping directories. Documentation .md files
+        # outside README/CHANGELOG/source dirs are not packaged, so they do
+        # not trigger this hook.
+        files: '^(package\.json|\.npmignore|.*\.meta$|scripts/(validate-npm-meta|run-managed-jest)\.js|scripts/__tests__/validate-npm-meta\.test\.js|README\.md|CHANGELOG\.md|LICENSE.*|(Editor|Runtime|Samples~|SourceGenerators)/.*\.(cs|asmdef|asmref|md|json|svg|png|txt))$'
         stages:
-          - pre-commit
           - pre-push
-        description: Validate that npm package includes all .meta files correctly.
+        description: Validate that npm package includes all .meta files. Pre-push only; see .llm/skills/performance/git-hook-performance.md.
 
   - repo: local
     hooks:
+      # perf-allow[scans-the-world-with-files]: validator reads the entire CHANGELOG.md and git-diff metadata to enforce coverage-by-section; staged argv would not narrow the changelog scan itself
       - id: validate-changelog-policy
         name: Validate changelog policy
         entry: node scripts/validate-changelog.js --check-coverage
@@ -250,6 +249,7 @@ repos:
 
   - repo: local
     hooks:
+      # perf-allow[scans-the-world-with-files]: validator parses .vscode/settings.json to enforce terminal auto-approval security; scan is bounded to one JSON file and staged argv adds nothing
       - id: validate-vscode-settings
         name: Validate VS Code settings security
         entry: node scripts/validate-vscode-settings.js
@@ -260,6 +260,7 @@ repos:
           - pre-commit
           - pre-push
         description: Reject committed terminal auto-approval settings in repository VS Code config.
+      # perf-allow[scans-the-world-with-files]: validator parses .pre-commit-config.yaml plus package.json to cross-reference hook-level policy; staged argv cannot supply that cross-reference
       - id: validate-pre-commit-tooling
         name: Validate pre-commit Node tooling policy
         entry: node scripts/validate-pre-commit-tooling.js
@@ -270,6 +271,7 @@ repos:
           - pre-commit
           - pre-push
         description: Enforce explicit npx install policy and managed Jest wrapper usage in local hooks.
+      # perf-allow[scans-the-world-with-files]: validator parses .lychee.toml against the pinned lychee schema; scan is bounded to one TOML file and staged argv adds nothing
       - id: validate-lychee-config
         name: Validate lychee configuration
         entry: node scripts/validate-lychee-config.js
@@ -287,6 +289,8 @@ repos:
           scripts/__tests__/generate-skills-index.test.js
           scripts/__tests__/prettier-version.test.js
           scripts/__tests__/run-managed-prettier.test.js
+          scripts/__tests__/cspell-version-parity.test.js
+          scripts/__tests__/prettier-version-parity.test.js
           scripts/__tests__/validate-skills-required-fields.test.js
           scripts/__tests__/validate-workflows.test.js
           scripts/__tests__/check-eol.test.js
@@ -304,12 +308,17 @@ repos:
           scripts/__tests__/pre-commit-hook-stage-policy.test.js
           scripts/__tests__/run-managed-jest.test.js
           scripts/__tests__/verify-managed-jest-fallback.test.js
+          scripts/__tests__/run-staged-validators.test.js
+          scripts/__tests__/run-staged-md-pipeline.test.js
+          scripts/__tests__/hook-perf-budget.test.js
+          scripts/__tests__/precommit-perf-score.test.js
+          scripts/__tests__/precommit-yaml.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|validate-changelog|run-managed-jest|run-managed-prettier|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|run-managed-prettier|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|validate-changelog|run-managed-jest|run-managed-prettier|run-staged-validators|run-staged-md-pipeline|verify-managed-jest-fallback)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version|precommit-yaml|precommit-perf-score|staged-doc-formatters)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version|prettier-version-parity|run-managed-prettier|cspell-version-parity|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback|run-staged-validators|run-staged-md-pipeline|hook-perf-budget|precommit-perf-score|precommit-yaml)\.test\.js)$'
         stages:
-          - pre-commit
-        description: Fail fast on parser, npm-meta, and shell-safety regressions (quote handling, frontmatter/TOML parsing, newline normalization) before push.
+          - pre-push
+        description: Fail fast on parser, npm-meta, and shell-safety regressions before push. Pre-push only; see .llm/skills/performance/git-hook-performance.md.
 
   - repo: local
     hooks:
@@ -336,11 +345,13 @@ repos:
     hooks:
       - id: cspell
         name: Check spelling
-        entry: npx --yes cspell@9 --no-progress --no-summary
+        entry: >-
+          bash -c 'if [ -f node_modules/cspell/bin.mjs ]; then
+          exec node node_modules/cspell/bin.mjs --no-progress --no-summary "$@";
+          else exec npx --yes cspell@9.3.0 --no-progress --no-summary "$@"; fi' --
         language: system
-        files: '(?i)\.(md|cs|json|ya?ml|ps1|js)$'
+        files: '(?i)\.(md|markdown|cs|json|ya?ml|ps1|js)$'
         pass_filenames: true
         stages:
-          - pre-commit
           - pre-push
-        description: Check spelling in changed files before push.
+        description: Check spelling in changed files. Pre-push only; see .llm/skills/performance/git-hook-performance.md.

@@ -14,10 +14,17 @@ const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("./lib/quote-parser");
 const { getConfiguredPrettierSpec, getPinnedPrettierSpec } = require("./lib/prettier-version");
+const {
+  scoreConfig,
+  PERF_BUDGET,
+  PER_HOOK_CEILING,
+  formatReport
+} = require("./lib/precommit-perf-score");
 
 const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
 const PACKAGE_JSON_PATH = path.join(__dirname, "..", "package.json");
-const REQUIRED_PRECHECK_PARSER_COMMAND = "pre-commit run script-parser-tests --all-files";
+const REQUIRED_PRECHECK_PARSER_COMMAND =
+  "pre-commit run --hook-stage pre-push script-parser-tests --all-files";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
 const REQUIRED_CHANGELOG_VALIDATION_COMMAND = "npm run validate:changelog:coverage";
@@ -213,8 +220,10 @@ function hasNpxInstallPolicy(entry) {
 
   // Fallback for quoted shell fragments that contain npx but were tokenized as a single token.
   // This check is intentionally lexical and does not attempt to evaluate shell expansion.
+  // The flag boundary uses (?:^|\s) on the left and (?=\s|$) on the right because
+  // \b does not match between space and a leading hyphen.
   if (/\bnpx\b/.test(entry)) {
-    return /\b(--yes|-y|--no)\b/.test(entry);
+    return /(?:^|\s)(--yes|-y|--no)(?=\s|$)/.test(entry);
   }
 
   return true;
@@ -222,10 +231,6 @@ function hasNpxInstallPolicy(entry) {
 
 function usesManagedJestWrapper(entry) {
   return /\bnode\b\s+scripts\/run-managed-jest\.js\b/.test(entry);
-}
-
-function usesManagedPrettierWrapper(entry) {
-  return /\bnode\b\s+scripts\/run-managed-prettier\.js\b/.test(entry);
 }
 
 function isJestRelatedHook(hookId, entry) {
@@ -247,12 +252,27 @@ function hasManagedJestInvocation(hookIdOrEntry, maybeEntry) {
   return usesManagedJestWrapper(entry);
 }
 
-function hasManagedPrettierInvocation(hookId, entry) {
+// Round-4: the prettier hook now inlines its bin via `bash -c` (cspell /
+// markdownlint pattern), so there is no managed-wrapper requirement to
+// enforce here. The pinned `prettier@<v>` literal in the hook entry is
+// validated against package.json devDependencies by
+// `scripts/__tests__/prettier-version-parity.test.js`.
+function hasInlinedPrettierEntry(entry) {
+  if (!/\bprettier\b/.test(entry)) {
+    return false;
+  }
+
+  const usesLocalBin = /\bnode_modules\/prettier\/bin\/prettier\.cjs\b/.test(entry);
+  const usesPinnedNpxFallback = /\bnpx\b[^&]*--package=prettier@\d+\.\d+\.\d+/.test(entry);
+  return usesLocalBin && usesPinnedNpxFallback;
+}
+
+function hasInlinedPrettierInvocation(hookId, entry) {
   if (hookId !== "prettier") {
     return true;
   }
 
-  return usesManagedPrettierWrapper(entry);
+  return hasInlinedPrettierEntry(entry);
 }
 
 function hasGuardedFixerRestagePattern(hookId, entry) {
@@ -293,12 +313,12 @@ function validateHookEntries(entries) {
       );
     }
 
-    if (!hasManagedPrettierInvocation(hook.id, hook.entry)) {
+    if (!hasInlinedPrettierInvocation(hook.id, hook.entry)) {
       violations.push(
         new Violation(
           hook.id,
           hook.line,
-          "Prettier hook must invoke node scripts/run-managed-prettier.js.",
+          "Prettier hook must inline node_modules/prettier/bin/prettier.cjs with a pinned `npx --yes --package=prettier@<version>` fallback (see scripts/__tests__/prettier-version-parity.test.js).",
           hook.entry
         )
       );
@@ -517,6 +537,42 @@ function validatePreflightScriptPolicy(
   return violations;
 }
 
+function validatePerfBudget(content) {
+  const violations = [];
+  const result = scoreConfig(content);
+  if (result.totalScore > PERF_BUDGET) {
+    violations.push(
+      new Violation(
+        "perf-budget",
+        1,
+        `Pre-commit perf score ${result.totalScore} exceeds total budget ${PERF_BUDGET}. ${formatReport(result)} See .llm/skills/performance/git-hook-performance.md.`,
+        ".pre-commit-config.yaml"
+      )
+    );
+  }
+
+  // Per-hook ceiling: each hook scoring strictly above PER_HOOK_CEILING is
+  // its own violation. The total budget catches accumulated drift; this
+  // catches single-rule regressions (a `bash -lc` (5 points) added to one
+  // entry would otherwise sit comfortably under the total budget).
+  const perHookViolations = result.perHookViolations || [];
+  for (const violation of perHookViolations) {
+    const ruleSummary = violation.contributingRules
+      .map((r) => `${r.ruleId}(+${r.score})`)
+      .join(", ");
+    violations.push(
+      new Violation(
+        "perf-budget",
+        violation.startLine,
+        `Hook '${violation.id}' score ${violation.score} exceeds per-hook ceiling ${PER_HOOK_CEILING}. Contributing rules: ${ruleSummary || "(none unwaived)"}. ${formatReport(result)} See .llm/skills/performance/git-hook-performance.md.`,
+        ".pre-commit-config.yaml"
+      )
+    );
+  }
+
+  return violations;
+}
+
 function validateConfigContent(
   content,
   {
@@ -532,7 +588,8 @@ function validateConfigContent(
     ...validatePreflightScriptPolicy(readFileSyncImpl, packageJsonPath, preCommitConfigPath),
     ...validateHookEntries(hooks),
     ...validateYamllintPolicy(content),
-    ...validatePrettierVersionResolution(getConfiguredPrettierSpecFn, getPinnedPrettierSpecFn)
+    ...validatePrettierVersionResolution(getConfiguredPrettierSpecFn, getPinnedPrettierSpecFn),
+    ...validatePerfBudget(content)
   ];
 }
 
@@ -585,15 +642,16 @@ module.exports = {
   hasRequiredChangelogValidationCommand,
   hasNpxInstallPolicy,
   usesManagedJestWrapper,
-  usesManagedPrettierWrapper,
   isJestRelatedHook,
   hasManagedJestInvocation,
-  hasManagedPrettierInvocation,
+  hasInlinedPrettierEntry,
+  hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
   validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
   validatePreflightScriptPolicy,
+  validatePerfBudget,
   PACKAGE_JSON_PATH,
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,

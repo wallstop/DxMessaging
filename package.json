@@ -79,11 +79,12 @@
     "validate:npm-meta": "node scripts/validate-npm-meta.js --check",
     "validate:pre-commit-tooling": "node scripts/validate-pre-commit-tooling.js",
     "validate:vscode-settings": "node scripts/validate-vscode-settings.js",
-    "preflight:pre-commit": "npm run check:package-json-format && npm run check:prettier:hooks && npm run validate:pre-commit-tooling && npm run check:cspell:scripts && npm run check:yaml && node scripts/generate-skills-index.js --check && npm run validate:npm-meta && npm run validate:changelog:coverage && pre-commit run script-parser-tests --all-files"
+    "preflight:pre-commit": "npm run check:package-json-format && npm run check:prettier:hooks && npm run validate:pre-commit-tooling && npm run check:cspell:scripts && npm run check:yaml && node scripts/generate-skills-index.js --check && npm run validate:npm-meta && npm run validate:changelog:coverage && pre-commit run --hook-stage pre-push script-parser-tests --all-files"
   },
   "devDependencies": {
+    "cspell": "9.3.0",
     "jest": "^30.3.0",
-    "markdownlint-cli2": "^0.22.1",
+    "markdownlint-cli2": "0.17.1",
     "prettier": "3.8.3"
   },
   "samples": [

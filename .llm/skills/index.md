@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 142   |
+| Total Skills | 144   |
 | Categories   | 8     |
 
 ---
@@ -19,7 +19,7 @@
 - [Documentation](#documentation) (27)
 - [GitHub Actions](#github-actions) (5)
 - [Packaging](#packaging) (2)
-- [Performance](#performance) (40)
+- [Performance](#performance) (42)
 - [Scripting](#scripting) (15)
 - [Solid](#solid) (15)
 - [Testing](#testing) (37)
@@ -44,7 +44,7 @@
 | [Documentation Updates and Maintenance](./documentation/documentation-updates.md)                     | [ok] 149   | [basic]        | [stable] | [risk: none] | documentation, code-comments |
 | [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)               | [ok] 182   | [basic]        | [stable] | [risk: none] | documentation, links         |
 | [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md)           | [ok] 204   | [basic]        | [stable] | [risk: none] | github-actions, ci-cd        |
-| [Human-Prose Documentation Policy](./documentation/human-prose-policy.md)                             | [ok] 186   | [basic]        | [stable] | [risk: none] | documentation, prose         |
+| [Human-Prose Documentation Policy](./documentation/human-prose-policy.md)                             | [ok] 187   | [basic]        | [stable] | [risk: none] | documentation, prose         |
 | [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)                | [ok] 120   | [basic]        | [stable] | [risk: none] | documentation, links         |
 | [Link Quality and External URL Management Part 1](./documentation/link-quality-guidelines-part-1.md)  | [ok] 196   | [intermediate] | [stable] | [risk: low]  | migration, split             |
 | [Link Quality and External URL Management Part 2](./documentation/link-quality-guidelines-part-2.md)  | [draft] 64 | [intermediate] | [stable] | [risk: low]  | migration, split             |
@@ -96,6 +96,8 @@
 | [Collection Pooling with RAII Pattern](./performance/collection-pooling.md)                                        | [draft] 119 | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
 | [Collection Pooling with RAII Pattern Part 1](./performance/collection-pooling-part-1.md)                          | [ok] 206    | [intermediate] | [stable] | [risk: low]      | migration, split      |
 | [Collection Pooling with RAII Pattern Part 2](./performance/collection-pooling-part-2.md)                          | [draft] 57  | [intermediate] | [stable] | [risk: low]      | migration, split      |
+| [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 299  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
+| [Git Hook Performance: Stages and Tooling](./performance/git-hook-performance-tooling.md)                          | [ok] 240    | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [High-Performance Cache with Eviction Policies](./performance/cache-eviction-policies.md)                          | [ok] 177    | [advanced]     | [stable] | [risk: high]     | caching, memory       |
 | [Object Pooling Anti-Patterns](./performance/object-pooling-anti-patterns.md)                                      | [ok] 145    | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
 | [Object Pooling for Zero-Allocation Messaging](./performance/object-pooling.md)                                    | [ok] 124    | [intermediate] | [stable] | [risk: high]     | memory, allocation    |

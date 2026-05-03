@@ -29,7 +29,9 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For user-visible code edits (`Runtime/`, `Samples~/`, user-facing `Editor/`, or shipped `SourceGenerators/` code), run `npm run validate:changelog:coverage` before finishing and resolve any `W002` warnings by rewriting entries around user impact.
 - When editing `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, or `.js` files, run file-scoped cspell on touched files and update `.cspell.json` in the same change for legitimate domain terms.
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
+- For dynamic `import()` in `scripts/*.js`, convert filesystem paths with `pathToFileURL(...).href` before importing (raw Windows drive-letter paths fail Node's ESM loader).
 - When editing `.pre-commit-config.yaml`, `scripts/*` hook tooling, `.github/workflows/*.yml`, or hook-related scripts in `package.json`, run `npm run preflight:pre-commit` before finishing.
+- When editing `.pre-commit-config.yaml` or hook scripts, the new performance budget test (`scripts/__tests__/hook-perf-budget.test.js`) must pass; see [Git Hook Performance Budget](./skills/performance/git-hook-performance.md).
 
 ## Build and Test Commands
 
@@ -38,7 +40,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Script tests: `npm run test:scripts`
 - Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
 - Pre-commit Node tooling preflight: `npm run preflight:pre-commit`
-- Run parser hook suite exactly as pre-commit executes it: `pre-commit run script-parser-tests --all-files`
+- Run parser hook suite exactly as pre-push executes it: `pre-commit run --hook-stage pre-push script-parser-tests --all-files`
 - Check package.json format explicitly: `npm run check:package-json-format`
 - Check hook-managed Prettier targets: `npm run check:prettier:hooks`
 - Validate YAML formatting and lint policy: `npm run check:yaml`
@@ -49,6 +51,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - File-scoped spellcheck: `npx --yes cspell@9 --no-progress --no-summary <changed-files...>`
 - Script-wide spellcheck preflight: `npm run check:cspell:scripts`
 - Note: Prettier does not auto-wrap long YAML lines; yamllint enforces the 200-character limit.
+- For long `.pre-commit-config.yaml` values (especially `description:` fields), use YAML folded scalars (`>-`) instead of single-line strings.
 - Auto-fix markdown fragments/lists: `node scripts/fix-md029-md051.js <changed-docs.md ...>`
 - Lint markdown: `npx markdownlint-cli2 <changed-docs.md ...>`
 - Validate skills + context: `node scripts/validate-skills.js`
@@ -75,12 +78,12 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For pre-commit hooks that operate on staged files, remember pre-commit stashes unstaged changes and runs hooks against the staged snapshot on disk; reproduce failures through commit-equivalent hook runs when validating behavior.
 - For auto-fix hooks that restage files, guard restaging with `git diff --quiet -- "$@" || git add "$@"` so no-op runs do not touch the git index.
 - For Jest in hooks or npm scripts, use `node scripts/run-managed-jest.js` instead of bare `jest` invocations.
-- For Prettier in hooks or npm scripts, use `node scripts/run-managed-prettier.js` instead of hardcoded `prettier@X.Y.Z` commands. The managed runner resolves versions in this order: package-lock.json, package.json, then static fallback.
+- For Prettier in npm scripts (`format:*`, `check:prettier:hooks`) and ad-hoc invocations, use `node scripts/run-managed-prettier.js` instead of hardcoded `prettier@X.Y.Z` commands. The managed runner resolves versions in this order: package-lock.json, package.json, then static fallback. Pre-commit hook entries themselves use the inline `bash -c '[ -f node_modules/prettier/bin/prettier.cjs ] && exec node ...; else exec npx --yes --package=prettier@<pinned> prettier ...; fi'` pattern (cspell/markdownlint shape) plus the parity test at `scripts/__tests__/prettier-version-parity.test.js`.
 - For `npm`/`npx` child-process calls in `scripts/*.js` (`spawnSync`, `execFileSync`, `execSync`), use `spawnPlatformCommandSync()` from `scripts/lib/shell-command.js`. Do not call `spawnSync(toShellCommand(...))` directly; the helper applies Windows shell-shim execution rules consistently.
 - For validators that depend on `git` metadata (for example ignore-policy checks), treat `ENOENT`/missing-git failures as hard errors; never silently default to permissive behavior.
 - When editing `scripts/validate-npm-meta.js`, `scripts/__tests__/validate-npm-meta.test.js`, or npm package metadata, run `npm run validate:npm-meta` before finishing.
 - When editing `scripts/fix-csharp-underscore-methods.js` or its tests, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/fix-csharp-underscore-methods.test.js` and then `npm run preflight:pre-commit` before finishing.
-- For parser-script failures, verify both isolated and hook-parity execution before concluding root cause: run the focused Jest path first, then run `pre-commit run script-parser-tests --all-files` from the same shell used for commit operations.
+- For parser-script failures, verify both isolated and hook-parity execution before concluding root cause: run the focused Jest path first, then run `pre-commit run --hook-stage pre-push script-parser-tests --all-files` from the same shell used for commit operations.
 - When editing `.pre-commit-config.yaml` or `scripts/validate-pre-commit-tooling.js`, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/pre-commit-hook-stage-policy.test.js scripts/__tests__/validate-pre-commit-tooling.test.js` before `npm run preflight:pre-commit`.
 - On Windows, verify `npm --version` in the active shell before running hook-related checks (especially when using nvm/fnm).
 - On Windows hosts, run `npm run preflight:pre-commit` in the same shell you use for `git commit` so hook PATH/init, npm version drift, package.json formatting, and yamllint issues are caught before commit.
@@ -117,9 +120,9 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For edited Markdown files, run `node scripts/fix-md029-md051.js` and then `npx markdownlint-cli2` before finishing.
 - Ordered lists must follow MD029 `one` style (`1.` for each item).
 - Internal fragment links must match GitHub/markdownlint heading slugs exactly (MD051).
-- Documentation and `///` XML doc comments must be pure ASCII; see [ASCII-Only Documentation Policy](./skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` before finishing.
-- Every C# code sample in docs - inline, fenced, and XML `<code>` blocks - must compile; see [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` and the `DocsSnippetCompilationTests` suite before finishing.
-- Documentation prose must avoid LLM-style filler, marketing adjectives, hedge transitions, and vague quantifiers; see [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md). Run `node scripts/validate-docs-prose.js` before finishing.
+- Documentation and `///` XML doc comments must be pure ASCII; see [ASCII-Only Documentation Policy](./skills/documentation/ascii-only-docs.md). Run `node scripts/validate-docs-ascii.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) before finishing.
+- Every C# code sample in docs - inline, fenced, and XML `<code>` blocks - must compile; see [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) and the `DocsSnippetCompilationTests` suite before finishing.
+- Documentation prose must avoid LLM-style filler, marketing adjectives, hedge transitions, and vague quantifiers; see [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md). Run `node scripts/validate-docs-prose.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) before finishing.
 - Subclasses of `MessageAwareComponent` MUST call `base.<method>()` from every guarded lifecycle override (`Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, `RegisterMessageHandlers`); see [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md). Five enforcement layers (Roslyn analyzer DXMSG006-010, IL scanner, Inspector overlay, runtime self-check, meta-test) keep the contract honest.
 
 ## Skills to Prefer
@@ -149,3 +152,4 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md)
 - [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md)
 - [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md)
+- [Git Hook Performance Budget](./skills/performance/git-hook-performance.md)
