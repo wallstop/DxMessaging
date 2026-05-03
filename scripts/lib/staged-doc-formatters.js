@@ -5,8 +5,10 @@
  * `scripts/run-staged-validators.js` and `scripts/run-staged-md-pipeline.js`
  * surface violations from the same three validators (validate-docs-ascii,
  * validate-doc-code-patterns, validate-docs-prose) and produce identical
- * one-line-per-violation reports. The formatters live here so the runners
- * cannot drift in their output shape -- a regression there silently breaks
+ * line-oriented reports. Most formatters return a single line; the code-
+ * pattern formatter intentionally returns a three-line block
+ * (summary + why + fix). The formatters live here so the runners cannot
+ * drift in their output shape -- a regression there silently breaks
  * IDE problem matchers and CI annotation parsers.
  *
  * Each format function takes a violation object plus a `toRepoRelative`

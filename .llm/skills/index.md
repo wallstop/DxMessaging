@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-02. Do not edit manually.
+> **Auto-generated** on 2026-05-03. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -209,7 +209,7 @@
 
 | Skill                                                                     | Lines      | Complexity     | Status   | Performance  | Tags            |
 | ------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | --------------- |
-| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 262 | [intermediate] | [stable] | [risk: none] | unity, analyzer |
+| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer |
 
 ---
 

@@ -14,8 +14,8 @@
  * `require()`s their public scanFile/scanContent surface.
  *
  * Exit codes:
- *   0  No violations across any validator.
- *   1  At least one validator reported a violation, or argv was empty.
+ *   0  No violations across any validator, or argv was empty.
+ *   1  At least one validator reported a violation.
  */
 
 "use strict";

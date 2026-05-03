@@ -151,6 +151,8 @@ namespace DxMessaging.Editor.Analyzers
         private const string MessageAwareComponentFullName =
             "DxMessaging.Unity.MessageAwareComponent";
 
+        private static readonly Type[] BoolParameterTypes = { typeof(bool) };
+
         /// <summary>
         /// Result row produced by <see cref="Scan"/>. Mirrors the Unity-facing
         /// <c>BaseCallReportEntry</c> shape but uses pure BCL collections so the helper is
@@ -281,16 +283,7 @@ namespace DxMessaging.Editor.Analyzers
             HashSet<string> ignoredMethods = new(StringComparer.Ordinal);
             foreach (string methodName in GuardedMethodNames)
             {
-                MethodInfo m = type.GetMethod(
-                    methodName,
-                    BindingFlags.Public
-                        | BindingFlags.NonPublic
-                        | BindingFlags.Instance
-                        | BindingFlags.DeclaredOnly,
-                    null,
-                    Type.EmptyTypes,
-                    null
-                );
+                MethodInfo m = GetDeclaredInstance(type, methodName);
                 if (m == null)
                 {
                     continue;
@@ -447,6 +440,20 @@ namespace DxMessaging.Editor.Analyzers
             );
         }
 
+        private static MethodInfo GetDeclaredBoolArgInstance(Type type, string methodName)
+        {
+            return type.GetMethod(
+                methodName,
+                BindingFlags.Public
+                    | BindingFlags.NonPublic
+                    | BindingFlags.Instance
+                    | BindingFlags.DeclaredOnly,
+                null,
+                BoolParameterTypes,
+                null
+            );
+        }
+
         /// <summary>
         /// Resolves the declared instance method for a guarded name. Most guarded methods are
         /// zero-arg (and we look up via <see cref="GetDeclaredZeroArgInstance"/>), but the
@@ -466,39 +473,53 @@ namespace DxMessaging.Editor.Analyzers
             {
                 return null;
             }
-            return type.GetMethod(
-                methodName,
-                BindingFlags.Public
-                    | BindingFlags.NonPublic
-                    | BindingFlags.Instance
-                    | BindingFlags.DeclaredOnly,
-                null,
-                new[] { typeof(bool) },
-                null
-            );
+            return GetDeclaredBoolArgInstance(type, methodName);
+        }
+
+        private static IEnumerable<Type[]> GetGuardedMethodSignatures(string methodName)
+        {
+            yield return Type.EmptyTypes;
+            if (GuardedMethodsWithBoolSignature.Contains(methodName))
+            {
+                yield return BoolParameterTypes;
+            }
         }
 
         private static bool BaseHasSameNamedVirtual(Type baseType, string methodName)
         {
             while (baseType != null && baseType != typeof(object))
             {
-                MethodInfo m = baseType.GetMethod(
-                    methodName,
-                    BindingFlags.Public
-                        | BindingFlags.NonPublic
-                        | BindingFlags.Instance
-                        | BindingFlags.DeclaredOnly,
-                    null,
-                    Type.EmptyTypes,
-                    null
-                );
-                if (m != null && (m.IsVirtual || m.IsAbstract))
+                foreach (Type[] parameterTypes in GetGuardedMethodSignatures(methodName))
                 {
-                    return true;
+                    MethodInfo m = baseType.GetMethod(
+                        methodName,
+                        BindingFlags.Public
+                            | BindingFlags.NonPublic
+                            | BindingFlags.Instance
+                            | BindingFlags.DeclaredOnly,
+                        null,
+                        parameterTypes,
+                        null
+                    );
+                    if (m != null && (m.IsVirtual || m.IsAbstract))
+                    {
+                        return true;
+                    }
                 }
                 baseType = baseType.BaseType;
             }
             return false;
+        }
+
+        private static Type[] GetParameterTypes(MethodInfo method)
+        {
+            ParameterInfo[] parameters = method.GetParameters();
+            Type[] parameterTypes = new Type[parameters.Length];
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                parameterTypes[i] = parameters[i].ParameterType;
+            }
+            return parameterTypes;
         }
 
         private static MethodInfo GetOverriddenMethod(MethodInfo derivedOverride)
@@ -510,6 +531,7 @@ namespace DxMessaging.Editor.Analyzers
             // (e.g. a generic intermediate that just passes through), which is exactly what the
             // chain walk needs to detect DXMSG010 at the broken link rather than the pass-through.
             Type baseType = derivedOverride.DeclaringType?.BaseType;
+            Type[] signature = GetParameterTypes(derivedOverride);
             while (baseType != null && baseType != typeof(object))
             {
                 MethodInfo m = baseType.GetMethod(
@@ -519,7 +541,7 @@ namespace DxMessaging.Editor.Analyzers
                         | BindingFlags.Instance
                         | BindingFlags.DeclaredOnly,
                     null,
-                    Type.EmptyTypes,
+                    signature,
                     null
                 );
                 if (m != null)

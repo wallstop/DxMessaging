@@ -15,6 +15,9 @@ namespace DxMessaging.Tests.Runtime.Core
 
     public sealed class TestAttributeContractTests
     {
+        private const string TestAssemblyNamePrefix = "WallstopStudios.DxMessaging.Tests";
+        private const string TestNamespacePrefix = "DxMessaging.Tests";
+
         /// <summary>
         /// Matches the C# 9 target-typed pattern <c>GameObject identifier = new(...)</c>.
         /// Used by <see cref="FixturesUsingMessagingTestBaseUseSpawnedCleanupPattern"/>
@@ -26,6 +29,19 @@ namespace DxMessaging.Tests.Runtime.Core
             @"\bGameObject\b\s+\w+\s*=\s*new\s*\(",
             RegexOptions.Compiled | RegexOptions.CultureInvariant
         );
+
+        private static bool IsDxMessagingTestAssembly(Assembly assembly)
+        {
+            string assemblyName = assembly.GetName().Name;
+            return assemblyName != null
+                && assemblyName.StartsWith(TestAssemblyNamePrefix, StringComparison.Ordinal);
+        }
+
+        private static bool IsDxMessagingTestNamespace(string namespaceName)
+        {
+            return namespaceName != null
+                && namespaceName.StartsWith(TestNamespacePrefix, StringComparison.Ordinal);
+        }
 
         [Test]
         public void UnityTestsDoNotUseTestCaseAttributes()
@@ -117,7 +133,7 @@ namespace DxMessaging.Tests.Runtime.Core
             // they cannot accidentally satisfy the triplet criterion.
             Dictionary<Type, Dictionary<string, HashSet<string>>> tripletsByFixture = new();
 
-            foreach (MethodInfo method in GetRuntimeTestMethods())
+            foreach (MethodInfo method in GetDxMessagingTestMethods())
             {
                 if (!HasAttribute<UnityTestAttribute>(method))
                 {
@@ -381,7 +397,7 @@ namespace DxMessaging.Tests.Runtime.Core
             Dictionary<Type, List<MethodInfo>> kindNamedByFixture = new();
             HashSet<Type> fixturesWithParameterization = new();
 
-            foreach (MethodInfo method in GetRuntimeTestMethods())
+            foreach (MethodInfo method in GetDxMessagingTestMethods())
             {
                 if (!HasAttribute<UnityTestAttribute>(method))
                 {
@@ -518,14 +534,7 @@ namespace DxMessaging.Tests.Runtime.Core
             HashSet<Type> messagingBaseFixtures = new();
             foreach (Assembly testAssembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                string testAssemblyName = testAssembly.GetName().Name;
-                if (
-                    testAssemblyName == null
-                    || !testAssemblyName.StartsWith(
-                        "WallstopStudios.DxMessaging.Tests",
-                        StringComparison.Ordinal
-                    )
-                )
+                if (!IsDxMessagingTestAssembly(testAssembly))
                 {
                     continue;
                 }
@@ -547,13 +556,7 @@ namespace DxMessaging.Tests.Runtime.Core
                         continue;
                     }
 
-                    if (
-                        type.Namespace == null
-                        || !type.Namespace.StartsWith(
-                            "DxMessaging.Tests.Runtime",
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (type.Namespace == null || !IsDxMessagingTestNamespace(type.Namespace))
                     {
                         continue;
                     }
@@ -707,14 +710,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                string assemblyName = assembly.GetName().Name;
-                if (
-                    assemblyName == null
-                    || !assemblyName.StartsWith(
-                        "WallstopStudios.DxMessaging.Tests",
-                        StringComparison.Ordinal
-                    )
-                )
+                if (!IsDxMessagingTestAssembly(assembly))
                 {
                     continue;
                 }
@@ -736,12 +732,7 @@ namespace DxMessaging.Tests.Runtime.Core
                         continue;
                     }
 
-                    if (
-                        !type.Namespace.StartsWith(
-                            "DxMessaging.Tests.Runtime",
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (!IsDxMessagingTestNamespace(type.Namespace))
                     {
                         continue;
                     }
@@ -798,7 +789,7 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             List<string> offenders = new();
 
-            foreach (MethodInfo method in GetRuntimeTestMethods())
+            foreach (MethodInfo method in GetDxMessagingTestMethods())
             {
                 if (
                     !HasAttribute<UnityTestAttribute>(method)
@@ -876,7 +867,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
         private static IEnumerable<MethodInfo> FindMethods(Func<MethodInfo, bool> predicate)
         {
-            return GetRuntimeTestMethods().Where(predicate);
+            return GetDxMessagingTestMethods().Where(predicate);
         }
 
         /// <summary>
@@ -888,7 +879,7 @@ namespace DxMessaging.Tests.Runtime.Core
         /// sibling test assemblies), so contract tests apply uniformly across
         /// the test surface and not just the assembly that hosts this fixture.
         /// </summary>
-        private static IEnumerable<MethodInfo> GetRuntimeTestMethods()
+        private static IEnumerable<MethodInfo> GetDxMessagingTestMethods()
         {
             BindingFlags methodFlags =
                 BindingFlags.Instance
@@ -898,14 +889,7 @@ namespace DxMessaging.Tests.Runtime.Core
 
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                string assemblyName = assembly.GetName().Name;
-                if (
-                    assemblyName == null
-                    || !assemblyName.StartsWith(
-                        "WallstopStudios.DxMessaging.Tests",
-                        StringComparison.Ordinal
-                    )
-                )
+                if (!IsDxMessagingTestAssembly(assembly))
                 {
                     continue;
                 }
@@ -927,13 +911,7 @@ namespace DxMessaging.Tests.Runtime.Core
                         continue;
                     }
 
-                    if (
-                        type.Namespace == null
-                        || !type.Namespace.StartsWith(
-                            "DxMessaging.Tests.Runtime",
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (type.Namespace == null || !IsDxMessagingTestNamespace(type.Namespace))
                     {
                         continue;
                     }

@@ -4,7 +4,7 @@ id: "base-call-contract"
 category: "unity"
 version: "1.0.0"
 created: "2026-05-02"
-updated: "2026-05-02"
+updated: "2026-05-03"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -99,6 +99,11 @@ The contract:
   guard exists so that adding a virtual body to the base class in a future
   release immediately gets DXMSG006 / DXMSG010 coverage on existing subclasses
   without an analyzer revision.
+- Scanner/reflection parity requirement: every guarded-method lookup path in
+  `BaseCallTypeScannerCore` must apply the same signature rules (declared
+  method resolution, base-virtual detection for hiding checks, override-chain
+  traversal, and method-level `[DxIgnoreMissingBaseCall]` discovery). A bool
+  fallback only in one path is a contract bug.
 - One method (`OnApplicationQuit`) is virtual but intentionally empty; missing
   the base call there is harmless. It lives on the
   `AllowListIntentionallyUnguarded` allow list.
