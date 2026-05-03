@@ -14,7 +14,9 @@
   - **`base.RegisterMessageHandlers()`** - Call this FIRST in your override to preserve default setup (including string message demos) and parent class registrations.
   - **`base.Awake()`** - Call this if you override `Awake()`, or your token won't be created (this is the #1 cause of handlers not firing).
   - **`base.OnEnable()` / `base.OnDisable()`** - Call these so the token actually enables/disables.
+  - **`base.OnDestroy()`** - Call this if you override `OnDestroy()`, or registrations leak past the component's lifetime and held references prevent GC.
   - **Never use `new` to hide Unity methods** (e.g., `new void OnEnable()`); always use `override` and call `base.*`.
+  - For the complete table of guarded methods and the exact failure mode for each, see [Inheritance and base calls](../getting-started/quick-start.md#important-inheritance-and-base-calls) in the quickstart.
 
 Registration timing
 

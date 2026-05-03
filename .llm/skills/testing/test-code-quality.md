@@ -239,5 +239,5 @@ Before committing test code, verify:
 
 ## See Also
 
-- [Comprehensive Test Coverage](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Script Test Coverage](script-test-coverage.md)

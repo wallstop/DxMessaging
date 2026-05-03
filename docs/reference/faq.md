@@ -26,6 +26,10 @@
 
 - Enable logs and diagnostics: [Diagnostics](../guides/diagnostics.md).
 
+## My MessageAwareComponent subclass does not receive messages. What is wrong?
+
+The most common cause is forgetting to call `base.Awake()` (or `base.OnEnable()`, `base.OnDisable()`, `base.OnDestroy()`, `base.RegisterMessageHandlers()`) when you override one of those methods. The framework's setup runs in those base calls; without them, your registration token is never created or your handlers never enable. The Roslyn analyzer flags this as DXMSG006. See [Inheritance and base calls](../getting-started/quick-start.md#important-inheritance-and-base-calls) for the full list of guarded methods.
+
 ## What happens if I register a listener inside a message handler?
 
 - The newly registered listener will **not** run for the current message emission. It will only become active starting with the **next** message emission.

@@ -85,7 +85,7 @@ JavaScript using Jest, even when testing PowerShell script logic.
 1. **Create test files** in `scripts/__tests__/` for each script
 1. **Implement equivalent JavaScript functions** to test PowerShell logic
 1. **Verify file paths** to catch case sensitivity issues
-1. **Test edge cases** and error handling comprehensively
+1. **Test edge cases** -- empty input, malformed input, missing files, and unexpected error paths
 1. **Use `test()` not `it()`** for all Jest test declarations
 
 ## Test Location and Naming
@@ -249,7 +249,7 @@ Before merging scripts:
 ## See Also
 
 - [Cross-Platform Compatibility](../scripting/cross-platform-compatibility.md) - Case sensitivity patterns
-- [Comprehensive Test Coverage](./comprehensive-test-coverage.md) - General test coverage requirements
+- [Test Coverage Requirements](./comprehensive-test-coverage.md) - General test coverage requirements
 - [PowerShell Best Practices](../scripting/powershell-best-practices.md) - PowerShell scripting patterns
 
 ## Changelog

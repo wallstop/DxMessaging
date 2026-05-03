@@ -7,106 +7,157 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("../lib/quote-parser");
-
-function getIndent(line) {
-    return line.length - line.trimStart().length;
-}
-
-function findHookBlock(lines, hookId) {
-    let startIndex = -1;
-    let hookIndent = -1;
-
-    for (let i = 0; i < lines.length; i++) {
-        const idMatch = /^(\s*)-\s+id:\s*([^\s#]+)\s*$/.exec(lines[i]);
-        if (!idMatch || idMatch[2].trim() !== hookId) {
-            continue;
-        }
-
-        startIndex = i;
-        hookIndent = idMatch[1].length;
-        break;
-    }
-
-    if (startIndex === -1) {
-        return null;
-    }
-
-    let endIndex = lines.length;
-    for (let i = startIndex + 1; i < lines.length; i++) {
-        const idMatch = /^(\s*)-\s+id:\s*([^\s#]+)\s*$/.exec(lines[i]);
-        if (!idMatch) {
-            continue;
-        }
-
-        if (idMatch[1].length === hookIndent) {
-            endIndex = i;
-            break;
-        }
-    }
-
-    return {
-        startLine: startIndex + 1,
-        lines: lines.slice(startIndex, endIndex),
-    };
-}
-
-function extractStagesFromHookBlock(hookBlock) {
-    if (!hookBlock) {
-        return [];
-    }
-
-    const stages = [];
-
-    for (let i = 0; i < hookBlock.lines.length; i++) {
-        const stagesMatch = /^(\s*)stages:\s*$/.exec(hookBlock.lines[i]);
-        if (!stagesMatch) {
-            continue;
-        }
-
-        const stagesIndent = stagesMatch[1].length;
-
-        for (let j = i + 1; j < hookBlock.lines.length; j++) {
-            const line = hookBlock.lines[j];
-            if (!line.trim()) {
-                continue;
-            }
-
-            const indent = getIndent(line);
-            if (indent <= stagesIndent) {
-                break;
-            }
-
-            const stageMatch = /^\s*-\s*([^\s#]+)\s*$/.exec(line);
-            if (stageMatch) {
-                stages.push(stageMatch[1].trim());
-            }
-        }
-
-        break;
-    }
-
-    return stages;
-}
+const { findHookBlock, extractStagesFromHookBlock } = require("../lib/precommit-yaml");
 
 describe("pre-commit hook stage policy", () => {
     const configPath = path.resolve(__dirname, "../../.pre-commit-config.yaml");
     const configContent = normalizeToLf(fs.readFileSync(configPath, "utf8"));
     const configLines = configContent.split("\n");
 
-    test("cspell hook runs at pre-commit and pre-push", () => {
+    test("cspell hook runs at pre-push only (perf budget)", () => {
+        // Round-3 move: spell-check is a guardrail, not a formatter, and the
+        // single biggest wall-clock cost in the pre-commit pipeline (~5.5s
+        // per invocation, ~3.6s of which is dictionary loading). Pushing the
+        // cost to pre-push keeps single-file commits under budget; CI still
+        // runs the full cspell sweep across the repo. See
+        // .llm/skills/performance/git-hook-performance.md.
         const cspellBlock = findHookBlock(configLines, "cspell");
         expect(cspellBlock).not.toBeNull();
 
         const stages = extractStagesFromHookBlock(cspellBlock);
-        expect(stages).toEqual(expect.arrayContaining(["pre-commit", "pre-push"]));
+        // Exact equality (not arrayContaining) so accidental stage drift
+        // surfaces; adding pre-commit back here would re-bust the budget.
+        expect(stages).toEqual(["pre-push"]);
     });
 
-    test("validate-npm-meta hook runs at pre-commit and pre-push", () => {
+    test("run-staged-validators hook covers staged C# at pre-commit and pre-push", () => {
+        // Round-3 consolidation: validate-docs-ascii, validate-doc-code-patterns,
+        // and validate-docs-prose share a single Node process to eliminate
+        // ~2 redundant Node spawns per hook firing (~600-1200 ms on Windows).
+        // Round-4 narrows this hook to .cs only because markdown now flows
+        // through run-staged-md-pipeline (which calls the same validators
+        // in-process alongside the formatters).
+        const block = findHookBlock(configLines, "run-staged-validators");
+        expect(block).not.toBeNull();
+
+        const stages = extractStagesFromHookBlock(block);
+        expect(stages).toEqual(expect.arrayContaining(["pre-commit", "pre-push"]));
+
+        const blockText = block.lines.join("\n");
+        expect(blockText).toContain("entry: node scripts/run-staged-validators.js");
+        expect(blockText).toContain("pass_filenames: true");
+        expect(blockText).toContain("files: '\\.cs$'");
+        expect(blockText).toContain("exclude:");
+    });
+
+    test("run-staged-md-pipeline hook owns the consolidated markdown path at pre-commit", () => {
+        // Round-4 consolidation: the previous five-hook .md path
+        // (markdown-structure-fix, markdown-link-fragment-list-fix, prettier
+        // for .md, markdownlint, and the shared run-staged-validators) was
+        // collapsed into one Node process to eliminate four cold Node starts
+        // per commit (~800-2000 ms on Windows). The new hook lives at
+        // pre-commit only because markdown is auto-fixed there; the .cs
+        // validator path keeps pre-push redundancy via run-staged-validators.
+        const block = findHookBlock(configLines, "run-staged-md-pipeline");
+        expect(block).not.toBeNull();
+
+        const stages = extractStagesFromHookBlock(block);
+        expect(stages).toEqual(["pre-commit"]);
+
+        const blockText = block.lines.join("\n");
+        expect(blockText).toContain("entry: node scripts/run-staged-md-pipeline.js");
+        expect(blockText).toContain("pass_filenames: true");
+        expect(blockText).toContain("files: '(?i)\\.(md|markdown)$'");
+        expect(blockText).toContain("exclude:");
+    });
+
+    test("legacy per-md hooks (markdown-structure-fix, markdown-link-fragment-list-fix, markdownlint) are gone after round-4", () => {
+        // The three formatter/linter blocks below were folded into
+        // run-staged-md-pipeline. If a future change re-introduces them as
+        // standalone pre-commit hooks, they will silently re-add 4-5 Node
+        // spawns per commit and bust the wall-clock budget. Surface the
+        // regression here.
+        for (const id of [
+            "markdown-structure-fix",
+            "markdown-link-fragment-list-fix",
+            "markdownlint",
+        ]) {
+            expect(findHookBlock(configLines, id)).toBeNull();
+        }
+    });
+
+    test("prettier hook narrows files filter to JSON/asmdef/asmref/YAML (markdown is owned by run-staged-md-pipeline)", () => {
+        const block = findHookBlock(configLines, "prettier");
+        expect(block).not.toBeNull();
+        const blockText = block.lines.join("\n");
+        // Round-4: markdown was removed from this filter so the in-process
+        // markdown pipeline owns the .md/.markdown path end-to-end.
+        expect(blockText).toContain("files: '(?i)\\.(json|asmdef|asmref|ya?ml)$'");
+        expect(blockText).not.toMatch(/files:\s*'.*\bmd\b/);
+    });
+
+    test("validate-llms-txt hook is gone (moved to CI); freshness check stays at pre-push", () => {
+        // Round-3 move: the previous validate-llms-txt hook ran the full
+        // generator-contract Jest suite (~9s) at every push. CI workflow
+        // .github/workflows/validate-llms-txt.yml runs the same check on
+        // every PR. The hook here is just the cheap freshness diff.
+        const stale = findHookBlock(configLines, "validate-llms-txt");
+        expect(stale).toBeNull();
+
+        const fresh = findHookBlock(configLines, "check-llms-txt-fresh");
+        expect(fresh).not.toBeNull();
+        const stages = extractStagesFromHookBlock(fresh);
+        expect(stages).toEqual(["pre-push"]);
+        const blockText = fresh.lines.join("\n");
+        expect(blockText).toContain("node scripts/update-llms-txt.js --check");
+    });
+
+    test("conflict-markers entry uses bash -c (not bash -lc) to avoid login profile cost", () => {
+        // bash -lc loads ~/.bash_profile, nvm, etc. which adds 100-500 ms
+        // for nothing on hooks. bash -c is the right tool here.
+        const block = findHookBlock(configLines, "conflict-markers");
+        expect(block).not.toBeNull();
+        const blockText = block.lines.join("\n");
+        expect(blockText).not.toContain("bash -lc");
+        expect(blockText).toContain("bash -c ");
+    });
+
+    test("validate-npm-meta hook runs at pre-push only (perf budget)", () => {
+        // Moved off pre-commit because npm pack --dry-run is too slow for the
+        // single-file commit budget. Artifact-shape checks are the right
+        // cadence for pre-push. See .llm/skills/performance/git-hook-performance.md.
         const npmMetaBlock = findHookBlock(configLines, "validate-npm-meta");
         expect(npmMetaBlock).not.toBeNull();
 
         const stages = extractStagesFromHookBlock(npmMetaBlock);
-        expect(stages).toEqual(expect.arrayContaining(["pre-commit", "pre-push"]));
+        // Exact equality (not arrayContaining) so accidental stage drift fails
+        // loudly. Adding pre-commit back here would re-introduce the budget bust.
+        expect(stages).toEqual(["pre-push"]);
+    });
+
+    test("dotnet-tool-restore files: regex matches the manifest path exactly", () => {
+        // The hook's only purpose is to react to .config/dotnet-tools.json.
+        // A regression that drops the leading anchor or accepts arbitrary
+        // .json files would silently re-trigger `dotnet tool restore` on
+        // every JSON change, blowing the perf budget.
+        const dotnetBlock = findHookBlock(configLines, "dotnet-tool-restore");
+        expect(dotnetBlock).not.toBeNull();
+
+        const filesLine = dotnetBlock.lines.find((line) => /^\s*files:/.test(line));
+        expect(filesLine).toBeTruthy();
+        const filesMatch = /files:\s*'([^']+)'/.exec(filesLine);
+        expect(filesMatch).not.toBeNull();
+        const regex = new RegExp(filesMatch[1]);
+
+        // Positive match.
+        expect(regex.test(".config/dotnet-tools.json")).toBe(true);
+
+        // Negative cases that an over-broad regex would accept.
+        expect(regex.test("dotnet-tools.json")).toBe(false);
+        expect(regex.test("foo/.config/dotnet-tools.json")).toBe(false);
+        expect(regex.test(".config/dotnet-tools.json.bak")).toBe(false);
+        expect(regex.test(".config/dotnet-tools-json")).toBe(false);
+        expect(regex.test("a.config/dotnet-tools.json")).toBe(false);
     });
 
     test("validate-changelog-policy hook runs at pre-commit/pre-push and excludes internal Editor code", () => {

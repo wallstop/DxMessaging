@@ -1,0 +1,16 @@
+extends: substitution
+message: "Hedge transition '%s'; lead with the fact (%s)."
+level: warning
+ignorecase: true
+nonword: true
+swap:
+  '\bFurthermore\b,?': "remove the transition; lead with the new fact"
+  '\bMoreover\b,?': "remove the transition; lead with the new fact"
+  '\bIn conclusion\b,?': "remove or replace with a concrete summary"
+  '\bIn essence\b,?': "remove and state the point directly"
+  '\bIn summary\b,?': "remove or replace with a concrete summary"
+  "It's important to note": "state the fact directly"
+  "It's worth noting": "state the fact directly"
+  '\bThat said\b,?': "remove or replace with the contrast directly"
+  '\bOverall\b,?': "remove or replace with a concrete summary"
+  '\bUltimately\b,?': "remove or replace with the actual conclusion"

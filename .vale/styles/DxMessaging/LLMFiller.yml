@@ -1,0 +1,22 @@
+extends: substitution
+message: "LLM-signature filler '%s'; rewrite with concrete language (%s)."
+level: error
+ignorecase: true
+nonword: false
+swap:
+  delve into: "discuss or describe"
+  delving into: "discussing or describing"
+  delved into: "discussed or described"
+  delves into: "discusses or describes"
+  harness the power: "use"
+  navigate the complexities: "handle the details of"
+  unlock the potential: "use the feature to"
+  tapestry: "remove"
+  realm of: "remove or replace with the topic name"
+  dive deep into: "explain in detail"
+  dive into: "explain or cover"
+  at the heart of: "the core of"
+  lies the: "is the"
+  treasure trove: "set or collection"
+  it goes without saying: "remove"
+  needless to say: "remove"

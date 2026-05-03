@@ -14,9 +14,10 @@
   },
   "containerEnv": {
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
-    "DOTNET_NOLOGO": "1"
+    "DOTNET_NOLOGO": "1",
+    "NPM_CONFIG_PREFIX": "/home/vscode/.local"
   },
-  "postCreateCommand": "(dotnet tool restore || true) && (npm install || true) && git config --global --add safe.directory ${containerWorkspaceFolder} && (tldr --update || true) && (pre-commit install --install-hooks || true)",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -27,6 +28,7 @@
         "GitHub.copilot",
         "GitHub.copilot-chat",
         "anthropic.claude-code",
+        "openai.chatgpt",
         "streetsidesoftware.code-spell-checker",
         "DavidAnson.vscode-markdownlint",
         "yzhang.markdown-all-in-one"

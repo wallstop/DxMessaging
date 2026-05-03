@@ -163,7 +163,7 @@ CollectionAssert.AreEquivalent(
 
 ## See Also
 
-- [Comprehensive Test Coverage](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Unity Considerations and Anti-Patterns](test-coverage-unity-anti-patterns.md)
 
 ## Changelog

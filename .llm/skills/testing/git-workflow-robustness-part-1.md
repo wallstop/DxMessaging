@@ -177,7 +177,7 @@ Before merging code with git commands or parsers:
 
 ## See Also
 
-- [Comprehensive Test Coverage](../testing/comprehensive-test-coverage.md) - Detailed testing
+- [Test Coverage Requirements](../testing/comprehensive-test-coverage.md) - Detailed testing
   strategies
 - [Documentation Updates](../documentation/documentation-updates.md) - Keeping docs in sync
 - [Shell Pattern Matching](../../context.md#shell-pattern-matching) - Main context file patterns

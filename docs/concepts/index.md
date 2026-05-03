@@ -12,7 +12,7 @@ This section explains the core concepts behind DxMessaging. **Concepts** are the
 
 ## Core Concepts
 
-- **[Message Types](message-types.md)** -- Deep dive into Untargeted, Targeted, and Broadcast messages with code examples and decision guides.
+- **[Message Types](message-types.md)** -- The three categories (Untargeted, Targeted, Broadcast) with code examples and decision guides.
 
 - **[Targeting and Context](targeting-and-context.md)** -- How DxMessaging uses GameObjects and Components as message context, and the role of `InstanceId`.
 

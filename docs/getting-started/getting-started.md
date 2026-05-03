@@ -107,6 +107,14 @@ var heal = new Heal(10);
 heal.EmitGameObjectTargeted(playerGameObject);
 ```
 
+### Important: Inheritance and base calls
+
+> **Important**
+>
+> If you override `Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, or `RegisterMessageHandlers` on a `MessageAwareComponent`, your override **must** call the matching base method first. Forgetting any of them silently breaks message dispatch on the component -- no errors, no compile failure, just dead handlers. The Roslyn analyzer raises DXMSG006 and the [Inspector overlay](../guides/inspector-overlay.md) shows a HelpBox once the code is on disk.
+
+For the full table of guarded methods and the exact failure mode for each, see [Inheritance and base calls](quick-start.md#important-inheritance-and-base-calls) in the quickstart and [DXMSG006 in the analyzer reference](../reference/analyzers.md#dxmsg006-missing-base-call).
+
 ## Message Types
 
 ### New to messaging? Use this decision tree

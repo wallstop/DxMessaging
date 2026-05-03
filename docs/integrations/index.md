@@ -1,10 +1,10 @@
 # DI Framework Integrations
 
-DxMessaging integrates seamlessly with popular Unity dependency injection (DI) frameworks. This section covers how to combine DxMessaging's reactive event system with constructor-based dependency injection for a powerful, scalable architecture.
+DxMessaging integrates with three Unity DI frameworks: VContainer, Zenject, and Reflex. This section shows how to bind `IMessageBus` in each container, use scoped lifetimes for per-scene buses, and inject `IMessageRegistrationBuilder` so handlers stay testable.
 
 ## Why Combine DI + Messaging?
 
-Use the best of both worlds:
+DI and messaging cover different concerns:
 
 - **Constructor Injection** -- for service dependencies (repositories, managers, configuration)
 - **Messaging** -- for reactive events (damage taken, item collected, game state changes)

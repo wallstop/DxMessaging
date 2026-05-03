@@ -149,7 +149,7 @@ Three layers, all wired up:
 
 1. **`scripts/validate-docs-ascii.js`** - the runtime check, exits non-zero on any banned character. Reports `file:line:column` with codepoint and char.
 1. **`scripts/normalize-docs-ascii.js`** - the auto-fixer, idempotent, applies the substitution table. Run with `--check` for a dry run.
-1. **Pre-commit hook** (`validate-docs-ascii` in `.pre-commit-config.yaml`) and **CI workflow** (`.github/workflows/docs-lint.yml`) run the validator on every commit and PR.
+1. **Pre-commit hooks** - the validator runs as part of `run-staged-md-pipeline` (for `.md` / `.markdown` files) and `run-staged-validators` (for `.cs` files) in `.pre-commit-config.yaml`. The standalone CLI `node scripts/validate-docs-ascii.js` is preserved for ad-hoc invocations. The same validator runs on every PR via the **CI workflow** at `.github/workflows/docs-lint.yml`.
 
 ## How to Fix Violations
 

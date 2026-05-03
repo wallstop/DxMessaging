@@ -539,6 +539,145 @@ public sealed class BaseCallTypeScannerTests
     }
 
     [Test]
+    public void ScanBoolSignatureOverrideWithoutBaseReportsDxmsg006()
+    {
+        Assembly fixture = CompileFixture(
+            """
+            using DxMessaging.Unity;
+
+            public class FocusBase : MessageAwareComponent
+            {
+                protected virtual void OnApplicationFocus(bool focused) { }
+            }
+
+            public class BrokenFocusLeaf : FocusBase
+            {
+                protected override void OnApplicationFocus(bool focused)
+                {
+                    // No base call.
+                }
+            }
+            """
+        );
+
+        Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
+            BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
+
+        Assert.That(snapshot, Contains.Key("BrokenFocusLeaf"));
+        BaseCallTypeScannerCore.ScanEntry entry = snapshot["BrokenFocusLeaf"];
+        Assert.That(entry.MissingBaseFor, Is.EquivalentTo(new[] { "OnApplicationFocus" }));
+        Assert.That(entry.DiagnosticIds, Is.EquivalentTo(new[] { "DXMSG006" }));
+    }
+
+    [Test]
+    public void ScanBoolSignatureHidingWithNewReportsDxmsg007()
+    {
+        Assembly fixture = CompileFixture(
+            """
+            using DxMessaging.Unity;
+
+            public class PauseBase : MessageAwareComponent
+            {
+                protected virtual void OnApplicationPause(bool paused) { }
+            }
+
+            public class HiddenPauseLeaf : PauseBase
+            {
+                protected new void OnApplicationPause(bool paused)
+                {
+                    // Hides via explicit `new`.
+                }
+            }
+            """
+        );
+
+        Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
+            BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
+
+        Assert.That(snapshot, Contains.Key("HiddenPauseLeaf"));
+        BaseCallTypeScannerCore.ScanEntry entry = snapshot["HiddenPauseLeaf"];
+        Assert.That(entry.MissingBaseFor, Is.EquivalentTo(new[] { "OnApplicationPause" }));
+        Assert.That(entry.DiagnosticIds, Is.EquivalentTo(new[] { "DXMSG007" }));
+    }
+
+    [Test]
+    public void ScanBoolSignatureBrokenIntermediateReportsDxmsg010OnLeaf()
+    {
+        Assembly fixture = CompileFixture(
+            """
+            using DxMessaging.Unity;
+
+            public class FocusRoot : MessageAwareComponent
+            {
+                protected virtual void OnApplicationFocus(bool focused) { }
+            }
+
+            public class BrokenFocusMiddle : FocusRoot
+            {
+                protected override void OnApplicationFocus(bool focused)
+                {
+                    // No base call; chain breaks here.
+                }
+            }
+
+            public class FocusLeaf : BrokenFocusMiddle
+            {
+                protected override void OnApplicationFocus(bool focused)
+                {
+                    base.OnApplicationFocus(focused);
+                }
+            }
+            """
+        );
+
+        Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
+            BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
+
+        Assert.That(snapshot, Contains.Key("BrokenFocusMiddle"));
+        Assert.That(
+            snapshot["BrokenFocusMiddle"].DiagnosticIds,
+            Is.EquivalentTo(new[] { "DXMSG006" })
+        );
+
+        Assert.That(snapshot, Contains.Key("FocusLeaf"));
+        Assert.That(snapshot["FocusLeaf"].DiagnosticIds, Is.EquivalentTo(new[] { "DXMSG010" }));
+        Assert.That(
+            snapshot["FocusLeaf"].MissingBaseFor,
+            Is.EquivalentTo(new[] { "OnApplicationFocus" })
+        );
+    }
+
+    [Test]
+    public void ScanBoolSignatureMethodLevelIgnoreAttributeSuppressesAnnotatedMethod()
+    {
+        Assembly fixture = CompileFixture(
+            """
+            using DxMessaging.Unity;
+            using DxMessaging.Core.Attributes;
+
+            public class FocusBase : MessageAwareComponent
+            {
+                protected virtual void OnApplicationFocus(bool focused) { }
+            }
+
+            public class FocusIgnoredLeaf : FocusBase
+            {
+                [DxIgnoreMissingBaseCall]
+                protected override void OnApplicationFocus(bool focused)
+                {
+                    // Broken but explicitly suppressed.
+                }
+            }
+            """
+        );
+
+        Dictionary<string, BaseCallTypeScannerCore.ScanEntry> snapshot =
+            BaseCallTypeScannerCore.Scan(EnumerateMacSubclasses(fixture), null);
+
+        Assert.That(snapshot, Does.Not.ContainKey("FocusIgnoredLeaf"));
+    }
+
+    [Test]
     public void ScanTwoBrokenMethodsOnSameTypeFoldedIntoSingleEntry()
     {
         // Spec 2b: a single type with TWO broken overrides (Awake AND OnEnable) must produce

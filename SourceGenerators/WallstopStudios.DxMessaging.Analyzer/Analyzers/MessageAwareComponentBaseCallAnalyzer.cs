@@ -1,5 +1,6 @@
 namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
 {
+    using System;
     using System.Collections.Generic;
     using System.Collections.Immutable;
     using System.Linq;
@@ -76,20 +77,99 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
         private const string MissingBaseCallTitle =
             "Missing base call in MessageAwareComponent override";
 
+        // G1: generic fallback retained as a safety net. The analyzer normally selects the
+        // per-method consequence text from <see cref="MissingBaseCallMessageFormatsByMethod"/>;
+        // if a future contributor adds a new guarded method without populating the dictionary the
+        // generic format keeps the diagnostic intact (and the
+        // <c>GuardedMethodListMatchesAllVirtualLifecycleMethodsOnPublicBaseClasses</c> meta-test
+        // catches the omission so the slip cannot reach a release build).
         private const string MissingBaseCallMessageFormat =
             "'{0}' overrides MessageAwareComponent.{1} but does not call base.{1}(); the messaging system may not function correctly on this component.";
 
         private const string HelpLinkBase =
             "https://github.com/wallstop/DxMessaging/blob/master/docs/reference/analyzers.md#";
 
-        private static readonly ImmutableHashSet<string> GuardedMethodNames =
+        internal static readonly ImmutableHashSet<string> GuardedMethodNames =
             ImmutableHashSet.Create(
                 "Awake",
                 "OnEnable",
                 "OnDisable",
                 "OnDestroy",
+                "OnApplicationFocus",
+                "OnApplicationPause",
                 RegisterMessageHandlersMethodName
             );
+
+        /// <summary>
+        /// Guarded methods whose canonical Unity signature takes a single <c>bool</c>
+        /// (<c>OnApplicationFocus(bool focused)</c>, <c>OnApplicationPause(bool paused)</c>).
+        /// All other guarded methods are zero-argument. Used to relax the DXMSG009
+        /// signature filter for these specific names so an implicit hide of the bool-arg
+        /// variant is also surfaced. <see cref="MessageAwareComponent"/> does NOT currently
+        /// declare these methods; they are guarded prospectively so that adding a virtual
+        /// body in a future release immediately gets DXMSG006 / DXMSG010 coverage on
+        /// existing subclasses without a separate analyzer revision.
+        /// </summary>
+        internal static readonly ImmutableHashSet<string> GuardedMethodsWithBoolSignature =
+            ImmutableHashSet.Create("OnApplicationFocus", "OnApplicationPause");
+
+        /// <summary>
+        /// Lifecycle methods that <see cref="MessageAwareComponent"/> declares as virtual but whose
+        /// base body is intentionally empty. Adding them to <see cref="GuardedMethodNames"/> would
+        /// produce noise without protecting any real framework work; the meta-test
+        /// <c>GuardedMethodListMatchesAllVirtualLifecycleMethodsOnPublicBaseClasses</c> uses this
+        /// allow-list to assert that any other virtual lifecycle method MUST be guarded.
+        /// </summary>
+        internal static readonly ImmutableHashSet<string> AllowListIntentionallyUnguarded =
+            ImmutableHashSet.Create("OnApplicationQuit");
+
+        /// <summary>
+        /// Per-method consequence text for DXMSG006. Each entry tells the user precisely what
+        /// breaks at runtime when the corresponding base call is missing, so the diagnostic
+        /// (and the inspector overlay HelpBox, which mirrors this dictionary in
+        /// <c>BaseCallTypeScannerCore.MissingBaseCallMessageFormatsByMethod</c>) is actionable
+        /// rather than generic. ASCII-only by policy. New guarded methods MUST add an entry here
+        /// or the meta-test will fail.
+        /// </summary>
+        internal static readonly ImmutableDictionary<
+            string,
+            string
+        > MissingBaseCallMessageFormatsByMethod = new[]
+        {
+            new KeyValuePair<string, string>(
+                "Awake",
+                "'{0}' overrides MessageAwareComponent.Awake but does not call base.Awake(); the message registration token will never be created and handlers cannot register."
+            ),
+            new KeyValuePair<string, string>(
+                "OnEnable",
+                "'{0}' overrides MessageAwareComponent.OnEnable but does not call base.OnEnable(); handlers will not be re-enabled when this component is enabled."
+            ),
+            new KeyValuePair<string, string>(
+                "OnDisable",
+                "'{0}' overrides MessageAwareComponent.OnDisable but does not call base.OnDisable(); handlers will not be disabled when this component is disabled, causing unwanted message processing."
+            ),
+            new KeyValuePair<string, string>(
+                "OnDestroy",
+                "'{0}' overrides MessageAwareComponent.OnDestroy but does not call base.OnDestroy(); handlers will not be deregistered and the registration token will not be released, causing a memory leak."
+            ),
+            new KeyValuePair<string, string>(
+                RegisterMessageHandlersMethodName,
+                "'{0}' overrides MessageAwareComponent.RegisterMessageHandlers but does not call base.RegisterMessageHandlers(); default string-message handlers will not be registered (override RegisterForStringMessages to suppress this warning)."
+            ),
+            // OnApplicationFocus / OnApplicationPause are guarded prospectively. MessageAwareComponent
+            // does not currently declare these methods, so the analyzer never actually fires DXMSG006
+            // for them today; the entries exist so that adding a virtual body to the base class in a
+            // future release immediately produces actionable per-method consequence text without an
+            // analyzer revision. The meta-test forces these dictionaries to mirror GuardedMethodNames.
+            new KeyValuePair<string, string>(
+                "OnApplicationFocus",
+                "'{0}' overrides MessageAwareComponent.OnApplicationFocus but does not call base.OnApplicationFocus(); the messaging system may not function correctly on this component when focus changes."
+            ),
+            new KeyValuePair<string, string>(
+                "OnApplicationPause",
+                "'{0}' overrides MessageAwareComponent.OnApplicationPause but does not call base.OnApplicationPause(); the messaging system may not function correctly on this component when the application pauses."
+            ),
+        }.ToImmutableDictionary(StringComparer.Ordinal);
 
         private static readonly DiagnosticDescriptor MissingBaseCallDescriptor = new(
             id: MissingBaseCallDiagnosticId,
@@ -212,13 +292,25 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
             // non-static, non-generic; so unrelated overloads like `void OnEnable(int)`,
             // unrelated static helpers, and `void Awake<T>()` (which coexists with the base method
             // because of differing generic arity and does not trigger CS0114) all stay silent.
+            // Special case: OnApplicationFocus / OnApplicationPause have a canonical Unity
+            // signature `(bool)`; for those names we accept either zero parameters OR exactly one
+            // bool parameter so an implicit hide of the bool variant also surfaces.
+            bool signatureMatchesLifecycleShape =
+                methodSymbol.ReturnsVoid
+                && !methodSymbol.IsGenericMethod
+                && (
+                    methodSymbol.Parameters.Length == 0
+                    || (
+                        GuardedMethodsWithBoolSignature.Contains(methodName)
+                        && methodSymbol.Parameters.Length == 1
+                        && methodSymbol.Parameters[0].Type.SpecialType == SpecialType.System_Boolean
+                    )
+                );
             bool wouldFireMissingModifier =
                 !hasNewModifier
                 && !hasOverrideModifier
                 && !hasStaticModifier
-                && !methodSymbol.IsGenericMethod
-                && methodSymbol.ReturnsVoid
-                && methodSymbol.Parameters.Length == 0;
+                && signatureMatchesLifecycleShape;
 
             // Bail when this method does not match any of our diagnostic shapes. This protects
             // unrelated methods on subclasses (e.g., a private helper named `Awake` that takes a
@@ -365,6 +457,23 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
             string typeDisplay = containingType.ToDisplayString();
             Location location = methodDecl.Identifier.GetLocation();
 
+            // G1: select per-method consequence text. The dictionary's keys are the same set as
+            // GuardedMethodNames, but we fall back to the generic format defensively so that
+            // adding a guarded method without populating the dictionary still produces a usable
+            // (if generic) diagnostic. The meta-test forces the dictionary to stay aligned.
+            string consequenceFormat = MissingBaseCallMessageFormatsByMethod.TryGetValue(
+                methodName,
+                out string perMethodFormat
+            )
+                ? perMethodFormat
+                : MissingBaseCallMessageFormat;
+            string formattedMessage = string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                consequenceFormat,
+                typeDisplay,
+                methodName
+            );
+
             // Smart-case: lower DXMSG006 to Info when the class also overrides
             // RegisterForStringMessages and that override returns the literal `false`.
             // We keep the id stable as DXMSG006 by constructing the lowered Diagnostic via the
@@ -375,12 +484,6 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 && ClassOverridesRegisterForStringMessagesAsFalse(containingType)
             )
             {
-                string formattedMessage = string.Format(
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    MissingBaseCallMessageFormat,
-                    typeDisplay,
-                    methodName
-                );
                 Diagnostic loweredDiagnostic = Diagnostic.Create(
                     id: MissingBaseCallDiagnosticId,
                     category: Category,
@@ -400,9 +503,26 @@ namespace WallstopStudios.DxMessaging.SourceGenerators.Analyzers
                 return;
             }
 
-            context.ReportDiagnostic(
-                Diagnostic.Create(MissingBaseCallDescriptor, location, typeDisplay, methodName)
+            // Standard DXMSG006 path; emit with the per-method consequence message. We call
+            // Diagnostic.Create with the descriptor only for the metadata (id, category,
+            // severity, help link), and supply the formatted message explicitly via the
+            // string-id overload so our per-method wording reaches the consumer verbatim.
+            Diagnostic perMethodDiagnostic = Diagnostic.Create(
+                id: MissingBaseCallDiagnosticId,
+                category: Category,
+                message: formattedMessage,
+                severity: DiagnosticSeverity.Warning,
+                defaultSeverity: DiagnosticSeverity.Warning,
+                isEnabledByDefault: true,
+                warningLevel: 1,
+                title: MissingBaseCallTitle,
+                description: null,
+                helpLink: HelpLinkBase + "dxmsg006",
+                location: location,
+                additionalLocations: null,
+                customTags: null
             );
+            context.ReportDiagnostic(perMethodDiagnostic);
         }
 
         private static bool StrictlyInheritsFromMessageAwareComponent(INamedTypeSymbol type)

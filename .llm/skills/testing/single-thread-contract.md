@@ -187,7 +187,7 @@ review.
 
 - [Tests Must Be Parameterized by Message Kind](tests-must-be-parameterized-by-message-kind.md)
 - [Allocation Coverage Required for Dispatch](allocation-coverage-required-for-dispatch.md)
-- [Comprehensive Test Coverage Requirements](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 
 ## References
 

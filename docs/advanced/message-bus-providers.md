@@ -150,7 +150,7 @@ public class DiagnosticLogger : MonoBehaviour
 - A ScriptableObject provider (design-time configuration)
 - A runtime provider instance (runtime configuration)
 
-This gives you the best of both worlds: editor-friendly assets and runtime flexibility.
+The handle resolves the runtime provider when one is set; otherwise it resolves the asset. That way the same field accepts an editor-assigned ScriptableObject or a runtime override without branching at every call site.
 
 ### Key Methods
 

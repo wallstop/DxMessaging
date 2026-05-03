@@ -110,7 +110,7 @@ Three layers, all wired up. The two layers split responsibility cleanly:
    - `DocumentationSnippetsCompile` - fenced ` ```csharp ` blocks across `docs/`.
    - `InlineTableSnippetsCompile` - inline backtick code spans inside table rows. Filtered via `IsApiSignatureDocumentation` and a "must contain `(` and end with `)` or `;`" heuristic so single identifiers and bare type names don't get tested.
    - `XmlDocCodeBlocksCompile` - `<code>...</code>` and `<example><code>...</code></example>` blocks across `Runtime/`, `Editor/`, `SourceGenerators/`.
-1. **Pre-commit hook** (`validate-doc-code-patterns` in `.pre-commit-config.yaml`) and **CI workflow** (`.github/workflows/docs-lint.yml`).
+1. **Pre-commit hooks** - the validator runs as part of `run-staged-md-pipeline` (for `.md` / `.markdown` files) and `run-staged-validators` (for `.cs` files) in `.pre-commit-config.yaml`. The standalone CLI `node scripts/validate-doc-code-patterns.js` is preserved for ad-hoc invocations. The same validator runs on every PR via the **CI workflow** at `.github/workflows/docs-lint.yml`.
 
 The harness uses a minimal stub set (`GeneratorTestUtilities.SharedStubs`) rather than the full runtime, so doc snippets that reference real DxMessaging APIs without redeclaring them work. The corresponding diagnostic IDs (`CS0103`, `CS0246`, `CS1061`, etc., for missing identifiers and types) are tolerated via `IgnoredSnippetDiagnosticIds` so the test focuses on real semantic bugs that don't depend on external symbols. The trade-off: stub coverage gaps require ignoring `CS1510`, which means the textual lint is the only mechanism that catches the struct-rvalue-Emit bug class.
 

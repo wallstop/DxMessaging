@@ -243,7 +243,7 @@ common drift point.
 ## See Also
 
 - [Tests Must Be Parameterized by Message Kind](tests-must-be-parameterized-by-message-kind.md)
-- [Comprehensive Test Coverage Requirements](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Test Categories for Selective Execution](test-categories.md)
 - [Single Thread Contract](single-thread-contract.md)
 

@@ -108,6 +108,51 @@ function findNonPortableNpmCommandViolations(filePath) {
     return violations;
 }
 
+function findUnsafeDynamicImportSpecifierViolationsInContent(content) {
+    const violations = [];
+    const lines = content.split("\n");
+    const lookaheadLines = 4;
+
+    const safeSpecifierPattern =
+        /import\(\s*(?:pathToFileURL\(|toImportFileUrl\(|["'`](?:\.{1,2}\/|\/|file:|data:|node:))/;
+
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        const trimmed = line.trim();
+
+        if (!line.includes("import(")) {
+            continue;
+        }
+
+        if (
+            trimmed.startsWith("//") ||
+            trimmed.startsWith("/*") ||
+            trimmed.startsWith("*")
+        ) {
+            continue;
+        }
+
+        const snippet = lines
+            .slice(index, Math.min(lines.length, index + lookaheadLines))
+            .join(" ");
+
+        if (!safeSpecifierPattern.test(snippet)) {
+            violations.push({
+                line: index + 1,
+                source: trimmed,
+                reason: "unsafe-dynamic-import-specifier",
+            });
+        }
+    }
+
+    return violations;
+}
+
+function findUnsafeDynamicImportSpecifierViolations(filePath) {
+    const content = normalizeToLf(fs.readFileSync(filePath, "utf8"));
+    return findUnsafeDynamicImportSpecifierViolationsInContent(content);
+}
+
 describe("detect-shell-redirection-antipattern", () => {
     test("production scripts avoid shell redirection in child_process command strings", () => {
         const scriptsRoot = path.resolve(__dirname, "..");
@@ -121,6 +166,7 @@ describe("detect-shell-redirection-antipattern", () => {
                     reason: "shell-redirection",
                 })),
                 ...findNonPortableNpmCommandViolations(filePath),
+                ...findUnsafeDynamicImportSpecifierViolations(filePath),
             ];
             if (violations.length === 0) {
                 continue;
@@ -147,8 +193,37 @@ describe("detect-shell-redirection-antipattern", () => {
 
             throw new Error(
                 `Found shell command portability violations in production scripts:\n${details}\n` +
-                    "Use child_process argument arrays with stdio options and call spawnPlatformCommandSync() for npm/npx invocations."
+                    "Use child_process argument arrays with stdio options, call spawnPlatformCommandSync() for npm/npx invocations, and normalize dynamic import filesystem paths with pathToFileURL()."
             );
         }
+    });
+
+    test("dynamic import checker accepts safe multiline specifiers", () => {
+        const content = [
+            "async function load() {",
+            "  const mod = await import(",
+            "    toImportFileUrl(MARKDOWNLINT_CLI2_MODULE)",
+            "  );",
+            "  return mod;",
+            "}",
+        ].join("\n");
+
+        const violations = findUnsafeDynamicImportSpecifierViolationsInContent(content);
+        expect(violations).toEqual([]);
+    });
+
+    test("dynamic import checker rejects unsafe multiline specifiers", () => {
+        const content = [
+            "async function load() {",
+            "  const mod = await import(",
+            "    MARKDOWNLINT_CLI2_MODULE",
+            "  );",
+            "  return mod;",
+            "}",
+        ].join("\n");
+
+        const violations = findUnsafeDynamicImportSpecifierViolationsInContent(content);
+        expect(violations).toHaveLength(1);
+        expect(violations[0].reason).toBe("unsafe-dynamic-import-specifier");
     });
 });

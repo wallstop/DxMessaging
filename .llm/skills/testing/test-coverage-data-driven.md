@@ -162,7 +162,7 @@ public sealed class MessageSerializationTests
 
 ## See Also
 
-- [Comprehensive Test Coverage](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Data-Driven Tests](data-driven-tests.md)
 
 ## Changelog

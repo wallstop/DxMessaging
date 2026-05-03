@@ -96,6 +96,26 @@ public sealed class HealthUI : MessageAwareComponent
 }
 ```
 
+#### Important: Inheritance and base calls
+
+> **Important**
+>
+> If you override any of the lifecycle methods that DxMessaging hooks, your override **must** call the matching base method first. Forgetting this is silent: no errors, no compile failure, just dead handlers. The Roslyn analyzer (DXMSG006) and the [Inspector overlay](../guides/inspector-overlay.md) will flag the mistake, but they fire after the broken code is already written.
+
+The five guarded methods, with what breaks if you forget the base call:
+
+| Method                           | What breaks                                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `base.Awake()`                   | The registration token is never created; no handler on this component runs.                                                 |
+| `base.OnEnable()`                | When `MessageRegistrationTiedToEnableStatus` is true, your handlers never re-enable with the component.                     |
+| `base.OnDisable()`               | Handlers stay live while the component is disabled, processing messages they should not see.                                |
+| `base.OnDestroy()`               | Registrations leak past the component's lifetime; held references prevent GC.                                               |
+| `base.RegisterMessageHandlers()` | The default `StringMessage` handlers never register. Override `RegisterForStringMessages => false` if you do not want them. |
+
+`Start`, `Update`, `FixedUpdate`, `LateUpdate`, and `OnApplicationQuit` are not hooked. You can override them without calling base.
+
+See [DXMSG006 in the analyzer reference](../reference/analyzers.md#dxmsg006-missing-base-call) and the symptom-first [troubleshooting guide](../reference/troubleshooting.md).
+
 ### Step 3: Send messages
 
 ```csharp

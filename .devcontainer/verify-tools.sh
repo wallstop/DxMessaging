@@ -152,6 +152,22 @@ echo -e "${BLUE}=== .NET Tools ===${NC}"
 check_tool "csharpier" "csharpier" "--version"
 
 echo ""
+echo -e "${BLUE}=== Node.js Global Tools ===${NC}"
+check_tool "codex" "codex" "--version"
+
+echo ""
+echo -e "${BLUE}=== npm Configuration ===${NC}"
+printf "%-20s" "npm prefix"
+npm_prefix=$(npm config get prefix 2>/dev/null || echo "error")
+if [ "$npm_prefix" = "$HOME/.local" ]; then
+    echo -e "${GREEN}✓${NC} $npm_prefix"
+    ((PASS++))
+else
+    echo -e "${RED}✗${NC} $npm_prefix (expected $HOME/.local)"
+    ((FAIL++))
+fi
+
+echo ""
 echo -e "${BLUE}=== Moreutils ===${NC}"
 check_tool_exists "sponge" "sponge"
 check_tool_exists "ts" "ts"

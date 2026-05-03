@@ -221,11 +221,13 @@ If a new test triplet sneaks in, CI fails with a pointer back to this skill.
 ## See Also
 
 - [Data-Driven Tests](data-driven-tests.md)
-- [Comprehensive Test Coverage Requirements](comprehensive-test-coverage.md)
+- [Test Coverage Requirements](comprehensive-test-coverage.md)
 - [Data-Driven Coverage Patterns](test-coverage-data-driven.md)
 - [Shared Test Fixtures](shared-test-fixtures.md)
 - [Allocation Coverage Required for Dispatch](allocation-coverage-required-for-dispatch.md)
 - [Single Thread Contract](single-thread-contract.md)
+- [Lifecycle Edge-Case Test Coverage](lifecycle-edge-coverage.md)
+- [LeakWatcher: Detecting Registration Leaks in Tests](leak-watcher-usage.md)
 
 ## References
 

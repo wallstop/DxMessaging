@@ -10,7 +10,7 @@ you fix it.
 
 This guide covers when warnings appear, what the Inspector HelpBox looks
 like, the three actions it offers, the Project Settings panel, and the
-manual rescan menu. For the comprehensive reference -- every diagnostic id,
+manual rescan menu. For the full reference -- every diagnostic id,
 exact detection policy, suppression precedence, and Unity 2021 setup
 notes -- see [Roslyn Analyzers & Diagnostics](../reference/analyzers.md).
 
@@ -273,9 +273,9 @@ Each suppression emits an audit-only [`DXMSG008`](../reference/analyzers.md#dxms
 
 ## Related
 
-- [Roslyn Analyzers & Diagnostics](../reference/analyzers.md) -- the
-  comprehensive reference for every diagnostic id, the
-  suppression-precedence ordering, and the Unity 2021 setup notes.
+- [Roslyn Analyzers & Diagnostics](../reference/analyzers.md) -- every
+  diagnostic id, the suppression-precedence ordering, and the Unity 2021
+  setup notes.
 - [Unity Integration](unity-integration.md) -- the inheritance contract
   the analyzer enforces and the recommended `MessageAwareComponent`
   patterns.

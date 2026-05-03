@@ -6,6 +6,7 @@ namespace DxMessaging.Tests.Runtime.Core
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
+    using System.Text.RegularExpressions;
     using DxMessaging.Core;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Tests.Runtime;
@@ -14,6 +15,34 @@ namespace DxMessaging.Tests.Runtime.Core
 
     public sealed class TestAttributeContractTests
     {
+        private const string TestAssemblyNamePrefix = "WallstopStudios.DxMessaging.Tests";
+        private const string TestNamespacePrefix = "DxMessaging.Tests";
+
+        /// <summary>
+        /// Matches the C# 9 target-typed pattern <c>GameObject identifier = new(...)</c>.
+        /// Used by <see cref="FixturesUsingMessagingTestBaseUseSpawnedCleanupPattern"/>
+        /// to detect spawn calls that the older substring grep for
+        /// <c>"new GameObject("</c> would miss. Compiled once because the
+        /// fixture scan runs across every test source file.
+        /// </summary>
+        private static readonly Regex GameObjectTargetTypedNewPattern = new(
+            @"\bGameObject\b\s+\w+\s*=\s*new\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant
+        );
+
+        private static bool IsDxMessagingTestAssembly(Assembly assembly)
+        {
+            string assemblyName = assembly.GetName().Name;
+            return assemblyName != null
+                && assemblyName.StartsWith(TestAssemblyNamePrefix, StringComparison.Ordinal);
+        }
+
+        private static bool IsDxMessagingTestNamespace(string namespaceName)
+        {
+            return namespaceName != null
+                && namespaceName.StartsWith(TestNamespacePrefix, StringComparison.Ordinal);
+        }
+
         [Test]
         public void UnityTestsDoNotUseTestCaseAttributes()
         {
@@ -104,7 +133,7 @@ namespace DxMessaging.Tests.Runtime.Core
             // they cannot accidentally satisfy the triplet criterion.
             Dictionary<Type, Dictionary<string, HashSet<string>>> tripletsByFixture = new();
 
-            foreach (MethodInfo method in GetRuntimeTestMethods())
+            foreach (MethodInfo method in GetDxMessagingTestMethods())
             {
                 if (!HasAttribute<UnityTestAttribute>(method))
                 {
@@ -185,6 +214,10 @@ namespace DxMessaging.Tests.Runtime.Core
                 // only available for those kinds). The bodies are not structurally
                 // identical, and consolidating would weaken the kind-asymmetric
                 // coverage the longer variants provide.
+                // Remove when the Targeted/Broadcast variants drop their extra
+                // Component-* Run blocks OR the harness gains a uniform way to
+                // declare per-kind extra emit paths (then the body becomes
+                // identical and consolidation is safe).
                 "DxMessaging.Tests.Runtime.Core.NominalTests.RemoveOrder",
                 // OrderingManyRegistrationsTests.PostProcessorsManyRegistrationsMaintainOrder:
                 // the Untargeted variant registers only fast post-processors with
@@ -194,6 +227,9 @@ namespace DxMessaging.Tests.Runtime.Core
                 // consolidation would either drop assertions or test a code path
                 // (action post-processors) that is not exercised today on the
                 // untargeted bus.
+                // Remove when action post-processors are wired into the
+                // untargeted bus (so the untargeted variant uses the same
+                // dual-list shape as the targeted/broadcast variants).
                 "DxMessaging.Tests.Runtime.Core.OrderingManyRegistrationsTests.PostProcessorsManyRegistrationsMaintainOrder",
                 // RegistrationTests.Interceptor: the Untargeted variant emits via
                 // a single EmitUntargeted path, while Targeted and Broadcast each
@@ -202,6 +238,9 @@ namespace DxMessaging.Tests.Runtime.Core
                 // the post-deregistration assertion to prove deregistration applies
                 // across both targeting/source variants. Consolidation would
                 // reduce the targeted/broadcast assertions to a single emit path.
+                // Remove when the Untargeted variant grows a Component-style
+                // second emit path OR the helper harness collapses the per-kind
+                // emit list so each variant exercises the same number of paths.
                 "DxMessaging.Tests.Runtime.Core.RegistrationTests.Interceptor",
             };
 
@@ -331,50 +370,570 @@ namespace DxMessaging.Tests.Runtime.Core
             }
         }
 
-        private static IEnumerable<MethodInfo> FindMethods(Func<MethodInfo, bool> predicate)
+        /// <summary>
+        /// Tightens <see cref="TripletEmitTestsUseScenarioParameterization"/>:
+        /// once a fixture adopts <see cref="MessageScenario"/>-parameterized
+        /// tests (any <c>[UnityTest]</c> in the fixture takes a
+        /// <see cref="MessageScenario"/> via <c>[ValueSource]</c>), every
+        /// kind-named <c>[UnityTest]</c> method in the SAME fixture must
+        /// also be parameterized. Mixing parameterized and per-kind methods
+        /// in the same fixture is almost always an oversight - either the
+        /// kind-named methods predate the consolidation and were missed, or
+        /// they exercise materially different mechanics and should move
+        /// into a <c>*Specific*</c> fixture.
+        /// </summary>
+        /// <remarks>
+        /// Fixtures with materially asymmetric overload assertions (e.g.
+        /// <c>NominalTests</c>'s <c>TargetedWithoutTargeting</c> tests that
+        /// have no Untargeted counterpart) are exempted via the
+        /// <c>allowedMixedFixtures</c> set below; each entry includes a
+        /// short justification. Removing an exemption later is the
+        /// consolidation milestone.
+        /// </remarks>
+        [Test]
+        public void MixedParameterizationAndKindNamedTestsInSameFixture()
         {
-            return GetRuntimeTestMethods().Where(predicate);
+            string[] kindTokens = { "Untargeted", "Targeted", "Broadcast" };
+            Dictionary<Type, List<MethodInfo>> kindNamedByFixture = new();
+            HashSet<Type> fixturesWithParameterization = new();
+
+            foreach (MethodInfo method in GetDxMessagingTestMethods())
+            {
+                if (!HasAttribute<UnityTestAttribute>(method))
+                {
+                    continue;
+                }
+
+                Type fixture = method.DeclaringType;
+                if (fixture == null)
+                {
+                    continue;
+                }
+
+                if (
+                    fixture.Name.IndexOf("Specific", StringComparison.Ordinal) >= 0
+                    || fixture.Name.IndexOf("Equivalence", StringComparison.Ordinal) >= 0
+                    || fixture.Name.IndexOf("Prefreeze", StringComparison.Ordinal) >= 0
+                )
+                {
+                    continue;
+                }
+
+                if (HasMessageScenarioParameter(method))
+                {
+                    fixturesWithParameterization.Add(fixture);
+                    continue;
+                }
+
+                bool nameHasKindToken = false;
+                foreach (string token in kindTokens)
+                {
+                    if (method.Name.IndexOf(token, StringComparison.Ordinal) >= 0)
+                    {
+                        nameHasKindToken = true;
+                        break;
+                    }
+                }
+
+                if (!nameHasKindToken)
+                {
+                    continue;
+                }
+
+                if (!kindNamedByFixture.TryGetValue(fixture, out List<MethodInfo> bucket))
+                {
+                    bucket = new List<MethodInfo>();
+                    kindNamedByFixture[fixture] = bucket;
+                }
+
+                bucket.Add(method);
+            }
+
+            // Allowlist: fixtures known to mix kind-named and parameterized
+            // tests for justified reasons. Adding a NEW fixture should be
+            // accompanied by a comment explaining why consolidation is unsafe.
+            HashSet<string> allowedMixedFixtures = new(StringComparer.Ordinal)
+            {
+                // MutationDestructionTests pairs a parameterized
+                // DestroyOtherListenerDoesNotRun with kind-asymmetric
+                // overloads (TargetedComponent / TargetedWithoutTargeting /
+                // BroadcastComponent / BroadcastWithoutSource) that have
+                // no Untargeted counterpart. Consolidating would erase the
+                // overload-specific assertions.
+                // Remove when the Untargeted bus grows a Component or
+                // *WithoutTargeting analogue (so every overload has a
+                // counterpart and the asymmetric methods can collapse).
+                "DxMessaging.Tests.Runtime.Core.MutationDestructionTests",
+                // MutationDuringEmissionTests pins a wide matrix of mutation
+                // x emission permutations. Several methods cover the
+                // *WithoutTargeting / *WithoutSource overloads which are
+                // kind-asymmetric (only Targeted and Broadcast have
+                // without-* variants).
+                // Remove when the Untargeted bus exposes equivalent
+                // *WithoutTargeting / *WithoutSource overloads (so every
+                // mutation entry has a corresponding Untargeted variant).
+                "DxMessaging.Tests.Runtime.Core.MutationDuringEmissionTests",
+                // OrderingManyRegistrationsTests has the same shape: the
+                // *WithoutTargeting and per-kind PostProcessor variants
+                // are kind-asymmetric.
+                // Remove when action post-processors and *WithoutTargeting
+                // are unified across kinds (matching the resolution
+                // condition above for the same fixture's triplet entry).
+                "DxMessaging.Tests.Runtime.Core.OrderingManyRegistrationsTests",
+            };
+
+            List<string> offenders = new();
+            foreach (KeyValuePair<Type, List<MethodInfo>> pair in kindNamedByFixture)
+            {
+                if (!fixturesWithParameterization.Contains(pair.Key))
+                {
+                    continue;
+                }
+
+                if (allowedMixedFixtures.Contains(pair.Key.FullName))
+                {
+                    continue;
+                }
+
+                foreach (MethodInfo method in pair.Value)
+                {
+                    offenders.Add(FormatMethod(method));
+                }
+            }
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                "Fixtures that adopt MessageScenario parameterization must consolidate ALL kind-named "
+                    + "[UnityTest] methods, OR be added to the allowlist with a justification comment. "
+                    + "Offenders:\n"
+                    + string.Join("\n", offenders)
+            );
         }
 
-        private static IEnumerable<MethodInfo> GetRuntimeTestMethods()
+        /// <summary>
+        /// Pins the cleanup pattern: every fixture inheriting from
+        /// <c>MessagingTestBase</c> must rely on the <c>_spawned</c> list
+        /// for GameObject teardown rather than calling
+        /// <c>UnityEngine.Object.Destroy(go)</c> directly without registering
+        /// the object with <c>_spawned</c> first. This is enforced by
+        /// scanning fixture sources for <c>Object.Destroy(</c>/<c>Destroy(</c>
+        /// occurrences that are not preceded by a <c>_spawned.Add</c>; we
+        /// only flag occurrences in test fixtures (not in the base class
+        /// itself, which legitimately calls Destroy as part of the cleanup
+        /// loop). Source-text heuristic: any <c>_spawned.Add(</c> token in
+        /// the file is treated as evidence the fixture follows the
+        /// convention.
+        /// </summary>
+        [Test]
+        public void FixturesUsingMessagingTestBaseUseSpawnedCleanupPattern()
         {
-            Assembly assembly = typeof(TestAttributeContractTests).Assembly;
+            // Scan every loaded test assembly (Runtime + Benchmarks +
+            // siblings) so the rule applies uniformly across the test
+            // surface, not just to the assembly that hosts this fixture.
+            HashSet<Type> messagingBaseFixtures = new();
+            foreach (Assembly testAssembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!IsDxMessagingTestAssembly(testAssembly))
+                {
+                    continue;
+                }
+
+                Type[] assemblyTypes;
+                try
+                {
+                    assemblyTypes = testAssembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    assemblyTypes = ex.Types.Where(t => t != null).ToArray();
+                }
+
+                foreach (Type type in assemblyTypes)
+                {
+                    if (type == null)
+                    {
+                        continue;
+                    }
+
+                    if (type.Namespace == null || !IsDxMessagingTestNamespace(type.Namespace))
+                    {
+                        continue;
+                    }
+
+                    if (type.IsAbstract)
+                    {
+                        continue;
+                    }
+
+                    if (
+                        !typeof(DxMessaging.Tests.Runtime.Core.MessagingTestBase).IsAssignableFrom(
+                            type
+                        )
+                    )
+                    {
+                        continue;
+                    }
+
+                    // Skip fixtures that have NO test methods (likely helper
+                    // scaffolding); the rule applies to fixtures that exercise
+                    // the bus.
+                    bool hasTest = false;
+                    foreach (
+                        MethodInfo method in type.GetMethods(
+                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                        )
+                    )
+                    {
+                        if (
+                            HasAttribute<TestAttribute>(method)
+                            || HasAttribute<UnityTestAttribute>(method)
+                        )
+                        {
+                            hasTest = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasTest)
+                    {
+                        continue;
+                    }
+
+                    messagingBaseFixtures.Add(type);
+                }
+            }
+
+            // Source-text approximation: walk the test source roots and
+            // for each fixture pair its source file, then flag fixtures
+            // whose source spawns GameObjects (`new GameObject(`) but
+            // never calls `_spawned.Add(`. Files that cannot be located
+            // on disk are simply not classified (they fall into the
+            // "uncovered" bucket and do not fail the test).
+            List<string> sourceRoots = ResolveTestSourceRootsFallback();
+            Dictionary<string, string> fixtureToSource = new(StringComparer.Ordinal);
+
+            foreach (string root in sourceRoots)
+            {
+                if (!System.IO.Directory.Exists(root))
+                {
+                    continue;
+                }
+
+                foreach (
+                    string file in System.IO.Directory.EnumerateFiles(
+                        root,
+                        "*.cs",
+                        System.IO.SearchOption.AllDirectories
+                    )
+                )
+                {
+                    string text;
+                    try
+                    {
+                        text = System.IO.File.ReadAllText(file);
+                    }
+                    catch (System.IO.IOException)
+                    {
+                        continue;
+                    }
+
+                    foreach (Type fixture in messagingBaseFixtures)
+                    {
+                        // Match by simple type name; the file name pattern
+                        // mirrors the fixture name across the test tree.
+                        if (
+                            !string.Equals(
+                                System.IO.Path.GetFileNameWithoutExtension(file),
+                                fixture.Name,
+                                StringComparison.Ordinal
+                            )
+                        )
+                        {
+                            continue;
+                        }
+
+                        fixtureToSource[fixture.FullName] = text;
+                        break;
+                    }
+                }
+            }
+
+            List<string> offenders = new();
+            foreach (Type fixture in messagingBaseFixtures)
+            {
+                if (!fixtureToSource.TryGetValue(fixture.FullName, out string text))
+                {
+                    continue;
+                }
+
+                // Match BOTH classic `new GameObject(...)` AND C# 9 target-typed
+                // `GameObject identifier = new(...)` patterns. The latter became
+                // common when fixtures adopted target-typed instantiation; without
+                // this alternate the check would silently miss spawn calls written
+                // in the new style. Roslyn would be more robust but the runtime
+                // tests asmdef does not reference the syntax APIs, so the regex
+                // form is the pragmatic option.
+                bool spawnsGameObjects =
+                    text.IndexOf("new GameObject(", StringComparison.Ordinal) >= 0
+                    || GameObjectTargetTypedNewPattern.IsMatch(text);
+                bool tracksWithSpawned =
+                    text.IndexOf("_spawned.Add", StringComparison.Ordinal) >= 0;
+
+                if (spawnsGameObjects && !tracksWithSpawned)
+                {
+                    offenders.Add(fixture.FullName);
+                }
+            }
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                "Fixtures inheriting MessagingTestBase that spawn GameObjects must register them via _spawned.Add(...) "
+                    + "for proper teardown. Offenders:\n  "
+                    + string.Join("\n  ", offenders)
+            );
+        }
+
+        /// <summary>
+        /// Pins that no namespace contains more than one
+        /// <c>[SetUpFixture]</c>. NUnit applies a SetUpFixture's hooks to
+        /// every test in the namespace and its sub-namespaces; multiple
+        /// fixtures in the same namespace produce undefined ordering and
+        /// can race each other's <c>[OneTimeSetUp]</c> /
+        /// <c>[OneTimeTearDown]</c> bodies.
+        /// </summary>
+        [Test]
+        public void AtMostOneSetUpFixturePerNamespace()
+        {
+            Dictionary<string, List<string>> fixturesByNamespace = new(StringComparer.Ordinal);
+
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!IsDxMessagingTestAssembly(assembly))
+                {
+                    continue;
+                }
+
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    types = ex.Types.Where(t => t != null).ToArray();
+                }
+
+                foreach (Type type in types)
+                {
+                    if (type == null || type.Namespace == null)
+                    {
+                        continue;
+                    }
+
+                    if (!IsDxMessagingTestNamespace(type.Namespace))
+                    {
+                        continue;
+                    }
+
+                    if (
+                        type.GetCustomAttributes(
+                            typeof(SetUpFixtureAttribute),
+                            inherit: false
+                        ).Length == 0
+                    )
+                    {
+                        continue;
+                    }
+
+                    if (!fixturesByNamespace.TryGetValue(type.Namespace, out List<string> bucket))
+                    {
+                        bucket = new List<string>();
+                        fixturesByNamespace[type.Namespace] = bucket;
+                    }
+
+                    bucket.Add(type.FullName);
+                }
+            }
+
+            List<string> offenders = new();
+            foreach (KeyValuePair<string, List<string>> pair in fixturesByNamespace)
+            {
+                if (pair.Value.Count > 1)
+                {
+                    offenders.Add(
+                        $"{pair.Key}: {pair.Value.Count} SetUpFixture types ("
+                            + string.Join(", ", pair.Value)
+                            + ")"
+                    );
+                }
+            }
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                "Namespaces with multiple [SetUpFixture] declarations:\n  "
+                    + string.Join("\n  ", offenders)
+            );
+        }
+
+        /// <summary>
+        /// Pins that <see cref="MessageScenario"/> parameter sources on
+        /// <c>[UnityTest]</c> methods always reference one of the canonical
+        /// scenario sources (<see cref="MessageScenarios.AllKinds"/>,
+        /// <see cref="MessageScenarios.WithAndWithoutInterceptor"/>, etc.).
+        /// </summary>
+        [Test]
+        public void MessageScenarioParametersUseValueSource()
+        {
+            List<string> offenders = new();
+
+            foreach (MethodInfo method in GetDxMessagingTestMethods())
+            {
+                if (
+                    !HasAttribute<UnityTestAttribute>(method)
+                    && !HasAttribute<TestAttribute>(method)
+                )
+                {
+                    continue;
+                }
+
+                foreach (ParameterInfo parameter in method.GetParameters())
+                {
+                    if (parameter.ParameterType != typeof(MessageScenario))
+                    {
+                        continue;
+                    }
+
+                    bool hasValueSource =
+                        parameter
+                            .GetCustomAttributes(
+                                typeof(NUnit.Framework.ValueSourceAttribute),
+                                inherit: false
+                            )
+                            .Length > 0;
+                    if (hasValueSource)
+                    {
+                        continue;
+                    }
+
+                    offenders.Add(FormatMethod(method) + " (parameter " + parameter.Name + ")");
+                }
+            }
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                "Found MessageScenario parameters without [ValueSource]. Use "
+                    + "[ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))] "
+                    + "(or another canonical source) to drive parameterized tests:\n"
+                    + string.Join("\n", offenders)
+            );
+        }
+
+        private static List<string> ResolveTestSourceRootsFallback()
+        {
+            List<string> roots = new List<string>();
+            string[] candidates =
+            {
+                System.IO.Path.Combine(
+                    UnityEngine.Application.dataPath,
+                    "..",
+                    "Packages",
+                    "com.wallstop-studios.dxmessaging",
+                    "Tests",
+                    "Runtime"
+                ),
+                System.IO.Path.Combine(UnityEngine.Application.dataPath, "..", "Tests", "Runtime"),
+                System.IO.Path.Combine(
+                    System.IO.Directory.GetCurrentDirectory(),
+                    "Tests",
+                    "Runtime"
+                ),
+            };
+
+            foreach (string candidate in candidates)
+            {
+                string full = System.IO.Path.GetFullPath(candidate);
+                if (System.IO.Directory.Exists(full))
+                {
+                    roots.Add(full);
+                }
+            }
+
+            return roots;
+        }
+
+        private static IEnumerable<MethodInfo> FindMethods(Func<MethodInfo, bool> predicate)
+        {
+            return GetDxMessagingTestMethods().Where(predicate);
+        }
+
+        /// <summary>
+        /// Enumerates every test method (any method with <c>[Test]</c>,
+        /// <c>[UnityTest]</c>, <c>[TestCase]</c>, or <c>[TestCaseSource]</c>) in
+        /// every loaded assembly whose name begins with
+        /// <c>WallstopStudios.DxMessaging.Tests</c>. This intentionally covers
+        /// the runtime test asmdef AND the Benchmarks asmdef (and any future
+        /// sibling test assemblies), so contract tests apply uniformly across
+        /// the test surface and not just the assembly that hosts this fixture.
+        /// </summary>
+        private static IEnumerable<MethodInfo> GetDxMessagingTestMethods()
+        {
             BindingFlags methodFlags =
                 BindingFlags.Instance
                 | BindingFlags.Static
                 | BindingFlags.Public
                 | BindingFlags.NonPublic;
 
-            foreach (Type type in assembly.GetTypes())
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                if (
-                    type.Namespace == null
-                    || !type.Namespace.StartsWith(
-                        "DxMessaging.Tests.Runtime",
-                        StringComparison.Ordinal
-                    )
-                )
+                if (!IsDxMessagingTestAssembly(assembly))
                 {
                     continue;
                 }
 
-                foreach (MethodInfo method in type.GetMethods(methodFlags))
+                Type[] types;
+                try
                 {
-                    if (method.IsSpecialName)
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    types = ex.Types.Where(t => t != null).ToArray();
+                }
+
+                foreach (Type type in types)
+                {
+                    if (type == null)
                     {
                         continue;
                     }
 
-                    bool isTestMethod =
-                        HasAttribute<TestAttribute>(method)
-                        || HasAttribute<UnityTestAttribute>(method)
-                        || HasAttribute<TestCaseAttribute>(method)
-                        || HasAttribute<TestCaseSourceAttribute>(method);
-                    // ValueSource is parameter data only and is always paired with a test-defining attribute.
-
-                    if (isTestMethod)
+                    if (type.Namespace == null || !IsDxMessagingTestNamespace(type.Namespace))
                     {
-                        yield return method;
+                        continue;
+                    }
+
+                    foreach (MethodInfo method in type.GetMethods(methodFlags))
+                    {
+                        if (method.IsSpecialName)
+                        {
+                            continue;
+                        }
+
+                        bool isTestMethod =
+                            HasAttribute<TestAttribute>(method)
+                            || HasAttribute<UnityTestAttribute>(method)
+                            || HasAttribute<TestCaseAttribute>(method)
+                            || HasAttribute<TestCaseSourceAttribute>(method);
+                        // ValueSource is parameter data only and is always paired with a test-defining attribute.
+
+                        if (isTestMethod)
+                        {
+                            yield return method;
+                        }
                     }
                 }
             }

@@ -463,6 +463,6 @@ public class AchievementTracker : MessageAwareComponent
 
 - **[Quick Reference](../reference/quick-reference.md)** -- API cheat sheet for all emit methods
 - **[Message Types](../concepts/message-types.md)** -- Understand Untargeted, Targeted, and Broadcast messages
-- **[Targeting & Context](../concepts/targeting-and-context.md)** -- Deep dive into GameObject vs Component
+- **[Targeting & Context](../concepts/targeting-and-context.md)** -- GameObject vs Component as message context
 - **[String Messages](string-messages.md)** -- More about string message helpers
 - **[Diagnostics](../guides/diagnostics.md)** -- Debugging tools and Inspector integration

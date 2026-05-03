@@ -76,6 +76,27 @@ namespace DxMessaging.Tests.Runtime
                 }
             }
         }
+
+        /// <summary>
+        /// Cross-product of interceptor x post-processor presence per kind,
+        /// minus the (false, false) baseline. That row was removed for two
+        /// reasons: it duplicated the no-feature emit path already pinned by
+        /// <c>AllocationMatrixTests.EmitIsZeroAlloc</c>, and the original
+        /// (Untargeted, false, false) case proved empirically unstable when
+        /// run through this harness.
+        /// </summary>
+        public static IEnumerable<MessageScenario> WithAtLeastOneFeatureToggle
+        {
+            get
+            {
+                foreach (MessageScenario scenario in AllKinds)
+                {
+                    yield return scenario.WithInterceptor(false).WithPostProcessor(true);
+                    yield return scenario.WithInterceptor(true).WithPostProcessor(false);
+                    yield return scenario.WithInterceptor(true).WithPostProcessor(true);
+                }
+            }
+        }
     }
 }
 #endif

@@ -43,8 +43,9 @@ related:
 
 ## Overview
 
-This skill covers best practices for writing robust git commands in CI/CD pipelines and
-implementing reliable markdown parsers that handle edge cases correctly.
+This skill covers practices for writing git commands in CI/CD pipelines that handle
+shallow clones, missing tags, initial commits, and merge bases without failing, and
+implementing markdown parsers that survive malformed input without aborting.
 
 ## Solution
 

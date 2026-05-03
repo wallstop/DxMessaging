@@ -48,7 +48,7 @@ https://github.com/wallstop/DxMessaging.git
 ### NPM Scoped Registry
 
 1. Open Unity Package Manager
-1. (Optional) Enable Pre-release packages to get the latest, cutting-edge builds
+1. (Optional) Enable Pre-release packages to receive pre-release builds (RCs and betas) before they ship as stable
 1. Open the Advanced Package Settings
 1. Add an entry for a new "Scoped Registry"
    - Name: `NPM`

@@ -26,6 +26,13 @@ namespace DxMessaging.Core.MessageBus
     /// <item><description><see cref="Messages.ITargetedMessage"/> -- Directed at a specific <see cref="InstanceId"/>.</description></item>
     /// <item><description><see cref="Messages.IBroadcastMessage"/> -- Emitted from a source for any listener.</description></item>
     /// </list>
+    /// <para>
+    /// Contract note: emitting any message on a bus with no registered handlers must
+    /// be a silent no-op. Implementations must NOT throw, log, or otherwise surface
+    /// the empty-bus state to the caller. The
+    /// <c>LifecycleEdgeCasesTests.EmitOnEmptyBusIsSilentNoOp</c> test pins this
+    /// contract for every message kind.
+    /// </para>
     /// </remarks>
     /// <example>
     /// <code>
@@ -117,6 +124,57 @@ namespace DxMessaging.Core.MessageBus
         int RegisteredTargeted { get; }
 
         int RegisteredUntargeted { get; }
+
+        /// <summary>
+        /// Total number of registered interceptors across all message kinds.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Counts the unique <c>(interceptor delegate, priority)</c> pairs registered via
+        /// <see cref="RegisterUntargetedInterceptor{T}"/>, <see cref="RegisterTargetedInterceptor{T}"/>,
+        /// and <see cref="RegisterBroadcastInterceptor{T}"/>. Test infrastructure such as
+        /// <c>LeakWatcher</c> reads this counter to detect interceptor handles that escape
+        /// a watched region. Single-thread contract: read on the same thread that drives dispatch.
+        /// </para>
+        /// <para>
+        /// Aggregated by walking the per-kind interceptor caches; the call is O(n) in the
+        /// number of message types known to the bus. Snapshot at the start of a tracked
+        /// region rather than reading in a hot loop.
+        /// </para>
+        /// </remarks>
+        int RegisteredInterceptors { get; }
+
+        /// <summary>
+        /// Total number of registered post-processors across all message kinds.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Sums per-message-type post-processor handler counts across the untargeted,
+        /// targeted, targeted-without-targeting, broadcast, and broadcast-without-source
+        /// post-processor sinks. Test infrastructure such as <c>LeakWatcher</c> reads this
+        /// counter to detect post-processor handles that escape a watched region. Same
+        /// single-thread contract as the other counters.
+        /// </para>
+        /// <para>
+        /// Aggregated on each read; prefer snapshotting at region boundaries instead of
+        /// polling every frame.
+        /// </para>
+        /// </remarks>
+        int RegisteredPostProcessors { get; }
+
+        /// <summary>
+        /// Number of registered global accept-all handlers on this bus.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Counts the distinct <see cref="MessageHandler"/> instances registered via
+        /// <see cref="RegisterGlobalAcceptAll"/>. Test infrastructure such as
+        /// <c>LeakWatcher</c> reads this counter to detect global accept-all handles
+        /// that escape a watched region. Same single-thread contract as the other
+        /// counters.
+        /// </para>
+        /// </remarks>
+        int RegisteredGlobalAcceptAll { get; }
 
         /// <summary>
         /// Interceptor delegate for untargeted messages to transform or cancel them.

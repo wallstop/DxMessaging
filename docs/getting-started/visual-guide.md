@@ -250,6 +250,8 @@ public class Player : MessageAwareComponent {
 - Deactivates in `OnDisable()`
 - Cleans up in `OnDestroy()`
 
+> **Important**: If you override `Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, or `RegisterMessageHandlers` on a `MessageAwareComponent`, call `base.X()` first or your handlers stop working silently. See the [analyzer reference](../reference/analyzers.md#dxmsg006-missing-base-call).
+
 ### Step 3: Send It
 
 ```csharp
@@ -592,12 +594,12 @@ If you checked all these, you are following best practices.
 
 ## Next Steps
 
-Ready to dive deeper?
+Ready for more?
 
 1. **[Mental Model](../concepts/mental-model.md)** - Understand the philosophy
 1. **[Getting Started Guide](getting-started.md)** - Full guide with more details
 1. **[Common Patterns](../guides/patterns.md)** - Real-world examples
-1. **[Message Types](../concepts/message-types.md)** - Deep dive into when to use what
+1. **[Message Types](../concepts/message-types.md)** - When to pick Untargeted, Targeted, or Broadcast
 1. **[Diagnostics](../guides/diagnostics.md)** - Master the Inspector tools
 
 ---
