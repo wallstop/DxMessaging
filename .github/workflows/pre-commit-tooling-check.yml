@@ -129,7 +129,7 @@ jobs:
         run: pre-commit run validate-changelog-policy --all-files
 
       - name: Run parser script tests hook
-        run: pre-commit run script-parser-tests --all-files
+        run: pre-commit run --hook-stage pre-push script-parser-tests --all-files
 
       - name: Diagnose managed Jest fallback environment
         shell: bash

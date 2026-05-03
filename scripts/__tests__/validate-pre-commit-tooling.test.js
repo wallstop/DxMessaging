@@ -13,6 +13,8 @@ const {
   parseHookIds,
   hasRequiredParserPrecheckCommand,
   hasRequiredPackageJsonFormatCommand,
+  hasRequiredNodeToolingCommand,
+  hasRequiredHookMarkdownCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredChangelogValidationCommand,
   hasRequiredParserSuiteTestPaths,
@@ -26,6 +28,8 @@ const {
   validatePreflightScriptPolicy,
   validatePerfBudget,
   REQUIRED_PRECHECK_PARSER_COMMAND,
+  REQUIRED_NODE_TOOLING_COMMAND,
+  REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_CHANGELOG_VALIDATION_COMMAND,
@@ -150,6 +154,8 @@ describe("validate-pre-commit-tooling", () => {
 
   test("hasRequiredPackageJsonFormatCommand detects package.json format precheck step", () => {
     const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
       REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
       "npm run check:prettier:hooks",
       REQUIRED_PRECHECK_PARSER_COMMAND
@@ -164,8 +170,44 @@ describe("validate-pre-commit-tooling", () => {
     expect(hasRequiredPackageJsonFormatCommand(script)).toBe(false);
   });
 
+  test("hasRequiredNodeToolingCommand detects node tooling health precheck step", () => {
+    const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
+      REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+      REQUIRED_PRECHECK_PARSER_COMMAND
+    ].join(" && ");
+
+    expect(hasRequiredNodeToolingCommand(script)).toBe(true);
+  });
+
+  test("hasRequiredNodeToolingCommand rejects substring-only matches", () => {
+    const script = "npm run validate:pre-commit-tooling && echo npm run validate:node-tooling";
+
+    expect(hasRequiredNodeToolingCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredHookMarkdownCommand detects markdown hook parity precheck step", () => {
+    const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
+      REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+      REQUIRED_PRECHECK_PARSER_COMMAND
+    ].join(" && ");
+
+    expect(hasRequiredHookMarkdownCommand(script)).toBe(true);
+  });
+
+  test("hasRequiredHookMarkdownCommand rejects substring-only matches", () => {
+    const script = "npm run validate:pre-commit-tooling && echo npm run validate:hook-markdown";
+
+    expect(hasRequiredHookMarkdownCommand(script)).toBe(false);
+  });
+
   test("hasRequiredScriptsCspellCommand detects script cspell command as chained step", () => {
     const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
       REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
       REQUIRED_SCRIPTS_CSPELL_COMMAND,
       REQUIRED_PRECHECK_PARSER_COMMAND
@@ -182,6 +224,8 @@ describe("validate-pre-commit-tooling", () => {
 
   test("hasRequiredChangelogValidationCommand detects changelog validation step", () => {
     const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
       REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
       REQUIRED_SCRIPTS_CSPELL_COMMAND,
       REQUIRED_CHANGELOG_VALIDATION_COMMAND,
@@ -192,7 +236,8 @@ describe("validate-pre-commit-tooling", () => {
   });
 
   test("hasRequiredChangelogValidationCommand rejects substring-only matches", () => {
-    const script = "npm run validate:pre-commit-tooling && echo npm run validate:changelog:coverage";
+    const script =
+      "npm run validate:pre-commit-tooling && echo npm run validate:changelog:coverage";
 
     expect(hasRequiredChangelogValidationCommand(script)).toBe(false);
   });
@@ -240,8 +285,8 @@ describe("validate-pre-commit-tooling", () => {
     // npx fallback pins a concrete `prettier@<semver>` (cold-cache parity).
     const inlined =
       "bash -c 'if [ -f node_modules/prettier/bin/prettier.cjs ]; then " +
-      "exec node node_modules/prettier/bin/prettier.cjs --write \"$@\"; " +
-      "else exec npx --yes --package=prettier@3.8.3 prettier --write \"$@\"; fi' --";
+      'exec node node_modules/prettier/bin/prettier.cjs --write "$@"; ' +
+      'else exec npx --yes --package=prettier@3.8.3 prettier --write "$@"; fi\' --';
     expect(hasInlinedPrettierEntry(inlined)).toBe(true);
     // Missing the local bin reference -> cold-cache only -> regression.
     expect(
@@ -262,18 +307,18 @@ describe("validate-pre-commit-tooling", () => {
   test("hasInlinedPrettierInvocation only enforces inlining for the prettier hook id", () => {
     const inlined =
       "bash -c 'if [ -f node_modules/prettier/bin/prettier.cjs ]; then " +
-      "exec node node_modules/prettier/bin/prettier.cjs --write \"$@\"; " +
-      "else exec npx --yes --package=prettier@3.8.3 prettier --write \"$@\"; fi' --";
+      'exec node node_modules/prettier/bin/prettier.cjs --write "$@"; ' +
+      'else exec npx --yes --package=prettier@3.8.3 prettier --write "$@"; fi\' --';
     // Wrong shape on the prettier hook -> rejected.
-    expect(
-      hasInlinedPrettierInvocation("prettier", "npx --yes prettier@3.8.3 --write")
-    ).toBe(false);
+    expect(hasInlinedPrettierInvocation("prettier", "npx --yes prettier@3.8.3 --write")).toBe(
+      false
+    );
     // Correct shape on the prettier hook -> accepted.
     expect(hasInlinedPrettierInvocation("prettier", inlined)).toBe(true);
     // Other hooks are not constrained by this rule.
-    expect(
-      hasInlinedPrettierInvocation("other-hook", "npx --yes prettier@3.8.3 --write")
-    ).toBe(true);
+    expect(hasInlinedPrettierInvocation("other-hook", "npx --yes prettier@3.8.3 --write")).toBe(
+      true
+    );
   });
 
   // Note: cspell/markdownlint version parity lives in
@@ -289,18 +334,18 @@ describe("validate-pre-commit-tooling", () => {
     expect(
       hasGuardedFixerRestagePattern(
         "fix-csharp-underscore-methods",
-        "bash -c 'node scripts/fix-csharp-underscore-methods.js \"$@\" && git add \"$@\"' --"
+        'bash -c \'node scripts/fix-csharp-underscore-methods.js "$@" && git add "$@"\' --'
       )
     ).toBe(false);
 
     expect(
       hasGuardedFixerRestagePattern(
         "fix-csharp-underscore-methods",
-        "bash -c 'node scripts/fix-csharp-underscore-methods.js \"$@\" && { git diff --quiet -- \"$@\" || git add \"$@\"; }' --"
+        'bash -c \'node scripts/fix-csharp-underscore-methods.js "$@" && { git diff --quiet -- "$@" || git add "$@"; }\' --'
       )
     ).toBe(true);
 
-    expect(hasGuardedFixerRestagePattern("another-hook", "git add \"$@\"")).toBe(true);
+    expect(hasGuardedFixerRestagePattern("another-hook", 'git add "$@"')).toBe(true);
   });
 
   test("hasGuardedFixerRestagePattern rejects single-quoted $@ variants", () => {
@@ -334,7 +379,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -379,11 +424,9 @@ describe("validate-pre-commit-tooling", () => {
     // ceiling (3), so we get 1 total-budget + 3 per-hook = 4 perf-budget
     // entries. Assert the total-budget message is present at least once.
     expect(perfBudgetViolations.length).toBeGreaterThanOrEqual(1);
-    expect(
-      perfBudgetViolations.some((v) => /exceeds total budget/.test(v.message)),
-    ).toBe(true);
+    expect(perfBudgetViolations.some((v) => /exceeds total budget/.test(v.message))).toBe(true);
     const perHookEntries = perfBudgetViolations.filter((v) =>
-      /exceeds per-hook ceiling/.test(v.message),
+      /exceeds per-hook ceiling/.test(v.message)
     );
     expect(perHookEntries).toHaveLength(3);
   });
@@ -561,7 +604,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -601,6 +644,8 @@ describe("validate-pre-commit-tooling", () => {
     expect(packageJson.scripts["check:prettier:hooks"]).toContain(
       "node scripts/run-managed-prettier.js --check"
     );
+    expect(preflightScript).toContain(REQUIRED_NODE_TOOLING_COMMAND);
+    expect(preflightScript).toContain("npm run validate:hook-markdown");
     expect(preflightScript).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
     expect(preflightScript).toContain("npm run check:prettier:hooks");
     expect(preflightScript).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
@@ -618,7 +663,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -652,7 +697,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND}`
           }
         });
       }
@@ -686,7 +731,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -715,12 +760,46 @@ describe("validate-pre-commit-tooling", () => {
     expect(violations[0].message).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
   });
 
+  test("validatePreflightScriptPolicy reports missing markdown hook parity precheck command", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_HOOK_MARKDOWN_COMMAND);
+  });
+
   test("validatePreflightScriptPolicy reports missing scripts cspell precheck command", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -754,7 +833,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -788,7 +867,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }
@@ -822,7 +901,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": `${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
+            "preflight:pre-commit": `${REQUIRED_NODE_TOOLING_COMMAND} && ${REQUIRED_HOOK_MARKDOWN_COMMAND} && ${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND} && npm run validate:pre-commit-tooling && ${REQUIRED_SCRIPTS_CSPELL_COMMAND} && ${REQUIRED_CHANGELOG_VALIDATION_COMMAND} && ${REQUIRED_PRECHECK_PARSER_COMMAND}`
           }
         });
       }

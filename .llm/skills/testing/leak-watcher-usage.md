@@ -249,7 +249,7 @@ exclusively against the new counter fails loudly otherwise.
 
 ## References
 
-- NUnit `IDisposable` cleanup pattern: https://docs.nunit.org/articles/nunit/writing-tests/setup-teardown/Tear-Down.html
+- NUnit `IDisposable` cleanup pattern: https://docs.nunit.org/articles/nunit/writing-tests/attributes/teardown.html
 - Unity Test Framework: https://docs.unity3d.com/Packages/com.unity.test-framework@latest
 
 ## Changelog

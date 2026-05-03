@@ -42,6 +42,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
       - name: Install npm dependencies
         run: |
           if [ -f package-lock.json ]; then
@@ -57,6 +62,14 @@ jobs:
         run: |
           git config user.name "perf-measurement-bot"
           git config user.email "perf-measurement-bot@users.noreply.github.com"
+
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      - name: Diagnose .NET tool availability
+        run: |
+          dotnet --info
+          dotnet tool list
 
       - name: Install pre-commit hooks
         run: pre-commit install --install-hooks

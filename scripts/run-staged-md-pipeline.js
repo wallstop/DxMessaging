@@ -36,7 +36,9 @@
 
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const { pathToFileURL } = require("url");
+const { spawnPlatformCommandSync } = require("./lib/shell-command");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 
@@ -50,220 +52,361 @@ const sharedFormatters = require("./lib/staged-doc-formatters");
 // Mirror the per-hook YAML filter that this pipeline replaces:
 //   files: '(?i)\.(md|markdown)$'
 const ALLOWED_EXTS = new Set([".md", ".markdown"]);
+const PACKAGE_JSON_PATH = path.join(ROOT_DIR, "package.json");
 
 // Mirror the per-validator exclude regex used by the staged-validators hook
 // the pipeline subsumes for `.md` paths.
 const EXCLUDE_PREFIXES = ["Library/", "Temp/", "node_modules/", "obj/", "bin/"];
 const EXCLUDE_SEGMENT_RE = /(?:^|\/)(?:bin|obj)\//;
 
-const PRETTIER_LOCAL_BIN = path.join(
-    ROOT_DIR,
-    "node_modules",
-    "prettier",
-    "bin",
-    "prettier.cjs",
-);
-const PRETTIER_LOCAL_MODULE = path.join(
-    ROOT_DIR,
-    "node_modules",
-    "prettier",
-    "index.cjs",
-);
+const PRETTIER_LOCAL_BIN = path.join(ROOT_DIR, "node_modules", "prettier", "bin", "prettier.cjs");
+const PRETTIER_LOCAL_MODULE = path.join(ROOT_DIR, "node_modules", "prettier", "index.cjs");
 const MARKDOWNLINT_CLI2_MODULE = path.join(
-    ROOT_DIR,
-    "node_modules",
-    "markdownlint-cli2",
-    "markdownlint-cli2.mjs",
+  ROOT_DIR,
+  "node_modules",
+  "markdownlint-cli2",
+  "markdownlint-cli2.mjs"
 );
+const TOOL_LOAD_ERROR_PATTERNS = [
+  /Cannot find package/i,
+  /Cannot find module/i,
+  /ERR_MODULE_NOT_FOUND/i,
+  /MODULE_NOT_FOUND/i
+];
+const WINDOWS_ABSOLUTE_PATH_RE = /^[A-Za-z]:[\\/]/;
+
+function readPackageJson() {
+  return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
+}
+
+function getPackageSpec(packageName) {
+  const packageJson = readPackageJson();
+  const version =
+    packageJson.devDependencies?.[packageName] || packageJson.dependencies?.[packageName];
+  if (!version) {
+    throw new Error(`Missing ${packageName} dependency in package.json.`);
+  }
+  return `${packageName}@${version.replace(/^[~^]/, "")}`;
+}
+
+function isRecoverableToolLoadError(error) {
+  const message = `${error?.code || ""}\n${error?.message || ""}\n${error?.stack || ""}`;
+  return TOOL_LOAD_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function runToolCommand(command, args, options = {}) {
+  const runner =
+    command === "npm" || command === "npx" ? spawnPlatformCommandSync : childProcess.spawnSync;
+  return runner(command, args, {
+    cwd: ROOT_DIR,
+    encoding: "utf8",
+    ...options
+  });
+}
+
+function resolveBundledNpxCliPath({
+  execPath = process.execPath,
+  existsSyncFn = fs.existsSync
+} = {}) {
+  const candidate = path.join(path.dirname(execPath), "node_modules", "npm", "bin", "npx-cli.js");
+  return existsSyncFn(candidate) ? candidate : null;
+}
+
+function runNpxCommand(args, options = {}) {
+  const {
+    execPath = process.execPath,
+    resolveBundledNpxCliPathFn = resolveBundledNpxCliPath,
+    runToolCommandFn = runToolCommand
+  } = options;
+  const npxCliPath = resolveBundledNpxCliPathFn({ execPath });
+  if (npxCliPath) {
+    return runToolCommandFn(execPath, [npxCliPath, ...args]);
+  }
+
+  throw new Error(
+    "Unable to locate npm's npx-cli.js next to the active Node executable. Run `npm install` in a shell with a complete Node/npm installation, or ensure npm is installed with this Node runtime."
+  );
+}
 
 function toImportFileUrl(modulePath) {
-    return pathToFileURL(modulePath).href;
+  if (WINDOWS_ABSOLUTE_PATH_RE.test(modulePath)) {
+    const windowsUrl = pathToFileURL(modulePath, { windows: true }).href;
+    if (/^file:\/\/\/[A-Za-z]:\//.test(windowsUrl)) {
+      return windowsUrl;
+    }
+
+    // Fallback for runtimes that ignore the `windows` option.
+    const normalized = modulePath.replace(/\\/g, "/");
+    return pathToFileURL(`/${normalized}`).href;
+  }
+
+  return pathToFileURL(modulePath).href;
 }
 
 function toRepoRelative(absOrRelPath) {
-    const abs = path.isAbsolute(absOrRelPath)
-        ? absOrRelPath
-        : path.resolve(process.cwd(), absOrRelPath);
-    const rel = path.relative(ROOT_DIR, abs);
-    if (rel.startsWith("..")) {
-        return absOrRelPath.split(path.sep).join("/");
-    }
-    return rel.split(path.sep).join("/");
+  const abs = path.isAbsolute(absOrRelPath)
+    ? absOrRelPath
+    : path.resolve(process.cwd(), absOrRelPath);
+  const rel = path.relative(ROOT_DIR, abs);
+  if (rel.startsWith("..")) {
+    return absOrRelPath.split(path.sep).join("/");
+  }
+  return rel.split(path.sep).join("/");
 }
 
 function isExcluded(repoRelPath) {
-    for (const prefix of EXCLUDE_PREFIXES) {
-        if (repoRelPath.startsWith(prefix)) return true;
-    }
-    if (EXCLUDE_SEGMENT_RE.test(repoRelPath)) return true;
-    return false;
+  for (const prefix of EXCLUDE_PREFIXES) {
+    if (repoRelPath.startsWith(prefix)) return true;
+  }
+  if (EXCLUDE_SEGMENT_RE.test(repoRelPath)) return true;
+  return false;
 }
 
 function isApplicable(filePath) {
-    const ext = path.extname(filePath).toLowerCase();
-    if (!ALLOWED_EXTS.has(ext)) return false;
-    const rel = toRepoRelative(filePath);
-    if (isExcluded(rel)) return false;
-    return true;
+  const ext = path.extname(filePath).toLowerCase();
+  if (!ALLOWED_EXTS.has(ext)) return false;
+  const rel = toRepoRelative(filePath);
+  if (isExcluded(rel)) return false;
+  return true;
 }
 
 function readFileSafe(filePath) {
-    try {
-        return fs.readFileSync(filePath, "utf8");
-    } catch {
-        return null;
-    }
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 function writeIfChanged(filePath, originalContent, nextContent, modifiedSet) {
-    if (nextContent === originalContent) return originalContent;
-    fs.writeFileSync(filePath, nextContent);
-    modifiedSet.add(filePath);
-    return nextContent;
+  if (nextContent === originalContent) return originalContent;
+  fs.writeFileSync(filePath, nextContent);
+  modifiedSet.add(filePath);
+  return nextContent;
 }
 
 function applyInProcessFixers(absPath, content, modifiedSet) {
-    let next = content;
-    const md036 = fixMd036.processMarkdownContent(next);
-    if (md036.changed) {
-        next = writeIfChanged(absPath, content, md036.content, modifiedSet);
-    }
-    const md029Md051 = fixMd029Md051.processMarkdownContent(next);
-    if (md029Md051.changed) {
-        const before = next;
-        next = writeIfChanged(absPath, before, md029Md051.content, modifiedSet);
-    }
-    return next;
+  let next = content;
+  const md036 = fixMd036.processMarkdownContent(next);
+  if (md036.changed) {
+    next = writeIfChanged(absPath, content, md036.content, modifiedSet);
+  }
+  const md029Md051 = fixMd029Md051.processMarkdownContent(next);
+  if (md029Md051.changed) {
+    const before = next;
+    next = writeIfChanged(absPath, before, md029Md051.content, modifiedSet);
+  }
+  return next;
 }
 
 async function loadPrettier() {
-    // Prefer the local devDependency (matches the inlined hook entry's fast
-    // path). The CJS entry point exposes the same async surface used by
-    // `prettier --write` internally.
-    if (fs.existsSync(PRETTIER_LOCAL_MODULE)) {
-        // eslint-disable-next-line global-require
-        return require(PRETTIER_LOCAL_MODULE);
+  // Prefer the local devDependency (matches the inlined hook entry's fast
+  // path). The CJS entry point exposes the same async surface used by
+  // `prettier --write` internally.
+  if (fs.existsSync(PRETTIER_LOCAL_MODULE)) {
+    try {
+      // eslint-disable-next-line global-require
+      return require(PRETTIER_LOCAL_MODULE);
+    } catch (error) {
+      if (isRecoverableToolLoadError(error)) {
+        return null;
+      }
+      throw error;
     }
-    if (fs.existsSync(PRETTIER_LOCAL_BIN)) {
-        // The bin file is not directly require()-able; if the entry module
-        // is missing but the bin is present, the install is corrupt.
-        throw new Error(
-            "Prettier devDependency layout is unexpected: bin present but index.cjs missing. Run `npm install` to repair.",
-        );
-    }
-    return null;
+  }
+  if (fs.existsSync(PRETTIER_LOCAL_BIN)) {
+    // The bin file is not directly require()-able; if the entry module
+    // is missing but the bin is present, the install is corrupt.
+    throw new Error(
+      "Prettier devDependency layout is unexpected: bin present but index.cjs missing. Run `npm install` to repair."
+    );
+  }
+  return null;
+}
+
+function runNpxPrettier(absPath, modifiedSet) {
+  const before = readFileSafe(absPath);
+  const result = runNpxCommand([
+    "--yes",
+    `--package=${getPackageSpec("prettier")}`,
+    "prettier",
+    "--write",
+    path.relative(ROOT_DIR, absPath).split(path.sep).join("/")
+  ]);
+
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`npx prettier exited with status ${result.status}.`);
+  }
+
+  const after = readFileSafe(absPath);
+  if (before !== after) {
+    modifiedSet.add(absPath);
+  }
+  return after ?? before ?? "";
 }
 
 async function runPrettierInProcess(absPath, content, modifiedSet) {
-    const prettier = await loadPrettier();
-    if (!prettier) {
-        // Cold-cache fallback would be `npx --yes --package=prettier@<v>`,
-        // but the consolidated pipeline's invariant is that
-        // node_modules/prettier is present (validated by
-        // prettier-version-parity.test.js + the hook's own bash fallback
-        // at install time). If we ever reach this branch in CI it means
-        // node_modules was wiped between `npm install` and hook execution.
-        throw new Error(
-            "node_modules/prettier is missing. Run `npm install` (or rely on the cspell-style npx fallback) before invoking the markdown pipeline.",
-        );
-    }
-    const options = await prettier.resolveConfig(absPath, { editorconfig: true });
-    const fileInfo = await prettier.getFileInfo(absPath, {
-        resolveConfig: false,
-    });
-    if (fileInfo.ignored) {
-        return content;
-    }
-    const formatOptions = {
-        ...(options || {}),
-        filepath: absPath,
-    };
-    const formatted = await prettier.format(content, formatOptions);
-    if (formatted === content) {
-        return content;
-    }
-    return writeIfChanged(absPath, content, formatted, modifiedSet);
+  const prettier = await loadPrettier();
+  if (!prettier) {
+    process.stderr.write(
+      "run-staged-md-pipeline: local Prettier install is missing or incomplete; using pinned npx fallback.\n"
+    );
+    return runNpxPrettier(absPath, modifiedSet);
+  }
+  const options = await prettier.resolveConfig(absPath, { editorconfig: true });
+  const fileInfo = await prettier.getFileInfo(absPath, {
+    resolveConfig: false
+  });
+  if (fileInfo.ignored) {
+    return content;
+  }
+  const formatOptions = {
+    ...(options || {}),
+    filepath: absPath
+  };
+  const formatted = await prettier.format(content, formatOptions);
+  if (formatted === content) {
+    return content;
+  }
+  return writeIfChanged(absPath, content, formatted, modifiedSet);
 }
 
-async function runMarkdownlintInProcess(absPaths, modifiedSet) {
-    if (absPaths.length === 0) return { errors: 0 };
-    if (!fs.existsSync(MARKDOWNLINT_CLI2_MODULE)) {
-        throw new Error(
-            "node_modules/markdownlint-cli2 is missing. Run `npm install` before invoking the markdown pipeline.",
-        );
-    }
-    // markdownlint-cli2 ships as ESM only; CommonJS callers must use a
-    // dynamic import. The module object exposes `main(params)` per the
-    // bin entry at node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs.
-    const mod = await import(toImportFileUrl(MARKDOWNLINT_CLI2_MODULE));
-    const main = mod.main;
+function snapshotFileStats(absPaths) {
+  const sizeByPath = new Map();
+  const mtimeByPath = new Map();
+  for (const p of absPaths) {
+    const stat = fs.statSync(p);
+    sizeByPath.set(p, stat.size);
+    mtimeByPath.set(p, stat.mtimeMs);
+  }
 
-    // Capture output for two reasons: (1) the cli2 banner is noise on hook
-    // runs, (2) the modified-set bookkeeping below needs to detect rewrites
-    // by re-reading from disk after `--fix` runs in place.
-    const sizeByPath = new Map();
-    const mtimeByPath = new Map();
-    for (const p of absPaths) {
-        const stat = fs.statSync(p);
-        sizeByPath.set(p, stat.size);
-        mtimeByPath.set(p, stat.mtimeMs);
-    }
+  return { sizeByPath, mtimeByPath };
+}
 
-    // Pass POSIX-style relative paths to keep markdownlint-cli2's globby
-    // resolution stable on Windows.
-    const relativePaths = absPaths.map((p) =>
-        path.relative(ROOT_DIR, p).split(path.sep).join("/"),
+function recordModifiedByStats(absPaths, beforeStats, modifiedSet) {
+  for (const p of absPaths) {
+    let stat;
+    try {
+      stat = fs.statSync(p);
+    } catch {
+      continue;
+    }
+    if (
+      stat.size !== beforeStats.sizeByPath.get(p) ||
+      stat.mtimeMs !== beforeStats.mtimeByPath.get(p)
+    ) {
+      modifiedSet.add(p);
+    }
+  }
+}
+
+function getMarkdownlintRelativePaths(absPaths) {
+  return absPaths.map((p) => path.relative(ROOT_DIR, p).split(path.sep).join("/"));
+}
+
+async function importMarkdownlintCli2Module() {
+  return import(toImportFileUrl(MARKDOWNLINT_CLI2_MODULE));
+}
+
+function runNpxMarkdownlint(absPaths, modifiedSet) {
+  if (absPaths.length === 0) return { errors: 0 };
+
+  const beforeStats = snapshotFileStats(absPaths);
+  const result = runNpxCommand([
+    "--yes",
+    `--package=${getPackageSpec("markdownlint-cli2")}`,
+    "markdownlint-cli2",
+    "--fix",
+    ...getMarkdownlintRelativePaths(absPaths)
+  ]);
+
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  if (result.error) throw result.error;
+
+  recordModifiedByStats(absPaths, beforeStats, modifiedSet);
+  return { errors: result.status === 0 ? 0 : result.status || 1 };
+}
+
+async function runMarkdownlintInProcess(absPaths, modifiedSet, options = {}) {
+  if (absPaths.length === 0) return { errors: 0 };
+  const {
+    existsSyncFn = fs.existsSync,
+    importModuleFn = importMarkdownlintCli2Module,
+    runNpxMarkdownlintFn = runNpxMarkdownlint
+  } = options;
+  if (!existsSyncFn(MARKDOWNLINT_CLI2_MODULE)) {
+    process.stderr.write(
+      "run-staged-md-pipeline: local markdownlint-cli2 install is missing; using pinned npx fallback.\n"
     );
-
-    const collected = [];
-    const result = await main({
-        directory: ROOT_DIR,
-        argv: ["--fix", ...relativePaths],
-        logMessage: (msg) => {
-            // Drop the banner / progress lines; keep nothing on stdout in
-            // success cases. Errors come through logError.
-            collected.push(msg);
-        },
-        logError: (msg) => {
-            process.stderr.write(`${msg}\n`);
-        },
-        allowStdin: false,
-    });
-
-    // Detect file rewrites caused by `--fix` so the modified-set is
-    // accurate. mtime is the cheap signal; size is the tiebreaker.
-    for (const p of absPaths) {
-        let stat;
-        try {
-            stat = fs.statSync(p);
-        } catch {
-            continue;
-        }
-        if (
-            stat.size !== sizeByPath.get(p) ||
-            stat.mtimeMs !== mtimeByPath.get(p)
-        ) {
-            modifiedSet.add(p);
-        }
+    return runNpxMarkdownlintFn(absPaths, modifiedSet);
+  }
+  // markdownlint-cli2 ships as ESM only; CommonJS callers must use a
+  // dynamic import. The module object exposes `main(params)` per the
+  // bin entry at node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs.
+  let mod;
+  try {
+    mod = await importModuleFn();
+  } catch (error) {
+    if (!isRecoverableToolLoadError(error)) {
+      throw error;
     }
 
-    return { errors: result, log: collected };
+    process.stderr.write(
+      `run-staged-md-pipeline: local markdownlint-cli2 install is incomplete (${error.message}); using pinned npx fallback.\n`
+    );
+    return runNpxMarkdownlintFn(absPaths, modifiedSet);
+  }
+  const main = mod.main;
+
+  // Capture output for two reasons: (1) the cli2 banner is noise on hook
+  // runs, (2) the modified-set bookkeeping below needs to detect rewrites
+  // by re-reading from disk after `--fix` runs in place.
+  const beforeStats = snapshotFileStats(absPaths);
+
+  // Pass POSIX-style relative paths to keep markdownlint-cli2's globby
+  // resolution stable on Windows.
+  const relativePaths = getMarkdownlintRelativePaths(absPaths);
+
+  const collected = [];
+  const result = await main({
+    directory: ROOT_DIR,
+    argv: ["--fix", ...relativePaths],
+    logMessage: (msg) => {
+      // Drop the banner / progress lines; keep nothing on stdout in
+      // success cases. Errors come through logError.
+      collected.push(msg);
+    },
+    logError: (msg) => {
+      process.stderr.write(`${msg}\n`);
+    },
+    allowStdin: false
+  });
+
+  // Detect file rewrites caused by `--fix` so the modified-set is
+  // accurate. mtime is the cheap signal; size is the tiebreaker.
+  recordModifiedByStats(absPaths, beforeStats, modifiedSet);
+
+  return { errors: result, log: collected };
 }
 
 function runValidators(absPath, content) {
-    const violations = { ascii: [], codePatterns: [], prose: [] };
-    const warnings = { ascii: [] };
+  const violations = { ascii: [], codePatterns: [], prose: [] };
+  const warnings = { ascii: [] };
 
-    const asciiResult = ascii.scanContent(absPath, content, false);
-    violations.ascii.push(...asciiResult.violations);
-    if (asciiResult.warning) warnings.ascii.push(asciiResult.warning);
+  const asciiResult = ascii.scanContent(absPath, content, false);
+  violations.ascii.push(...asciiResult.violations);
+  if (asciiResult.warning) warnings.ascii.push(asciiResult.warning);
 
-    codePatterns.scanMarkdown(absPath, content, violations.codePatterns);
+  codePatterns.scanMarkdown(absPath, content, violations.codePatterns);
 
-    const proseResult = prose.scanContent(absPath, content);
-    violations.prose.push(...proseResult.violations);
+  const proseResult = prose.scanContent(absPath, content);
+  violations.prose.push(...proseResult.violations);
 
-    return { violations, warnings };
+  return { violations, warnings };
 }
 
 // Output formatters live in scripts/lib/staged-doc-formatters.js to keep
@@ -271,201 +414,208 @@ function runValidators(absPath, content) {
 // run-staged-validators.js. Local thin wrappers bind the pipeline-local
 // toRepoRelative.
 function formatAsciiViolation(v) {
-    return sharedFormatters.formatAsciiViolation(v, toRepoRelative);
+  return sharedFormatters.formatAsciiViolation(v, toRepoRelative);
 }
 
 function formatAsciiWarning(w) {
-    return sharedFormatters.formatAsciiWarning(w, toRepoRelative);
+  return sharedFormatters.formatAsciiWarning(w, toRepoRelative);
 }
 
 function formatCodePatternViolation(v) {
-    return sharedFormatters.formatCodePatternViolation(v, toRepoRelative);
+  return sharedFormatters.formatCodePatternViolation(v, toRepoRelative);
 }
 
 function formatProseViolation(v) {
-    return sharedFormatters.formatProseViolation(v, toRepoRelative);
+  return sharedFormatters.formatProseViolation(v, toRepoRelative);
 }
 
 function emit(line, useStderr) {
-    const stream = useStderr ? process.stderr : process.stdout;
-    stream.write(`${line}\n`);
+  const stream = useStderr ? process.stderr : process.stdout;
+  stream.write(`${line}\n`);
 }
 
 async function runStagedMdPipeline(filePaths, options = {}) {
-    const skipMarkdownlint = !!options.skipMarkdownlint;
-    const skipPrettier = !!options.skipPrettier;
-    const applicable = [];
-    for (const raw of filePaths) {
-        if (isApplicable(raw)) {
-            applicable.push(
-                path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw),
-            );
-        }
+  const skipMarkdownlint = !!options.skipMarkdownlint;
+  const skipPrettier = !!options.skipPrettier;
+  const applicable = [];
+  for (const raw of filePaths) {
+    if (isApplicable(raw)) {
+      applicable.push(path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw));
+    }
+  }
+
+  const modifiedSet = new Set();
+  const aggregated = {
+    ascii: { violations: [], warnings: [] },
+    codePatterns: { violations: [] },
+    prose: { violations: [] }
+  };
+  let markdownlintErrors = 0;
+  // Tracks files the per-file loop actually processed (i.e. files that
+  // existed and were readable). Markdownlint runs in a single batched
+  // call after the loop, and would crash with ENOENT on missing files
+  // because it stats every input. Including only the present files
+  // mirrors the per-file loop's silent-skip behaviour.
+  const present = [];
+
+  for (const absPath of applicable) {
+    const original = readFileSafe(absPath);
+    if (original === null) continue;
+    present.push(absPath);
+
+    // Stage 1+2: in-process structural fixers.
+    let working = applyInProcessFixers(absPath, original, modifiedSet);
+
+    // Stage 3: prettier in-process.
+    if (!skipPrettier) {
+      try {
+        working = await runPrettierInProcess(absPath, working, modifiedSet);
+      } catch (error) {
+        emit(
+          `run-staged-md-pipeline: prettier failed on ${toRepoRelative(absPath)}: ${error.message}`,
+          true
+        );
+        throw error;
+      }
     }
 
-    const modifiedSet = new Set();
-    const aggregated = {
-        ascii: { violations: [], warnings: [] },
-        codePatterns: { violations: [] },
-        prose: { violations: [] },
-    };
-    let markdownlintErrors = 0;
-    // Tracks files the per-file loop actually processed (i.e. files that
-    // existed and were readable). Markdownlint runs in a single batched
-    // call after the loop, and would crash with ENOENT on missing files
-    // because it stats every input. Including only the present files
-    // mirrors the per-file loop's silent-skip behaviour.
-    const present = [];
+    // Stage 5 (validators) reads the post-fix content. Markdownlint runs
+    // outside this loop so it can batch all files into a single call.
+    // Re-read from disk to pick up any changes prettier wrote, then
+    // hand the content to the validators.
+    const postFix = readFileSafe(absPath) ?? working;
+    const v = runValidators(absPath, postFix);
+    aggregated.ascii.violations.push(...v.violations.ascii);
+    aggregated.ascii.warnings.push(...v.warnings.ascii);
+    aggregated.codePatterns.violations.push(...v.violations.codePatterns);
+    aggregated.prose.violations.push(...v.violations.prose);
+  }
 
-    for (const absPath of applicable) {
-        const original = readFileSafe(absPath);
-        if (original === null) continue;
-        present.push(absPath);
+  // Stage 4: markdownlint --fix across all present files at once.
+  // Skipping any file the per-file loop couldn't read keeps markdownlint
+  // from crashing on a missing path (ENOENT in fs.statSync).
+  if (!skipMarkdownlint && present.length > 0) {
+    const lintResult = await runMarkdownlintInProcess(present, modifiedSet);
+    markdownlintErrors = lintResult.errors || 0;
+  }
 
-        // Stage 1+2: in-process structural fixers.
-        let working = applyInProcessFixers(absPath, original, modifiedSet);
-
-        // Stage 3: prettier in-process.
-        if (!skipPrettier) {
-            try {
-                working = await runPrettierInProcess(absPath, working, modifiedSet);
-            } catch (error) {
-                emit(
-                    `run-staged-md-pipeline: prettier failed on ${toRepoRelative(absPath)}: ${error.message}`,
-                    true,
-                );
-                throw error;
-            }
-        }
-
-        // Stage 5 (validators) reads the post-fix content. Markdownlint runs
-        // outside this loop so it can batch all files into a single call.
-        // Re-read from disk to pick up any changes prettier wrote, then
-        // hand the content to the validators.
-        const postFix = readFileSafe(absPath) ?? working;
-        const v = runValidators(absPath, postFix);
-        aggregated.ascii.violations.push(...v.violations.ascii);
-        aggregated.ascii.warnings.push(...v.warnings.ascii);
-        aggregated.codePatterns.violations.push(...v.violations.codePatterns);
-        aggregated.prose.violations.push(...v.violations.prose);
-    }
-
-    // Stage 4: markdownlint --fix across all present files at once.
-    // Skipping any file the per-file loop couldn't read keeps markdownlint
-    // from crashing on a missing path (ENOENT in fs.statSync).
-    if (!skipMarkdownlint && present.length > 0) {
-        const lintResult = await runMarkdownlintInProcess(present, modifiedSet);
-        markdownlintErrors = lintResult.errors || 0;
-    }
-
-    return {
-        applicable,
-        modified: [...modifiedSet],
-        violations: aggregated,
-        markdownlintErrors,
-    };
+  return {
+    applicable,
+    modified: [...modifiedSet],
+    violations: aggregated,
+    markdownlintErrors
+  };
 }
 
 function reportPipelineResult(result) {
-    let totalViolations = 0;
+  let totalViolations = 0;
 
-    for (const w of result.violations.ascii.warnings) {
-        emit(formatAsciiWarning(w), true);
-    }
+  for (const w of result.violations.ascii.warnings) {
+    emit(formatAsciiWarning(w), true);
+  }
 
-    if (result.violations.ascii.violations.length > 0) {
-        emit("-- validate-docs-ascii --", true);
-        for (const v of result.violations.ascii.violations) {
-            emit(formatAsciiViolation(v), true);
-        }
-        totalViolations += result.violations.ascii.violations.length;
+  if (result.violations.ascii.violations.length > 0) {
+    emit("-- validate-docs-ascii --", true);
+    for (const v of result.violations.ascii.violations) {
+      emit(formatAsciiViolation(v), true);
     }
+    totalViolations += result.violations.ascii.violations.length;
+  }
 
-    if (result.violations.codePatterns.violations.length > 0) {
-        emit("-- validate-doc-code-patterns --", true);
-        for (const v of result.violations.codePatterns.violations) {
-            emit(formatCodePatternViolation(v), true);
-        }
-        totalViolations += result.violations.codePatterns.violations.length;
+  if (result.violations.codePatterns.violations.length > 0) {
+    emit("-- validate-doc-code-patterns --", true);
+    for (const v of result.violations.codePatterns.violations) {
+      emit(formatCodePatternViolation(v), true);
     }
+    totalViolations += result.violations.codePatterns.violations.length;
+  }
 
-    if (result.violations.prose.violations.length > 0) {
-        emit("-- validate-docs-prose --", true);
-        for (const v of result.violations.prose.violations) {
-            emit(formatProseViolation(v), true);
-        }
-        totalViolations += result.violations.prose.violations.length;
+  if (result.violations.prose.violations.length > 0) {
+    emit("-- validate-docs-prose --", true);
+    for (const v of result.violations.prose.violations) {
+      emit(formatProseViolation(v), true);
     }
+    totalViolations += result.violations.prose.violations.length;
+  }
 
-    if (result.markdownlintErrors > 0) {
-        emit(
-            `run-staged-md-pipeline: markdownlint reported ${result.markdownlintErrors} error(s); see stderr above.`,
-            true,
-        );
-    }
+  if (result.markdownlintErrors > 0) {
+    emit(
+      `run-staged-md-pipeline: markdownlint reported ${result.markdownlintErrors} error(s); see stderr above.`,
+      true
+    );
+  }
 
-    if (
-        totalViolations === 0 &&
-        result.markdownlintErrors === 0 &&
-        result.modified.length === 0
-    ) {
-        emit(
-            `run-staged-md-pipeline: 0 violations, no files modified (${result.applicable.length} file(s) inspected).`,
-            false,
-        );
-    } else if (totalViolations === 0 && result.markdownlintErrors === 0) {
-        emit(
-            `run-staged-md-pipeline: 0 violations, ${result.modified.length} file(s) auto-fixed (${result.applicable.length} inspected). Re-stage to commit.`,
-            false,
-        );
-    } else {
-        emit(
-            `run-staged-md-pipeline: ${totalViolations} validator violation(s) and ${result.markdownlintErrors} markdownlint error(s) across ${result.applicable.length} file(s).`,
-            true,
-        );
-    }
-    return totalViolations + result.markdownlintErrors;
+  if (totalViolations === 0 && result.markdownlintErrors === 0 && result.modified.length === 0) {
+    emit(
+      `run-staged-md-pipeline: 0 violations, no files modified (${result.applicable.length} file(s) inspected).`,
+      false
+    );
+  } else if (totalViolations === 0 && result.markdownlintErrors === 0) {
+    emit(
+      `run-staged-md-pipeline: 0 violations, ${result.modified.length} file(s) auto-fixed (${result.applicable.length} inspected). Re-stage to commit.`,
+      false
+    );
+  } else {
+    emit(
+      `run-staged-md-pipeline: ${totalViolations} validator violation(s) and ${result.markdownlintErrors} markdownlint error(s) across ${result.applicable.length} file(s).`,
+      true
+    );
+  }
+  return totalViolations + result.markdownlintErrors;
 }
 
 async function main(argv) {
-    if (!argv || argv.length === 0) {
-        process.stdout.write(
-            "run-staged-md-pipeline: no file paths given (nothing to do).\n",
-        );
-        return 0;
-    }
-    const result = await runStagedMdPipeline(argv);
-    const failures = reportPipelineResult(result);
-    return failures === 0 ? 0 : 1;
+  if (!argv || argv.length === 0) {
+    process.stdout.write("run-staged-md-pipeline: no file paths given (nothing to do).\n");
+    return 0;
+  }
+  const result = await runStagedMdPipeline(argv);
+  const failures = reportPipelineResult(result);
+  return failures === 0 ? 0 : 1;
 }
 
 module.exports = {
-    ROOT_DIR,
-    ALLOWED_EXTS,
-    EXCLUDE_PREFIXES,
-    EXCLUDE_SEGMENT_RE,
-    PRETTIER_LOCAL_BIN,
-    PRETTIER_LOCAL_MODULE,
-    MARKDOWNLINT_CLI2_MODULE,
-    toImportFileUrl,
-    toRepoRelative,
-    isExcluded,
-    isApplicable,
-    applyInProcessFixers,
-    runPrettierInProcess,
-    runMarkdownlintInProcess,
-    runValidators,
-    runStagedMdPipeline,
-    reportPipelineResult,
-    main,
+  ROOT_DIR,
+  ALLOWED_EXTS,
+  EXCLUDE_PREFIXES,
+  EXCLUDE_SEGMENT_RE,
+  PRETTIER_LOCAL_BIN,
+  PRETTIER_LOCAL_MODULE,
+  MARKDOWNLINT_CLI2_MODULE,
+  TOOL_LOAD_ERROR_PATTERNS,
+  readPackageJson,
+  getPackageSpec,
+  isRecoverableToolLoadError,
+  runToolCommand,
+  resolveBundledNpxCliPath,
+  runNpxCommand,
+  toImportFileUrl,
+  toRepoRelative,
+  isExcluded,
+  isApplicable,
+  applyInProcessFixers,
+  runNpxPrettier,
+  runPrettierInProcess,
+  snapshotFileStats,
+  recordModifiedByStats,
+  getMarkdownlintRelativePaths,
+  importMarkdownlintCli2Module,
+  runNpxMarkdownlint,
+  runMarkdownlintInProcess,
+  runValidators,
+  runStagedMdPipeline,
+  reportPipelineResult,
+  main
 };
 
 if (require.main === module) {
-    main(process.argv.slice(2)).then(
-        (code) => process.exit(code),
-        (error) => {
-            process.stderr.write(`run-staged-md-pipeline: fatal error: ${error.stack || error.message}\n`);
-            process.exit(1);
-        },
-    );
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (error) => {
+      process.stderr.write(
+        `run-staged-md-pipeline: fatal error: ${error.stack || error.message}\n`
+      );
+      process.exit(1);
+    }
+  );
 }

@@ -40,6 +40,8 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Script tests: `npm run test:scripts`
 - Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
 - Pre-commit Node tooling preflight: `npm run preflight:pre-commit`
+- Validate local Node tool dependency health: `npm run validate:node-tooling`
+- Run markdown hook parity check: `npm run validate:hook-markdown`
 - Run parser hook suite exactly as pre-push executes it: `pre-commit run --hook-stage pre-push script-parser-tests --all-files`
 - Check package.json format explicitly: `npm run check:package-json-format`
 - Check hook-managed Prettier targets: `npm run check:prettier:hooks`
@@ -87,6 +89,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - When editing `.pre-commit-config.yaml` or `scripts/validate-pre-commit-tooling.js`, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/pre-commit-hook-stage-policy.test.js scripts/__tests__/validate-pre-commit-tooling.test.js` before `npm run preflight:pre-commit`.
 - On Windows, verify `npm --version` in the active shell before running hook-related checks (especially when using nvm/fnm).
 - On Windows hosts, run `npm run preflight:pre-commit` in the same shell you use for `git commit` so hook PATH/init, npm version drift, package.json formatting, and yamllint issues are caught before commit.
+- If a Node-backed hook reports missing packages under `node_modules`, run `npm run validate:node-tooling` before retrying the hook; it imports the same local tool graph and reports incomplete installs directly.
 - For destructive test harness scripts (for example deleting files under `node_modules`), require explicit CLI opt-in flags and validate target paths defensively before mutation.
 - In workflows where `package-lock.json` is gitignored, dependency install blocks must be lockfile-aware (`npm ci` when lockfile exists, `npm i --no-audit --no-fund` fallback when absent); bare install-only blocks should be treated as policy violations.
 - For command alternation regexes, avoid optional-suffix shorthands that split words into partial tokens; prefer explicit alternation forms like `(?:install|i)` to keep patterns readable and spellcheck-safe.

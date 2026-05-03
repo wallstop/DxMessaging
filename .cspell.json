@@ -16,6 +16,7 @@
     ".devcontainer/**",
     ".gitignore",
     ".gitattributes",
+    ".vale/styles/Vocab/**/reject.txt",
     "*.meta",
     "Samples~/**",
     "package-lock.json",

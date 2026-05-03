@@ -25,6 +25,8 @@ const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.ya
 const PACKAGE_JSON_PATH = path.join(__dirname, "..", "package.json");
 const REQUIRED_PRECHECK_PARSER_COMMAND =
   "pre-commit run --hook-stage pre-push script-parser-tests --all-files";
+const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
+const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
 const REQUIRED_CHANGELOG_VALIDATION_COMMAND = "npm run validate:changelog:coverage";
@@ -154,6 +156,14 @@ function hasRequiredParserPrecheckCommand(preflightScript) {
 
 function hasRequiredPackageJsonFormatCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
+}
+
+function hasRequiredNodeToolingCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_NODE_TOOLING_COMMAND);
+}
+
+function hasRequiredHookMarkdownCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_HOOK_MARKDOWN_COMMAND);
 }
 
 function hasRequiredScriptsCspellCommand(preflightScript) {
@@ -329,7 +339,7 @@ function validateHookEntries(entries) {
         new Violation(
           hook.id,
           hook.line,
-          "fix-csharp-underscore-methods must guard restaging with 'git diff --quiet -- \"$@\" || git add \"$@\"' to avoid unnecessary git index locking.",
+          'fix-csharp-underscore-methods must guard restaging with \'git diff --quiet -- "$@" || git add "$@"\' to avoid unnecessary git index locking.',
           hook.entry
         )
       );
@@ -452,6 +462,28 @@ function validatePreflightScriptPolicy(
         "preflight-script",
         1,
         `preflight:pre-commit must include '${REQUIRED_PACKAGE_JSON_FORMAT_COMMAND}' so package.json formatting drift is caught before hooks.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (!hasRequiredNodeToolingCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_NODE_TOOLING_COMMAND}' so incomplete local node_modules installs are caught before hooks.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (!hasRequiredHookMarkdownCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_HOOK_MARKDOWN_COMMAND}' so the pre-commit markdown hook path is smoke-tested before commit.`,
         preflightScript
       )
     );
@@ -638,6 +670,8 @@ module.exports = {
   hasRequiredPreflightCommand,
   hasRequiredParserPrecheckCommand,
   hasRequiredPackageJsonFormatCommand,
+  hasRequiredNodeToolingCommand,
+  hasRequiredHookMarkdownCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredChangelogValidationCommand,
   hasNpxInstallPolicy,
@@ -654,6 +688,8 @@ module.exports = {
   validatePerfBudget,
   PACKAGE_JSON_PATH,
   REQUIRED_PRECHECK_PARSER_COMMAND,
+  REQUIRED_NODE_TOOLING_COMMAND,
+  REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_CHANGELOG_VALIDATION_COMMAND,
