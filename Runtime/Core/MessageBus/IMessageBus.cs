@@ -64,6 +64,16 @@ namespace DxMessaging.Core.MessageBus
         long EmissionId { get; }
 
         /// <summary>
+        /// Reclaim empty message slots and pooled collections owned by this bus.
+        /// </summary>
+        /// <param name="force">
+        /// When true, ignores idle-age thresholds and drains shared pools to zero.
+        /// When false, only slots past the configured idle threshold are eligible.
+        /// </param>
+        /// <returns>Counts describing what was reclaimed.</returns>
+        TrimResult Trim(bool force = false);
+
+        /// <summary>
         /// Default buffer size for message emission history.
         /// </summary>
         /// <remarks>
@@ -119,6 +129,48 @@ namespace DxMessaging.Core.MessageBus
         bool DiagnosticsMode { get; }
 
         int RegisteredGlobalSequentialIndex { get; }
+
+        /// <summary>
+        /// Number of currently occupied per-message-type slots on this bus.
+        /// </summary>
+        int OccupiedTypeSlots { get; }
+
+        /// <summary>
+        /// Number of currently occupied per-context target/source slots on this bus.
+        /// </summary>
+        int OccupiedTargetSlots { get; }
+
+        /// <summary>
+        /// Result returned by <see cref="Trim"/>.
+        /// </summary>
+        readonly struct TrimResult
+        {
+            public TrimResult(
+                int typeSlotsEvicted,
+                int targetSlotsEvicted,
+                int pooledCollectionsEvicted,
+                int liveTypeSlotsRemaining
+            )
+            {
+                TypeSlotsEvicted = typeSlotsEvicted;
+                TargetSlotsEvicted = targetSlotsEvicted;
+                PooledCollectionsEvicted = pooledCollectionsEvicted;
+                LiveTypeSlotsRemaining = liveTypeSlotsRemaining;
+            }
+
+            /// <summary>Number of typed-handler slots reset.</summary>
+            public int TypeSlotsEvicted { get; }
+
+            /// <summary>Number of bus target/source context entries removed.</summary>
+            public int TargetSlotsEvicted { get; }
+
+            /// <summary>Number of pooled collections dropped from shared pools.</summary>
+            public int PooledCollectionsEvicted { get; }
+
+            /// <summary>Number of occupied type slots remaining after trim.</summary>
+            public int LiveTypeSlotsRemaining { get; }
+        }
+
         int RegisteredBroadcast { get; }
 
         int RegisteredTargeted { get; }

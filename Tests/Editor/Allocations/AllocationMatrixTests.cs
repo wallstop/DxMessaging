@@ -6,6 +6,7 @@ namespace DxMessaging.Tests.Editor.Allocations
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
+    using DxMessaging.Core.Pooling;
     using DxMessaging.Tests.Editor.Benchmarks;
     using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
@@ -101,6 +102,14 @@ namespace DxMessaging.Tests.Editor.Allocations
         /// philosophy applied.
         /// </summary>
         private const long PerDeregistrationByteBudget = 256L;
+
+        /// <summary>
+        /// Cumulative allocation budget for 32 trim calls after warm-up. Trim
+        /// can perform small fixed bookkeeping work while walking dirty
+        /// candidates, but repeated calls must stay bounded and independent of
+        /// normal dispatch hot-path allocations.
+        /// </summary>
+        private const long TrimAllocBudget = 4 * 1024L;
 
         /// <summary>
         /// Per-call allocation budget for a single registration on the
@@ -529,6 +538,102 @@ namespace DxMessaging.Tests.Editor.Allocations
             );
         }
 
+        /// <summary>
+        /// Pins explicit forced trim to a small bounded allocation budget
+        /// across the same 32-iteration measurement window used by the emit
+        /// allocation assertions. The setup creates a fresh dirty empty slot
+        /// for the selected message kind and prewarms one trim call so any
+        /// one-time bookkeeping does not contaminate the measured loop.
+        /// </summary>
+        [Test]
+        [Category("Allocation")]
+        public void TrimIsBoundedAlloc(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            RunWithFreshHarness(
+                scenario,
+                (token, bus) =>
+                {
+                    Action emit = BuildEmitClosure(scenario, bus);
+                    _ = bus.Trim(force: true);
+                    CreateFreshTrimCandidate(scenario, token, emit);
+
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    long before = GC.GetAllocatedBytesForCurrentThread();
+                    IMessageBus.TrimResult result = default;
+                    int evictedSlots = 0;
+                    for (int i = 0; i < AllocationAssertions.DefaultMeasuredIterations; ++i)
+                    {
+                        result = bus.Trim(force: true);
+                        evictedSlots += result.TypeSlotsEvicted + result.TargetSlotsEvicted;
+                    }
+                    long after = GC.GetAllocatedBytesForCurrentThread();
+                    long delta = after - before;
+                    long perTrim = delta / AllocationAssertions.DefaultMeasuredIterations;
+
+                    Assert.That(
+                        delta,
+                        Is.LessThanOrEqualTo(TrimAllocBudget),
+                        $"Trim-{scenario.Kind} allocated {delta} bytes; "
+                            + $"({perTrim} avg/trim) across "
+                            + $"{AllocationAssertions.DefaultMeasuredIterations} trims; "
+                            + $"budget is {TrimAllocBudget} bytes. "
+                            + $"Result: type evicted={result.TypeSlotsEvicted}, "
+                            + $"target evicted={result.TargetSlotsEvicted}, "
+                            + $"pooled evicted={result.PooledCollectionsEvicted}, "
+                            + $"live type slots={result.LiveTypeSlotsRemaining}."
+                    );
+                    Assert.Greater(
+                        evictedSlots,
+                        0,
+                        $"Trim-{scenario.Kind} must reclaim at least one slot during the measured loop."
+                    );
+                }
+            );
+        }
+
+        /// <summary>
+        /// Pins zero-allocation emission after registering several handlers,
+        /// deregistering half of them, and running a non-force trim. This
+        /// covers the handoff where partial trim bookkeeping observes dirty
+        /// candidates while the remaining live routes must still emit on the
+        /// hot path without allocating.
+        /// </summary>
+        [Test]
+        [Category("Allocation")]
+        public void EmitAfterPartialTrimIsZeroAlloc(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            RunWithFreshHarness(
+                scenario,
+                (token, bus) =>
+                {
+                    Action emit = BuildEmitClosure(scenario, bus);
+                    List<MessageRegistrationHandle> handles = RegisterManyHandlers(
+                        scenario,
+                        token,
+                        count: 8
+                    );
+                    for (int i = 0; i < handles.Count / 2; ++i)
+                    {
+                        token.RemoveRegistration(handles[i]);
+                    }
+
+                    _ = bus.Trim(force: false);
+
+                    AllocationAssertions.AssertNoAllocations(
+                        $"EmitAfterPartialTrim-{scenario.Kind}",
+                        emit
+                    );
+                }
+            );
+        }
+
         public static IEnumerable<MessageScenario> DiagnosticsOnScenarios
         {
             get
@@ -582,7 +687,13 @@ namespace DxMessaging.Tests.Editor.Allocations
                 throw new ArgumentNullException(nameof(body));
             }
 
-            MessageBus bus = new MessageBus();
+            MessageBus bus = new MessageBus(
+                StopwatchClock.Instance,
+                idleEvictionTicks: 0,
+                evictionTickIntervalSeconds: double.PositiveInfinity,
+                idleEvictionEnabled: false,
+                trimApiEnabled: true
+            );
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
             try
@@ -595,6 +706,32 @@ namespace DxMessaging.Tests.Editor.Allocations
                 token.UnregisterAll();
                 token.Dispose();
             }
+        }
+
+        private static void CreateFreshTrimCandidate(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            Action emit
+        )
+        {
+            MessageRegistrationHandle handle = RegisterHandler(scenario, token);
+            emit();
+            token.RemoveRegistration(handle);
+        }
+
+        private static List<MessageRegistrationHandle> RegisterManyHandlers(
+            MessageScenario scenario,
+            MessageRegistrationToken token,
+            int count
+        )
+        {
+            List<MessageRegistrationHandle> handles = new List<MessageRegistrationHandle>(count);
+            for (int i = 0; i < count; ++i)
+            {
+                handles.Add(RegisterHandler(scenario, token, priority: i));
+            }
+
+            return handles;
         }
 
         private static MessageRegistrationHandle RegisterHandler(

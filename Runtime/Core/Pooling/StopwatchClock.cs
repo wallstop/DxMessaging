@@ -1,0 +1,22 @@
+namespace DxMessaging.Core.Pooling
+{
+    using System.Diagnostics;
+
+    /// <summary>
+    /// Default <see cref="IDxMessagingClock"/> backed by a process-lifetime
+    /// <see cref="Stopwatch"/>. Monotonic and Unity-agnostic so it works in
+    /// EditMode, PlayMode, and standalone test harnesses.
+    /// </summary>
+    public sealed class StopwatchClock : IDxMessagingClock
+    {
+        /// <summary>Shared instance. Stopwatch is lock-free and safe to share.</summary>
+        public static readonly StopwatchClock Instance = new();
+
+        private static readonly double TicksToSeconds = 1.0 / Stopwatch.Frequency;
+
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+
+        /// <inheritdoc />
+        public double NowSeconds => _stopwatch.ElapsedTicks * TicksToSeconds;
+    }
+}

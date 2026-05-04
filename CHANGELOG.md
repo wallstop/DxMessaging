@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SuiteSpeedBudgetTest` as a default-suite speed guard rail.
 - `TestAttributeContractTests` extensions enforcing kind-parameterization and allocation coverage discipline.
 - Three new public read-only registration counters on `IMessageBus`: `RegisteredInterceptors`, `RegisteredPostProcessors`, and `RegisteredGlobalAcceptAll`. Lets diagnostic and leak-check tooling distinguish interceptor / post-processor / global accept-all leaks from regular handler leaks, and lets external monitors aggregate the bus's registration footprint without reflecting on internals. `MessageBus` aggregates the counters on each read by walking the per-message-type caches; consumers polling these properties in tight loops should snapshot at region boundaries.
+- Runtime memory-reclamation foundations: `DxMessagingRuntimeSettings` loads from `Resources/DxMessagingRuntimeSettings` and hot-reloads eviction cadence, enablement, trim opt-out, and pool-cap changes without recreating the bus. Pooled internal collections and typed/bus slot registries preserve existing dispatch APIs while making empty handler and interceptor slots reclaimable. `IMessageBus.Trim(force)` and `MessageHandler.TrimAll(force)` reset dirty empty slots and trim shared pools on demand, `OccupiedTypeSlots` / `OccupiedTargetSlots` expose the retained bus and dirty typed-handler slot footprint for diagnostics, and idle sweeps run from emits and Unity's PlayerLoop.
 
 ### Fixed
 

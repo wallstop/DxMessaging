@@ -26,6 +26,11 @@ namespace DxMessaging.Tests.Runtime
     /// the public surface, so the watcher does not lift any internal field. If a
     /// future API adds a seventh registration kind, <see cref="Snapshot"/> and
     /// <see cref="LeakedRegistrations"/> need to be extended in lock-step.
+    /// Slot occupancy counters (<see cref="IMessageBus.OccupiedTypeSlots"/> and
+    /// <see cref="IMessageBus.OccupiedTargetSlots"/>) are also captured and
+    /// reported. They are enforced only by <see cref="WatchWithSlots"/> so the
+    /// default watcher remains suitable for registration-only leak checks that
+    /// do not force a trim inside the watched region.
     /// </para>
     /// <para>
     /// Allocation note: the <see cref="Snapshot"/> getter and the
@@ -59,6 +64,9 @@ namespace DxMessaging.Tests.Runtime
         private readonly int _initialInterceptors;
         private readonly int _initialPostProcessors;
         private readonly int _initialGlobalAcceptAll;
+        private readonly int _initialTypeSlotCount;
+        private readonly int _initialTargetSlotCount;
+        private readonly bool _watchSlots;
 
         private bool _disposed;
         private int _finalUntargeted;
@@ -67,6 +75,8 @@ namespace DxMessaging.Tests.Runtime
         private int _finalInterceptors;
         private int _finalPostProcessors;
         private int _finalGlobalAcceptAll;
+        private int _finalTypeSlotCount;
+        private int _finalTargetSlotCount;
 
         /// <summary>
         /// Captures the initial registration counts on the supplied
@@ -85,7 +95,12 @@ namespace DxMessaging.Tests.Runtime
         /// Optional label included in the failure message. Useful for
         /// distinguishing multiple watchers in a single test.
         /// </param>
-        public LeakWatcher(IMessageBus bus = null, bool throwOnLeak = true, string label = null)
+        public LeakWatcher(
+            IMessageBus bus = null,
+            bool throwOnLeak = true,
+            string label = null,
+            bool watchSlots = false
+        )
         {
             _bus = bus ?? MessageHandler.MessageBus;
             if (_bus == null)
@@ -98,12 +113,15 @@ namespace DxMessaging.Tests.Runtime
 
             _throwOnLeak = throwOnLeak;
             _label = label;
+            _watchSlots = watchSlots;
             _initialUntargeted = _bus.RegisteredUntargeted;
             _initialTargeted = _bus.RegisteredTargeted;
             _initialBroadcast = _bus.RegisteredBroadcast;
             _initialInterceptors = _bus.RegisteredInterceptors;
             _initialPostProcessors = _bus.RegisteredPostProcessors;
             _initialGlobalAcceptAll = _bus.RegisteredGlobalAcceptAll;
+            _initialTypeSlotCount = _bus.OccupiedTypeSlots;
+            _initialTargetSlotCount = _bus.OccupiedTargetSlots;
         }
 
         /// <summary>
@@ -114,6 +132,36 @@ namespace DxMessaging.Tests.Runtime
         public static LeakWatcher Watch(string label = null)
         {
             return new LeakWatcher(bus: null, throwOnLeak: true, label: label);
+        }
+
+        /// <summary>
+        /// Convenience factory that also asserts per-type and per-target slot
+        /// occupancy returns to the starting counts. Use when the watched
+        /// region performs an explicit trim or otherwise expects all empty
+        /// memory-reclamation slots to be reclaimed before disposal.
+        /// </summary>
+        public static LeakWatcher WatchWithSlots(string label = null)
+        {
+            return new LeakWatcher(bus: null, throwOnLeak: true, label: label, watchSlots: true);
+        }
+
+        /// <summary>
+        /// Convenience factory for a specific bus that also asserts
+        /// per-type and per-target slot occupancy returns to the starting
+        /// counts.
+        /// </summary>
+        public static LeakWatcher WatchWithSlots(
+            IMessageBus bus,
+            bool throwOnLeak = true,
+            string label = null
+        )
+        {
+            return new LeakWatcher(
+                bus: bus,
+                throwOnLeak: throwOnLeak,
+                label: label,
+                watchSlots: true
+            );
         }
 
         /// <summary>
@@ -154,6 +202,19 @@ namespace DxMessaging.Tests.Runtime
             + _initialGlobalAcceptAll;
 
         /// <summary>
+        /// The live occupied-slot count across per-message-type and
+        /// per-target/source slots. Updates on each read until disposal.
+        /// </summary>
+        public int SlotSnapshot =>
+            (_disposed ? _finalTypeSlotCount : _bus.OccupiedTypeSlots)
+            + (_disposed ? _finalTargetSlotCount : _bus.OccupiedTargetSlots);
+
+        /// <summary>
+        /// The occupied-slot count captured at construction.
+        /// </summary>
+        public int InitialSlotSnapshot => _initialTypeSlotCount + _initialTargetSlotCount;
+
+        /// <summary>
         /// Number of additional registrations leaked relative to the initial
         /// snapshot. Negative values indicate a regression where the watched
         /// region removed registrations beyond what it owned. Reads the live
@@ -192,6 +253,28 @@ namespace DxMessaging.Tests.Runtime
         }
 
         /// <summary>
+        /// Number of occupied per-message-type slots leaked relative to the
+        /// initial snapshot. Negative values indicate the watched region
+        /// reclaimed slots it did not create.
+        /// </summary>
+        public int LeakedTypeSlots =>
+            (_disposed ? _finalTypeSlotCount : _bus.OccupiedTypeSlots) - _initialTypeSlotCount;
+
+        /// <summary>
+        /// Number of occupied per-target/source slots leaked relative to the
+        /// initial snapshot. Negative values indicate the watched region
+        /// reclaimed slots it did not create.
+        /// </summary>
+        public int LeakedTargetSlots =>
+            (_disposed ? _finalTargetSlotCount : _bus.OccupiedTargetSlots)
+            - _initialTargetSlotCount;
+
+        /// <summary>
+        /// Total occupied slot drift relative to the initial snapshot.
+        /// </summary>
+        public int LeakedSlots => LeakedTypeSlots + LeakedTargetSlots;
+
+        /// <summary>
         /// Returns a one-line per-counter description of the delta between the
         /// initial snapshot and the current (or final, post-disposal) bus
         /// counts. Intended for inclusion in NUnit assertion messages so a
@@ -215,6 +298,10 @@ namespace DxMessaging.Tests.Runtime
             int currentGlobalAcceptAll = _disposed
                 ? _finalGlobalAcceptAll
                 : _bus.RegisteredGlobalAcceptAll;
+            int currentTypeSlotCount = _disposed ? _finalTypeSlotCount : _bus.OccupiedTypeSlots;
+            int currentTargetSlotCount = _disposed
+                ? _finalTargetSlotCount
+                : _bus.OccupiedTargetSlots;
 
             int delta = TotalDelta(
                 currentUntargeted,
@@ -230,7 +317,7 @@ namespace DxMessaging.Tests.Runtime
                 CultureInfo.InvariantCulture,
                 "LeakWatcher{0}: delta={1} (Untargeted {2}->{3}, Targeted {4}->{5}, "
                     + "Broadcast {6}->{7}, Interceptors {8}->{9}, PostProcessors {10}->{11}, "
-                    + "GlobalAcceptAll {12}->{13}).",
+                    + "GlobalAcceptAll {12}->{13}, TypeSlots {14}->{15}, TargetSlots {16}->{17}).",
                 scope,
                 delta,
                 _initialUntargeted,
@@ -244,7 +331,11 @@ namespace DxMessaging.Tests.Runtime
                 _initialPostProcessors,
                 currentPostProcessors,
                 _initialGlobalAcceptAll,
-                currentGlobalAcceptAll
+                currentGlobalAcceptAll,
+                _initialTypeSlotCount,
+                currentTypeSlotCount,
+                _initialTargetSlotCount,
+                currentTargetSlotCount
             );
         }
 
@@ -268,6 +359,8 @@ namespace DxMessaging.Tests.Runtime
             _finalInterceptors = _bus.RegisteredInterceptors;
             _finalPostProcessors = _bus.RegisteredPostProcessors;
             _finalGlobalAcceptAll = _bus.RegisteredGlobalAcceptAll;
+            _finalTypeSlotCount = _bus.OccupiedTypeSlots;
+            _finalTargetSlotCount = _bus.OccupiedTargetSlots;
 
             int delta = TotalDelta(
                 _finalUntargeted,
@@ -277,7 +370,10 @@ namespace DxMessaging.Tests.Runtime
                 _finalPostProcessors,
                 _finalGlobalAcceptAll
             );
-            if (delta == 0)
+            int typeSlotDelta = _finalTypeSlotCount - _initialTypeSlotCount;
+            int targetSlotDelta = _finalTargetSlotCount - _initialTargetSlotCount;
+            bool slotDeltaIsClean = !_watchSlots || (typeSlotDelta == 0 && targetSlotDelta == 0);
+            if (delta == 0 && slotDeltaIsClean)
             {
                 return;
             }
@@ -287,17 +383,20 @@ namespace DxMessaging.Tests.Runtime
                 return;
             }
 
-            Assert.Fail(BuildFailureMessage(delta));
+            Assert.Fail(BuildFailureMessage(delta, typeSlotDelta, targetSlotDelta));
         }
 
-        private string BuildFailureMessage(int delta)
+        private string BuildFailureMessage(int delta, int typeSlotDelta, int targetSlotDelta)
         {
             string scope = string.IsNullOrEmpty(_label) ? string.Empty : $" ({_label})";
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "LeakWatcher{0}: registration count changed by {1} during the watched region. "
+                "LeakWatcher{0}: watched counts changed during the region. "
+                    + "Registration delta={1}; "
+                    + "type slot delta={14}, target slot delta={15}. "
                     + "Untargeted {2}->{3}, Targeted {4}->{5}, Broadcast {6}->{7}, "
-                    + "Interceptors {8}->{9}, PostProcessors {10}->{11}, GlobalAcceptAll {12}->{13}.",
+                    + "Interceptors {8}->{9}, PostProcessors {10}->{11}, GlobalAcceptAll {12}->{13}, "
+                    + "TypeSlots {16}->{17}, TargetSlots {18}->{19}.",
                 scope,
                 delta,
                 _initialUntargeted,
@@ -311,7 +410,13 @@ namespace DxMessaging.Tests.Runtime
                 _initialPostProcessors,
                 _finalPostProcessors,
                 _initialGlobalAcceptAll,
-                _finalGlobalAcceptAll
+                _finalGlobalAcceptAll,
+                typeSlotDelta,
+                targetSlotDelta,
+                _initialTypeSlotCount,
+                _finalTypeSlotCount,
+                _initialTargetSlotCount,
+                _finalTargetSlotCount
             );
         }
 

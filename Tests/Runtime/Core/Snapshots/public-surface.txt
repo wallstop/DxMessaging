@@ -4,6 +4,8 @@ DxMessaging.Core.Attributes.DxIgnoreMissingBaseCallAttribute
 DxMessaging.Core.Attributes.DxOptionalParameterAttribute
 DxMessaging.Core.Attributes.DxTargetedMessageAttribute
 DxMessaging.Core.Attributes.DxUntargetedMessageAttribute
+DxMessaging.Core.Configuration.DxMessagingRuntimeSettings
+DxMessaging.Core.Configuration.DxMessagingRuntimeSettingsProvider
 DxMessaging.Core.Diagnostics.MessageEmissionData
 DxMessaging.Core.Diagnostics.MessageRegistrationMetadata
 DxMessaging.Core.Diagnostics.MessageRegistrationType
@@ -23,6 +25,7 @@ DxMessaging.Core.MessageBus.GlobalMessageBusProvider
 DxMessaging.Core.MessageBus.IMessageBus
 DxMessaging.Core.MessageBus.IMessageBus+BroadcastInterceptor`1
 DxMessaging.Core.MessageBus.IMessageBus+TargetedInterceptor`1
+DxMessaging.Core.MessageBus.IMessageBus+TrimResult
 DxMessaging.Core.MessageBus.IMessageBus+UntargetedInterceptor`1
 DxMessaging.Core.MessageBus.IMessageBusProvider
 DxMessaging.Core.MessageBus.IMessageRegistrationBuilder
@@ -56,3 +59,6 @@ DxMessaging.Core.Messages.ReflexiveSendMode
 DxMessaging.Core.Messages.SourcedStringMessage
 DxMessaging.Core.Messages.StringMessage
 DxMessaging.Core.MessagingDebug
+DxMessaging.Core.Pooling.IDxMessagingClock
+DxMessaging.Core.Pooling.StopwatchClock
+DxMessaging.Core.Pooling.UnityRealtimeClock

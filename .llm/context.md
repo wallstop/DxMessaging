@@ -110,7 +110,9 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Tests that exercise dispatch across more than one of `Untargeted`/`Targeted`/`Broadcast` MUST be parameterized via `MessageScenarios.AllKinds`; see [Tests Must Be Parameterized by Message Kind](./skills/testing/tests-must-be-parameterized-by-message-kind.md).
 - Bus dispatch-path changes must be covered by the canonical lifecycle edge-case set (scene unload mid-dispatch, DDOL transitions, prefab pooling churn, token disable / re-enable, post-Reset emit, OnApplicationQuit drain, cross-kind reentrancy); see [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md).
 - Tests that create and tear down message registrations should bracket the work in a `LeakWatcher` to assert no registrations survive; see [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md).
+- Tests for memory holders keyed by message type or `InstanceId` must prove forced trim, idle sweep, slot-count recovery, and stale deregistration behavior; see [Memory Reclaim Coverage](./skills/testing/memory-reclaim-coverage.md).
 - Benchmark and performance/allocation tests must stay isolated under `Tests/Runtime/Benchmarks` in asmdef `WallstopStudios.DxMessaging.Tests.00.Runtime.Benchmarks`; `.00` is a lexical prefix convention so the benchmark assembly sorts before peer test assemblies in Unity Test Runner. Keep `BenchmarkAssemblyContractTests` green when adding or moving perf tests.
+- When adding a `MessageCache<>` storage field to `MessageBus`, update `MessageBus.ExpectedMessageCacheFieldCount`, add the field to `MessageBus.SweepableTypeCaches`, and add reclamation coverage; see [DxMessaging Memory Reclamation](./skills/performance/memory-reclamation.md).
 
 ## Documentation Expectations
 
@@ -133,8 +135,10 @@ This file is intentionally concise. It contains only critical, high-signal guida
 Use the index above and then select the most relevant skill pages. Frequently useful entries include:
 
 - Documentation and changelog guidance under `./skills/documentation/`
+- Memory reclamation guidance under `./skills/performance/memory-reclamation.md`
 - Script reliability and parsing guidance under `./skills/scripting/`
 - Test quality and investigation guidance under `./skills/testing/`
+- Memory reclaim testing guidance under `./skills/testing/memory-reclaim-coverage.md`
 - Workflow robustness under `./skills/github-actions/`
 
 ## Split File Maintenance
@@ -154,5 +158,7 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [Test Failure Investigation and Zero-Flaky Policy](./skills/testing/test-failure-investigation.md)
 - [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md)
 - [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md)
+- [Memory Reclaim Coverage](./skills/testing/memory-reclaim-coverage.md)
+- [DxMessaging Memory Reclamation](./skills/performance/memory-reclamation.md)
 - [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md)
 - [Git Hook Performance Budget](./skills/performance/git-hook-performance.md)

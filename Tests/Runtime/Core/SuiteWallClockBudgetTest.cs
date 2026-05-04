@@ -14,8 +14,8 @@ namespace DxMessaging.Tests.Runtime
     /// (Core, Integrations, Unity) within the runtime test assembly. The
     /// default Unity Edit + Play mode test run is supposed to finish in
     /// under 60 seconds once the <c>Stress</c>, <c>Allocation</c>,
-    /// <c>Performance</c>, and <c>UnityRuntime</c> categories are filtered
-    /// out. This setup fixture captures a timestamp at suite start (via
+    /// <c>Performance</c>, <c>MemoryReclaim</c>, and <c>UnityRuntime</c>
+    /// categories are filtered out. This setup fixture captures a timestamp at suite start (via
     /// <see cref="OneTimeSetUpAttribute"/>) and asserts the elapsed wall
     /// clock at suite end is below a soft and hard budget.
     /// </summary>
@@ -48,9 +48,9 @@ namespace DxMessaging.Tests.Runtime
     /// defined by NUnit's internal <c>PropertyNames</c> table) and forwards
     /// each one to <see cref="NoteGatedCategoryObserved"/>.
     /// If any test in the session is in the gated set
-    /// (<c>Stress</c>, <c>Performance</c>, <c>Allocation</c>, or <c>UnityRuntime</c>),
-    /// the wall-clock budget assertion is skipped because the gated suites
-    /// have their own CI-side timing budgets.
+    /// (<c>Stress</c>, <c>Performance</c>, <c>Allocation</c>,
+    /// <c>MemoryReclaim</c>, or <c>UnityRuntime</c>), the wall-clock budget assertion is skipped
+    /// because the gated suites have their own CI-side timing budgets.
     /// </para>
     /// <para>
     /// Mechanism alternative: a CI-side timer (e.g. measuring
@@ -81,6 +81,7 @@ namespace DxMessaging.Tests.Runtime
             "Stress",
             "Performance",
             "Allocation",
+            "MemoryReclaim",
             "UnityRuntime",
         };
 
@@ -123,7 +124,7 @@ namespace DxMessaging.Tests.Runtime
             if (_gatedCategoryDetected)
             {
                 UnityEngine.Debug.Log(
-                    "Skipping default-suite wall-clock assertion: a Stress/Performance/Allocation/UnityRuntime "
+                    "Skipping default-suite wall-clock assertion: a Stress/Performance/Allocation/MemoryReclaim/UnityRuntime "
                         + "test was observed in this run."
                 );
                 return;
@@ -134,7 +135,7 @@ namespace DxMessaging.Tests.Runtime
                 Assert.Fail(
                     $"Default suite wall clock ({elapsed.TotalSeconds:0.00}s) exceeded the hard budget "
                         + $"({HardBudget.TotalSeconds:0.0}s). Reduce iteration counts or move offending tests "
-                        + "behind a gated category (Stress/Performance/Allocation/UnityRuntime)."
+                        + "behind a gated category (Stress/Performance/Allocation/MemoryReclaim/UnityRuntime)."
                 );
             }
             else if (elapsed > SoftBudget)

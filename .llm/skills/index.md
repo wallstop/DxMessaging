@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-03. Do not edit manually.
+> **Auto-generated** on 2026-05-04. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 144   |
+| Total Skills | 146   |
 | Categories   | 8     |
 
 ---
@@ -19,10 +19,10 @@
 - [Documentation](#documentation) (27)
 - [GitHub Actions](#github-actions) (5)
 - [Packaging](#packaging) (2)
-- [Performance](#performance) (42)
+- [Performance](#performance) (43)
 - [Scripting](#scripting) (15)
 - [Solid](#solid) (15)
-- [Testing](#testing) (37)
+- [Testing](#testing) (38)
 - [Unity](#unity) (1)
 
 ---
@@ -96,6 +96,7 @@
 | [Collection Pooling with RAII Pattern](./performance/collection-pooling.md)                                        | [draft] 119 | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
 | [Collection Pooling with RAII Pattern Part 1](./performance/collection-pooling-part-1.md)                          | [ok] 206    | [intermediate] | [stable] | [risk: low]      | migration, split      |
 | [Collection Pooling with RAII Pattern Part 2](./performance/collection-pooling-part-2.md)                          | [draft] 57  | [intermediate] | [stable] | [risk: low]      | migration, split      |
+| [DxMessaging Memory Reclamation](./performance/memory-reclamation.md)                                              | [ok] 185    | [advanced]     | [stable] | [risk: critical] | memory, reclamation   |
 | [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 299  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [Git Hook Performance: Stages and Tooling](./performance/git-hook-performance-tooling.md)                          | [ok] 240    | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [High-Performance Cache with Eviction Policies](./performance/cache-eviction-policies.md)                          | [ok] 177    | [advanced]     | [stable] | [risk: high]     | caching, memory       |
@@ -177,6 +178,7 @@
 | [Inspector Overlay Invariants for MessageAwareComponent](./testing/inspector-overlay-invariants.md)     | [ok] 153    | [intermediate] | [stable] | [risk: low]      | testing, editor              |
 | [LeakWatcher: Detecting Registration Leaks in Tests](./testing/leak-watcher-usage.md)                   | [ok] 260    | [basic]        | [stable] | [risk: low]      | testing, leaks               |
 | [Lifecycle Edge-Case Test Coverage](./testing/lifecycle-edge-coverage.md)                               | [ok] 249    | [intermediate] | [stable] | [risk: none]     | testing, lifecycle           |
+| [Memory Reclaim Coverage](./testing/memory-reclaim-coverage.md)                                         | [ok] 184    | [intermediate] | [stable] | [risk: high]     | testing, memory              |
 | [Script Test Coverage Requirements](./testing/script-test-coverage.md)                                  | [ok] 260    | [intermediate] | [stable] | [risk: none]     | testing, scripts             |
 | [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                         | [ok] 186    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |
 | [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)             | [ok] 253    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |

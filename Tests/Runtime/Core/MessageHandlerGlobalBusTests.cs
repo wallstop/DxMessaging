@@ -56,6 +56,19 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         [Test]
+        public void TrimAllUsesCurrentGlobalMessageBus()
+        {
+            CountingTrimMessageBus wrapper = new CountingTrimMessageBus(new GlobalMessageBus());
+            MessageHandler.SetGlobalMessageBus(wrapper);
+
+            IMessageBus.TrimResult result = MessageHandler.TrimAll(force: true);
+
+            Assert.AreEqual(1, wrapper.TrimCallCount);
+            Assert.IsTrue(wrapper.LastForce);
+            Assert.AreEqual(default(IMessageBus.TrimResult), result);
+        }
+
+        [Test]
         public void OverrideGlobalMessageBusScopeRestoresPreviousBus()
         {
             GlobalMessageBus primary = new GlobalMessageBus();
@@ -70,9 +83,9 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.AreSame(primary, MessageHandler.MessageBus);
         }
 
-        private sealed class WrapperMessageBus : IMessageBus
+        private class WrapperMessageBus : IMessageBus
         {
-            private readonly IMessageBus _inner;
+            protected readonly IMessageBus _inner;
 
             public WrapperMessageBus(IMessageBus inner)
             {
@@ -82,6 +95,10 @@ namespace DxMessaging.Tests.Runtime.Core
             public bool DiagnosticsMode => _inner.DiagnosticsMode;
 
             public int RegisteredGlobalSequentialIndex => _inner.RegisteredGlobalSequentialIndex;
+
+            public int OccupiedTypeSlots => _inner.OccupiedTypeSlots;
+
+            public int OccupiedTargetSlots => _inner.OccupiedTargetSlots;
 
             public int RegisteredBroadcast => _inner.RegisteredBroadcast;
 
@@ -98,6 +115,8 @@ namespace DxMessaging.Tests.Runtime.Core
             public RegistrationLog Log => _inner.Log;
 
             public long EmissionId => _inner.EmissionId;
+
+            public virtual IMessageBus.TrimResult Trim(bool force = false) => _inner.Trim(force);
 
             public Action RegisterUntargeted<T>(MessageHandler messageHandler, int priority = 0)
                 where T : IUntargetedMessage =>
@@ -220,6 +239,23 @@ namespace DxMessaging.Tests.Runtime.Core
             public void SourcedBroadcast<TMessage>(ref InstanceId source, ref TMessage typedMessage)
                 where TMessage : IBroadcastMessage =>
                 _inner.SourcedBroadcast(ref source, ref typedMessage);
+        }
+
+        private sealed class CountingTrimMessageBus : WrapperMessageBus
+        {
+            public CountingTrimMessageBus(IMessageBus inner)
+                : base(inner) { }
+
+            public int TrimCallCount { get; private set; }
+
+            public bool LastForce { get; private set; }
+
+            public override IMessageBus.TrimResult Trim(bool force = false)
+            {
+                TrimCallCount++;
+                LastForce = force;
+                return base.Trim(force);
+            }
         }
     }
 }

@@ -10,3 +10,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Runtime.VContainer")]
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Runtime.Zenject")]
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Editor")]
+[assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Editor.Allocations")]
