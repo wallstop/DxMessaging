@@ -31,9 +31,9 @@ namespace DxMessaging.Tests.Editor.Allocations
     /// <b>Cross-product reduction.</b> The matrix exercises EACH axis (kind,
     /// interceptor presence, post-processor presence, diagnostics on/off,
     /// multi-priority) independently. The full Cartesian product is intentionally
-    /// not tested because: (a) the test count would explode (3 kinds x 2
-    /// interceptor x 2 post-processor x 2 diagnostics x 3 priority = 72
-    /// permutations); (b) interaction effects are covered by
+    /// not tested because: (a) the test count would explode across the canonical
+    /// kinds, without-context dispatch surfaces, interceptor, post-processor,
+    /// diagnostics, and priority axes; (b) interaction effects are covered by
     /// <see cref="EmitWithFullStackIsZeroAlloc"/>, a single combinatorial test
     /// that exercises the realistic production setup (interceptor +
     /// post-processor + multi-priority handler chain); and (c) any specific
@@ -156,13 +156,16 @@ namespace DxMessaging.Tests.Editor.Allocations
 
         /// <summary>
         /// Pins zero-allocation emission for the bare register-one-handler-then-emit
-        /// path across all three message kinds. Closure under measurement is built
+        /// path across every dispatch surface. Closure under measurement is built
         /// once with stable captures so its allocation does not pollute the result.
         /// </summary>
         [Test]
         [Category("Allocation")]
         public void EmitIsZeroAlloc(
-            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.AllKindsIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -225,7 +228,7 @@ namespace DxMessaging.Tests.Editor.Allocations
         public void EmitIsZeroAllocAcrossPostProcessorPresence(
             [ValueSource(
                 typeof(MessageScenarios),
-                nameof(MessageScenarios.WithAndWithoutPostProcessor)
+                nameof(MessageScenarios.WithAndWithoutPostProcessorIncludingWithoutContext)
             )]
                 MessageScenario scenario
         )
@@ -269,7 +272,10 @@ namespace DxMessaging.Tests.Editor.Allocations
         [Test]
         [Category("Allocation")]
         public void EmitWithDiagnosticsEnabledIsBoundedAlloc(
-            [ValueSource(typeof(AllocationMatrixTests), nameof(DiagnosticsOnScenarios))]
+            [ValueSource(
+                typeof(AllocationMatrixTests),
+                nameof(DiagnosticsOnScenariosIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -335,7 +341,10 @@ namespace DxMessaging.Tests.Editor.Allocations
         [Test]
         [Category("Allocation")]
         public void EmitWithMultiplePrioritiesIsZeroAlloc(
-            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.AllKindsIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -463,7 +472,10 @@ namespace DxMessaging.Tests.Editor.Allocations
         [Test]
         [Category("Allocation")]
         public void RegisterIsZeroAllocSteadyState(
-            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.AllKindsIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -506,7 +518,10 @@ namespace DxMessaging.Tests.Editor.Allocations
         [Test]
         [Category("Allocation")]
         public void DeregisterIsZeroAllocSteadyState(
-            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.AllKindsIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -548,7 +563,10 @@ namespace DxMessaging.Tests.Editor.Allocations
         [Test]
         [Category("Allocation")]
         public void TrimIsBoundedAlloc(
-            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.AllKindsIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -605,7 +623,10 @@ namespace DxMessaging.Tests.Editor.Allocations
         [Test]
         [Category("Allocation")]
         public void EmitAfterPartialTrimIsZeroAlloc(
-            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.AllKindsIncludingWithoutContext)
+            )]
                 MessageScenario scenario
         )
         {
@@ -634,11 +655,13 @@ namespace DxMessaging.Tests.Editor.Allocations
             );
         }
 
-        public static IEnumerable<MessageScenario> DiagnosticsOnScenarios
+        public static IEnumerable<MessageScenario> DiagnosticsOnScenariosIncludingWithoutContext
         {
             get
             {
-                foreach (MessageScenario scenario in MessageScenarios.WithDiagnosticsToggle)
+                foreach (
+                    MessageScenario scenario in MessageScenarios.WithDiagnosticsToggleIncludingWithoutContext
+                )
                 {
                     if (scenario.DiagnosticsEnabled)
                     {
@@ -653,6 +676,16 @@ namespace DxMessaging.Tests.Editor.Allocations
         private static void NoOpTargeted(ref SimpleTargetedMessage message) { }
 
         private static void NoOpBroadcast(ref SimpleBroadcastMessage message) { }
+
+        private static void NoOpTargetedWithoutTargeting(
+            ref InstanceId target,
+            ref SimpleTargetedMessage message
+        ) { }
+
+        private static void NoOpBroadcastWithoutSource(
+            ref InstanceId source,
+            ref SimpleBroadcastMessage message
+        ) { }
 
         private static bool AllowUntargeted(ref SimpleUntargetedMessage message)
         {
@@ -687,7 +720,7 @@ namespace DxMessaging.Tests.Editor.Allocations
                 throw new ArgumentNullException(nameof(body));
             }
 
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 StopwatchClock.Instance,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: double.PositiveInfinity,
@@ -771,6 +804,20 @@ namespace DxMessaging.Tests.Editor.Allocations
                         priority: priority
                     );
                 }
+                case MessageKind.TargetedWithoutTargeting:
+                {
+                    return token.RegisterTargetedWithoutTargeting<SimpleTargetedMessage>(
+                        NoOpTargetedWithoutTargeting,
+                        priority: priority
+                    );
+                }
+                case MessageKind.BroadcastWithoutSource:
+                {
+                    return token.RegisterBroadcastWithoutSource<SimpleBroadcastMessage>(
+                        NoOpBroadcastWithoutSource,
+                        priority: priority
+                    );
+                }
                 default:
                 {
                     throw new InvalidOperationException($"Unhandled MessageKind {scenario.Kind}.");
@@ -849,6 +896,18 @@ namespace DxMessaging.Tests.Editor.Allocations
                         NoOpBroadcast
                     );
                 }
+                case MessageKind.TargetedWithoutTargeting:
+                {
+                    return token.RegisterTargetedWithoutTargetingPostProcessor<SimpleTargetedMessage>(
+                        NoOpTargetedWithoutTargeting
+                    );
+                }
+                case MessageKind.BroadcastWithoutSource:
+                {
+                    return token.RegisterBroadcastWithoutSourcePostProcessor<SimpleBroadcastMessage>(
+                        NoOpBroadcastWithoutSource
+                    );
+                }
                 default:
                 {
                     throw new InvalidOperationException($"Unhandled MessageKind {scenario.Kind}.");
@@ -872,6 +931,18 @@ namespace DxMessaging.Tests.Editor.Allocations
                     return () => targeted.EmitTargeted(target, bus);
                 }
                 case MessageKind.Broadcast:
+                {
+                    SimpleBroadcastMessage broadcast = new SimpleBroadcastMessage();
+                    InstanceId source = StableSource;
+                    return () => broadcast.EmitBroadcast(source, bus);
+                }
+                case MessageKind.TargetedWithoutTargeting:
+                {
+                    SimpleTargetedMessage targeted = new SimpleTargetedMessage();
+                    InstanceId target = StableTarget;
+                    return () => targeted.EmitTargeted(target, bus);
+                }
+                case MessageKind.BroadcastWithoutSource:
                 {
                     SimpleBroadcastMessage broadcast = new SimpleBroadcastMessage();
                     InstanceId source = StableSource;

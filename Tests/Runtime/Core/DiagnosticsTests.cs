@@ -139,14 +139,14 @@ namespace DxMessaging.Tests.Runtime.Core
             IDisposable overrideToken = null;
             try
             {
-                MessageBus existingBus = new MessageBus(new FakeClock());
+                MessageBus existingBus = MessageBus.CreateForInternalUse(new FakeClock());
                 settings._messageBufferSize = 2;
                 overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
 
                 Assert.AreEqual(2, IMessageBus.GlobalMessageBufferSize);
                 Assert.AreEqual(2, GetEmissionBuffer(existingBus).Capacity);
 
-                MessageBus newBus = new MessageBus(new FakeClock());
+                MessageBus newBus = MessageBus.CreateForInternalUse(new FakeClock());
                 Assert.AreEqual(2, GetEmissionBuffer(newBus).Capacity);
 
                 settings._messageBufferSize = 1;

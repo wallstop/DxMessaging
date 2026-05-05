@@ -18,8 +18,20 @@ namespace DxMessaging.Tests.Runtime
             _now = initialSeconds;
         }
 
+        /// <summary>
+        /// Number of times <see cref="NowSeconds"/> has been read.
+        /// </summary>
+        public int ReadCount { get; private set; }
+
         /// <inheritdoc />
-        public double NowSeconds => _now;
+        public double NowSeconds
+        {
+            get
+            {
+                ++ReadCount;
+                return _now;
+            }
+        }
 
         /// <summary>Advance the clock by the given number of seconds.</summary>
         public void Advance(double seconds)

@@ -15,7 +15,7 @@ namespace DxMessaging.Core.DataStructure
     [Serializable]
     internal sealed class CyclicBuffer<T> : IReadOnlyList<T>
     {
-        public struct CyclicBufferEnumerator : IEnumerator<T>
+        internal struct CyclicBufferEnumerator : IEnumerator<T>
         {
             private readonly CyclicBuffer<T> _buffer;
 

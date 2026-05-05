@@ -291,16 +291,17 @@ namespace DxMessaging.Tests.Runtime.Core
 
         /// <summary>
         /// Pins the allocation-coverage contract: every value of
-        /// <see cref="MessageKind"/> must be represented in
-        /// <see cref="MessageScenarios.AllKinds"/>. Adding a new kind without
-        /// updating the scenario source - and therefore the allocation matrix
-        /// that consumes it - will trip this guard. The contract pin lives in
+        /// <see cref="MessageKind"/> must be represented in the scenario source
+        /// that covers the full dispatch surface. Adding a new kind without
+        /// updating the source will trip this guard. The contract pin lives in
         /// the <c>allocation-coverage-required-for-dispatch</c> skill.
         /// </summary>
         [Test]
         public void EveryEmitPathHasAllocationCoverage()
         {
-            HashSet<MessageKind> covered = new(MessageScenarios.AllKinds.Select(s => s.Kind));
+            HashSet<MessageKind> covered = new(
+                MessageScenarios.AllKindsIncludingWithoutContext.Select(s => s.Kind)
+            );
             List<string> missing = new();
 
             foreach (MessageKind kind in Enum.GetValues(typeof(MessageKind)))
@@ -314,9 +315,11 @@ namespace DxMessaging.Tests.Runtime.Core
             Assert.That(
                 missing,
                 Is.Empty,
-                "MessageScenarios.AllKinds must yield every MessageKind so the allocation matrix "
-                    + "and parameterized tests cover all dispatch paths. Missing kinds: "
+                "MessageScenarios.AllKindsIncludingWithoutContext must yield every MessageKind "
+                    + "so full-surface parameterized tests cover all dispatch paths. Missing kinds: "
                     + string.Join(", ", missing)
+                    + ". Actual kinds: "
+                    + string.Join(", ", covered)
                     + ". See .llm/skills/testing/allocation-coverage-required-for-dispatch.md."
             );
         }

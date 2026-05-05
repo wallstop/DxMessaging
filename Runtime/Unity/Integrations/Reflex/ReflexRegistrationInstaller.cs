@@ -2,7 +2,9 @@
 namespace DxMessaging.Unity.Integrations.Reflex
 {
 #if REFLEX_PRESENT
+    using System;
     using Core.MessageBus;
+    using Core.Pooling;
     using global::Reflex.Attributes;
     using global::Reflex.Core;
 
@@ -85,6 +87,77 @@ namespace DxMessaging.Unity.Integrations.Reflex
             {
                 return _container.Resolve<IMessageBus>();
             }
+        }
+    }
+
+    /// <summary>
+    /// Provides convenience helpers for wiring a <see cref="MessageBus"/> into Reflex containers.
+    /// Reflex's container builder defaults to public-only constructor scanning, so today the
+    /// bare <c>Bind&lt;MessageBus&gt;().AsSingleton()</c> pattern resolves through the public
+    /// parameterless constructor. This is fragile against future Reflex versions that broaden
+    /// scanning to non-public constructors -- always prefer the helper below for clarity and
+    /// forward compatibility.
+    /// </summary>
+    public static class ReflexRegistrationExtensions
+    {
+        /// <summary>
+        /// Registers a singleton <see cref="MessageBus"/> exposed as <see cref="IMessageBus"/>
+        /// using an explicit factory.
+        /// </summary>
+        /// <param name="builder">Container builder receiving the registration.</param>
+        public static void AddDxMessagingBus(this ContainerBuilder builder)
+        {
+            if (builder == null)
+            {
+                throw new ArgumentNullException(nameof(builder));
+            }
+            builder.AddSingleton(_ => new MessageBus(), typeof(MessageBus), typeof(IMessageBus));
+        }
+
+        /// <summary>
+        /// Registers a singleton <see cref="MessageBus"/> exposed as <see cref="IMessageBus"/>
+        /// using the supplied factory. Allows callers to inject a custom
+        /// <see cref="IDxMessagingClock"/> via <see cref="MessageBus.CreateForInternalUse"/>.
+        /// </summary>
+        /// <param name="builder">Container builder receiving the registration.</param>
+        /// <param name="factory">Delegate that constructs the <see cref="MessageBus"/> instance using the resolver.</param>
+        public static void AddDxMessagingBus(
+            this ContainerBuilder builder,
+            Func<Container, MessageBus> factory
+        )
+        {
+            if (builder == null)
+            {
+                throw new ArgumentNullException(nameof(builder));
+            }
+            if (factory == null)
+            {
+                throw new ArgumentNullException(nameof(factory));
+            }
+            builder.AddSingleton(factory, typeof(MessageBus), typeof(IMessageBus));
+        }
+
+        /// <summary>
+        /// Registers a singleton <see cref="MessageBus"/> exposed as <see cref="IMessageBus"/>
+        /// using the supplied <see cref="IDxMessagingClock"/>.
+        /// </summary>
+        /// <param name="builder">Container builder receiving the registration.</param>
+        /// <param name="clock">Clock implementation injected into the bus. Must not be null.</param>
+        public static void AddDxMessagingBus(this ContainerBuilder builder, IDxMessagingClock clock)
+        {
+            if (builder == null)
+            {
+                throw new ArgumentNullException(nameof(builder));
+            }
+            if (clock == null)
+            {
+                throw new ArgumentNullException(nameof(clock));
+            }
+            builder.AddSingleton(
+                _ => MessageBus.CreateForInternalUse(clock),
+                typeof(MessageBus),
+                typeof(IMessageBus)
+            );
         }
     }
 #endif

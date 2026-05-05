@@ -27,7 +27,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 MessageScenario scenario
         )
         {
-            MessageBus bus = new MessageBus(new FakeClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
             using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
                 bus,
                 label: scenario.DisplayName
@@ -76,7 +76,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 MessageScenario scenario
         )
         {
-            MessageBus bus = new MessageBus(new FakeClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
             using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
                 bus,
                 label: scenario.DisplayName
@@ -122,7 +122,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
         )
         {
             FakeClock clock = new FakeClock();
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 clock,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 1d,
@@ -170,7 +170,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
         )
         {
             FakeClock clock = new FakeClock();
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 clock,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,
@@ -218,7 +218,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 MessageScenario scenario
         )
         {
-            MessageBus bus = new MessageBus(new FakeClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
             using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
                 bus,
                 label: scenario.DisplayName
@@ -276,7 +276,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 settings._bufferMaxDistinctEntries = 4;
                 settings._bufferUseLruEviction = true;
                 overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
-                MessageBus bus = new MessageBus(new FakeClock());
+                MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock());
 
                 List<object> pooled = DxPools.ObjectLists.Rent();
                 DxPools.ObjectLists.Return(pooled);
@@ -313,7 +313,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 settings._evictionTickIntervalSeconds = 60f;
                 overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
                 FakeClock clock = new FakeClock();
-                MessageBus bus = new MessageBus(clock);
+                MessageBus bus = MessageBus.CreateForInternalUse(clock);
                 using IDisposable cleanup = ForceTrimCleanup(bus);
                 MessageRegistrationToken token = CreateEnabledToken(bus);
                 MessageRegistrationHandle handle = RegisterFirst(
@@ -367,7 +367,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 settings._evictionEnabled = true;
                 settings._bufferMaxDistinctEntries = 4;
                 overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
-                MessageBus bus = new MessageBus(new FakeClock());
+                MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock());
                 MessageRegistrationToken token = CreateEnabledToken(bus);
                 MessageRegistrationHandle handle = RegisterFirst(
                     MessageScenario.Untargeted(),
@@ -411,7 +411,10 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 settings._bufferUseLruEviction = true;
                 overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
                 _ = DxPools.TrimAll(force: true);
-                MessageBus bus = new MessageBus(new FakeClock(), idleEvictionTicks: 0);
+                MessageBus bus = MessageBus.CreateForInternalUse(
+                    new FakeClock(),
+                    idleEvictionTicks: 0
+                );
                 using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
                     bus,
                     label: scenario.DisplayName
@@ -463,7 +466,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 MessageScenario scenario
         )
         {
-            MessageBus bus = new MessageBus(new FakeClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
             using IDisposable cleanup = ForceTrimCleanup(bus);
             MessageHandler handler = CreateActiveHandler(bus);
             int currentCalls = 0;

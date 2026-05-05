@@ -13,6 +13,7 @@ namespace DxMessaging.Tests.Runtime.Core
     using NUnit.Framework;
     using UnityEngine;
     using UnityEngine.TestTools;
+    using static DxMessaging.Tests.Runtime.RegistrationCountAssertions;
 
     /// <summary>
     /// Pins the runtime consequence of forgetting a <c>base.X()</c> call when
@@ -130,20 +131,12 @@ namespace DxMessaging.Tests.Runtime.Core
             EmitDirectly(scenario, host);
 
             IMessageBus bus = MessageHandler.MessageBus;
-            Assert.Zero(
-                bus.RegisteredUntargeted,
-                "[{0}] No untargeted registrations should exist.",
-                scenario.Kind
-            );
-            Assert.Zero(
-                bus.RegisteredTargeted,
-                "[{0}] No targeted registrations should exist.",
-                scenario.Kind
-            );
-            Assert.Zero(
-                bus.RegisteredBroadcast,
-                "[{0}] No broadcast registrations should exist.",
-                scenario.Kind
+            AssertRegistrationCounts(
+                bus,
+                untargeted: 0,
+                targeted: 0,
+                broadcast: 0,
+                context: $"OmitBaseAwake[{scenario.Kind}] no registrations should exist"
             );
 
             yield break;
@@ -495,23 +488,13 @@ namespace DxMessaging.Tests.Runtime.Core
             // refactor that nets to zero by accidentally deregistering
             // unrelated registrations along with the user counter.
             IMessageBus bus = MessageHandler.MessageBus;
-            Assert.Zero(
-                bus.RegisteredUntargeted,
-                "[{0}] No untargeted registrations should remain after destroy. {1}",
-                scenario.Kind,
-                watcher.DescribeDelta()
-            );
-            Assert.Zero(
-                bus.RegisteredTargeted,
-                "[{0}] No targeted registrations should remain after destroy. {1}",
-                scenario.Kind,
-                watcher.DescribeDelta()
-            );
-            Assert.Zero(
-                bus.RegisteredBroadcast,
-                "[{0}] No broadcast registrations should remain after destroy. {1}",
-                scenario.Kind,
-                watcher.DescribeDelta()
+            AssertRegistrationCounts(
+                bus,
+                untargeted: 0,
+                targeted: 0,
+                broadcast: 0,
+                context: $"InheritedOnDisableMasksBrokenOnDestroy[{scenario.Kind}] "
+                    + $"after destroy. {watcher.DescribeDelta()}"
             );
 
             yield break;
@@ -584,34 +567,18 @@ namespace DxMessaging.Tests.Runtime.Core
 
             string deltaDescription = watcher.DescribeDelta();
 
-            Assert.AreEqual(
-                expectedTargeted,
-                bus.RegisteredTargeted,
-                "[{0}] Targeted leak must include the 2 default StringMessage "
-                    + "handlers plus any counter for this scenario. Expected={1}. {2}",
-                scenario.Kind,
-                expectedTargeted,
-                deltaDescription
-            );
-            Assert.AreEqual(
-                expectedUntargeted,
-                bus.RegisteredUntargeted,
-                "[{0}] Untargeted leak must include the 1 default "
-                    + "GlobalStringMessage handler plus any counter for this "
-                    + "scenario. Expected={1}. {2}",
-                scenario.Kind,
-                expectedUntargeted,
-                deltaDescription
-            );
-            Assert.AreEqual(
-                expectedBroadcast,
-                bus.RegisteredBroadcast,
-                "[{0}] Broadcast leak must equal the scenario's counter "
-                    + "contribution; the base class registers no default "
-                    + "broadcast handlers. Expected={1}. {2}",
-                scenario.Kind,
-                expectedBroadcast,
-                deltaDescription
+            // Per-counter shape: the two default StringMessage handlers land on
+            // Targeted regardless of scenario, the default GlobalStringMessage
+            // handler lands on Untargeted, and the user counter lands on the
+            // bucket that matches scenario.Kind. Failure messages surface the
+            // diverging bucket(s) directly.
+            AssertRegistrationCounts(
+                bus,
+                untargeted: expectedUntargeted,
+                targeted: expectedTargeted,
+                broadcast: expectedBroadcast,
+                context: $"OmitBaseOnDisableAndOnDestroyLeaksDefaultHandlersToo[{scenario.Kind}] "
+                    + $"after destroy. {deltaDescription}"
             );
 
             // Drop the orphaned registrations so they cannot bleed into the

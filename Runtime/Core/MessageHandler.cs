@@ -2323,6 +2323,10 @@ namespace DxMessaging.Core
 
         internal sealed class HandlerActionCache<T> : DxMessaging.Core.Internal.IHandlerActionCache
         {
+            // Uses outer T as a field type -- reflection callers must close
+            // via MakeGenericType(outer.GetGenericArguments()) before passing
+            // this type to Activator.CreateInstance. See
+            // Tests/Editor/Contract/ReflectionHelpers.cs::CloseNestedGeneric.
             internal readonly struct Entry
             {
                 /// <summary>
@@ -3233,6 +3237,18 @@ namespace DxMessaging.Core
                 HandlerActionCache<Action<IUntargetedMessage>> cache = GetGlobalCache<
                     Action<IUntargetedMessage>
                 >(TypedGlobalSlotIndex.UntargetedDefault);
+                // Live-count fast path. Cross-handler in-flight snapshot
+                // semantics do not apply to the global accept-all path: the
+                // bus dispatch loop calls PrefreezeGlobalUntargetedForEmission
+                // lazily per-entry inside InvokeGlobalUntargetedEntry, after
+                // earlier-priority handlers have already run. A sibling
+                // MessageHandler that removes this handler's entry mid-emit
+                // drains cache.entries before the lazy prefreeze can capture
+                // a snapshot, so cache.cache rebuilds from the now-empty
+                // entries. Bailing on cache.entries.Count == 0 is therefore
+                // equivalent to bailing after GetOrAddNewHandlerStack would
+                // return an empty list, and is documented behavior for the
+                // global path.
                 if (cache?.entries is not { Count: > 0 })
                 {
                     return;
@@ -3269,6 +3285,9 @@ namespace DxMessaging.Core
                 HandlerActionCache<Action<InstanceId, ITargetedMessage>> cache = GetGlobalCache<
                     Action<InstanceId, ITargetedMessage>
                 >(TypedGlobalSlotIndex.TargetedDefault);
+                // Live-count fast path. See comment in HandleGlobalUntargeted
+                // for why the global accept-all path bails on
+                // cache.entries.Count == 0 rather than reading the snapshot.
                 if (cache?.entries is not { Count: > 0 })
                 {
                     return;
@@ -3305,6 +3324,9 @@ namespace DxMessaging.Core
                 HandlerActionCache<Action<InstanceId, IBroadcastMessage>> cache = GetGlobalCache<
                     Action<InstanceId, IBroadcastMessage>
                 >(TypedGlobalSlotIndex.BroadcastDefault);
+                // Live-count fast path. See comment in HandleGlobalUntargeted
+                // for why the global accept-all path bails on
+                // cache.entries.Count == 0 rather than reading the snapshot.
                 if (cache?.entries is not { Count: > 0 })
                 {
                     return;
@@ -4692,7 +4714,22 @@ namespace DxMessaging.Core
                 where TMessage : IMessage
                 where TU : IMessage
             {
-                if (cache?.entries is not { Count: > 0 })
+                // Snapshot semantics: do not bail on the live entries dictionary
+                // count. A mid-emit removal can drain entries while the pinned
+                // emission snapshot in cache.cache still holds the handlers we
+                // must invoke. Read the snapshot first and bail only if the
+                // snapshot itself is empty.
+                //
+                // Perf note: GetOrAddNewHandlerStack is now invoked on every
+                // call (including for empty caches that the previous fast-path
+                // would have skipped). The cost is one dictionary
+                // emission-id/version compare and -- only when the per-emission
+                // snapshot has not been pinned yet -- a single pass over
+                // cache.entries to materialise an empty list. The win is
+                // correctness across cross-handler mid-emit removals where the
+                // pinned snapshot in cache.cache still holds handlers the live
+                // entries dictionary no longer reaches.
+                if (cache == null)
                 {
                     return;
                 }
@@ -4700,6 +4737,10 @@ namespace DxMessaging.Core
                 ref TU typedMessage = ref Unsafe.As<TMessage, TU>(ref message);
                 List<FastHandler<TU>> handlers = GetOrAddNewHandlerStack(cache, emissionId);
                 int handlersCount = handlers.Count;
+                if (handlersCount == 0)
+                {
+                    return;
+                }
                 switch (handlersCount)
                 {
                     case 1:
@@ -4754,7 +4795,10 @@ namespace DxMessaging.Core
                 where TMessage : IMessage
                 where TU : IMessage
             {
-                if (cache?.entries is not { Count: > 0 })
+                // Snapshot semantics: see comment on the FastHandler<TU> overload.
+                // The pinned emission snapshot may still hold handlers even when
+                // the live entries dictionary has been drained mid-emit.
+                if (cache == null)
                 {
                     return;
                 }
@@ -4765,6 +4809,10 @@ namespace DxMessaging.Core
                     emissionId
                 );
                 int handlersCount = handlers.Count;
+                if (handlersCount == 0)
+                {
+                    return;
+                }
                 switch (handlersCount)
                 {
                     case 1:

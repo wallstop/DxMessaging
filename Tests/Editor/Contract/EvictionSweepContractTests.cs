@@ -34,7 +34,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void ForceSweepResetsDirtyEmptyTypedSlotsAndTrimsPools()
         {
             ManualClock clock = new ManualClock(10d);
-            MessageBus bus = new MessageBus(clock, idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(clock, idleEvictionTicks: 0);
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             try
             {
@@ -77,7 +77,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void NonForceSweepRetainsFreshDirtyTypedSlotsUntilIdle()
         {
             ManualClock clock = new ManualClock();
-            MessageBus bus = new MessageBus(clock, idleEvictionTicks: 1);
+            MessageBus bus = MessageBus.CreateForInternalUse(clock, idleEvictionTicks: 1);
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             try
             {
@@ -119,7 +119,10 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void ForceSweepPreservesActiveTypedRegistration()
         {
-            MessageBus bus = new MessageBus(new ManualClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                new ManualClock(),
+                idleEvictionTicks: 0
+            );
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             try
             {
@@ -150,7 +153,10 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void StaleDeregisterAfterEmptySweepDoesNotRemoveReRegisteredHandler()
         {
-            MessageBus bus = new MessageBus(new ManualClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                new ManualClock(),
+                idleEvictionTicks: 0
+            );
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             try
             {
@@ -198,7 +204,10 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void TrimReclaimsBusSlotAfterDispatchThenDeregister()
         {
-            MessageBus bus = new MessageBus(new ManualClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                new ManualClock(),
+                idleEvictionTicks: 0
+            );
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             try
             {
@@ -235,7 +244,10 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void ForceTrimOnFreshBusDoesNotReportGlobalSlotEviction()
         {
-            MessageBus bus = new MessageBus(new ManualClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                new ManualClock(),
+                idleEvictionTicks: 0
+            );
 
             IMessageBus.TrimResult result = bus.Trim(force: true);
 
@@ -248,7 +260,10 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void StaleScalarDeregisterAfterSweepDoesNotLogOverDeregistration()
         {
-            MessageBus bus = new MessageBus(new ManualClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                new ManualClock(),
+                idleEvictionTicks: 0
+            );
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             Action<LogLevel, string> previousLog = MessagingDebug.LogFunction;
             bool previousEnabled = MessagingDebug.enabled;
@@ -283,7 +298,10 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void StaleContextDeregisterAfterSweepDoesNotLogOverDeregistration()
         {
-            MessageBus bus = new MessageBus(new ManualClock(), idleEvictionTicks: 0);
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                new ManualClock(),
+                idleEvictionTicks: 0
+            );
             MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
             Action<LogLevel, string> previousLog = MessagingDebug.LogFunction;
             bool previousEnabled = MessagingDebug.enabled;
@@ -321,7 +339,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void EmitTimeSweepReclaimsIdleDirtySlotsWhenCadenceHasElapsed()
         {
             ManualClock clock = new ManualClock();
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 clock,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,
@@ -365,7 +383,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void EmitTimeSweepWaitsForCadenceInterval()
         {
             ManualClock clock = new ManualClock();
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 clock,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 10d,
@@ -406,7 +424,7 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void EmitTimeSweepPreservesActiveRegistration()
         {
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 new ManualClock(),
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,
@@ -444,7 +462,7 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void DisabledIdleEvictionPreventsEmitTimeSweep()
         {
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 new ManualClock(),
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,
@@ -480,7 +498,7 @@ namespace DxMessaging.Tests.Editor.Contract
         [Test]
         public void TrimReturnsDefaultAndLeavesStateWhenTrimApiIsDisabled()
         {
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 new ManualClock(),
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,
@@ -542,7 +560,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void EmitTimeSweepRunsForTargetedAndBroadcastTypedEntryPoints()
         {
             ManualClock clock = new ManualClock();
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 clock,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,
@@ -596,7 +614,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void RuntimeSettingsHotReloadUpdatesSweepGatesAndPoolCaps()
         {
             ManualClock clock = new ManualClock();
-            MessageBus bus = new MessageBus(clock);
+            MessageBus bus = MessageBus.CreateForInternalUse(clock);
             DxMessagingRuntimeSettings settings =
                 ScriptableObject.CreateInstance<DxMessagingRuntimeSettings>();
             try
@@ -663,7 +681,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void PlayerLoopSweepAgesIdleCandidatesWithoutEmit()
         {
             ManualClock clock = new ManualClock();
-            MessageBus bus = new MessageBus(
+            MessageBus bus = MessageBus.CreateForInternalUse(
                 clock,
                 idleEvictionTicks: 0,
                 evictionTickIntervalSeconds: 0d,

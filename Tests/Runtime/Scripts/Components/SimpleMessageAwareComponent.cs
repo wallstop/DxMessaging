@@ -46,6 +46,8 @@ namespace DxMessaging.Tests.Runtime.Scripts.Components
         private MessageRegistrationHandle? _slowComplexTargetingHandle;
         private MessageRegistrationHandle? _fastComplexTargetingHandle;
 
+        protected override bool RegisterForStringMessages => false;
+
         protected override void RegisterMessageHandlers()
         {
             _ = _messageRegistrationToken.RegisterUntargeted<SimpleUntargetedMessage>(

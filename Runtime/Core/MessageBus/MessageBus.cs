@@ -635,28 +635,70 @@ namespace DxMessaging.Core.MessageBus
 
         private readonly BusGlobalSlot _globalSlots = new();
 
+        /// <summary>
+        /// Constructs a <see cref="MessageBus"/> using the default <see cref="StopwatchClock"/>
+        /// and runtime-settings provided eviction cadence. This is the only public constructor; DI
+        /// containers that scan constructors reflectively (for example VContainer, which inspects
+        /// both public and private constructors) must be configured with an explicit factory --
+        /// see the integration helpers under <c>Runtime/Unity/Integrations</c>.
+        /// </summary>
         public MessageBus()
             : this(StopwatchClock.Instance, DefaultIdleEvictionTicks, applyRuntimeSettings: true)
         { }
 
-        internal MessageBus(IDxMessagingClock clock)
-            : this(clock, DefaultIdleEvictionTicks, applyRuntimeSettings: true) { }
-
-        internal MessageBus(IDxMessagingClock clock, long idleEvictionTicks)
-            : this(clock, idleEvictionTicks, applyRuntimeSettings: false) { }
-
-        internal MessageBus(
+        /// <summary>
+        /// Internal factory used by tests and integration assemblies to construct a
+        /// <see cref="MessageBus"/> with an injected <see cref="IDxMessagingClock"/> and optional
+        /// eviction overrides. Lives behind an <c>internal static</c> entry point so the public
+        /// surface exposes only the parameterless constructor; this keeps reflection-based DI
+        /// containers from latching onto a clock-taking overload they cannot satisfy.
+        /// </summary>
+        /// <param name="clock">Clock implementation. Must not be null.</param>
+        /// <param name="idleEvictionTicks">Optional idle-eviction tick budget; falls back to <see cref="DefaultIdleEvictionTicks"/> when null.</param>
+        /// <param name="evictionTickIntervalSeconds">Optional sweep cadence in seconds.</param>
+        /// <param name="idleEvictionEnabled">Optional opt-out for idle eviction.</param>
+        /// <param name="trimApiEnabled">Optional opt-out for the trim API.</param>
+        /// <returns>Configured <see cref="MessageBus"/> instance.</returns>
+        internal static MessageBus CreateForInternalUse(
             IDxMessagingClock clock,
-            long idleEvictionTicks,
-            double evictionTickIntervalSeconds,
-            bool idleEvictionEnabled,
-            bool trimApiEnabled
+            long? idleEvictionTicks = null,
+            double? evictionTickIntervalSeconds = null,
+            bool? idleEvictionEnabled = null,
+            bool? trimApiEnabled = null
         )
-            : this(clock, idleEvictionTicks, applyRuntimeSettings: false)
         {
-            _evictionTickIntervalSeconds = Math.Max(0d, evictionTickIntervalSeconds);
-            _idleEvictionEnabled = idleEvictionEnabled;
-            _trimApiEnabled = trimApiEnabled;
+            if (clock == null)
+            {
+                throw new ArgumentNullException(nameof(clock));
+            }
+
+            long resolvedIdleEvictionTicks = idleEvictionTicks ?? DefaultIdleEvictionTicks;
+            bool applyRuntimeSettings =
+                idleEvictionTicks == null
+                && evictionTickIntervalSeconds == null
+                && idleEvictionEnabled == null
+                && trimApiEnabled == null;
+
+            MessageBus bus = new MessageBus(
+                clock,
+                resolvedIdleEvictionTicks,
+                applyRuntimeSettings: applyRuntimeSettings
+            );
+
+            if (evictionTickIntervalSeconds.HasValue)
+            {
+                bus._evictionTickIntervalSeconds = Math.Max(0d, evictionTickIntervalSeconds.Value);
+            }
+            if (idleEvictionEnabled.HasValue)
+            {
+                bus._idleEvictionEnabled = idleEvictionEnabled.Value;
+            }
+            if (trimApiEnabled.HasValue)
+            {
+                bus._trimApiEnabled = trimApiEnabled.Value;
+            }
+
+            return bus;
         }
 
         private MessageBus(

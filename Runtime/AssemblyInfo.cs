@@ -5,6 +5,9 @@ using System.Runtime.CompilerServices;
     AllInternalsVisible = true
 )]
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Editor")]
+[assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Reflex")]
+[assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.VContainer")]
+[assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Zenject")]
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Runtime")]
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Runtime.Reflex")]
 [assembly: InternalsVisibleTo("WallstopStudios.DxMessaging.Tests.Runtime.VContainer")]

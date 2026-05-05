@@ -9,7 +9,7 @@ updated: "2026-05-01"
 source:
   repository: "wallstop/DxMessaging"
   files:
-    - path: "Tests/Runtime/Benchmarks/AllocationMatrixTests.cs"
+    - path: "Tests/Editor/Allocations/AllocationMatrixTests.cs"
     - path: "Tests/Runtime/TestUtilities/AllocationAssertions.cs"
     - path: "Tests/Runtime/TestUtilities/MessageScenarios.cs"
   url: "https://github.com/wallstop/DxMessaging"
@@ -82,7 +82,7 @@ DxMessaging promises zero managed allocations on the steady-state dispatch
 path. A regression there is silent: messages still flow, callers still receive
 them, only the GC profile gets worse - and only at scale. The defense is a
 matrix of allocation tests pinned in
-`Tests/Runtime/Benchmarks/AllocationMatrixTests.cs` that asserts byte budgets
+`Tests/Editor/Allocations/AllocationMatrixTests.cs` that asserts byte budgets
 on the bare register / emit / deregister surface across every dispatch axis
 (kind, interceptor presence, post-processor presence, diagnostics, priority).
 
@@ -115,27 +115,30 @@ budget blown in production.
 Two requirements stack:
 
 1. Every dispatch path with a stable signature must have an
-   `AllocationMatrixTests` row that exercises it via the parameterized
-   `MessageScenarios` source. Use `AllocationAssertions.AssertNoAllocations`
+   `AllocationMatrixTests` row that exercises it via the appropriate
+   parameterized `MessageScenarios` source. Use `AllocationAssertions.AssertNoAllocations`
    for paths that must allocate exactly zero managed bytes per call, and a
    hand-rolled `GC.GetTotalAllocatedBytes(precise: true)` delta with an
    explicit `Is.LessThanOrEqualTo(byteBudget)` for paths where a small,
    documented ceiling is intentional (for example registration and
    deregistration).
-1. Every `MessageKind` value must appear in `MessageScenarios.AllKinds`.
-   Anything driven by `[ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]`
-   automatically picks up the new kind once it lands there.
+1. Every `MessageKind` value must appear in
+   `MessageScenarios.AllKindsIncludingWithoutContext`. Anything driven by
+   `[ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKindsIncludingWithoutContext))]`
+   automatically picks up the new kind once it lands there. Tests that
+   intentionally cover only the context-bound surfaces should use
+   `MessageScenarios.AllKinds`.
 
 ### Adding a Zero-Allocation Row
 
 Patterned after `EmitIsZeroAlloc` in
-`Tests/Runtime/Benchmarks/AllocationMatrixTests.cs`:
+`Tests/Editor/Allocations/AllocationMatrixTests.cs`:
 
 ```csharp
 [Test]
 [Category("Allocation")]
 public void EmitWithMetadataIsZeroAlloc(
-    [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+    [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKindsIncludingWithoutContext))]
         MessageScenario scenario
 )
 {
@@ -173,7 +176,7 @@ state, and assert against an explicit byte budget:
 [Test]
 [Category("Allocation")]
 public void RegisterIsZeroAllocSteadyState(
-    [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+    [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKindsIncludingWithoutContext))]
         MessageScenario scenario
 )
 {
@@ -210,9 +213,9 @@ pay for, so reviewers can audit relaxations.
 `Tests/Runtime/Core/TestAttributeContractTests.cs` contains
 `EveryEmitPathHasAllocationCoverage`. The test enumerates every
 `MessageKind` value via reflection and asserts that
-`MessageScenarios.AllKinds` yields a scenario for each. Adding a new kind
-without updating the source - and therefore the allocation matrix that
-consumes it - fails the build.
+`MessageScenarios.AllKindsIncludingWithoutContext` yields a scenario for each.
+Adding a new kind without updating the full-surface source - and therefore the
+tests that consume it - fails the build.
 
 The contract pin is intentionally narrow (kind enumeration). It cannot prove
 that every individual `Emit*` method is covered, but it does guarantee the
@@ -227,8 +230,8 @@ common drift point.
   dispatch path.
 - Tag every allocation test with `[Category("Allocation")]` so the
   default-suite speed budget skips them.
-- Use `MessageScenarios.AllKinds` (or a narrower source) so the row
-  automatically expands when a new kind is added.
+- Use `MessageScenarios.AllKindsIncludingWithoutContext` for full dispatch-surface
+  rows, or a narrower source when the test intentionally covers only a subset.
 - Build emit closures outside the assertion zone.
 
 ### Don't
@@ -236,7 +239,7 @@ common drift point.
 - Don't measure inside `[SetUp]` / `[TearDown]`; the harness state is not
   guaranteed stable.
 - Don't add a kind to `MessageKind` without adding it to
-  `MessageScenarios.AllKinds`; the contract test will fail.
+  `MessageScenarios.AllKindsIncludingWithoutContext`; the contract test will fail.
 - Don't relax a budget without explaining the new ceiling in the test's
   XML doc comment.
 

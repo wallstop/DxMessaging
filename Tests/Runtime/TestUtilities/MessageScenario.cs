@@ -57,6 +57,16 @@ namespace DxMessaging.Tests.Runtime
             return new MessageScenario(MessageKind.Broadcast);
         }
 
+        public static MessageScenario TargetedWithoutTargeting()
+        {
+            return new MessageScenario(MessageKind.TargetedWithoutTargeting);
+        }
+
+        public static MessageScenario BroadcastWithoutSource()
+        {
+            return new MessageScenario(MessageKind.BroadcastWithoutSource);
+        }
+
         public MessageScenario WithInterceptor(bool useInterceptor)
         {
             return new MessageScenario(

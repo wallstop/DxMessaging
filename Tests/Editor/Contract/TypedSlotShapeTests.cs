@@ -41,7 +41,68 @@ namespace DxMessaging.Tests.Editor.Contract
     [Category("Contract")]
     public sealed class TypedSlotShapeTests
     {
+        // Centralized string-named members so reviewers update them in one
+        // place when production renames land.
+        private const string HandlerActionCacheNestedName = "HandlerActionCache`1";
+        private const string EntryNestedName = "Entry";
+        private const string EntriesFieldName = "entries";
+        private const string CacheFieldName = "cache";
+        private const string CountFieldName = "count";
+
         private readonly struct ProbeMessage : IUntargetedMessage { }
+
+        // Fixture-private rename-stable probe for the open-vs-closed
+        // regression test below. Pinning the .NET reflection rule against
+        // this fixture-owned type (instead of the production
+        // HandlerActionCache.Entry) keeps the regression backstop alive
+        // even if the production type is renamed or restructured.
+        private sealed class ProbeOuter<T>
+        {
+            internal readonly struct ProbeSlot
+            {
+                public ProbeSlot(T value, int count)
+                {
+                    this.value = value;
+                    this.count = count;
+                }
+
+                public readonly T value;
+                public readonly int count;
+            }
+        }
+
+        // Probe shape for the non-generic-outer-with-generic-nested
+        // diagnostic test.
+        private sealed class NonGenericProbeOuter
+        {
+            internal readonly struct GenericProbeSlot<U>
+            {
+                public GenericProbeSlot(U value)
+                {
+                    this.value = value;
+                }
+
+                public readonly U value;
+            }
+        }
+
+        // Probe shape for the HIGH-severity test that the helper rejects
+        // nested types declaring their own generic parameters under the
+        // three-arg overload, and accepts them under the four-arg overload.
+        private sealed class ProbeOuterWithOwnEntryArg<T>
+        {
+            internal readonly struct OwnEntry<U>
+            {
+                public OwnEntry(T outerValue, U ownValue)
+                {
+                    this.outerValue = outerValue;
+                    this.ownValue = ownValue;
+                }
+
+                public readonly T outerValue;
+                public readonly U ownValue;
+            }
+        }
 
         /// <summary>
         /// Trivial in-test stub for <see cref="IHandlerActionCache"/>. Used so
@@ -291,7 +352,7 @@ namespace DxMessaging.Tests.Editor.Contract
         public void HandlerActionCacheImplementsIHandlerActionCache()
         {
             System.Type nested = typeof(DxMessaging.Core.MessageHandler).GetNestedType(
-                "HandlerActionCache`1",
+                HandlerActionCacheNestedName,
                 BindingFlags.NonPublic
             );
             Assert.IsNotNull(
@@ -327,11 +388,11 @@ namespace DxMessaging.Tests.Editor.Contract
             // collection instances the cache holds, so direct mutation
             // populates the cache.
             FieldInfo entriesField = closed.GetField(
-                "entries",
+                EntriesFieldName,
                 BindingFlags.Public | BindingFlags.Instance
             );
             FieldInfo cacheField = closed.GetField(
-                "cache",
+                CacheFieldName,
                 BindingFlags.Public | BindingFlags.Instance
             );
             Assert.IsNotNull(entriesField, "HandlerActionCache<T>.entries must exist.");
@@ -340,11 +401,28 @@ namespace DxMessaging.Tests.Editor.Contract
                 entriesField.GetValue(instance);
             System.Collections.IList cacheList = (System.Collections.IList)
                 cacheField.GetValue(instance);
-            // Entry is a non-generic struct nested inside HandlerActionCache<T>;
-            // GetNestedType on the closed generic returns the per-T concrete
-            // Entry type directly (no further MakeGenericType needed).
-            System.Type entryType = closed.GetNestedType("Entry", BindingFlags.NonPublic);
+            // Entry is a struct nested inside HandlerActionCache<T> that uses
+            // T as a field type. Per .NET reflection rules, GetNestedType
+            // invoked on a closed outer generic returns the OPEN nested type
+            // whenever the nested type uses the outer's generic parameters
+            // (ContainsGenericParameters == true); it must be re-closed with
+            // the outer's generic arguments before construction or
+            // Activator.CreateInstance throws ArgumentException. The
+            // CloseNestedGeneric helper centralizes that handshake; the
+            // companion test EntryNestedTypeRetainsGenericParameterFromOuter
+            // pins the underlying behavior so future refactors do not regress
+            // back to the naive direct-Activator pattern.
+            System.Type entryType = ReflectionHelpers.CloseNestedGeneric(
+                closed,
+                EntryNestedName,
+                BindingFlags.NonPublic
+            );
             Assert.IsNotNull(entryType, "HandlerActionCache<T>.Entry nested type must exist.");
+            Assert.IsFalse(
+                entryType.ContainsGenericParameters,
+                "Entry must be fully closed before Activator.CreateInstance; "
+                    + "ReflectionHelpers.CloseNestedGeneric is responsible for closing it."
+            );
             System.Action<int> handler = _ignored => { };
             object entry = System.Activator.CreateInstance(entryType, handler, 1);
             entries[handler] = entry;
@@ -368,6 +446,247 @@ namespace DxMessaging.Tests.Editor.Contract
             Assert.AreEqual(0, entries.Count, "Reset() must empty entries.");
             Assert.AreEqual(0, cacheList.Count, "Reset() must empty cache.");
             Assert.IsTrue(view.IsEmpty, "After Reset() the cache must report IsEmpty == true.");
+        }
+
+        /// <summary>
+        /// Regression backstop for the
+        /// <see cref="HandlerActionCacheImplementsIHandlerActionCache"/> test
+        /// and for <see cref="ReflectionHelpers.CloseNestedGeneric"/>. Pins
+        /// the .NET reflection rule that bit the original test: when a nested
+        /// type uses one of its outer's generic parameters,
+        /// <see cref="System.Type.GetNestedType(string, BindingFlags)"/>
+        /// invoked on the closed outer returns the OPEN nested type (its
+        /// <see cref="System.Type.ContainsGenericParameters"/> is still
+        /// <c>true</c>) and must be re-closed with the outer's generic
+        /// arguments via <see cref="System.Type.MakeGenericType(System.Type[])"/>
+        /// before <see cref="System.Activator.CreateInstance(System.Type)"/>
+        /// will succeed. The probe deliberately uses the fixture-private
+        /// <see cref="ProbeOuter{T}.ProbeSlot"/> rather than the production
+        /// nested type so this canary remains intact across renames or
+        /// restructures of <c>HandlerActionCache.Entry</c>.
+        /// </summary>
+        [Test]
+        public void EntryNestedTypeRetainsGenericParameterFromOuter()
+        {
+            System.Type closed = typeof(ProbeOuter<>).MakeGenericType(typeof(System.Action<int>));
+
+            System.Type openSlot = closed.GetNestedType(
+                nameof(ProbeOuter<int>.ProbeSlot),
+                BindingFlags.NonPublic
+            );
+            Assert.IsNotNull(openSlot, "ProbeOuter<T>.ProbeSlot nested type must exist.");
+            Assert.IsTrue(
+                openSlot.ContainsGenericParameters,
+                "GetNestedType on a closed outer generic returns the OPEN nested type "
+                    + "when the nested type uses the outer's generic parameter; reviewers "
+                    + "must close it with MakeGenericType(closed.GetGenericArguments()) "
+                    + "before constructing instances."
+            );
+            // Type-specific Assert.Throws<ArgumentException> is intentional:
+            // this is the early-warning canary for the .NET reflection rule
+            // the helper exists to navigate. If a future runtime ever
+            // changes the exception type or wraps it, the failure message
+            // here surfaces the regression at the source rather than
+            // letting it silently propagate through CloseNestedGeneric.
+            Assert.Throws<System.ArgumentException>(
+                () => System.Activator.CreateInstance(openSlot, (System.Action<int>)(x => { }), 1),
+                "Activator.CreateInstance must reject the OPEN nested type so the "
+                    + "open-vs-closed mistake fails loudly instead of silently constructing."
+            );
+
+            System.Type closedSlot = ReflectionHelpers.CloseNestedGeneric(
+                closed,
+                nameof(ProbeOuter<int>.ProbeSlot),
+                BindingFlags.NonPublic
+            );
+            Assert.IsFalse(
+                closedSlot.ContainsGenericParameters,
+                "ReflectionHelpers.CloseNestedGeneric must produce a fully-closed nested type."
+            );
+            object slot = System.Activator.CreateInstance(
+                closedSlot,
+                (System.Action<int>)(x => { }),
+                3
+            );
+            Assert.IsNotNull(
+                slot,
+                "Activator.CreateInstance must succeed on the closed nested type."
+            );
+            FieldInfo countField = closedSlot.GetField(
+                CountFieldName,
+                BindingFlags.Public | BindingFlags.Instance
+            );
+            Assert.IsNotNull(countField, "ProbeSlot.count field must exist.");
+            Assert.AreEqual(3, countField.GetValue(slot));
+        }
+
+        /// <summary>
+        /// Pins the contract for
+        /// <see cref="ReflectionHelpers.CloseNestedGeneric(System.Type, string, BindingFlags)"/>:
+        /// passing <c>null</c> for the outer type throws
+        /// <see cref="System.ArgumentNullException"/> with a parameter-named
+        /// message. Refactors that drop the explicit null check fail this
+        /// test instead of surfacing a generic <see cref="System.NullReferenceException"/>
+        /// at the call site.
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericRejectsNullOuter()
+        {
+            System.ArgumentNullException ex = Assert.Throws<System.ArgumentNullException>(() =>
+                ReflectionHelpers.CloseNestedGeneric(null, EntryNestedName, BindingFlags.NonPublic)
+            );
+            StringAssert.Contains("closedOuter", ex.Message);
+        }
+
+        /// <summary>
+        /// Pins the contract for
+        /// <see cref="ReflectionHelpers.CloseNestedGeneric(System.Type, string, BindingFlags)"/>:
+        /// passing <c>null</c> for the nested name throws
+        /// <see cref="System.ArgumentNullException"/> with a parameter-named
+        /// message. Pairs with <see cref="CloseNestedGenericRejectsNullOuter"/>.
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericRejectsNullName()
+        {
+            System.Type closed = typeof(ProbeOuter<>).MakeGenericType(typeof(System.Action<int>));
+            System.ArgumentNullException ex = Assert.Throws<System.ArgumentNullException>(() =>
+                ReflectionHelpers.CloseNestedGeneric(closed, null, BindingFlags.NonPublic)
+            );
+            StringAssert.Contains("nestedName", ex.Message);
+        }
+
+        /// <summary>
+        /// Pins that
+        /// <see cref="ReflectionHelpers.CloseNestedGeneric(System.Type, string, BindingFlags)"/>
+        /// rejects an OPEN outer generic type (one whose
+        /// <see cref="System.Type.ContainsGenericParameters"/> is still
+        /// <c>true</c>). The diagnostic message must call out the
+        /// "fully-closed outer" requirement so reviewers do not have to
+        /// trace through the helper to understand the failure.
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericRejectsOpenOuter()
+        {
+            System.Type openOuter = typeof(ProbeOuter<>);
+            System.InvalidOperationException ex = Assert.Throws<System.InvalidOperationException>(
+                () =>
+                    ReflectionHelpers.CloseNestedGeneric(
+                        openOuter,
+                        nameof(ProbeOuter<int>.ProbeSlot),
+                        BindingFlags.NonPublic
+                    )
+            );
+            StringAssert.Contains("fully-closed outer", ex.Message);
+        }
+
+        /// <summary>
+        /// Pins that
+        /// <see cref="ReflectionHelpers.CloseNestedGeneric(System.Type, string, BindingFlags)"/>
+        /// throws a descriptive
+        /// <see cref="System.InvalidOperationException"/> -- not a silent
+        /// <c>null</c> -- when the requested nested name does not exist.
+        /// The message must include both the missing name and the outer's
+        /// fully-qualified name so reviewers can resolve typos quickly.
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericRejectsMissingNestedName()
+        {
+            System.Type closed = typeof(ProbeOuter<>).MakeGenericType(typeof(System.Action<int>));
+            System.InvalidOperationException ex = Assert.Throws<System.InvalidOperationException>(
+                () =>
+                    ReflectionHelpers.CloseNestedGeneric(
+                        closed,
+                        "DoesNotExist",
+                        BindingFlags.NonPublic
+                    )
+            );
+            StringAssert.Contains("DoesNotExist", ex.Message);
+            StringAssert.Contains("not found", ex.Message);
+        }
+
+        /// <summary>
+        /// Pins that
+        /// <see cref="ReflectionHelpers.CloseNestedGeneric(System.Type, string, BindingFlags)"/>
+        /// throws <see cref="System.InvalidOperationException"/> -- never a
+        /// silent <see cref="System.ArgumentException"/> from
+        /// <c>MakeGenericType</c> -- when asked to close a generic nested
+        /// type whose outer is non-generic (so there are no inherited
+        /// generic arguments to supply).
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericRejectsGenericNestedOnNonGenericOuter()
+        {
+            System.InvalidOperationException ex = Assert.Throws<System.InvalidOperationException>(
+                () =>
+                    ReflectionHelpers.CloseNestedGeneric(
+                        typeof(NonGenericProbeOuter),
+                        nameof(NonGenericProbeOuter.GenericProbeSlot<int>) + "`1",
+                        BindingFlags.NonPublic
+                    )
+            );
+            StringAssert.Contains("non-generic", ex.Message);
+        }
+
+        /// <summary>
+        /// Pins the HIGH-severity contract for the three-argument overload
+        /// of <see cref="ReflectionHelpers.CloseNestedGeneric(System.Type, string, BindingFlags)"/>:
+        /// when the nested type declares its OWN generic parameters in
+        /// addition to those inherited from the outer, the helper must
+        /// throw <see cref="System.InvalidOperationException"/> with a
+        /// message directing the caller to the four-argument overload.
+        /// Without this guard the helper would forward only the outer's
+        /// arguments to <c>MakeGenericType</c> and surface a raw
+        /// <see cref="System.ArgumentException"/> from the runtime instead.
+        /// The companion test
+        /// <see cref="CloseNestedGenericFourArgOverloadAcceptsNestedOwnArgs"/>
+        /// covers the success path on the same shape.
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericRejectsNestedTypeWithOwnGenericParameters()
+        {
+            System.Type closed = typeof(ProbeOuterWithOwnEntryArg<>).MakeGenericType(
+                typeof(System.Action<int>)
+            );
+            System.InvalidOperationException ex = Assert.Throws<System.InvalidOperationException>(
+                () =>
+                    ReflectionHelpers.CloseNestedGeneric(
+                        closed,
+                        nameof(ProbeOuterWithOwnEntryArg<int>.OwnEntry<int>) + "`1",
+                        BindingFlags.NonPublic
+                    )
+            );
+            StringAssert.Contains("of its own", ex.Message);
+            StringAssert.Contains("overload", ex.Message);
+        }
+
+        /// <summary>
+        /// Companion success path for
+        /// <see cref="CloseNestedGenericRejectsNestedTypeWithOwnGenericParameters"/>:
+        /// the four-argument overload accepts the explicit
+        /// <c>nestedOwnArgs</c> and produces a fully-closed type whose
+        /// inherited slot is taken from the outer and whose own slot is
+        /// taken from the supplied argument array.
+        /// </summary>
+        [Test]
+        public void CloseNestedGenericFourArgOverloadAcceptsNestedOwnArgs()
+        {
+            System.Type closed = typeof(ProbeOuterWithOwnEntryArg<>).MakeGenericType(
+                typeof(System.Action<int>)
+            );
+            System.Type closedNested = ReflectionHelpers.CloseNestedGeneric(
+                closed,
+                nameof(ProbeOuterWithOwnEntryArg<int>.OwnEntry<int>) + "`1",
+                BindingFlags.NonPublic,
+                new System.Type[] { typeof(string) }
+            );
+            Assert.IsFalse(
+                closedNested.ContainsGenericParameters,
+                "Four-arg overload must produce a fully-closed nested type."
+            );
+            System.Type[] genericArgs = closedNested.GetGenericArguments();
+            Assert.AreEqual(2, genericArgs.Length);
+            Assert.AreEqual(typeof(System.Action<int>), genericArgs[0]);
+            Assert.AreEqual(typeof(string), genericArgs[1]);
         }
 
         /// <summary>
