@@ -62,7 +62,7 @@ namespace DxMessaging.Core.Configuration
 
         [SerializeField]
         [Tooltip(
-            "Minimum interval in seconds between idle sweeps. The bus checks the clock at the top of each Emit and only sweeps when this much wall time has elapsed since the last sweep. See EvictionTickIntervalSeconds."
+            "Minimum interval in seconds between idle sweeps. Emit-time idle eviction samples the clock periodically instead of at the top of every Emit, and sweeps only when this much wall time has elapsed since the last sweep. See EvictionTickIntervalSeconds."
         )]
         [Min(0f)]
         internal float _evictionTickIntervalSeconds = DefaultEvictionTickIntervalSeconds;

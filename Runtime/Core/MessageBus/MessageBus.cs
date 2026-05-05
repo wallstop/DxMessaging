@@ -51,6 +51,8 @@ namespace DxMessaging.Core.MessageBus
         private const byte PrefreezeKindGlobalBroadcastHandlers = 5;
         private const long DefaultIdleEvictionTicks = 30;
         private const double DefaultEvictionTickIntervalSeconds = 5d;
+        internal const int SweepGateSampleSize = 16;
+        private const long SweepGateMask = SweepGateSampleSize - 1;
 
         private static readonly SlotKey UntargetedHandleSlot = new SlotKey(
             DispatchKind.Untargeted,
@@ -1151,6 +1153,11 @@ namespace DxMessaging.Core.MessageBus
         private void TrySweepIdle(bool advanceTickForIdleAging = false)
         {
             if (!_idleEvictionEnabled)
+            {
+                return;
+            }
+
+            if (!advanceTickForIdleAging && ((unchecked(_emissionId + 1)) & SweepGateMask) != 0)
             {
                 return;
             }

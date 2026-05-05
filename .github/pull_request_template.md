@@ -28,3 +28,29 @@ Fixes #
 - [ ] I have updated the documentation accordingly
 - [ ] I have updated the [CHANGELOG](../CHANGELOG.md)
 - [ ] My changes do not introduce breaking changes, or breaking changes are documented
+
+### Performance numbers
+
+<!--
+REQUIRED if this PR modifies hot-path files:
+  Runtime/Core/MessageBus/MessageBus.cs
+  Runtime/Core/MessageHandler.cs
+  Runtime/Core/Pooling/**
+
+The perf-numbers-check workflow gates on this section's presence.
+
+Format:
+  Scenario | Baseline (commit 25a4dcc) | This PR | Delta
+  --- | --- | --- | ---
+  UntargetedFlood_OneHandler (Mono Editor) | X.XX M emits/sec | Y.YY M emits/sec | +Z.Z%
+  ...
+
+Acceptable substitutions:
+  - "N/A - refactor only <one-line justification>" when the change cannot
+    affect runtime perf, e.g. comments / docs / tests-only changes.
+  - "N/A - non-hot-path edit only <one-line description>" to describe what was
+    actually touched, e.g. settings asset shape or editor tooling.
+
+See .llm/skills/performance/dispatch-hot-path.md for the budget and the
+T0 benchmark harness invocation.
+-->

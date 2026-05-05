@@ -360,14 +360,7 @@ namespace DxMessaging.Tests.Editor.Contract
                 Assert.GreaterOrEqual(bus.OccupiedTypeSlots, 1);
 
                 OtherProbeMessage other = new OtherProbeMessage();
-                bus.UntargetedBroadcast(ref other);
-                Assert.GreaterOrEqual(
-                    bus.OccupiedTypeSlots,
-                    1,
-                    "The emit that checks cadence runs before AdvanceTick, so it only ages the candidate for the next emit."
-                );
-
-                bus.UntargetedBroadcast(ref other);
+                EmitUntargetedSweepSampleWindow(bus, ref other);
 
                 Assert.AreEqual(0, bus.OccupiedTypeSlots);
                 Assert.AreEqual(0, ReadCollectionCount(bus, "_dirtyTypes"));
@@ -404,13 +397,12 @@ namespace DxMessaging.Tests.Editor.Contract
                 OtherProbeMessage other = new OtherProbeMessage();
 
                 clock.SetTo(9d);
-                bus.UntargetedBroadcast(ref other);
-                bus.UntargetedBroadcast(ref other);
+                EmitUntargetedSweepSampleWindow(bus, ref other);
 
                 Assert.GreaterOrEqual(bus.OccupiedTypeSlots, 1);
 
                 clock.SetTo(10d);
-                bus.UntargetedBroadcast(ref other);
+                EmitUntargetedSweepSampleWindow(bus, ref other);
 
                 Assert.AreEqual(0, bus.OccupiedTypeSlots);
                 Assert.AreEqual(10d, ReadDoubleField(bus, "_lastSweepSeconds"));
@@ -447,10 +439,9 @@ namespace DxMessaging.Tests.Editor.Contract
                 );
 
                 ProbeMessage message = new ProbeMessage();
-                bus.UntargetedBroadcast(ref message);
-                bus.UntargetedBroadcast(ref message);
+                EmitUntargetedSweepSampleWindow(bus, ref message);
 
-                Assert.AreEqual(2, calls);
+                Assert.AreEqual(SweepSampleWindowEmits, calls);
                 Assert.GreaterOrEqual(bus.OccupiedTypeSlots, 1);
             }
             finally
@@ -482,8 +473,7 @@ namespace DxMessaging.Tests.Editor.Contract
                 deregistration();
 
                 OtherProbeMessage other = new OtherProbeMessage();
-                bus.UntargetedBroadcast(ref other);
-                bus.UntargetedBroadcast(ref other);
+                EmitUntargetedSweepSampleWindow(bus, ref other);
 
                 Assert.GreaterOrEqual(bus.OccupiedTypeSlots, 1);
                 Assert.AreEqual(1, ReadCollectionCount(bus, "_dirtyTypes"));
@@ -592,14 +582,12 @@ namespace DxMessaging.Tests.Editor.Contract
                 Assert.GreaterOrEqual(bus.OccupiedTargetSlots, 2);
 
                 TargetedProbeMessage targeted = new TargetedProbeMessage();
-                bus.TargetedBroadcast(ref context, ref targeted);
-                bus.TargetedBroadcast(ref context, ref targeted);
+                EmitTargetedSweepSampleWindow(bus, ref context, ref targeted);
 
                 Assert.LessOrEqual(bus.OccupiedTargetSlots, 1);
 
                 BroadcastProbeMessage broadcast = new BroadcastProbeMessage();
-                bus.SourcedBroadcast(ref context, ref broadcast);
-                bus.SourcedBroadcast(ref context, ref broadcast);
+                EmitSourcedSweepSampleWindow(bus, ref context, ref broadcast);
 
                 Assert.AreEqual(0, bus.OccupiedTargetSlots);
             }
@@ -655,6 +643,10 @@ namespace DxMessaging.Tests.Editor.Contract
             }
             finally
             {
+                DxMessagingRuntimeSettingsProvider.ResetForTests();
+                DxMessagingRuntimeSettings.RaiseSettingsChanged(
+                    DxMessagingRuntimeSettingsProvider.Current
+                );
                 UnityEngine.Object.DestroyImmediate(settings);
             }
         }
@@ -727,6 +719,46 @@ namespace DxMessaging.Tests.Editor.Contract
             Assert.IsNotNull(typedHandler);
             return typedHandler;
         }
+
+        private static void EmitUntargetedSweepSampleWindow<TMessage>(
+            MessageBus bus,
+            ref TMessage message
+        )
+            where TMessage : IUntargetedMessage
+        {
+            for (int i = 0; i < SweepSampleWindowEmits; i++)
+            {
+                bus.UntargetedBroadcast(ref message);
+            }
+        }
+
+        private static void EmitTargetedSweepSampleWindow<TMessage>(
+            MessageBus bus,
+            ref InstanceId target,
+            ref TMessage message
+        )
+            where TMessage : ITargetedMessage
+        {
+            for (int i = 0; i < SweepSampleWindowEmits; i++)
+            {
+                bus.TargetedBroadcast(ref target, ref message);
+            }
+        }
+
+        private static void EmitSourcedSweepSampleWindow<TMessage>(
+            MessageBus bus,
+            ref InstanceId source,
+            ref TMessage message
+        )
+            where TMessage : IBroadcastMessage
+        {
+            for (int i = 0; i < SweepSampleWindowEmits; i++)
+            {
+                bus.SourcedBroadcast(ref source, ref message);
+            }
+        }
+
+        private const int SweepSampleWindowEmits = MessageBus.SweepGateSampleSize + 1;
 
         private static Array ReadArrayField(object owner, string name)
         {

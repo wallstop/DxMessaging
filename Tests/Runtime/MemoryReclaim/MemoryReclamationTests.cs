@@ -137,7 +137,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
             MessageRegistrationToken token = CreateEnabledToken(bus);
             MessageRegistrationHandle handle = RegisterFirst(scenario, token, DefaultContext);
             token.RemoveRegistration(handle);
-            EmitSweepProbe(bus);
+            EmitSweepSampleWindow(bus);
 
             Assert.GreaterOrEqual(
                 bus.OccupiedTypeSlots + bus.OccupiedTargetSlots,
@@ -147,7 +147,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
             );
 
             clock.Advance(1d);
-            EmitSweepProbe(bus);
+            EmitSweepSampleWindow(bus);
 
             Assert.AreEqual(
                 0,
@@ -194,8 +194,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
             try
             {
                 clock.Advance(3600d);
-                EmitSweepProbe(bus);
-                EmitSweepProbe(bus);
+                EmitSweepSampleWindow(bus);
                 EmitFirst(scenario, bus, DefaultContext);
 
                 Assert.AreEqual(
@@ -324,8 +323,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 token.RemoveRegistration(handle);
 
                 clock.Advance(60d);
-                EmitSweepProbe(bus);
-                EmitSweepProbe(bus);
+                EmitSweepSampleWindow(bus);
                 Assert.GreaterOrEqual(
                     bus.OccupiedTypeSlots,
                     1,
@@ -339,8 +337,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 DxMessagingRuntimeSettings.RaiseSettingsChanged(settings);
                 Assert.AreEqual(default(IMessageBus.TrimResult), bus.Trim(force: true));
 
-                EmitSweepProbe(bus);
-                EmitSweepProbe(bus);
+                EmitSweepSampleWindow(bus);
                 Assert.AreEqual(
                     0,
                     bus.OccupiedTypeSlots,
@@ -753,6 +750,15 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
         {
             SweepProbeMessage message = new SweepProbeMessage();
             bus.UntargetedBroadcast(ref message);
+        }
+
+        private static void EmitSweepSampleWindow(MessageBus bus)
+        {
+            SweepProbeMessage message = new SweepProbeMessage();
+            for (int i = 0; i <= MessageBus.SweepGateSampleSize; i++)
+            {
+                bus.UntargetedBroadcast(ref message);
+            }
         }
 
         private static ArgumentOutOfRangeException UnsupportedScenario(MessageScenario scenario)

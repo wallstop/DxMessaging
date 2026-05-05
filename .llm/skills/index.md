@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-04. Do not edit manually.
+> **Auto-generated** on 2026-05-05. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 146   |
+| Total Skills | 148   |
 | Categories   | 8     |
 
 ---
@@ -19,7 +19,7 @@
 - [Documentation](#documentation) (27)
 - [GitHub Actions](#github-actions) (5)
 - [Packaging](#packaging) (2)
-- [Performance](#performance) (43)
+- [Performance](#performance) (45)
 - [Scripting](#scripting) (15)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
@@ -96,7 +96,9 @@
 | [Collection Pooling with RAII Pattern](./performance/collection-pooling.md)                                        | [draft] 119 | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
 | [Collection Pooling with RAII Pattern Part 1](./performance/collection-pooling-part-1.md)                          | [ok] 206    | [intermediate] | [stable] | [risk: low]      | migration, split      |
 | [Collection Pooling with RAII Pattern Part 2](./performance/collection-pooling-part-2.md)                          | [draft] 57  | [intermediate] | [stable] | [risk: low]      | migration, split      |
+| [DxMessaging Dispatch Hot Path](./performance/dispatch-hot-path.md)                                                | [ok] 213    | [advanced]     | [stable] | [risk: critical] | dispatch, hot-path    |
 | [DxMessaging Memory Reclamation](./performance/memory-reclamation.md)                                              | [ok] 185    | [advanced]     | [stable] | [risk: critical] | memory, reclamation   |
+| [DxMessaging Sweep Gate Must Be Cheap](./performance/sweep-gate-must-be-cheap.md)                                  | [ok] 185    | [advanced]     | [stable] | [risk: critical] | sweep, eviction       |
 | [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 299  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [Git Hook Performance: Stages and Tooling](./performance/git-hook-performance-tooling.md)                          | [ok] 240    | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [High-Performance Cache with Eviction Policies](./performance/cache-eviction-policies.md)                          | [ok] 177    | [advanced]     | [stable] | [risk: high]     | caching, memory       |

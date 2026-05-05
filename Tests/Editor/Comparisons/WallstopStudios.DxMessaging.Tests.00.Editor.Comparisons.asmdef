@@ -1,5 +1,5 @@
 {
-  "name": "WallstopStudios.DxMessaging.Tests.01.Editor.Comparisons",
+  "name": "WallstopStudios.DxMessaging.Tests.00.Editor.Comparisons",
   "rootNamespace": "DxMessaging.Tests.Editor.Comparisons",
   "references": [
     "UnityEngine.TestRunner",
