@@ -565,7 +565,16 @@ function Get-EditorCommandInner {
     $assembliesQ = ConvertTo-BashSingleQuotedString $Assemblies
     [void]$sb.AppendLine('set -euo pipefail')
     [void]$sb.AppendLine('cleanup_ownership() {')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true')
+    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
+    [void]$sb.AppendLine('    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then')
+    [void]$sb.AppendLine('        baseline_path="${DX_PERF_BASELINE}"')
+    [void]$sb.AppendLine('        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"')
+    [void]$sb.AppendLine('        if [[ "${baseline_path}" == /workspace/* ]]; then')
+    [void]$sb.AppendLine('            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true')
+    [void]$sb.AppendLine('            baseline_dir="$(dirname "${baseline_path}")"')
+    [void]$sb.AppendLine('            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true')
+    [void]$sb.AppendLine('        fi')
+    [void]$sb.AppendLine('    fi')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true')
     [void]$sb.AppendLine('}')
     [void]$sb.AppendLine('trap cleanup_ownership EXIT')
@@ -605,7 +614,16 @@ function Get-StandaloneBuildCommandInner {
     $buildPathQ = ConvertTo-BashSingleQuotedString $StandaloneBuildContainer
     [void]$sb.AppendLine('set -euo pipefail')
     [void]$sb.AppendLine('cleanup_ownership() {')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true')
+    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
+    [void]$sb.AppendLine('    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then')
+    [void]$sb.AppendLine('        baseline_path="${DX_PERF_BASELINE}"')
+    [void]$sb.AppendLine('        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"')
+    [void]$sb.AppendLine('        if [[ "${baseline_path}" == /workspace/* ]]; then')
+    [void]$sb.AppendLine('            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true')
+    [void]$sb.AppendLine('            baseline_dir="$(dirname "${baseline_path}")"')
+    [void]$sb.AppendLine('            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true')
+    [void]$sb.AppendLine('        fi')
+    [void]$sb.AppendLine('    fi')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Builds || true')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true')
     [void]$sb.AppendLine('}')
@@ -641,7 +659,16 @@ function Get-StandaloneRunCommandInner {
     $assembliesQ = ConvertTo-BashSingleQuotedString $Assemblies
     [void]$sb.AppendLine('set -euo pipefail')
     [void]$sb.AppendLine('cleanup_ownership() {')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true')
+    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
+    [void]$sb.AppendLine('    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then')
+    [void]$sb.AppendLine('        baseline_path="${DX_PERF_BASELINE}"')
+    [void]$sb.AppendLine('        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"')
+    [void]$sb.AppendLine('        if [[ "${baseline_path}" == /workspace/* ]]; then')
+    [void]$sb.AppendLine('            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true')
+    [void]$sb.AppendLine('            baseline_dir="$(dirname "${baseline_path}")"')
+    [void]$sb.AppendLine('            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true')
+    [void]$sb.AppendLine('        fi')
+    [void]$sb.AppendLine('    fi')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true')
     [void]$sb.AppendLine('}')
     [void]$sb.AppendLine('trap cleanup_ownership EXIT')
@@ -682,6 +709,8 @@ $dockerBaseArgs = @(
     '-e', 'UNITY_EMAIL',
     '-e', 'UNITY_PASSWORD',
     '-e', 'DX_PERF_COMMIT',
+    '-e', 'DX_PERF_BASELINE',
+    '-e', 'DX_PERF_BASELINE_MODE',
     '-e', "USER_UID=$UserUid",
     '-e', "USER_GID=$UserGid"
 )

@@ -5,7 +5,10 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Globalization;
+    using System.IO;
     using System.Reflection;
+    using System.Text;
+    using System.Text.RegularExpressions;
     using DxMessaging.Core;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Tests.Runtime.Scripts.Messages;
@@ -35,6 +38,11 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
 
     public sealed class DispatchThroughputBenchmarks
     {
+        private const string BaselineOutputEnvVar = "DX_PERF_BASELINE";
+        private const string BaselineModeEnvVar = "DX_PERF_BASELINE_MODE";
+        private const string PackageName = "com.wallstop-studios.dxmessaging";
+        private const string BaselineCsvHeader =
+            "scenario,platform,commit,runIndex,emitsPerSecond,allocatedBytesDelta,wallClockMs";
         private const int WarmupEmits = 10_000;
         private const int MedianRuns = 5;
         private static readonly TimeSpan MeasurementWindow = TimeSpan.FromSeconds(1);
@@ -97,6 +105,30 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
         public void RegistrationFlood1000TypesFromColdBus()
         {
             _ = RunScenario(DispatchBenchmarkScenario.RegistrationFlood1000TypesFromColdBus);
+        }
+
+        [Test, Explicit, Performance, Category("PerfBaseline")]
+        public void UpdateDispatchThroughputBaseline()
+        {
+            string outputPath = ResolveBaselineOutputPath();
+            bool replaceAllRows = string.Equals(
+                Environment.GetEnvironmentVariable(BaselineModeEnvVar),
+                "replace",
+                StringComparison.OrdinalIgnoreCase
+            );
+
+            List<DispatchBenchmarkResult> results = new();
+            foreach (
+                DispatchBenchmarkScenario scenario in Enum.GetValues(
+                    typeof(DispatchBenchmarkScenario)
+                )
+            )
+            {
+                results.Add(RunScenario(scenario));
+            }
+
+            WriteBaselineRows(outputPath, results, replaceAllRows);
+            TestContext.Out.WriteLine($"Updated performance baseline: {outputPath}");
         }
 
         public static DispatchBenchmarkResult RunScenario(
@@ -439,6 +471,247 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             return _registrationFloodBuilders;
         }
 
+        private static string ResolveBaselineOutputPath()
+        {
+            string configuredPath = Environment.GetEnvironmentVariable(BaselineOutputEnvVar);
+            if (string.IsNullOrWhiteSpace(configuredPath))
+            {
+                configuredPath = ".artifacts/perf-baseline.csv";
+            }
+
+            if (Path.IsPathRooted(configuredPath))
+            {
+                return configuredPath;
+            }
+
+            string packageRoot = ResolvePackageRoot();
+            string baseDirectory = packageRoot ?? ResolveUnityProjectRoot();
+            return Path.GetFullPath(Path.Combine(baseDirectory, configuredPath));
+        }
+
+        internal static string ResolvePackageRoot()
+        {
+#if UNITY_EDITOR
+            string packageInfoRoot = ResolvePackageInfoRoot(
+                typeof(DispatchThroughputBenchmarks).Assembly
+            );
+            if (packageInfoRoot != null)
+            {
+                return packageInfoRoot;
+            }
+
+            packageInfoRoot = ResolvePackageInfoRoot(typeof(MessageBus).Assembly);
+            if (packageInfoRoot != null)
+            {
+                return packageInfoRoot;
+            }
+#endif
+
+            string[] roots = { Directory.GetCurrentDirectory(), Application.dataPath };
+            for (int index = 0; index < roots.Length; index++)
+            {
+                string packageRoot = FindPackageRoot(roots[index]);
+                if (packageRoot != null)
+                {
+                    return packageRoot;
+                }
+            }
+
+            return null;
+        }
+
+#if UNITY_EDITOR
+        private static string ResolvePackageInfoRoot(Assembly assembly)
+        {
+            UnityEditor.PackageManager.PackageInfo packageInfo =
+                UnityEditor.PackageManager.PackageInfo.FindForAssembly(assembly);
+            if (
+                packageInfo != null
+                && string.Equals(packageInfo.name, PackageName, StringComparison.Ordinal)
+                && Directory.Exists(packageInfo.resolvedPath)
+            )
+            {
+                return FindPackageRoot(packageInfo.resolvedPath);
+            }
+
+            return null;
+        }
+#endif
+
+        private static string FindPackageRoot(string startDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(startDirectory))
+            {
+                return null;
+            }
+
+            DirectoryInfo current = new(startDirectory);
+            while (current != null)
+            {
+                if (IsPackageRoot(current.FullName))
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
+
+            return null;
+        }
+
+        private static bool IsPackageRoot(string directory)
+        {
+            string packageJsonPath = Path.Combine(directory, "package.json");
+            if (!File.Exists(packageJsonPath))
+            {
+                return false;
+            }
+
+            string packageJson = File.ReadAllText(packageJsonPath);
+            return Regex.IsMatch(packageJson, $"\"name\"\\s*:\\s*\"{Regex.Escape(PackageName)}\"");
+        }
+
+        private static string ResolveUnityProjectRoot()
+        {
+            string assetsPath = Application.dataPath;
+            if (string.IsNullOrWhiteSpace(assetsPath))
+            {
+                return Directory.GetCurrentDirectory();
+            }
+
+            return Directory.GetParent(assetsPath)?.FullName ?? Directory.GetCurrentDirectory();
+        }
+
+        private static void WriteBaselineRows(
+            string outputPath,
+            IReadOnlyList<DispatchBenchmarkResult> results,
+            bool replaceAllRows
+        )
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? ".");
+
+            List<string> rows = replaceAllRows
+                ? new List<string>()
+                : ReadExistingBaselineRows(outputPath);
+            for (int index = 0; index < results.Count; index++)
+            {
+                DispatchBenchmarkResult result = results[index];
+                RemoveMatchingBaselineRow(rows, result);
+                rows.Add(result.ToCsvRow());
+            }
+
+            rows.Sort(CompareBaselineRows);
+
+            StringBuilder builder = new();
+            builder.AppendLine(BaselineCsvHeader);
+            for (int index = 0; index < rows.Count; index++)
+            {
+                builder.AppendLine(rows[index]);
+            }
+
+            File.WriteAllText(outputPath, builder.ToString(), new UTF8Encoding(false));
+        }
+
+        private static List<string> ReadExistingBaselineRows(string outputPath)
+        {
+            List<string> rows = new();
+            if (!File.Exists(outputPath))
+            {
+                return rows;
+            }
+
+            string[] lines = File.ReadAllLines(outputPath);
+            for (int index = 0; index < lines.Length; index++)
+            {
+                string line = lines[index];
+                if (
+                    string.IsNullOrWhiteSpace(line)
+                    || line.StartsWith("scenario,", StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    continue;
+                }
+
+                rows.Add(line);
+            }
+
+            return rows;
+        }
+
+        private static void RemoveMatchingBaselineRow(
+            List<string> rows,
+            DispatchBenchmarkResult result
+        )
+        {
+            for (int index = rows.Count - 1; index >= 0; index--)
+            {
+                string[] fields = ParseCsvFields(rows[index]);
+                if (
+                    fields.Length >= 3
+                    && string.Equals(fields[0], result.Scenario, StringComparison.Ordinal)
+                    && string.Equals(fields[1], result.Platform, StringComparison.Ordinal)
+                    && string.Equals(fields[2], result.Commit, StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    rows.RemoveAt(index);
+                }
+            }
+        }
+
+        private static int CompareBaselineRows(string left, string right)
+        {
+            string[] leftFields = ParseCsvFields(left);
+            string[] rightFields = ParseCsvFields(right);
+            for (int index = 2; index >= 0; index--)
+            {
+                string leftValue = index < leftFields.Length ? leftFields[index] : string.Empty;
+                string rightValue = index < rightFields.Length ? rightFields[index] : string.Empty;
+                int comparison = string.CompareOrdinal(leftValue, rightValue);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+            }
+
+            return string.CompareOrdinal(left, right);
+        }
+
+        private static string[] ParseCsvFields(string line)
+        {
+            List<string> fields = new();
+            StringBuilder builder = new();
+            bool inQuotes = false;
+
+            for (int index = 0; index < line.Length; index++)
+            {
+                char value = line[index];
+                if (value == '"')
+                {
+                    if (inQuotes && index + 1 < line.Length && line[index + 1] == '"')
+                    {
+                        builder.Append('"');
+                        index++;
+                        continue;
+                    }
+
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (value == ',' && !inQuotes)
+                {
+                    fields.Add(builder.ToString());
+                    builder.Clear();
+                    continue;
+                }
+
+                builder.Append(value);
+            }
+
+            fields.Add(builder.ToString());
+            return fields.ToArray();
+        }
+
         private static void RegisterFloodMessage<TMarker>(MessageRegistrationToken token)
         {
             _ = token.RegisterUntargeted<RegistrationFloodMessage<TMarker>>(NoOpFloodHandler);
@@ -768,7 +1041,124 @@ namespace DxMessaging.Tests.Runtime.Benchmarks
             }
 
             commit = Environment.GetEnvironmentVariable("GITHUB_SHA");
+            if (!string.IsNullOrWhiteSpace(commit))
+            {
+                return commit;
+            }
+
+            commit = ResolveGitHeadCommit(DispatchThroughputBenchmarks.ResolvePackageRoot());
             return string.IsNullOrWhiteSpace(commit) ? "local" : commit;
+        }
+
+        private static string ResolveGitHeadCommit(string packageRoot)
+        {
+            if (string.IsNullOrWhiteSpace(packageRoot))
+            {
+                return null;
+            }
+
+            string gitPath = Path.Combine(packageRoot, ".git");
+            if (File.Exists(gitPath))
+            {
+                string gitFile = File.ReadAllText(gitPath).Trim();
+                const string GitDirPrefix = "gitdir:";
+                if (gitFile.StartsWith(GitDirPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    gitPath = gitFile.Substring(GitDirPrefix.Length).Trim();
+                    if (!Path.IsPathRooted(gitPath))
+                    {
+                        gitPath = Path.GetFullPath(Path.Combine(packageRoot, gitPath));
+                    }
+                }
+            }
+
+            string headPath = Path.Combine(gitPath, "HEAD");
+            if (!File.Exists(headPath))
+            {
+                return null;
+            }
+
+            string head = File.ReadAllText(headPath).Trim();
+            string commonGitPath = ResolveCommonGitPath(gitPath);
+            const string RefPrefix = "ref:";
+            if (!head.StartsWith(RefPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.IsNullOrWhiteSpace(head) ? null : head;
+            }
+
+            string refName = head.Substring(RefPrefix.Length).Trim();
+            string commit =
+                ReadGitRefCommit(gitPath, refName) ?? ReadGitRefCommit(commonGitPath, refName);
+            return string.IsNullOrWhiteSpace(commit) ? null : commit;
+        }
+
+        private static string ResolveCommonGitPath(string gitPath)
+        {
+            string commonDirPath = Path.Combine(gitPath, "commondir");
+            if (!File.Exists(commonDirPath))
+            {
+                return gitPath;
+            }
+
+            string commonDir = File.ReadAllText(commonDirPath).Trim();
+            if (string.IsNullOrWhiteSpace(commonDir))
+            {
+                return gitPath;
+            }
+
+            return Path.IsPathRooted(commonDir)
+                ? commonDir
+                : Path.GetFullPath(Path.Combine(gitPath, commonDir));
+        }
+
+        private static string ReadGitRefCommit(string gitPath, string refName)
+        {
+            if (string.IsNullOrWhiteSpace(gitPath))
+            {
+                return null;
+            }
+
+            string normalizedRefName = refName.Replace('/', Path.DirectorySeparatorChar);
+            string refPath = Path.Combine(gitPath, normalizedRefName);
+            if (File.Exists(refPath))
+            {
+                string commit = File.ReadAllText(refPath).Trim();
+                if (!string.IsNullOrWhiteSpace(commit))
+                {
+                    return commit;
+                }
+            }
+
+            string packedRefsPath = Path.Combine(gitPath, "packed-refs");
+            if (!File.Exists(packedRefsPath))
+            {
+                return null;
+            }
+
+            string[] packedRefs = File.ReadAllLines(packedRefsPath);
+            for (int index = 0; index < packedRefs.Length; index++)
+            {
+                string line = packedRefs[index];
+                if (line.Length == 0 || line[0] == '#' || line[0] == '^')
+                {
+                    continue;
+                }
+
+                int separatorIndex = line.IndexOf(' ');
+                if (
+                    separatorIndex > 0
+                    && string.Equals(
+                        line.Substring(separatorIndex + 1),
+                        refName,
+                        StringComparison.Ordinal
+                    )
+                )
+                {
+                    return line.Substring(0, separatorIndex);
+                }
+            }
+
+            return null;
         }
 
         private static string EscapeCsv(string value)

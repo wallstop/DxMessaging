@@ -98,6 +98,8 @@ describe("scripts/unity/run-tests.sh contract", () => {
 
   test("forwards the perf commit environment into Unity containers", () => {
     expect(content).toContain("-e DX_PERF_COMMIT");
+    expect(content).toContain("-e DX_PERF_BASELINE");
+    expect(content).toContain("-e DX_PERF_BASELINE_MODE");
   });
 
   test("standalone player run forwards the same assembly and filter controls", () => {
@@ -126,8 +128,12 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).toContain("UNITY_LIBRARY_CACHE_SOURCE=");
     expect(content).toContain("dxm-unity-library-%s-%s");
     expect(content).toContain(
-      'chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true'
+      'chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true'
     );
+    expect(content).toContain('baseline_path="${DX_PERF_BASELINE}"');
+    expect(content).toContain('baseline_path="/workspace/${baseline_path}"');
+    expect(content).toContain('chown "${USER_UID}:${USER_GID}" "${baseline_path}"');
+    expect(content).toContain('baseline_dir="$(dirname "${baseline_path}")"');
     expect(content).toContain(
       'chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true'
     );
@@ -235,6 +241,8 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
 
   test("forwards the perf commit environment into Unity containers", () => {
     expect(content).toContain("'-e', 'DX_PERF_COMMIT'");
+    expect(content).toContain("'-e', 'DX_PERF_BASELINE'");
+    expect(content).toContain("'-e', 'DX_PERF_BASELINE_MODE'");
   });
 
   test("standalone player run forwards the same assembly and filter controls", () => {
@@ -264,6 +272,13 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("trap cleanup_ownership EXIT");
     expect(content).toContain("$UnityLibraryCacheSource");
     expect(content).toContain("dxm-unity-library-$ImageTag-$Platform");
+    expect(content).toContain(
+      'chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true'
+    );
+    expect(content).toContain('baseline_path="${DX_PERF_BASELINE}"');
+    expect(content).toContain('baseline_path="/workspace/${baseline_path}"');
+    expect(content).toContain('chown "${USER_UID}:${USER_GID}" "${baseline_path}"');
+    expect(content).toContain('baseline_dir="$(dirname "${baseline_path}")"');
     expect(content).toContain(
       'chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true'
     );

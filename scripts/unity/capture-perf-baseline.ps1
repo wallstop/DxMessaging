@@ -3,9 +3,8 @@
         Capture a Unity performance baseline for DispatchThroughputBenchmarks.
 
     .DESCRIPTION
-        Runs the playmode DispatchThroughputBenchmarks perf suite for a commit,
-        tees the Unity output to a commit-specific log file, and extracts the
-        normalized baseline CSV via scripts/unity/extract-perf-baseline.js.
+        Runs the explicit DispatchThroughputBenchmarks baseline update test
+        for a commit. The Unity test writes the normalized baseline CSV.
 
     .PARAMETER Commit
         Commit/ref value to expose to Unity as DX_PERF_COMMIT. When omitted,
@@ -15,10 +14,11 @@
         Baseline CSV output path. Defaults to .artifacts/perf-baseline.csv.
 
     .PARAMETER Append
-        Append extracted rows to an existing baseline CSV.
+        Kept for compatibility. Baseline updates add missing rows and replace
+        matching rows by default.
 
     .PARAMETER Replace
-        Replace an existing baseline CSV.
+        Replace the full baseline CSV instead of updating matching rows.
 
     .PARAMETER Help
         Show detailed help and exit.
@@ -28,7 +28,7 @@
             -Commit bf448fe84872022343260cb636409a9d3831bdec
 
     .EXAMPLE
-        pwsh -NoProfile -File scripts/unity/capture-perf-baseline.ps1 -Append
+        pwsh -NoProfile -File scripts/unity/capture-perf-baseline.ps1 -Replace
 #>
 
 [CmdletBinding()]
@@ -54,11 +54,6 @@ if ($Help) {
     exit 0
 }
 
-if ($Append -and $Replace) {
-    Write-Host 'ERROR: -Append and -Replace cannot both be specified.' -ForegroundColor Red
-    exit 2
-}
-
 if ([string]::IsNullOrWhiteSpace($Commit)) {
     $Commit = Read-Host 'Commit/ref for DX_PERF_COMMIT'
 }
@@ -81,20 +76,45 @@ $artifactToken = $Commit -replace '[^A-Za-z0-9_.-]', '-'
 $resultsPath = Join-Path $ArtifactsDir "perf-$artifactToken-results.xml"
 $logPath = Join-Path $ArtifactsDir "perf-$artifactToken-unity-log.txt"
 $runnerPath = Join-Path $ScriptDir 'run-tests.ps1'
-$extractorPath = Join-Path $ScriptDir 'extract-perf-baseline.js'
-$filter = 'DxMessaging.Tests.Runtime.Benchmarks.DispatchThroughputBenchmarks.*'
+$filter = 'DxMessaging.Tests.Runtime.Benchmarks.DispatchThroughputBenchmarks.UpdateDispatchThroughputBaseline'
 
-if (-not [System.IO.Path]::IsPathRooted($Output)) {
-    $Output = Join-Path $RepoRoot $Output
+function ConvertTo-RepoRelativePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        $fullPath = [System.IO.Path]::GetFullPath($Path)
+    } else {
+        $fullPath = [System.IO.Path]::GetFullPath($Path, $RepoRoot)
+    }
+
+    $relativePath = [System.IO.Path]::GetRelativePath($RepoRoot, $fullPath)
+    if ([System.IO.Path]::IsPathRooted($relativePath) -or $relativePath -eq '..' -or $relativePath.StartsWith("..$([System.IO.Path]::DirectorySeparatorChar)") -or $relativePath.StartsWith("..$([System.IO.Path]::AltDirectorySeparatorChar)")) {
+        return $null
+    }
+
+    return $relativePath
 }
-$outputDir = Split-Path -Parent $Output
+
+$BaselinePathForUnity = ConvertTo-RepoRelativePath $Output
+if ([string]::IsNullOrWhiteSpace($BaselinePathForUnity)) {
+    Write-Host @"
+ERROR: -Output must be relative to the repo or under the repo root.
+Paths outside the repo are not visible to Docker Unity runs.
+"@ -ForegroundColor Red
+    exit 2
+}
+
+if ([System.IO.Path]::IsPathRooted($Output)) {
+    $BaselineDisplayPath = [System.IO.Path]::GetFullPath($Output)
+} else {
+    $BaselineDisplayPath = [System.IO.Path]::GetFullPath($Output, $RepoRoot)
+}
+$outputDir = Split-Path -Parent $BaselineDisplayPath
 if (-not (Test-Path $outputDir)) {
     New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-}
-
-if ((Test-Path -LiteralPath $Output) -and -not $Append -and -not $Replace) {
-    Write-Host "ERROR: Output already exists: $Output. Specify -Append or -Replace." -ForegroundColor Red
-    exit 2
 }
 
 function Find-ExecutableOnPath {
@@ -151,12 +171,28 @@ if (-not $pwshPath) {
 
 $previousDxPerfCommit = $env:DX_PERF_COMMIT
 $hadDxPerfCommit = Test-Path Env:DX_PERF_COMMIT
+$previousBaseline = $env:DX_PERF_BASELINE
+$hadBaseline = Test-Path Env:DX_PERF_BASELINE
+$previousBaselineMode = $env:DX_PERF_BASELINE_MODE
+$hadBaselineMode = Test-Path Env:DX_PERF_BASELINE_MODE
 $env:DX_PERF_COMMIT = $Commit
+$env:DX_PERF_BASELINE = $BaselinePathForUnity
+if ($Replace) {
+    $env:DX_PERF_BASELINE_MODE = 'replace'
+} else {
+    Remove-Item Env:DX_PERF_BASELINE_MODE -ErrorAction SilentlyContinue
+}
 
 try {
-    Write-Host "Running DispatchThroughputBenchmarks for $Commit"
+    Write-Host "Updating DispatchThroughputBenchmarks baseline for $Commit"
     Write-Host "Unity results: $resultsPath"
     Write-Host "Unity log:     $logPath"
+    Write-Host "Baseline CSV:  $BaselineDisplayPath"
+
+    $baselineTimestampBeforeRun = $null
+    if (Test-Path -LiteralPath $BaselineDisplayPath -PathType Leaf) {
+        $baselineTimestampBeforeRun = (Get-Item -LiteralPath $BaselineDisplayPath).LastWriteTimeUtc
+    }
 
     & $pwshPath -NoProfile -File $runnerPath `
         -Platform playmode `
@@ -171,31 +207,33 @@ try {
         exit $unityExitCode
     }
 
-    $extractArgs = @(
-        $extractorPath,
-        '--input', $logPath,
-        '--input', $resultsPath,
-        '--output', $Output
-    )
-    if ($Append) {
-        $extractArgs += '--append'
-    } elseif ($Replace) {
-        $extractArgs += '--replace'
+    if (-not (Test-Path -LiteralPath $BaselineDisplayPath -PathType Leaf)) {
+        Write-Host "ERROR: Unity perf run completed but did not write baseline CSV: $BaselineDisplayPath" -ForegroundColor Red
+        exit 1
     }
 
-    & node @extractArgs
-    $extractExitCode = $LASTEXITCODE
-    if ($extractExitCode -ne 0) {
-        Write-Host "ERROR: Baseline extraction failed with exit code $extractExitCode." -ForegroundColor Red
-        exit $extractExitCode
+    $baselineTimestampAfterRun = (Get-Item -LiteralPath $BaselineDisplayPath).LastWriteTimeUtc
+    if ($baselineTimestampBeforeRun -and $baselineTimestampAfterRun -le $baselineTimestampBeforeRun) {
+        Write-Host "ERROR: Unity perf run completed but did not update baseline CSV: $BaselineDisplayPath" -ForegroundColor Red
+        exit 1
     }
-
-    Write-Host "Baseline CSV:  $Output"
 }
 finally {
     if ($hadDxPerfCommit) {
         $env:DX_PERF_COMMIT = $previousDxPerfCommit
     } else {
         Remove-Item Env:DX_PERF_COMMIT -ErrorAction SilentlyContinue
+    }
+
+    if ($hadBaseline) {
+        $env:DX_PERF_BASELINE = $previousBaseline
+    } else {
+        Remove-Item Env:DX_PERF_BASELINE -ErrorAction SilentlyContinue
+    }
+
+    if ($hadBaselineMode) {
+        $env:DX_PERF_BASELINE_MODE = $previousBaselineMode
+    } else {
+        Remove-Item Env:DX_PERF_BASELINE_MODE -ErrorAction SilentlyContinue
     }
 }

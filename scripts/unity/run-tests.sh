@@ -439,7 +439,16 @@ build_editor_cmd_inner() {
     assemblies_q="$(printf '%q' "${ASSEMBLIES}")"
     cmd=$'set -euo pipefail\n'
     cmd+=$'cleanup_ownership() {\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true\n'
+    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
+    cmd+=$'    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then\n'
+    cmd+=$'        baseline_path="${DX_PERF_BASELINE}"\n'
+    cmd+=$'        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"\n'
+    cmd+=$'        if [[ "${baseline_path}" == /workspace/* ]]; then\n'
+    cmd+=$'            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true\n'
+    cmd+=$'            baseline_dir="$(dirname "${baseline_path}")"\n'
+    cmd+=$'            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true\n'
+    cmd+=$'        fi\n'
+    cmd+=$'    fi\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true\n'
     cmd+=$'}\n'
     cmd+=$'trap cleanup_ownership EXIT\n'
@@ -490,7 +499,16 @@ build_standalone_build_cmd_inner() {
     build_path_q="$(printf '%q' "${STANDALONE_BUILD_CONTAINER}")"
     cmd=$'set -euo pipefail\n'
     cmd+=$'cleanup_ownership() {\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true\n'
+    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
+    cmd+=$'    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then\n'
+    cmd+=$'        baseline_path="${DX_PERF_BASELINE}"\n'
+    cmd+=$'        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"\n'
+    cmd+=$'        if [[ "${baseline_path}" == /workspace/* ]]; then\n'
+    cmd+=$'            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true\n'
+    cmd+=$'            baseline_dir="$(dirname "${baseline_path}")"\n'
+    cmd+=$'            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true\n'
+    cmd+=$'        fi\n'
+    cmd+=$'    fi\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Builds || true\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true\n'
     cmd+=$'}\n'
@@ -539,7 +557,16 @@ build_standalone_run_cmd_inner() {
     assemblies_q="$(printf '%q' "${ASSEMBLIES}")"
     cmd=$'set -euo pipefail\n'
     cmd+=$'cleanup_ownership() {\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts/unity || true\n'
+    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
+    cmd+=$'    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then\n'
+    cmd+=$'        baseline_path="${DX_PERF_BASELINE}"\n'
+    cmd+=$'        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"\n'
+    cmd+=$'        if [[ "${baseline_path}" == /workspace/* ]]; then\n'
+    cmd+=$'            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true\n'
+    cmd+=$'            baseline_dir="$(dirname "${baseline_path}")"\n'
+    cmd+=$'            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true\n'
+    cmd+=$'        fi\n'
+    cmd+=$'    fi\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true\n'
     cmd+=$'}\n'
     cmd+=$'trap cleanup_ownership EXIT\n'
@@ -593,6 +620,8 @@ DOCKER_BASE_ARGS=(
     -e UNITY_EMAIL
     -e UNITY_PASSWORD
     -e DX_PERF_COMMIT
+    -e DX_PERF_BASELINE
+    -e DX_PERF_BASELINE_MODE
     -e "USER_UID=${USER_UID_VAL}"
     -e "USER_GID=${USER_GID_VAL}"
 )
