@@ -83,8 +83,33 @@ For each commit and configuration:
   CSV rows identify the runtime commit under test. `DX_PERF_COMMIT` overrides
   CI's `GITHUB_SHA` when both are present.
 - Run the PlayMode `PerfBench` category in batchmode.
-- Append the structured output to `progress/perf-baseline-2026-05-05.csv`.
+- Extract the benchmark rows from the Unity output and append them to
+  `progress/perf-baseline-2026-05-05.csv`.
 - Record the exact commit, platform, Unity version, and scripting backend.
+
+The benchmark harness writes both structured log lines and CSV-shaped rows.
+Prefer the extractor so the baseline file has one header and normalized rows:
+
+```bash
+DX_PERF_COMMIT=25a4dcc \
+bash scripts/unity/run-tests.sh \
+  --platform playmode \
+  --include-perf \
+  --filter 'DxMessaging.Tests.Runtime.Benchmarks.DispatchThroughputBenchmarks.*' \
+  --results .artifacts/unity/perf-25a4dcc-editor-mono.xml \
+  2>&1 | tee .artifacts/unity/perf-25a4dcc-editor-mono.log
+
+node scripts/unity/extract-perf-baseline.js \
+  --input .artifacts/unity/perf-25a4dcc-editor-mono.log \
+  --input .artifacts/unity/perf-25a4dcc-editor-mono.xml \
+  --output progress/perf-baseline-2026-05-05.csv \
+  --append
+```
+
+For the first cell, omit `--append` so the script creates the file with the
+CSV header. For later cells, use `--append`. Repeat the run for `29a5338` and
+`HEAD`, changing both `DX_PERF_COMMIT` and artifact filenames so each cell is
+traceable.
 
 Do not mix methodology changes with baseline updates. If the harness changes,
 capture a new baseline and make the old/new methodology boundary explicit in
@@ -192,17 +217,17 @@ You can run these benchmarks yourself to get results specific to your environmen
 
 | Message Tech                               | Operations / Second | Allocations? |
 | ------------------------------------------ | ------------------- | ------------ |
-| Unity                                      | 2,387,729           | Yes          |
-| DxMessaging (GameObject) - Normal          | 10,069,781          | No           |
-| DxMessaging (Component) - Normal           | 9,958,399           | No           |
-| DxMessaging (GameObject) - No-Copy         | 11,369,437          | No           |
-| DxMessaging (Component) - No-Copy          | 8,576,809           | No           |
-| DxMessaging (Untargeted) - No-Copy         | 17,393,604          | No           |
-| DxMessaging (Untargeted) - Interceptors    | 7,055,588           | No           |
-| DxMessaging (Untargeted) - Post-Processors | 6,534,681           | No           |
-| Reflexive (One Argument)                   | 2,749,645           | No           |
-| Reflexive (Two Arguments)                  | 2,311,295           | No           |
-| Reflexive (Three Arguments)                | 2,300,900           | No           |
+| Unity                                      | 2,578,664           | Yes          |
+| DxMessaging (GameObject) - Normal          | 9,922,135           | No           |
+| DxMessaging (Component) - Normal           | 9,917,199           | No           |
+| DxMessaging (GameObject) - No-Copy         | 11,101,203          | No           |
+| DxMessaging (Component) - No-Copy          | 8,525,796           | No           |
+| DxMessaging (Untargeted) - No-Copy         | 17,070,253          | No           |
+| DxMessaging (Untargeted) - Interceptors    | 7,069,814           | No           |
+| DxMessaging (Untargeted) - Post-Processors | 6,845,186           | No           |
+| Reflexive (One Argument)                   | 2,771,579           | No           |
+| Reflexive (Two Arguments)                  | 2,260,609           | No           |
+| Reflexive (Three Arguments)                | 2,186,370           | No           |
 
 ## macOS
 

@@ -19,8 +19,20 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
     public sealed class MemoryReclamationTests : MessagingTestBase
     {
         private const int DistinctTargetCount = 1024;
+        private const int RetainedPoolEntryCount = 64;
         private static readonly InstanceId HandlerOwner = new InstanceId(0x5A17_0001);
         private static readonly InstanceId DefaultContext = new InstanceId(0x5A17_0002);
+
+        public static IEnumerable<MessageScenario> ContextDictPoolScenarios
+        {
+            get
+            {
+                yield return MessageScenario.Targeted();
+                yield return MessageScenario.Broadcast();
+                yield return MessageScenario.Targeted().WithPostProcessor(true);
+                yield return MessageScenario.Broadcast().WithPostProcessor(true);
+            }
+        }
 
         [Test]
         public void TrimEvictsEmptyTypeSlots(
@@ -266,6 +278,126 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
         }
 
         [Test]
+        public void NonForceTrimDuringActiveContextDispatchKeepsDirtyTargetCandidate(
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.KindsWithComponentTarget)
+            )]
+                MessageScenario scenario
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                bus,
+                label: scenario.DisplayName
+            );
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            MessageRegistrationToken token = CreateEnabledToken(bus);
+            int calls = 0;
+            int inDispatchTargetEvictions = -1;
+            MessageRegistrationHandle handle = default;
+            handle = RegisterCountingFirst(
+                scenario,
+                token,
+                DefaultContext,
+                () =>
+                {
+                    calls++;
+                    token.RemoveRegistration(handle);
+                    // This trim runs INSIDE active dispatch and must short-circuit the dirty
+                    // target eviction (HasActiveDispatchSnapshot guard). Capture the eviction
+                    // count to assert the in-dispatch contract directly.
+                    IMessageBus.TrimResult inDispatch = bus.Trim(force: false);
+                    inDispatchTargetEvictions = inDispatch.TargetSlotsEvicted;
+                }
+            );
+
+            EmitFirst(scenario, bus, DefaultContext);
+
+            Assert.AreEqual(
+                1,
+                calls,
+                "[{0}] the self-removing handler must run exactly once.",
+                scenario.Kind
+            );
+            Assert.AreEqual(
+                0,
+                inDispatchTargetEvictions,
+                "[{0}] non-force trim called inside active dispatch must NOT evict the empty target slot it could otherwise reclaim.",
+                scenario.Kind
+            );
+
+            // Advance the bus tick so the dirty target candidate ages past the idle threshold
+            // (idleEvictionTicks=0 still requires _tickCounter strictly greater than the slot's
+            // lastTouchTicks). Without this probe the post-dispatch trim observes 0 elapsed
+            // ticks since deregister and skips eviction. EmitSweepProbe is the canonical pattern
+            // shared with TrimAfterDeregisterReclaimsHandlerCache and BusContextDictReturnsToPool.
+            EmitSweepProbe(bus);
+            IMessageBus.TrimResult afterDispatch = bus.Trim(force: false);
+
+            Assert.GreaterOrEqual(
+                afterDispatch.TargetSlotsEvicted,
+                1,
+                "[{0}] a non-force trim skipped during active dispatch must leave the dirty target candidate for the next trim. afterDispatch={1}",
+                scenario.Kind,
+                afterDispatch
+            );
+        }
+
+        /// <summary>
+        /// Pins the contract that <c>idleEvictionTicks: 0</c> still requires at least one tick
+        /// advancement between the deregister-touch and a non-force trim. The strict
+        /// <c>_tickCounter &gt; lastTouchTicks</c> comparison in <c>IsIdleForSweep</c> means a trim
+        /// called immediately after deregister observes 0 elapsed ticks and skips eviction; the
+        /// next trim, after a single tick-advancing emit, evicts the slot. This test exists so a
+        /// regression that flips the comparison to <c>&gt;=</c> (or that omits the tick advance in
+        /// dispatch paths) breaks loudly.
+        /// </summary>
+        [Test]
+        public void NonForceTrimRequiresOneTickAdvancementWithZeroIdleBudget(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                bus,
+                label: scenario.DisplayName
+            );
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            MessageRegistrationToken token = CreateEnabledToken(bus);
+            MessageRegistrationHandle handle = RegisterFirst(scenario, token, DefaultContext);
+
+            token.RemoveRegistration(handle);
+            IMessageBus.TrimResult immediate = bus.Trim(force: false);
+            Assert.AreEqual(
+                0,
+                immediate.TypeSlotsEvicted,
+                "[{0}] non-force trim with no elapsed ticks must NOT evict a freshly-deregistered slot. immediate={1}",
+                scenario.Kind,
+                immediate
+            );
+            Assert.AreEqual(
+                0,
+                immediate.TargetSlotsEvicted,
+                "[{0}] non-force trim with no elapsed ticks must NOT evict a freshly-deregistered context slot. immediate={1}",
+                scenario.Kind,
+                immediate
+            );
+
+            EmitSweepProbe(bus);
+            IMessageBus.TrimResult afterProbe = bus.Trim(force: false);
+            int totalEvicted = afterProbe.TypeSlotsEvicted + afterProbe.TargetSlotsEvicted;
+            Assert.GreaterOrEqual(
+                totalEvicted,
+                1,
+                "[{0}] one tick advancement must make the slot eligible for non-force trim. afterProbe={1}",
+                scenario.Kind,
+                afterProbe
+            );
+        }
+
+        [Test]
         public void RuntimeSettingsHotReloadAppliesCaps()
         {
             DxMessagingRuntimeSettings settings =
@@ -275,12 +407,25 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
             {
                 settings._bufferMaxDistinctEntries = 4;
                 settings._bufferUseLruEviction = true;
+                settings._idleEvictionSeconds = 0f;
                 overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
                 MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock());
+                using IDisposable cleanup = ForceTrimCleanup(bus);
 
                 List<object> pooled = DxPools.ObjectLists.Rent();
                 DxPools.ObjectLists.Return(pooled);
                 Assert.Greater(DxPools.DescribeAll().ObjectLists.Cached, 0);
+
+                MessageRegistrationToken token = CreateEnabledToken(bus);
+                MessageRegistrationHandle handle = RegisterFirst(
+                    MessageScenario.Targeted(),
+                    token,
+                    DefaultContext
+                );
+                token.RemoveRegistration(handle);
+                EmitSweepProbe(bus);
+                _ = bus.Trim(force: false);
+                Assert.Greater(bus.GetContextDictPoolDiagnosticsForTesting().Cached, 0);
 
                 settings._bufferMaxDistinctEntries = 0;
                 settings._bufferUseLruEviction = false;
@@ -289,6 +434,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 Assert.AreEqual(0, DxPools.ObjectLists.MaxRetained);
                 Assert.IsFalse(DxPools.ObjectLists.UseLru);
                 Assert.AreEqual(0, DxPools.DescribeAll().ObjectLists.Cached);
+                Assert.AreEqual(0, bus.GetContextDictPoolDiagnosticsForTesting().Cached);
                 GC.KeepAlive(bus);
             }
             finally
@@ -455,6 +601,443 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 overrideToken?.Dispose();
                 UnityEngine.Object.DestroyImmediate(settings);
                 _ = DxPools.TrimAll(force: true);
+            }
+        }
+
+        [Test]
+        public void BusContextDictReturnsToPool(
+            [ValueSource(nameof(ContextDictPoolScenarios))] MessageScenario scenario
+        )
+        {
+            // Pin the AppDomain-scoped ContextHandlerByTargetDicts pool's MaxRetained to a
+            // known >0 value for the duration of this test. A sibling test that drops it to
+            // 0 (e.g. RuntimeSettingsHotReloadAppliesCaps) and runs first under a randomized
+            // execution order would otherwise make the trim's Return path drop the dict on
+            // the floor instead of caching it, breaking the assertion below. Mirrors the
+            // pattern in TrimAfterDeregisterReclaimsHandlerCache.
+            DxMessagingRuntimeSettings settings = null;
+            IDisposable overrideToken = null;
+            Action firstDeregister = null;
+            Action secondDeregister = null;
+            try
+            {
+                MessageBus bus = CreatePoolRetainingBus(
+                    new FakeClock(),
+                    out settings,
+                    out overrideToken
+                );
+                using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                    bus,
+                    label: scenario.DisplayName
+                );
+                using IDisposable cleanup = ForceTrimCleanup(bus);
+                MessageHandler handler = CreateActiveHandler(bus);
+
+                // The bus's context-dict pool is AppDomain-scoped (shared across all MessageBus
+                // instances). Capture the baseline AFTER the registration's rent so the delta
+                // cleanly measures the trim's contribution alone, regardless of whatever entries
+                // prior fixtures left in the pool. (Capturing before the rent would produce a
+                // net-zero delta: the rent decrements Cached, the trim's return increments it back.)
+                firstDeregister = RegisterDirect(scenario, handler, bus, DefaultContext, () => { });
+                CollectionPoolDiagnostics afterFirstRent =
+                    bus.GetContextDictPoolDiagnosticsForTesting();
+                firstDeregister();
+                firstDeregister = null;
+                EmitSweepProbe(bus);
+
+                IMessageBus.TrimResult firstTrim = bus.Trim(force: false);
+                CollectionPoolDiagnostics afterReturn =
+                    bus.GetContextDictPoolDiagnosticsForTesting();
+
+                Assert.GreaterOrEqual(
+                    firstTrim.TargetSlotsEvicted,
+                    1,
+                    "[{0}] trim must reclaim the empty context dictionary slot. firstTrim={1}",
+                    scenario.Kind,
+                    firstTrim
+                );
+                Assert.Greater(
+                    afterReturn.Cached,
+                    afterFirstRent.Cached,
+                    "[{0}] trim must return the bus context dictionary to the pool. afterFirstRent.Cached={1}, afterReturn.Cached={2}",
+                    scenario.Kind,
+                    afterFirstRent.Cached,
+                    afterReturn.Cached
+                );
+
+                secondDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => { }
+                );
+                CollectionPoolDiagnostics afterRent = bus.GetContextDictPoolDiagnosticsForTesting();
+
+                Assert.Greater(
+                    afterRent.Hits,
+                    afterReturn.Hits,
+                    "[{0}] the next context registration must reuse a pooled dictionary. afterReturn.Hits={1}, afterRent.Hits={2}",
+                    scenario.Kind,
+                    afterReturn.Hits,
+                    afterRent.Hits
+                );
+
+                secondDeregister();
+                secondDeregister = null;
+            }
+            finally
+            {
+                firstDeregister?.Invoke();
+                secondDeregister?.Invoke();
+                overrideToken?.Dispose();
+                if (settings != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(settings);
+                }
+            }
+        }
+
+        [Test]
+        public void StaleBusContextDeregisterAfterPooledDictionaryReuseDoesNotRemoveReplacement(
+            [ValueSource(nameof(ContextDictPoolScenarios))] MessageScenario scenario
+        )
+        {
+            DxMessagingRuntimeSettings settings = null;
+            IDisposable overrideToken = null;
+            MessageBus bus = CreatePoolRetainingBus(
+                new FakeClock(),
+                out settings,
+                out overrideToken
+            );
+            int staleCalls = 0;
+            int currentCalls = 0;
+            List<string> logs = new List<string>();
+            Action<LogLevel, string> previousLogFunction = MessagingDebug.LogFunction;
+            bool previousMessagingDebugEnabled = MessagingDebug.enabled;
+            Action currentDeregister = null;
+
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                bus,
+                label: scenario.DisplayName
+            );
+            try
+            {
+                Action staleDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => staleCalls++
+                );
+                EmitFirst(scenario, bus, DefaultContext);
+                staleDeregister();
+                EmitSweepProbe(bus);
+
+                IMessageBus.TrimResult trimResult = bus.Trim(force: false);
+                CollectionPoolDiagnostics afterReturn =
+                    bus.GetContextDictPoolDiagnosticsForTesting();
+
+                Assert.GreaterOrEqual(
+                    trimResult.TargetSlotsEvicted,
+                    1,
+                    "[{0}] trim must reclaim the stale context slot before replacement.",
+                    scenario.Kind
+                );
+                Assert.Greater(
+                    afterReturn.Cached,
+                    0,
+                    "[{0}] trim must return the bus context dictionary to the private pool.",
+                    scenario.Kind
+                );
+
+                currentDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => currentCalls++
+                );
+                CollectionPoolDiagnostics afterRent = bus.GetContextDictPoolDiagnosticsForTesting();
+
+                Assert.Greater(
+                    afterRent.Hits,
+                    afterReturn.Hits,
+                    "[{0}] replacement registration must reuse the pooled context dictionary.",
+                    scenario.Kind
+                );
+
+                MessagingDebug.enabled = true;
+                MessagingDebug.LogFunction = (_, message) => logs.Add(message);
+                staleDeregister();
+                EmitFirst(scenario, bus, DefaultContext);
+
+                Assert.AreEqual(
+                    1,
+                    staleCalls,
+                    "[{0}] stale deregistration must not revive the old registration.",
+                    scenario.Kind
+                );
+                Assert.AreEqual(
+                    1,
+                    currentCalls,
+                    "[{0}] stale deregistration must not remove the replacement registration.",
+                    scenario.Kind
+                );
+                Assert.AreEqual(
+                    0,
+                    logs.Count,
+                    "[{0}] stale deregistration after pooled dictionary reuse must not log diagnostics.",
+                    scenario.Kind
+                );
+
+                currentDeregister();
+                currentDeregister = null;
+                _ = bus.Trim(force: true);
+            }
+            finally
+            {
+                MessagingDebug.enabled = previousMessagingDebugEnabled;
+                MessagingDebug.LogFunction = previousLogFunction;
+                currentDeregister?.Invoke();
+                _ = bus.Trim(force: true);
+                overrideToken?.Dispose();
+                if (settings != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(settings);
+                }
+            }
+        }
+
+        [Test]
+        public void OversizedDirtyTargetAndContextPoolsDropHighWaterCollections()
+        {
+            DxMessagingRuntimeSettings settings = null;
+            IDisposable overrideToken = null;
+            MessageBus bus = CreatePoolRetainingBus(
+                new FakeClock(),
+                out settings,
+                out overrideToken
+            );
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            List<Action> deregistrations = new List<Action>(RetainedPoolEntryCount + 1);
+            Action smallDeregister = null;
+            try
+            {
+                _ = DxPools.TrimAll(force: true);
+                MessageBus.ResetStaticPools();
+
+                for (int i = 0; i <= RetainedPoolEntryCount; ++i)
+                {
+                    InstanceId target = new InstanceId(0x5A18_0000 + i);
+                    deregistrations.Add(
+                        RegisterDirect(MessageScenario.Targeted(), handler, bus, target, () => { })
+                    );
+                }
+
+                foreach (Action deregister in deregistrations)
+                {
+                    deregister();
+                }
+                deregistrations.Clear();
+
+                EmitSweepProbe(bus);
+                IMessageBus.TrimResult oversizedTrim = bus.Trim(force: false);
+                PoolDiagnosticsSnapshot oversizedPools = DxPools.DescribeAll();
+                CollectionPoolDiagnostics oversizedContextPool =
+                    bus.GetContextDictPoolDiagnosticsForTesting();
+
+                Assert.GreaterOrEqual(
+                    oversizedTrim.TargetSlotsEvicted,
+                    RetainedPoolEntryCount + 1,
+                    "Trim must reclaim every oversized target slot before evaluating pool retention."
+                );
+                Assert.AreEqual(
+                    0,
+                    oversizedPools.InstanceIdLists.Cached,
+                    "Dirty-target lists that exceeded the pool cap must be dropped instead of cached."
+                );
+                Assert.AreEqual(
+                    0,
+                    oversizedPools.InstanceIdSets.Cached,
+                    "Dirty-target sets that exceeded the pool cap must be dropped instead of cached."
+                );
+                Assert.AreEqual(
+                    0,
+                    oversizedContextPool.Cached,
+                    "Bus context dictionaries that exceeded the pool cap must be dropped instead of cached."
+                );
+
+                smallDeregister = RegisterDirect(
+                    MessageScenario.Targeted(),
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => { }
+                );
+                smallDeregister();
+                smallDeregister = null;
+                EmitSweepProbe(bus);
+                _ = bus.Trim(force: false);
+
+                PoolDiagnosticsSnapshot smallPools = DxPools.DescribeAll();
+                CollectionPoolDiagnostics smallContextPool =
+                    bus.GetContextDictPoolDiagnosticsForTesting();
+                Assert.Greater(
+                    smallPools.InstanceIdLists.Cached,
+                    0,
+                    "Small dirty-target lists should still return to the pool."
+                );
+                Assert.Greater(
+                    smallPools.InstanceIdSets.Cached,
+                    0,
+                    "Small dirty-target sets should still return to the pool."
+                );
+                Assert.Greater(
+                    smallContextPool.Cached,
+                    0,
+                    "Small bus context dictionaries should still return to the private pool."
+                );
+            }
+            finally
+            {
+                smallDeregister?.Invoke();
+                foreach (Action deregistration in deregistrations)
+                {
+                    deregistration();
+                }
+                _ = bus.Trim(force: true);
+                overrideToken?.Dispose();
+                if (settings != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(settings);
+                }
+            }
+        }
+
+        [Test]
+        public void StaticResetDrainsBusContextDictionaryPool()
+        {
+            DxMessagingRuntimeSettings settings = null;
+            IDisposable overrideToken = null;
+            MessageBus bus = CreatePoolRetainingBus(
+                new FakeClock(),
+                out settings,
+                out overrideToken
+            );
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(bus);
+            Action deregister = null;
+            try
+            {
+                MessageBus.ResetStaticPools();
+                MessageHandler handler = CreateActiveHandler(bus);
+                deregister = RegisterDirect(
+                    MessageScenario.Targeted(),
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => { }
+                );
+                deregister();
+                deregister = null;
+                EmitSweepProbe(bus);
+                _ = bus.Trim(force: false);
+
+                Assert.Greater(
+                    bus.GetContextDictPoolDiagnosticsForTesting().Cached,
+                    0,
+                    "Setup must return at least one bus context dictionary to the static pool."
+                );
+
+                DxMessagingStaticState.Reset();
+
+                Assert.AreEqual(
+                    0,
+                    bus.GetContextDictPoolDiagnosticsForTesting().Cached,
+                    "DxMessagingStaticState.Reset must drain the bus-owned static context dictionary pool."
+                );
+            }
+            finally
+            {
+                deregister?.Invoke();
+                _ = bus.Trim(force: true);
+                overrideToken?.Dispose();
+                if (settings != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(settings);
+                }
+            }
+        }
+
+        [Test]
+        public void OversizedContextPoolDropsAfterPartialReclaim()
+        {
+            DxMessagingRuntimeSettings settings = null;
+            IDisposable overrideToken = null;
+            MessageBus bus = CreatePoolRetainingBus(
+                new FakeClock(),
+                out settings,
+                out overrideToken
+            );
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            List<Action> deregistrations = new List<Action>(RetainedPoolEntryCount + 1);
+            try
+            {
+                MessageBus.ResetStaticPools();
+
+                for (int i = 0; i <= RetainedPoolEntryCount; ++i)
+                {
+                    InstanceId target = new InstanceId(0x5A19_0000 + i);
+                    deregistrations.Add(
+                        RegisterDirect(MessageScenario.Targeted(), handler, bus, target, () => { })
+                    );
+                }
+
+                for (int i = 0; i < RetainedPoolEntryCount; ++i)
+                {
+                    deregistrations[i]();
+                    deregistrations[i] = null;
+                }
+
+                EmitSweepProbe(bus);
+                _ = bus.Trim(force: false);
+
+                Assert.AreEqual(
+                    0,
+                    bus.GetContextDictPoolDiagnosticsForTesting().Cached,
+                    "The oversized context dictionary must remain live while one target is still registered."
+                );
+
+                deregistrations[RetainedPoolEntryCount]();
+                deregistrations[RetainedPoolEntryCount] = null;
+                EmitSweepProbe(bus);
+                _ = bus.Trim(force: false);
+
+                Assert.AreEqual(
+                    0,
+                    bus.GetContextDictPoolDiagnosticsForTesting().Cached,
+                    "The oversized context dictionary must be dropped even when it empties across multiple sweeps."
+                );
+            }
+            finally
+            {
+                foreach (Action deregistration in deregistrations)
+                {
+                    deregistration?.Invoke();
+                }
+                _ = bus.Trim(force: true);
+                overrideToken?.Dispose();
+                if (settings != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(settings);
+                }
             }
         }
 
@@ -923,6 +1506,26 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
         private static MessageHandler CreateActiveHandler(MessageBus bus)
         {
             return new MessageHandler(HandlerOwner, bus) { active = true };
+        }
+
+        private static MessageBus CreatePoolRetainingBus(
+            IDxMessagingClock clock,
+            out DxMessagingRuntimeSettings settings,
+            out IDisposable overrideToken
+        )
+        {
+            settings = ScriptableObject.CreateInstance<DxMessagingRuntimeSettings>();
+            settings._bufferMaxDistinctEntries = RetainedPoolEntryCount;
+            settings._bufferUseLruEviction = true;
+            settings._idleEvictionSeconds = 0f;
+            settings._evictionTickIntervalSeconds = 0f;
+            settings._enableTrimApi = true;
+            settings._evictionEnabled = true;
+            overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
+            MessageBus bus = MessageBus.CreateForInternalUse(clock, idleEvictionTicks: 0);
+            DxPools.Configure(settings);
+            DxMessagingRuntimeSettings.RaiseSettingsChanged(settings);
+            return bus;
         }
 
         private static IDisposable ForceTrimCleanup(MessageBus bus)

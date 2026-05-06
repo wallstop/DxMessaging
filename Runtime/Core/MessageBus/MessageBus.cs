@@ -135,6 +135,27 @@ namespace DxMessaging.Core.MessageBus
         private static readonly ArrayPool<DispatchEntry> DispatchEntryPool =
             ArrayPool<DispatchEntry>.Shared;
 
+        private static CollectionPool<
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+        > ContextHandlerByTargetDicts => ContextHandlerByTargetDictPoolHolder.Instance;
+
+        private static class ContextHandlerByTargetDictPoolHolder
+        {
+            public static readonly CollectionPool<
+                Dictionary<InstanceId, HandlerCache<int, HandlerCache>>
+            > Instance = new(
+                maxRetained: 512,
+                useLru: true,
+                factory: static () => new Dictionary<InstanceId, HandlerCache<int, HandlerCache>>(),
+                onRecycled: static dict => dict.Clear()
+            );
+        }
+
+        internal static int ResetStaticPools()
+        {
+            return ContextHandlerByTargetDicts.Trim(0);
+        }
+
         internal readonly struct DispatchEntry
         {
             public DispatchEntry(
@@ -271,6 +292,10 @@ namespace DxMessaging.Core.MessageBus
             /// </summary>
             public void Clear()
             {
+                // LEGACY: version reset semantics; the BusSinkSlot.Reset path under P3 will
+                // preserve monotonic as required by R3. Bus-side deregistration closures use
+                // captured cache identity and reset generations, so no current consumer depends
+                // on monotonic version here until storage migration lands.
                 handlers.Clear();
                 order.Clear();
                 cache.Clear();
@@ -354,6 +379,10 @@ namespace DxMessaging.Core.MessageBus
             /// </summary>
             public void Clear()
             {
+                // LEGACY: version reset semantics; the BusSinkSlot.Reset path under P3 will
+                // preserve monotonic as required by R3. Bus-side deregistration closures use
+                // captured cache identity and reset generations, so no current consumer depends
+                // on monotonic version here until storage migration lands.
                 handlers.Clear();
                 cache.Clear();
                 version = 0;
@@ -796,6 +825,7 @@ namespace DxMessaging.Core.MessageBus
             DxMessagingRuntimeSettings.SettingsChanged -= HandleRuntimeSettingsChanged;
             IdleSweepBuses.Clear();
             RuntimeSettingsSubscribed = false;
+            ResetStaticPools();
         }
 
         private void ApplyRuntimeSettings(DxMessagingRuntimeSettings settings)
@@ -806,6 +836,8 @@ namespace DxMessaging.Core.MessageBus
             }
 
             DxPools.Configure(settings);
+            ContextHandlerByTargetDicts.UseLru = settings.BufferUseLruEviction;
+            ContextHandlerByTargetDicts.MaxRetained = settings.BufferMaxDistinctEntries;
             if (!settings.IsFallbackInstance)
             {
                 IMessageBus.GlobalMessageBufferSize = Math.Max(0, settings.MessageBufferSize);
@@ -970,8 +1002,13 @@ namespace DxMessaging.Core.MessageBus
         private double _lastSweepSeconds;
         private readonly List<int> _dirtyTypes = new();
         private readonly Dictionary<int, List<InstanceId>> _dirtyTargets = new();
+        private readonly Dictionary<int, int> _dirtyTargetHighWaterCounts = new();
         private readonly HashSet<int> _dirtyTypeSet = new();
         private readonly Dictionary<int, HashSet<InstanceId>> _dirtyTargetSets = new();
+        private readonly Dictionary<
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>>,
+            int
+        > _contextMapHighWaterCounts = new();
         private readonly List<MessageHandler> _dirtyHandlers = new();
         private readonly HashSet<MessageHandler> _dirtyHandlerSet = new();
         private readonly Dictionary<MessageHandler, long> _dirtyHandlerTicks = new();
@@ -1072,19 +1109,23 @@ namespace DxMessaging.Core.MessageBus
 
             if (!_dirtyTargets.TryGetValue(typeIndex, out List<InstanceId> targets))
             {
-                targets = new List<InstanceId>();
+                targets = DxPools.InstanceIdLists.Rent();
                 _dirtyTargets[typeIndex] = targets;
             }
 
             if (!_dirtyTargetSets.TryGetValue(typeIndex, out HashSet<InstanceId> targetSet))
             {
-                targetSet = new HashSet<InstanceId>();
+                targetSet = DxPools.InstanceIdSets.Rent();
                 _dirtyTargetSets[typeIndex] = targetSet;
             }
 
             if (targetSet.Add(target))
             {
                 targets.Add(target);
+                _dirtyTargetHighWaterCounts[typeIndex] = Math.Max(
+                    GetDirtyTargetHighWaterCount(typeIndex),
+                    targets.Count
+                );
             }
         }
 
@@ -1130,7 +1171,6 @@ namespace DxMessaging.Core.MessageBus
             typeSlotsEvicted += SweepableTypeCacheRegistry[4].Sweep(this, force);
             typeSlotsEvicted += SweepGlobalSlot(force);
             typeSlotsEvicted += SweepDirtyTypedHandlerSlots(force);
-            int pooledCollectionsEvicted = DxPools.TrimAll(force);
             if (force)
             {
                 ClearDirtySweepCandidates();
@@ -1139,6 +1179,10 @@ namespace DxMessaging.Core.MessageBus
             {
                 PruneDirtySweepCandidates();
             }
+            int pooledCollectionsEvicted = DxPools.TrimAll(force);
+            pooledCollectionsEvicted += ContextHandlerByTargetDicts.Trim(
+                force ? 0 : ContextHandlerByTargetDicts.MaxRetained
+            );
             _lastSweepSeconds = _clock.NowSeconds;
 
             return new TrimResult(
@@ -1285,7 +1329,7 @@ namespace DxMessaging.Core.MessageBus
 
                     if (handlersByTarget.Count == 0)
                     {
-                        sink.RemoveAtIndex(typeIndex);
+                        RemoveAndReturnContextMap(sink, typeIndex, handlersByTarget);
                         _lastContextTypeSlotsEvicted++;
                     }
                 }
@@ -1306,6 +1350,9 @@ namespace DxMessaging.Core.MessageBus
                 return 0;
             }
 
+            // LEGACY: global slot reset keeps the current sweep-generation guard for stale
+            // deregistration closures. The BusSinkSlot.Reset path under P3 will preserve
+            // monotonic as required by R3 when the remaining bus-side storage migrates.
             _globalSlots.Reset();
             unchecked
             {
@@ -1492,6 +1539,7 @@ namespace DxMessaging.Core.MessageBus
             for (int i = 0; i < emptyTypeKeys.Count; ++i)
             {
                 int typeIndex = emptyTypeKeys[i];
+                ReturnDirtyTargetCollections(typeIndex);
                 _dirtyTargets.Remove(typeIndex);
                 _dirtyTargetSets.Remove(typeIndex);
             }
@@ -1520,7 +1568,10 @@ namespace DxMessaging.Core.MessageBus
 
                 if (
                     handlers.handlers.Count == 0
-                    && !IsIdleForSweep(handlers.lastTouchTicks, force: false)
+                    && (
+                        HasActiveDispatchSnapshot(handlers.dispatchState)
+                        || !IsIdleForSweep(handlers.lastTouchTicks, force: false)
+                    )
                 )
                 {
                     return true;
@@ -1563,6 +1614,179 @@ namespace DxMessaging.Core.MessageBus
             ClearDirtyTypeCandidatesWithoutEmptySlots();
             ClearDirtyTargetCandidatesWithoutEmptySlots();
             ClearDirtyHandlerCandidatesWithoutEmptySlots();
+        }
+
+        private void ReturnDirtyTargetCollections(int typeIndex)
+        {
+            _dirtyTargets.TryGetValue(typeIndex, out List<InstanceId> targets);
+            _dirtyTargetSets.TryGetValue(typeIndex, out HashSet<InstanceId> targetSet);
+            int highWaterCount = GetDirtyTargetHighWaterCount(typeIndex);
+            ReturnDirtyTargetList(targets, highWaterCount);
+            ReturnDirtyTargetSet(targetSet, highWaterCount);
+            _dirtyTargetHighWaterCounts.Remove(typeIndex);
+        }
+
+        private void ReturnAllDirtyTargetCollections()
+        {
+            foreach (KeyValuePair<int, List<InstanceId>> entry in _dirtyTargets)
+            {
+                int highWaterCount = GetDirtyTargetHighWaterCount(entry.Key);
+                ReturnDirtyTargetList(entry.Value, highWaterCount);
+            }
+
+            foreach (KeyValuePair<int, HashSet<InstanceId>> entry in _dirtyTargetSets)
+            {
+                int highWaterCount = GetDirtyTargetHighWaterCount(entry.Key);
+                ReturnDirtyTargetSet(entry.Value, highWaterCount);
+            }
+
+            _dirtyTargetHighWaterCounts.Clear();
+        }
+
+        private int GetDirtyTargetHighWaterCount(int typeIndex)
+        {
+            return _dirtyTargetHighWaterCounts.TryGetValue(typeIndex, out int count) ? count : 0;
+        }
+
+        private static void ReturnDirtyTargetList(List<InstanceId> targets, int highWaterCount)
+        {
+            if (targets == null)
+            {
+                return;
+            }
+
+            if (ShouldDropOversizedPoolEntry(highWaterCount, DxPools.InstanceIdLists.MaxRetained))
+            {
+                targets.Clear();
+                return;
+            }
+
+            DxPools.InstanceIdLists.Return(targets);
+        }
+
+        private static void ReturnDirtyTargetSet(HashSet<InstanceId> targets, int highWaterCount)
+        {
+            if (targets == null)
+            {
+                return;
+            }
+
+            if (ShouldDropOversizedPoolEntry(highWaterCount, DxPools.InstanceIdSets.MaxRetained))
+            {
+                targets.Clear();
+                return;
+            }
+
+            DxPools.InstanceIdSets.Return(targets);
+        }
+
+        internal CollectionPoolDiagnostics GetContextDictPoolDiagnosticsForTesting()
+        {
+            return ContextHandlerByTargetDicts.Snapshot();
+        }
+
+        private Dictionary<InstanceId, HandlerCache<int, HandlerCache>> GetOrRentContextMap<T>(
+            MessageCache<Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> sinks
+        )
+            where T : IMessage
+        {
+            if (
+                sinks.TryGetValue<T>(
+                    out Dictionary<InstanceId, HandlerCache<int, HandlerCache>> handlersByTarget
+                )
+            )
+            {
+                return handlersByTarget;
+            }
+
+            handlersByTarget = ContextHandlerByTargetDicts.Rent();
+            _contextMapHighWaterCounts[handlersByTarget] = handlersByTarget.Count;
+            sinks.Set<T>(handlersByTarget);
+            return handlersByTarget;
+        }
+
+        private void RemoveAndReturnContextMap(
+            MessageCache<Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> sink,
+            int typeIndex,
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> handlersByTarget
+        )
+        {
+            sink.RemoveAtIndex(typeIndex);
+            ReturnContextMap(handlersByTarget);
+        }
+
+        private void ReturnContextMap(
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> handlersByTarget
+        )
+        {
+            if (handlersByTarget == null)
+            {
+                return;
+            }
+
+            int highWaterCount = GetContextMapHighWaterCount(handlersByTarget);
+            _contextMapHighWaterCounts.Remove(handlersByTarget);
+
+            foreach (HandlerCache<int, HandlerCache> handlers in handlersByTarget.Values)
+            {
+                handlers?.Clear();
+            }
+
+            handlersByTarget.Clear();
+            if (
+                ShouldDropOversizedPoolEntry(
+                    highWaterCount,
+                    ContextHandlerByTargetDicts.MaxRetained
+                )
+            )
+            {
+                return;
+            }
+
+            ContextHandlerByTargetDicts.Return(handlersByTarget);
+        }
+
+        private void ClearAndReturnContextSink(
+            MessageCache<Dictionary<InstanceId, HandlerCache<int, HandlerCache>>> sink
+        )
+        {
+            foreach (
+                Dictionary<InstanceId, HandlerCache<int, HandlerCache>> handlersByTarget in sink
+            )
+            {
+                ReturnContextMap(handlersByTarget);
+            }
+
+            sink.Clear();
+        }
+
+        private void TrackContextMapHighWater(
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> handlersByTarget
+        )
+        {
+            if (handlersByTarget == null)
+            {
+                return;
+            }
+
+            _contextMapHighWaterCounts[handlersByTarget] = Math.Max(
+                GetContextMapHighWaterCount(handlersByTarget),
+                handlersByTarget.Count
+            );
+        }
+
+        private int GetContextMapHighWaterCount(
+            Dictionary<InstanceId, HandlerCache<int, HandlerCache>> handlersByTarget
+        )
+        {
+            return _contextMapHighWaterCounts.TryGetValue(handlersByTarget, out int count)
+                ? count
+                : handlersByTarget?.Count ?? 0;
+        }
+
+        private static bool ShouldDropOversizedPoolEntry(int retainedEntryCount, int maxRetained)
+        {
+            return maxRetained > 0 && retainedEntryCount > maxRetained;
         }
 
         private void ClearDirtyTypeCandidatesWithoutEmptySlots()
@@ -1661,6 +1885,7 @@ namespace DxMessaging.Core.MessageBus
             for (int i = 0; i < emptyTypeKeys.Count; ++i)
             {
                 int typeIndex = emptyTypeKeys[i];
+                ReturnDirtyTargetCollections(typeIndex);
                 _dirtyTargets.Remove(typeIndex);
                 _dirtyTargetSets.Remove(typeIndex);
             }
@@ -1761,11 +1986,11 @@ namespace DxMessaging.Core.MessageBus
             _scalarSinks[BusSinkIndex.UntargetedHandleDefault].Clear();
             _scalarSinks[BusSinkIndex.BroadcastHandleWithoutContext].Clear();
             _scalarSinks[BusSinkIndex.TargetedHandleWithoutContext].Clear();
-            _contextSinks[BusContextIndex.TargetedHandleDefault].Clear();
-            _contextSinks[BusContextIndex.BroadcastHandleDefault].Clear();
+            ClearAndReturnContextSink(_contextSinks[BusContextIndex.TargetedHandleDefault]);
+            ClearAndReturnContextSink(_contextSinks[BusContextIndex.BroadcastHandleDefault]);
             _scalarSinks[BusSinkIndex.UntargetedPostProcessDefault].Clear();
-            _contextSinks[BusContextIndex.TargetedPostProcessDefault].Clear();
-            _contextSinks[BusContextIndex.BroadcastPostProcessDefault].Clear();
+            ClearAndReturnContextSink(_contextSinks[BusContextIndex.TargetedPostProcessDefault]);
+            ClearAndReturnContextSink(_contextSinks[BusContextIndex.BroadcastPostProcessDefault]);
             _scalarSinks[BusSinkIndex.TargetedPostProcessWithoutContext].Clear();
             _scalarSinks[BusSinkIndex.BroadcastPostProcessWithoutContext].Clear();
             _globalSlots.Clear();
@@ -1778,9 +2003,12 @@ namespace DxMessaging.Core.MessageBus
             _innerInterceptorsStack.Clear();
             _methodCache.Clear();
             _dirtyTypes.Clear();
+            ReturnAllDirtyTargetCollections();
             _dirtyTargets.Clear();
             _dirtyTypeSet.Clear();
             _dirtyTargetSets.Clear();
+            _dirtyTargetHighWaterCounts.Clear();
+            _contextMapHighWaterCounts.Clear();
             _dirtyHandlers.Clear();
             _dirtyHandlerSet.Clear();
             _dirtyHandlerTicks.Clear();
@@ -6015,7 +6243,7 @@ namespace DxMessaging.Core.MessageBus
 
             long touchTick = AdvanceTick();
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>> broadcastHandlers =
-                sinks.GetOrAdd<T>();
+                GetOrRentContextMap<T>(sinks);
             Dictionary<InstanceId, HandlerCache<int, HandlerCache>> capturedBroadcastHandlers =
                 broadcastHandlers;
             SlotKey slotKey = RegistrationMethodAxes.GetSlotKey(registrationMethod);
@@ -6029,6 +6257,7 @@ namespace DxMessaging.Core.MessageBus
             {
                 handlers = new HandlerCache<int, HandlerCache>();
                 broadcastHandlers[context] = handlers;
+                TrackContextMapHighWater(broadcastHandlers);
             }
             Touch(handlers, touchTick);
             HandlerCache<int, HandlerCache> capturedHandlers = handlers;

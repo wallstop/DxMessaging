@@ -3,6 +3,7 @@ namespace DxMessaging.Tests.Editor.Allocations
 {
     using System;
     using System.Collections.Generic;
+    using System.Reflection;
     using DxMessaging.Core;
     using DxMessaging.Core.Extensions;
     using DxMessaging.Core.MessageBus;
@@ -121,6 +122,7 @@ namespace DxMessaging.Tests.Editor.Allocations
         /// to cover the augmented closure's captured state.
         /// </summary>
         private const long PerAugmentedRegistrationByteBudget = 768L;
+        private const int DirtyTargetPoolRetainedEntryCount = 64;
 
         // The InstanceId values below are arbitrary 32-bit integers that
         // distinguish the targeted/source/owner participants from each other
@@ -655,6 +657,340 @@ namespace DxMessaging.Tests.Editor.Allocations
             );
         }
 
+        [Test]
+        [Category("Allocation")]
+        public void DirtyTargetTrimReturnsInstanceIdCollectionsToPools(
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.KindsWithComponentTarget)
+            )]
+                MessageScenario scenario
+        )
+        {
+            RunWithFreshHarness(
+                scenario,
+                (token, bus) =>
+                {
+                    int previousListCap = DxPools.InstanceIdLists.MaxRetained;
+                    int previousSetCap = DxPools.InstanceIdSets.MaxRetained;
+                    bool previousListLru = DxPools.InstanceIdLists.UseLru;
+                    bool previousSetLru = DxPools.InstanceIdSets.UseLru;
+                    try
+                    {
+                        _ = DxPools.TrimAll(force: true);
+                        DxPools.InstanceIdLists.UseLru = true;
+                        DxPools.InstanceIdSets.UseLru = true;
+                        DxPools.InstanceIdLists.MaxRetained = DirtyTargetPoolRetainedEntryCount;
+                        DxPools.InstanceIdSets.MaxRetained = DirtyTargetPoolRetainedEntryCount;
+                        Action emit = BuildEmitClosure(scenario, bus);
+                        MessageRegistrationHandle handle = RegisterHandler(scenario, token);
+                        emit();
+                        token.RemoveRegistration(handle);
+                        emit();
+                        int listsBefore = DxPools.DescribeAll().InstanceIdLists.Cached;
+                        int setsBefore = DxPools.DescribeAll().InstanceIdSets.Cached;
+
+                        IMessageBus.TrimResult result = bus.Trim(force: false);
+
+                        Assert.Greater(
+                            result.TargetSlotsEvicted,
+                            0,
+                            $"Trim-{scenario.Kind} must reclaim a dirty target slot."
+                        );
+                        Assert.Greater(
+                            DxPools.DescribeAll().InstanceIdLists.Cached,
+                            listsBefore,
+                            $"Trim-{scenario.Kind} must return the dirty-target list to the pool."
+                        );
+                        Assert.Greater(
+                            DxPools.DescribeAll().InstanceIdSets.Cached,
+                            setsBefore,
+                            $"Trim-{scenario.Kind} must return the dirty-target set to the pool."
+                        );
+
+                        long listHitsBeforeReuse = DxPools.DescribeAll().InstanceIdLists.Hits;
+                        long setHitsBeforeReuse = DxPools.DescribeAll().InstanceIdSets.Hits;
+                        MessageRegistrationHandle reused = RegisterHandler(scenario, token);
+                        emit();
+                        token.RemoveRegistration(reused);
+
+                        Assert.Greater(
+                            DxPools.DescribeAll().InstanceIdLists.Hits,
+                            listHitsBeforeReuse,
+                            $"Register-{scenario.Kind} must rent a pooled dirty-target list."
+                        );
+                        Assert.Greater(
+                            DxPools.DescribeAll().InstanceIdSets.Hits,
+                            setHitsBeforeReuse,
+                            $"Register-{scenario.Kind} must rent a pooled dirty-target set."
+                        );
+                    }
+                    finally
+                    {
+                        _ = DxPools.TrimAll(force: true);
+                        DxPools.InstanceIdLists.UseLru = previousListLru;
+                        DxPools.InstanceIdSets.UseLru = previousSetLru;
+                        DxPools.InstanceIdLists.MaxRetained = previousListCap;
+                        DxPools.InstanceIdSets.MaxRetained = previousSetCap;
+                    }
+                }
+            );
+        }
+
+        public static IEnumerable<int> RetainedDirtyTargetWarmupCounts
+        {
+            get
+            {
+                yield return 1;
+                yield return DirtyTargetPoolRetainedEntryCount - 1;
+                yield return DirtyTargetPoolRetainedEntryCount;
+            }
+        }
+
+        public static IEnumerable<int> OversizedDirtyTargetWarmupCounts
+        {
+            get
+            {
+                yield return DirtyTargetPoolRetainedEntryCount + 1;
+                yield return DirtyTargetPoolRetainedEntryCount * 2;
+                yield return 1000;
+            }
+        }
+
+        [Test]
+        [Category("Allocation")]
+        public void DirtyTargetTrackingIsAllocationFreeAfterWarmup(
+            [ValueSource(nameof(RetainedDirtyTargetWarmupCounts))] int targetCount
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                StopwatchClock.Instance,
+                idleEvictionTicks: 0,
+                evictionTickIntervalSeconds: double.PositiveInfinity,
+                idleEvictionEnabled: false,
+                trimApiEnabled: true
+            );
+            try
+            {
+                int previousListCap = DxPools.InstanceIdLists.MaxRetained;
+                int previousSetCap = DxPools.InstanceIdSets.MaxRetained;
+                bool previousListLru = DxPools.InstanceIdLists.UseLru;
+                bool previousSetLru = DxPools.InstanceIdSets.UseLru;
+                _ = DxPools.TrimAll(force: true);
+                DxPools.InstanceIdLists.UseLru = true;
+                DxPools.InstanceIdSets.UseLru = true;
+                DxPools.InstanceIdLists.MaxRetained = DirtyTargetPoolRetainedEntryCount;
+                DxPools.InstanceIdSets.MaxRetained = DirtyTargetPoolRetainedEntryCount;
+                PrimeDirtyTargetMessageTypeIndex(bus);
+                _ = DxPools.TrimAll(force: true);
+                try
+                {
+                    Action<InstanceId> markDirtyTarget = CreateDirtyTargetMarker(bus);
+                    MarkDirtyTargets(markDirtyTarget, 0x2424_0000, targetCount);
+                    _ = bus.Trim(force: false);
+                    PoolDiagnosticsSnapshot afterWarmup = DxPools.DescribeAll();
+
+                    Assert.Greater(
+                        afterWarmup.InstanceIdLists.Cached,
+                        0,
+                        "Dirty-target warmup must return a retained InstanceId list to the pool "
+                            + $"before measuring reuse. targetCount={targetCount}, "
+                            + $"cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"listPool={FormatPoolDiagnostics(afterWarmup.InstanceIdLists)}."
+                    );
+                    Assert.Greater(
+                        afterWarmup.InstanceIdSets.Cached,
+                        0,
+                        "Dirty-target warmup must return a retained InstanceId set to the pool "
+                            + $"before measuring reuse. targetCount={targetCount}, "
+                            + $"cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"setPool={FormatPoolDiagnostics(afterWarmup.InstanceIdSets)}."
+                    );
+
+                    long listHitsBefore = afterWarmup.InstanceIdLists.Hits;
+                    long setHitsBefore = afterWarmup.InstanceIdSets.Hits;
+
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    long before = GC.GetAllocatedBytesForCurrentThread();
+                    MarkDirtyTargets(markDirtyTarget, 0x2425_0000, targetCount);
+                    long after = GC.GetAllocatedBytesForCurrentThread();
+                    PoolDiagnosticsSnapshot afterReuse = DxPools.DescribeAll();
+
+                    Assert.AreEqual(
+                        0,
+                        after - before,
+                        "Dirty-target tracking must reuse warmed InstanceId list/set storage without managed allocations."
+                    );
+                    Assert.Greater(
+                        afterReuse.InstanceIdLists.Hits,
+                        listHitsBefore,
+                        "Dirty-target tracking must rent the warmed InstanceId list. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterWarmup.InstanceIdLists)}, "
+                            + $"after={FormatPoolDiagnostics(afterReuse.InstanceIdLists)}."
+                    );
+                    Assert.Greater(
+                        afterReuse.InstanceIdSets.Hits,
+                        setHitsBefore,
+                        "Dirty-target tracking must rent the warmed InstanceId set. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterWarmup.InstanceIdSets)}, "
+                            + $"after={FormatPoolDiagnostics(afterReuse.InstanceIdSets)}."
+                    );
+                }
+                finally
+                {
+                    DxPools.InstanceIdLists.UseLru = previousListLru;
+                    DxPools.InstanceIdSets.UseLru = previousSetLru;
+                    DxPools.InstanceIdLists.MaxRetained = previousListCap;
+                    DxPools.InstanceIdSets.MaxRetained = previousSetCap;
+                }
+            }
+            finally
+            {
+                _ = bus.Trim(force: false);
+                _ = DxPools.TrimAll(force: true);
+            }
+        }
+
+        [Test]
+        [Category("Allocation")]
+        public void DirtyTargetTrackingDropsOversizedWarmupCollections(
+            [ValueSource(nameof(OversizedDirtyTargetWarmupCounts))] int targetCount
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(
+                StopwatchClock.Instance,
+                idleEvictionTicks: 0,
+                evictionTickIntervalSeconds: double.PositiveInfinity,
+                idleEvictionEnabled: false,
+                trimApiEnabled: true
+            );
+            try
+            {
+                int previousListCap = DxPools.InstanceIdLists.MaxRetained;
+                int previousSetCap = DxPools.InstanceIdSets.MaxRetained;
+                bool previousListLru = DxPools.InstanceIdLists.UseLru;
+                bool previousSetLru = DxPools.InstanceIdSets.UseLru;
+                _ = DxPools.TrimAll(force: true);
+                DxPools.InstanceIdLists.UseLru = true;
+                DxPools.InstanceIdSets.UseLru = true;
+                DxPools.InstanceIdLists.MaxRetained = DirtyTargetPoolRetainedEntryCount;
+                DxPools.InstanceIdSets.MaxRetained = DirtyTargetPoolRetainedEntryCount;
+                PrimeDirtyTargetMessageTypeIndex(bus);
+                _ = DxPools.TrimAll(force: true);
+                try
+                {
+                    Action<InstanceId> markDirtyTarget = CreateDirtyTargetMarker(bus);
+                    MarkDirtyTargets(markDirtyTarget, 0x2525_0000, targetCount);
+                    _ = bus.Trim(force: false);
+                    PoolDiagnosticsSnapshot afterOversizedTrim = DxPools.DescribeAll();
+
+                    Assert.AreEqual(
+                        0,
+                        afterOversizedTrim.InstanceIdLists.Cached,
+                        "Oversized dirty-target warmup must drop its InstanceId list instead of caching it. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"listPool={FormatPoolDiagnostics(afterOversizedTrim.InstanceIdLists)}."
+                    );
+                    Assert.AreEqual(
+                        0,
+                        afterOversizedTrim.InstanceIdSets.Cached,
+                        "Oversized dirty-target warmup must drop its InstanceId set instead of caching it. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"setPool={FormatPoolDiagnostics(afterOversizedTrim.InstanceIdSets)}."
+                    );
+
+                    MarkDirtyTargets(markDirtyTarget, 0x2526_0000, 1);
+                    PoolDiagnosticsSnapshot afterFreshRent = DxPools.DescribeAll();
+
+                    Assert.AreEqual(
+                        afterOversizedTrim.InstanceIdLists.Hits,
+                        afterFreshRent.InstanceIdLists.Hits,
+                        "Renting after an oversized dirty-target drop must not report a pooled list hit. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterOversizedTrim.InstanceIdLists)}, "
+                            + $"after={FormatPoolDiagnostics(afterFreshRent.InstanceIdLists)}."
+                    );
+                    Assert.AreEqual(
+                        afterOversizedTrim.InstanceIdSets.Hits,
+                        afterFreshRent.InstanceIdSets.Hits,
+                        "Renting after an oversized dirty-target drop must not report a pooled set hit. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterOversizedTrim.InstanceIdSets)}, "
+                            + $"after={FormatPoolDiagnostics(afterFreshRent.InstanceIdSets)}."
+                    );
+                    Assert.Greater(
+                        afterFreshRent.InstanceIdLists.Misses,
+                        afterOversizedTrim.InstanceIdLists.Misses,
+                        "Renting after an oversized dirty-target drop must allocate a fresh list. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterOversizedTrim.InstanceIdLists)}, "
+                            + $"after={FormatPoolDiagnostics(afterFreshRent.InstanceIdLists)}."
+                    );
+                    Assert.Greater(
+                        afterFreshRent.InstanceIdSets.Misses,
+                        afterOversizedTrim.InstanceIdSets.Misses,
+                        "Renting after an oversized dirty-target drop must allocate a fresh set. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterOversizedTrim.InstanceIdSets)}, "
+                            + $"after={FormatPoolDiagnostics(afterFreshRent.InstanceIdSets)}."
+                    );
+
+                    _ = bus.Trim(force: false);
+                    PoolDiagnosticsSnapshot afterSmallTrim = DxPools.DescribeAll();
+
+                    Assert.Greater(
+                        afterSmallTrim.InstanceIdLists.Cached,
+                        0,
+                        "A small dirty-target cycle after an oversized drop must return its list to the pool. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"listPool={FormatPoolDiagnostics(afterSmallTrim.InstanceIdLists)}."
+                    );
+                    Assert.Greater(
+                        afterSmallTrim.InstanceIdSets.Cached,
+                        0,
+                        "A small dirty-target cycle after an oversized drop must return its set to the pool. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"setPool={FormatPoolDiagnostics(afterSmallTrim.InstanceIdSets)}."
+                    );
+
+                    MarkDirtyTargets(markDirtyTarget, 0x2527_0000, 1);
+                    PoolDiagnosticsSnapshot afterSmallReuse = DxPools.DescribeAll();
+
+                    Assert.Greater(
+                        afterSmallReuse.InstanceIdLists.Hits,
+                        afterSmallTrim.InstanceIdLists.Hits,
+                        "A small dirty-target cycle after an oversized drop must rent the recovered pooled list. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterSmallTrim.InstanceIdLists)}, "
+                            + $"after={FormatPoolDiagnostics(afterSmallReuse.InstanceIdLists)}."
+                    );
+                    Assert.Greater(
+                        afterSmallReuse.InstanceIdSets.Hits,
+                        afterSmallTrim.InstanceIdSets.Hits,
+                        "A small dirty-target cycle after an oversized drop must rent the recovered pooled set. "
+                            + $"targetCount={targetCount}, cap={DirtyTargetPoolRetainedEntryCount}, "
+                            + $"before={FormatPoolDiagnostics(afterSmallTrim.InstanceIdSets)}, "
+                            + $"after={FormatPoolDiagnostics(afterSmallReuse.InstanceIdSets)}."
+                    );
+                }
+                finally
+                {
+                    DxPools.InstanceIdLists.UseLru = previousListLru;
+                    DxPools.InstanceIdSets.UseLru = previousSetLru;
+                    DxPools.InstanceIdLists.MaxRetained = previousListCap;
+                    DxPools.InstanceIdSets.MaxRetained = previousSetCap;
+                }
+            }
+            finally
+            {
+                _ = bus.Trim(force: false);
+                _ = DxPools.TrimAll(force: true);
+            }
+        }
+
         public static IEnumerable<MessageScenario> DiagnosticsOnScenariosIncludingWithoutContext
         {
             get
@@ -861,6 +1197,63 @@ namespace DxMessaging.Tests.Editor.Allocations
                     throw new InvalidOperationException($"Unhandled MessageKind {scenario.Kind}.");
                 }
             }
+        }
+
+        private static Action<InstanceId> CreateDirtyTargetMarker(MessageBus bus)
+        {
+            MethodInfo method = typeof(MessageBus)
+                .GetMethod("MarkDirtyTarget", BindingFlags.Instance | BindingFlags.NonPublic)
+                .MakeGenericMethod(typeof(SimpleTargetedMessage));
+            return (Action<InstanceId>)
+                Delegate.CreateDelegate(typeof(Action<InstanceId>), bus, method);
+        }
+
+        private static void PrimeDirtyTargetMessageTypeIndex(MessageBus bus)
+        {
+            MessageHandler handler = new MessageHandler(HandlerOwner, bus) { active = true };
+            MessageRegistrationToken token = MessageRegistrationToken.Create(handler, bus);
+            try
+            {
+                token.Enable();
+                MessageRegistrationHandle handle =
+                    ScenarioHarness.RegisterTargeted<SimpleTargetedMessage>(
+                        MessageScenario.Targeted(),
+                        token,
+                        StableTarget,
+                        NoOpTargeted
+                    );
+                token.RemoveRegistration(handle);
+            }
+            finally
+            {
+                token.UnregisterAll();
+                token.Dispose();
+                _ = bus.Trim(force: true);
+            }
+        }
+
+        private static void MarkDirtyTargets(
+            Action<InstanceId> markDirtyTarget,
+            int baseValue,
+            int targetCount
+        )
+        {
+            for (int i = 0; i < targetCount; ++i)
+            {
+                markDirtyTarget(new InstanceId(baseValue + i));
+            }
+        }
+
+        private static string FormatPoolDiagnostics(CollectionPoolDiagnostics diagnostics)
+        {
+            return "Cached="
+                + diagnostics.Cached
+                + ", Hits="
+                + diagnostics.Hits
+                + ", Misses="
+                + diagnostics.Misses
+                + ", Evictions="
+                + diagnostics.Evictions;
         }
 
         private static MessageRegistrationHandle RegisterPostProcessor(

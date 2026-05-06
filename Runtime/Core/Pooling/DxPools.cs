@@ -31,6 +31,20 @@ namespace DxMessaging.Core.Pooling
                 onRecycled: dict => dict.Clear()
             );
 
+        internal static readonly CollectionPool<List<InstanceId>> InstanceIdLists = new(
+            maxRetained: DefaultMaxRetained,
+            useLru: true,
+            factory: () => new List<InstanceId>(),
+            onRecycled: list => list.Clear()
+        );
+
+        internal static readonly CollectionPool<HashSet<InstanceId>> InstanceIdSets = new(
+            maxRetained: DefaultMaxRetained,
+            useLru: true,
+            factory: () => new HashSet<InstanceId>(),
+            onRecycled: set => set.Clear()
+        );
+
         internal static readonly CollectionPool<List<object>> ObjectLists = new(
             maxRetained: DefaultMaxRetained,
             useLru: true,
@@ -79,6 +93,8 @@ namespace DxMessaging.Core.Pooling
         {
             int evicted = 0;
             evicted += InstanceIdDicts.Trim(force ? 0 : InstanceIdDicts.MaxRetained);
+            evicted += InstanceIdLists.Trim(force ? 0 : InstanceIdLists.MaxRetained);
+            evicted += InstanceIdSets.Trim(force ? 0 : InstanceIdSets.MaxRetained);
             evicted += ObjectLists.Trim(force ? 0 : ObjectLists.MaxRetained);
             evicted += ObjectStacks.Trim(force ? 0 : ObjectStacks.MaxRetained);
             evicted += IntSets.Trim(force ? 0 : IntSets.MaxRetained);
@@ -105,12 +121,16 @@ namespace DxMessaging.Core.Pooling
             int cap = settings.BufferMaxDistinctEntries;
             bool useLru = settings.BufferUseLruEviction;
             InstanceIdDicts.UseLru = useLru;
+            InstanceIdLists.UseLru = useLru;
+            InstanceIdSets.UseLru = useLru;
             ObjectLists.UseLru = useLru;
             ObjectStacks.UseLru = useLru;
             IntSets.UseLru = useLru;
             TypedHandlerContextDicts.UseLru = useLru;
             TypedHandlerPriorityDicts.UseLru = useLru;
             InstanceIdDicts.MaxRetained = cap;
+            InstanceIdLists.MaxRetained = cap;
+            InstanceIdSets.MaxRetained = cap;
             ObjectLists.MaxRetained = cap;
             ObjectStacks.MaxRetained = cap;
             IntSets.MaxRetained = cap;
@@ -124,6 +144,8 @@ namespace DxMessaging.Core.Pooling
         {
             return new PoolDiagnosticsSnapshot(
                 InstanceIdDicts.Snapshot(),
+                InstanceIdLists.Snapshot(),
+                InstanceIdSets.Snapshot(),
                 ObjectLists.Snapshot(),
                 ObjectStacks.Snapshot(),
                 IntSets.Snapshot(),

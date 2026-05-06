@@ -61,6 +61,7 @@ namespace DxMessaging.Core
                 IMessageBus defaultBus = MessageHandler.InitialGlobalMessageBus;
 
                 MessageHandler.ResetStatics();
+                MessageBus.MessageBus.ResetStaticPools();
 
                 if (
                     !ReferenceEquals(activeBus, defaultBus)

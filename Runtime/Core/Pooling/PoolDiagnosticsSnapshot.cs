@@ -10,6 +10,12 @@ namespace DxMessaging.Core.Pooling
         /// <summary><c>Dictionary&lt;InstanceId, object&gt;</c> pool diagnostics.</summary>
         public readonly CollectionPoolDiagnostics InstanceIdDicts;
 
+        /// <summary><c>List&lt;InstanceId&gt;</c> pool diagnostics.</summary>
+        public readonly CollectionPoolDiagnostics InstanceIdLists;
+
+        /// <summary><c>HashSet&lt;InstanceId&gt;</c> pool diagnostics.</summary>
+        public readonly CollectionPoolDiagnostics InstanceIdSets;
+
         /// <summary><c>List&lt;object&gt;</c> pool diagnostics.</summary>
         public readonly CollectionPoolDiagnostics ObjectLists;
 
@@ -27,6 +33,8 @@ namespace DxMessaging.Core.Pooling
 
         internal PoolDiagnosticsSnapshot(
             CollectionPoolDiagnostics instanceIdDicts,
+            CollectionPoolDiagnostics instanceIdLists,
+            CollectionPoolDiagnostics instanceIdSets,
             CollectionPoolDiagnostics objectLists,
             CollectionPoolDiagnostics objectStacks,
             CollectionPoolDiagnostics intSets,
@@ -35,6 +43,8 @@ namespace DxMessaging.Core.Pooling
         )
         {
             InstanceIdDicts = instanceIdDicts;
+            InstanceIdLists = instanceIdLists;
+            InstanceIdSets = instanceIdSets;
             ObjectLists = objectLists;
             ObjectStacks = objectStacks;
             IntSets = intSets;

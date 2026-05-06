@@ -65,7 +65,46 @@ namespace DxMessaging.Tests.Runtime.Core
 
             Assert.AreEqual(1, wrapper.TrimCallCount);
             Assert.IsTrue(wrapper.LastForce);
-            Assert.AreEqual(default(IMessageBus.TrimResult), result);
+            // The wrapped bus has no registrations, so its eviction-side fields are always zero.
+            // PooledCollectionsEvicted is intentionally NOT asserted: Trim(force: true) drains
+            // AppDomain-scoped static pools (DxPools / ContextHandlerByTargetDicts) shared with
+            // other test fixtures, so its value is non-deterministic across test orderings.
+            Assert.AreEqual(
+                0,
+                result.TypeSlotsEvicted,
+                "TypeSlotsEvicted should be 0 on a fresh bus."
+            );
+            Assert.AreEqual(
+                0,
+                result.TargetSlotsEvicted,
+                "TargetSlotsEvicted should be 0 on a fresh bus."
+            );
+            Assert.AreEqual(
+                0,
+                result.LiveTypeSlotsRemaining,
+                "LiveTypeSlotsRemaining should be 0 on a fresh bus."
+            );
+        }
+
+        [Test]
+        public void TrimAllPropagatesInnerBusResultUnchanged()
+        {
+            IMessageBus.TrimResult sentinel = new IMessageBus.TrimResult(7, 11, 13, 17);
+            SentinelTrimMessageBus wrapper = new SentinelTrimMessageBus(
+                new GlobalMessageBus(),
+                sentinel
+            );
+            MessageHandler.SetGlobalMessageBus(wrapper);
+
+            IMessageBus.TrimResult result = MessageHandler.TrimAll(force: false);
+
+            Assert.AreEqual(
+                sentinel,
+                result,
+                "MessageHandler.TrimAll must return the inner bus's TrimResult unchanged. expected={0}, actual={1}",
+                sentinel,
+                result
+            );
         }
 
         [Test]
@@ -256,6 +295,24 @@ namespace DxMessaging.Tests.Runtime.Core
                 LastForce = force;
                 return base.Trim(force);
             }
+        }
+
+        /// <summary>
+        /// Wrapper that returns a fixed sentinel <see cref="IMessageBus.TrimResult"/> so the test
+        /// can assert field-by-field propagation through <see cref="MessageHandler.TrimAll"/>
+        /// without depending on the real bus's pool/eviction state.
+        /// </summary>
+        private sealed class SentinelTrimMessageBus : WrapperMessageBus
+        {
+            private readonly IMessageBus.TrimResult _sentinel;
+
+            public SentinelTrimMessageBus(IMessageBus inner, IMessageBus.TrimResult sentinel)
+                : base(inner)
+            {
+                _sentinel = sentinel;
+            }
+
+            public override IMessageBus.TrimResult Trim(bool force = false) => _sentinel;
         }
     }
 }

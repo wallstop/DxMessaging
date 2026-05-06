@@ -2,9 +2,9 @@
 title: "DxMessaging Memory Reclamation"
 id: "memory-reclamation"
 category: "performance"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-05-04"
-updated: "2026-05-04"
+updated: "2026-05-06"
 
 source:
   repository: "wallstop/DxMessaging"
@@ -115,6 +115,7 @@ pool trim path.
 | Typed handler slots     | message type, handler, priority, optional context | `MessageHandler.ResetEmptyTypedSlotsForSweep` |
 | Global accept-all slot  | global handler delegates                          | `MessageBus.SweepGlobalSlot`                  |
 | Shared collection pools | pooled dictionaries, lists, stacks, sets          | `DxPools.TrimAll`                             |
+| Bus context map pool    | targeted/broadcast context dictionaries           | `MessageBus.Trim` and settings hot reload     |
 
 Any new holder keyed by message type or `InstanceId` must have an explicit row
 in tests and, if it is a `MessageCache<>` field, an entry in the sweepable
@@ -139,14 +140,22 @@ handlers touched since the previous sweep.
 ## Pool Layer
 
 `CollectionPool<T>` backs the internal reusable collections. `DxPools`
-centralizes the pools for `InstanceId` dictionaries, typed-handler context
+centralizes the pools for `InstanceId` dictionaries, dirty-target
+`List<InstanceId>` and `HashSet<InstanceId>` holders, typed-handler context
 dictionaries, typed-handler priority dictionaries, object lists, object stacks,
 and integer sets.
+
+`MessageBus` also owns the private static `ContextHandlerByTargetDicts` pool for
+bus-side targeted and sourced-broadcast context dictionaries. This pool stays
+inside `MessageBus` because its value type references private handler-cache
+types. It must be configured with the same runtime settings as `DxPools`,
+trimmed from `MessageBus.Trim`, and covered by memory-reclamation tests.
 
 `DxMessagingRuntimeSettings.BufferMaxDistinctEntries` controls the retained
 entry cap for each pool. `BufferUseLruEviction` chooses between LRU retention
 and bounded LIFO behavior. `DxPools.Configure(settings)` hot-reloads both the
-cap and retention mode without recreating buses.
+cap and retention mode without recreating buses; bus-owned pools must mirror
+the same settings in `MessageBus.ApplyRuntimeSettings`.
 
 ## Adding a MessageCache
 
@@ -159,6 +168,9 @@ When adding a new `MessageCache<>` storage field to `MessageBus`:
 1. Update `LeakWatcher` if the cache introduces a new public leak counter.
 1. Keep stale deregistration closures safe after sweep; a stale closure must
    not remove a later registration that reused the same slot.
+1. If the cache introduces a dirty-tracking collection or bus-owned pool, add a
+   sweep-time compaction or return-to-pool test that proves the object is both
+   returned and reused.
 
 ## Performance Notes
 
@@ -179,6 +191,7 @@ When adding a new `MessageCache<>` storage field to `MessageBus`:
 
 ## Changelog
 
-| Version | Date       | Changes         |
-| ------- | ---------- | --------------- |
-| 1.0.0   | 2026-05-04 | Initial version |
+| Version | Date       | Changes                                                                  |
+| ------- | ---------- | ------------------------------------------------------------------------ |
+| 1.1.0   | 2026-05-06 | Documented bus-side context dictionary and dirty-target collection pools |
+| 1.0.0   | 2026-05-04 | Initial version                                                          |
