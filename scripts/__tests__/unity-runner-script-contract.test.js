@@ -163,7 +163,8 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     ["UnityVersion"],
     ["IncludePerf"],
     ["IncludeIntegrations"],
-    ["IncludeComparisons"]
+    ["IncludeComparisons"],
+    ["Runner"]
   ])("declares parameter %s (as $Name and -Name)", (paramName) => {
     // PowerShell convention: `param([type]$Name)` declares the parameter,
     // callers pass it as `-Name`. We require BOTH forms: the variable
@@ -217,6 +218,19 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("function ConvertTo-BashScriptText");
     expect(content).toContain('return $Value.Replace("`r`n", "`n")');
     expect(content).toContain("return ConvertTo-BashScriptText $sb.ToString()");
+  });
+
+  test("supports local Windows Unity execution for editmode and playmode", () => {
+    expect(content).toMatch(/\[ValidateSet\(\s*'auto'\s*,\s*'docker'\s*,\s*'local'\s*\)\]/);
+    expect(content).toContain("function Find-UnityEditorPath");
+    expect(content).toContain("UNITY_EDITOR_PATH");
+    expect(content).toContain("UNITY_PATH");
+    expect(content).toContain("Unity/Hub/Editor/$Version/Editor/Unity.exe");
+    expect(content).toContain("function Invoke-LocalUnityTests");
+    expect(content).toContain("Launching local Unity");
+    expect(content).toContain("$IsWindows -and $Platform -ne 'standalone'");
+    expect(content).toContain("$ResolvedRunner = 'local'");
+    expect(content).toContain("-Runner local does not support standalone");
   });
 
   test("forwards the perf commit environment into Unity containers", () => {

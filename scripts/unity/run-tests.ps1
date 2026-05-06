@@ -53,6 +53,10 @@
         (default: .artifacts/unity/results.xml). Must be within the repo
         root (the docker bind-mount only exposes the repo root).
 
+    .PARAMETER Runner
+        auto | docker | local. auto uses local Unity on Windows for editmode
+        and playmode, and docker elsewhere. standalone always uses docker.
+
     .EXAMPLE
         pwsh -NoProfile -File scripts/unity/run-tests.ps1 -Platform editmode
 
@@ -87,6 +91,9 @@ param(
     [switch]$IncludeComparisons,
 
     [string]$Results,
+
+    [ValidateSet('auto', 'docker', 'local')]
+    [string]$Runner = 'auto',
 
     [switch]$Help
 )
@@ -216,6 +223,111 @@ if ($env:CI -eq 'true') {
         $cp = "$cp -testFilter `"$Filter`""
     }
     Write-Host "  customParameters: $cp"
+    return
+}
+
+function Find-UnityEditorPath {
+    param([string]$Version)
+
+    foreach ($envName in @('UNITY_EDITOR_PATH', 'UNITY_PATH')) {
+        $envValue = [Environment]::GetEnvironmentVariable($envName)
+        if (-not [string]::IsNullOrWhiteSpace($envValue) -and
+            (Test-Path -LiteralPath $envValue -PathType Leaf)) {
+            return (Resolve-Path -LiteralPath $envValue).Path
+        }
+    }
+
+    $candidates = @()
+    foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if ([string]::IsNullOrWhiteSpace($root)) {
+            continue
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Version)) {
+            $candidates += (Join-Path $root "Unity/Hub/Editor/$Version/Editor/Unity.exe")
+        }
+
+        $hubRoot = Join-Path $root 'Unity/Hub/Editor'
+        if (Test-Path -LiteralPath $hubRoot -PathType Container) {
+            $candidates += Get-ChildItem -LiteralPath $hubRoot -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending |
+                ForEach-Object { Join-Path $_.FullName 'Editor/Unity.exe' }
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return ''
+}
+
+function Invoke-LocalUnityTests {
+    $unityPath = Find-UnityEditorPath $UnityVersion
+    if ([string]::IsNullOrWhiteSpace($unityPath)) {
+        Write-Host @"
+ERROR: Could not find a local Unity Editor.
+Set UNITY_EDITOR_PATH to your Unity.exe path, for example:
+  `$env:UNITY_EDITOR_PATH = 'C:\Program Files\Unity\Hub\Editor\$UnityVersion\Editor\Unity.exe'
+"@ -ForegroundColor Red
+        exit 1
+    }
+
+    $projectPath = Join-Path $RepoRoot '.unity-test-project'
+    $unityArgs = @(
+        '-batchmode',
+        '-nographics',
+        '-projectPath', $projectPath,
+        '-runTests',
+        '-testPlatform', $Platform,
+        '-testResults', $Results,
+        '-assemblyNames', $Assemblies
+    )
+    if (-not [string]::IsNullOrWhiteSpace($Filter)) {
+        $unityArgs += @('-testFilter', $Filter)
+    }
+    $unityArgs += @('-logFile', '-')
+
+    Write-Host "Launching local Unity: $unityPath" -ForegroundColor Cyan
+    Write-Host "  platform=$Platform assemblies=$Assemblies"
+    Write-Host "  results=$Results log=$ArtifactsDir/log.txt"
+    Write-Host "  perf=$($IncludePerf.IsPresent) comparisons=$($IncludeComparisons.IsPresent) integrations=$($IncludeIntegrations.IsPresent) filter=$Filter"
+
+    & $unityPath @unityArgs 2>&1 | Tee-Object -FilePath (Join-Path $ArtifactsDir 'log.txt')
+    $UnityExit = $LASTEXITCODE
+    if ($UnityExit -ne 0) {
+        if (-not (Test-Path $Results)) {
+            Write-Host "No results.xml at $Results" -ForegroundColor Yellow
+        }
+        Write-Host "Unity exited with code $UnityExit." -ForegroundColor Red
+        exit $UnityExit
+    }
+
+    if (-not (Test-Path $Results)) {
+        Write-Host "Unity exited 0 but no results.xml was produced at $Results." -ForegroundColor Red
+        exit 1
+    }
+}
+
+$ResolvedRunner = $Runner
+if ($ResolvedRunner -eq 'auto') {
+    if ($IsWindows -and $Platform -ne 'standalone') {
+        $ResolvedRunner = 'local'
+    } else {
+        $ResolvedRunner = 'docker'
+    }
+}
+if ($ResolvedRunner -eq 'local') {
+    if ($Platform -eq 'standalone') {
+        Write-Host 'ERROR: -Runner local does not support standalone; use -Runner docker.' -ForegroundColor Red
+        exit 2
+    }
+    if (-not (Test-Path $ArtifactsDir)) {
+        New-Item -ItemType Directory -Path $ArtifactsDir -Force | Out-Null
+    }
+    Invoke-LocalUnityTests
     return
 }
 
