@@ -7,11 +7,7 @@
     "WallstopStudios.DxMessaging",
     "WallstopStudios.DxMessaging.Tests.Runtime",
     "WallstopStudios.DxMessaging.Tests.00.Runtime.Benchmarks",
-    "Unity.PerformanceTesting",
-    "Zenject",
-    "MessagePipe",
-    "UniRx",
-    "UniTask"
+    "Unity.PerformanceTesting"
   ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],

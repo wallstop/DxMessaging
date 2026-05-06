@@ -3,6 +3,7 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
 {
     using System;
     using System.Collections.Generic;
+    using System.Reflection;
     using DxMessaging.Core;
     using DxMessaging.Core.Configuration;
     using DxMessaging.Core.MessageBus;
@@ -532,6 +533,385 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
             }
         }
 
+        [Test]
+        public void TypedHandlerOuterWrapperReclaimedAfterTrim(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            Action deregisterFirst = null;
+            Action deregisterSecond = null;
+            Action deregisterThird = null;
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                bus,
+                label: scenario.DisplayName
+            );
+            try
+            {
+                deregisterFirst = RegisterDirect(scenario, handler, bus, DefaultContext, () => { });
+                deregisterSecond = RegisterDirectSecond(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => { }
+                );
+                deregisterThird = RegisterDirectThird(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => { }
+                );
+
+                Assert.IsTrue(
+                    CountHandlerTypeCacheEntries(handler, bus) >= 3,
+                    "[{0}] typed-handler wrappers must exist while registrations are live.",
+                    scenario.Kind
+                );
+
+                deregisterFirst();
+                deregisterFirst = null;
+                deregisterSecond();
+                deregisterSecond = null;
+                deregisterThird();
+                deregisterThird = null;
+
+                Assert.IsTrue(
+                    CountHandlerTypeCacheEntries(handler, bus) >= 3,
+                    "[{0}] empty typed-handler wrappers must remain until trim.",
+                    scenario.Kind
+                );
+
+                _ = bus.Trim(force: true);
+
+                Assert.AreEqual(
+                    0,
+                    CountHandlerTypeCacheEntries(handler, bus),
+                    "[{0}] trim must remove empty typed-handler outer wrappers.",
+                    scenario.Kind
+                );
+            }
+            finally
+            {
+                deregisterFirst?.Invoke();
+                deregisterSecond?.Invoke();
+                deregisterThird?.Invoke();
+                _ = bus.Trim(force: true);
+            }
+        }
+
+        [Test]
+        public void TypedHandlerOuterWrappersReclaimedAtScaleAfterTrim()
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            List<Action> deregistrations = new List<Action>(1024);
+            MethodInfo registerMethod = typeof(MemoryReclamationTests).GetMethod(
+                nameof(RegisterUntargetedGenericDirect),
+                BindingFlags.Static | BindingFlags.NonPublic
+            );
+            Type[] markerTypes = RegistrationFloodMarkerTypes;
+
+            try
+            {
+                foreach (Type outerMarker in markerTypes)
+                {
+                    foreach (Type innerMarker in markerTypes)
+                    {
+                        Type messageType = typeof(RegistrationFloodMessage<,>).MakeGenericType(
+                            outerMarker,
+                            innerMarker
+                        );
+                        deregistrations.Add(
+                            (Action)
+                                registerMethod
+                                    .MakeGenericMethod(messageType)
+                                    .Invoke(null, new object[] { handler, bus })
+                        );
+                    }
+                }
+
+                Assert.AreEqual(
+                    1024,
+                    CountHandlerTypeCacheEntries(handler, bus),
+                    "Scale setup must create one typed-handler wrapper per distinct message type."
+                );
+
+                foreach (Action deregister in deregistrations)
+                {
+                    deregister();
+                }
+
+                deregistrations.Clear();
+
+                Assert.AreEqual(
+                    1024,
+                    CountHandlerTypeCacheEntries(handler, bus),
+                    "Empty typed-handler wrappers must remain in the sparse cache until trim."
+                );
+
+                _ = bus.Trim(force: true);
+
+                Assert.AreEqual(
+                    0,
+                    CountHandlerTypeCacheEntries(handler, bus),
+                    "Trim must remove every empty typed-handler wrapper from the sparse cache."
+                );
+            }
+            finally
+            {
+                foreach (Action deregistration in deregistrations)
+                {
+                    deregistration();
+                }
+
+                _ = bus.Trim(force: true);
+            }
+        }
+
+        [Test]
+        public void DirtyHandlerCompactedAfterTrim()
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            Action deregister = RegisterDirect(
+                MessageScenario.Untargeted(),
+                handler,
+                bus,
+                DefaultContext,
+                () => { }
+            );
+
+            deregister();
+
+            Assert.GreaterOrEqual(
+                CountDirtyHandlers(bus),
+                1,
+                "Deregistering the last typed handler must dirty the owning MessageHandler."
+            );
+
+            _ = bus.Trim(force: true);
+
+            Assert.AreEqual(
+                0,
+                CountDirtyHandlers(bus),
+                "Trim must compact dirty-handler candidates after their typed wrappers are reclaimed."
+            );
+        }
+
+        [Test]
+        public void DispatchLinksCaptureOuterGenerationGuard()
+        {
+            Type messageHandlerType = typeof(MessageHandler);
+            Type[] linkTypes =
+            {
+                messageHandlerType
+                    .GetNestedType("UntargetedDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(UntargetedOne)),
+                messageHandlerType
+                    .GetNestedType("UntargetedPostDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(UntargetedOne)),
+                messageHandlerType
+                    .GetNestedType("TargetedDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(TargetedOne)),
+                messageHandlerType
+                    .GetNestedType("TargetedPostDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(TargetedOne)),
+                messageHandlerType
+                    .GetNestedType("TargetedWithoutTargetingDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(TargetedOne)),
+                messageHandlerType
+                    .GetNestedType(
+                        "TargetedWithoutTargetingPostDispatchLink`1",
+                        BindingFlags.NonPublic
+                    )
+                    .MakeGenericType(typeof(TargetedOne)),
+                messageHandlerType
+                    .GetNestedType("BroadcastDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(BroadcastOne)),
+                messageHandlerType
+                    .GetNestedType("BroadcastPostDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(BroadcastOne)),
+                messageHandlerType
+                    .GetNestedType("BroadcastWithoutSourceDispatchLink`1", BindingFlags.NonPublic)
+                    .MakeGenericType(typeof(BroadcastOne)),
+                messageHandlerType
+                    .GetNestedType(
+                        "BroadcastWithoutSourcePostDispatchLink`1",
+                        BindingFlags.NonPublic
+                    )
+                    .MakeGenericType(typeof(BroadcastOne)),
+            };
+
+            foreach (Type linkType in linkTypes)
+            {
+                Assert.NotNull(
+                    linkType.GetField(
+                        "capturedGeneration",
+                        BindingFlags.Instance | BindingFlags.NonPublic
+                    ),
+                    "{0} must capture the TypedHandler outer generation.",
+                    linkType.Name
+                );
+            }
+        }
+
+        [Test]
+        public void OuterReclamationDoesNotFireStaleDispatchLink(
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.WithAndWithoutPostProcessorIncludingWithoutContext)
+            )]
+                MessageScenario scenario
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            int staleCalls = 0;
+            int currentCalls = 0;
+            Action staleDeregister = null;
+            Action currentDeregister = null;
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                bus,
+                label: scenario.DisplayName
+            );
+            try
+            {
+                staleDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => staleCalls++
+                );
+                object staleLink = CaptureDispatchLink(scenario, handler, bus);
+
+                staleDeregister();
+                staleDeregister = null;
+                _ = bus.Trim(force: true);
+
+                currentDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => currentCalls++
+                );
+                object currentLink = CaptureDispatchLink(scenario, handler, bus);
+
+                InvokeCapturedDispatchLink(scenario, staleLink, handler, DefaultContext);
+                InvokeCapturedDispatchLink(scenario, currentLink, handler, DefaultContext);
+
+                Assert.AreEqual(
+                    0,
+                    staleCalls,
+                    "[{0}] reclaimed stale dispatch links must early-out without firing old handlers.",
+                    scenario.DisplayName
+                );
+                Assert.AreEqual(
+                    1,
+                    currentCalls,
+                    "[{0}] stale dispatch links must not disturb the replacement typed wrapper.",
+                    scenario.DisplayName
+                );
+            }
+            finally
+            {
+                staleDeregister?.Invoke();
+                currentDeregister?.Invoke();
+                _ = bus.Trim(force: true);
+            }
+        }
+
+        [Test]
+        public void EmitAfterOuterReclamationDispatchesReplacementOnly(
+            [ValueSource(
+                typeof(MessageScenarios),
+                nameof(MessageScenarios.WithAndWithoutPostProcessorIncludingWithoutContext)
+            )]
+                MessageScenario scenario
+        )
+        {
+            MessageBus bus = MessageBus.CreateForInternalUse(new FakeClock(), idleEvictionTicks: 0);
+            using IDisposable cleanup = ForceTrimCleanup(bus);
+            MessageHandler handler = CreateActiveHandler(bus);
+            int staleCalls = 0;
+            int currentCalls = 0;
+            Action staleDeregister = null;
+            Action currentDeregister = null;
+            using LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                bus,
+                label: scenario.DisplayName
+            );
+            try
+            {
+                staleDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => staleCalls++
+                );
+
+                EmitFirst(scenario, bus, DefaultContext);
+                Assert.AreEqual(
+                    1,
+                    staleCalls,
+                    "[{0}] setup emission must prove the stale registration was reachable.",
+                    scenario.DisplayName
+                );
+
+                staleDeregister();
+                staleDeregister = null;
+                IMessageBus.TrimResult trimResult = bus.Trim(force: true);
+                Assert.GreaterOrEqual(
+                    trimResult.TypeSlotsEvicted,
+                    1,
+                    "[{0}] trim must reclaim the empty typed-handler wrapper before replacement. Result={1}",
+                    scenario.DisplayName,
+                    trimResult
+                );
+
+                currentDeregister = RegisterDirect(
+                    scenario,
+                    handler,
+                    bus,
+                    DefaultContext,
+                    () => currentCalls++
+                );
+
+                EmitFirst(scenario, bus, DefaultContext);
+
+                Assert.AreEqual(
+                    1,
+                    staleCalls,
+                    "[{0}] stale bus dispatch state must not fire the reclaimed registration.",
+                    scenario.DisplayName
+                );
+                Assert.AreEqual(
+                    1,
+                    currentCalls,
+                    "[{0}] replacement registration must dispatch through the production bus path.",
+                    scenario.DisplayName
+                );
+            }
+            finally
+            {
+                staleDeregister?.Invoke();
+                currentDeregister?.Invoke();
+                _ = bus.Trim(force: true);
+            }
+        }
+
         private static MessageRegistrationToken CreateEnabledToken(MessageBus bus)
         {
             MessageHandler handler = CreateActiveHandler(bus);
@@ -676,6 +1056,11 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
             Action onMessage
         )
         {
+            if (scenario.UsePostProcessor)
+            {
+                return RegisterDirectPostProcessor(scenario, handler, bus, context, onMessage);
+            }
+
             switch (scenario.Kind)
             {
                 case MessageKind.Untargeted:
@@ -710,11 +1095,408 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                         messageBus: bus
                     );
                 }
+                case MessageKind.TargetedWithoutTargeting:
+                {
+                    Action<InstanceId, TargetedOne> callback = (_, _) => onMessage();
+                    return handler.RegisterTargetedWithoutTargeting(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.BroadcastWithoutSource:
+                {
+                    Action<InstanceId, BroadcastOne> callback = (_, _) => onMessage();
+                    return handler.RegisterSourcedBroadcastWithoutSource(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
                 default:
                 {
                     throw UnsupportedScenario(scenario);
                 }
             }
+        }
+
+        private static Action RegisterDirectPostProcessor(
+            MessageScenario scenario,
+            MessageHandler handler,
+            MessageBus bus,
+            InstanceId context,
+            Action onMessage
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    Action<UntargetedOne> callback = _ => onMessage();
+                    return handler.RegisterUntargetedPostProcessor(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    Action<TargetedOne> callback = _ => onMessage();
+                    return handler.RegisterTargetedPostProcessor(
+                        context,
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    Action<BroadcastOne> callback = _ => onMessage();
+                    return handler.RegisterSourcedBroadcastPostProcessor(
+                        context,
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.TargetedWithoutTargeting:
+                {
+                    Action<InstanceId, TargetedOne> callback = (_, _) => onMessage();
+                    return handler.RegisterTargetedWithoutTargetingPostProcessor(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.BroadcastWithoutSource:
+                {
+                    Action<InstanceId, BroadcastOne> callback = (_, _) => onMessage();
+                    return handler.RegisterSourcedBroadcastWithoutSourcePostProcessor(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                default:
+                {
+                    throw UnsupportedScenario(scenario);
+                }
+            }
+        }
+
+        private static Action RegisterDirectSecond(
+            MessageScenario scenario,
+            MessageHandler handler,
+            MessageBus bus,
+            InstanceId context,
+            Action onMessage
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    Action<UntargetedTwo> callback = _ => onMessage();
+                    return handler.RegisterUntargetedMessageHandler(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    Action<TargetedTwo> callback = _ => onMessage();
+                    return handler.RegisterTargetedMessageHandler(
+                        context,
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    Action<BroadcastTwo> callback = _ => onMessage();
+                    return handler.RegisterSourcedBroadcastMessageHandler(
+                        context,
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                default:
+                {
+                    throw UnsupportedScenario(scenario);
+                }
+            }
+        }
+
+        private static Action RegisterDirectThird(
+            MessageScenario scenario,
+            MessageHandler handler,
+            MessageBus bus,
+            InstanceId context,
+            Action onMessage
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    Action<UntargetedThree> callback = _ => onMessage();
+                    return handler.RegisterUntargetedMessageHandler(
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.Targeted:
+                {
+                    Action<TargetedThree> callback = _ => onMessage();
+                    return handler.RegisterTargetedMessageHandler(
+                        context,
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                case MessageKind.Broadcast:
+                {
+                    Action<BroadcastThree> callback = _ => onMessage();
+                    return handler.RegisterSourcedBroadcastMessageHandler(
+                        context,
+                        callback,
+                        callback,
+                        priority: 0,
+                        messageBus: bus
+                    );
+                }
+                default:
+                {
+                    throw UnsupportedScenario(scenario);
+                }
+            }
+        }
+
+        private static object CaptureDispatchLink(
+            MessageScenario scenario,
+            MessageHandler handler,
+            MessageBus bus
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                    return scenario.UsePostProcessor
+                        ? handler.GetOrCreateUntargetedPostDispatchLink<UntargetedOne>(bus)
+                        : handler.GetOrCreateUntargetedDispatchLink<UntargetedOne>(bus);
+                case MessageKind.Targeted:
+                    return scenario.UsePostProcessor
+                        ? handler.GetOrCreateTargetedPostDispatchLink<TargetedOne>(bus)
+                        : handler.GetOrCreateTargetedDispatchLink<TargetedOne>(bus);
+                case MessageKind.TargetedWithoutTargeting:
+                    return scenario.UsePostProcessor
+                        ? handler.GetOrCreateTargetedWithoutTargetingPostDispatchLink<TargetedOne>(
+                            bus
+                        )
+                        : handler.GetOrCreateTargetedWithoutTargetingDispatchLink<TargetedOne>(bus);
+                case MessageKind.Broadcast:
+                    return scenario.UsePostProcessor
+                        ? handler.GetOrCreateBroadcastPostDispatchLink<BroadcastOne>(bus)
+                        : handler.GetOrCreateBroadcastDispatchLink<BroadcastOne>(bus);
+                case MessageKind.BroadcastWithoutSource:
+                    return scenario.UsePostProcessor
+                        ? handler.GetOrCreateBroadcastWithoutSourcePostDispatchLink<BroadcastOne>(
+                            bus
+                        )
+                        : handler.GetOrCreateBroadcastWithoutSourceDispatchLink<BroadcastOne>(bus);
+                default:
+                    throw UnsupportedScenario(scenario);
+            }
+        }
+
+        private static void InvokeCapturedDispatchLink(
+            MessageScenario scenario,
+            object link,
+            MessageHandler handler,
+            InstanceId context
+        )
+        {
+            switch (scenario.Kind)
+            {
+                case MessageKind.Untargeted:
+                {
+                    UntargetedOne message = new UntargetedOne();
+                    if (scenario.UsePostProcessor)
+                    {
+                        ((MessageHandler.UntargetedPostDispatchLink<UntargetedOne>)link).Invoke(
+                            handler,
+                            ref message,
+                            priority: 0,
+                            emissionId: 0
+                        );
+                    }
+                    else
+                    {
+                        ((MessageHandler.UntargetedDispatchLink<UntargetedOne>)link).Invoke(
+                            handler,
+                            ref message,
+                            priority: 0,
+                            emissionId: 0
+                        );
+                    }
+
+                    return;
+                }
+                case MessageKind.Targeted:
+                {
+                    TargetedOne message = new TargetedOne();
+                    if (scenario.UsePostProcessor)
+                    {
+                        ((MessageHandler.TargetedPostDispatchLink<TargetedOne>)link).Invoke(
+                            handler,
+                            ref context,
+                            ref message,
+                            priority: 0,
+                            emissionId: 0
+                        );
+                    }
+                    else
+                    {
+                        ((MessageHandler.TargetedDispatchLink<TargetedOne>)link).Invoke(
+                            handler,
+                            ref context,
+                            ref message,
+                            priority: 0,
+                            emissionId: 0
+                        );
+                    }
+
+                    return;
+                }
+                case MessageKind.TargetedWithoutTargeting:
+                {
+                    TargetedOne message = new TargetedOne();
+                    if (scenario.UsePostProcessor)
+                    {
+                        (
+                            (MessageHandler.TargetedWithoutTargetingPostDispatchLink<TargetedOne>)link
+                        ).Invoke(handler, ref context, ref message, priority: 0, emissionId: 0);
+                    }
+                    else
+                    {
+                        (
+                            (MessageHandler.TargetedWithoutTargetingDispatchLink<TargetedOne>)link
+                        ).Invoke(handler, ref context, ref message, priority: 0, emissionId: 0);
+                    }
+
+                    return;
+                }
+                case MessageKind.Broadcast:
+                {
+                    BroadcastOne message = new BroadcastOne();
+                    if (scenario.UsePostProcessor)
+                    {
+                        ((MessageHandler.BroadcastPostDispatchLink<BroadcastOne>)link).Invoke(
+                            handler,
+                            ref context,
+                            ref message,
+                            priority: 0,
+                            emissionId: 0
+                        );
+                    }
+                    else
+                    {
+                        ((MessageHandler.BroadcastDispatchLink<BroadcastOne>)link).Invoke(
+                            handler,
+                            ref context,
+                            ref message,
+                            priority: 0,
+                            emissionId: 0
+                        );
+                    }
+
+                    return;
+                }
+                case MessageKind.BroadcastWithoutSource:
+                {
+                    BroadcastOne message = new BroadcastOne();
+                    if (scenario.UsePostProcessor)
+                    {
+                        (
+                            (MessageHandler.BroadcastWithoutSourcePostDispatchLink<BroadcastOne>)link
+                        ).Invoke(handler, ref context, ref message, priority: 0, emissionId: 0);
+                    }
+                    else
+                    {
+                        (
+                            (MessageHandler.BroadcastWithoutSourceDispatchLink<BroadcastOne>)link
+                        ).Invoke(handler, ref context, ref message, priority: 0, emissionId: 0);
+                    }
+
+                    return;
+                }
+                default:
+                {
+                    throw UnsupportedScenario(scenario);
+                }
+            }
+        }
+
+        private static int CountDirtyHandlers(MessageBus bus)
+        {
+            FieldInfo field = typeof(MessageBus).GetField(
+                "_dirtyHandlers",
+                BindingFlags.Instance | BindingFlags.NonPublic
+            );
+            List<MessageHandler> dirtyHandlers = (List<MessageHandler>)field.GetValue(bus);
+            return dirtyHandlers.Count;
+        }
+
+        private static int CountHandlerTypeCacheEntries(MessageHandler handler, MessageBus bus)
+        {
+            int busIndex = bus.RegisteredGlobalSequentialIndex;
+            if (busIndex < 0 || handler._handlersByTypeByMessageBus.Count <= busIndex)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (object typedHandler in handler._handlersByTypeByMessageBus[busIndex])
+            {
+                if (typedHandler != null)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static Action RegisterUntargetedGenericDirect<T>(
+            MessageHandler handler,
+            MessageBus bus
+        )
+            where T : IUntargetedMessage<T>
+        {
+            Action<T> callback = _ => { };
+            return handler.RegisterUntargetedMessageHandler(
+                callback,
+                callback,
+                priority: 0,
+                messageBus: bus
+            );
         }
 
         private static void EmitFirst(MessageScenario scenario, MessageBus bus, InstanceId context)
@@ -728,12 +1510,14 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                     return;
                 }
                 case MessageKind.Targeted:
+                case MessageKind.TargetedWithoutTargeting:
                 {
                     TargetedOne message = new TargetedOne();
                     bus.TargetedBroadcast(ref context, ref message);
                     return;
                 }
                 case MessageKind.Broadcast:
+                case MessageKind.BroadcastWithoutSource:
                 {
                     BroadcastOne message = new BroadcastOne();
                     bus.SourcedBroadcast(ref context, ref message);
@@ -791,6 +1575,109 @@ namespace DxMessaging.Tests.Runtime.MemoryReclaim
                 _cleanup();
             }
         }
+
+        private static readonly Type[] RegistrationFloodMarkerTypes =
+        {
+            typeof(RegistrationFloodMarker00),
+            typeof(RegistrationFloodMarker01),
+            typeof(RegistrationFloodMarker02),
+            typeof(RegistrationFloodMarker03),
+            typeof(RegistrationFloodMarker04),
+            typeof(RegistrationFloodMarker05),
+            typeof(RegistrationFloodMarker06),
+            typeof(RegistrationFloodMarker07),
+            typeof(RegistrationFloodMarker08),
+            typeof(RegistrationFloodMarker09),
+            typeof(RegistrationFloodMarker10),
+            typeof(RegistrationFloodMarker11),
+            typeof(RegistrationFloodMarker12),
+            typeof(RegistrationFloodMarker13),
+            typeof(RegistrationFloodMarker14),
+            typeof(RegistrationFloodMarker15),
+            typeof(RegistrationFloodMarker16),
+            typeof(RegistrationFloodMarker17),
+            typeof(RegistrationFloodMarker18),
+            typeof(RegistrationFloodMarker19),
+            typeof(RegistrationFloodMarker20),
+            typeof(RegistrationFloodMarker21),
+            typeof(RegistrationFloodMarker22),
+            typeof(RegistrationFloodMarker23),
+            typeof(RegistrationFloodMarker24),
+            typeof(RegistrationFloodMarker25),
+            typeof(RegistrationFloodMarker26),
+            typeof(RegistrationFloodMarker27),
+            typeof(RegistrationFloodMarker28),
+            typeof(RegistrationFloodMarker29),
+            typeof(RegistrationFloodMarker30),
+            typeof(RegistrationFloodMarker31),
+        };
+
+        private readonly struct RegistrationFloodMessage<TOuter, TInner>
+            : IUntargetedMessage<RegistrationFloodMessage<TOuter, TInner>> { }
+
+        private readonly struct RegistrationFloodMarker00 { }
+
+        private readonly struct RegistrationFloodMarker01 { }
+
+        private readonly struct RegistrationFloodMarker02 { }
+
+        private readonly struct RegistrationFloodMarker03 { }
+
+        private readonly struct RegistrationFloodMarker04 { }
+
+        private readonly struct RegistrationFloodMarker05 { }
+
+        private readonly struct RegistrationFloodMarker06 { }
+
+        private readonly struct RegistrationFloodMarker07 { }
+
+        private readonly struct RegistrationFloodMarker08 { }
+
+        private readonly struct RegistrationFloodMarker09 { }
+
+        private readonly struct RegistrationFloodMarker10 { }
+
+        private readonly struct RegistrationFloodMarker11 { }
+
+        private readonly struct RegistrationFloodMarker12 { }
+
+        private readonly struct RegistrationFloodMarker13 { }
+
+        private readonly struct RegistrationFloodMarker14 { }
+
+        private readonly struct RegistrationFloodMarker15 { }
+
+        private readonly struct RegistrationFloodMarker16 { }
+
+        private readonly struct RegistrationFloodMarker17 { }
+
+        private readonly struct RegistrationFloodMarker18 { }
+
+        private readonly struct RegistrationFloodMarker19 { }
+
+        private readonly struct RegistrationFloodMarker20 { }
+
+        private readonly struct RegistrationFloodMarker21 { }
+
+        private readonly struct RegistrationFloodMarker22 { }
+
+        private readonly struct RegistrationFloodMarker23 { }
+
+        private readonly struct RegistrationFloodMarker24 { }
+
+        private readonly struct RegistrationFloodMarker25 { }
+
+        private readonly struct RegistrationFloodMarker26 { }
+
+        private readonly struct RegistrationFloodMarker27 { }
+
+        private readonly struct RegistrationFloodMarker28 { }
+
+        private readonly struct RegistrationFloodMarker29 { }
+
+        private readonly struct RegistrationFloodMarker30 { }
+
+        private readonly struct RegistrationFloodMarker31 { }
 
         private readonly struct UntargetedOne : IUntargetedMessage<UntargetedOne> { }
 

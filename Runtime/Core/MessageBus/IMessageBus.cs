@@ -66,6 +66,11 @@ namespace DxMessaging.Core.MessageBus
         /// <summary>
         /// Reclaim empty message slots and pooled collections owned by this bus.
         /// </summary>
+        /// <remarks>
+        /// Non-Unity and headless hosts must call this periodically when they need
+        /// deterministic reclamation. The automatic PlayerLoop sweep hook is only
+        /// installed on Unity 2021.3 or newer player/editor hosts.
+        /// </remarks>
         /// <param name="force">
         /// When true, ignores idle-age thresholds and drains shared pools to zero.
         /// When false, only slots past the configured idle threshold are eligible.

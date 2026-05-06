@@ -1,6 +1,7 @@
 namespace DxMessaging.Core.Pooling
 {
     using System.Diagnostics;
+    using System.Runtime.CompilerServices;
 
     /// <summary>
     /// Default <see cref="IDxMessagingClock"/> backed by a process-lifetime
@@ -17,6 +18,10 @@ namespace DxMessaging.Core.Pooling
         private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
 
         /// <inheritdoc />
-        public double NowSeconds => _stopwatch.ElapsedTicks * TicksToSeconds;
+        public double NowSeconds
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _stopwatch.ElapsedTicks * TicksToSeconds;
+        }
     }
 }

@@ -360,3 +360,34 @@ Temp.meta
 failed-tests.txt*
 
 PERF-PLAN.md*
+OLD-PLAN.md*
+*PLAN.md*
+
+# Unity test harness (.unity-test-project/) - track only the thin harness contract.
+.unity-test-project/*
+!.unity-test-project/Assets/
+.unity-test-project/Assets/*
+!.unity-test-project/Assets/Editor/
+!.unity-test-project/Assets/Editor.meta
+!.unity-test-project/Assets/Editor/TestRunnerBuilder.cs
+!.unity-test-project/Assets/Editor/TestRunnerBuilder.cs.meta
+!.unity-test-project/Assets/Editor/WallstopStudios.DxMessaging.TestHarness.Editor.asmdef
+!.unity-test-project/Assets/Editor/WallstopStudios.DxMessaging.TestHarness.Editor.asmdef.meta
+!.unity-test-project/Packages/
+!.unity-test-project/Packages/manifest.json
+!.unity-test-project/Packages/packages-lock.json
+!.unity-test-project/ProjectSettings/
+.unity-test-project/ProjectSettings/*
+!.unity-test-project/ProjectSettings/ProjectVersion.txt
+
+# Unity test harness generated artifacts.
+.unity-test-project/Library/
+.unity-test-project/Temp/
+.unity-test-project/Logs/
+.unity-test-project/obj/
+.unity-test-project/Builds/
+.unity-test-project/UserSettings/
+.unity-test-project/MemoryCaptures/
+.unity-test-project/.vsconfig
+
+*.ulf

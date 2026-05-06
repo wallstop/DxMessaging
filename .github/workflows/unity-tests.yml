@@ -1,0 +1,201 @@
+# =============================================================================
+# Unity EditMode + PlayMode PR Gate
+# =============================================================================
+# Purpose:
+#   Runs the DxMessaging test suite under the Unity Test Runner via the
+#   game-ci action across the supported Unity LTS / 6.0 versions. This is the
+#   canonical Unity correctness gate for pull requests targeting master.
+#
+# Why this is a PR gate (not benchmarks):
+#   The default assembly include list explicitly EXCLUDES the perf,
+#   allocation, and comparison suites — those run on a separate scheduled
+#   workflow (.github/workflows/unity-benchmarks.yml). DI-integration suites
+#   (VContainer / Zenject / Reflex) are also opt-in and excluded here per
+#   Phase 2 review fix M3.
+#
+# How the assembly list stays correct over time:
+#   The `Compute test assembly list` step shells out to
+#   scripts/unity/lib/asmdef-discovery.js, the SAME module used by
+#   scripts/unity/run-tests.sh and the Phase 4 contract test. When a new perf
+#   asmdef is added under Tests/, the regex in asmdef-discovery.js (matching
+#   Benchmarks|Allocations|Comparisons) classifies it automatically and this
+#   workflow needs no edits. Likewise, new core asmdefs are picked up
+#   automatically.
+#
+# Required repository secrets (set in repo Settings -> Secrets and variables):
+#   For Unity Personal: UNITY_LICENSE (raw .ulf contents) + UNITY_EMAIL + UNITY_PASSWORD
+#   For Unity Professional serial: UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD
+#   See .llm/skills/unity/unity-license-bootstrap.md for setup.
+#   2FA on the Unity account MUST be disabled, or use a dedicated CI account.
+#
+#   UNITY_LICENSE   — Raw contents of a Unity .ulf license file. This is the
+#                     shape expected by game-ci/unity-test-runner@v4.
+#   UNITY_SERIAL    — Paid Unity serial for Professional activation.
+#   UNITY_EMAIL     — Unity account email.
+#   UNITY_PASSWORD  — Unity account password.
+#
+# Common failure modes & remediation:
+#   1. "License activation failed" — the most common new-contributor failure.
+#      The UNITY_LICENSE secret is missing/expired, or UNITY_SERIAL does not
+#      match the configured Unity account. Re-bootstrap via
+#      unity-license-bootstrap.md and re-set the secret.
+#   2. "Test framework not found" — usually means the .unity-test-project
+#      Library cache is corrupted. Bump the cache key prefix below to bust it,
+#      or push a no-op commit to .unity-test-project/Packages/manifest.json
+#      to invalidate the hashFiles() component of the key.
+#   3. "0 tests ran" — the assembly include list resolved to a name that no
+#      asmdef advertises. Run `node scripts/unity/lib/asmdef-discovery.js`
+#      locally to diff the discovered names against the previous run.
+#
+# Manual override:
+#   Use the workflow_dispatch inputs to pin a single Unity version or a
+#   single test mode (handy when triaging a regression on one channel).
+# =============================================================================
+
+name: Unity Tests
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      unity-version:
+        description: "Pin a single Unity version (e.g. 2022.3.45f1). Empty = full matrix."
+        required: false
+        default: ""
+        type: string
+      test-mode:
+        description: "Pin a single test mode (use 'all' for both)."
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - editmode
+          - playmode
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  matrix-config:
+    name: Resolve test matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      unity-versions: ${{ steps.resolve.outputs.unity-versions }}
+      test-modes: ${{ steps.resolve.outputs.test-modes }}
+    steps:
+      - name: Resolve dispatch overrides
+        id: resolve
+        env:
+          INPUT_UNITY_VERSION: ${{ inputs.unity-version }}
+          INPUT_TEST_MODE: ${{ inputs.test-mode }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_UNITY_VERSION:-}" ]; then
+            versions="[\"${INPUT_UNITY_VERSION}\"]"
+          else
+            versions='["2021.3.45f1","2022.3.45f1","6000.0.32f1"]'
+          fi
+          if [ -n "${INPUT_TEST_MODE:-}" ] && [ "${INPUT_TEST_MODE}" != "all" ]; then
+            modes="[\"${INPUT_TEST_MODE}\"]"
+          else
+            modes='["editmode","playmode"]'
+          fi
+          {
+            echo "unity-versions=${versions}"
+            echo "test-modes=${modes}"
+          } >> "${GITHUB_OUTPUT}"
+
+  unity-tests:
+    name: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
+    needs: matrix-config
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        unity-version: ${{ fromJSON(needs.matrix-config.outputs.unity-versions) }}
+        test-mode: ${{ fromJSON(needs.matrix-config.outputs.test-modes) }}
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          swap-storage: false
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      # M4: include manifest, lock, and ProjectVersion in the hash. Variables
+      # are defined here so the long hashFiles() expressions don't violate the
+      # repo's 200-char yamllint cap (and stay readable).
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        env:
+          MANIFEST_HASH: ${{ hashFiles('.unity-test-project/Packages/manifest.json') }}
+          LOCK_HASH: ${{ hashFiles('.unity-test-project/Packages/packages-lock.json') }}
+          VERSION_HASH: ${{ hashFiles('.unity-test-project/ProjectSettings/ProjectVersion.txt') }}
+        with:
+          path: .unity-test-project/Library
+          key: Library-${{ matrix.unity-version }}-${{ matrix.test-mode }}-${{ env.MANIFEST_HASH }}-${{ env.LOCK_HASH }}-${{ env.VERSION_HASH }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Compute test assembly list
+        run: |
+          set -euo pipefail
+          assemblies=$(node -e "const m=require('./scripts/unity/lib/asmdef-discovery.js'); console.log(m.defaultIncludeAssemblies(process.cwd()).join(';'))")
+          if [ -z "${assemblies}" ]; then
+            echo "::error::asmdef discovery returned an empty assembly list" >&2
+            exit 1
+          fi
+          echo "DXM_TEST_ASSEMBLIES=${assemblies}" >> "${GITHUB_ENV}"
+          echo "Resolved assemblies: ${assemblies}"
+
+      - name: Run Unity Test Runner
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: .unity-test-project
+          unityVersion: ${{ matrix.unity-version }}
+          testMode: ${{ matrix.test-mode }}
+          customParameters: -nographics -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}"
+          coverageOptions: "generateAdditionalMetrics;generateHtmlReport"
+          artifactsPath: artifacts/unity-${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          checkName: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Unity test artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unity-${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          # M3: include the CodeCoverage/ tree alongside the artifactsPath.
+          # game-ci writes coverage HTML to CodeCoverage/ at the project root
+          # by default (independent of artifactsPath), so we must enumerate
+          # both paths here or the HTML report is dropped.
+          path: |
+            artifacts/unity-${{ matrix.unity-version }}-${{ matrix.test-mode }}
+            CodeCoverage/
+          if-no-files-found: warn
+          retention-days: 14

@@ -61,7 +61,9 @@ namespace DxMessaging.Core.Internal
         /// The bus emission id of the most recent dispatch that consumed
         /// this cache. Mirrors
         /// <c>HandlerActionCache&lt;TDelegate&gt;.lastSeenEmissionId</c>.
-        /// Used by the staged dispatch staleness check.
+        /// Used by the staged dispatch staleness check. Implementations use
+        /// an invalid sentinel before the first dispatch so emission id 0
+        /// still materializes an initial snapshot.
         /// </summary>
         long LastSeenEmissionId { get; set; }
 
@@ -101,6 +103,18 @@ namespace DxMessaging.Core.Internal
     /// </summary>
     internal interface ITypedHandlerSlotSweeper
     {
+        /// <summary>
+        /// Message type index for the owning typed-handler wrapper.
+        /// </summary>
+        int MessageTypeIndex { get; }
+
+        /// <summary>
+        /// True when the last sweep found no live typed slots or dispatch links
+        /// worth retaining and the owning <c>MessageCache</c> entry can be
+        /// removed.
+        /// </summary>
+        bool MarkedForOuterRemoval { get; }
+
         /// <summary>
         /// Resets every empty typed or typed-global slot and removes it from
         /// the handler's slot arrays.
@@ -211,7 +225,7 @@ namespace DxMessaging.Core.Internal
         /// Forward-compat plumbing; not yet read by the typed-handler hot
         /// path.
         /// </summary>
-        public long lastSeenEmissionId;
+        public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
@@ -366,7 +380,7 @@ namespace DxMessaging.Core.Internal
             byContext = null;
             version = 0;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
         }
 
@@ -428,7 +442,7 @@ namespace DxMessaging.Core.Internal
             ReturnContextDictionaries();
             byContext = null;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
             unchecked
             {
@@ -519,7 +533,7 @@ namespace DxMessaging.Core.Internal
         /// this slot. Forward-compat plumbing; not yet read by the
         /// typed-handler hot path.
         /// </summary>
-        public long lastSeenEmissionId;
+        public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
@@ -575,7 +589,7 @@ namespace DxMessaging.Core.Internal
             cache = null;
             version = 0;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
         }
 
@@ -604,7 +618,7 @@ namespace DxMessaging.Core.Internal
             cache?.Reset();
             cache = null;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
             unchecked
             {

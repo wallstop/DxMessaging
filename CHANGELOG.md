@@ -37,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Emit-time idle eviction now samples the wall clock only at the sweep-gate cadence instead of on every message emit, restoring dispatch hot-path throughput while preserving the extra timestamp read only when a sweep actually runs.
+- Emit-time idle eviction now samples the wall clock only at the sweep-gate cadence instead of on every message emit, with sealed inline clock getters on the default clocks, reducing dispatch hot-path clock overhead while preserving the extra timestamp read only when a sweep actually runs.
+- Forced and idle trims now release empty typed-handler outer wrappers and compact dirty-handler tracking, preventing long-running buses from retaining every message type a handler once registered after those registrations are removed.
 - Cross-priority deregistration during in-flight emit no longer drops handlers from the current dispatch.
   - Previously, when a handler at one priority removed a handler at a later priority of the same emission, the later priority's typed-handler stack was rebuilt from the now-mutated registry on first touch and the scheduled-for-removal handler was silently skipped, breaking the documented "frozen handler list per emission" contract.
   - This affected sourced-broadcast, broadcast-without-source, and targeted-without-targeting dispatch (the targeted/untargeted paths already pre-froze every bucket up-front).

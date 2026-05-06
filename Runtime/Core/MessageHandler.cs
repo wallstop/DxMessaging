@@ -2152,11 +2152,16 @@ namespace DxMessaging.Core
             }
 
             int resetCount = 0;
+            MessageCache<object> handlersByType = _handlersByTypeByMessageBus[messageBusIndex];
             foreach (object untypedHandler in _handlersByTypeByMessageBus[messageBusIndex])
             {
                 if (untypedHandler is ITypedHandlerSlotSweeper sweeper)
                 {
                     resetCount += sweeper.ResetEmptySlotsForSweep();
+                    if (sweeper.MarkedForOuterRemoval)
+                    {
+                        handlersByType.RemoveAtIndex(sweeper.MessageTypeIndex);
+                    }
                 }
             }
 
@@ -2203,6 +2208,26 @@ namespace DxMessaging.Core
             }
 
             return count;
+        }
+
+        internal bool HasTypedHandlersForBus(IMessageBus messageBus = null)
+        {
+            messageBus = ResolveMessageBus(messageBus);
+            int messageBusIndex = messageBus.RegisteredGlobalSequentialIndex;
+            if (messageBusIndex < 0 || _handlersByTypeByMessageBus.Count <= messageBusIndex)
+            {
+                return false;
+            }
+
+            foreach (object untypedHandler in _handlersByTypeByMessageBus[messageBusIndex])
+            {
+                if (untypedHandler != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         internal int GetUntargetedPostProcessingPrefreezeCount<T>(
@@ -2348,7 +2373,7 @@ namespace DxMessaging.Core
             public readonly List<T> cache = new();
             public long version;
             public long lastSeenVersion = -1;
-            public long lastSeenEmissionId;
+            public long lastSeenEmissionId = -1;
             internal int prefreezeInvocationCount;
 
             /// <summary>Monotonic version field, read-only on the interface surface.</summary>
@@ -2399,7 +2424,7 @@ namespace DxMessaging.Core
                 entries.Clear();
                 cache.Clear();
                 lastSeenVersion = -1;
-                lastSeenEmissionId = 0;
+                lastSeenEmissionId = -1;
                 prefreezeInvocationCount = 0;
                 unchecked
                 {
@@ -2412,10 +2437,12 @@ namespace DxMessaging.Core
             where T : IMessage
         {
             private readonly TypedHandler<T> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal UntargetedDispatchLink(TypedHandler<T> typedHandler)
+            internal UntargetedDispatchLink(TypedHandler<T> typedHandler, long capturedGeneration)
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2426,6 +2453,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 if (!messageHandler.active)
                 {
                     return;
@@ -2439,10 +2474,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal UntargetedPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal UntargetedPostDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2453,6 +2493,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 if (!messageHandler.active)
                 {
                     return;
@@ -2466,10 +2514,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal TargetedDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal TargetedDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2481,6 +2534,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleTargeted(ref target, ref message, priority, emissionId);
             }
         }
@@ -2489,10 +2550,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal TargetedPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal TargetedPostDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2504,6 +2570,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleTargetedPostProcessing(
                     ref target,
                     ref message,
@@ -2517,10 +2591,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal TargetedWithoutTargetingDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal TargetedWithoutTargetingDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2532,6 +2611,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleTargetedWithoutTargeting(
                     ref target,
                     ref message,
@@ -2545,10 +2632,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal TargetedWithoutTargetingPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal TargetedWithoutTargetingPostDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2560,6 +2652,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleTargetedWithoutTargetingPostProcessing(
                     ref target,
                     ref message,
@@ -2573,10 +2673,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal BroadcastDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal BroadcastDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2588,6 +2693,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleSourcedBroadcast(ref source, ref message, priority, emissionId);
             }
         }
@@ -2596,10 +2709,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal BroadcastPostDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal BroadcastPostDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2611,6 +2729,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleSourcedBroadcastPostProcessing(
                     ref source,
                     ref message,
@@ -2624,10 +2750,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal BroadcastWithoutSourceDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal BroadcastWithoutSourceDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2639,6 +2770,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleSourcedBroadcastWithoutSource(
                     ref source,
                     ref message,
@@ -2652,10 +2791,15 @@ namespace DxMessaging.Core
             where TMessage : IMessage
         {
             private readonly TypedHandler<TMessage> typedHandler;
+            internal readonly long capturedGeneration;
 
-            internal BroadcastWithoutSourcePostDispatchLink(TypedHandler<TMessage> typedHandler)
+            internal BroadcastWithoutSourcePostDispatchLink(
+                TypedHandler<TMessage> typedHandler,
+                long capturedGeneration
+            )
             {
                 this.typedHandler = typedHandler;
+                this.capturedGeneration = capturedGeneration;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2667,6 +2811,14 @@ namespace DxMessaging.Core
                 long emissionId
             )
             {
+                // Generation guard: 1 field read + 1 compare per dispatch on the hot path.
+                // Sits at the top of Invoke so reclaimed wrappers return before handler-slot
+                // walks when the outer wrapper has been reclaimed.
+                if (typedHandler._outerGeneration != capturedGeneration)
+                {
+                    return;
+                }
+
                 typedHandler.HandleBroadcastWithoutSourcePostProcessing(
                     ref source,
                     ref message,
@@ -2701,6 +2853,21 @@ namespace DxMessaging.Core
             internal TypedHandler()
             {
                 ValidateSlotArrays();
+            }
+
+            internal long _outerGeneration;
+            internal bool _markedForOuterRemoval;
+
+            int ITypedHandlerSlotSweeper.MessageTypeIndex
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => MessageHelperIndexer<T>.SequentialId;
+            }
+
+            bool ITypedHandlerSlotSweeper.MarkedForOuterRemoval
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => _markedForOuterRemoval;
             }
 
             [Conditional("DEBUG")]
@@ -2858,6 +3025,7 @@ namespace DxMessaging.Core
 
             int ITypedHandlerSlotSweeper.ResetEmptySlotsForSweep()
             {
+                _markedForOuterRemoval = false;
                 int resetCount = 0;
                 for (int i = 0; i < _slots.Length; ++i)
                 {
@@ -2881,11 +3049,13 @@ namespace DxMessaging.Core
                     }
                 }
 
+                MarkForOuterRemovalIfEmpty();
                 return resetCount;
             }
 
             int ITypedHandlerSlotSweeper.ResetAllSlotsForBusReset()
             {
+                _markedForOuterRemoval = false;
                 int resetCount = 0;
                 for (int i = 0; i < _slots.Length; ++i)
                 {
@@ -2909,6 +3079,11 @@ namespace DxMessaging.Core
                     }
                 }
 
+                ClearDispatchLinks();
+                unchecked
+                {
+                    ++_outerGeneration;
+                }
                 return resetCount;
             }
 
@@ -2937,6 +3112,53 @@ namespace DxMessaging.Core
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void MarkForOuterRemovalIfEmpty()
+            {
+                if (HasLiveSlots())
+                {
+                    return;
+                }
+
+                ClearDispatchLinks();
+                _markedForOuterRemoval = true;
+                unchecked
+                {
+                    ++_outerGeneration;
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private bool HasLiveSlots()
+            {
+                for (int i = 0; i < _slots.Length; ++i)
+                {
+                    if (_slots[i] != null)
+                    {
+                        return true;
+                    }
+                }
+
+                for (int i = 0; i < _globalSlots.Length; ++i)
+                {
+                    if (_globalSlots[i] != null)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void ClearDispatchLinks()
+            {
+                for (int i = 0; i < _dispatchLinks.Length; ++i)
+                {
+                    _dispatchLinks[i] = null;
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal UntargetedDispatchLink<T> GetOrCreateUntargetedLink()
             {
                 UntargetedDispatchLink<T> link =
@@ -2944,7 +3166,7 @@ namespace DxMessaging.Core
                     as UntargetedDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new UntargetedDispatchLink<T>(this);
+                    link = new UntargetedDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.UntargetedHandle] = link;
                 }
 
@@ -2959,7 +3181,7 @@ namespace DxMessaging.Core
                     as UntargetedPostDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new UntargetedPostDispatchLink<T>(this);
+                    link = new UntargetedPostDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.UntargetedPostProcess] = link;
                 }
 
@@ -2974,7 +3196,7 @@ namespace DxMessaging.Core
                     as TargetedDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new TargetedDispatchLink<T>(this);
+                    link = new TargetedDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.TargetedHandle] = link;
                 }
 
@@ -2989,7 +3211,7 @@ namespace DxMessaging.Core
                     as TargetedPostDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new TargetedPostDispatchLink<T>(this);
+                    link = new TargetedPostDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.TargetedPostProcess] = link;
                 }
 
@@ -3004,7 +3226,7 @@ namespace DxMessaging.Core
                     as TargetedWithoutTargetingDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new TargetedWithoutTargetingDispatchLink<T>(this);
+                    link = new TargetedWithoutTargetingDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.TargetedHandleWithoutContext] = link;
                 }
 
@@ -3019,7 +3241,7 @@ namespace DxMessaging.Core
                     as TargetedWithoutTargetingPostDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new TargetedWithoutTargetingPostDispatchLink<T>(this);
+                    link = new TargetedWithoutTargetingPostDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.TargetedPostProcessWithoutContext] = link;
                 }
 
@@ -3034,7 +3256,7 @@ namespace DxMessaging.Core
                     as BroadcastDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new BroadcastDispatchLink<T>(this);
+                    link = new BroadcastDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.BroadcastHandle] = link;
                 }
 
@@ -3049,7 +3271,7 @@ namespace DxMessaging.Core
                     as BroadcastPostDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new BroadcastPostDispatchLink<T>(this);
+                    link = new BroadcastPostDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.BroadcastPostProcess] = link;
                 }
 
@@ -3064,7 +3286,7 @@ namespace DxMessaging.Core
                     as BroadcastWithoutSourceDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new BroadcastWithoutSourceDispatchLink<T>(this);
+                    link = new BroadcastWithoutSourceDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.BroadcastHandleWithoutContext] = link;
                 }
 
@@ -3079,7 +3301,7 @@ namespace DxMessaging.Core
                     as BroadcastWithoutSourcePostDispatchLink<T>;
                 if (link == null)
                 {
-                    link = new BroadcastWithoutSourcePostDispatchLink<T>(this);
+                    link = new BroadcastWithoutSourcePostDispatchLink<T>(this, _outerGeneration);
                     _dispatchLinks[TypedDispatchLinkIndex.BroadcastPostProcessWithoutContext] =
                         link;
                 }

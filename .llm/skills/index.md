@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 148   |
+| Total Skills | 155   |
 | Categories   | 8     |
 
 ---
@@ -17,13 +17,13 @@
 ## Table of Contents
 
 - [Documentation](#documentation) (27)
-- [GitHub Actions](#github-actions) (5)
+- [GitHub Actions](#github-actions) (6)
 - [Packaging](#packaging) (2)
 - [Performance](#performance) (45)
 - [Scripting](#scripting) (15)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
-- [Unity](#unity) (1)
+- [Unity](#unity) (7)
 
 ---
 
@@ -63,6 +63,7 @@
 
 | Skill                                                                                                  | Lines      | Complexity     | Status   | Performance    | Tags                  |
 | ------------------------------------------------------------------------------------------------------ | ---------- | -------------- | -------- | -------------- | --------------------- |
+| [CI/CD Devcontainer Workflows](./github-actions/cicd-devcontainer-workflows.md)                        | [ok] 206   | [intermediate] | [stable] | [risk: high]   | github-actions, ci-cd |
 | [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md)                     | [ok] 232   | [intermediate] | [stable] | [risk: low]    | github-actions, git   |
 | [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)                        | [ok] 183   | [intermediate] | [stable] | [risk: medium] | github-actions, ci-cd |
 | [GitHub Actions Workflow Consistency Part 1](./github-actions/workflow-consistency-part-1.md)          | [ok] 196   | [intermediate] | [stable] | [risk: low]    | migration, split      |
@@ -211,9 +212,15 @@
 
 ## Unity
 
-| Skill                                                                     | Lines      | Complexity     | Status   | Performance  | Tags            |
-| ------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | --------------- |
-| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer |
+| Skill                                                                     | Lines      | Complexity     | Status   | Performance  | Tags                 |
+| ------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | -------------------- |
+| [Devcontainer Cache Contract](./unity/devcontainer-cache-contract.md)     | [ok] 180   | [intermediate] | [stable] | [risk: high] | devcontainer, docker |
+| [Headless Unity Test Runner](./unity/headless-test-runner.md)             | [ok] 224   | [intermediate] | [stable] | [risk: none] | unity, testing       |
+| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
+| [Unity CI Matrix](./unity/unity-ci-matrix.md)                             | [ok] 193   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
+| [Unity License Bootstrap](./unity/unity-license-bootstrap.md)             | [ok] 216   | [basic]        | [stable] | [risk: none] | unity, license       |
+| [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)         | [ok] 211   | [intermediate] | [stable] | [risk: high] | unity, performance   |
+| [UPM Test Harness](./unity/upm-test-harness.md)                           | [ok] 207   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---
 

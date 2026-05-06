@@ -19,7 +19,13 @@
   "overrideReferences": true,
   "precompiledReferences": ["nunit.framework.dll"],
   "autoReferenced": true,
-  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS",
+    "MESSAGEPIPE_PRESENT",
+    "UNIRX_PRESENT",
+    "ZENJECT_PRESENT",
+    "UNITASK_PRESENT"
+  ],
   "versionDefines": [
     {
       "name": "com.cysharp.messagepipe",
@@ -40,6 +46,11 @@
       "name": "com.svermeulen.extenject",
       "expression": "0.0.1",
       "define": "ZENJECT_PRESENT"
+    },
+    {
+      "name": "com.cysharp.unitask",
+      "expression": "0.0.1",
+      "define": "UNITASK_PRESENT"
     }
   ],
   "noEngineReferences": false

@@ -438,8 +438,16 @@ namespace DxMessaging.Tests.Editor.Contract
                 priority: 17,
                 messageBus: bus
             );
+            object newTypedHandler = ReadTypedHandler<ProbeMessage>(handler, bus);
+            Assert.AreNotSame(
+                typedHandler,
+                newTypedHandler,
+                "External sweep removes an empty typed-handler wrapper, so a later "
+                    + "registration must allocate a replacement wrapper."
+            );
+            Array newSlots = ReadArrayField(newTypedHandler, "_slots");
             TypedSlot<ProbeMessage> newSlot =
-                (TypedSlot<ProbeMessage>)slots.GetValue(TypedSlotIndex.UntargetedHandleDefault);
+                (TypedSlot<ProbeMessage>)newSlots.GetValue(TypedSlotIndex.UntargetedHandleDefault);
             Assert.AreEqual(1, newSlot.liveCount);
 
             deregistration();

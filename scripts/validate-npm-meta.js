@@ -27,11 +27,11 @@ const { spawnPlatformCommandSync } = require("./lib/shell-command");
  * @returns {string[]} Package-relative file list
  */
 function parseTarListingOutput(tarOutput) {
-    return normalizeToLf(tarOutput)
-        .split("\n")
-        .filter((line) => line.trim())
-        .map((line) => line.replace(/^package\//, ""))
-        .filter((line) => line); // Remove empty strings
+  return normalizeToLf(tarOutput)
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => line.replace(/^package\//, ""))
+    .filter((line) => line); // Remove empty strings
 }
 
 /**
@@ -41,52 +41,52 @@ function parseTarListingOutput(tarOutput) {
  * @returns {string[]} Package-relative file list
  */
 function parseNpmPackJsonOutput(packOutput) {
-    const trimmedOutput = normalizeToLf(packOutput || "").trim();
+  const trimmedOutput = normalizeToLf(packOutput || "").trim();
 
-    if (!trimmedOutput) {
-        throw new Error("npm pack produced no output");
-    }
+  if (!trimmedOutput) {
+    throw new Error("npm pack produced no output");
+  }
 
-    let parsedOutput;
-    try {
-        parsedOutput = JSON.parse(trimmedOutput);
-    } catch (error) {
-        throw new Error(`Unable to parse npm pack --json output: ${error.message}`);
-    }
+  let parsedOutput;
+  try {
+    parsedOutput = JSON.parse(trimmedOutput);
+  } catch (error) {
+    throw new Error(`Unable to parse npm pack --json output: ${error.message}`);
+  }
 
-    if (
-        !Array.isArray(parsedOutput) ||
-        parsedOutput.length === 0 ||
-        parsedOutput[0] === null ||
-        typeof parsedOutput[0] !== "object"
-    ) {
-        throw new Error("npm pack --json output did not contain package metadata");
-    }
+  if (
+    !Array.isArray(parsedOutput) ||
+    parsedOutput.length === 0 ||
+    parsedOutput[0] === null ||
+    typeof parsedOutput[0] !== "object"
+  ) {
+    throw new Error("npm pack --json output did not contain package metadata");
+  }
 
-    const packageInfo = parsedOutput[0];
-    if (!Array.isArray(packageInfo.files)) {
-        throw new Error("npm pack --json output did not include a files list");
-    }
+  const packageInfo = parsedOutput[0];
+  if (!Array.isArray(packageInfo.files)) {
+    throw new Error("npm pack --json output did not include a files list");
+  }
 
-    const files = packageInfo.files
-        .map((entry) => {
-            if (typeof entry === "string") {
-                return entry;
-            }
+  const files = packageInfo.files
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry;
+      }
 
-            if (entry && typeof entry.path === "string") {
-                return entry.path;
-            }
+      if (entry && typeof entry.path === "string") {
+        return entry.path;
+      }
 
-            return "";
-        })
-        .filter((entry) => entry.length > 0);
+      return "";
+    })
+    .filter((entry) => entry.length > 0);
 
-    if (files.length === 0) {
-        throw new Error("npm pack --json output contained an empty files list");
-    }
+  if (files.length === 0) {
+    throw new Error("npm pack --json output contained an empty files list");
+  }
 
-    return files;
+  return files;
 }
 
 /**
@@ -97,40 +97,103 @@ function parseNpmPackJsonOutput(packOutput) {
  * @returns {string[]} Array of file paths relative to package root
  */
 function getPackageFiles() {
-    const repoRoot = path.resolve(__dirname, "..");
+  const repoRoot = path.resolve(__dirname, "..");
 
-    try {
-        console.log("Computing package file list via npm pack --json --dry-run...");
-        const packResult = spawnPlatformCommandSync("npm", ["pack", "--json", "--dry-run"], {
-            encoding: "utf8",
-            cwd: repoRoot,
-            stdio: ["ignore", "pipe", "pipe"],
-        });
+  try {
+    console.log("Computing package file list via npm pack --json --dry-run...");
+    const packResult = spawnPlatformCommandSync("npm", ["pack", "--json", "--dry-run"], {
+      encoding: "utf8",
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
 
-        if (packResult.error) {
-            throw packResult.error;
-        }
-
-        if (packResult.status !== 0) {
-            const stderr = normalizeToLf(packResult.stderr || "").trim();
-            throw new Error(
-                `npm pack --json --dry-run failed with exit code ${packResult.status}${stderr ? `: ${stderr}` : ""}`
-            );
-        }
-
-        return parseNpmPackJsonOutput(packResult.stdout || "");
-    } catch (error) {
-        if (error && error.code === "ENOENT") {
-            console.error(
-                "Error creating or reading npm package:",
-                `${error.message}\n` +
-                    "npm was not found in this hook shell. Verify npm --version in the same shell used for git commits."
-            );
-        } else {
-            console.error("Error creating or reading npm package:", error.message);
-        }
-        throw error;
+    if (packResult.error) {
+      throw packResult.error;
     }
+
+    if (packResult.status !== 0) {
+      const stderr = normalizeToLf(packResult.stderr || "").trim();
+      throw new Error(
+        `npm pack --json --dry-run failed with exit code ${packResult.status}${stderr ? `: ${stderr}` : ""}`
+      );
+    }
+
+    return parseNpmPackJsonOutput(packResult.stdout || "");
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      console.error(
+        "Error creating or reading npm package:",
+        `${error.message}\n` +
+          "npm was not found in this hook shell. Verify npm --version in the same shell used for git commits."
+      );
+    } else {
+      console.error("Error creating or reading npm package:", error.message);
+    }
+    throw error;
+  }
+}
+
+// Files that don't need .meta files because they are package metadata or non-Unity assets.
+const metaRequirementExcludePatterns = [
+  /^package\.json$/,
+  /^package-lock\.json$/,
+  /^node_modules\//,
+  /^\.git\//,
+  /^\.github\//
+];
+
+const developmentFileExcludePatterns = [
+  /^\.config(?:\/|\.meta$|$)/,
+  /^\.devcontainer(?:\/|\.meta$|$)/,
+  /^\.git(?:\/|\.meta$|$)/,
+  /^\.gitattributes(?:\.meta)?$/,
+  /^\.github(?:\/|\.meta$|$)/,
+  /^\.husky(?:\/|\.meta$|$)/,
+  /^\.llm(?:\/|\.meta$|$)/,
+  /^\.unity-test-project(?:\/|\.meta$|$)/,
+  /^\.venv(?:\/|\.meta$|$)/,
+  /^\.(?:editorconfig|prettierrc(?:\.json)?|prettierignore|markdownlint(?:\.json|\.jsonc)|markdownlint-cli2\.jsonc|markdownlintignore|yamllint\.yaml|cspell\.json|lychee\.toml|csharpierignore|csharpierrc\.json|cursorrules|pre-commit-config\.yaml)(?:\.meta)?$/,
+  /^AGENTS\.md(?:\.meta)?$/,
+  /^CLAUDE\.md(?:\.meta)?$/,
+  /^CONTRIBUTING\.md(?:\.meta)?$/,
+  /^GH-PAGES-PLAN\.md(?:\.meta)?$/,
+  /^PLAN\.md(?:\.meta)?$/,
+  /^Tests(?:\/|\.meta$|$)/,
+  /^SourceGenerators\/WallstopStudios\.DxMessaging\.SourceGenerators\.Tests(?:\/|\.meta$|$)/,
+  /^scripts(?:\/|\.meta$|$)/,
+  /^node_modules(?:\/|\.meta$|$)/,
+  /^coverage(?:\/|\.meta$|$)/,
+  /^docs\/(?:__pycache__\/|hooks\.py(?:\.meta)?$)/,
+  /^jest\.config\.(?:js|mjs)(?:\.meta)?$/,
+  /^mkdocs\.yml(?:\.meta)?$/,
+  /^__pycache__(?:\/|\.meta$|$)/,
+  /^progress(?:\/|\.meta$|$)/,
+  /^requirements-docs\.txt(?:\.meta)?$/,
+  /^site(?:\/|\.meta$|$)/,
+  /^package-lock\.json(?:\.meta)?$/
+];
+
+const directoryMetaRequirementExcludePatterns = [
+  // UPM hides Samples~ from the package asset tree; sample folders beneath it still need metadata files.
+  /^Samples~$/
+];
+
+function matchesAnyPattern(file, patterns) {
+  return patterns.some((pattern) => pattern.test(file));
+}
+
+function shouldSkipMetaRequirement(file) {
+  return (
+    matchesAnyPattern(file, metaRequirementExcludePatterns) ||
+    matchesAnyPattern(file, developmentFileExcludePatterns)
+  );
+}
+
+function shouldSkipDirectoryMetaRequirement(directory) {
+  return (
+    shouldSkipMetaRequirement(directory) ||
+    matchesAnyPattern(directory, directoryMetaRequirementExcludePatterns)
+  );
 }
 
 /**
@@ -139,32 +202,32 @@ function getPackageFiles() {
  * @returns {Object} Validation result with errors array
  */
 function validateMetaFilesHaveTargets(files) {
-    const errors = [];
-    const fileSet = new Set(files);
+  const errors = [];
+  const fileSet = new Set(files);
 
-    for (const file of files) {
-        if (file.endsWith(".meta")) {
-            // Remove .meta extension to get the target path
-            const targetPath = file.substring(0, file.length - 5);
+  for (const file of files) {
+    if (file.endsWith(".meta")) {
+      // Remove .meta extension to get the target path
+      const targetPath = file.substring(0, file.length - 5);
 
-            // Check if the target file exists directly
-            const hasTargetFile = fileSet.has(targetPath);
+      // Check if the target file exists directly
+      const hasTargetFile = fileSet.has(targetPath);
 
-            // Check if this is a directory .meta by seeing if any files start with targetPath/
-            const targetPathPrefix = targetPath + "/";
-            const hasFilesInDirectory = files.some((f) => f.startsWith(targetPathPrefix));
+      // Check if this is a directory .meta by seeing if any files start with targetPath/
+      const targetPathPrefix = targetPath + "/";
+      const hasFilesInDirectory = files.some((f) => f.startsWith(targetPathPrefix));
 
-            if (!hasTargetFile && !hasFilesInDirectory) {
-                errors.push({
-                    type: "orphaned-meta",
-                    file: file,
-                    message: `Meta file '${file}' has no corresponding file or directory in the package`,
-                });
-            }
-        }
+      if (!hasTargetFile && !hasFilesInDirectory) {
+        errors.push({
+          type: "orphaned-meta",
+          file: file,
+          message: `Meta file '${file}' has no corresponding file or directory in the package`
+        });
+      }
     }
+  }
 
-    return { valid: errors.length === 0, errors };
+  return { valid: errors.length === 0, errors };
 }
 
 /**
@@ -173,40 +236,74 @@ function validateMetaFilesHaveTargets(files) {
  * @returns {Object} Validation result with errors array
  */
 function validateFilesHaveMetaFiles(files) {
-    const errors = [];
-    const metaFiles = new Set(files.filter((f) => f.endsWith(".meta")));
+  const errors = [];
+  const metaFiles = new Set(files.filter((f) => f.endsWith(".meta")));
+  const packageDirectories = new Set();
 
-    // Files that don't need .meta files (non-Unity assets)
-    const excludePatterns = [
-        /^package\.json$/,
-        /^package-lock\.json$/,
-        /^node_modules\//,
-        /^\.git\//,
-        /^\.github\//,
-    ];
-
-    for (const file of files) {
-        // Skip .meta files themselves
-        if (file.endsWith(".meta")) {
-            continue;
-        }
-
-        // Skip files that don't need .meta files
-        if (excludePatterns.some((pattern) => pattern.test(file))) {
-            continue;
-        }
-
-        const metaPath = file + ".meta";
-        if (!metaFiles.has(metaPath)) {
-            errors.push({
-                type: "missing-meta",
-                file: file,
-                message: `File '${file}' is missing its .meta file in the package`,
-            });
-        }
+  for (const file of files) {
+    // Skip .meta files themselves
+    if (file.endsWith(".meta")) {
+      continue;
     }
 
-    return { valid: errors.length === 0, errors };
+    // Skip files that don't need .meta files
+    if (shouldSkipMetaRequirement(file)) {
+      continue;
+    }
+
+    let directory = path.posix.dirname(file);
+    while (directory && directory !== ".") {
+      packageDirectories.add(directory);
+      directory = path.posix.dirname(directory);
+    }
+
+    const metaPath = file + ".meta";
+    if (!metaFiles.has(metaPath)) {
+      errors.push({
+        type: "missing-meta",
+        file: file,
+        message: `File '${file}' is missing its .meta file in the package`
+      });
+    }
+  }
+
+  for (const directory of packageDirectories) {
+    if (shouldSkipDirectoryMetaRequirement(directory)) {
+      continue;
+    }
+
+    const metaPath = directory + ".meta";
+    if (!metaFiles.has(metaPath)) {
+      errors.push({
+        type: "missing-meta",
+        file: directory,
+        message: `Directory '${directory}' is missing its .meta file in the package`
+      });
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate that development-only repository paths are not published.
+ * @param {string[]} files - List of files in the package
+ * @returns {Object} Validation result with errors array
+ */
+function validateDevelopmentFilesExcluded(files) {
+  const errors = [];
+
+  for (const file of files) {
+    if (matchesAnyPattern(file, developmentFileExcludePatterns)) {
+      errors.push({
+        type: "development-file-in-package",
+        file: file,
+        message: `Development-only file '${file}' must not be included in the npm package`
+      });
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
 /**
@@ -216,79 +313,98 @@ function validateFilesHaveMetaFiles(files) {
  * @returns {Object} Validation results
  */
 function validateNpmMeta(options = {}) {
-    console.log("Validating NPM package meta files...\n");
+  console.log("Validating NPM package meta files...\n");
 
-    const files = getPackageFiles();
-    console.log(`Found ${files.length} files in package\n`);
+  const files = getPackageFiles();
+  console.log(`Found ${files.length} files in package\n`);
 
-    // Count .meta files
-    const metaFileCount = files.filter((f) => f.endsWith(".meta")).length;
-    const regularFileCount = files.length - metaFileCount;
-    console.log(`  - Regular files: ${regularFileCount}`);
-    console.log(`  - Meta files: ${metaFileCount}\n`);
+  // Count .meta files
+  const metaFileCount = files.filter((f) => f.endsWith(".meta")).length;
+  const regularFileCount = files.length - metaFileCount;
+  console.log(`  - Regular files: ${regularFileCount}`);
+  console.log(`  - Meta files: ${metaFileCount}\n`);
 
-    // Validate orphaned .meta files
-    console.log("Checking for orphaned .meta files...");
-    const orphanedResult = validateMetaFilesHaveTargets(files);
-    if (orphanedResult.valid) {
-        console.log("✓ All .meta files have corresponding files/directories\n");
-    } else {
-        console.log(`✗ Found ${orphanedResult.errors.length} orphaned .meta file(s):\n`);
-        for (const error of orphanedResult.errors) {
-            console.log(`  - ${error.message}`);
-        }
-        console.log();
+  // Validate orphaned .meta files
+  console.log("Checking for orphaned .meta files...");
+  const orphanedResult = validateMetaFilesHaveTargets(files);
+  if (orphanedResult.valid) {
+    console.log("✓ All .meta files have corresponding files/directories\n");
+  } else {
+    console.log(`✗ Found ${orphanedResult.errors.length} orphaned .meta file(s):\n`);
+    for (const error of orphanedResult.errors) {
+      console.log(`  - ${error.message}`);
+    }
+    console.log();
+  }
+
+  // Validate missing .meta files
+  console.log("Checking for missing .meta files...");
+  const missingResult = validateFilesHaveMetaFiles(files);
+  if (missingResult.valid) {
+    console.log("✓ All files have corresponding .meta files\n");
+  } else {
+    console.log(`✗ Found ${missingResult.errors.length} file(s) missing .meta:\n`);
+    for (const error of missingResult.errors) {
+      console.log(`  - ${error.message}`);
+    }
+    console.log();
+  }
+
+  console.log("Checking for development-only package contents...");
+  const developmentFilesResult = validateDevelopmentFilesExcluded(files);
+  if (developmentFilesResult.valid) {
+    console.log("✓ Development-only files are excluded from the package\n");
+  } else {
+    console.log(
+      `✗ Found ${developmentFilesResult.errors.length} development-only file(s) in package:\n`
+    );
+    for (const error of developmentFilesResult.errors) {
+      console.log(`  - ${error.message}`);
+    }
+    console.log();
+  }
+
+  // Summary
+  const allValid = orphanedResult.valid && missingResult.valid && developmentFilesResult.valid;
+  if (allValid) {
+    console.log("✓ NPM package meta file validation passed!");
+    return { valid: true, errors: [] };
+  } else {
+    console.log("✗ NPM package meta file validation failed!");
+    const allErrors = [
+      ...orphanedResult.errors,
+      ...missingResult.errors,
+      ...developmentFilesResult.errors
+    ];
+
+    if (options.check) {
+      process.exit(1);
     }
 
-    // Validate missing .meta files
-    console.log("Checking for missing .meta files...");
-    const missingResult = validateFilesHaveMetaFiles(files);
-    if (missingResult.valid) {
-        console.log("✓ All files have corresponding .meta files\n");
-    } else {
-        console.log(`✗ Found ${missingResult.errors.length} file(s) missing .meta:\n`);
-        for (const error of missingResult.errors) {
-            console.log(`  - ${error.message}`);
-        }
-        console.log();
-    }
-
-    // Summary
-    const allValid = orphanedResult.valid && missingResult.valid;
-    if (allValid) {
-        console.log("✓ NPM package meta file validation passed!");
-        return { valid: true, errors: [] };
-    } else {
-        console.log("✗ NPM package meta file validation failed!");
-        const allErrors = [...orphanedResult.errors, ...missingResult.errors];
-
-        if (options.check) {
-            process.exit(1);
-        }
-
-        return { valid: false, errors: allErrors };
-    }
+    return { valid: false, errors: allErrors };
+  }
 }
 
 // Run validation if called directly
 if (require.main === module) {
-    const args = process.argv.slice(2);
-    const check = args.includes("--check");
+  const args = process.argv.slice(2);
+  const check = args.includes("--check");
 
-    try {
-        validateNpmMeta({ check });
-    } catch (error) {
-        console.error("Validation failed with error:", error.message);
-        process.exit(1);
-    }
+  try {
+    validateNpmMeta({ check });
+  } catch (error) {
+    console.error("Validation failed with error:", error.message);
+    process.exit(1);
+  }
 }
 
 // Export for testing
 module.exports = {
-    getPackageFiles,
-    parseNpmPackJsonOutput,
-    parseTarListingOutput,
-    validateMetaFilesHaveTargets,
-    validateFilesHaveMetaFiles,
-    validateNpmMeta,
+  getPackageFiles,
+  parseNpmPackJsonOutput,
+  parseTarListingOutput,
+  validateDevelopmentFilesExcluded,
+  validateMetaFilesHaveTargets,
+  validateFilesHaveMetaFiles,
+  validateNpmMeta
 };

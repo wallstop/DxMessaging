@@ -60,6 +60,27 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Regenerate skills index: `node scripts/generate-skills-index.js`
 - Verify index is current: `node scripts/generate-skills-index.js --check`
 
+## Running Unity Tests
+
+For Unity-side tests in `Tests/Editor/` or `Tests/Runtime/` (excludes Benchmarks/Allocations/Comparisons by default):
+
+- EditMode: `bash scripts/unity/run-tests.sh --platform editmode`
+- PlayMode: `bash scripts/unity/run-tests.sh --platform playmode`
+- IL2CPP standalone: `bash scripts/unity/run-tests.sh --platform standalone`
+- Filter: `--filter <regex>` (passed to `-testFilter`)
+- Include perf: `--include-perf` (off by default; runnable perf tests run only via `unity-benchmarks.yml`)
+- Include comparisons: `--include-comparisons` (off by default; requires MessagePipe/UniRx/UniTask/Zenject packages in the harness)
+- Include DI integrations (Reflex/Zenject/VContainer): `--include-integrations` (off by default)
+- Realtime log streams to stdout; XML written to `.artifacts/unity/results.xml` unless `--results` overrides it
+- Bootstrap project: `.unity-test-project/` -- see [skills/unity/upm-test-harness.md](./skills/unity/upm-test-harness.md)
+- License: see [skills/unity/unity-license-bootstrap.md](./skills/unity/unity-license-bootstrap.md) (Personal/GameCI: raw `.ulf` in `UNITY_LICENSE` plus credentials; Professional: `UNITY_SERIAL` plus credentials; local shells may use `UNITY_LICENSE_B64`.)
+- ARM Mac (Apple Silicon): not supported locally -- use CI gates or a Codespace
+- For source-generator tests (no Unity), use `dotnet test SourceGenerators/...Tests`
+
+## Devcontainer Workflow
+
+The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outside-of-docker). Unity tests spawn ephemeral `unityci/editor` containers via the host docker socket; the image is pulled lazily on first use, the `.unity-test-project/Library` cache is preserved in a named volume across runs. See [skills/unity/devcontainer-cache-contract.md](./skills/unity/devcontainer-cache-contract.md) and [skills/unity/headless-test-runner.md](./skills/unity/headless-test-runner.md).
+
 ## C# Conventions
 
 - Use explicit types where practical; avoid unnecessary `var`.
@@ -140,6 +161,7 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - Test quality and investigation guidance under `./skills/testing/`
 - Memory reclaim testing guidance under `./skills/testing/memory-reclaim-coverage.md`
 - Workflow robustness under `./skills/github-actions/`
+- Unity headless test workflow under `./skills/unity/` (see headless-test-runner, unity-license-bootstrap, upm-test-harness, devcontainer-cache-contract, unity-ci-matrix, unity-perf-test-isolation)
 
 ## Split File Maintenance
 
@@ -162,3 +184,10 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [DxMessaging Memory Reclamation](./skills/performance/memory-reclamation.md)
 - [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md)
 - [Git Hook Performance Budget](./skills/performance/git-hook-performance.md)
+- [Headless Unity Test Runner](./skills/unity/headless-test-runner.md)
+- [Unity License Bootstrap](./skills/unity/unity-license-bootstrap.md)
+- [UPM Test Harness](./skills/unity/upm-test-harness.md)
+- [Devcontainer Cache Contract](./skills/unity/devcontainer-cache-contract.md)
+- [Unity CI Matrix](./skills/unity/unity-ci-matrix.md)
+- [Unity Perf Test Isolation](./skills/unity/unity-perf-test-isolation.md)
+- [CI/CD Devcontainer Workflows](./skills/github-actions/cicd-devcontainer-workflows.md)

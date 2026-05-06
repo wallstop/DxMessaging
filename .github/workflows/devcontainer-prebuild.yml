@@ -1,0 +1,118 @@
+# =============================================================================
+# Devcontainer Pre-build (GHCR Cache Warm)
+# =============================================================================
+# Purpose:
+#   Pre-builds the .devcontainer image and pushes it to GHCR so:
+#     1. CI workflows that consume the same image (devcontainer-test.yml)
+#        get fast cache hits.
+#     2. New contributors hitting "Open in Container" / "Open in Codespace"
+#        don't pay a 5-15 minute cold build the first time.
+#     3. Weekly rebuilds catch base-image security updates and CVE drift.
+#
+# Triggers:
+#   - Pushes to master that touch .devcontainer/** (image needs rebuild).
+#   - Weekly cron (Sunday 00:00 UTC) — keep the cache warm + capture base
+#     image updates even when no code changes.
+#   - Manual dispatch.
+#
+# Critical: eventFilterForPush
+#   devcontainers/ci@v0.3 defaults `eventFilterForPush` to "push", which
+#   silently SKIPS pushing the image on `schedule` / `workflow_dispatch`
+#   events. Setting it to "" makes the explicit `push: always` knob the only
+#   source of truth — without this, the weekly cron and manual dispatches
+#   would build but never publish, defeating the whole purpose of this
+#   workflow. See .llm/skills/github-actions/cicd-devcontainer-workflows.md
+#   (ported from Shiro in Phase 4).
+#
+# Permissions:
+#   `packages: write` is required for the docker/login-action push to GHCR
+#   under the GITHUB_TOKEN.
+# =============================================================================
+
+name: Pre-build Devcontainer
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".devcontainer/**"
+  schedule:
+    # Sunday 00:00 UTC — weekly rebuild keeps the image fresh and captures
+    # base-image updates / CVE patches.
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prebuild:
+    name: Build + push devcontainer image to GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Debug workflow context
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Actor: ${{ github.actor }}"
+
+      - name: Set lowercase repository name
+        id: repo
+        run: |
+          set -euo pipefail
+          repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "repository_lowercase=${repo_lower}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push devcontainer image
+        uses: devcontainers/ci@v0.3
+        env:
+          BUILDKIT_PROGRESS: plain
+        with:
+          imageName: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+          cacheFrom: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+          push: always
+          # Required: devcontainers/ci defaults eventFilterForPush to "push",
+          # which silently skips push on schedule / workflow_dispatch triggers.
+          # Empty string here makes `push: always` the single source of truth.
+          eventFilterForPush: ""
+
+      - name: Verify image pushed to GHCR
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer:latest"
+          echo "=== Local Docker images ==="
+          docker images | grep devcontainer || echo "No local devcontainer images found"
+          echo ""
+          echo "=== Checking local image ==="
+          if docker image inspect "${IMAGE}" >/dev/null 2>&1; then
+            echo "Image found locally"
+            docker image inspect "${IMAGE}" --format '{{.Id}} {{.Created}}'
+          else
+            echo "WARNING: Image not found locally"
+          fi
+          echo ""
+          echo "=== Pulling from GHCR to verify push ==="
+          if docker pull "${IMAGE}"; then
+            echo "Image successfully pulled from GHCR."
+          else
+            echo "ERROR: failed to pull image from GHCR — push may have failed." >&2
+            exit 1
+          fi

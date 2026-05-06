@@ -1,14 +1,15 @@
 namespace DxMessaging.Core.Pooling
 {
 #if UNITY_2021_3_OR_NEWER
+    using System.Runtime.CompilerServices;
     using UnityEngine;
 
     /// <summary>
     /// Unity-only <see cref="IDxMessagingClock"/> backed by
-    /// <see cref="Time.realtimeSinceStartup"/>. Use this when sweep cadence should
-    /// follow Unity wall time rather than the AppDomain Stopwatch (Stopwatch keeps
-    /// running across editor pause; Time.realtimeSinceStartup also runs across
-    /// pause but is the canonical Unity clock).
+    /// <see cref="Time.realtimeSinceStartupAsDouble"/>. Use this when sweep cadence
+    /// should follow Unity wall time rather than the AppDomain Stopwatch (Stopwatch
+    /// keeps running across editor pause; Time.realtimeSinceStartupAsDouble also
+    /// runs across pause but is the canonical Unity clock).
     /// </summary>
     /// <remarks>
     /// Must be invoked from the Unity main thread; the underlying <c>Time</c>
@@ -20,7 +21,11 @@ namespace DxMessaging.Core.Pooling
         public static readonly UnityRealtimeClock Instance = new();
 
         /// <inheritdoc />
-        public double NowSeconds => Time.realtimeSinceStartupAsDouble;
+        public double NowSeconds
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Time.realtimeSinceStartupAsDouble;
+        }
     }
 #endif
 }

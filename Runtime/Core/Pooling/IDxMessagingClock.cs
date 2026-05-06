@@ -3,8 +3,8 @@ namespace DxMessaging.Core.Pooling
     /// <summary>
     /// Abstraction over a monotonic wall-clock used by the eviction sweeper to
     /// decide whether enough time has elapsed since the last sweep. Implementations
-    /// must be cheap (single field read or call) because every Emit consults the
-    /// clock.
+    /// must be cheap (single field read or call) because sampled idle-sweep gates
+    /// sit on the emit path.
     /// </summary>
     public interface IDxMessagingClock
     {

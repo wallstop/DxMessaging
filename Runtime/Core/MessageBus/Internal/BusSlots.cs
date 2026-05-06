@@ -58,7 +58,7 @@ namespace DxMessaging.Core.MessageBus.Internal
         /// The bus emission id of the most recent dispatch that consumed this
         /// bucket. Used by the staged dispatch staleness check.
         /// </summary>
-        public long lastSeenEmissionId;
+        public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Clear all bucket state. Mirrors the legacy
@@ -75,7 +75,7 @@ namespace DxMessaging.Core.MessageBus.Internal
             cache.Clear();
             version = 0;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
         }
     }
 
@@ -136,7 +136,7 @@ namespace DxMessaging.Core.MessageBus.Internal
         /// The bus emission id of the most recent dispatch that consumed this
         /// slot. Used by the staged dispatch staleness check.
         /// </summary>
-        public long lastSeenEmissionId;
+        public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
@@ -230,7 +230,7 @@ namespace DxMessaging.Core.MessageBus.Internal
             dispatchState = null;
             version = 0;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
         }
 
@@ -259,7 +259,7 @@ namespace DxMessaging.Core.MessageBus.Internal
             dispatchState?.Reset();
             dispatchState = null;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
             unchecked
             {
@@ -583,7 +583,7 @@ namespace DxMessaging.Core.MessageBus.Internal
         /// does not yet read this field; it is allocated for parity with the
         /// per-cache <see cref="BusSinkSlot.lastSeenEmissionId"/> contract.
         /// </summary>
-        public long lastSeenEmissionId;
+        public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
@@ -679,7 +679,7 @@ namespace DxMessaging.Core.MessageBus.Internal
             broadcastDispatchState = null;
             version = 0;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
         }
 
@@ -704,7 +704,7 @@ namespace DxMessaging.Core.MessageBus.Internal
             broadcastDispatchState?.Reset();
             broadcastDispatchState = null;
             lastSeenVersion = -1;
-            lastSeenEmissionId = 0;
+            lastSeenEmissionId = -1;
             liveCount = 0;
             unchecked
             {

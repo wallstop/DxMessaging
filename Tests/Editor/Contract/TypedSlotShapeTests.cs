@@ -373,6 +373,12 @@ namespace DxMessaging.Tests.Editor.Contract
             long _ = view.Version;
             view.LastSeenVersion = 7;
             Assert.AreEqual(7, view.LastSeenVersion);
+            Assert.AreEqual(
+                -1,
+                view.LastSeenEmissionId,
+                "Fresh HandlerActionCache<T> instances must start with an invalid "
+                    + "emission sentinel so emission id 0 materializes the first snapshot."
+            );
             view.LastSeenEmissionId = 13;
             Assert.AreEqual(13, view.LastSeenEmissionId);
             int prefreeze = view.PrefreezeInvocationCount;
@@ -442,7 +448,12 @@ namespace DxMessaging.Tests.Editor.Contract
                 "Reset() must bump version monotonically (PLAN Risk Register R3)."
             );
             Assert.AreEqual(-1, view.LastSeenVersion, "Reset() must restore lastSeenVersion = -1.");
-            Assert.AreEqual(0, view.LastSeenEmissionId);
+            Assert.AreEqual(
+                -1,
+                view.LastSeenEmissionId,
+                "Reset() must restore lastSeenEmissionId to an invalid sentinel so "
+                    + "emission id 0 still materializes a fresh snapshot."
+            );
             Assert.AreEqual(0, entries.Count, "Reset() must empty entries.");
             Assert.AreEqual(0, cacheList.Count, "Reset() must empty cache.");
             Assert.IsTrue(view.IsEmpty, "After Reset() the cache must report IsEmpty == true.");
@@ -774,7 +785,7 @@ namespace DxMessaging.Tests.Editor.Contract
                     + "version to 0; eviction-driven monotonicity belongs to Reset()."
             );
             Assert.AreEqual(-1, slot.lastSeenVersion);
-            Assert.AreEqual(0, slot.lastSeenEmissionId);
+            Assert.AreEqual(-1, slot.lastSeenEmissionId);
             Assert.AreEqual(0, slot.liveCount);
             Assert.AreEqual(0, slot.byPriority.Count);
             Assert.AreEqual(0, slot.orderedPriorities.Count);
@@ -845,7 +856,7 @@ namespace DxMessaging.Tests.Editor.Contract
 
             Assert.AreEqual(0, slot.version);
             Assert.AreEqual(-1, slot.lastSeenVersion);
-            Assert.AreEqual(0, slot.lastSeenEmissionId);
+            Assert.AreEqual(-1, slot.lastSeenEmissionId);
             Assert.AreEqual(0, slot.liveCount);
             Assert.IsNull(slot.cache);
         }

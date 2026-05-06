@@ -1,0 +1,192 @@
+---
+title: "Unity CI Matrix"
+id: "unity-ci-matrix"
+category: "unity"
+version: "1.0.0"
+created: "2026-05-05"
+updated: "2026-05-05"
+
+source:
+  repository: "wallstop/DxMessaging"
+  files:
+    - path: ".github/workflows/unity-tests.yml"
+    - path: ".github/workflows/unity-il2cpp.yml"
+    - path: ".github/workflows/unity-benchmarks.yml"
+  url: "https://github.com/wallstop/DxMessaging"
+
+tags:
+  - "unity"
+  - "ci"
+  - "matrix"
+  - "il2cpp"
+  - "lts"
+  - "game-ci"
+
+complexity:
+  level: "intermediate"
+  reasoning: "Requires understanding game-ci action shapes, IL2CPP-specific failure modes, and Unity LTS cadence."
+
+impact:
+  performance:
+    rating: "low"
+    details: "Each matrix cell costs about 5 minutes of runner time"
+  maintainability:
+    rating: "high"
+    details: "One workflow per concern; the matrix is computed from a single dispatch input"
+  testability:
+    rating: "high"
+    details: "Phase 4 contract test pins the workflow shape and asmdef discovery source-of-truth"
+
+prerequisites:
+  - "Familiarity with GitHub Actions matrix expansion"
+  - "Awareness of Unity LTS release cadence"
+
+dependencies:
+  packages: []
+  skills:
+    - "headless-test-runner"
+    - "unity-perf-test-isolation"
+
+applies_to:
+  languages:
+    - "YAML"
+  frameworks:
+    - "GitHub Actions"
+    - "Unity"
+  versions:
+    unity: ">=2021.3"
+
+aliases:
+  - "Unity matrix"
+  - "IL2CPP gate"
+
+related:
+  - "headless-test-runner"
+  - "unity-license-bootstrap"
+  - "unity-perf-test-isolation"
+  - "cicd-devcontainer-workflows"
+
+status: "stable"
+---
+
+<!-- trigger: unity, ci, matrix, il2cpp, lts, game-ci, version | Unity version matrix and IL2CPP-only failure patterns | Core -->
+
+# Unity CI Matrix
+
+> **One-line summary**: `unity-tests.yml` runs editmode and playmode against three Unity versions; `unity-il2cpp.yml` runs the AOT-compiled standalone player against a single version on every PR plus weekly cron; expand the matrix only when a new LTS ships or a user reports a version-specific bug.
+
+## When to Use
+
+- Adding a new Unity LTS release to the supported set.
+- Triaging an IL2CPP-only test failure that does not reproduce in EditMode.
+- Investigating a game-ci log that fails before any test prints output.
+- Deciding whether to expand or contract the matrix to balance signal vs runtime.
+
+## When NOT to Use
+
+- Tweaking which assemblies run. That is the asmdef-discovery module's responsibility (see [unity-perf-test-isolation](./unity-perf-test-isolation.md)).
+- Adjusting cache keys. Those live in the workflow's `actions/cache@v4` block; they hash `manifest.json` + `packages-lock.json` + `ProjectVersion.txt`.
+
+## Current Matrix
+
+`unity-tests.yml` (PR gate, fast feedback):
+
+| Axis            | Values                                      |
+| --------------- | ------------------------------------------- |
+| `unity-version` | `2021.3.45f1`, `2022.3.45f1`, `6000.0.32f1` |
+| `test-mode`     | `editmode`, `playmode`                      |
+
+Six matrix cells. Workflow_dispatch inputs let you pin a single version or single mode for triage.
+
+`unity-il2cpp.yml` (PR gate, slower):
+
+| Axis            | Values        |
+| --------------- | ------------- |
+| `unity-version` | `2022.3.45f1` |
+
+Single cell on PRs to keep the gate under ~15 minutes; weekly cron currently uses the same single version (the matrix-config job is already shaped to expand without code changes).
+
+`unity-benchmarks.yml` (workflow_dispatch + nightly cron, NEVER on PRs):
+
+| Axis            | Values                 |
+| --------------- | ---------------------- |
+| `unity-version` | `2022.3.45f1`          |
+| `test-mode`     | `editmode`, `playmode` |
+
+The `unity-benchmarks.yml` triggers explicitly omit `pull_request` and `push` per the perf isolation rule.
+
+## When to Add a Unity Version
+
+Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the following is true:
+
+- A new LTS reaches general availability (e.g., when 2024.3 LTS or 7000.0 LTS ships) and the package's `package.json` `unity` field still permits it.
+- A user files an issue reproducing only on a specific Editor version.
+- Unity publishes a security patch on a currently-supported channel that the maintainer wants the gate to track.
+
+## How to Add a Unity Version
+
+1. Edit `.github/workflows/unity-tests.yml`. The matrix is computed in the `matrix-config` job:
+
+   ```yaml
+   versions='["2021.3.45f1","2022.3.45f1","6000.0.32f1"]'
+   ```
+
+   Append the new tag to the JSON array. Use the `unityci/editor` tag format (e.g., `2024.3.10f1`).
+
+1. Verify the corresponding `unityci/editor:<tag>-base-3` (and `-linux-il2cpp-3` for `unity-il2cpp.yml`) image exists at `https://hub.docker.com/r/unityci/editor/tags`. game-ci publishes images shortly after Unity ships; if the tag is missing, wait or pick the nearest released patch.
+
+1. Run the runner locally to validate the new version:
+
+   ```bash
+   bash scripts/unity/run-tests.sh --platform editmode --unity-version <new-version>
+   ```
+
+1. Push the workflow change. The first CI run will pull the new image (slow); subsequent runs hit the cache.
+
+The `actions/cache@v4` keys include `${{ matrix.unity-version }}`, mode, manifest hash, lockfile hash, and `ProjectVersion.txt`. Do not add broad `restore-keys` for `Library/`; restoring a Library from a different Unity version or package graph can corrupt domain reloads and make failures nondeterministic. A new version should start cold and warm on the next exact-key run.
+
+## IL2CPP-Only Failure Patterns
+
+IL2CPP exercises an AOT-compiled path that EditMode/PlayMode under Mono cannot. These regressions historically slip past the Mono gate and only surface when a downstream consumer builds a player. The catalog:
+
+| Pattern                                       | Signature in log                                                                   | Remediation                                                                                       |
+| --------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Generic virtual method (GVM) call             | `ExecutionEngineException: Attempting to call method 'X' for which no AOT code...` | Add a non-generic forwarder, mark with `[Preserve]`, or instantiate the generic at compile time.  |
+| Code stripping                                | `MissingMethodException` or `TypeLoadException` for a reflected type               | Add the type to `link.xml`, or annotate with `[Preserve]`. See Unity managed-code-stripping docs. |
+| Reflection over open generics                 | Tests pass under Mono, fail under IL2CPP with reflection-related null returns      | Avoid open-generic reflection on the hot path; use the source generator instead.                  |
+| Incremental Mono / IL2CPP serialization drift | `Library/` cache is stale and the build hangs at "Domain Reload"                   | Delete the Library cache (or bump the cache key prefix in the workflow); rebuild.                 |
+| PInvoke / native-callable mismatch            | `EntryPointNotFoundException` or `MarshalAs` complaints unique to IL2CPP           | Audit `[DllImport]` signatures; verify calling convention.                                        |
+
+The `avoid-reflection-on-hot-paths` skill (see Performance section of the index) covers reflection-related cases in detail. The DxMessaging codebase uses the source generator precisely to avoid most reflection at runtime.
+
+## Reading game-ci Logs
+
+A game-ci job log is structured. To diagnose a failure, scan in this order:
+
+1. **Pre-Unity setup**: `Setup Node.js`, `Cache Unity Library`, `Compute test assembly list`. Failures here are infrastructure, not test logic.
+1. **License activation**: search for `LICENSE SYSTEM` or `License client failed`. See [unity-license-bootstrap](./unity-license-bootstrap.md).
+1. **Editor startup**: search for `[Licensing]` or `Loading native plugins`. A timeout here usually means a corrupted Library cache.
+1. **Domain reload**: search for `Reloading assemblies`. A hang here typically means a circular asmdef reference or a missing dependency.
+1. **Test execution**: search for `Run tests on platform`. NUnit failures appear as `[Test Failed]` lines with stack traces.
+1. **Result emission**: search for `Test results saved at`. Missing results XML almost always means the player crashed before tests completed.
+
+For IL2CPP runs, two distinct stages emit logs:
+
+- `game-ci/unity-builder@v4` builds the player. Failures here are AOT or stripping.
+- The custom `Run IL2CPP test player` step launches the produced binary. Failures here are runtime AOT or test-logic.
+
+The IL2CPP workflow checks the player exit code BEFORE parsing the XML so a crash mid-run cannot look green.
+
+## See Also
+
+- [Headless Test Runner](./headless-test-runner.md)
+- [Unity License Bootstrap](./unity-license-bootstrap.md)
+- [Unity Perf Test Isolation](./unity-perf-test-isolation.md)
+- [CI/CD Devcontainer Workflows](../github-actions/cicd-devcontainer-workflows.md)
+
+## References
+
+- game-ci docs: https://game.ci/docs/
+- Unity LTS roadmap: https://unity.com/releases/lts
+- Unity managed code stripping: https://docs.unity3d.com/Manual/ManagedCodeStripping.html
+- Source: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-il2cpp.yml`

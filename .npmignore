@@ -53,6 +53,10 @@ CLAUDE.md.meta
 # Devcontainer
 .devcontainer/
 
+# Unity test harness
+.unity-test-project/
+.unity-test-project.meta
+
 # Tool configuration
 .config/
 

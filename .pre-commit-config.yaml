@@ -356,3 +356,30 @@ repos:
         stages:
           - pre-push
         description: Check spelling in changed files. Pre-push only; see .llm/skills/performance/git-hook-performance.md.
+
+  - repo: local
+    hooks:
+      # perf-allow[scans-the-world-with-files,jest-at-pre-commit]: pre-push only; suite verifies cross-file invariants across cache mounts, asmdefs, workflows, allowlist, and skills.
+      - id: unity-contract-tests
+        name: Unity contract tests (Jest)
+        entry: node scripts/run-managed-jest.js
+        args:
+          - --runTestsByPath
+          - scripts/__tests__/unity-test-harness-contract.test.js
+          - scripts/__tests__/unity-runner-script-contract.test.js
+          - scripts/__tests__/devcontainer-cache-contract.test.js
+          - scripts/__tests__/unity-workflow-shape.test.js
+          - scripts/__tests__/unity-perf-isolation.test.js
+          - scripts/__tests__/claude-permissions-contract.test.js
+          - scripts/__tests__/llm-skills-unity-coverage.test.js
+        language: system
+        pass_filenames: false
+        files: >-
+          ^(\.devcontainer/|\.unity-test-project/|scripts/unity/|\.github/workflows/unity-|\.github/workflows/devcontainer-|\.claude/settings\.local\.json|\.llm/skills/unity/|\.llm/skills/github-actions/cicd-devcontainer-workflows\.md|\.llm/context\.md|Tests/.+/.+\.asmdef$)
+        stages:
+          - pre-push
+        description: >-
+          Run Unity / devcontainer contract Jest tests when their tracked
+          surface changes. Locks the Phase 1-3 deliverables (cache mounts,
+          asmdef classification, workflow shape, runner script flags, Claude
+          allowlist, skill file coverage).

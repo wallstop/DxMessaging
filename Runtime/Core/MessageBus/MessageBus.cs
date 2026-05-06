@@ -262,7 +262,7 @@ namespace DxMessaging.Core.MessageBus
             public readonly List<KeyValuePair<TKey, TValue>> cache = new();
             public long version;
             public long lastSeenVersion = -1;
-            public long lastSeenEmissionId;
+            public long lastSeenEmissionId = -1;
             public long lastTouchTicks;
             public DispatchState dispatchState;
 
@@ -276,7 +276,7 @@ namespace DxMessaging.Core.MessageBus
                 cache.Clear();
                 version = 0;
                 lastSeenVersion = -1;
-                lastSeenEmissionId = 0;
+                lastSeenEmissionId = -1;
                 dispatchState?.Reset();
                 dispatchState = null;
             }
@@ -285,13 +285,13 @@ namespace DxMessaging.Core.MessageBus
         private sealed class InterceptorCache<TValue>
         {
             public readonly SortedList<int, List<TValue>> handlers = new();
-            public long lastSeenEmissionId;
+            public long lastSeenEmissionId = -1;
             public long lastTouchTicks;
 
             public void Clear()
             {
                 handlers.Clear();
-                lastSeenEmissionId = 0;
+                lastSeenEmissionId = -1;
                 lastTouchTicks = 0;
             }
         }
@@ -347,7 +347,7 @@ namespace DxMessaging.Core.MessageBus
             public readonly List<MessageHandler> cache = new();
             public long version;
             public long lastSeenVersion = -1;
-            public long lastSeenEmissionId;
+            public long lastSeenEmissionId = -1;
 
             /// <summary>
             /// Clears all cached handler references and resets the version tracking metadata.
@@ -358,7 +358,7 @@ namespace DxMessaging.Core.MessageBus
                 cache.Clear();
                 version = 0;
                 lastSeenVersion = -1;
-                lastSeenEmissionId = 0;
+                lastSeenEmissionId = -1;
             }
         }
 
@@ -1323,7 +1323,9 @@ namespace DxMessaging.Core.MessageBus
                 return evicted;
             }
 
-            for (int i = 0; i < _dirtyHandlers.Count; ++i)
+            int write = 0;
+            int count = _dirtyHandlers.Count;
+            for (int i = 0; i < count; ++i)
             {
                 MessageHandler handler = _dirtyHandlers[i];
                 if (
@@ -1334,10 +1336,24 @@ namespace DxMessaging.Core.MessageBus
                     )
                 )
                 {
+                    _dirtyHandlers[write++] = handler;
                     continue;
                 }
 
                 evicted += handler.ResetEmptyTypedSlotsForSweep(this);
+                if (handler.HasTypedHandlersForBus(this))
+                {
+                    _dirtyHandlers[write++] = handler;
+                    continue;
+                }
+
+                _dirtyHandlerSet.Remove(handler);
+                _dirtyHandlerTicks.Remove(handler);
+            }
+
+            if (write < count)
+            {
+                _dirtyHandlers.RemoveRange(write, count - write);
             }
 
             return evicted;

@@ -8,6 +8,7 @@ namespace DxMessaging.Tests.Editor.Allocations
     using DxMessaging.Tests.Runtime.Scripts.Messages;
     using NUnit.Framework;
 
+    [Category("PerfGate")]
     public sealed class EmitGateClockReadIsRare
     {
         [Test]
