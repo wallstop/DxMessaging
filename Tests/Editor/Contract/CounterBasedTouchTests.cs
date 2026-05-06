@@ -9,10 +9,9 @@ namespace DxMessaging.Tests.Editor.Contract
     using NUnit.Framework;
 
     /// <summary>
-    /// Reflection-based contract tests for PLAN P4.1 counter-based slot touch
-    /// wiring. These intentionally pin likely private/internal names so the
-    /// tests compile before the runtime touch hook exists, while failing with
-    /// focused messages until the implementation lands.
+    /// Reflection-based contract tests for counter-based slot touch wiring.
+    /// These intentionally pin likely private/internal names so implementation
+    /// drift fails with focused messages.
     /// </summary>
     [TestFixture]
     [Category("Contract")]
@@ -444,7 +443,7 @@ namespace DxMessaging.Tests.Editor.Contract
             Assert.Fail(
                 "Could not locate the MessageBus touch tick counter. Tried: "
                     + string.Join(", ", TickMemberNames)
-                    + ". Update CounterBasedTouchTests.TickMemberNames if P4.1 uses a different name."
+                    + ". Update CounterBasedTouchTests.TickMemberNames if the implementation uses a different name."
             );
             return 0;
         }

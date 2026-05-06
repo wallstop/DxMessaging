@@ -7,7 +7,6 @@ on:
       - "Runtime/Core/MessageBus/MessageBus.cs"
       - "Runtime/Core/MessageHandler.cs"
       - "Runtime/Core/Pooling/**"
-      - ".github/workflows/perf-numbers-check.yml"
   workflow_dispatch:
 
 concurrency:
@@ -88,18 +87,21 @@ jobs:
 
             const expectedHeaders = [
               "scenario",
-              "baseline (commit 25a4dcc)",
+              "baseline run",
               "this pr",
               "delta",
             ];
 
             function splitMarkdownRow(line) {
-              if (!line.startsWith("|") || !line.endsWith("|")) {
+              if (!line.includes("|")) {
                 return null;
               }
 
-              return line
-                .slice(1, -1)
+              const trimmed = line
+                .replace(/^\|/, "")
+                .replace(/\|$/, "");
+
+              return trimmed
                 .split("|")
                 .map((cell) => cell.trim());
             }
@@ -154,7 +156,7 @@ jobs:
             ) {
               core.setFailed(
                 "Performance numbers tables must use columns: " +
-                  "Scenario | Baseline (commit 25a4dcc) | This PR | Delta, " +
+                  "| Scenario | Baseline run | This PR | Delta |, " +
                   "plus at least one data row."
               );
               return;

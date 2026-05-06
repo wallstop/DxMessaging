@@ -12,7 +12,7 @@ namespace DxMessaging.Core.Internal
     /// PostProcess within Phase, and with-context before WithoutContext
     /// within Variant. The xmldoc on each constant names the legacy
     /// <c>TypedHandler&lt;T&gt;</c> dispatch-link field whose storage role
-    /// the slot will assume in the P3.3 storage migration.
+    /// the slot assumes in typed dispatch storage.
     /// </remarks>
     internal static class TypedDispatchLinkIndex
     {

@@ -23,7 +23,7 @@ namespace DxMessaging.Core.Internal
     /// <remarks>
     /// <para>
     /// <c>HandlerActionCache&lt;TDelegate&gt;</c> implements this interface
-    /// explicitly as of P3.2 -- the explicit form keeps the public field
+    /// explicitly; the explicit form keeps the public field
     /// shape on the nested cache type unchanged, so the public dispatch
     /// surface picks up no new members from the interface retrofit.
     /// </para>
@@ -90,7 +90,7 @@ namespace DxMessaging.Core.Internal
         /// <see cref="LastSeenEmissionId"/> / <c>prefreezeInvocationCount</c>,
         /// and bumps <see cref="Version"/> as the LAST step so any captured
         /// dispatch closure that observed the prior version detects
-        /// invalidation (PLAN Risk Register R3). Idempotent.
+        /// invalidation. Idempotent.
         /// </summary>
         void Reset();
     }
@@ -147,21 +147,16 @@ namespace DxMessaging.Core.Internal
     /// </summary>
     /// <remarks>
     /// <para>
-    /// PLAN section 2.3 sketched this type as <c>abstract</c>. We chose
-    /// <c>sealed</c> here because there is no concrete subclass to
-    /// introduce per delegate variant without speculatively enumerating the
-    /// variants the storage migration will need. If delegate-variant
-    /// specialisation becomes necessary in P3.3 (for example, to encode a
-    /// non-generic dispatch fast path per shape), the class can be promoted
-    /// to <c>abstract</c> at that point with the concrete subclasses
-    /// introduced in the same change. Promoting now would commit to a
-    /// specific subclass layout the migration may not actually need.
+    /// This type is sealed because the current slot layout uses one
+    /// type-erased cache shape for every delegate variant. A future
+    /// delegate-specific fast path can promote the type to <c>abstract</c>
+    /// together with its concrete subclasses, without affecting the current
+    /// storage contract.
     /// </para>
     /// <para>
-    /// PLAN section 2.3 also sketched <c>RequiresContext</c> as an abstract
-    /// property. Because this class is sealed, the property collapses to a
-    /// readonly field (<see cref="requiresContext"/>) set via the
-    /// constructor. The semantic is identical: the field is <c>true</c> for
+    /// The context requirement is represented as a readonly field
+    /// (<see cref="requiresContext"/>) set via the constructor. The field is
+    /// <c>true</c> for
     /// slots whose <see cref="SlotKey"/> resolves to a
     /// <see cref="DispatchVariant"/> that carries an
     /// <see cref="InstanceId"/> recipient or source (Targeted / Broadcast,
@@ -170,16 +165,15 @@ namespace DxMessaging.Core.Internal
     /// </para>
     /// <para>
     /// <see cref="TypedHandler{T}"/> routes storage through this slot;
-    /// P3.3 deleted the legacy named fields and made the
+    /// the legacy named fields were deleted and the
     /// <c>_slots[<see cref="TypedSlotIndex.Length"/>]</c> array the
     /// storage owner.
     /// </para>
     /// <para>
-    /// PLAN section 2.3 also calls for a
+    /// <see cref="TypedHandler{T}"/> owns a
     /// <c>_dispatchLinks[<see cref="TypedDispatchLinkIndex.Length"/>]</c>
-    /// array on <see cref="TypedHandler{T}"/>. That array is a plain
-    /// <c>object[]</c> field on the handler, not a slot type; P3.3
-    /// deleted the named dispatch-link fields.
+    /// array as a plain <c>object[]</c> field. It is not a slot type; the
+    /// legacy named dispatch-link fields were removed.
     /// </para>
     /// </remarks>
     /// <typeparam name="T">
@@ -187,8 +181,8 @@ namespace DxMessaging.Core.Internal
     /// <see cref="TypedHandler{T}"/> binds to. The slot itself does not
     /// reference <typeparamref name="T"/> directly today (the type-erased
     /// <see cref="IHandlerActionCache"/> handles the per-delegate generic
-    /// shapes) -- the parameter is carried so the P3.3 storage migration
-    /// can add a concrete cache reference here without an additional
+    /// shapes) -- the parameter is carried so typed storage can add a
+    /// concrete cache reference here without an additional
     /// generic re-parameterization.
     /// </typeparam>
     internal sealed class TypedSlot<T> : IEvictableSlot
@@ -214,23 +208,20 @@ namespace DxMessaging.Core.Internal
         /// <summary>
         /// The <see cref="version"/> value observed by the most recent
         /// dispatcher snapshot. Used to decide whether the cache list needs
-        /// to be re-materialised before the next dispatch. Forward-compat
-        /// plumbing; not yet read by the typed-handler hot path.
+        /// to be re-materialised before the next dispatch.
         /// </summary>
         public long lastSeenVersion = -1;
 
         /// <summary>
         /// The bus emission id of the most recent dispatch that consumed
         /// this slot. Used by the staged dispatch staleness check.
-        /// Forward-compat plumbing; not yet read by the typed-handler hot
-        /// path.
         /// </summary>
         public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
-        /// emit that touched this slot. Will be maintained by P4's touch
-        /// hook; preserved across <see cref="Clear"/> and <see cref="Reset"/>
+        /// emit that touched this slot. Maintained by the sweep touch hook;
+        /// preserved across <see cref="Clear"/> and <see cref="Reset"/>
         /// so the sweep can distinguish freshly-reset slots from
         /// never-touched slots.
         /// </summary>
@@ -255,28 +246,26 @@ namespace DxMessaging.Core.Internal
         /// True iff this slot's <see cref="SlotKey"/> resolves to a
         /// dispatch variant that carries an <see cref="InstanceId"/>
         /// recipient or source (the non-<c>WithoutContext</c> Targeted and
-        /// Broadcast variants). When <c>true</c>, the storage migration
-        /// will populate <see cref="byContext"/>; when <c>false</c>,
-        /// storage flows through <see cref="byPriority"/> directly.
+        /// Broadcast variants). When <c>true</c>, context-bound storage uses
+        /// <see cref="byContext"/>; when <c>false</c>, storage flows through
+        /// <see cref="byPriority"/> directly.
         /// </summary>
         /// <remarks>
-        /// PLAN section 2.3 sketched this as an abstract <c>RequiresContext</c>
-        /// property; collapsed to a readonly field here because
-        /// <see cref="TypedSlot{T}"/> is sealed (see class remarks).
+        /// Kept as a readonly field because <see cref="TypedSlot{T}"/> is
+        /// sealed (see class remarks).
         /// </remarks>
         public readonly bool requiresContext;
 
         /// <summary>
         /// Inner per-context map for context-bound slots. Null unless
         /// <see cref="requiresContext"/> is <c>true</c> AND at least one
-        /// context has been registered. Forward-compat plumbing.
+        /// context has been registered.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Lifetime semantic for the storage migration: <see cref="Clear"/>
-        /// and <see cref="Reset"/> return the outer context dictionary and
-        /// every inner priority dictionary to <see cref="DxPools"/> before
-        /// nulling the field.
+        /// Lifetime semantic: <see cref="Clear"/> and <see cref="Reset"/>
+        /// return the outer context dictionary and every inner priority
+        /// dictionary to <see cref="DxPools"/> before nulling the field.
         /// </para>
         /// <para>
         /// Unlike the bus-side <see cref="BusContextSlot.byContext"/>, which
@@ -298,11 +287,10 @@ namespace DxMessaging.Core.Internal
         /// 3-level shape was chosen over the alternatives (extend
         /// <see cref="IHandlerActionCache"/> with per-priority buckets, or
         /// recurse with <c>Dictionary&lt;InstanceId, TypedSlot&lt;T&gt;&gt;</c>)
-        /// because it preserves the legacy storage layout exactly --
-        /// minimising the per-call-site rewrite the P3.3 storage migration
-        /// has to perform. PLAN Risk Register R3 informs the
-        /// monotonic-version drain contract on <see cref="Reset"/>: every
-        /// inner cache is drained through
+        /// because it preserves the legacy storage layout exactly and keeps
+        /// call sites aligned with the existing shape. The monotonic-version
+        /// drain contract on
+        /// <see cref="Reset"/> requires every inner cache to be drained through
         /// <see cref="IHandlerActionCache.Reset"/> before the outer
         /// container is cleared.
         /// </para>
@@ -397,8 +385,8 @@ namespace DxMessaging.Core.Internal
         /// ones.
         /// </summary>
         /// <remarks>
-        /// Drain order is load-bearing per PLAN Risk Register R3: inner
-        /// caches must be reset (and their own monotonic versions bumped)
+        /// Drain order is load-bearing: inner caches must be reset (and their
+        /// own monotonic versions bumped)
         /// BEFORE the outer container is cleared, so any captured dispatch
         /// closure observing an inner cache detects invalidation regardless
         /// of whether the outer reference is still reachable. The outer
@@ -409,10 +397,9 @@ namespace DxMessaging.Core.Internal
         {
             // Inline the structural-clear body of Clear(); do NOT call
             // Clear() because that resets version=0 and would break the
-            // monotonic invariant the eviction layer depends on (PLAN Risk
-            // Register R3: stale deregister closures captured before reset
-            // must observe a strictly larger version after reset and skip
-            // their work).
+            // monotonic invariant the eviction layer depends on: stale
+            // deregister closures captured before reset must observe a
+            // strictly larger version after reset and skip their work.
             // Per-cache drain BEFORE the structural clear: every
             // IHandlerActionCache.Reset() bumps its own version internally,
             // so closures captured against the inner cache also detect
@@ -476,12 +463,12 @@ namespace DxMessaging.Core.Internal
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Per PLAN section 2.3 the typed handler holds an array of 6
-    /// <see cref="TypedGlobalSlot"/>. The per-(<see cref="DispatchKind"/>,
-    /// <see cref="DispatchVariant"/>) indexing scheme that maps the six
-    /// global flavours (3 kinds {<c>Untargeted</c>, <c>Targeted</c>,
+    /// The typed handler holds an array of 6 <see cref="TypedGlobalSlot"/>
+    /// entries. The per-(<see cref="DispatchKind"/>,
+    /// <see cref="DispatchVariant"/>) indexing scheme maps the six global
+    /// flavours (3 kinds {<c>Untargeted</c>, <c>Targeted</c>,
     /// <c>Broadcast</c>} times 2 variants {<c>Default</c>, <c>Fast</c>}) to
-    /// array slots is committed in <see cref="TypedGlobalSlotIndex"/>
+    /// array slots and is committed in <see cref="TypedGlobalSlotIndex"/>
     /// (sibling file in the same folder). This type defines the per-slot
     /// shape; the index file owns the layout decision.
     /// <see cref="TypedHandler{T}"/> routes global storage through this type.
@@ -523,22 +510,20 @@ namespace DxMessaging.Core.Internal
 
         /// <summary>
         /// The <see cref="version"/> value observed by the most recent
-        /// dispatcher snapshot. Forward-compat plumbing; not yet read by
-        /// the typed-handler hot path.
+        /// dispatcher snapshot.
         /// </summary>
         public long lastSeenVersion = -1;
 
         /// <summary>
         /// The bus emission id of the most recent dispatch that consumed
-        /// this slot. Forward-compat plumbing; not yet read by the
-        /// typed-handler hot path.
+        /// this slot.
         /// </summary>
         public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
-        /// emit that touched this slot. Will be maintained by P4's touch
-        /// hook; preserved across <see cref="Clear"/> and
+        /// emit that touched this slot. Maintained by the sweep touch hook;
+        /// preserved across <see cref="Clear"/> and
         /// <see cref="Reset"/>.
         /// </summary>
         public long lastTouchTicks;
@@ -602,8 +587,8 @@ namespace DxMessaging.Core.Internal
         /// <see cref="lastTouchTicks"/> is intentionally preserved.
         /// </summary>
         /// <remarks>
-        /// Drain order is load-bearing per PLAN Risk Register R3: the
-        /// inner cache's own monotonic version is bumped BEFORE the slot
+        /// Drain order is load-bearing: the inner cache's own monotonic
+        /// version is bumped BEFORE the slot
         /// drops the reference, so closures captured against the inner
         /// cache also detect invalidation. The outer <see cref="version"/>
         /// bump is the LAST statement in the method for the same reason at
@@ -613,8 +598,7 @@ namespace DxMessaging.Core.Internal
         {
             // Inline the structural-clear body of Clear(); do NOT call
             // Clear() because that resets version=0 and would break the
-            // monotonic invariant the eviction layer depends on (PLAN Risk
-            // Register R3).
+            // monotonic invariant the eviction layer depends on.
             cache?.Reset();
             cache = null;
             lastSeenVersion = -1;

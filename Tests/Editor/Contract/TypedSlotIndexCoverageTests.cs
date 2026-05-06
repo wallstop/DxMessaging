@@ -12,8 +12,8 @@ namespace DxMessaging.Tests.Editor.Contract
     using NUnit.Framework;
 
     /// <summary>
-    /// Contract guardrails for the per-message-type slot-index tables wired in
-    /// PLAN Phase P3.2: <see cref="TypedSlotIndex"/> (20-slot
+    /// Contract guardrails for the per-message-type slot-index tables:
+    /// <see cref="TypedSlotIndex"/> (20-slot
     /// <c>TypedSlot&lt;T&gt;[]</c> on <c>TypedHandler&lt;T&gt;</c>),
     /// <see cref="TypedGlobalSlotIndex"/> (6-slot
     /// <c>TypedGlobalSlot[]</c>), and <see cref="TypedDispatchLinkIndex"/>
@@ -21,9 +21,8 @@ namespace DxMessaging.Tests.Editor.Contract
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Each test pins one structural invariant the P3.3 storage migration
-    /// depends on so the migration can land without revisiting the per-axis
-    /// layout. The tests reflect over a freshly-instantiated typed handler
+    /// Each test pins one structural invariant typed storage depends on. The
+    /// tests reflect over a freshly-instantiated typed handler
     /// rather than asserting against a hand-written shape so accidental
     /// future field additions / index renumbering surface here BEFORE they
     /// drift away from <c>ValidateSlotArrays()</c>.
@@ -43,9 +42,8 @@ namespace DxMessaging.Tests.Editor.Contract
 
         private readonly struct ProbeTargetedMessage : ITargetedMessage { }
 
-        // The expected legacy field name -> slot-index constant map. P3.3
-        // deletes the fields; the names stay here as a migration ledger so
-        // new variants must still pick an explicit axis-indexed slot.
+        // The expected legacy field name -> slot-index constant map. The names
+        // stay here so new variants must still pick an explicit axis-indexed slot.
         private static readonly (string FieldName, string ConstantName)[] LegacySlotMap =
         {
             ("_untargetedHandlers", nameof(TypedSlotIndex.UntargetedHandleDefault)),
@@ -300,7 +298,7 @@ namespace DxMessaging.Tests.Editor.Contract
                     declaredFieldNames.Contains(fieldName),
                     "TypedHandler<T> must not redeclare legacy typed field '"
                         + fieldName
-                        + "' after P3.3 storage migration."
+                        + "' because typed storage owns that slot."
                 );
                 Assert.IsTrue(
                     indexConstantNames.Contains(constantName),
@@ -323,7 +321,7 @@ namespace DxMessaging.Tests.Editor.Contract
                     declaredFieldNames.Contains(fieldName),
                     "TypedHandler<T> must not redeclare legacy global field '"
                         + fieldName
-                        + "' after P3.3 storage migration."
+                        + "' because typed global storage owns that slot."
                 );
             }
 
@@ -333,7 +331,7 @@ namespace DxMessaging.Tests.Editor.Contract
                     declaredFieldNames.Contains(fieldName),
                     "TypedHandler<T> must not redeclare legacy dispatch-link field '"
                         + fieldName
-                        + "' after P3.3 storage migration."
+                        + "' because typed dispatch storage owns that slot."
                 );
             }
         }

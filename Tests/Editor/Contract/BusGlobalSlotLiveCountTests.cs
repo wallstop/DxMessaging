@@ -9,7 +9,7 @@ namespace DxMessaging.Tests.Editor.Contract
 
     /// <summary>
     /// Contract guardrails for the <see cref="BusGlobalSlot.liveCount"/>
-    /// invariant wired in Phase P2.5 of the memory reclamation plan. The
+    /// invariant wired for memory reclamation. The
     /// counter must remain in lockstep with
     /// <c>BusGlobalSlot.sharedHandlers.Count</c> across every register and
     /// deregister flow exercised through

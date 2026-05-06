@@ -12,7 +12,7 @@ namespace DxMessaging.Core.Internal
     /// PostProcess within Phase; and Default -&gt; Fast -&gt; WithoutContext -&gt;
     /// WithoutContextFast within Variant. The xmldoc on each constant names
     /// the legacy <c>TypedHandler&lt;T&gt;</c> field whose storage role the
-    /// slot will assume in the P3.3 storage migration.
+    /// slot assumes in typed storage.
     /// </remarks>
     internal static class TypedSlotIndex
     {

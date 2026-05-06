@@ -2,16 +2,15 @@ namespace DxMessaging.Core.MessageBus.Internal
 {
     /// <summary>
     /// Marker interface for bus-level slot containers that the eviction layer
-    /// (PLAN Phase P4) can sweep. Each slot tracks its last-touch tick so the
-    /// sweep can decide whether to reclaim it, and exposes a monotonic
+    /// can sweep. Each slot tracks its last-touch tick so the sweep can decide
+    /// whether to reclaim it, and exposes a monotonic
     /// <see cref="Version"/> so that staged dispatch closures captured before
     /// eviction can detect they have been invalidated.
     /// </summary>
     /// <remarks>
-    /// In P2.1 these contracts are declared but not yet swept -- P2.5 wires
-    /// <see cref="Reset"/> to return inner pooled collections to
-    /// <c>DxMessaging.Core.Pooling.DxPools</c>, and P4 implements the sweep
-    /// policy that calls <see cref="Reset"/> on idle empty slots.
+    /// <see cref="Reset"/> returns inner pooled collections to
+    /// <c>DxMessaging.Core.Pooling.DxPools</c>. The sweep policy calls
+    /// <see cref="Reset"/> on idle empty slots.
     /// </remarks>
     internal interface IEvictableSlot
     {

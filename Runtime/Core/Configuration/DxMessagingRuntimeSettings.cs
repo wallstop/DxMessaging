@@ -19,7 +19,10 @@ namespace DxMessaging.Core.Configuration
     /// Field changes raise <see cref="SettingsChanged"/>; consumers should
     /// re-read derived state on the event.
     /// </remarks>
-    [CreateAssetMenu(fileName = ResourceName, menuName = "Wallstop/DxMessaging/Runtime Settings")]
+    [CreateAssetMenu(
+        fileName = ResourceName,
+        menuName = "Wallstop Studios/DxMessaging/Runtime Settings"
+    )]
     public sealed class DxMessagingRuntimeSettings : ScriptableObject
     {
         /// <summary>Resource name (no extension) used by <c>Resources.Load</c>.</summary>
@@ -136,7 +139,9 @@ namespace DxMessaging.Core.Configuration
         private const string ResourceFolder = "Assets/Resources";
         private const string ResourceAssetPath = ResourceFolder + "/" + ResourceName + ".asset";
 
-        [UnityEditor.MenuItem("Assets/Create/Wallstop/DxMessaging/Runtime Settings (in Resources)")]
+        [UnityEditor.MenuItem(
+            "Assets/Create/Wallstop Studios/DxMessaging/Runtime Settings (in Resources)"
+        )]
         private static void CreateAssetInResources()
         {
             if (!UnityEditor.AssetDatabase.IsValidFolder(ResourceFolder))

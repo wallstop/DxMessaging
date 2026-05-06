@@ -11,7 +11,7 @@ namespace DxMessaging.Core.Internal
     /// Untargeted -&gt; Targeted -&gt; Broadcast within Kind, Default before
     /// Fast within Variant. The xmldoc on each constant names the legacy
     /// <c>TypedHandler&lt;T&gt;</c> field whose storage role the slot will
-    /// assume in the P3.3 storage migration.
+    /// assume in typed global storage.
     /// </remarks>
     internal static class TypedGlobalSlotIndex
     {

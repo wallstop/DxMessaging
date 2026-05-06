@@ -11,8 +11,8 @@ namespace DxMessaging.Tests.Editor.Contract
     using NUnit.Framework;
 
     /// <summary>
-    /// Contract guardrails for the typed-handler-side slot grid introduced in
-    /// PLAN Phase P3.1: <see cref="IHandlerActionCache"/> (the non-generic
+    /// Contract guardrails for the typed-handler-side slot grid:
+    /// <see cref="IHandlerActionCache"/> (the non-generic
     /// erasure of the per-delegate-shape cache type),
     /// <see cref="TypedSlot{T}"/> (the per-message-type, per-<see cref="SlotKey"/>
     /// dispatch slot), and <see cref="TypedGlobalSlot"/> (the per-message-type
@@ -20,21 +20,17 @@ namespace DxMessaging.Tests.Editor.Contract
     /// </summary>
     /// <remarks>
     /// <para>
-    /// These types are forward-compat plumbing in P3.1 -- no writer populates
-    /// them yet -- but the eviction-driven monotonic <c>Reset()</c> contract
-    /// (PLAN Risk Register R3) and the <see cref="IEvictableSlot"/> shape
-    /// must be locked in before the storage migration in P3.2 / P3.3 starts
-    /// reading them. Each test below pins one structural invariant so the
-    /// migration can land without revisiting the per-slot lifecycle.
+    /// These tests pin the eviction-driven monotonic <c>Reset()</c> contract
+    /// and the <see cref="IEvictableSlot"/> shape that typed storage relies on.
+    /// Each test below covers one structural invariant in the per-slot
+    /// lifecycle.
     /// </para>
     /// <para>
     /// The <see cref="IHandlerActionCacheInterfaceShape"/> test reflects over
     /// the interface's declared members and is the structural backstop for
-    /// P3.2: when the storage migration retrofits
-    /// <c>HandlerActionCache&lt;TDelegate&gt;</c> to implement
-    /// <see cref="IHandlerActionCache"/>, any silent member add or remove
-    /// here will fail this test until reviewers update both the interface
-    /// and its expected-shape list in lockstep.
+    /// typed storage. Any silent member add or remove here will fail this test
+    /// until reviewers update both the interface and its expected-shape list in
+    /// lockstep.
     /// </para>
     /// </remarks>
     [TestFixture]
@@ -108,8 +104,7 @@ namespace DxMessaging.Tests.Editor.Contract
         /// Trivial in-test stub for <see cref="IHandlerActionCache"/>. Used so
         /// the slot tests can populate <see cref="TypedSlot{T}.byPriority"/>
         /// and <see cref="TypedSlot{T}.byContext"/> without depending on the
-        /// real <c>HandlerActionCache&lt;TDelegate&gt;</c> implementation
-        /// (which, in P3.1, does not yet implement the interface).
+        /// real <c>HandlerActionCache&lt;TDelegate&gt;</c> implementation.
         /// </summary>
         private sealed class StubCache : IHandlerActionCache
         {
@@ -132,8 +127,8 @@ namespace DxMessaging.Tests.Editor.Contract
         }
 
         /// <summary>
-        /// Probe stub for the drain-BEFORE-clear ordering tests (PLAN Risk
-        /// Register R3). <see cref="ProbeOuterCount"/> is invoked from
+        /// Probe stub for the drain-BEFORE-clear ordering tests.
+        /// <see cref="ProbeOuterCount"/> is invoked from
         /// <see cref="Reset"/> and the observed value pinned in
         /// <see cref="ObservedOuterCountAtReset"/>; the slot tests set
         /// <see cref="ProbeOuterCount"/> to read the size of the outer
@@ -200,7 +195,7 @@ namespace DxMessaging.Tests.Editor.Contract
                 Assert.Greater(
                     slot.version,
                     previous,
-                    "Reset() must bump version strictly monotonically (PLAN Risk R3)."
+                    "Reset() must bump version strictly monotonically."
                 );
                 previous = slot.version;
             }
@@ -221,15 +216,12 @@ namespace DxMessaging.Tests.Editor.Contract
         }
 
         /// <summary>
-        /// Pins the per-cache drain wired in P3.2: <see cref="TypedSlot{T}.Reset"/>
+        /// Pins the per-cache drain: <see cref="TypedSlot{T}.Reset"/>
         /// must invoke <see cref="IHandlerActionCache.Reset"/> on every
         /// <see cref="IHandlerActionCache"/> held by
         /// <see cref="TypedSlot{T}.byPriority"/> BEFORE clearing the
-        /// container. Drain order is load-bearing per PLAN Risk Register R3
-        /// so that closures captured against the inner cache also detect
-        /// invalidation. The earlier P3.1 placeholder pin asserted the
-        /// inverse (<c>ResetCallCount == 0</c>) and was flipped here in
-        /// lockstep with the wiring.
+        /// container. Drain order is load-bearing so that closures captured
+        /// against the inner cache also detect invalidation.
         /// </summary>
         [Test]
         public void TypedSlotResetDrainsHeldCachesViaIHandlerActionCache()
@@ -243,9 +235,8 @@ namespace DxMessaging.Tests.Editor.Contract
             Assert.AreEqual(
                 1,
                 child.ResetCallCount,
-                "P3.2 wires Reset() to drain every IHandlerActionCache held by "
-                    + "byPriority via IHandlerActionCache.Reset() BEFORE the structural "
-                    + "clear (PLAN Risk Register R3). Re-check the xmldoc on "
+                "Reset() must drain every IHandlerActionCache held by byPriority "
+                    + "via IHandlerActionCache.Reset() BEFORE the structural clear. Re-check the xmldoc on "
                     + "TypedSlot<T>.Reset() if this assertion needs to change."
             );
         }
@@ -256,7 +247,7 @@ namespace DxMessaging.Tests.Editor.Contract
         /// <see cref="TypedSlot{T}.byContext"/> is also drained on
         /// <see cref="TypedSlot{T}.Reset"/>. Walks both axes of the flat
         /// 3-level <c>InstanceId -&gt; (priority -&gt; IHandlerActionCache)</c>
-        /// shape committed in P3.2.
+        /// shape used by typed storage.
         /// </summary>
         [Test]
         public void TypedSlotResetDrainsByContextHeldCachesViaIHandlerActionCache()
@@ -284,7 +275,7 @@ namespace DxMessaging.Tests.Editor.Contract
 
         /// <summary>
         /// Pins the drain-BEFORE-clear ordering on
-        /// <see cref="TypedSlot{T}.byPriority"/> (PLAN Risk Register R3).
+        /// <see cref="TypedSlot{T}.byPriority"/>.
         /// The probe cache reads <c>byPriority.Count</c> at the moment its
         /// <see cref="IHandlerActionCache.Reset"/> fires; a value of 1
         /// proves the drain ran while the outer dict still held the entry.
@@ -303,8 +294,7 @@ namespace DxMessaging.Tests.Editor.Contract
             Assert.AreEqual(
                 1,
                 probe.ObservedOuterCountAtReset,
-                "Reset() must drain inner caches BEFORE clearing byPriority "
-                    + "(PLAN Risk Register R3)."
+                "Reset() must drain inner caches BEFORE clearing byPriority."
             );
         }
 
@@ -335,14 +325,13 @@ namespace DxMessaging.Tests.Editor.Contract
             Assert.AreEqual(
                 1,
                 probe.ObservedOuterCountAtReset,
-                "Reset() must drain inner caches BEFORE clearing byContext "
-                    + "(PLAN Risk Register R3)."
+                "Reset() must drain inner caches BEFORE clearing byContext."
             );
         }
 
         /// <summary>
         /// Pins that <c>MessageHandler.HandlerActionCache&lt;T&gt;</c> implements
-        /// <see cref="IHandlerActionCache"/> after P3.2 (Task 1). The interface
+        /// <see cref="IHandlerActionCache"/>. The interface
         /// is implemented explicitly so the public-facing field shape on the
         /// nested cache type is unchanged; this test exercises the six
         /// interface members through an interface-typed reference to confirm
@@ -362,7 +351,7 @@ namespace DxMessaging.Tests.Editor.Contract
             System.Type closed = nested.MakeGenericType(typeof(System.Action<int>));
             Assert.IsTrue(
                 typeof(IHandlerActionCache).IsAssignableFrom(closed),
-                "HandlerActionCache<T> must implement IHandlerActionCache after P3.2."
+                "HandlerActionCache<T> must implement IHandlerActionCache."
             );
 
             object instance = System.Activator.CreateInstance(closed, nonPublic: true);
@@ -442,11 +431,7 @@ namespace DxMessaging.Tests.Editor.Contract
 
             long beforeReset = view.Version;
             view.Reset();
-            Assert.Greater(
-                view.Version,
-                beforeReset,
-                "Reset() must bump version monotonically (PLAN Risk Register R3)."
-            );
+            Assert.Greater(view.Version, beforeReset, "Reset() must bump version monotonically.");
             Assert.AreEqual(-1, view.LastSeenVersion, "Reset() must restore lastSeenVersion = -1.");
             Assert.AreEqual(
                 -1,
@@ -703,7 +688,7 @@ namespace DxMessaging.Tests.Editor.Contract
         /// <summary>
         /// Pins that <see cref="TypedSlot{T}.byContext"/> is the flat
         /// 3-level <c>Dictionary&lt;InstanceId, Dictionary&lt;int, IHandlerActionCache&gt;&gt;</c>
-        /// shape committed in P3.2 (option (2) from the P3.1 enumeration).
+        /// shape used by typed storage.
         /// </summary>
         [Test]
         public void TypedSlotByContextShapeIsFlatThreeLevelDictionary()
@@ -803,7 +788,7 @@ namespace DxMessaging.Tests.Editor.Contract
                 Assert.Greater(
                     slot.version,
                     previous,
-                    "Reset() must bump version strictly monotonically (PLAN Risk R3)."
+                    "Reset() must bump version strictly monotonically."
                 );
                 previous = slot.version;
             }
@@ -889,9 +874,8 @@ namespace DxMessaging.Tests.Editor.Contract
         /// <see cref="IHandlerActionCache.IsEmpty"/>, and
         /// <see cref="IHandlerActionCache.Reset"/>. Adding or removing a
         /// member breaks this test until reviewers update the expected list,
-        /// providing a structural backstop for P3.2 (where
-        /// <c>HandlerActionCache&lt;TDelegate&gt;</c> retroactively implements
-        /// the interface).
+        /// providing a structural backstop for the
+        /// <c>HandlerActionCache&lt;TDelegate&gt;</c> interface implementation.
         /// </summary>
         [Test]
         public void IHandlerActionCacheInterfaceShape()

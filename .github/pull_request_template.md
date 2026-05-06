@@ -40,9 +40,9 @@ REQUIRED if this PR modifies hot-path files:
 The perf-numbers-check workflow gates on this section's presence.
 
 Format:
-  Scenario | Baseline (commit 25a4dcc) | This PR | Delta
-  --- | --- | --- | ---
-  UntargetedFlood_OneHandler (Mono Editor) | X.XX M emits/sec | Y.YY M emits/sec | +Z.Z%
+  | Scenario | Baseline run | This PR | Delta |
+  | --- | --- | --- | --- |
+  | UntargetedFlood_OneHandler (Mono Editor) | X.XX M emits/sec | Y.YY M emits/sec | +Z.Z% |
   ...
 
 Acceptable substitutions:
@@ -51,6 +51,6 @@ Acceptable substitutions:
   - "N/A - non-hot-path edit only <one-line description>" to describe what was
     actually touched, e.g. settings asset shape or editor tooling.
 
-See .llm/skills/performance/dispatch-hot-path.md for the budget and the
-T0 benchmark harness invocation.
+See docs/architecture/performance.md for the budget and dispatch throughput
+benchmark invocation.
 -->

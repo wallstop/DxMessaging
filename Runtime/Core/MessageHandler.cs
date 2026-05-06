@@ -2134,7 +2134,7 @@ namespace DxMessaging.Core
 
         /// <summary>
         /// Resets empty typed-handler slots associated with
-        /// <paramref name="messageBus"/>. P4's eviction layer calls through
+        /// <paramref name="messageBus"/>. The eviction layer calls through
         /// this erased surface after bus-side slots prove idle and empty.
         /// </summary>
         /// <param name="messageBus">
@@ -2417,7 +2417,7 @@ namespace DxMessaging.Core
 
             /// <summary>
             /// Eviction-driven full clear; bumps <see cref="version"/> as the LAST step
-            /// to invalidate any captured dispatch closure (PLAN Risk Register R3).
+            /// so captured dispatch closures observe invalidation.
             /// </summary>
             void DxMessaging.Core.Internal.IHandlerActionCache.Reset()
             {
@@ -2835,7 +2835,7 @@ namespace DxMessaging.Core
         internal sealed class TypedHandler<T> : ITypedHandlerSlotSweeper
             where T : IMessage
         {
-            // P3.3 storage: 20 typed slots + 6 global slots + 10 dispatch
+            // Typed storage: 20 typed slots + 6 global slots + 10 dispatch
             // links. The legacy named fields were deleted so new handler
             // variants must pick an explicit axis-indexed slot.
             internal readonly TypedSlot<T>[] _slots = new TypedSlot<T>[TypedSlotIndex.Length];
@@ -2891,7 +2891,7 @@ namespace DxMessaging.Core
                         $"_dispatchLinks length is {_dispatchLinks.Length} but TypedDispatchLinkIndex.Length is {TypedDispatchLinkIndex.Length}."
                     );
                 }
-                // P3.3 wires lazy registration writers; this assertion still
+                // Lazy registration writers update the slot arrays; this assertion still
                 // holds at construction (slots populate on first register,
                 // not on construction). The invariant flips meaning -- not
                 // the message -- when writers land.

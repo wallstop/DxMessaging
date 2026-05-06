@@ -292,10 +292,9 @@ namespace DxMessaging.Core.MessageBus
             /// </summary>
             public void Clear()
             {
-                // LEGACY: version reset semantics; the BusSinkSlot.Reset path under P3 will
-                // preserve monotonic as required by R3. Bus-side deregistration closures use
-                // captured cache identity and reset generations, so no current consumer depends
-                // on monotonic version here until storage migration lands.
+                // LEGACY: version reset semantics. Bus-side deregistration closures use
+                // captured cache identity and reset generations, so monotonic versioning
+                // is handled by sweep-driven slot reset paths.
                 handlers.Clear();
                 order.Clear();
                 cache.Clear();
@@ -379,10 +378,9 @@ namespace DxMessaging.Core.MessageBus
             /// </summary>
             public void Clear()
             {
-                // LEGACY: version reset semantics; the BusSinkSlot.Reset path under P3 will
-                // preserve monotonic as required by R3. Bus-side deregistration closures use
-                // captured cache identity and reset generations, so no current consumer depends
-                // on monotonic version here until storage migration lands.
+                // LEGACY: version reset semantics. Bus-side deregistration closures use
+                // captured cache identity and reset generations, so monotonic versioning
+                // is handled by sweep-driven slot reset paths.
                 handlers.Clear();
                 cache.Clear();
                 version = 0;
@@ -638,7 +636,7 @@ namespace DxMessaging.Core.MessageBus
         // BusGlobalSlot -- the global accept-all slot is single-cardinality, so
         // there is no array to index, but it is grouped here because it shares
         // the lifecycle of the typed sinks (cleared together in ResetState,
-        // touched together by the eviction layer in P4).
+        // touched together by the eviction layer).
         private readonly MessageCache<HandlerCache<int, HandlerCache>>[] _scalarSinks =
             new MessageCache<HandlerCache<int, HandlerCache>>[BusSinkIndex.Length]
             {
@@ -1350,9 +1348,8 @@ namespace DxMessaging.Core.MessageBus
                 return 0;
             }
 
-            // LEGACY: global slot reset keeps the current sweep-generation guard for stale
-            // deregistration closures. The BusSinkSlot.Reset path under P3 will preserve
-            // monotonic as required by R3 when the remaining bus-side storage migrates.
+            // LEGACY: global slot reset keeps the sweep-generation guard for stale
+            // deregistration closures.
             _globalSlots.Reset();
             unchecked
             {

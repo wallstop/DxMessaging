@@ -1,16 +1,16 @@
 # Performance Benchmarks
 
-This page documents the T0 throughput benchmark policy and keeps the older
-PlayMode benchmark tables for broad historical context.
+This page documents the dispatch throughput benchmark policy and keeps the
+older PlayMode benchmark tables for broad historical context.
 
 See also: [Performance optimizations](./design-and-architecture.md#performance-optimizations)
 for design details.
 
-## T0 Benchmark Methodology
+## Dispatch Throughput Methodology
 
-The T0 harness measures raw dispatch throughput before any hot-path runtime
-changes land. It is intentionally narrow: warm up each scenario, measure a
-1-second window, repeat five times, and compare the median. Each row records:
+The throughput harness measures raw dispatch cost for the current runtime. It is
+intentionally narrow: warm up each scenario, measure a 1-second window, repeat
+five times, and compare the median. Each row records:
 
 - Scenario name.
 - Platform identity, including editor/player target, scripting backend,
@@ -35,7 +35,7 @@ Keep the editor version, scripting backend, CPU governor, and machine load
 stable across before/after runs. Close the Unity editor UI before batchmode
 runs so the benchmark process owns the editor session.
 
-The T0 scenarios cover these paths:
+The dispatch throughput scenarios cover these paths:
 
 | Scenario                                      | What it measures                                         |
 | --------------------------------------------- | -------------------------------------------------------- |
@@ -51,17 +51,19 @@ The T0 scenarios cover these paths:
 
 ## Baseline Capture
 
-Capture baselines into `progress/perf-baseline-2026-05-05.csv`. The baseline
-file should be updated in a dedicated measurement commit, separate from runtime
-changes.
+Capture baselines into a local CSV file and keep the file path explicit in the
+commands that consume it. Do not put generated baseline CSVs in package
+documentation or rely on a dated filename. For CI or release comparison, publish
+the CSV as a workflow artifact or attach it to the pull request that records the
+measurement.
 
-Required commit cells:
+Recommended commit cells:
 
-| Commit    | Purpose                                |
-| --------- | -------------------------------------- |
-| `25a4dcc` | Pre-GC parent baseline.                |
-| `29a5338` | First-pass garbage-collection landing. |
-| `HEAD`    | Current branch result.                 |
+| Commit reference              | Purpose                                 |
+| ----------------------------- | --------------------------------------- |
+| Chosen comparison commit      | Accepted baseline for regression gates. |
+| Previous optimization landing | Runtime after the last relevant change. |
+| `HEAD`                        | Current branch result.                  |
 
 Required configuration cells:
 
@@ -73,43 +75,43 @@ Required configuration cells:
 
 For each commit and configuration:
 
-- Keep the T0 harness/worktree available; older runtime commits do not contain
-  the benchmark harness.
+- Keep the benchmark harness available; older runtime commits may not contain
+  the benchmark files.
 - Measure the older runtime with a harness-preserving flow. Use a throwaway
-  branch that cherry-picks the T0 harness onto the measured runtime commit, or
-  keep the harness branch checked out and swap only the runtime files being
+  branch that cherry-picks the current harness onto the measured runtime commit,
+  or keep the harness branch checked out and swap only the runtime files being
   measured.
 - Set `DX_PERF_COMMIT=<measured-runtime-commit>` for every benchmark run so
   CSV rows identify the runtime commit under test. `DX_PERF_COMMIT` overrides
   CI's `GITHUB_SHA` when both are present.
 - Run the PlayMode `PerfBench` category in batchmode.
 - Extract the benchmark rows from the Unity output and append them to
-  `progress/perf-baseline-2026-05-05.csv`.
+  the local baseline CSV.
 - Record the exact commit, platform, Unity version, and scripting backend.
 
 The benchmark harness writes both structured log lines and CSV-shaped rows.
 Prefer the extractor so the baseline file has one header and normalized rows:
 
 ```bash
-DX_PERF_COMMIT=25a4dcc \
+DX_PERF_COMMIT=<measured-runtime-commit> \
 bash scripts/unity/run-tests.sh \
   --platform playmode \
   --include-perf \
   --filter 'DxMessaging.Tests.Runtime.Benchmarks.DispatchThroughputBenchmarks.*' \
-  --results .artifacts/unity/perf-25a4dcc-editor-mono.xml \
-  2>&1 | tee .artifacts/unity/perf-25a4dcc-editor-mono.log
+  --results <results.xml> \
+  2>&1 | tee <unity-log.txt>
 
 node scripts/unity/extract-perf-baseline.js \
-  --input .artifacts/unity/perf-25a4dcc-editor-mono.log \
-  --input .artifacts/unity/perf-25a4dcc-editor-mono.xml \
-  --output progress/perf-baseline-2026-05-05.csv \
+  --input <unity-log.txt> \
+  --input <results.xml> \
+  --output <baseline.csv> \
   --append
 ```
 
 For the first cell, omit `--append` so the script creates the file with the
-CSV header. For later cells, use `--append`. Repeat the run for `29a5338` and
-`HEAD`, changing both `DX_PERF_COMMIT` and artifact filenames so each cell is
-traceable.
+CSV header. For later cells, use `--append`. Repeat the run for each comparison
+commit and for `HEAD`, changing `DX_PERF_COMMIT` and artifact filenames so each
+cell is traceable.
 
 Do not mix methodology changes with baseline updates. If the harness changes,
 capture a new baseline and make the old/new methodology boundary explicit in
@@ -133,26 +135,27 @@ window. Dispatch scenarios should stay at zero measured bytes after warmup.
 Any non-zero allocation delta on a hot-path dispatch scenario requires an
 explanation, a fix, or an explicit reviewer-approved exception.
 
-The opt-in smoke gate uses `progress/perf-baseline-2026-05-05.csv`, requires an
-exact `25a4dcc` row for the current scenario and platform identity, and fails
-when a within-platform regression exceeds the configured threshold. Enable it
+The opt-in smoke gate reads `DX_PERF_BASELINE`, requires a row for the configured
+comparison commit on the current scenario and platform identity, and fails when
+a within-platform regression exceeds the configured threshold. Enable the gate
 with:
 
 ```bash
-DX_PERF_GATE=1 unity -batchmode -runTests -testPlatform editmode -testCategory "PerfGate"
+DX_PERF_GATE=1 \
+DX_PERF_BASELINE=<baseline.csv> \
+DX_PERF_BASELINE_COMMIT=<baseline-commit> \
+unity -batchmode -runTests -testPlatform editmode -testCategory "PerfGate"
 ```
 
-The smoke gate is an EditMode test category. The T1 clock-read scaffold remains
-`[Test, Explicit]` before T1.1, but it is not tagged `PerfGate` until the
-sample-not-call sweep gate lands.
-Before T0.3 baseline capture creates `progress/perf-baseline-2026-05-05.csv`,
-the smoke gate reports an inconclusive skip instead of failing the suite for a
-missing baseline file.
+The smoke gate is an EditMode test category. If the gate is enabled without
+`DX_PERF_BASELINE` or `DX_PERF_BASELINE_COMMIT`, or if the configured CSV is
+missing, it reports an inconclusive skip instead of failing the suite for a
+missing local artifact.
 
 ## Hot-Path PR Rule
 
-Any pull request that touches one of these paths must include before/after T0
-numbers in the PR description under `### Performance numbers`:
+Any pull request that touches one of these paths must include before/after
+throughput numbers in the PR description under `### Performance numbers`:
 
 - `Runtime/Core/MessageBus/MessageBus.cs`
 - `Runtime/Core/MessageHandler.cs`
@@ -163,9 +166,9 @@ Use this shape:
 ```markdown
 ### Performance numbers
 
-| Scenario                                 | Baseline (commit 25a4dcc) | This PR          | Delta |
-| ---------------------------------------- | ------------------------- | ---------------- | ----- |
-| UntargetedFlood_OneHandler (Mono Editor) | X.XX M emits/sec          | Y.YY M emits/sec | +Z.Z% |
+| Scenario                                 | Baseline run     | This PR          | Delta |
+| ---------------------------------------- | ---------------- | ---------------- | ----- |
+| UntargetedFlood_OneHandler (Mono Editor) | X.XX M emits/sec | Y.YY M emits/sec | +Z.Z% |
 ```
 
 The workflow accepts either the table shape above with at least one populated

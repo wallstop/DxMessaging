@@ -96,9 +96,7 @@ namespace DxMessaging.Core.MessageBus.Internal
     /// </para>
     /// <para>
     /// The <see cref="dispatchState"/> field carries the staged Stage/Acquire
-    /// snapshot for this slot. It is forward-compatible plumbing -- BusSinkSlot
-    /// is not yet the storage type wired into the hot dispatch path; that
-    /// wiring lands in a future P3 / storage-migration session.
+    /// snapshot for this slot.
     /// </para>
     /// </remarks>
     internal sealed class BusSinkSlot : IEvictableSlot
@@ -140,7 +138,7 @@ namespace DxMessaging.Core.MessageBus.Internal
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
-        /// emit that touched this slot. Maintained by P4's touch hook;
+        /// emit that touched this slot. Maintained by the sweep touch hook;
         /// preserved across <see cref="Clear"/> and <see cref="Reset"/> so the
         /// sweep can distinguish never-touched slots from freshly-reset slots.
         /// </summary>
@@ -152,13 +150,10 @@ namespace DxMessaging.Core.MessageBus.Internal
         /// (<see cref="MessageHandler"/>, priority) pair count across every
         /// entry in <see cref="handlersByPriority"/>, so <see cref="IsEmpty"/>
         /// becomes a single integer compare rather than a walk over priority
-        /// buckets. The bus does not yet maintain this counter; the wiring
-        /// lands when <see cref="BusSinkSlot"/> becomes the storage type
-        /// backing the typed-sink hot dispatch path (the same deferred phase
-        /// described on <see cref="dispatchState"/>). <see cref="IsEmpty"/>
-        /// currently returns <c>true</c> at all times because no writer
-        /// increments <see cref="liveCount"/>; eviction will only consult
-        /// <see cref="IsEmpty"/> once the bus-side counter wiring lands.
+        /// buckets. This counter is reserved until <see cref="BusSinkSlot"/> is
+        /// used as the typed-sink storage type. <see cref="IsEmpty"/> currently
+        /// returns <c>true</c> at all times because no writer increments
+        /// <see cref="liveCount"/>.
         /// </para>
         /// <para>
         /// Intended transitions once wired: re-registration of an existing
@@ -246,9 +241,9 @@ namespace DxMessaging.Core.MessageBus.Internal
         {
             // Inline the structural-clear body of Clear(); do NOT call Clear()
             // because that resets version=0 and would break the monotonic
-            // invariant the eviction layer depends on (PLAN Risk Register R3:
-            // stale deregister closures captured before reset must observe a
-            // strictly larger version after reset and skip their work).
+            // invariant the eviction layer depends on: stale deregister
+            // closures captured before reset must observe a strictly larger
+            // version after reset and skip their work.
             foreach (BusPriorityBucket bucket in handlersByPriority.Values)
             {
                 bucket.Clear();
@@ -285,7 +280,7 @@ namespace DxMessaging.Core.MessageBus.Internal
     /// <see cref="Unsafe.As{T}(object)"/>; the class is sealed and only inserted
     /// from this type's own methods, so the cast cannot encounter a foreign
     /// runtime type. <c>DEBUG</c> builds verify the invariant at every
-    /// cast site (PLAN Risk Register R4).
+    /// cast site.
     /// </para>
     /// <para>
     /// The map is left null until first registration so empty slots cost only
@@ -309,7 +304,7 @@ namespace DxMessaging.Core.MessageBus.Internal
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
-        /// emit that touched this slot. Maintained by P4's touch hook;
+        /// emit that touched this slot. Maintained by the sweep touch hook;
         /// preserved across <see cref="Clear"/> and <see cref="Reset"/>.
         /// </summary>
         public long lastTouchTicks;
@@ -320,14 +315,10 @@ namespace DxMessaging.Core.MessageBus.Internal
         /// <see cref="InstanceId"/> keys in <see cref="byContext"/> that
         /// currently retain at least one live handler, so <see cref="IsEmpty"/>
         /// becomes a single integer compare rather than a recursive walk over
-        /// the inner per-context slots. The bus does not yet maintain this
-        /// counter; the wiring lands when <see cref="BusContextSlot"/> becomes
-        /// the storage type backing the typed-sink hot dispatch path (the same
-        /// deferred phase described on <see cref="BusSinkSlot.dispatchState"/>).
+        /// the inner per-context slots. This counter is reserved until
+        /// <see cref="BusContextSlot"/> is used as the typed-sink storage type.
         /// <see cref="IsEmpty"/> currently returns <c>true</c> at all times
-        /// because no writer increments <see cref="liveCount"/>; eviction will
-        /// only consult <see cref="IsEmpty"/> once the bus-side counter wiring
-        /// lands.
+        /// because no writer increments <see cref="liveCount"/>.
         /// </para>
         /// <para>
         /// Intended transitions once wired: the bus will increment by 1 when
@@ -482,9 +473,9 @@ namespace DxMessaging.Core.MessageBus.Internal
 
         /// <summary>
         /// Eviction-driven reset. Walks every inner <see cref="BusSinkSlot"/>
-        /// and calls <see cref="BusSinkSlot.Reset"/> on each (PLAN Risk
-        /// Register R3: inner pooled state must be drained BEFORE the outer
-        /// map is recycled), then returns <see cref="byContext"/> to the
+        /// and calls <see cref="BusSinkSlot.Reset"/> on each. Inner pooled
+        /// state must be drained BEFORE the outer map is recycled. Then returns
+        /// <see cref="byContext"/> to the
         /// shared <see cref="DxPools.InstanceIdDicts"/> pool and nulls the
         /// field. Bumps <see cref="version"/> as the LAST step so any captured
         /// dispatch closure that observed the prior version detects
@@ -534,10 +525,9 @@ namespace DxMessaging.Core.MessageBus.Internal
     /// </summary>
     /// <remarks>
     /// <para>
-    /// PLAN.md section 2.5 Option G2 chooses to model the legacy
-    /// global-handlers triple-category share as one slot with a shared
-    /// handler set (<see cref="sharedHandlers"/> / <see cref="sharedCache"/>)
-    /// and three separate per-kind dispatch state fields
+    /// This slot models global accept-all handlers as one shared handler set
+    /// (<see cref="sharedHandlers"/> / <see cref="sharedCache"/>) and three
+    /// separate per-kind dispatch state fields
     /// (<see cref="untargetedDispatchState"/>,
     /// <see cref="targetedDispatchState"/>,
     /// <see cref="broadcastDispatchState"/>). The discrete fields keep the
@@ -556,11 +546,11 @@ namespace DxMessaging.Core.MessageBus.Internal
         public readonly Dictionary<MessageHandler, int> sharedHandlers = new();
 
         /// <summary>
-        /// Reserved for future global-slot snapshot iteration. Mirrors the
-        /// legacy non-generic <c>HandlerCache.cache</c> field, which was likewise
+        /// Reserved for global-slot snapshot iteration. Mirrors the legacy
+        /// non-generic <c>HandlerCache.cache</c> field, which was likewise
         /// allocated for parity but never populated or read by any dispatch path.
-        /// Cleared by <see cref="Clear"/> and <see cref="Reset"/> so adding a writer
-        /// in a later phase requires no extra lifecycle plumbing.
+        /// Cleared by <see cref="Clear"/> and <see cref="Reset"/> as part of the
+        /// slot lifecycle.
         /// </summary>
         public readonly List<MessageHandler> sharedCache = new();
 
@@ -569,25 +559,22 @@ namespace DxMessaging.Core.MessageBus.Internal
 
         /// <summary>
         /// Reserved counter intended to record the <see cref="version"/> value
-        /// observed by the most recent dispatcher snapshot. The global path
-        /// does not yet read this field; it is allocated for parity with the
-        /// per-cache <see cref="BusSinkSlot.lastSeenVersion"/> contract so the
-        /// staged-dispatch staleness check can adopt it without an additional
-        /// lifecycle change.
+        /// observed by the most recent dispatcher snapshot. Allocated for parity
+        /// with the per-cache <see cref="BusSinkSlot.lastSeenVersion"/> contract.
         /// </summary>
         public long lastSeenVersion = -1;
 
         /// <summary>
         /// Reserved counter intended to record the bus emission id of the
-        /// most recent dispatch that consumed this slot. The global path
-        /// does not yet read this field; it is allocated for parity with the
-        /// per-cache <see cref="BusSinkSlot.lastSeenEmissionId"/> contract.
+        /// most recent dispatch that consumed this slot. Allocated for parity
+        /// with the per-cache <see cref="BusSinkSlot.lastSeenEmissionId"/>
+        /// contract.
         /// </summary>
         public long lastSeenEmissionId = -1;
 
         /// <summary>
         /// Bus tick counter value at the most recent register / deregister /
-        /// emit that touched this slot. Maintained by P4's touch hook;
+        /// emit that touched this slot. Maintained by the sweep touch hook;
         /// preserved across <see cref="Clear"/> and <see cref="Reset"/>.
         /// </summary>
         public long lastTouchTicks;
@@ -618,8 +605,8 @@ namespace DxMessaging.Core.MessageBus.Internal
 
         /// <summary>
         /// Dispatch state for the Untargeted-global emission path. One of the
-        /// three discrete per-kind fields per Option G2 of PLAN section 2.5 --
-        /// separate slots over a per-kind dictionary keep the per-emission
+        /// three discrete per-kind fields. Separate slots over a per-kind
+        /// dictionary keep the per-emission
         /// select branch-free under JIT monomorphization. Lazy alloc on first
         /// Stage/Acquire; null after Reset().
         /// </summary>
@@ -694,7 +681,7 @@ namespace DxMessaging.Core.MessageBus.Internal
         {
             // Inline the structural-clear body of Clear(); do NOT call Clear()
             // because that resets version=0 and would break the monotonic
-            // invariant the eviction layer depends on (PLAN Risk Register R3).
+            // invariant the eviction layer depends on.
             sharedHandlers.Clear();
             sharedCache.Clear();
             untargetedDispatchState?.Reset();

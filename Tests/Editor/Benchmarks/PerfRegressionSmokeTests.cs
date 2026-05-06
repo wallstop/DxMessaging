@@ -11,8 +11,8 @@ namespace DxMessaging.Tests.Editor.Benchmarks
     public sealed class PerfRegressionSmokeTests
     {
         private const string PerfGateEnvVar = "DX_PERF_GATE";
-        private const string BaselinePath = "progress/perf-baseline-2026-05-05.csv";
-        private const string BaselineCommit = "25a4dcc";
+        private const string BaselinePathEnvVar = "DX_PERF_BASELINE";
+        private const string BaselineCommitEnvVar = "DX_PERF_BASELINE_COMMIT";
         private const double RegressionMultiplier = 1.5d;
 
         [Test, Explicit, Category("PerfGate")]
@@ -79,7 +79,13 @@ namespace DxMessaging.Tests.Editor.Benchmarks
             DispatchBenchmarkResult current = DispatchThroughputBenchmarks.RunScenario(scenario);
             IReadOnlyList<BaselineRow> baselines = LoadBaselines();
             string scenarioName = DispatchThroughputBenchmarks.GetScenarioName(scenario);
-            BaselineRow baseline = FindBaseline(baselines, scenarioName, current.Platform);
+            string baselineCommit = GetBaselineCommit();
+            BaselineRow baseline = FindBaseline(
+                baselines,
+                scenarioName,
+                current.Platform,
+                baselineCommit
+            );
 
             if (current.IsRegistrationScenario)
             {
@@ -108,11 +114,19 @@ namespace DxMessaging.Tests.Editor.Benchmarks
 
         private static IReadOnlyList<BaselineRow> LoadBaselines()
         {
-            string path = FindRepoRelativePath(BaselinePath);
+            string configuredPath = Environment.GetEnvironmentVariable(BaselinePathEnvVar);
+            if (string.IsNullOrWhiteSpace(configuredPath))
+            {
+                Assert.Ignore(
+                    $"{BaselinePathEnvVar}=<baseline.csv> is required to run the perf smoke gate."
+                );
+            }
+
+            string path = ResolvePath(configuredPath);
             if (!File.Exists(path))
             {
                 Assert.Ignore(
-                    $"Performance baseline file not found: {BaselinePath}. Capture T0.3 baselines before enforcing PerfGate."
+                    $"Performance baseline file not found: {configuredPath}. Capture a dispatch throughput baseline before enforcing PerfGate."
                 );
             }
 
@@ -137,7 +151,8 @@ namespace DxMessaging.Tests.Editor.Benchmarks
         private static BaselineRow FindBaseline(
             IReadOnlyList<BaselineRow> rows,
             string scenario,
-            string platform
+            string platform,
+            string baselineCommit
         )
         {
             for (int index = 0; index < rows.Count; index++)
@@ -146,7 +161,7 @@ namespace DxMessaging.Tests.Editor.Benchmarks
                 if (
                     string.Equals(row.Scenario, scenario, StringComparison.Ordinal)
                     && string.Equals(row.Platform, platform, StringComparison.Ordinal)
-                    && string.Equals(row.Commit, BaselineCommit, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(row.Commit, baselineCommit, StringComparison.OrdinalIgnoreCase)
                 )
                 {
                     return row;
@@ -154,17 +169,35 @@ namespace DxMessaging.Tests.Editor.Benchmarks
             }
 
             Assert.Fail(
-                $"No {BaselineCommit} baseline row found for scenario {scenario} on platform {platform}."
+                $"No {baselineCommit} baseline row found for scenario {scenario} on platform {platform}."
             );
             return default;
         }
 
-        private static string FindRepoRelativePath(string relativePath)
+        private static string GetBaselineCommit()
         {
+            string configuredCommit = Environment.GetEnvironmentVariable(BaselineCommitEnvVar);
+            if (string.IsNullOrWhiteSpace(configuredCommit))
+            {
+                Assert.Ignore(
+                    $"{BaselineCommitEnvVar}=<baseline-commit> is required to run the perf smoke gate."
+                );
+            }
+
+            return configuredCommit;
+        }
+
+        private static string ResolvePath(string configuredPath)
+        {
+            if (Path.IsPathRooted(configuredPath))
+            {
+                return configuredPath;
+            }
+
             DirectoryInfo current = new(Directory.GetCurrentDirectory());
             while (current != null)
             {
-                string candidate = Path.Combine(current.FullName, relativePath);
+                string candidate = Path.Combine(current.FullName, configuredPath);
                 if (File.Exists(candidate))
                 {
                     return candidate;
@@ -173,7 +206,7 @@ namespace DxMessaging.Tests.Editor.Benchmarks
                 current = current.Parent;
             }
 
-            return Path.Combine(Directory.GetCurrentDirectory(), relativePath);
+            return Path.Combine(Directory.GetCurrentDirectory(), configuredPath);
         }
 
         private readonly struct BaselineRow

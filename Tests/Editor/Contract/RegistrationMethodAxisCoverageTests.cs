@@ -10,8 +10,8 @@ namespace DxMessaging.Tests.Editor.Contract
 
     /// <summary>
     /// Contract guardrails for the <see cref="RegistrationMethodAxes"/> table.
-    /// These tests are the structural backstop for Phase P1 of the memory
-    /// reclamation plan: they assert that every
+    /// These tests are the structural backstop for memory reclamation: they
+    /// assert that every
     /// <see cref="RegistrationMethod"/> has an explicit <see cref="SlotKey"/>
     /// mapping and that real (non-sentinel) mappings are unique.
     /// </summary>
