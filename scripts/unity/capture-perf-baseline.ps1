@@ -91,11 +91,12 @@ function ConvertTo-RepoRelativePath {
     }
 
     $relativePath = [System.IO.Path]::GetRelativePath($RepoRoot, $fullPath)
-    if ([System.IO.Path]::IsPathRooted($relativePath) -or $relativePath -eq '..' -or $relativePath.StartsWith("..$([System.IO.Path]::DirectorySeparatorChar)") -or $relativePath.StartsWith("..$([System.IO.Path]::AltDirectorySeparatorChar)")) {
+    $dockerRelativePath = $relativePath.Replace('\', '/')
+    if ([System.IO.Path]::IsPathRooted($relativePath) -or $dockerRelativePath -eq '..' -or $dockerRelativePath.StartsWith('../')) {
         return $null
     }
 
-    return $relativePath
+    return $dockerRelativePath
 }
 
 $BaselinePathForUnity = ConvertTo-RepoRelativePath $Output

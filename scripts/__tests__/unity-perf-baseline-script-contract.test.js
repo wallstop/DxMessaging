@@ -130,6 +130,11 @@ function cleanupPerfArtifacts(commit) {
   }
 }
 
+function expectDockerRelativePath(actual, expected) {
+  expect(actual).toBe(expected);
+  expect(actual).not.toContain("\\");
+}
+
 describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
   let content;
 
@@ -171,6 +176,8 @@ describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
     expect(content).toContain("$BaselinePathForUnity = ConvertTo-RepoRelativePath $Output");
     expect(content).toContain("[System.IO.Path]::IsPathRooted($relativePath)");
     expect(content).toContain("[System.IO.Path]::GetFullPath($Path, $RepoRoot)");
+    expect(content).toContain("$dockerRelativePath = $relativePath.Replace('\\', '/')");
+    expect(content).toContain("$dockerRelativePath.StartsWith('../')");
     expect(content).toContain(
       "$BaselineDisplayPath = [System.IO.Path]::GetFullPath($Output, $RepoRoot)"
     );
@@ -201,7 +208,7 @@ describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
 
       expect(result.status).toBe(0);
       expect(marker.commit).toBe(commit);
-      expect(marker.baseline).toBe(outputPath);
+      expectDockerRelativePath(marker.baseline, outputPath);
       expect(marker.mode).toBe("replace");
       expect(result.stdout).toContain(`fake unity stdout for ${commit}`);
       expect(result.stdout).toContain(`fake unity stderr for ${commit}`);
@@ -228,7 +235,7 @@ describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
       const marker = JSON.parse(fs.readFileSync(tools.pwshMarker, "utf8"));
 
       expect(result.status).toBe(0);
-      expect(marker.baseline).toBe(path.join(".artifacts", "absolute-baseline.csv"));
+      expectDockerRelativePath(marker.baseline, ".artifacts/absolute-baseline.csv");
       expect(result.stdout).toContain(outputPath);
     } finally {
       cleanupPerfArtifacts(commit);
@@ -266,6 +273,44 @@ describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
     expect(fs.existsSync(tools.pwshMarker)).toBe(false);
   });
 
+  test("rejects backslash parent traversal after Docker path normalization", () => {
+    if (!REAL_PWSH) {
+      return;
+    }
+
+    const tools = makeTempToolDir();
+    const result = runCapture(
+      ["-Commit", "backslash-outside-output-test", "-Output", "..\\outside-baseline.csv"],
+      tools
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain("-Output must be relative to the repo or under the repo root");
+    expect(fs.existsSync(tools.pwshMarker)).toBe(false);
+  });
+
+  test("normalizes Windows-style relative output to forward slashes for Docker-safe resolution", () => {
+    if (!REAL_PWSH) {
+      return;
+    }
+
+    const commit = "windows-relative-output-test";
+    const tools = makeTempToolDir();
+    const outputPath = ".artifacts\\windows-relative-baseline.csv";
+    const cleanupPath = path.join(REPO_ROOT, ".artifacts", "windows-relative-baseline.csv");
+
+    try {
+      const result = runCapture(["-Commit", commit, "-Output", outputPath, "-Replace"], tools);
+      const marker = JSON.parse(fs.readFileSync(tools.pwshMarker, "utf8"));
+
+      expect(result.status).toBe(0);
+      expectDockerRelativePath(marker.baseline, ".artifacts/windows-relative-baseline.csv");
+    } finally {
+      cleanupPerfArtifacts(commit);
+      fs.rmSync(cleanupPath, { force: true });
+    }
+  });
+
   test("forwards the default baseline output as repo-relative for docker-safe resolution", () => {
     if (!REAL_PWSH) {
       return;
@@ -281,7 +326,7 @@ describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
       const marker = JSON.parse(fs.readFileSync(tools.pwshMarker, "utf8"));
 
       expect(result.status).toBe(0);
-      expect(marker.baseline).toBe(".artifacts/perf-baseline.csv");
+      expectDockerRelativePath(marker.baseline, ".artifacts/perf-baseline.csv");
       expect(result.stdout).toContain(path.join(REPO_ROOT, ".artifacts", "perf-baseline.csv"));
     } finally {
       cleanupPerfArtifacts(commit);

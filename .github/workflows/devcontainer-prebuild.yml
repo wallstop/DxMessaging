@@ -21,8 +21,7 @@
 #   events. Setting it to "" makes the explicit `push: always` knob the only
 #   source of truth — without this, the weekly cron and manual dispatches
 #   would build but never publish, defeating the whole purpose of this
-#   workflow. See .llm/skills/github-actions/cicd-devcontainer-workflows.md
-#   (ported from Shiro in Phase 4).
+#   workflow. See .llm/skills/github-actions/cicd-devcontainer-workflows.md.
 #
 # Permissions:
 #   `packages: write` is required for the docker/login-action push to GHCR
