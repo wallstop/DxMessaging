@@ -304,6 +304,31 @@ fi
 # headless activation in docker. Personal users need a .ulf in UNITY_LICENSE
 # (raw) or UNITY_LICENSE_B64 (local convenience). Paid users may use
 # UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD.
+if [[ -z "${UNITY_LICENSE:-}" ]] && [[ -z "${UNITY_LICENSE_B64:-}" ]]; then
+    UNITY_LICENSE_CANDIDATES=()
+    if [[ -n "${UNITY_LICENSE_FILE:-}" ]]; then
+        UNITY_LICENSE_CANDIDATES+=("${UNITY_LICENSE_FILE}")
+    fi
+    if [[ -n "${ProgramData:-}" ]]; then
+        UNITY_LICENSE_CANDIDATES+=("${ProgramData}/Unity/Unity_lic.ulf")
+    fi
+    if [[ -n "${LOCALAPPDATA:-}" ]]; then
+        UNITY_LICENSE_CANDIDATES+=("${LOCALAPPDATA}/Unity/Unity_lic.ulf")
+    fi
+    if [[ -n "${HOME:-}" ]]; then
+        UNITY_LICENSE_CANDIDATES+=("${HOME}/.local/share/unity3d/Unity/Unity_lic.ulf")
+        UNITY_LICENSE_CANDIDATES+=("${HOME}/Library/Application Support/Unity/Unity_lic.ulf")
+    fi
+    for license_path in "${UNITY_LICENSE_CANDIDATES[@]}"; do
+        if [[ -f "${license_path}" ]]; then
+            UNITY_LICENSE="$(cat "${license_path}")"
+            export UNITY_LICENSE
+            printf '[run-tests] loaded UNITY_LICENSE from %s\n' "${license_path}"
+            break
+        fi
+    done
+fi
+
 LICENSE_MODE=""
 if [[ -n "${UNITY_LICENSE:-}" ]]; then
     LICENSE_MODE="ulf"

@@ -269,6 +269,39 @@ Remediation:
 # License activation: auto-detect ULF vs paid serial vs failure.
 # Mirrors the bash script: current Unity/GameCI behavior does not support
 # email/password-only Personal headless activation in docker.
+function Get-UnityLicenseFileCandidates {
+    $candidates = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:UNITY_LICENSE_FILE)) {
+        $candidates += $env:UNITY_LICENSE_FILE
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramData)) {
+        $candidates += (Join-Path $env:ProgramData 'Unity/Unity_lic.ulf')
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $candidates += (Join-Path $env:LOCALAPPDATA 'Unity/Unity_lic.ulf')
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:HOME)) {
+        $candidates += (Join-Path $env:HOME '.local/share/unity3d/Unity/Unity_lic.ulf')
+        $candidates += (Join-Path $env:HOME 'Library/Application Support/Unity/Unity_lic.ulf')
+    }
+
+    return $candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+}
+
+if ([string]::IsNullOrEmpty($env:UNITY_LICENSE) -and [string]::IsNullOrEmpty($env:UNITY_LICENSE_B64)) {
+    foreach ($licensePath in Get-UnityLicenseFileCandidates) {
+        if (Test-Path -LiteralPath $licensePath -PathType Leaf) {
+            $env:UNITY_LICENSE = Get-Content -LiteralPath $licensePath -Raw
+            Write-Host "[run-tests] loaded UNITY_LICENSE from $licensePath"
+            break
+        }
+    }
+}
+
 $LicenseMode = ''
 if (-not [string]::IsNullOrEmpty($env:UNITY_LICENSE)) {
     $LicenseMode = 'ulf'
@@ -408,6 +441,11 @@ function ConvertTo-BashSingleQuotedString {
     return "'" + ($Value -replace "'", "'\''") + "'"
 }
 
+function ConvertTo-BashScriptText {
+    param([string]$Value)
+    return $Value.Replace("`r`n", "`n")
+}
+
 function Get-EditorCommandInner {
     $sb = [System.Text.StringBuilder]::new()
     $projectPathQ = ConvertTo-BashSingleQuotedString '/workspace/.unity-test-project'
@@ -443,7 +481,7 @@ function Get-EditorCommandInner {
         [void]$sb.AppendLine('  -username "${UNITY_EMAIL}" -password "${UNITY_PASSWORD}" -serial "${UNITY_SERIAL}" \')
     }
     [void]$sb.AppendLine('  -logFile - 2>&1 | tee /workspace/.artifacts/unity/log.txt')
-    return $sb.ToString()
+    return ConvertTo-BashScriptText $sb.ToString()
 }
 
 function Get-StandaloneBuildCommandInner {
@@ -481,7 +519,7 @@ function Get-StandaloneBuildCommandInner {
         [void]$sb.AppendLine('  -username "${UNITY_EMAIL}" -password "${UNITY_PASSWORD}" -serial "${UNITY_SERIAL}" \')
     }
     [void]$sb.AppendLine('  -logFile - 2>&1 | tee /workspace/.artifacts/unity/build-log.txt')
-    return $sb.ToString()
+    return ConvertTo-BashScriptText $sb.ToString()
 }
 
 function Get-StandaloneRunCommandInner {
@@ -509,7 +547,7 @@ function Get-StandaloneRunCommandInner {
         [void]$sb.AppendLine("  -testFilter $filterQ \")
     }
     [void]$sb.AppendLine('  -logFile - 2>&1 | tee /workspace/.artifacts/unity/log.txt')
-    return $sb.ToString()
+    return ConvertTo-BashScriptText $sb.ToString()
 }
 
 # ---------------------------------------------------------------------------

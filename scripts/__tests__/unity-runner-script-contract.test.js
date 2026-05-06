@@ -87,6 +87,15 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).not.toContain("personal-email");
   });
 
+  test("auto-loads common local Unity license files before failing", () => {
+    expect(content).toContain("UNITY_LICENSE_FILE");
+    expect(content).toContain("ProgramData");
+    expect(content).toContain("LOCALAPPDATA");
+    expect(content).toContain(".local/share/unity3d/Unity/Unity_lic.ulf");
+    expect(content).toContain("Library/Application Support/Unity/Unity_lic.ulf");
+    expect(content).toContain('UNITY_LICENSE="$(cat "${license_path}")"');
+  });
+
   test("forwards the perf commit environment into Unity containers", () => {
     expect(content).toContain("-e DX_PERF_COMMIT");
   });
@@ -193,6 +202,21 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("UNITY_SERIAL");
     expect(content).not.toContain('-serial ""');
     expect(content).not.toContain("personal-email");
+  });
+
+  test("auto-loads common local Unity license files before failing", () => {
+    expect(content).toContain("UNITY_LICENSE_FILE");
+    expect(content).toContain("ProgramData");
+    expect(content).toContain("LOCALAPPDATA");
+    expect(content).toContain(".local/share/unity3d/Unity/Unity_lic.ulf");
+    expect(content).toContain("Library/Application Support/Unity/Unity_lic.ulf");
+    expect(content).toContain("Get-Content -LiteralPath $licensePath -Raw");
+  });
+
+  test("normalizes generated bash payloads to LF for docker bash", () => {
+    expect(content).toContain("function ConvertTo-BashScriptText");
+    expect(content).toContain('return $Value.Replace("`r`n", "`n")');
+    expect(content).toContain("return ConvertTo-BashScriptText $sb.ToString()");
   });
 
   test("forwards the perf commit environment into Unity containers", () => {
