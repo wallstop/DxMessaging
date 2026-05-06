@@ -31,7 +31,10 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
 - For dynamic `import()` in `scripts/*.js`, convert filesystem paths with `pathToFileURL(...).href` before importing (raw Windows drive-letter paths fail Node's ESM loader).
 - When editing `.pre-commit-config.yaml`, `scripts/*` hook tooling, `.github/workflows/*.yml`, or hook-related scripts in `package.json`, run `npm run preflight:pre-commit` before finishing.
+- When running `preflight:pre-commit` with unstaged docs changes, the markdown hook may report 'files were modified' -- stage the changes first.
 - When editing `.pre-commit-config.yaml` or hook scripts, the new performance budget test (`scripts/__tests__/hook-perf-budget.test.js`) must pass; see [Git Hook Performance Budget](./skills/performance/git-hook-performance.md).
+- Never introduce `PLAN.md` / `PERF-PLAN.md` / `OLD-PLAN.md` / `GH-PAGES-PLAN.md` filename references or `T0.0` / `P0.0`-style milestone tags into shipping content (under `Runtime/`, `Editor/`, `SourceGenerators/`, `Samples~/`, `docs/`, root `*.md`, `llms.txt`). The `validate:no-plan-vocabulary` hook enforces this; treat any failure as a prose rewrite, not a hook bypass. See [No PLAN Vocabulary in Shipping Content](./skills/documentation/no-plan-vocabulary.md).
+- Untracked-and-unignored paths at the repo root are forbidden. The `validate:untracked-policy` hook fails if `git ls-files --others --exclude-standard` reports any path. Either commit the file or extend `.gitignore` / `.npmignore`.
 
 ## Build and Test Commands
 
@@ -150,6 +153,7 @@ The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outsid
 - Every C# code sample in docs - inline, fenced, and XML `<code>` blocks - must compile; see [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) and the `DocsSnippetCompilationTests` suite before finishing.
 - Documentation prose must avoid LLM-style filler, marketing adjectives, hedge transitions, and vague quantifiers; see [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md). Run `node scripts/validate-docs-prose.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) before finishing.
 - Subclasses of `MessageAwareComponent` MUST call `base.<method>()` from every guarded lifecycle override (`Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, `RegisterMessageHandlers`); see [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md). Five enforcement layers (Roslyn analyzer DXMSG006-010, IL scanner, Inspector overlay, runtime self-check, meta-test) keep the contract honest.
+- When editing `Runtime/Core/Configuration/DxMessagingRuntimeSettings.cs` or its provider, run `npm run validate:runtime-settings-docs` and update `docs/reference/runtime-settings.md` and `docs/guides/memory-reclamation.md` in the same change; see [Memory Reclamation Documentation Maintenance](./skills/documentation/memory-reclamation-docs.md).
 
 ## Skills to Prefer
 

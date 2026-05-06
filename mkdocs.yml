@@ -177,6 +177,7 @@ nav:
       - Unity Integration: guides/unity-integration.md
       - Testing: guides/testing.md
       - Diagnostics: guides/diagnostics.md
+      - Memory Reclamation: guides/memory-reclamation.md
       - Inspector Overlay & Base-Call Warnings: guides/inspector-overlay.md
       - Advanced Topics: guides/advanced.md
       - Migration Guide: guides/migration-guide.md
@@ -202,6 +203,7 @@ nav:
       - reference/reference.md
       - Quick Reference: reference/quick-reference.md
       - Helpers: reference/helpers.md
+      - Runtime Settings: reference/runtime-settings.md
       - FAQ: reference/faq.md
       - Glossary: reference/glossary.md
       - Troubleshooting: reference/troubleshooting.md

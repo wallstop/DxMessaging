@@ -169,6 +169,41 @@ A **debug feature** that tracks message history and handler statistics. Enable i
 IMessageBus.GlobalDiagnosticsMode = true; // See message history
 ```
 
+## Memory Reclamation Terms
+
+### Idle Eviction
+
+Background reclamation that resets empty per-message-type and per-context
+slots after they have stayed empty for `IdleEvictionSeconds` worth of bus
+activity ticks. Active registrations are never touched. Gated by
+`EvictionEnabled` and `EvictionTickIntervalSeconds`.
+
+### Sweep
+
+A single pass of the reclamation algorithm. A sweep walks dirty-tracked slots
+and pool entries, resets the eligible empty ones, and updates the live
+occupancy counters. Triggered by emit-time sampling, the Unity PlayerLoop
+hook, or an explicit `Trim` call.
+
+### Trim
+
+The public API (`IMessageBus.Trim` / `MessageHandler.TrimAll`) that runs a
+sweep synchronously. With `force: true` it ignores the idle threshold and
+drains shared pools to zero; with `force: false` it uses the same idle
+threshold as scheduled sweeps. Gated by `EnableTrimApi`.
+
+### TrimResult
+
+The struct returned by `Trim`. Its fields (`TypeSlotsEvicted`,
+`TargetSlotsEvicted`, `PooledCollectionsEvicted`, `LiveTypeSlotsRemaining`)
+report how much state the sweep reclaimed and how much remains live.
+
+### Empty Slot
+
+A typed-handler, interceptor, or context slot whose registrations have all
+been deregistered. Empty slots stay around until reclamation runs because a
+freshly empty slot is often about to be reused on the next dispatch.
+
 ## Attributes (Source Generation)
 
 ### [DxUntargetedMessage]

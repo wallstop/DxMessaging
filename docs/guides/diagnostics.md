@@ -294,7 +294,43 @@ Attach `MessagingComponent` to a GameObject. In the Unity Inspector:
 - Set `Log.Enabled = true` in tests to verify registration behavior.
 - Use `Log.Clear()` between test cases to isolate registration tracking.
 
+## Memory diagnostic counters
+
+Three pieces of API expose memory-reclamation state on `IMessageBus`:
+
+- `OccupiedTypeSlots` returns the number of distinct per-message-type slots
+  currently occupied on the bus.
+- `OccupiedTargetSlots` returns the number of distinct target or source
+  context slots currently occupied on the bus.
+- `Trim(bool force = false)` reclaims empty slots and returns a `TrimResult`
+  whose `TypeSlotsEvicted`, `TargetSlotsEvicted`,
+  `PooledCollectionsEvicted`, and `LiveTypeSlotsRemaining` fields describe
+  the work performed. `MessageHandler.TrimAll(force)` is the convenience
+  wrapper for the global bus.
+
+Both counters aggregate on read by walking the per-kind caches; the cost is
+O(n) in the number of distinct message types known to the bus. Snapshot the
+values at region boundaries (start of a scene unload, end of a leak-watching
+scope) rather than polling them every frame.
+
+A typical leak-watching pattern uses these counters together with the
+internal test-suite `LeakWatcher` utility (see
+`Tests/Runtime/TestUtilities/LeakWatcher.cs` for the pattern; users can build
+their own equivalent for production diagnostics):
+
+1. Snapshot `OccupiedTypeSlots` and `OccupiedTargetSlots` at the start of a
+   scoped operation.
+1. Run the operation.
+1. Call `Trim(force: true)` to reset every empty slot.
+1. Compare the post-trim counters against the snapshot. Surviving slots
+   correspond to active registrations.
+
+For the full reclamation model, tuning recommendations, and worked examples,
+see the [Memory Reclamation guide](memory-reclamation.md).
+
 ## Related
 
 - [Listening Patterns](../concepts/listening-patterns.md)
+- [Memory Reclamation](memory-reclamation.md)
+- [Runtime Settings Reference](../reference/runtime-settings.md)
 - [Troubleshooting](../reference/troubleshooting.md)

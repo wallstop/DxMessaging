@@ -18,6 +18,12 @@
 **/*.pdb
 
 # =============================================================================
+# Tooling Output Directories
+# =============================================================================
+.artifacts/
+.artifacts.meta
+
+# =============================================================================
 # SourceGenerator Exclusions
 # =============================================================================
 # Exclude the test project entirely (both folder and .meta file)
@@ -120,6 +126,10 @@ PLAN.md
 PLAN.md.meta
 GH-PAGES-PLAN.md
 GH-PAGES-PLAN.md.meta
+PERF-PLAN.md
+PERF-PLAN.md.meta
+OLD-PLAN.md
+OLD-PLAN.md.meta
 
 # =============================================================================
 # Python Virtual Environment

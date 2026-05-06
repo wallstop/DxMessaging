@@ -695,6 +695,7 @@ public void TestAchievementSystem() {
 - [Unity Integration](docs/guides/unity-integration.md) -- MessagingComponent deep dive
 - [Targeting & Context](docs/concepts/targeting-and-context.md) -- GameObject vs Component
 - [Diagnostics](docs/guides/diagnostics.md) -- Inspector tools and debugging
+- [Memory Reclamation](docs/guides/memory-reclamation.md) -- idle eviction, explicit Trim, and tuning the runtime settings asset
 
 Important: Inheritance with MessageAwareComponent
 

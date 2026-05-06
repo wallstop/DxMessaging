@@ -208,6 +208,58 @@ When to use direct references/events:
 - Private implementation details -> keep internal
 ```
 
+## Memory reclamation in 3.0
+
+DxMessaging 3.0 adds a memory-reclamation subsystem that resets empty
+per-message-type and per-context slots so long-running sessions do not
+retain a slot for every message type or `InstanceId` ever touched. The
+2.x dispatch surface is unchanged; the new pieces are opt-in tuning and
+diagnostics.
+
+### What is new
+
+- **Optional `DxMessagingRuntimeSettings` asset.** A ScriptableObject loaded
+  via `Resources.Load<DxMessagingRuntimeSettings>("DxMessagingRuntimeSettings")`.
+  Use `Assets > Create > Wallstop Studios > DxMessaging > Runtime Settings (in Resources)`
+  to drop the asset under `Assets/Resources/`. Without an asset the runtime
+  hands out a defaulted instance, so the 2.x out-of-the-box behavior is
+  preserved.
+- **New `Trim` and `TrimAll` API.** `IMessageBus.Trim(bool force = false)`
+  and the convenience wrapper `MessageHandler.TrimAll(bool force = false)`
+  reclaim empty slots and pooled collections synchronously. Both return a
+  `TrimResult` reporting how much was reclaimed.
+- **New `OccupiedTypeSlots` and `OccupiedTargetSlots` counters on
+  `IMessageBus`.** Aggregated read-only counters for use in diagnostics and
+  leak-watching tests.
+
+### Backward compatibility
+
+- The defaults match 2.x behavior with no asset present: idle eviction is
+  on with a 30 second threshold, the explicit Trim API is on, pool retention
+  is LRU at 512 entries.
+- No existing dispatch, registration, or interceptor code changes. Active
+  registrations are never reclaimed; the sweep only resets empty slots.
+- The settings asset hot-reloads through `DxMessagingRuntimeSettings.SettingsChanged`.
+  Existing buses re-apply caps without recreation, so editing the asset
+  during Play mode does not invalidate registrations.
+
+### When to adopt
+
+- **Shipped titles or dedicated servers running for hours.** Drop the asset
+  in to bound retained slot memory; tune `IdleEvictionSeconds` and
+  `BufferMaxDistinctEntries` for the workload.
+- **Editor sessions across many scene loads.** Call
+  `MessageHandler.TrimAll(force: true)` at scene unload to keep the
+  occupancy counters honest.
+- **Leak diagnosis.** Snapshot `OccupiedTypeSlots` / `OccupiedTargetSlots`,
+  run the operation, force a trim, then compare. Surviving slots correspond
+  to active registrations.
+
+For tuning, scenario tables, and worked examples, see the
+[Memory Reclamation guide](memory-reclamation.md). For asset parameters,
+defaults, and the full diagnostic API, see the
+[Runtime Settings reference](../reference/runtime-settings.md).
+
 ## Coexistence Patterns
 
 ### Pattern 1: Event-to-Message Bridge

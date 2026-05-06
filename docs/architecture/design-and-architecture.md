@@ -114,6 +114,18 @@ Attributes like `[DxTargetedMessage]` and `[DxBroadcastMessage]` (with source ge
 - Disposal cleans up handlers automatically, preventing leaks.
 - `MessageAwareComponent` wires Unity lifecycles to tokens for safety.
 
+### Memory Reclamation Subsystem
+
+A separate memory-reclamation subsystem bounds the empty per-message-type
+and per-context slots a long-running bus retains, plus the shared
+collection pools `DxPools` and the bus-owned context dictionary use. Idle
+sweeps run on a wall-clock cadence and through a Unity PlayerLoop hook;
+`IMessageBus.Trim` exposes the same sweep synchronously. Active
+registrations are never reclaimed. See the
+[Memory Reclamation guide](../guides/memory-reclamation.md) and
+[Runtime Settings reference](../reference/runtime-settings.md) for the full
+policy, tuning recommendations, and diagnostic counters.
+
 ## The Message Bus
 
 Message flow: Interceptors > Handlers > Post-Processors.

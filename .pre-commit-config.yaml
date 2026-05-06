@@ -234,6 +234,48 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-runtime-settings-docs
+        name: Validate runtime-settings docs are in sync
+        entry: node scripts/validate-runtime-settings-docs.js
+        language: system
+        pass_filenames: false
+        files: '^(Runtime/Core/Configuration/.*\.cs|Runtime/Core/MessageBus/(IMessageBus|MessageHandler)\.cs|Runtime/Core/Pooling/.*\.cs|docs/reference/runtime-settings\.md|docs/guides/memory-reclamation\.md|scripts/validate-runtime-settings-docs\.js|scripts/__tests__/validate-runtime-settings-docs\.test\.js)$'
+        stages:
+          - pre-push
+        description: >-
+          Cross-reference public runtime settings, the Trim and
+          OccupiedTypeSlots surface, and the user-facing docs at
+          docs/reference/runtime-settings.md and docs/guides/memory-reclamation.md.
+          Pre-push only; see .llm/skills/performance/git-hook-performance.md.
+      - id: validate-untracked-policy
+        name: Validate no untracked-and-unignored repo paths
+        entry: node scripts/validate-untracked-policy.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-push
+        description: >-
+          Fail the push when git ls-files --others --exclude-standard reports
+          any untracked-and-unignored path. Either commit the file or extend
+          .gitignore / .npmignore. Pre-push only; see
+          .llm/skills/performance/git-hook-performance.md.
+      - id: validate-no-plan-vocabulary
+        name: Validate shipping content has no PLAN.md vocabulary
+        entry: node scripts/validate-no-plan-vocabulary.js
+        language: system
+        pass_filenames: false
+        files: '^(Runtime/|Editor/|SourceGenerators/|Samples~/|docs/|llms\.txt|[^/]+\.md|scripts/validate-no-plan-vocabulary\.js|scripts/__tests__/validate-no-plan-vocabulary\.test\.js)'
+        stages:
+          - pre-push
+        description: >-
+          Reject PLAN.md / PERF-PLAN.md / OLD-PLAN.md / GH-PAGES-PLAN.md
+          filename references and T0.0 / P0.0-style milestone tags in shipping
+          content. Pre-push only; see
+          .llm/skills/performance/git-hook-performance.md.
+
+  - repo: local
+    hooks:
       # perf-allow[scans-the-world-with-files]: validator reads the entire CHANGELOG.md and git-diff metadata to enforce coverage-by-section; staged argv would not narrow the changelog scan itself
       - id: validate-changelog-policy
         name: Validate changelog policy

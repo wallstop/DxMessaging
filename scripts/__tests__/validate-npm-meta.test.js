@@ -20,6 +20,8 @@ const {
   validateDevelopmentFilesExcluded,
   validateMetaFilesHaveTargets,
   validateFilesHaveMetaFiles,
+  validateNoBuildArtifactsInTarball,
+  validatePublishedFilesArePairedWithMetas,
   validateNpmMeta
 } = require("../validate-npm-meta.js");
 
@@ -115,7 +117,7 @@ describe("validate-npm-meta", () => {
       expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
       expect(spawnSyncSpy).toHaveBeenCalledWith(
         toShellCommand("npm"),
-        ["pack", "--json", "--dry-run"],
+        ["pack", "--json", "--dry-run", "--ignore-scripts"],
         expect.objectContaining({
           cwd: expect.any(String),
           encoding: "utf8",
@@ -587,6 +589,19 @@ describe("validate-npm-meta", () => {
       );
     });
 
+    test("validateNpmMeta should pass against the real npm pack --dry-run output on the current branch", () => {
+      // Integration check: shells out to the real npm pack flow via the script's own
+      // getPackageFiles() and asserts the current branch is clean. This is the live
+      // guardrail that issue #204 (https://github.com/wallstop/DxMessaging/issues/204)
+      // cannot regress without the test failing.
+      jest.spyOn(console, "log").mockImplementation(() => {});
+
+      const result = validateNpmMeta();
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
     test("validateNpmMeta should fail when npm pack includes development-only files", () => {
       jest.spyOn(console, "log").mockImplementation(() => {});
       jest.spyOn(childProcess, "spawnSync").mockReturnValue({
@@ -632,6 +647,336 @@ describe("validate-npm-meta", () => {
             "Development-only file '.unity-test-project/Packages/manifest.json.meta' must not be included in the npm package"
         }
       ]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Issue #204 regression coverage
+  //
+  // GitHub issue #204 (https://github.com/wallstop/DxMessaging/issues/204)
+  // reported `GuidDB::CreateMetaFileMappings` warnings on every Unity asset-database
+  // refresh after installing the npm package. Pre-2.1.8 tarballs shipped
+  // SourceGenerator `bin/Debug/netstandard2.0/...` build outputs and `obj/...` files
+  // whose paths had no `.meta` partner. 2.1.8 patched `.npmignore`. These tests are
+  // the permanent guardrail that #204 cannot regress -- both the bin/obj artifacts
+  // (validateNoBuildArtifactsInTarball) and the missing-meta-pairings symptom
+  // (validatePublishedFilesArePairedWithMetas) are caught.
+  // -------------------------------------------------------------------------
+  describe("issue #204 regression coverage", () => {
+    describe("validateNoBuildArtifactsInTarball", () => {
+      test("rejects Runtime/bin/Foo.dll", () => {
+        const result = validateNoBuildArtifactsInTarball(["Runtime/bin/Foo.dll"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Runtime/bin/Foo.dll");
+        expect(result.errors[0].message).toContain("Issue #204");
+      });
+
+      test("rejects SourceGenerators obj/Debug build outputs", () => {
+        const offending =
+          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/obj/Debug/Foo.cs";
+        const result = validateNoBuildArtifactsInTarball([offending]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe(offending);
+        expect(result.errors[0].message).toContain("Issue #204");
+      });
+
+      test("rejects Editor/Foo.pdb", () => {
+        const result = validateNoBuildArtifactsInTarball(["Editor/Foo.pdb"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Editor/Foo.pdb");
+        expect(result.errors[0].message).toContain("Issue #204");
+      });
+
+      test("rejects Runtime/Foo.tmp", () => {
+        const result = validateNoBuildArtifactsInTarball(["Runtime/Foo.tmp"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Runtime/Foo.tmp");
+      });
+
+      test("rejects Editor/Foo.csproj.user", () => {
+        const result = validateNoBuildArtifactsInTarball(["Editor/Foo.csproj.user"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Editor/Foo.csproj.user");
+      });
+
+      test("rejects Samples~/.vs/foo.txt", () => {
+        const result = validateNoBuildArtifactsInTarball(["Samples~/.vs/foo.txt"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Samples~/.vs/foo.txt");
+      });
+
+      test("rejects Editor/Foo.suo", () => {
+        const result = validateNoBuildArtifactsInTarball(["Editor/Foo.suo"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Editor/Foo.suo");
+      });
+
+      test("rejects com.wallstop-studios.dxmessaging.sln.DotSettings.user", () => {
+        const result = validateNoBuildArtifactsInTarball([
+          "com.wallstop-studios.dxmessaging.sln.DotSettings.user"
+        ]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("com.wallstop-studios.dxmessaging.sln.DotSettings.user");
+      });
+
+      test("accepts a clean Runtime/Foo.cs tarball with no errors", () => {
+        const files = ["Runtime/Foo.cs", "Runtime/Foo.cs.meta", "Runtime.meta"];
+
+        const result = validateNoBuildArtifactsInTarball(files);
+
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+      });
+    });
+
+    describe("validatePublishedFilesArePairedWithMetas", () => {
+      test("reproduces the exact #204 leak: a SourceGenerator bin/Debug AssemblyInfo.cs without its .meta", () => {
+        const offending =
+          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/bin/Debug/netstandard2.0/AssemblyInfo.cs";
+        const files = [
+          "SourceGenerators.meta",
+          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.meta",
+          offending
+        ];
+
+        const metaPairingResult = validatePublishedFilesArePairedWithMetas(files);
+
+        // The validator considers SourceGenerators/.../*.cs Unity-relevant, so the missing
+        // .meta partner is reported. This is the exact symptom that issue #204 surfaced.
+        expect(metaPairingResult.valid).toBe(false);
+        const missingMetaErrors = metaPairingResult.errors.filter(
+          (e) => e.type === "missing-meta-in-tarball"
+        );
+        expect(missingMetaErrors.length).toBeGreaterThan(0);
+        const errorForFile = missingMetaErrors.find((e) => e.file === offending + ".meta");
+        expect(errorForFile).toBeDefined();
+        expect(errorForFile.message).toContain(offending + ".meta");
+        expect(errorForFile.message).toContain("issue #204");
+
+        // Defense in depth: the bin/ artifact validator must also fire on the same path.
+        const buildArtifactResult = validateNoBuildArtifactsInTarball(files);
+        expect(buildArtifactResult.valid).toBe(false);
+        expect(buildArtifactResult.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(buildArtifactResult.errors[0].file).toBe(offending);
+      });
+
+      test("rejects Runtime/Core/Foo.cs and its .meta when the directory meta Runtime/Core.meta is missing", () => {
+        const files = [
+          "Runtime.meta",
+          "Runtime/Core/Foo.cs",
+          "Runtime/Core/Foo.cs.meta"
+          // Missing Runtime/Core.meta
+        ];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(false);
+        const missingDirectoryMeta = result.errors.find((e) => e.file === "Runtime/Core.meta");
+        expect(missingDirectoryMeta).toBeDefined();
+        expect(missingDirectoryMeta.type).toBe("missing-meta-in-tarball");
+        expect(missingDirectoryMeta.message).toContain("Runtime/Core.meta");
+        expect(missingDirectoryMeta.message).toContain("issue #204");
+      });
+
+      test("accepts a canonical clean Runtime/Core/Foo.cs shape with all .meta partners", () => {
+        const files = [
+          "Runtime.meta",
+          "Runtime/Core.meta",
+          "Runtime/Core/Foo.cs",
+          "Runtime/Core/Foo.cs.meta"
+        ];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      test("accepts a Samples~/Demo/Foo.cs shape with all .meta neighbours", () => {
+        // Samples~/ paths ARE Unity-relevant; the Samples~ root itself is hidden by UPM
+        // but its subdirectories still need .meta partners.
+        const files = ["Samples~/Demo.meta", "Samples~/Demo/Foo.cs", "Samples~/Demo/Foo.cs.meta"];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      test("rejects Runtime/Foo.cs without its Runtime/Foo.cs.meta partner", () => {
+        const files = [
+          "Runtime.meta",
+          "Runtime/Foo.cs"
+          // Missing Runtime/Foo.cs.meta
+        ];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(false);
+        const missing = result.errors.find((e) => e.file === "Runtime/Foo.cs.meta");
+        expect(missing).toBeDefined();
+        expect(missing.type).toBe("missing-meta-in-tarball");
+        expect(missing.message).toContain("Runtime/Foo.cs.meta");
+        expect(missing.message).toContain("issue #204");
+      });
+
+      test("rejects ./Runtime/Foo.cs (./-prefixed paths) so leading-dot prefixes do not mask leaks", () => {
+        // npm pack and tar listings occasionally emit `./Runtime/Foo.cs` style entries.
+        // Without normalization, the `startsWith("Runtime/")` check would silently skip
+        // these and miss the regression.
+        const files = ["./Runtime/Foo.cs", "./Runtime.meta"];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(false);
+        const missing = result.errors.find((e) => e.file === "Runtime/Foo.cs.meta");
+        expect(missing).toBeDefined();
+        expect(missing.type).toBe("missing-meta-in-tarball");
+      });
+
+      test("flags SourceGenerators/Directory.Build.props missing its .meta partner", () => {
+        // package.json explicitly ships SourceGenerators/Directory.Build.props.meta as a
+        // Unity-tracked asset. The validator must therefore require the .props file's
+        // .meta partner; otherwise a future drop of the .meta line in package.json would
+        // sail past the validator unnoticed.
+        const files = ["SourceGenerators.meta", "SourceGenerators/Directory.Build.props"];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(false);
+        const missing = result.errors.find(
+          (e) => e.file === "SourceGenerators/Directory.Build.props.meta"
+        );
+        expect(missing).toBeDefined();
+        expect(missing.type).toBe("missing-meta-in-tarball");
+        expect(missing.message).toContain("SourceGenerators/Directory.Build.props.meta");
+        expect(missing.message).toContain("issue #204");
+      });
+
+      test("emits exactly one missing-meta error when the directory walk catches the root meta", () => {
+        // Mi1 regression guard: the explicit rootShippedDirectoryMetas loop was removed
+        // because the per-directory walk already records every ancestor of every shipped
+        // file. Asserting exactly one error here proves there is no double-report.
+        const files = ["Runtime/Core/Foo.cs", "Runtime/Core/Foo.cs.meta"];
+
+        const result = validatePublishedFilesArePairedWithMetas(files);
+
+        expect(result.valid).toBe(false);
+        const runtimeCoreMetaErrors = result.errors.filter((e) => e.file === "Runtime/Core.meta");
+        const runtimeMetaErrors = result.errors.filter((e) => e.file === "Runtime.meta");
+        expect(runtimeCoreMetaErrors).toHaveLength(1);
+        expect(runtimeMetaErrors).toHaveLength(1);
+      });
+    });
+
+    describe("validateNoBuildArtifactsInTarball edge cases", () => {
+      test("rejects JetBrains .idea/ state nested under Runtime/", () => {
+        const result = validateNoBuildArtifactsInTarball(["Runtime/.idea/workspace.xml"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Runtime/.idea/workspace.xml");
+        expect(result.errors[0].message).toContain("JetBrains IDE state");
+      });
+
+      test("rejects a generic .user file via the bare \\.user$ pattern", () => {
+        // The bare `\.user$` pattern is the catch-all for IDE-flavoured per-user files
+        // that do not match a more specific pattern (.csproj.user / .DotSettings.user).
+        const result = validateNoBuildArtifactsInTarball(["Runtime/Foo.user"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Runtime/Foo.user");
+        expect(result.errors[0].message).toContain("per-user IDE settings file");
+      });
+
+      test("rejects a deeply nested bin/ path", () => {
+        const result = validateNoBuildArtifactsInTarball(["Editor/CodeGen/bin/cache.json"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("Editor/CodeGen/bin/cache.json");
+      });
+
+      test("rejects a root-level bin/ path via the ^bin/ branch of the alternation", () => {
+        const result = validateNoBuildArtifactsInTarball(["bin/Foo.dll"]);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].type).toBe("build-artifact-in-tarball");
+        expect(result.errors[0].file).toBe("bin/Foo.dll");
+      });
+
+      test("does not produce false positives on names that merely contain the substrings", () => {
+        // The regexes are word/path-anchored on purpose. A filename containing `bin`,
+        // `obj`, or `user` as part of a longer identifier must NOT match.
+        const files = [
+          "Runtime/AwesomeBin.cs",
+          "Runtime/objective-c-bridge.cs",
+          "Runtime/foo.user.cs"
+        ];
+
+        const result = validateNoBuildArtifactsInTarball(files);
+
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      test("scenario D: bin/ artifact with its .meta still flags the build artifact but not the missing meta", () => {
+        // Defense-in-depth: even if some future package.json change accidentally ships
+        // a .meta partner alongside a bin/ artifact, validateNoBuildArtifactsInTarball
+        // must still reject the artifact while validatePublishedFilesArePairedWithMetas
+        // does not synthesize a meta-pairing complaint (because the meta is present).
+        const files = [
+          "Runtime.meta",
+          "Runtime/bin.meta",
+          "Runtime/bin/Foo.dll",
+          "Runtime/bin/Foo.dll.meta"
+        ];
+
+        const buildArtifactResult = validateNoBuildArtifactsInTarball(files);
+        expect(buildArtifactResult.valid).toBe(false);
+        expect(buildArtifactResult.errors).toHaveLength(2);
+        expect(buildArtifactResult.errors.map((e) => e.file).sort()).toEqual([
+          "Runtime/bin/Foo.dll",
+          "Runtime/bin/Foo.dll.meta"
+        ]);
+
+        const metaPairingResult = validatePublishedFilesArePairedWithMetas(files);
+        // Runtime/bin/Foo.dll IS Unity-relevant (under Runtime/) and HAS its meta sibling,
+        // so the pairing validator stays silent on this scenario.
+        const missingForDll = metaPairingResult.errors.find(
+          (e) => e.file === "Runtime/bin/Foo.dll.meta"
+        );
+        expect(missingForDll).toBeUndefined();
+      });
     });
   });
 });

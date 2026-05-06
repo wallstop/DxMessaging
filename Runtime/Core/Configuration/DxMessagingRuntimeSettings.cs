@@ -13,7 +13,7 @@ namespace DxMessaging.Core.Configuration
     /// out-of-the-box.
     /// </summary>
     /// <remarks>
-    /// To customize, create the asset via <c>Assets &gt; Create &gt; Wallstop &gt;
+    /// To customize, create the asset via <c>Assets &gt; Create &gt; Wallstop Studios &gt;
     /// DxMessaging &gt; Runtime Settings</c> and place it under any
     /// <c>Resources/</c> folder named <c>DxMessagingRuntimeSettings.asset</c>.
     /// Field changes raise <see cref="SettingsChanged"/>; consumers should
@@ -183,7 +183,7 @@ namespace DxMessaging.Core.Configuration
             )
             {
                 Debug.LogWarning(
-                    "[DxMessaging] Runtime settings asset is not under a Resources/ folder; Resources.Load will not find it. Move it under Assets/Resources/ or use the 'Assets/Create/Wallstop/DxMessaging/Runtime Settings (in Resources)' menu.",
+                    "[DxMessaging] Runtime settings asset is not under a Resources/ folder; Resources.Load will not find it. Move it under Assets/Resources/ or use the 'Assets/Create/Wallstop Studios/DxMessaging/Runtime Settings (in Resources)' menu.",
                     this
                 );
             }

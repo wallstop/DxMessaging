@@ -220,17 +220,17 @@ You can run these benchmarks yourself to get results specific to your environmen
 
 | Message Tech                               | Operations / Second | Allocations? |
 | ------------------------------------------ | ------------------- | ------------ |
-| Unity                                      | 2,466,070           | Yes          |
-| DxMessaging (GameObject) - Normal          | 9,955,012           | No           |
-| DxMessaging (Component) - Normal           | 10,025,723          | No           |
-| DxMessaging (GameObject) - No-Copy         | 11,154,213          | No           |
-| DxMessaging (Component) - No-Copy          | 8,462,079           | No           |
-| DxMessaging (Untargeted) - No-Copy         | 16,613,774          | No           |
-| DxMessaging (Untargeted) - Interceptors    | 7,193,011           | No           |
-| DxMessaging (Untargeted) - Post-Processors | 6,519,230           | No           |
-| Reflexive (One Argument)                   | 2,733,126           | No           |
-| Reflexive (Two Arguments)                  | 2,265,041           | No           |
-| Reflexive (Three Arguments)                | 2,292,211           | No           |
+| Unity                                      | 2,568,246           | Yes          |
+| DxMessaging (GameObject) - Normal          | 9,854,653           | No           |
+| DxMessaging (Component) - Normal           | 9,902,081           | No           |
+| DxMessaging (GameObject) - No-Copy         | 11,074,789          | No           |
+| DxMessaging (Component) - No-Copy          | 8,424,722           | No           |
+| DxMessaging (Untargeted) - No-Copy         | 16,976,111          | No           |
+| DxMessaging (Untargeted) - Interceptors    | 7,232,103           | No           |
+| DxMessaging (Untargeted) - Post-Processors | 6,779,454           | No           |
+| Reflexive (One Argument)                   | 2,706,648           | No           |
+| Reflexive (Two Arguments)                  | 2,188,005           | No           |
+| Reflexive (Three Arguments)                | 2,187,457           | No           |
 
 ## macOS
 
@@ -239,3 +239,35 @@ Run the PlayMode benchmarks on macOS to populate this section.
 ## Linux
 
 Run the PlayMode benchmarks on Linux to populate this section.
+
+## Memory footprint and reclamation
+
+Dispatch state is stored per message type and, for targeted and broadcast
+paths, per `InstanceId`. Long-running sessions accumulate slots for every
+type or entity ever touched unless something reclaims them. The memory
+reclamation system caps that growth without changing dispatch semantics or
+allocating during emit.
+
+Reclamation runs on two paths:
+
+- An idle sweep that runs from emit-time clock samples and the Unity
+  PlayerLoop, gated by `DxMessagingRuntimeSettings.EvictionEnabled` and
+  `EvictionTickIntervalSeconds`. Empty slots become eligible only after
+  remaining empty for at least `IdleEvictionSeconds` of wall time.
+- An explicit `IMessageBus.Trim(force)` and `MessageHandler.TrimAll(force)`
+  pair that runs synchronously at scene boundaries, in tests, or in
+  maintenance windows. The master switch `EnableTrimApi` controls whether
+  the explicit calls perform work; idle sweeps remain controlled by
+  `EvictionEnabled` independently.
+
+Active registrations are never reclaimed. Only empty slots and shared pool
+entries are touched. Sweep work runs outside the hot handler loop, so emit
+throughput is unaffected; the per-emit overhead is one branch that samples
+the wall clock.
+
+For tuning recommendations, the public `Trim` and diagnostic-counter API
+surface, and worked examples (scene transitions, leak diagnosis, mobile
+caps, shipped-title configurations), see the
+[Memory Reclamation guide](../guides/memory-reclamation.md). For the
+parameter reference, see the
+[Runtime Settings reference](../reference/runtime-settings.md).
