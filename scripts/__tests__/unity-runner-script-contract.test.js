@@ -87,6 +87,10 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).not.toContain("personal-email");
   });
 
+  test("forwards the perf commit environment into Unity containers", () => {
+    expect(content).toContain("-e DX_PERF_COMMIT");
+  });
+
   test("standalone player run forwards the same assembly and filter controls", () => {
     const standaloneRun = content.slice(content.indexOf("build_standalone_run_cmd_inner"));
     expect(standaloneRun).toContain("-assemblyNames");
@@ -189,6 +193,10 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("UNITY_SERIAL");
     expect(content).not.toContain('-serial ""');
     expect(content).not.toContain("personal-email");
+  });
+
+  test("forwards the perf commit environment into Unity containers", () => {
+    expect(content).toContain("'-e', 'DX_PERF_COMMIT'");
   });
 
   test("standalone player run forwards the same assembly and filter controls", () => {

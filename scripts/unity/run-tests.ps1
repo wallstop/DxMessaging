@@ -531,6 +531,7 @@ $dockerBaseArgs = @(
     '-e', 'UNITY_SERIAL',
     '-e', 'UNITY_EMAIL',
     '-e', 'UNITY_PASSWORD',
+    '-e', 'DX_PERF_COMMIT',
     '-e', "USER_UID=$UserUid",
     '-e', "USER_GID=$UserGid"
 )
