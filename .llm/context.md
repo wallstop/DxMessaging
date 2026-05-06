@@ -44,6 +44,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
 - Pre-commit Node tooling preflight: `npm run preflight:pre-commit`
 - Validate local Node tool dependency health: `npm run validate:node-tooling`
+- Run Unity/devcontainer contract tests: `npm run test:unity-contracts`
 - Run markdown hook parity check: `npm run validate:hook-markdown`
 - Run parser hook suite exactly as pre-push executes it: `pre-commit run --hook-stage pre-push script-parser-tests --all-files`
 - Check package.json format explicitly: `npm run check:package-json-format`
@@ -110,6 +111,7 @@ The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outsid
 - When editing `scripts/validate-npm-meta.js`, `scripts/__tests__/validate-npm-meta.test.js`, or npm package metadata, run `npm run validate:npm-meta` before finishing.
 - When editing `scripts/fix-csharp-underscore-methods.js` or its tests, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/fix-csharp-underscore-methods.test.js` and then `npm run preflight:pre-commit` before finishing.
 - For parser-script failures, verify both isolated and hook-parity execution before concluding root cause: run the focused Jest path first, then run `pre-commit run --hook-stage pre-push script-parser-tests --all-files` from the same shell used for commit operations.
+- For Unity runner or perf-baseline script failures, run `npm run test:unity-contracts` before hook parity checks. On Windows, keep fake command shims platform-native (`.cmd` wrappers for PATH-resolved tools) and verify executable shell entrypoints with `git ls-files --stage` because NTFS mode bits are not the repository contract.
 - When editing `.pre-commit-config.yaml` or `scripts/validate-pre-commit-tooling.js`, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/pre-commit-hook-stage-policy.test.js scripts/__tests__/validate-pre-commit-tooling.test.js` before `npm run preflight:pre-commit`.
 - On Windows, verify `npm --version` in the active shell before running hook-related checks (especially when using nvm/fnm).
 - On Windows hosts, run `npm run preflight:pre-commit` in the same shell you use for `git commit` so hook PATH/init, npm version drift, package.json formatting, and yamllint issues are caught before commit.

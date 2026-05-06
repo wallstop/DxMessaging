@@ -17,6 +17,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const UNITY_SCRIPTS = path.join(REPO_ROOT, "scripts", "unity");
@@ -28,10 +29,16 @@ function readScript(relPath) {
 }
 
 function hasExecutableBit(absPath) {
-  const mode = fs.statSync(absPath).mode;
-  // Any of user/group/other execute bits set is enough; chmod tooling on
-  // contributor machines varies, but git+the CI runner only require one.
-  return (mode & 0o111) !== 0;
+  const relativePath = path.relative(REPO_ROOT, absPath).split(path.sep).join("/");
+  const result = childProcess.spawnSync("git", ["ls-files", "--stage", "--", relativePath], {
+    cwd: REPO_ROOT,
+    encoding: "utf8"
+  });
+
+  expect(result.status).toBe(0);
+  const [mode] = result.stdout.trim().split(/\s+/, 1);
+  expect(mode).toBe("100755");
+  return true;
 }
 
 describe("scripts/unity/run-tests.sh contract", () => {
@@ -127,9 +134,7 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).toContain("trap cleanup_ownership EXIT");
     expect(content).toContain("UNITY_LIBRARY_CACHE_SOURCE=");
     expect(content).toContain("dxm-unity-library-%s-%s");
-    expect(content).toContain(
-      'chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true'
-    );
+    expect(content).toContain('chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true');
     expect(content).toContain('baseline_path="${DX_PERF_BASELINE}"');
     expect(content).toContain('baseline_path="/workspace/${baseline_path}"');
     expect(content).toContain('chown "${USER_UID}:${USER_GID}" "${baseline_path}"');
@@ -272,9 +277,7 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("trap cleanup_ownership EXIT");
     expect(content).toContain("$UnityLibraryCacheSource");
     expect(content).toContain("dxm-unity-library-$ImageTag-$Platform");
-    expect(content).toContain(
-      'chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true'
-    );
+    expect(content).toContain('chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true');
     expect(content).toContain('baseline_path="${DX_PERF_BASELINE}"');
     expect(content).toContain('baseline_path="/workspace/${baseline_path}"');
     expect(content).toContain('chown "${USER_UID}:${USER_GID}" "${baseline_path}"');

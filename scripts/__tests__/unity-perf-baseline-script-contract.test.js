@@ -39,21 +39,68 @@ function makeTempToolDir() {
   const pwshMarker = path.join(tempRoot, "fake-pwsh.json");
   const nodeMarker = path.join(tempRoot, "fake-node.json");
 
-  const fakePwsh = [
-    "#!/usr/bin/env bash",
-    "set -euo pipefail",
-    'printf \'{"commit":%s,"baseline":%s,"mode":%s}\\n\' "$("$FAKE_REAL_NODE" -e \'process.stdout.write(JSON.stringify(process.env.DX_PERF_COMMIT || \"\"))\')" "$("$FAKE_REAL_NODE" -e \'process.stdout.write(JSON.stringify(process.env.DX_PERF_BASELINE || \"\"))\')" "$("$FAKE_REAL_NODE" -e \'process.stdout.write(JSON.stringify(process.env.DX_PERF_BASELINE_MODE || \"\"))\')" > "$FAKE_PWSH_MARKER"',
-    'if [[ "${FAKE_SKIP_BASELINE:-0}" != "1" && -n "${DX_PERF_BASELINE:-}" && ! -f "$DX_PERF_BASELINE" ]]; then mkdir -p "$(dirname "$DX_PERF_BASELINE")"; printf "%s\\n" "scenario,platform,commit,runIndex,emitsPerSecond,allocatedBytesDelta,wallClockMs" > "$DX_PERF_BASELINE"; fi',
-    'printf "%s\\n" "fake unity stdout for $DX_PERF_COMMIT"',
-    'printf "%s\\n" "fake unity stderr for $DX_PERF_COMMIT" >&2',
-    'exit "${FAKE_PWSH_EXIT:-0}"',
+  const fakePwshJs = [
+    '"use strict";',
+    'const fs = require("fs");',
+    'const path = require("path");',
+    "const marker = {",
+    '  commit: process.env.DX_PERF_COMMIT || "",',
+    '  baseline: process.env.DX_PERF_BASELINE || "",',
+    '  mode: process.env.DX_PERF_BASELINE_MODE || ""',
+    "};",
+    "fs.writeFileSync(process.env.FAKE_PWSH_MARKER, `${JSON.stringify(marker)}\\n`);",
+    'if (process.env.FAKE_SKIP_BASELINE !== "1" && marker.baseline) {',
+    "  const baselinePath = path.resolve(process.cwd(), marker.baseline);",
+    "  fs.mkdirSync(path.dirname(baselinePath), { recursive: true });",
+    "  fs.writeFileSync(",
+    "    baselinePath,",
+    '    "scenario,platform,commit,runIndex,emitsPerSecond,allocatedBytesDelta,wallClockMs\\n"',
+    "  );",
+    "}",
+    "process.stdout.write(`fake unity stdout for ${marker.commit}\\n`);",
+    "process.stderr.write(`fake unity stderr for ${marker.commit}\\n`);",
+    'process.exit(Number.parseInt(process.env.FAKE_PWSH_EXIT || "0", 10));',
     ""
   ].join("\n");
 
-  const fakeNode = ["#!/usr/bin/env bash", "set -euo pipefail", "exit 99", ""].join("\n");
+  const fakePwshSh = [
+    "#!/usr/bin/env sh",
+    "set -eu",
+    'exec "$FAKE_REAL_NODE" "$(dirname "$0")/fake-pwsh.js"',
+    ""
+  ].join("\n");
 
-  fs.writeFileSync(path.join(binDir, "pwsh"), fakePwsh, { mode: 0o755 });
-  fs.writeFileSync(path.join(binDir, "node"), fakeNode, { mode: 0o755 });
+  const fakePwshCmd = [
+    "@echo off",
+    '"%FAKE_REAL_NODE%" "%~dp0fake-pwsh.js"',
+    "exit /b %ERRORLEVEL%",
+    ""
+  ].join("\r\n");
+
+  const fakeNodeJs = [
+    '"use strict";',
+    "require('fs').writeFileSync(process.env.FAKE_NODE_MARKER, 'invoked\\n');",
+    "process.exit(99);",
+    ""
+  ].join("\n");
+  const fakeNodeSh = [
+    "#!/usr/bin/env sh",
+    'exec "$FAKE_REAL_NODE" "$(dirname "$0")/fake-node.js"',
+    ""
+  ].join("\n");
+  const fakeNodeCmd = [
+    "@echo off",
+    '"%FAKE_REAL_NODE%" "%~dp0fake-node.js"',
+    "exit /b %ERRORLEVEL%",
+    ""
+  ].join("\r\n");
+
+  fs.writeFileSync(path.join(binDir, "fake-pwsh.js"), fakePwshJs);
+  fs.writeFileSync(path.join(binDir, "fake-node.js"), fakeNodeJs);
+  fs.writeFileSync(path.join(binDir, "pwsh"), fakePwshSh, { mode: 0o755 });
+  fs.writeFileSync(path.join(binDir, "pwsh.cmd"), fakePwshCmd);
+  fs.writeFileSync(path.join(binDir, "node"), fakeNodeSh, { mode: 0o755 });
+  fs.writeFileSync(path.join(binDir, "node.cmd"), fakeNodeCmd);
 
   return { tempRoot, binDir, pwshMarker, nodeMarker };
 }
@@ -68,7 +115,8 @@ function runCapture(args, tools, extraEnv = {}) {
       FAKE_NODE_MARKER: tools.nodeMarker,
       FAKE_PWSH_MARKER: tools.pwshMarker,
       FAKE_REAL_NODE: process.execPath,
-      PATH: `${tools.binDir}${path.delimiter}${process.env.PATH}`
+      PATH: `${tools.binDir}${path.delimiter}${process.env.PATH}`,
+      PATHEXT: process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD"
     }
   });
 }
@@ -123,7 +171,9 @@ describe("scripts/unity/capture-perf-baseline.ps1 contract", () => {
     expect(content).toContain("$BaselinePathForUnity = ConvertTo-RepoRelativePath $Output");
     expect(content).toContain("[System.IO.Path]::IsPathRooted($relativePath)");
     expect(content).toContain("[System.IO.Path]::GetFullPath($Path, $RepoRoot)");
-    expect(content).toContain("$BaselineDisplayPath = [System.IO.Path]::GetFullPath($Output, $RepoRoot)");
+    expect(content).toContain(
+      "$BaselineDisplayPath = [System.IO.Path]::GetFullPath($Output, $RepoRoot)"
+    );
     expect(content).toContain("$baselineTimestampBeforeRun");
     expect(content).toContain("$baselineTimestampAfterRun -le $baselineTimestampBeforeRun");
     expect(content).toContain("did not write baseline CSV");
