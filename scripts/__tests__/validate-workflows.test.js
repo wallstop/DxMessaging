@@ -21,6 +21,7 @@ const {
   findLockfileInstallViolations,
   detectBashSyntaxPattern,
   findWindowsBashPortabilityViolations,
+  findChangelogCoverageCheckoutViolations,
   validateWorkflow
 } = require("../validate-workflows.js");
 
@@ -696,6 +697,181 @@ describe("validateWorkflow newline handling", () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("findChangelogCoverageCheckoutViolations", () => {
+  test.each([
+    ["direct changelog validator", "node scripts/validate-changelog.js --check-coverage"],
+    ["pre-commit changelog policy hook", "pre-commit run validate-changelog-policy --all-files"],
+    ["npm coverage script", "npm run validate:changelog:coverage"],
+    ["npm preflight script", "npm run preflight:pre-commit"],
+    ["npm full validation script", "npm run validate:all"]
+  ])("requires full-history checkout for %s", (_name, coverageCommand) => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Checkout repository",
+      "        uses: actions/checkout@v6",
+      "        with:",
+      "          persist-credentials: false",
+      "      - name: Validate changelog coverage",
+      `        run: ${coverageCommand}`
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toEqual(
+      expect.objectContaining({
+        file: "workflow.yml",
+        line: 10,
+        pattern: coverageCommand,
+        severity: "error"
+      })
+    );
+    expect(violations[0].message).toContain("fetch-depth: 0");
+  });
+
+  test.each([
+    ["unquoted zero", "          fetch-depth: 0"],
+    ["quoted zero", '          fetch-depth: "0"']
+  ])("allows full-history checkout with %s", (_name, fetchDepthLine) => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Checkout repository",
+      "        uses: actions/checkout@v6",
+      "        with:",
+      fetchDepthLine,
+      "          persist-credentials: false",
+      "      - name: Validate changelog coverage",
+      "        run: pre-commit run validate-changelog-policy --all-files"
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(0);
+  });
+
+  test("allows shorthand full-history checkout before changelog coverage", () => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - uses: actions/checkout@v6",
+      "        with:",
+      "          fetch-depth: 0",
+      "      - name: Validate changelog coverage",
+      "        run: node scripts/validate-changelog.js --check-coverage"
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(0);
+  });
+
+  test.each([
+    [
+      "folded run block",
+      [
+        "      - name: Validate changelog coverage",
+        "        run: >-",
+        "          node scripts/validate-changelog.js",
+        "          --check-coverage"
+      ]
+    ],
+    [
+      "literal run block",
+      [
+        "      - name: Validate changelog coverage",
+        "        run: |",
+        "          pre-commit run",
+        "          validate-changelog-policy --all-files"
+      ]
+    ]
+  ])("detects changelog coverage in %s", (_name, runStepLines) => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Checkout repository",
+      "        uses: actions/checkout@v6",
+      "      - name: Other step",
+      "        run: echo before",
+      ...runStepLines
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("preceding full-history checkout");
+  });
+
+  test("requires the full-history checkout to precede changelog coverage", () => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Validate changelog coverage",
+      "        run: node scripts/validate-changelog.js --check-coverage",
+      "      - name: Checkout repository",
+      "        uses: actions/checkout@v6",
+      "        with:",
+      "          fetch-depth: 0"
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(1);
+  });
+
+  test("uses the most recent checkout before changelog coverage", () => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Full checkout",
+      "        uses: actions/checkout@v6",
+      "        with:",
+      "          fetch-depth: 0",
+      "      - name: Later shallow checkout",
+      "        uses: actions/checkout@v6",
+      "      - name: Validate changelog coverage",
+      "        run: node scripts/validate-changelog.js --check-coverage"
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(1);
+  });
+
+  test("shorthand shallow checkout after full checkout invalidates changelog coverage", () => {
+    const lines = [
+      "jobs:",
+      "  changelog:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Full checkout",
+      "        uses: actions/checkout@v6",
+      "        with:",
+      "          fetch-depth: 0",
+      "      - uses: actions/checkout@v6",
+      "      - name: Validate changelog coverage",
+      "        run: node scripts/validate-changelog.js --check-coverage"
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+
+    expect(violations).toHaveLength(1);
   });
 });
 

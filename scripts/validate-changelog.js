@@ -618,6 +618,48 @@ function parseChangedFilesOutput(commandOutput) {
     .filter(Boolean);
 }
 
+function parseChangedFilesStatusOutput(commandOutput) {
+  const text = String(commandOutput || "");
+  if (text.includes("\0")) {
+    const fields = text.split("\0").filter((field) => field.length > 0);
+    const files = [];
+
+    for (let index = 0; index < fields.length; index++) {
+      const status = fields[index];
+      const statusCode = status[0];
+
+      if (statusCode === "R" || statusCode === "C") {
+        files.push(normalizeRepoPath(fields[index + 1]));
+        files.push(normalizeRepoPath(fields[index + 2]));
+        index += 2;
+        continue;
+      }
+
+      files.push(normalizeRepoPath(fields[index + 1]));
+      index++;
+    }
+
+    return files.filter(Boolean);
+  }
+
+  return normalizeToLf(text)
+    .split("\n")
+    .flatMap((line) => {
+      const fields = line.split("\t").filter((field) => field.length > 0);
+      if (fields.length < 2) {
+        return [];
+      }
+
+      const statusCode = fields[0][0];
+      if (statusCode === "R" || statusCode === "C") {
+        return [normalizeRepoPath(fields[1]), normalizeRepoPath(fields[2])];
+      }
+
+      return [normalizeRepoPath(fields[1])];
+    })
+    .filter(Boolean);
+}
+
 function formatGitFailure(error) {
   if (!error) {
     return "unknown failure";
@@ -635,21 +677,19 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
   const attemptedSources = [];
   const failures = [];
 
-  const runGit = (source, args) => {
+  const runGit = (source, args, parseOutput = parseChangedFilesOutput) => {
     attemptedSources.push(source);
 
     try {
-      const files = parseChangedFilesOutput(
-        execFileSyncImpl("git", args, {
+      const output = execFileSyncImpl("git", args, {
           cwd: REPO_ROOT,
           encoding: "utf8",
           stdio: ["ignore", "pipe", "pipe"]
-        })
-      );
+        });
 
       return {
         ok: true,
-        files
+        files: parseOutput(output)
       };
     } catch (error) {
       failures.push({
@@ -683,7 +723,10 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
     return merged;
   };
 
-  const staged = runGit("staged", ["diff", "-M", "--name-only", "--cached"]);
+  const runGitStatus = (source, args) =>
+    runGit(source, ["diff", "-z", "--name-status", "-M", ...args], parseChangedFilesStatusOutput);
+
+  const staged = runGitStatus("staged", ["--cached"]);
   if (!staged.ok) {
     return {
       files: [],
@@ -693,22 +736,14 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
     };
   }
 
-  if (staged.ok && staged.files.length > 0) {
-    return {
-      files: staged.files,
-      source: "staged",
-      attemptedSources,
-      failures
-    };
-  }
-
   const isCiEnvironment =
     String(env.CI || "").toLowerCase() === "true" || String(env.GITHUB_ACTIONS || "") === "true";
 
   if (!isCiEnvironment) {
-    const unstaged = runGit("unstaged", ["diff", "-M", "--name-only"]);
+    const unstaged = runGitStatus("unstaged", []);
     const untracked = runGit("untracked", ["ls-files", "--others", "--exclude-standard"]);
     const files = mergeUniquePaths(
+      staged.files,
       unstaged.ok ? unstaged.files : [],
       untracked.ok ? untracked.files : []
     );
@@ -729,13 +764,22 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
     };
   }
 
+  if (staged.files.length > 0) {
+    return {
+      files: staged.files,
+      source: "staged",
+      attemptedSources,
+      failures
+    };
+  }
+
   if (
     env.GITHUB_EVENT_NAME === "pull_request" &&
     typeof env.GITHUB_BASE_REF === "string" &&
     env.GITHUB_BASE_REF.length > 0
   ) {
     const baseRef = `origin/${env.GITHUB_BASE_REF}`;
-    const pr = runGit("pull-request", ["diff", "-M", "--name-only", `${baseRef}...HEAD`]);
+    const pr = runGitStatus("pull-request", [`${baseRef}...HEAD`]);
     if (pr.ok) {
       return {
         files: pr.files,
@@ -759,7 +803,7 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
     env.GITHUB_EVENT_BEFORE &&
     !/^0+$/.test(env.GITHUB_EVENT_BEFORE)
   ) {
-    const push = runGit("push", ["diff", "-M", "--name-only", `${env.GITHUB_EVENT_BEFORE}...HEAD`]);
+    const push = runGitStatus("push", [`${env.GITHUB_EVENT_BEFORE}...HEAD`]);
     if (push.ok) {
       return {
         files: push.files,
@@ -777,7 +821,7 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
     };
   }
 
-  const fallback = runGit("head-fallback", ["diff", "-M", "--name-only", "HEAD~1...HEAD"]);
+  const fallback = runGitStatus("head-fallback", ["HEAD~1...HEAD"]);
   return {
     files: fallback.ok ? fallback.files : [],
     source: fallback.ok
@@ -1020,6 +1064,7 @@ module.exports = {
   validateHeuristicRules,
   isLikelyUserVisiblePath,
   parseChangedFilesOutput,
+  parseChangedFilesStatusOutput,
   getChangedFilesFromGitDetails,
   getChangedFilesFromGit,
   validateChangedFilesDiscovery,

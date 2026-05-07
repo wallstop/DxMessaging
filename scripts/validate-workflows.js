@@ -702,6 +702,19 @@ function extractStepShell(lines, stepStartIndex, stepEndIndex) {
     return null;
 }
 
+function extractStepUses(lines, stepStartIndex, stepEndIndex) {
+    for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+        const line = lines[i];
+        const usesMatch = /^\s*(?:-\s+)?uses:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/i.exec(line);
+
+        if (usesMatch) {
+            return usesMatch[1].toLowerCase();
+        }
+    }
+
+    return null;
+}
+
 function extractJobSteps(lines, job) {
     const steps = [];
     const startIndex = job.startLine - 1;
@@ -767,7 +780,10 @@ function extractJobSteps(lines, job) {
 
         const run = extractStepRun(lines, stepStartIndex, stepEndIndex);
         steps.push({
+            startIndex: stepStartIndex,
+            endIndex: stepEndIndex,
             shell: extractStepShell(lines, stepStartIndex, stepEndIndex),
+            uses: extractStepUses(lines, stepStartIndex, stepEndIndex),
             run,
         });
 
@@ -878,6 +894,76 @@ function findWindowsBashPortabilityViolations(relativePath, lines) {
     return violations;
 }
 
+function runTextInvokesChangelogCoverage(runText) {
+    if (typeof runText !== "string" || runText.trim().length === 0) {
+        return false;
+    }
+
+    return (
+        /validate-changelog\.js\b[\s\S]*--check-coverage/.test(runText)
+        || /pre-commit\s+run\b[\s\S]*\bvalidate-changelog-policy\b/.test(runText)
+        || /npm\s+run\s+(?:validate:changelog:coverage|preflight:pre-commit|validate:all)\b/.test(runText)
+    );
+}
+
+function stepHasFullHistoryCheckout(lines, step) {
+    if (!step || typeof step.uses !== "string" || !step.uses.startsWith("actions/checkout@")) {
+        return false;
+    }
+
+    for (let i = step.startIndex; i <= step.endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (/^fetch-depth:\s*["']?0["']?\s*(?:#.*)?$/.test(trimmed)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function findChangelogCoverageCheckoutViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+
+    for (const job of jobs) {
+        const steps = extractJobSteps(lines, job);
+        let latestCheckoutHasFullHistory = false;
+
+        for (const step of steps) {
+            if (typeof step.uses === "string" && step.uses.startsWith("actions/checkout@")) {
+                latestCheckoutHasFullHistory = stepHasFullHistoryCheckout(lines, step);
+                continue;
+            }
+
+            if (!step.run || !runTextInvokesChangelogCoverage(step.run.text)) {
+                continue;
+            }
+
+            if (latestCheckoutHasFullHistory) {
+                continue;
+            }
+
+            violations.push(
+                new Violation(
+                    relativePath,
+                    step.run.line,
+                    step.run.text,
+                    `Workflow job '${job.id}' runs changelog coverage without a preceding full-history checkout. Set actions/checkout fetch-depth: 0 so origin/<base> refs are available for changed-file discovery.`,
+                    "error"
+                )
+            );
+        }
+    }
+
+    return violations;
+}
+
 /**
  * Validates a single workflow file.
  *
@@ -956,6 +1042,10 @@ function validateWorkflow(filePath, options = {}) {
 
         violations.push(
             ...findWindowsBashPortabilityViolations(relativePath, lines)
+        );
+
+        violations.push(
+            ...findChangelogCoverageCheckoutViolations(relativePath, lines)
         );
     } catch (error) {
         violations.push(
@@ -1062,6 +1152,9 @@ if (typeof module !== 'undefined' && module.exports) {
         extractJobSteps,
         detectBashSyntaxPattern,
         findWindowsBashPortabilityViolations,
+        runTextInvokesChangelogCoverage,
+        stepHasFullHistoryCheckout,
+        findChangelogCoverageCheckoutViolations,
         validateWorkflow,
         Violation,
     };

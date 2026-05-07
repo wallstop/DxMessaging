@@ -18,6 +18,7 @@ const {
   validateHeuristicRules,
   isLikelyUserVisiblePath,
   parseChangedFilesOutput,
+  parseChangedFilesStatusOutput,
   getChangedFilesFromGitDetails,
   getChangedFilesFromGit,
   validateChangedFilesDiscovery,
@@ -333,29 +334,58 @@ describe("validate-changelog", () => {
       ]);
     });
 
-    test("prefers staged files when staged changes exist", () => {
+    test.each([
+      [
+        "line-delimited rename status",
+        "R100\tRuntime/Core/Old.cs\tscripts/Old.cs\nD\tRuntime/Core/Deleted.cs\n",
+        ["Runtime/Core/Old.cs", "scripts/Old.cs", "Runtime/Core/Deleted.cs"]
+      ],
+      [
+        "NUL-delimited rename status",
+        "R100\0docs/Old.md\0Runtime/Core/New.cs\0M\0Editor\\CustomEditors\\View.cs\0",
+        ["docs/Old.md", "Runtime/Core/New.cs", "Editor/CustomEditors/View.cs"]
+      ]
+    ])("parses %s", (_name, output, expected) => {
+      expect(parseChangedFilesStatusOutput(output)).toEqual(expected);
+    });
+
+    test("merges staged, unstaged, and untracked files outside CI", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
-        if (args.join(" ") === "diff -M --name-only --cached") {
-          return "Runtime/Core/MessageBus.cs\n";
+        const joined = args.join(" ");
+
+        if (joined === "diff -z --name-status -M --cached") {
+          return "M\tRuntime/Core/MessageBus.cs\n";
         }
 
-        throw new Error(`Unexpected git command: ${args.join(" ")}`);
+        if (joined === "diff -z --name-status -M") {
+          return "M\tEditor/CustomEditors/MessagingComponentEditor.cs\n";
+        }
+
+        if (joined === "ls-files --others --exclude-standard") {
+          return "Samples~/BasicUsage/NewSample.cs\n";
+        }
+
+        throw new Error(`Unexpected git command: ${joined}`);
       });
 
       const result = getChangedFilesFromGit(execFileSyncMock, {});
-      expect(result).toEqual(["Runtime/Core/MessageBus.cs"]);
+      expect(result).toEqual([
+        "Runtime/Core/MessageBus.cs",
+        "Editor/CustomEditors/MessagingComponentEditor.cs",
+        "Samples~/BasicUsage/NewSample.cs"
+      ]);
     });
 
     test("uses local unstaged and untracked files outside CI when no staged changes exist", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const joined = args.join(" ");
 
-        if (joined === "diff -M --name-only --cached") {
+        if (joined === "diff -z --name-status -M --cached") {
           return "";
         }
 
-        if (joined === "diff -M --name-only") {
-          return "Runtime/Core/MessageBus.cs\nEditor/CustomEditors/MessagingComponentEditor.cs\n";
+        if (joined === "diff -z --name-status -M") {
+          return "M\tRuntime/Core/MessageBus.cs\nM\tEditor/CustomEditors/MessagingComponentEditor.cs\n";
         }
 
         if (joined === "ls-files --others --exclude-standard") {
@@ -377,12 +407,12 @@ describe("validate-changelog", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const joined = args.join(" ");
 
-        if (joined === "diff -M --name-only --cached") {
+        if (joined === "diff -z --name-status -M --cached") {
           return "";
         }
 
-        if (joined === "diff -M --name-only origin/main...HEAD") {
-          return "Runtime/Core/RenamedMessageBus.cs\n";
+        if (joined === "diff -z --name-status -M origin/main...HEAD") {
+          return "M\tRuntime/Core/RenamedMessageBus.cs\n";
         }
 
         throw new Error(`Unexpected git command: ${joined}`);
@@ -407,7 +437,7 @@ describe("validate-changelog", () => {
           GITHUB_EVENT_NAME: "pull_request",
           GITHUB_BASE_REF: "main"
         },
-        "diff -M --name-only origin/main...HEAD",
+        "diff -z --name-status -M origin/main...HEAD",
         "pull-request"
       ],
       [
@@ -418,7 +448,7 @@ describe("validate-changelog", () => {
           GITHUB_EVENT_NAME: "push",
           GITHUB_EVENT_BEFORE: "abc123"
         },
-        "diff -M --name-only abc123...HEAD",
+        "diff -z --name-status -M abc123...HEAD",
         "push"
       ],
       [
@@ -428,19 +458,19 @@ describe("validate-changelog", () => {
           GITHUB_ACTIONS: "true",
           GITHUB_EVENT_NAME: "workflow_dispatch"
         },
-        "diff -M --name-only HEAD~1...HEAD",
+        "diff -z --name-status -M HEAD~1...HEAD",
         "head-fallback"
       ]
     ])("reports %s changed-file source diagnostics", (_name, env, expectedCommand, source) => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const joined = args.join(" ");
 
-        if (joined === "diff -M --name-only --cached") {
+        if (joined === "diff -z --name-status -M --cached") {
           return "";
         }
 
         if (joined === expectedCommand) {
-          return "Runtime/Core/MessageBus.cs\n";
+          return "M\tRuntime/Core/MessageBus.cs\n";
         }
 
         throw new Error(`Unexpected git command: ${joined}`);
@@ -463,7 +493,7 @@ describe("validate-changelog", () => {
           GITHUB_EVENT_NAME: "pull_request",
           GITHUB_BASE_REF: "main"
         },
-        "diff -M --name-only origin/main...HEAD",
+        "diff -z --name-status -M origin/main...HEAD",
         "pull-request-empty"
       ],
       [
@@ -474,7 +504,7 @@ describe("validate-changelog", () => {
           GITHUB_EVENT_NAME: "push",
           GITHUB_EVENT_BEFORE: "abc123"
         },
-        "diff -M --name-only abc123...HEAD",
+        "diff -z --name-status -M abc123...HEAD",
         "push-empty"
       ]
     ])(
@@ -483,7 +513,7 @@ describe("validate-changelog", () => {
         const execFileSyncMock = jest.fn((_command, args) => {
           const joined = args.join(" ");
 
-          if (joined === "diff -M --name-only --cached" || joined === expectedCommand) {
+          if (joined === "diff -z --name-status -M --cached" || joined === expectedCommand) {
             return "";
           }
 
@@ -509,7 +539,7 @@ describe("validate-changelog", () => {
           GITHUB_EVENT_NAME: "pull_request",
           GITHUB_BASE_REF: "main"
         },
-        "diff -M --name-only origin/main...HEAD",
+        "diff -z --name-status -M origin/main...HEAD",
         "pull-request"
       ],
       [
@@ -520,7 +550,7 @@ describe("validate-changelog", () => {
           GITHUB_EVENT_NAME: "push",
           GITHUB_EVENT_BEFORE: "abc123"
         },
-        "diff -M --name-only abc123...HEAD",
+        "diff -z --name-status -M abc123...HEAD",
         "push"
       ]
     ])(
@@ -529,7 +559,7 @@ describe("validate-changelog", () => {
         const execFileSyncMock = jest.fn((_command, args) => {
           const joined = args.join(" ");
 
-          if (joined === "diff -M --name-only --cached") {
+          if (joined === "diff -z --name-status -M --cached") {
             return "";
           }
 
@@ -553,7 +583,7 @@ describe("validate-changelog", () => {
           })
         );
         expect(errors).toHaveLength(1);
-        expect(errors[0].suggestion).toContain(`${source}: git diff -M --name-only`);
+        expect(errors[0].suggestion).toContain(`${source}: git diff -z --name-status -M`);
       }
     );
 
@@ -582,12 +612,12 @@ describe("validate-changelog", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const joined = args.join(" ");
 
-        if (joined === "diff -M --name-only --cached") {
+        if (joined === "diff -z --name-status -M --cached") {
           return "";
         }
 
-        if (joined === "diff -M --name-only") {
-          return "Runtime/Core/MessageBus.cs\n";
+        if (joined === "diff -z --name-status -M") {
+          return "M\tRuntime/Core/MessageBus.cs\n";
         }
 
         const error = new Error("untracked discovery failed");
@@ -609,7 +639,7 @@ describe("validate-changelog", () => {
       expect(errors[0].suggestion).toContain("untracked: git ls-files");
     });
 
-    test("reports Git discovery failures when CI changed-file sources are unavailable", () => {
+    test("reports staged Git discovery failures before CI changed-file discovery", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const error = new Error(`failed ${args.join(" ")}`);
         error.stderr = "fatal: bad revision\n";
@@ -638,7 +668,40 @@ describe("validate-changelog", () => {
           severity: "ERROR"
         })
       );
-      expect(errors[0].suggestion).toContain("staged: git diff -M --name-only --cached");
+      expect(errors[0].suggestion).toContain("staged: git diff -z --name-status -M --cached");
+    });
+
+    test("reports PR Git discovery failures when the base ref is unavailable", () => {
+      const execFileSyncMock = jest.fn((_command, args) => {
+        const joined = args.join(" ");
+
+        if (joined === "diff -z --name-status -M --cached") {
+          return "";
+        }
+
+        const error = new Error(`failed ${joined}`);
+        error.stderr = "fatal: ambiguous argument 'origin/main...HEAD'\n";
+        throw error;
+      });
+
+      const details = getChangedFilesFromGitDetails(execFileSyncMock, {
+        CI: "true",
+        GITHUB_ACTIONS: "true",
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_BASE_REF: "main"
+      });
+      const errors = validateChangedFilesDiscovery(details);
+
+      expect(details).toEqual(
+        expect.objectContaining({
+          files: [],
+          source: "unavailable",
+          attemptedSources: ["staged", "pull-request"]
+        })
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0].suggestion).toContain("pull-request: git diff -z --name-status -M");
+      expect(errors[0].suggestion).toContain("ambiguous argument");
     });
 
     test("fails coverage when user-visible files changed without changelog", () => {
@@ -678,6 +741,17 @@ describe("validate-changelog", () => {
 
       expect(errors).toHaveLength(1);
       expect(errors[0].code).toBe("E004");
+    });
+
+    test("fails coverage when a rename removes a user-visible runtime path", () => {
+      const changedFiles = parseChangedFilesStatusOutput(
+        "R100\tRuntime/Core/LegacyMessage.cs\tscripts/LegacyMessage.cs\n"
+      );
+      const errors = validateCoverageRule(changedFiles);
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0].code).toBe("E004");
+      expect(errors[0].suggestion).toContain("Runtime/Core/LegacyMessage.cs");
     });
   });
 
