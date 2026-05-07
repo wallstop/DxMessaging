@@ -48,9 +48,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run cspell
-        uses: streetsidesoftware/cspell-action@v8
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
-          strict: true
-          config: '.cspell.json'
-          incremental_files_only: true
+          node-version: "22.18.0"
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Run cspell
+        run: npx --yes cspell@10.0.0 --no-progress --no-summary .

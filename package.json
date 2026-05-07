@@ -69,7 +69,7 @@
     "format:yaml:check": "node scripts/run-managed-prettier.js --check \"**/*.{yml,yaml}\"",
     "check:package-json-format": "node scripts/run-managed-prettier.js --check package.json",
     "check:prettier:hooks": "node scripts/run-managed-prettier.js --check \"**/*.{md,markdown,json,asmdef,asmref,yml,yaml}\"",
-    "check:cspell:scripts": "npx --yes cspell@9 --no-progress --no-summary \"scripts/**/*.js\"",
+    "check:cspell:scripts": "npx --yes cspell@10.0.0 --no-progress --no-summary \"scripts/**/*.js\"",
     "check:yaml": "npm run format:yaml:check && pre-commit run yamllint --all-files",
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\"",
     "update:llms-txt": "node scripts/update-llms-txt.js",
@@ -90,9 +90,9 @@
     "prepack": "node scripts/validate-npm-meta.js --check"
   },
   "devDependencies": {
-    "cspell": "9.3.0",
+    "cspell": "10.0.0",
     "jest": "^30.3.0",
-    "markdownlint-cli2": "0.17.1",
+    "markdownlint-cli2": "0.22.1",
     "prettier": "3.8.3"
   },
   "samples": [

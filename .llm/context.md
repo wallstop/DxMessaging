@@ -54,7 +54,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate changelog structure plus changed-file coverage: `npm run validate:changelog:coverage`
 - Check C# method naming (no underscores): `node scripts/fix-csharp-underscore-methods.js --check --all`
 - Auto-fix C# method naming on selected files: `node scripts/fix-csharp-underscore-methods.js <changed-files...>`
-- File-scoped spellcheck: `npx --yes cspell@9 --no-progress --no-summary <changed-files...>`
+- File-scoped spellcheck: `npx --yes cspell@10.0.0 --no-progress --no-summary <changed-files...>`
 - Script-wide spellcheck preflight: `npm run check:cspell:scripts`
 - Note: Prettier does not auto-wrap long YAML lines; yamllint enforces the 200-character limit.
 - For long `.pre-commit-config.yaml` values (especially `description:` fields), use YAML folded scalars (`>-`) instead of single-line strings.

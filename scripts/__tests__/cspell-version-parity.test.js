@@ -2,7 +2,7 @@
  * @fileoverview Version-parity tests for cspell and markdownlint-cli2.
  *
  * The hook entries in `.pre-commit-config.yaml` invoke pinned package
- * versions (e.g. `cspell@9.3.0`) for the npx fallback path. Those literal
+ * versions (e.g. `cspell@10.0.0`) for the npx fallback path. Those literal
  * versions MUST match the devDependencies versions in `package.json` so
  * cold-cache fallback installs the same binary that `npm install` brings
  * in. The previous round used a managed Node wrapper to derive the version
@@ -19,6 +19,7 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
 const PRE_COMMIT_CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
 const CSPELL_CONFIG_PATH = path.join(REPO_ROOT, ".cspell.json");
+const WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows");
 
 function readPackageJson() {
   return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
@@ -60,24 +61,80 @@ function findPinnedVersionInEntry(blockText, packageName) {
   return match ? match[1] : null;
 }
 
+function findPinnedVersionsInText(text, packageName) {
+  if (typeof text !== "string") return [];
+  const re = new RegExp(
+    `${packageName.replace(/[.+*?^${}()|[\]\\]/g, "\\$&")}@([0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][\\w.]+)?)`,
+    "g"
+  );
+  return Array.from(text.matchAll(re), (match) => match[1]);
+}
+
+function readWorkflowFiles() {
+  return fs
+    .readdirSync(WORKFLOWS_DIR)
+    .filter((fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"))
+    .map((fileName) => ({
+      fileName,
+      content: fs.readFileSync(path.join(WORKFLOWS_DIR, fileName), "utf8")
+    }));
+}
+
 describe("cspell version parity", () => {
   const pkg = readPackageJson();
   const config = readPreCommitConfig();
   const block = findHookBlockText(config, "cspell");
   const declaredVersion = normalizeVersion(pkg.devDependencies?.cspell);
   const entryVersion = findPinnedVersionInEntry(block, "cspell");
+  const cspellPins = [
+    {
+      name: ".pre-commit-config.yaml cspell fallback",
+      version: entryVersion
+    },
+    {
+      name: "package.json scripts.check:cspell:scripts",
+      version: findPinnedVersionInEntry(pkg.scripts?.["check:cspell:scripts"], "cspell")
+    }
+  ];
 
   test("package.json devDependencies.cspell is a concrete version", () => {
     expect(declaredVersion).not.toBeNull();
     expect(declaredVersion).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  test("cspell hook entry pins the same version as package.json devDependencies", () => {
-    // If the hook entry pattern changes (e.g. different fallback flow),
-    // either preserve the @<version> token or update this test.
+  test("cspell hook block exists in .pre-commit-config.yaml", () => {
     expect(block).not.toBeNull();
-    expect(entryVersion).not.toBeNull();
-    expect(entryVersion).toBe(declaredVersion);
+  });
+
+  test.each(cspellPins)(
+    "$name pins the same version as package.json devDependencies",
+    ({ version }) => {
+      // If an entry pattern changes (e.g. different fallback flow), either
+      // preserve the @<version> token or update this test.
+      expect(version).not.toBeNull();
+      expect(version).toBe(declaredVersion);
+    }
+  );
+
+  test("workflow npx fallback pins match package.json devDependency version", () => {
+    const workflowPins = readWorkflowFiles().flatMap((workflowFile) =>
+      findPinnedVersionsInText(workflowFile.content, "cspell").map((version) => ({
+        workflowFile: workflowFile.fileName,
+        version
+      }))
+    );
+
+    expect(workflowPins.length).toBeGreaterThan(0);
+    for (const pin of workflowPins) {
+      expect(pin.version).toBe(declaredVersion);
+    }
+  });
+
+  test("spellcheck workflow uses the repository-pinned cspell CLI", () => {
+    const spellcheckWorkflow = fs.readFileSync(path.join(WORKFLOWS_DIR, "spellcheck.yml"), "utf8");
+
+    expect(spellcheckWorkflow).toContain(`cspell@${declaredVersion}`);
+    expect(spellcheckWorkflow).not.toContain("streetsidesoftware/cspell-action");
   });
 });
 
@@ -109,6 +166,20 @@ describe("markdownlint-cli2 version parity", () => {
     const installedPkg = JSON.parse(fs.readFileSync(installedPkgPath, "utf8"));
     const installedVersion = normalizeVersion(installedPkg.version);
     expect(installedVersion).toBe(declaredVersion);
+  });
+
+  test("workflow npx fallback pins match package.json devDependency version", () => {
+    const workflowPins = readWorkflowFiles().flatMap((workflowFile) =>
+      findPinnedVersionsInText(workflowFile.content, "markdownlint-cli2").map((version) => ({
+        workflowFile: workflowFile.fileName,
+        version
+      }))
+    );
+
+    expect(workflowPins.length).toBeGreaterThan(0);
+    for (const pin of workflowPins) {
+      expect(pin.version).toBe(declaredVersion);
+    }
   });
 });
 
