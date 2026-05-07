@@ -1,21 +1,25 @@
 # =============================================================================
-# Unity Performance Benchmarks (NIGHTLY + workflow_dispatch ONLY)
+# Unity Performance Benchmarks (DISABLED IN GITHUB ACTIONS)
 # =============================================================================
 # Purpose:
-#   Runs the perf / allocation test suites that are EXCLUDED from the PR gate
-#   (.github/workflows/unity-tests.yml). External library comparison suites
-#   stay opt-in until the harness manifest installs their packages. These are graded
-#   regression-watchers, not pass/fail PR gates: noise from cold caches,
-#   ubuntu-latest CPU variance, and shared-runner contention makes them
-#   unreliable as a merge gate.
+#   Disabled in GitHub Actions for now. Keep using the local runner:
+#     bash scripts/unity/run-tests.sh --platform playmode --include-perf
+#
+#   GitHub jobs are guarded with `if: ${{ false }}` so manual dispatch cannot
+#   run game-ci while these tests are kept local-only.
+#
+#   When re-enabled, this runs the perf / allocation test suites that are
+#   EXCLUDED from the PR gate (.github/workflows-disabled/unity-tests.yml). External
+#   library comparison suites stay opt-in until the harness manifest installs
+#   their packages. These are graded regression-watchers, not pass/fail PR gates.
 #
 # This workflow MUST NOT block PRs.
 #   - No `pull_request` trigger.
 #   - No `push` trigger to master (or any branch).
-#   - The only triggers are `workflow_dispatch` (manual) and a nightly cron.
+#   - The only trigger while disabled is `workflow_dispatch`, and the jobs skip.
 #   This is an explicit hard requirement from the project lead; verify
 #   compliance via:
-#     grep -A 3 "^on:" .github/workflows/unity-benchmarks.yml
+#     test ! -e .github/workflows/unity-benchmarks.yml
 #
 # Assembly include list:
 #   Computed dynamically with `includePerf: true` on the same
@@ -41,10 +45,6 @@
 name: Unity Benchmarks
 
 on:
-  schedule:
-    # 06:00 UTC nightly. Pick a time outside the EditMode/IL2CPP gate's busy
-    # window to avoid runner contention.
-    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       unity-version:
@@ -65,6 +65,7 @@ permissions:
 jobs:
   matrix-config:
     name: Resolve benchmark matrix
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:

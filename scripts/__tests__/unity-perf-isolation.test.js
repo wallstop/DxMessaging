@@ -3,7 +3,7 @@
  *
  * The .llm/context.md "perf isolation" line (114) requires that the
  * Benchmarks/Allocations asmdefs run ONLY on the scheduled
- * benchmarks workflow, never on the PR gate. The single source of truth for
+ * benchmarks workflow template, never on the default local run. The single source of truth for
  * that decision is scripts/unity/lib/asmdef-discovery.js — both the run-tests
  * scripts and the Unity Tests workflow shell out to it via `node -e`. This
  * test locks the contract end-to-end:
@@ -134,8 +134,8 @@ describe("unity perf-isolation contract", () => {
     }
   });
 
-  test("unity-tests.yml shells out to defaultIncludeAssemblies (no hardcoded asmdef list)", () => {
-    const workflowPath = path.join(REPO_ROOT, ".github", "workflows", "unity-tests.yml");
+  test("disabled unity-tests.yml template shells out to defaultIncludeAssemblies (no hardcoded asmdef list)", () => {
+    const workflowPath = path.join(REPO_ROOT, ".github", "workflows-disabled", "unity-tests.yml");
     const workflow = fs.readFileSync(workflowPath, "utf8");
 
     // The single source of truth contract: the workflow must shell out to

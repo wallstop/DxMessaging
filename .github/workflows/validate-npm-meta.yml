@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           npm pack
-          tarball="$(ls -1 *.tgz | head -n1)"
+          tarball="$(find . -maxdepth 1 -type f -name '*.tgz' -print | sort | head -n1)"
           echo "Inspecting tarball: ${tarball}"
           leaks="$(tar -tzf "${tarball}" | grep -E '(^|/)(bin|obj)/|\.pdb$|\.tmp$|\.csproj\.user$|(^|/)\.vs/|(^|/)\.idea/|\.suo$|\.DotSettings\.user$|\.user$' || true)"
           if [ -n "${leaks}" ]; then

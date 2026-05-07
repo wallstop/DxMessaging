@@ -157,17 +157,51 @@ function isExcludedPath(fullPath) {
     return EXCLUDED_DIRECTORY_PATTERNS.some((pattern) => pattern.test(fullPath));
 }
 
+function pathModuleForPath(value) {
+    return /^[A-Za-z]:[\\/]/.test(value) || value.includes("\\") ? path.win32 : path.posix;
+}
+
 function isPathInsideRoot(rootDir, fullPath) {
-    const normalizedRootDir = path.resolve(rootDir);
-    const normalizedFullPath = path.resolve(fullPath);
-    const relativePath = path.relative(normalizedRootDir, normalizedFullPath);
+    const pathModule =
+        pathModuleForPath(rootDir) === path.win32 ? path.win32 : pathModuleForPath(fullPath);
+    const normalizedRootDir = pathModule.resolve(rootDir);
+    const normalizedFullPath = pathModule.resolve(fullPath);
+    const relativePath = pathModule.relative(normalizedRootDir, normalizedFullPath);
 
     if (relativePath === "") {
         return true;
     }
 
     // On Windows, different drive letters can yield an absolute relative path.
-    return !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+    return !relativePath.startsWith("..") && !pathModule.isAbsolute(relativePath);
+}
+
+function isExcludedRepoLocalPath(repoRoot, fullPath) {
+    const pathModule =
+        pathModuleForPath(repoRoot) === path.win32 ? path.win32 : pathModuleForPath(fullPath);
+    const relativePath = pathModule.relative(pathModule.resolve(repoRoot), pathModule.resolve(fullPath));
+
+    if (relativePath === "" || relativePath.startsWith("..") || pathModule.isAbsolute(relativePath)) {
+        return false;
+    }
+
+    return relativePath
+        .split(/[\\/]+/)
+        .filter(Boolean)
+        .some((segment) =>
+            [
+                ".git",
+                "node_modules",
+                "Library",
+                "Obj",
+                "obj",
+                "Temp",
+                ".vs",
+                ".venv",
+                ".artifacts",
+                "site",
+            ].includes(segment)
+        );
 }
 
 // INTERNAL ONLY: rootDir is expected to be the repository root.
@@ -220,7 +254,7 @@ function resolveExplicitFiles(repoRoot, fileArgs) {
         }
 
         // Apply excluded-directory patterns only for repo-local paths.
-        if (isPathInsideRoot(repoRoot, candidatePath) && isExcludedPath(candidatePath)) {
+        if (isPathInsideRoot(repoRoot, candidatePath) && isExcludedRepoLocalPath(repoRoot, candidatePath)) {
             continue;
         }
 
@@ -457,6 +491,8 @@ module.exports = {
     normalizeExplicitPathArg,
     toWindowsAbsolutePathFromPosixDrivePath,
     resolveCandidatePath,
+    isPathInsideRoot,
+    isExcludedRepoLocalPath,
     convertMethodNameToPascalCase,
     collectMethodRenames,
     applyMethodRenames,

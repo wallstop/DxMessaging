@@ -12,7 +12,7 @@ source:
     - path: "scripts/unity/activate-license.sh"
     - path: "scripts/unity/run-tests.sh"
     - path: ".devcontainer/devcontainer.json"
-    - path: ".github/workflows/unity-tests.yml"
+    - path: ".github/workflows-disabled/unity-tests.yml"
   url: "https://github.com/wallstop/DxMessaging"
 
 tags:
@@ -144,8 +144,9 @@ setup, not an email/password-only activation.
 | `UNITY_PASSWORD` | Unity account password | Yes      |
 | `UNITY_LICENSE`  | Raw `.ulf` contents    | Yes      |
 
-The workflows under `.github/workflows/unity-*.yml` pass all three to
-`game-ci/unity-test-runner@v4`; it picks the path from which secrets are set.
+The disabled workflow templates under `.github/workflows-disabled/unity-*.yml`
+pass all three to `game-ci/unity-test-runner@v4`; it picks the path from which
+secrets are set after the templates are moved back under `.github/workflows/`.
 
 ## Professional Serial Path
 
@@ -209,7 +210,7 @@ treat this as a future enhancement.
 ## References
 
 - Unity license activation methods: <https://docs.unity3d.com/Manual/LicenseActivationMethods.html>
-- Unity manual activation support: <https://support.unity.com/hc/en-us/articles/4401914348436-How-do-I-manually-activate-my-Unity-license>
+- Unity manual activation support: <https://docs.unity3d.com/Manual/ManualActivationGuide.html>
 - GameCI activation guide: <https://game.ci/docs/github/activation/>
 - GameCI test runner: <https://game.ci/docs/github/test-runner/>
 - Source: `scripts/unity/activate-license.sh`, `scripts/unity/run-tests.sh`

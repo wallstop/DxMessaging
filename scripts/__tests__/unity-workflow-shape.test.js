@@ -1,13 +1,12 @@
 /**
- * @fileoverview Contract tests for the shape of the Unity-related GitHub
- * Actions workflows.
+ * @fileoverview Contract tests for the shape of Unity-related GitHub Actions
+ * workflow templates.
  *
  * These workflows have non-obvious invariants that, if violated, cause silent
  * regressions:
- *   - unity-benchmarks.yml MUST be schedule + workflow_dispatch only (no
- *     pull_request, no push). Adding either trigger would convert the noisy
- *     perf suite into a PR-blocking gate, which is an explicit project-lead
- *     directive (see header of the file).
+ *   - game-ci backed Unity workflows are temporarily moved out of
+ *     .github/workflows while the GitHub-hosted game-ci jobs are disabled.
+ *     Local runners remain available.
  *   - All Unity workflows must include manifest, packages-lock, and
  *     ProjectVersion in the exact Library cache key, with no broad restore
  *     keys — otherwise stale Library/ dirs from a prior Unity version corrupt
@@ -28,9 +27,17 @@ const yaml = require("js-yaml");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows");
+const DISABLED_WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows-disabled");
+const DISABLED_UNITY_WORKFLOWS = ["unity-tests.yml", "unity-il2cpp.yml", "unity-benchmarks.yml"];
 
 function readWorkflow(name) {
   const abs = path.join(WORKFLOWS_DIR, name);
+  expect(fs.existsSync(abs)).toBe(true);
+  return fs.readFileSync(abs, "utf8");
+}
+
+function readDisabledWorkflow(name) {
+  const abs = path.join(DISABLED_WORKFLOWS_DIR, name);
   expect(fs.existsSync(abs)).toBe(true);
   return fs.readFileSync(abs, "utf8");
 }
@@ -43,6 +50,10 @@ function loadWorkflowYaml(name) {
   return yaml.load(text);
 }
 
+function loadDisabledWorkflowYaml(name) {
+  return yaml.load(readDisabledWorkflow(name));
+}
+
 function expectExactUnityLibraryCache(text) {
   expect(text).toContain("actions/cache@v4");
   expect(text).toContain("manifest.json");
@@ -52,11 +63,26 @@ function expectExactUnityLibraryCache(text) {
   expect(text).not.toContain("restore-keys:");
 }
 
-describe(".github/workflows/unity-tests.yml", () => {
+describe("Unity game-ci workflows disabled in GitHub", () => {
+  test.each(DISABLED_UNITY_WORKFLOWS)("%s is not an active GitHub workflow", (name) => {
+    expect(fs.existsSync(path.join(WORKFLOWS_DIR, name))).toBe(false);
+    expect(fs.existsSync(path.join(DISABLED_WORKFLOWS_DIR, name))).toBe(true);
+  });
+});
+
+describe(".github/workflows-disabled/unity-tests.yml", () => {
   let text;
+  let parsed;
 
   beforeAll(() => {
-    text = readWorkflow("unity-tests.yml");
+    text = readDisabledWorkflow("unity-tests.yml");
+    parsed = loadDisabledWorkflowYaml("unity-tests.yml");
+  });
+
+  test("stays workflow_dispatch only as a disabled template", () => {
+    const onBlock = parsed.on || parsed[true];
+    expect(Object.keys(onBlock).sort()).toEqual(["workflow_dispatch"]);
+    expect(parsed.jobs["matrix-config"].if).toBe("${{ false }}");
   });
 
   test("uses game-ci/unity-test-runner@v4", () => {
@@ -80,11 +106,19 @@ describe(".github/workflows/unity-tests.yml", () => {
   });
 });
 
-describe(".github/workflows/unity-il2cpp.yml", () => {
+describe(".github/workflows-disabled/unity-il2cpp.yml", () => {
   let text;
+  let parsed;
 
   beforeAll(() => {
-    text = readWorkflow("unity-il2cpp.yml");
+    text = readDisabledWorkflow("unity-il2cpp.yml");
+    parsed = loadDisabledWorkflowYaml("unity-il2cpp.yml");
+  });
+
+  test("stays workflow_dispatch only as a disabled template", () => {
+    const onBlock = parsed.on || parsed[true];
+    expect(Object.keys(onBlock).sort()).toEqual(["workflow_dispatch"]);
+    expect(parsed.jobs["matrix-config"].if).toBe("${{ false }}");
   });
 
   test("uses game-ci/unity-builder@v4", () => {
@@ -112,16 +146,16 @@ describe(".github/workflows/unity-il2cpp.yml", () => {
   });
 });
 
-describe(".github/workflows/unity-benchmarks.yml", () => {
+describe(".github/workflows-disabled/unity-benchmarks.yml", () => {
   let text;
   let parsed;
 
   beforeAll(() => {
-    text = readWorkflow("unity-benchmarks.yml");
-    parsed = loadWorkflowYaml("unity-benchmarks.yml");
+    text = readDisabledWorkflow("unity-benchmarks.yml");
+    parsed = loadDisabledWorkflowYaml("unity-benchmarks.yml");
   });
 
-  test("`on:` block has ONLY schedule and workflow_dispatch (no pull_request, no push)", () => {
+  test("`on:` block has ONLY workflow_dispatch as a disabled template", () => {
     // YAML 1.1 turns the bare `on` key into `true`; check both keys to
     // tolerate either representation across yaml/parser versions.
     const onBlock = parsed.on || parsed[true];
@@ -129,7 +163,8 @@ describe(".github/workflows/unity-benchmarks.yml", () => {
     expect(typeof onBlock).toBe("object");
 
     const triggerKeys = Object.keys(onBlock).sort();
-    expect(triggerKeys).toEqual(["schedule", "workflow_dispatch"]);
+    expect(triggerKeys).toEqual(["workflow_dispatch"]);
+    expect(parsed.jobs["matrix-config"].if).toBe("${{ false }}");
 
     // Belt-and-suspenders text grep: a stray `pull_request:` or `push:`
     // anywhere in the on: block (even commented-out or otherwise missed

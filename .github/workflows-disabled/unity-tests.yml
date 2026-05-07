@@ -1,15 +1,19 @@
 # =============================================================================
-# Unity EditMode + PlayMode PR Gate
+# Unity EditMode + PlayMode Tests (Disabled in GitHub)
 # =============================================================================
 # Purpose:
-#   Runs the DxMessaging test suite under the Unity Test Runner via the
-#   game-ci action across the supported Unity LTS / 6.0 versions. This is the
-#   canonical Unity correctness gate for pull requests targeting master.
+#   Disabled in GitHub Actions for now. Keep using the local runner:
+#     bash scripts/unity/run-tests.sh --platform editmode
+#     bash scripts/unity/run-tests.sh --platform playmode
 #
-# Why this is a PR gate (not benchmarks):
+# Disabled workflow contract:
+#   The jobs are guarded with `if: ${{ false }}` so manual dispatch cannot run
+#   game-ci while these tests are kept local-only.
+#
+# When re-enabled as a PR gate:
 #   The default assembly include list explicitly EXCLUDES the perf,
 #   allocation, and comparison suites — those run on a separate scheduled
-#   workflow (.github/workflows/unity-benchmarks.yml). DI-integration suites
+#   workflow (.github/workflows-disabled/unity-benchmarks.yml). DI-integration suites
 #   (VContainer / Zenject / Reflex) are also opt-in and excluded here per
 #   Phase 2 review fix M3.
 #
@@ -47,20 +51,14 @@
 #      asmdef advertises. Run `node scripts/unity/lib/asmdef-discovery.js`
 #      locally to diff the discovered names against the previous run.
 #
-# Manual override:
-#   Use the workflow_dispatch inputs to pin a single Unity version or a
-#   single test mode (handy when triaging a regression on one channel).
+# Manual override when re-enabled:
+#   Use the workflow_dispatch inputs to pin a single Unity version or a single
+#   test mode (handy when triaging a regression on one channel).
 # =============================================================================
 
 name: Unity Tests
 
 on:
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       unity-version:
@@ -89,6 +87,7 @@ permissions:
 jobs:
   matrix-config:
     name: Resolve test matrix
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:

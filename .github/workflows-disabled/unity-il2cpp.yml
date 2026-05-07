@@ -1,24 +1,28 @@
 # =============================================================================
-# Unity IL2CPP Standalone Player Tests
+# Unity IL2CPP Standalone Player Tests (Disabled in GitHub)
 # =============================================================================
 # Purpose:
-#   Builds the StandaloneLinux64 IL2CPP test player via game-ci/unity-builder
-#   and runs the produced binary headlessly. IL2CPP exercises the AOT-compiled
-#   path that EditMode/PlayMode under Mono cannot — it catches:
+#   Disabled in GitHub Actions for now. Keep using the local runner:
+#     bash scripts/unity/run-tests.sh --platform standalone
+#
+#   GitHub jobs are guarded with `if: ${{ false }}` so manual dispatch cannot
+#   run game-ci while these tests are kept local-only.
+#
+#   When re-enabled, this builds the StandaloneLinux64 IL2CPP test player via
+#   game-ci/unity-builder and runs the produced binary headlessly. IL2CPP
+#   exercises the AOT-compiled path that EditMode/PlayMode under Mono cannot:
 #     - Code stripping issues (linker.xml gaps, [Preserve] missing on reflected
 #       types, generic-method instantiations stripped at link time)
 #     - AOT generic-virtual-method (GVM) failures specific to IL2CPP
 #     - PInvoke / native-callable signature mismatches
 #     - C# language-feature regressions only the IL2CPP backend rejects
 #   These regressions have historically slipped past the Mono-based EditMode
-#   gate (.github/workflows/unity-tests.yml) and only surfaced when a
+#   gate (.github/workflows-disabled/unity-tests.yml) and only surfaced when a
 #   downstream consumer built a player.
 #
-# Schedule:
-#   On every PR / push to master against a single Unity version (single-version
-#   keeps the gate fast), and weekly via cron for multi-version drift checks.
-#   Expected runtime: ~10 minutes for the build + ~3 minutes for the player run
-#   on the standard ubuntu-latest runner.
+# Schedule when re-enabled:
+#   Use PR / push against a single Unity version for the gate, plus a weekly
+#   cron for multi-version drift checks.
 #
 # Local debugging:
 #   Reproduce a build failure end-to-end with the local runner script:
@@ -38,16 +42,6 @@
 name: Unity IL2CPP
 
 on:
-  pull_request:
-    branches:
-      - master
-  push:
-    branches:
-      - master
-  schedule:
-    # Monday 05:00 UTC — weekly multi-version drift check (still single-version
-    # in the matrix today; expand `unity-version` here when adding versions).
-    - cron: "0 5 * * 1"
   workflow_dispatch:
     inputs:
       unity-version:
@@ -67,6 +61,7 @@ permissions:
 jobs:
   matrix-config:
     name: Resolve IL2CPP matrix
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:

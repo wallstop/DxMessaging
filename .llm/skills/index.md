@@ -220,8 +220,8 @@
 | [Headless Unity Test Runner](./unity/headless-test-runner.md)             | [ok] 224   | [intermediate] | [stable] | [risk: none] | unity, testing       |
 | [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
 | [Unity CI Matrix](./unity/unity-ci-matrix.md)                             | [ok] 193   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
-| [Unity License Bootstrap](./unity/unity-license-bootstrap.md)             | [ok] 216   | [basic]        | [stable] | [risk: none] | unity, license       |
-| [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)         | [ok] 211   | [intermediate] | [stable] | [risk: high] | unity, performance   |
+| [Unity License Bootstrap](./unity/unity-license-bootstrap.md)             | [ok] 217   | [basic]        | [stable] | [risk: none] | unity, license       |
+| [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)         | [ok] 215   | [intermediate] | [stable] | [risk: high] | unity, performance   |
 | [UPM Test Harness](./unity/upm-test-harness.md)                           | [ok] 207   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---

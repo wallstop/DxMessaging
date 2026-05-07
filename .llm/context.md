@@ -72,18 +72,18 @@ For Unity-side tests in `Tests/Editor/` or `Tests/Runtime/` (excludes Benchmarks
 - PlayMode: `bash scripts/unity/run-tests.sh --platform playmode`
 - IL2CPP standalone: `bash scripts/unity/run-tests.sh --platform standalone`
 - Filter: `--filter <regex>` (passed to `-testFilter`)
-- Include perf: `--include-perf` (off by default; runnable perf tests run only via `unity-benchmarks.yml`)
+- Include perf: `--include-perf` (off by default; GitHub benchmark workflow template is disabled)
 - Include comparisons: `--include-comparisons` (off by default; requires MessagePipe/UniRx/UniTask/Zenject packages in the harness)
 - Include DI integrations (Reflex/Zenject/VContainer): `--include-integrations` (off by default)
 - Realtime log streams to stdout; XML written to `.artifacts/unity/results.xml` unless `--results` overrides it
-- Bootstrap project: `.unity-test-project/` -- see [skills/unity/upm-test-harness.md](./skills/unity/upm-test-harness.md)
-- License: see [skills/unity/unity-license-bootstrap.md](./skills/unity/unity-license-bootstrap.md) (Personal/GameCI: raw `.ulf` in `UNITY_LICENSE` plus credentials; Professional: `UNITY_SERIAL` plus credentials; local shells may use `UNITY_LICENSE_B64`.)
-- ARM Mac (Apple Silicon): not supported locally -- use CI gates or a Codespace
+- Bootstrap project: `.unity-test-project/` -- see [UPM Test Harness](./skills/unity/upm-test-harness.md)
+- License: see [Unity License Bootstrap](./skills/unity/unity-license-bootstrap.md) (Personal/GameCI: raw `.ulf` in `UNITY_LICENSE` plus credentials; Professional: `UNITY_SERIAL` plus credentials; local shells may use `UNITY_LICENSE_B64`.)
+- ARM Mac (Apple Silicon): not supported locally -- use a non-ARM local shell or Codespace while Unity GitHub workflows are disabled
 - For source-generator tests (no Unity), use `dotnet test SourceGenerators/...Tests`
 
 ## Devcontainer Workflow
 
-The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outside-of-docker). Unity tests spawn ephemeral `unityci/editor` containers via the host docker socket; the image is pulled lazily on first use, the `.unity-test-project/Library` cache is preserved in a named volume across runs. See [skills/unity/devcontainer-cache-contract.md](./skills/unity/devcontainer-cache-contract.md) and [skills/unity/headless-test-runner.md](./skills/unity/headless-test-runner.md).
+The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outside-of-docker). Unity tests spawn ephemeral `unityci/editor` containers via the host docker socket; the image is pulled lazily on first use, the `.unity-test-project/Library` cache is preserved in a named volume across runs. See [Devcontainer Cache Contract](./skills/unity/devcontainer-cache-contract.md) and [Headless Test Runner](./skills/unity/headless-test-runner.md).
 
 ## C# Conventions
 

@@ -9,7 +9,7 @@
  *   - scripts/unity/run-tests.sh (default include / exclude assembly list)
  *   - scripts/unity/run-tests.ps1 (PowerShell parity)
  *   - scripts/__tests__/unity-perf-isolation.test.js (Phase 4 contract)
- *   - .github/workflows/unity-tests.yml (Phase 3 customParameters)
+ *   - .github/workflows-disabled/unity-tests.yml (customParameters template)
  *
  * No filesystem mutation. Pure functions only.
  *

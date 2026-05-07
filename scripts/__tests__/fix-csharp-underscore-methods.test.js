@@ -10,6 +10,8 @@ const {
   normalizeExplicitPathArg,
   toWindowsAbsolutePathFromPosixDrivePath,
   resolveCandidatePath,
+  isPathInsideRoot,
+  isExcludedRepoLocalPath,
   convertMethodNameToPascalCase,
   collectMethodRenames,
   applyMethodRenames
@@ -71,6 +73,39 @@ describe("fix-csharp-underscore-methods", () => {
 
     expect(result).toBe("C:\\Users\\dev\\FixMe.CS");
   });
+
+  test.each([
+    ["posix repo file", "/tmp/repo", "/tmp/repo/Runtime/FixMe.cs", true, false],
+    ["posix excluded repo file", "/tmp/repo", "/tmp/repo/Library/FixMe.cs", true, true],
+    ["posix outside excluded segment", "/tmp/repo", "/tmp/outside/Library/FixMe.cs", false, false],
+    [
+      "win32 repo file",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo\\Runtime\\FixMe.cs",
+      true,
+      false
+    ],
+    [
+      "win32 excluded repo file",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo\\.git\\nested\\FixMe.cs",
+      true,
+      true
+    ],
+    [
+      "win32 outside excluded segment",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\repo",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\outside\\Library\\FixMe.cs",
+      false,
+      false
+    ]
+  ])(
+    "repo-local exclusions use paths relative to repo root: %s",
+    (_label, repoRoot, filePath, expectedInside, expectedExcluded) => {
+      expect(isPathInsideRoot(repoRoot, filePath)).toBe(expectedInside);
+      expect(isExcludedRepoLocalPath(repoRoot, filePath)).toBe(expectedExcluded);
+    }
+  );
 
   test("convertMethodNameToPascalCase removes underscores while preserving segment casing", () => {
     expect(convertMethodNameToPascalCase("Parse_Line_Bare")).toBe("ParseLineBare");

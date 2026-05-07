@@ -175,5 +175,5 @@ Remove in the inverse order: devcontainer.json first (so a fresh build does not 
 ## References
 
 - Docker volumes: https://docs.docker.com/storage/volumes/
-- Devcontainer mounts: https://containers.dev/implementors/json_reference/#mounts
+- Devcontainer JSON reference: https://containers.dev/implementors/json_reference/
 - Source: `.devcontainer/cache-contract.sh`

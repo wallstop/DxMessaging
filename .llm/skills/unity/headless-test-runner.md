@@ -13,7 +13,7 @@ source:
     - path: "scripts/unity/run-tests.ps1"
     - path: "scripts/unity/lib/asmdef-discovery.js"
     - path: "scripts/unity/lib/parse-test-results.py"
-    - path: ".github/workflows/unity-tests.yml"
+    - path: ".github/workflows-disabled/unity-tests.yml"
   url: "https://github.com/wallstop/DxMessaging"
 
 tags:
@@ -85,7 +85,7 @@ status: "stable"
 ## When to Use
 
 - Iterating on Runtime/Editor code that has Unity tests under `Tests/Editor` or `Tests/Runtime`.
-- Reproducing a CI failure from `unity-tests.yml` or `unity-il2cpp.yml` locally.
+- Reproducing a Unity workflow-template failure from `unity-tests.yml` or `unity-il2cpp.yml` locally.
 - Smoke-testing a change to `scripts/unity/lib/asmdef-discovery.js` or the test harness.
 - Verifying the perf-isolation contract by running with and without `--include-perf`.
 
@@ -103,13 +103,13 @@ status: "stable"
 | `--platform`             | enum (req) | none                                | `editmode`, `playmode`, or `standalone`. Required.                                              |
 | `--unity-version`        | string     | `2022.3.45f1` (or `$UNITY_VERSION`) | Pin a different Editor version when reproducing a matrix-specific failure.                      |
 | `--filter`               | regex      | empty                               | Forward to Unity's `-testFilter`. Use to narrow to a single fixture or namespace.               |
-| `--include-perf`         | bool flag  | off                                 | Include `Benchmarks` / `Allocations` asmdefs. PR gate keeps these excluded.                     |
+| `--include-perf`         | bool flag  | off                                 | Include `Benchmarks` / `Allocations` asmdefs. Default local runs keep these excluded.           |
 | `--include-integrations` | bool flag  | off                                 | Include `VContainer` / `Zenject` / `Reflex` suites. Requires those packages in `manifest.json`. |
 | `--include-comparisons`  | bool flag  | off                                 | Include external comparison benchmarks. Requires MessagePipe / UniRx / UniTask / Zenject.       |
 | `--results`              | path       | `.artifacts/unity/results.xml`      | Override NUnit XML output path. Must live under the repo (bind-mount limit).                    |
 | `--help`                 | flag       | -                                   | Print usage and exit 0.                                                                         |
 
-The defaults match `defaultIncludeAssemblies(repoRoot)` from `scripts/unity/lib/asmdef-discovery.js`. That module is the single source of truth and is also called by `unity-tests.yml`.
+The defaults match `defaultIncludeAssemblies(repoRoot)` from `scripts/unity/lib/asmdef-discovery.js`. That module is the single source of truth and is also called by the disabled `unity-tests.yml` workflow template.
 
 ## Expected Runtimes
 
@@ -198,14 +198,14 @@ Pick the matching error signature in stdout, then apply the listed remediation.
 
 `unityci/editor` images are amd64-only as of 2026-05. Running them via `docker run` on Apple Silicon falls back to QEMU emulation, which is roughly 10x slower and frequently hangs the editor during domain reload. There are two sanctioned paths on M-series Macs:
 
-1. Skip local Unity runs. Rely on the `unity-tests.yml` PR gate (free for public repos, ~5 min per matrix cell).
+1. Skip local Unity runs only when GitHub Unity workflows are re-enabled. They are currently local-only.
 1. Open the repo in a hosted GitHub Codespace (`gh codespace create`). The Codespace runs on amd64 hardware and the in-container Unity flow works the same as on Linux/Windows hosts.
 
 `.llm/context.md` carries a single-line warning so an agent flags this proactively when `uname -m` returns `arm64`.
 
 ## CI Parity
 
-When `CI=true` is set, the script does NOT spawn docker locally. It prints the equivalent `game-ci/unity-test-runner@v4` parameters and exits 0. This is what `unity-tests.yml` consumes. The shape is locked by a Phase 4 contract test (`unity-runner-script-contract.test.js`) so help text, flag names, and the assembly source-of-truth cannot drift apart.
+When `CI=true` is set, the script does NOT spawn docker locally. It prints the equivalent `game-ci/unity-test-runner@v4` parameters and exits 0. This is what the disabled `unity-tests.yml` template consumes when re-enabled. The shape is locked by a Phase 4 contract test (`unity-runner-script-contract.test.js`) so help text, flag names, and the assembly source-of-truth cannot drift apart.
 
 ## See Also
 

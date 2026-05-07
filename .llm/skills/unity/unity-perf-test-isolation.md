@@ -10,8 +10,8 @@ source:
   repository: "wallstop/DxMessaging"
   files:
     - path: "scripts/unity/lib/asmdef-discovery.js"
-    - path: ".github/workflows/unity-tests.yml"
-    - path: ".github/workflows/unity-benchmarks.yml"
+    - path: ".github/workflows-disabled/unity-tests.yml"
+    - path: ".github/workflows-disabled/unity-benchmarks.yml"
     - path: "scripts/unity/run-tests.sh"
     - path: ".llm/context.md"
   url: "https://github.com/wallstop/DxMessaging"
@@ -31,7 +31,7 @@ complexity:
 impact:
   performance:
     rating: "high"
-    details: "Keeps the PR gate at ~5 minutes by excluding perf suites that would otherwise dominate the runtime"
+    details: "Keeps the default local run small by excluding perf suites that would otherwise dominate the runtime"
   maintainability:
     rating: "high"
     details: "Single regex governs classification across runner, CI, and contract test"
@@ -72,18 +72,18 @@ related:
 status: "stable"
 ---
 
-<!-- trigger: unity, perf, benchmark, allocation, comparison, isolation, asmdef | Perf-asmdef classification and PR-gate exclusion contract | Core -->
+<!-- trigger: unity, perf, benchmark, allocation, comparison, isolation, asmdef | Perf-asmdef classification and default-run exclusion contract | Core -->
 
 # Unity Perf Test Isolation
 
-> **One-line summary**: Asmdefs whose name matches `Benchmarks|Allocations` are classified as `perf`; `Comparisons` assemblies are a separate external-package opt-in. Both are excluded from the PR gate by `scripts/unity/lib/asmdef-discovery.js`.
+> **One-line summary**: Asmdefs whose name matches `Benchmarks|Allocations` are classified as `perf`; `Comparisons` assemblies are a separate external-package opt-in. Both are excluded from default local Unity runs by `scripts/unity/lib/asmdef-discovery.js`.
 
 ## When to Use
 
 - Adding a new benchmark, allocation-counting, or library-comparison test suite.
 - Investigating why a perf-looking asmdef does or does not run on a PR.
 - Debugging a "0 tests ran" CI failure when the suite name pattern is suspect.
-- Verifying the PR gate still excludes perf after a refactor.
+- Verifying the default Unity run still excludes perf after a refactor.
 
 ## When NOT to Use
 
@@ -124,8 +124,8 @@ Three callers consume this module:
 
 - `scripts/unity/run-tests.sh` builds its assembly list at startup and passes it to Unity via `-assemblyNames`.
 - `scripts/unity/run-tests.ps1` does the same on Windows.
-- `unity-tests.yml` and `unity-il2cpp.yml` shell out to `node -e "...defaultIncludeAssemblies(process.cwd())..."` in the `Compute test assembly list` step.
-- `unity-benchmarks.yml` calls `defaultIncludeAssemblies(process.cwd(), { includePerf: true })` and skips integrations plus external comparisons.
+- Disabled workflow templates under `.github/workflows-disabled/` still shell out to the same asmdef-discovery module so they can be re-enabled without hand-maintained lists.
+- The disabled `unity-benchmarks.yml` template calls `defaultIncludeAssemblies(process.cwd(), { includePerf: true })` and skips integrations plus external comparisons.
 
 Because every caller goes through the same module, adding a new perf asmdef requires no edits to the workflows or runner scripts.
 
@@ -143,7 +143,7 @@ Because every caller goes through the same module, adding a new perf asmdef requ
 
    The output groups asmdefs by category. Confirm the new entry shows `[perf]`.
 
-1. Confirm the PR gate excludes it:
+1. Confirm the default run excludes it:
 
    ```bash
    bash scripts/unity/run-tests.sh --platform editmode
@@ -163,16 +163,20 @@ If the asmdef ends up in the `core` bucket instead, the most common cause is the
 
 ## Where Perf Actually Runs
 
-| Workflow               | Triggers                                 | Includes Perf? |
-| ---------------------- | ---------------------------------------- | -------------- |
-| `unity-tests.yml`      | `pull_request`, `push: master`, dispatch | NO             |
-| `unity-il2cpp.yml`     | `pull_request`, `push: master`, weekly   | NO             |
-| `unity-benchmarks.yml` | `workflow_dispatch`, nightly cron        | YES            |
+| Workflow               | Triggers                         | Includes Perf? |
+| ---------------------- | -------------------------------- | -------------- |
+| `unity-tests.yml`      | Moved out of `.github/workflows` | NO             |
+| `unity-il2cpp.yml`     | Moved out of `.github/workflows` | NO             |
+| `unity-benchmarks.yml` | Moved out of `.github/workflows` | YES            |
 
-`unity-benchmarks.yml` deliberately omits `pull_request` and `push` triggers. Verify any time you edit it:
+Unity game-ci jobs are temporarily disabled in GitHub by moving them to
+`.github/workflows-disabled/` and kept local-only via `scripts/unity/run-tests.sh`.
+Verify any time you edit the workflow templates:
 
 ```bash
-grep -A 3 "^on:" .github/workflows/unity-benchmarks.yml
+test ! -e .github/workflows/unity-tests.yml
+test ! -e .github/workflows/unity-il2cpp.yml
+test ! -e .github/workflows/unity-benchmarks.yml
 ```
 
 ## Comparison Suites
@@ -191,8 +195,8 @@ The runner should print `comparisons=true` and include the comparison asmdef in 
 
 - Every asmdef matching the perf regex is classified as `perf`.
 - Every asmdef NOT matching the perf or integration regex is classified as `core` and appears in `defaultIncludeAssemblies(repo)`.
-- `unity-tests.yml` and `unity-il2cpp.yml` resolve their assembly lists via `defaultIncludeAssemblies` rather than hand-rolled YAML.
-- `unity-benchmarks.yml` opts into perf via `{ includePerf: true }`.
+- Disabled `unity-tests.yml` and `unity-il2cpp.yml` templates resolve their assembly lists via `defaultIncludeAssemblies` rather than hand-rolled YAML.
+- Disabled `unity-benchmarks.yml` template opts into perf via `{ includePerf: true }`.
 
 The test catches the silent regression "I added a new perf asmdef and forgot to update the exclusion list" because the exclusion list is computed, not hand-maintained.
 
@@ -207,4 +211,4 @@ The test catches the silent regression "I added a new perf asmdef and forgot to 
 
 - Source: `scripts/unity/lib/asmdef-discovery.js`
 - Source-of-truth: `.llm/context.md`
-- Workflows: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-benchmarks.yml`
+- Workflow templates: `.github/workflows-disabled/unity-tests.yml`, `.github/workflows-disabled/unity-benchmarks.yml`

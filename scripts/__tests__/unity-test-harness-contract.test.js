@@ -83,13 +83,13 @@ describe("unity test harness contract (.unity-test-project/)", () => {
       expect(content).toMatch(/m_EditorVersion:/);
     });
 
-    test("editor version matches one of the unity-tests.yml matrix entries", () => {
+    test("editor version matches one of the disabled unity-tests.yml template matrix entries", () => {
       const content = fs.readFileSync(versionPath, "utf8");
       const match = content.match(/m_EditorVersion:\s*(\S+)/);
       expect(match).not.toBeNull();
       const projectVersion = match[1].trim();
 
-      const workflowPath = path.join(REPO_ROOT, ".github", "workflows", "unity-tests.yml");
+      const workflowPath = path.join(REPO_ROOT, ".github", "workflows-disabled", "unity-tests.yml");
       const workflowText = fs.readFileSync(workflowPath, "utf8");
       // The matrix is generated dynamically inside a shell heredoc, so a
       // structural YAML walk would skip those values; the canonical list

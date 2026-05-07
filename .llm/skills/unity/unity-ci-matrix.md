@@ -9,9 +9,9 @@ updated: "2026-05-05"
 source:
   repository: "wallstop/DxMessaging"
   files:
-    - path: ".github/workflows/unity-tests.yml"
-    - path: ".github/workflows/unity-il2cpp.yml"
-    - path: ".github/workflows/unity-benchmarks.yml"
+    - path: ".github/workflows-disabled/unity-tests.yml"
+    - path: ".github/workflows-disabled/unity-il2cpp.yml"
+    - path: ".github/workflows-disabled/unity-benchmarks.yml"
   url: "https://github.com/wallstop/DxMessaging"
 
 tags:
@@ -73,7 +73,7 @@ status: "stable"
 
 # Unity CI Matrix
 
-> **One-line summary**: `unity-tests.yml` runs editmode and playmode against three Unity versions; `unity-il2cpp.yml` runs the AOT-compiled standalone player against a single version on every PR plus weekly cron; expand the matrix only when a new LTS ships or a user reports a version-specific bug.
+> **One-line summary**: Unity game-ci workflow templates are disabled under `.github/workflows-disabled/`; when re-enabled, `unity-tests.yml` runs editmode and playmode against three Unity versions and `unity-il2cpp.yml` runs the AOT-compiled standalone player against a single version.
 
 ## When to Use
 
@@ -89,7 +89,7 @@ status: "stable"
 
 ## Current Matrix
 
-`unity-tests.yml` (PR gate, fast feedback):
+`unity-tests.yml` (disabled template; fast feedback when re-enabled):
 
 | Axis            | Values                                      |
 | --------------- | ------------------------------------------- |
@@ -98,7 +98,7 @@ status: "stable"
 
 Six matrix cells. Workflow_dispatch inputs let you pin a single version or single mode for triage.
 
-`unity-il2cpp.yml` (PR gate, slower):
+`unity-il2cpp.yml` (disabled template; slower AOT coverage when re-enabled):
 
 | Axis            | Values        |
 | --------------- | ------------- |
@@ -106,18 +106,18 @@ Six matrix cells. Workflow_dispatch inputs let you pin a single version or singl
 
 Single cell on PRs to keep the gate under ~15 minutes; weekly cron currently uses the same single version (the matrix-config job is already shaped to expand without code changes).
 
-`unity-benchmarks.yml` (workflow_dispatch + nightly cron, NEVER on PRs):
+`unity-benchmarks.yml` (disabled template; manual/nightly when re-enabled, NEVER on PRs):
 
 | Axis            | Values                 |
 | --------------- | ---------------------- |
 | `unity-version` | `2022.3.45f1`          |
 | `test-mode`     | `editmode`, `playmode` |
 
-The `unity-benchmarks.yml` triggers explicitly omit `pull_request` and `push` per the perf isolation rule.
+The `unity-benchmarks.yml` template explicitly omits `pull_request` and `push` per the perf isolation rule.
 
 ## When to Add a Unity Version
 
-Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the following is true:
+After re-enabling GitHub Unity tests, add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the following is true:
 
 - A new LTS reaches general availability (e.g., when 2024.3 LTS or 7000.0 LTS ships) and the package's `package.json` `unity` field still permits it.
 - A user files an issue reproducing only on a specific Editor version.
@@ -125,7 +125,7 @@ Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the
 
 ## How to Add a Unity Version
 
-1. Edit `.github/workflows/unity-tests.yml`. The matrix is computed in the `matrix-config` job:
+1. Edit `.github/workflows-disabled/unity-tests.yml` before moving it back under `.github/workflows/`. The matrix is computed in the `matrix-config` job:
 
    ```yaml
    versions='["2021.3.45f1","2022.3.45f1","6000.0.32f1"]'
@@ -189,4 +189,4 @@ The IL2CPP workflow checks the player exit code BEFORE parsing the XML so a cras
 - game-ci docs: https://game.ci/docs/
 - Unity LTS roadmap: https://unity.com/releases/lts
 - Unity managed code stripping: https://docs.unity3d.com/Manual/ManagedCodeStripping.html
-- Source: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-il2cpp.yml`
+- Source templates: `.github/workflows-disabled/unity-tests.yml`, `.github/workflows-disabled/unity-il2cpp.yml`
