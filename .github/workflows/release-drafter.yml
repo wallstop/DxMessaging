@@ -22,38 +22,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - name: Extract version from package.json
-        id: version
+      - name: Diagnose release inputs
         run: |
-          if [ ! -f package.json ]; then
-            echo "Error: package.json not found"
-            exit 1
+          set -euo pipefail
+          PACKAGE_VERSION="$(jq -r '.version // empty' package.json)"
+          LATEST_TAG="$(git tag --list | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$' | sort -V | tail -n 1 || true)"
+          if [ -n "$LATEST_TAG" ]; then
+            COMMITS_SINCE_TAG="$(git rev-list "${LATEST_TAG}..HEAD" --count)"
+          else
+            COMMITS_SINCE_TAG="$(git rev-list HEAD --count)"
           fi
-          VERSION=$(jq -r '.version // empty' package.json)
-          if [ -z "$VERSION" ]; then
-            echo "Error: version field not found in package.json"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Extracted version: $VERSION"
+          echo "Package version: ${PACKAGE_VERSION:-missing}"
+          echo "Latest semver tag: ${LATEST_TAG:-none}"
+          echo "Commits since latest tag: ${COMMITS_SINCE_TAG}"
+          echo "Draft changelog source: CHANGELOG.md ## [Unreleased]"
 
-      - name: Extract changelog for version
+      - name: Extract unreleased changelog
         id: changelog
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          echo "Looking for version: $VERSION"
-
           if [ ! -f CHANGELOG.md ]; then
             echo "Warning: CHANGELOG.md not found"
             echo "No changelog file found." > /tmp/changelog_section.md
             echo "changelog_file=/tmp/changelog_section.md" >> "$GITHUB_OUTPUT"
+            echo "changelog_section=missing" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Extract the changelog section for this version
-          # Matches from "## [VERSION]" until the next "## [" or end of file
-          CHANGELOG_CONTENT=$(awk -v ver="$VERSION" '
+          CHANGELOG_CONTENT=$(awk -v ver="Unreleased" '
             BEGIN { found=0; content="" }
             /^## \[/ {
               if (found) exit
@@ -66,21 +64,20 @@ jobs:
             END { print content }
           ' CHANGELOG.md)
 
-          # Handle empty changelog
           if [ -z "$CHANGELOG_CONTENT" ] || [ "$CHANGELOG_CONTENT" = $'\n' ]; then
-            CHANGELOG_CONTENT="No changelog entry found for version $VERSION"
+            CHANGELOG_CONTENT="No changelog entry found under Unreleased."
           fi
 
-          # Write to file for multi-line handling
           echo "$CHANGELOG_CONTENT" > /tmp/changelog_section.md
           echo "changelog_file=/tmp/changelog_section.md" >> "$GITHUB_OUTPUT"
+          echo "changelog_section=Unreleased" >> "$GITHUB_OUTPUT"
+          echo "Extracted Unreleased changelog bytes: $(wc -c < /tmp/changelog_section.md)"
 
       - name: Run Release Drafter
         uses: release-drafter/release-drafter@v7
         id: release_drafter
         with:
           config-name: release-drafter.yml
-          version: ${{ steps.version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -88,9 +85,9 @@ jobs:
         uses: actions/github-script@v9
         env:
           RELEASE_ID: ${{ steps.release_drafter.outputs.id }}
-          VERSION: ${{ steps.version.outputs.version }}
           DRAFTER_BODY: ${{ steps.release_drafter.outputs.body }}
           CHANGELOG_FILE: ${{ steps.changelog.outputs.changelog_file }}
+          CHANGELOG_SECTION: ${{ steps.changelog.outputs.changelog_section }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -100,9 +97,9 @@ jobs:
             if (!Number.isInteger(releaseId) || releaseId <= 0) {
               throw new Error('Invalid releaseId: ' + process.env.RELEASE_ID + '. Expected a positive integer.');
             }
-            const version = process.env.VERSION;
             const drafterBody = process.env.DRAFTER_BODY || '';
             const changelogFile = process.env.CHANGELOG_FILE;
+            const changelogSection = process.env.CHANGELOG_SECTION || 'unknown';
 
             let changelogContent = '';
             try {
@@ -127,9 +124,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: releaseId,
-              body: body,
-              name: version,
-              tag_name: version
+              body: body
             });
 
-            console.log('Updated release draft for version ' + version);
+            console.log('Updated release draft body for release id ' + releaseId + ' using changelog section ' + changelogSection + '.');

@@ -858,4 +858,57 @@ describe("validateWorkflow policy integration", () => {
     expect(restoreIndex).toBeLessThan(measureIndex);
     expect(diagnosticsIndex).toBeLessThan(measureIndex);
   });
+
+  test("release drafter lets version resolver choose the draft version from labels", () => {
+    const workflowPath = path.resolve(__dirname, "../../.github/workflows/release-drafter.yml");
+    const workflowContent = fs.readFileSync(workflowPath, "utf8");
+
+    expect(workflowContent).toContain("uses: release-drafter/release-drafter@v7");
+    expect(workflowContent).not.toMatch(
+      /\bversion:\s*\$\{\{\s*steps\.version\.outputs\.version\s*\}\}/
+    );
+    expect(workflowContent).not.toContain("name: version");
+    expect(workflowContent).not.toContain("id: version");
+  });
+
+  test("release drafter body uses Unreleased changelog without changing the draft tag", () => {
+    const workflowPath = path.resolve(__dirname, "../../.github/workflows/release-drafter.yml");
+    const workflowContent = fs.readFileSync(workflowPath, "utf8");
+
+    expect(workflowContent).toContain('awk -v ver="Unreleased"');
+    expect(workflowContent).toContain("CHANGELOG_SECTION");
+    expect(workflowContent).not.toMatch(/\btag_name:\s*version\b/);
+    expect(workflowContent).not.toMatch(/\bname:\s*version\b/);
+  });
+
+  test("workflow Node versions satisfy current JavaScript toolchain engines", () => {
+    const workflowDirs = [
+      path.resolve(__dirname, "../../.github/workflows"),
+      path.resolve(__dirname, "../../.github/workflows-disabled")
+    ];
+
+    const nodeVersionEntries = [];
+    for (const workflowsDir of workflowDirs) {
+      const workflowFiles = fs
+        .readdirSync(workflowsDir)
+        .filter((fileName) => fileName.endsWith(".yml") || fileName.endsWith(".yaml"));
+
+      for (const workflowFile of workflowFiles) {
+        const workflowPath = path.join(workflowsDir, workflowFile);
+        const workflowContent = fs.readFileSync(workflowPath, "utf8");
+        const matches = workflowContent.matchAll(/node-version:\s*["']?([^"'\s#]+)["']?/g);
+        for (const match of matches) {
+          nodeVersionEntries.push({
+            workflowFile: path.relative(path.resolve(__dirname, "../.."), workflowPath),
+            version: match[1]
+          });
+        }
+      }
+    }
+
+    expect(nodeVersionEntries.length).toBeGreaterThan(0);
+    for (const entry of nodeVersionEntries) {
+      expect(entry.version).toBe("22.18.0");
+    }
+  });
 });

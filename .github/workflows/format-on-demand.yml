@@ -61,7 +61,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: "22.18.0"
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -75,7 +75,7 @@ jobs:
           node scripts/run-managed-prettier.js --write "**/*.{yml,yaml}"
       - name: Apply markdownlint fixes
         run: |
-          npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
+          npx --yes markdownlint-cli2@0.22.1 "**/*.md" "**/*.markdown" --fix
       - name: Apply CSharpier formatting
         run: dotnet tool run csharpier format
       - name: Renormalize line endings
@@ -211,7 +211,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: "22.18.0"
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -225,7 +225,7 @@ jobs:
           node scripts/run-managed-prettier.js --write "**/*.{yml,yaml}"
       - name: Apply markdownlint fixes
         run: |
-          npx --yes markdownlint-cli2@0.20.0 "**/*.md" "**/*.markdown" --fix
+          npx --yes markdownlint-cli2@0.22.1 "**/*.md" "**/*.markdown" --fix
       - name: Apply CSharpier formatting
         run: dotnet tool run csharpier format
       - name: Renormalize line endings

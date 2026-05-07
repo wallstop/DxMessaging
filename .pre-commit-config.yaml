@@ -391,7 +391,7 @@ repos:
         entry: >-
           bash -c 'if [ -f node_modules/cspell/bin.mjs ]; then
           exec node node_modules/cspell/bin.mjs --no-progress --no-summary "$@";
-          else exec npx --yes cspell@9.3.0 --no-progress --no-summary "$@"; fi' --
+          else exec npx --yes cspell@10.0.0 --no-progress --no-summary "$@"; fi' --
         language: system
         files: '(?i)\.(md|markdown|cs|json|ya?ml|ps1|js)$'
         pass_filenames: true

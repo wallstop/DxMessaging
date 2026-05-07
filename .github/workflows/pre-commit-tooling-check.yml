@@ -90,7 +90,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22.18.0"
           cache: npm
           # Use package.json as a stable cache key input. package-lock.json path
           # resolution has been flaky on hosted runners in this matrix job.
