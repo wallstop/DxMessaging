@@ -17,6 +17,13 @@ namespace DxMessaging.Samples.DI.Reflex
     {
         protected override void InstallBindings()
         {
+            // Reflex today selects the public parameterless MessageBus constructor, so the bare
+            // Container.Bind<MessageBus>().AsSingleton() pattern works -- but it is fragile
+            // against future Reflex releases that broaden constructor scanning to non-public
+            // constructors (which would surface a clock-taking overload whose IDxMessagingClock
+            // dependency is not registered). When using the Reflex 8.0+ ContainerBuilder API,
+            // prefer ReflexRegistrationExtensions.AddDxMessagingBus, which uses an explicit
+            // factory that sidesteps reflection-based constructor selection entirely.
             Container.Bind<MessageBus>().AsSingleton();
             Container.Bind<IMessageBus>().FromContainer<MessageBus>();
 

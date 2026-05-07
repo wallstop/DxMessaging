@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "com.unity.ide.rider": "3.0.38",
+    "com.unity.ide.visualstudio": "2.0.25",
+    "com.unity.multiplayer.center": "1.0.1",
+    "com.unity.test-framework": "1.6.0",
+    "com.unity.test-framework.performance": "3.4.2",
+    "com.wallstop-studios.dxmessaging": "file:../..",
+    "com.unity.modules.accessibility": "1.0.0",
+    "com.unity.modules.adaptiveperformance": "1.0.0",
+    "com.unity.modules.vectorgraphics": "1.0.0"
+  },
+  "scopedRegistries": [],
+  "testables": ["com.wallstop-studios.dxmessaging"]
+}

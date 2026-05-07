@@ -28,7 +28,7 @@
 
 ```csharp
 using DxMessaging.Core.MessageBus;
-using DxMessaging.Unity.Integrations.VContainer; // Required for RegisterMessageRegistrationBuilder()
+using DxMessaging.Unity.Integrations.VContainer; // Required for RegisterDxMessagingBus()
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -37,8 +37,8 @@ public sealed class MessagingLifetimeScope : LifetimeScope
 {
     protected override void Configure(IContainerBuilder builder)
     {
-        // Register MessageBus as both concrete and interface
-        builder.Register<MessageBus>(Lifetime.Singleton).As<IMessageBus>();
+        // Register MessageBus as both concrete and interface through the safe helper.
+        builder.RegisterDxMessagingBus();
 
         // Optional: Enable automatic IMessageRegistrationBuilder binding
         // Requires VCONTAINER_PRESENT define (auto-added by DxMessaging when VContainer detected)
@@ -49,7 +49,7 @@ public sealed class MessagingLifetimeScope : LifetimeScope
 }
 ```
 
-**Note:** You must import the `DxMessaging.Unity.Integrations.VContainer` namespace to access the `RegisterMessageRegistrationBuilder()` extension method.
+**Note:** You must import the `DxMessaging.Unity.Integrations.VContainer` namespace to access the registration extension methods.
 
 #### Add to your scene
 
@@ -125,7 +125,7 @@ using DxMessaging.Unity.Integrations.VContainer; // Required for extension metho
 
 protected override void Configure(IContainerBuilder builder)
 {
-    builder.Register<MessageBus>(Lifetime.Singleton).As<IMessageBus>();
+    builder.RegisterDxMessagingBus();
     #if VCONTAINER_PRESENT
     builder.RegisterMessageRegistrationBuilder();
     #endif
@@ -222,7 +222,7 @@ public sealed class LevelLoader
         // Create a child scope with its own MessageBus
         return _parentScope.CreateChildFromPrefab(lifetimeScopePrefab, builder =>
         {
-            builder.Register<MessageBus>(Lifetime.Singleton).As<IMessageBus>();
+            builder.RegisterDxMessagingBus();
             #if VCONTAINER_PRESENT
             builder.RegisterMessageRegistrationBuilder();
             #endif
@@ -288,7 +288,7 @@ public IEnumerator PlayMode_MessageBusIsolation()
     // Create isolated scope for this test
     var scope = LifetimeScope.Create(builder =>
     {
-        builder.Register<MessageBus>(Lifetime.Singleton).As<IMessageBus>();
+        builder.RegisterDxMessagingBus();
     });
 
     var bus = scope.Container.Resolve<IMessageBus>();
@@ -306,7 +306,7 @@ public IEnumerator PlayMode_MessageBusIsolation()
 ### Initial Setup
 
 - [ ] Install DxMessaging and VContainer
-- [ ] Create `MessagingLifetimeScope` with `builder.Register<MessageBus>().As<IMessageBus>()`
+- [ ] Create `MessagingLifetimeScope` with `builder.RegisterDxMessagingBus()`
 - [ ] Add scope to your scene as a GameObject component
 - [ ] Import `DxMessaging.Unity.Integrations.VContainer` namespace for extension methods
 - [ ] Add `#if VCONTAINER_PRESENT` check and call `builder.RegisterMessageRegistrationBuilder()`

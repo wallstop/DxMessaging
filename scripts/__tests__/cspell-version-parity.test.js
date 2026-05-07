@@ -118,4 +118,11 @@ describe("cspell configuration exclusions", () => {
 
     expect(cspellConfig.ignorePaths).toContain(".vale/styles/Vocab/**/reject.txt");
   });
+
+  test("ignores generated dependency lockfiles", () => {
+    const cspellConfig = JSON.parse(fs.readFileSync(CSPELL_CONFIG_PATH, "utf8"));
+
+    expect(cspellConfig.ignorePaths).toContain("package-lock.json");
+    expect(cspellConfig.ignorePaths).toContain("**/packages-lock.json");
+  });
 });

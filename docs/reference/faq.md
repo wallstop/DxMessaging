@@ -45,6 +45,16 @@ The most common cause is forgetting to call `base.Awake()` (or `base.OnEnable()`
 
 - Yes. You can integrate with legacy patterns via `ReflexiveMessage`. Prefer DxMessaging for new code.
 
+## Why is my game retaining memory across scenes?
+
+- Each scene introduces new `InstanceId`s and sometimes new message types,
+  which add empty slots on the bus when their handlers tear down. Idle
+  eviction will reclaim them eventually; for deterministic cleanup call
+  `MessageHandler.TrimAll(force: true)` on scene unload (or
+  `bus.Trim(force: true)` for a non-global bus). See the
+  [Memory Reclamation guide](../guides/memory-reclamation.md) for the full
+  pattern.
+
 ---
 
 ## Related Documentation

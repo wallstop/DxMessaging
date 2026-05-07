@@ -156,6 +156,25 @@ namespace DxMessaging.Core.Helper
         }
 
         /// <summary>
+        /// Attempts to get the value at an already-resolved message type index.
+        /// </summary>
+        /// <param name="index">Index previously assigned by <see cref="MessageHelperIndexer{TMessage}"/>.</param>
+        /// <param name="value">Out parameter receiving the value if present.</param>
+        /// <returns>True if a non-null value was present.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool TryGetValueAtIndex(int index, out TValue value)
+        {
+            if (0 <= index && index < _values.Count)
+            {
+                value = _values[index];
+                return value != null;
+            }
+
+            value = default;
+            return false;
+        }
+
+        /// <summary>
         /// Removes the value for the given <typeparamref name="TMessage"/> key.
         /// </summary>
         /// <typeparam name="TMessage">Message type key.</typeparam>
@@ -164,6 +183,19 @@ namespace DxMessaging.Core.Helper
             where TMessage : IMessage
         {
             int index = MessageHelperIndexer<TMessage>.SequentialId;
+            if (0 <= index && index < _values.Count)
+            {
+                _values[index] = null;
+            }
+        }
+
+        /// <summary>
+        /// Removes the value at an already-resolved message type index.
+        /// </summary>
+        /// <param name="index">Index previously assigned by <see cref="MessageHelperIndexer{TMessage}"/>.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void RemoveAtIndex(int index)
+        {
             if (0 <= index && index < _values.Count)
             {
                 _values[index] = null;

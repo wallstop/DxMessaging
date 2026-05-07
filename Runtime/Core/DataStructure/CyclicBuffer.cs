@@ -123,7 +123,7 @@ namespace DxMessaging.Core.DataStructure
         /// <summary>
         /// Creates an enumerator that iterates from the oldest element to the most recently added.
         /// </summary>
-        internal CyclicBufferEnumerator GetEnumerator()
+        public CyclicBufferEnumerator GetEnumerator()
         {
             return new CyclicBufferEnumerator(this);
         }

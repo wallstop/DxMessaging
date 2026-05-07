@@ -146,12 +146,28 @@ void OnDisable() { token.Disable(); }
 - Emitting to a GameObject will not reach Component-targeted listeners (and vice-versa). Use the matching helper.
 - Shorthands exist for strings too; be explicit about using a GameObject vs Component with `EmitAt`/`EmitFrom`.
 
+## Memory Reclamation
+
+| API                             | Purpose                                                                           |
+| ------------------------------- | --------------------------------------------------------------------------------- |
+| `bus.Trim(bool force = false)`  | Reclaim empty slots and pooled collections on a single bus; returns `TrimResult`. |
+| `MessageHandler.TrimAll(force)` | Convenience wrapper that calls `Trim` on the global bus.                          |
+| `bus.OccupiedTypeSlots`         | Count of distinct per-message-type slots currently occupied on the bus.           |
+| `bus.OccupiedTargetSlots`       | Count of distinct (type, target) context tuples currently occupied on the bus.    |
+
+For tuning, scenario tables, and a leak-watching pattern see the
+[Memory Reclamation guide](../guides/memory-reclamation.md). For the asset
+parameters and defaults see the
+[Runtime Settings reference](runtime-settings.md).
+
 ## See also
 
 - [Emit Shorthands](../advanced/emit-shorthands.md)
 - [Advanced](../guides/advanced.md)
 - [Targeting & Context](../concepts/targeting-and-context.md)
 - [Interceptors & Ordering](../concepts/interceptors-and-ordering.md)
+- [Memory Reclamation](../guides/memory-reclamation.md)
+- [Runtime Settings](runtime-settings.md)
 
 ## Execution Order
 

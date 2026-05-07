@@ -3,7 +3,10 @@ name: Script Tests
 on:
   pull_request:
     paths:
+      - .github/workflows/script-tests.yml
       - package.json
+      - scripts/**/*.ps1
+      - scripts/**/*.sh
       - scripts/**/*.js
       - scripts/__tests__/**/*.js
   push:
@@ -11,7 +14,10 @@ on:
       - main
       - master
     paths:
+      - .github/workflows/script-tests.yml
       - package.json
+      - scripts/**/*.ps1
+      - scripts/**/*.sh
       - scripts/**/*.js
       - scripts/__tests__/**/*.js
   workflow_dispatch:
@@ -25,9 +31,15 @@ permissions:
 
 jobs:
   test:
-    name: Run script tests
-    runs-on: ubuntu-latest
+    name: Run script tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
 
     steps:
       - name: Checkout repository
@@ -44,6 +56,7 @@ jobs:
           cache-dependency-path: package.json
 
       - name: Install dependencies
+        shell: bash
         run: |
           if [ -f package-lock.json ]; then
             npm ci

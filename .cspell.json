@@ -20,6 +20,7 @@
     "*.meta",
     "Samples~/**",
     "package-lock.json",
+    "**/packages-lock.json",
     "Library/**",
     "Temp/**",
     "Logs/**",
@@ -38,6 +39,7 @@
   "words": [
     "DxMessaging",
     "dxmessaging",
+    "metas",
     "mtimes",
     "nofilter",
     "relitigate",
@@ -244,6 +246,7 @@
     "Ldstr",
     "materialised",
     "misaligning",
+    "monomorphization",
     "normalise",
     "Normalise",
     "normalises",
@@ -258,7 +261,16 @@
     "unmatch",
     "unstubbed",
     "unparseable",
-    "entrancy"
+    "entrancy",
+    "devirtualization",
+    "SIGSEGV",
+    "devirtualize",
+    "unityci",
+    "cicd",
+    "integ",
+    "Integ",
+    "jlumbroso",
+    "kubepods"
   ],
   "ignoreRegExpList": [
     "/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g",

@@ -31,7 +31,10 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
 - For dynamic `import()` in `scripts/*.js`, convert filesystem paths with `pathToFileURL(...).href` before importing (raw Windows drive-letter paths fail Node's ESM loader).
 - When editing `.pre-commit-config.yaml`, `scripts/*` hook tooling, `.github/workflows/*.yml`, or hook-related scripts in `package.json`, run `npm run preflight:pre-commit` before finishing.
+- When running `preflight:pre-commit` with unstaged docs changes, the markdown hook may report 'files were modified' -- stage the changes first.
 - When editing `.pre-commit-config.yaml` or hook scripts, the new performance budget test (`scripts/__tests__/hook-perf-budget.test.js`) must pass; see [Git Hook Performance Budget](./skills/performance/git-hook-performance.md).
+- Never introduce `PLAN.md` / `PERF-PLAN.md` / `OLD-PLAN.md` / `GH-PAGES-PLAN.md` filename references or `T0.0` / `P0.0`-style milestone tags into shipping content (under `Runtime/`, `Editor/`, `SourceGenerators/`, `Samples~/`, `docs/`, root `*.md`, `llms.txt`). The `validate:no-plan-vocabulary` hook enforces this; treat any failure as a prose rewrite, not a hook bypass. See [No PLAN Vocabulary in Shipping Content](./skills/documentation/no-plan-vocabulary.md).
+- Untracked-and-unignored paths at the repo root are forbidden. The `validate:untracked-policy` hook fails if `git ls-files --others --exclude-standard` reports any path. Either commit the file or extend `.gitignore` / `.npmignore`.
 
 ## Build and Test Commands
 
@@ -41,6 +44,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
 - Pre-commit Node tooling preflight: `npm run preflight:pre-commit`
 - Validate local Node tool dependency health: `npm run validate:node-tooling`
+- Run Unity/devcontainer contract tests: `npm run test:unity-contracts`
 - Run markdown hook parity check: `npm run validate:hook-markdown`
 - Run parser hook suite exactly as pre-push executes it: `pre-commit run --hook-stage pre-push script-parser-tests --all-files`
 - Check package.json format explicitly: `npm run check:package-json-format`
@@ -59,6 +63,27 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate skills + context: `node scripts/validate-skills.js`
 - Regenerate skills index: `node scripts/generate-skills-index.js`
 - Verify index is current: `node scripts/generate-skills-index.js --check`
+
+## Running Unity Tests
+
+For Unity-side tests in `Tests/Editor/` or `Tests/Runtime/` (excludes Benchmarks/Allocations/Comparisons by default):
+
+- EditMode: `bash scripts/unity/run-tests.sh --platform editmode`
+- PlayMode: `bash scripts/unity/run-tests.sh --platform playmode`
+- IL2CPP standalone: `bash scripts/unity/run-tests.sh --platform standalone`
+- Filter: `--filter <regex>` (passed to `-testFilter`)
+- Include perf: `--include-perf` (off by default; GitHub benchmark workflow template is disabled)
+- Include comparisons: `--include-comparisons` (off by default; requires MessagePipe/UniRx/UniTask/Zenject packages in the harness)
+- Include DI integrations (Reflex/Zenject/VContainer): `--include-integrations` (off by default)
+- Realtime log streams to stdout; XML written to `.artifacts/unity/results.xml` unless `--results` overrides it
+- Bootstrap project: `.unity-test-project/` -- see [UPM Test Harness](./skills/unity/upm-test-harness.md)
+- License: see [Unity License Bootstrap](./skills/unity/unity-license-bootstrap.md) (Personal/GameCI: raw `.ulf` in `UNITY_LICENSE` plus credentials; Professional: `UNITY_SERIAL` plus credentials; local shells may use `UNITY_LICENSE_B64`.)
+- ARM Mac (Apple Silicon): not supported locally -- use a non-ARM local shell or Codespace while Unity GitHub workflows are disabled
+- For source-generator tests (no Unity), use `dotnet test SourceGenerators/...Tests`
+
+## Devcontainer Workflow
+
+The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outside-of-docker). Unity tests spawn ephemeral `unityci/editor` containers via the host docker socket; the image is pulled lazily on first use, the `.unity-test-project/Library` cache is preserved in a named volume across runs. See [Devcontainer Cache Contract](./skills/unity/devcontainer-cache-contract.md) and [Headless Test Runner](./skills/unity/headless-test-runner.md).
 
 ## C# Conventions
 
@@ -86,6 +111,9 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - When editing `scripts/validate-npm-meta.js`, `scripts/__tests__/validate-npm-meta.test.js`, or npm package metadata, run `npm run validate:npm-meta` before finishing.
 - When editing `scripts/fix-csharp-underscore-methods.js` or its tests, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/fix-csharp-underscore-methods.test.js` and then `npm run preflight:pre-commit` before finishing.
 - For parser-script failures, verify both isolated and hook-parity execution before concluding root cause: run the focused Jest path first, then run `pre-commit run --hook-stage pre-push script-parser-tests --all-files` from the same shell used for commit operations.
+- For Unity runner or perf-baseline script failures, run `npm run test:unity-contracts` before hook parity checks. On Windows, keep fake command shims platform-native (`.cmd` wrappers for PATH-resolved tools) and verify executable shell entrypoints with `git ls-files --stage` because NTFS mode bits are not the repository contract.
+- For PowerShell paths exported into Docker or Unity containers, pass repo-relative paths with `/` separators; keep platform-native absolute paths only for local filesystem display and validation.
+- Generated dependency lockfiles should be ignored by cspell unless the vocabulary is intentionally reviewed.
 - When editing `.pre-commit-config.yaml` or `scripts/validate-pre-commit-tooling.js`, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/pre-commit-hook-stage-policy.test.js scripts/__tests__/validate-pre-commit-tooling.test.js` before `npm run preflight:pre-commit`.
 - On Windows, verify `npm --version` in the active shell before running hook-related checks (especially when using nvm/fnm).
 - On Windows hosts, run `npm run preflight:pre-commit` in the same shell you use for `git commit` so hook PATH/init, npm version drift, package.json formatting, and yamllint issues are caught before commit.
@@ -110,7 +138,9 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Tests that exercise dispatch across more than one of `Untargeted`/`Targeted`/`Broadcast` MUST be parameterized via `MessageScenarios.AllKinds`; see [Tests Must Be Parameterized by Message Kind](./skills/testing/tests-must-be-parameterized-by-message-kind.md).
 - Bus dispatch-path changes must be covered by the canonical lifecycle edge-case set (scene unload mid-dispatch, DDOL transitions, prefab pooling churn, token disable / re-enable, post-Reset emit, OnApplicationQuit drain, cross-kind reentrancy); see [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md).
 - Tests that create and tear down message registrations should bracket the work in a `LeakWatcher` to assert no registrations survive; see [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md).
+- Tests for memory holders keyed by message type or `InstanceId` must prove forced trim, idle sweep, slot-count recovery, and stale deregistration behavior; see [Memory Reclaim Coverage](./skills/testing/memory-reclaim-coverage.md).
 - Benchmark and performance/allocation tests must stay isolated under `Tests/Runtime/Benchmarks` in asmdef `WallstopStudios.DxMessaging.Tests.00.Runtime.Benchmarks`; `.00` is a lexical prefix convention so the benchmark assembly sorts before peer test assemblies in Unity Test Runner. Keep `BenchmarkAssemblyContractTests` green when adding or moving perf tests.
+- When adding a `MessageCache<>` storage field to `MessageBus`, update `MessageBus.ExpectedMessageCacheFieldCount`, add the field to `MessageBus.SweepableTypeCaches`, and add reclamation coverage; see [DxMessaging Memory Reclamation](./skills/performance/memory-reclamation.md).
 
 ## Documentation Expectations
 
@@ -127,15 +157,19 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Every C# code sample in docs - inline, fenced, and XML `<code>` blocks - must compile; see [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md). Run `node scripts/validate-doc-code-patterns.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) and the `DocsSnippetCompilationTests` suite before finishing.
 - Documentation prose must avoid LLM-style filler, marketing adjectives, hedge transitions, and vague quantifiers; see [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md). Run `node scripts/validate-docs-prose.js` (or, for the hook-equivalent batch run, `node scripts/run-staged-md-pipeline.js <md-files>` for `.md` and `node scripts/run-staged-validators.js <cs-files>` for `.cs`) before finishing.
 - Subclasses of `MessageAwareComponent` MUST call `base.<method>()` from every guarded lifecycle override (`Awake`, `OnEnable`, `OnDisable`, `OnDestroy`, `RegisterMessageHandlers`); see [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md). Five enforcement layers (Roslyn analyzer DXMSG006-010, IL scanner, Inspector overlay, runtime self-check, meta-test) keep the contract honest.
+- When editing `Runtime/Core/Configuration/DxMessagingRuntimeSettings.cs` or its provider, run `npm run validate:runtime-settings-docs` and update `docs/reference/runtime-settings.md` and `docs/guides/memory-reclamation.md` in the same change; see [Memory Reclamation Documentation Maintenance](./skills/documentation/memory-reclamation-docs.md).
 
 ## Skills to Prefer
 
 Use the index above and then select the most relevant skill pages. Frequently useful entries include:
 
 - Documentation and changelog guidance under `./skills/documentation/`
+- Memory reclamation guidance under `./skills/performance/memory-reclamation.md`
 - Script reliability and parsing guidance under `./skills/scripting/`
 - Test quality and investigation guidance under `./skills/testing/`
+- Memory reclaim testing guidance under `./skills/testing/memory-reclaim-coverage.md`
 - Workflow robustness under `./skills/github-actions/`
+- Unity headless test workflow under `./skills/unity/` (see headless-test-runner, unity-license-bootstrap, upm-test-harness, devcontainer-cache-contract, unity-ci-matrix, unity-perf-test-isolation)
 
 ## Split File Maintenance
 
@@ -154,5 +188,14 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [Test Failure Investigation and Zero-Flaky Policy](./skills/testing/test-failure-investigation.md)
 - [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md)
 - [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md)
+- [Memory Reclaim Coverage](./skills/testing/memory-reclaim-coverage.md)
+- [DxMessaging Memory Reclamation](./skills/performance/memory-reclamation.md)
 - [MessageAwareComponent Base-Call Contract](./skills/unity/base-call-contract.md)
 - [Git Hook Performance Budget](./skills/performance/git-hook-performance.md)
+- [Headless Unity Test Runner](./skills/unity/headless-test-runner.md)
+- [Unity License Bootstrap](./skills/unity/unity-license-bootstrap.md)
+- [UPM Test Harness](./skills/unity/upm-test-harness.md)
+- [Devcontainer Cache Contract](./skills/unity/devcontainer-cache-contract.md)
+- [Unity CI Matrix](./skills/unity/unity-ci-matrix.md)
+- [Unity Perf Test Isolation](./skills/unity/unity-perf-test-isolation.md)
+- [CI/CD Devcontainer Workflows](./skills/github-actions/cicd-devcontainer-workflows.md)

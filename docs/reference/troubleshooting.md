@@ -48,6 +48,19 @@ Diagnostics overhead
 
 - Disable diagnostics in release builds (`IMessageBus.GlobalDiagnosticsMode = false`).
 
+## Memory grows in long sessions
+
+- Read `bus.OccupiedTypeSlots` and `bus.OccupiedTargetSlots` (or the global
+  `MessageHandler.MessageBus.OccupiedTypeSlots` / `OccupiedTargetSlots`) at
+  region boundaries to see whether per-type or per-target slots are the
+  culprit.
+- Call `MessageHandler.TrimAll(force: true)` (or `bus.Trim(force: true)`) at
+  scene unload or other natural transitions. Slots that survive a forced
+  trim correspond to active registrations.
+- Tune the reclamation policy through `DxMessagingRuntimeSettings`. See the
+  [Memory Reclamation guide](../guides/memory-reclamation.md) for tuning
+  recommendations and a leak-watching pattern.
+
 ---
 
 ## Related Documentation

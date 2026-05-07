@@ -9,6 +9,7 @@ This guide covers how to configure message buses at runtime and retarget existin
   - [Global Message Bus Management](#global-message-bus-management)
   - [Re-binding Registrations](#re-binding-registrations)
   - [Common Patterns](#common-patterns)
+  - [Memory Reclamation Policy](#memory-reclamation-policy)
 
 ---
 
@@ -399,8 +400,30 @@ public class DynamicComponentManager
 
 ---
 
+## Memory Reclamation Policy
+
+Long-running buses retain per-message-type and per-context slots and a set of
+shared collection pools. The memory reclamation system bounds that growth
+through idle sweeps and an explicit `Trim` API. Both knobs live on the
+`DxMessagingRuntimeSettings` ScriptableObject loaded from `Resources/`.
+
+The asset is hot-reloadable. Live buses subscribe to
+`DxMessagingRuntimeSettings.SettingsChanged` and re-apply caps without
+recreation, which means you can tune the policy from the editor while Play
+mode is running.
+
+For scenario-driven tuning recommendations, the public `Trim` and
+diagnostic-counter API surface, and worked examples for scene transitions
+and leak diagnosis, see the [Memory Reclamation guide](../guides/memory-reclamation.md).
+For the full parameter reference (including defaults, mins, and tooltip
+text), see the [Runtime Settings reference](../reference/runtime-settings.md).
+
+---
+
 ## See Also
 
+- **[Memory Reclamation Guide](../guides/memory-reclamation.md)** -- when reclamation runs, how to tune it, and how to verify it
+- **[Runtime Settings Reference](../reference/runtime-settings.md)** -- complete parameter reference for `DxMessagingRuntimeSettings`
 - **[Message Bus Providers](message-bus-providers.md)** -- ScriptableObject-based provider system for design-time configuration
 - **[Registration Builders](registration-builders.md)** -- Fluent API for building message registrations with priority and lifecycle control
 - **[DI Integration Guides](../integrations/index.md)** -- Zenject, VContainer, and Reflex integration patterns

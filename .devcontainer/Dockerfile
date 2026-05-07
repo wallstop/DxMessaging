@@ -1,5 +1,10 @@
+# syntax=docker/dockerfile:1.4
+
 # DxMessaging Development Container
 # Base image: .NET 9.0 on Debian Bookworm
+# Note: .NET 10 SDK is installed alongside .NET 9 to support C# Dev Kit.
+# Note: docker-outside-of-docker (DooD) is enabled via devcontainer feature so
+#       Phase 2+ can spawn ephemeral unityci/editor containers from inside.
 FROM mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm
 
 # Build argument for target architecture (amd64 or arm64)
@@ -9,6 +14,8 @@ ARG TARGETARCH=amd64
 LABEL org.opencontainers.image.source="https://github.com/wallstop/DxMessaging"
 LABEL org.opencontainers.image.description="DxMessaging development container"
 LABEL org.opencontainers.image.licenses="MIT"
+LABEL unity.support="docker-outside-of-docker"
+LABEL unity.note="Unity tests spawn ephemeral unityci/editor containers via DooD"
 
 # Environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,30 +26,57 @@ ENV DOTNET_NOLOGO=1
 # Fix expired Yarn GPG key issue
 # The base image includes the Yarn repository which has an expired signing key.
 # Remove it since this project doesn't require Yarn.
+# This must run BEFORE the first apt-get update so feature installation does
+# not fail on the expired signature.
 # ------------------------------------------------------------------------------
-RUN rm -f /etc/apt/sources.list.d/yarn.list \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/sources.list.d/yarn.list \
     && rm -f /usr/share/keyrings/yarn-keyring.gpg \
-    && rm -f /etc/apt/keyrings/yarn.gpg
+    && rm -f /etc/apt/keyrings/yarn.gpg \
+    && rm -f /usr/share/keyrings/yarn.gpg \
+    && rm -f /etc/apt/trusted.gpg.d/yarn.gpg \
+    && find /etc/apt/sources.list.d/ -name "*yarn*" -delete || true
 
 # Install essential APT packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ripgrep \
-    jq \
-    htop \
-    ncdu \
-    tree \
-    tldr \
-    silversearcher-ag \
-    moreutils \
-    unzip \
-    wget \
-    ca-certificates \
-    shellcheck \
-    curl \
-    gnupg \
-    apt-transport-https \
-    software-properties-common \
-    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        ripgrep \
+        jq \
+        htop \
+        ncdu \
+        tree \
+        tldr \
+        silversearcher-ag \
+        moreutils \
+        unzip \
+        wget \
+        ca-certificates \
+        shellcheck \
+        curl \
+        gnupg \
+        apt-transport-https \
+        software-properties-common \
+    && apt-get autoremove -y
+
+# ------------------------------------------------------------------------------
+# Install .NET 10 SDK side-by-side (required by C# Dev Kit extension)
+# Unity is targeting .NET Standard 2.1 / .NET 9, so .NET 9 SDK remains primary.
+# We install .NET 10 SDK + runtime via the official dotnet-install.sh into a
+# shared location so both vscode and root see it on PATH.
+# ------------------------------------------------------------------------------
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    --mount=type=tmpfs,target=/tmp \
+    apt-get update \
+    && apt-get -y install --no-install-recommends \
+        wget \
+        ca-certificates \
+    && wget https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
+    && apt-get autoremove -y
 
 # Create a temporary directory for downloads
 WORKDIR /tmp/tools
@@ -301,32 +335,38 @@ RUN set -eux; \
 # Install PowerShell
 # https://docs.microsoft.com/en-us/powershell/scripting/install/install-debian
 # ------------------------------------------------------------------------------
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
     wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb; \
     dpkg -i packages-microsoft-prod.deb; \
     rm packages-microsoft-prod.deb; \
     apt-get update; \
     apt-get install -y powershell; \
-    rm -rf /var/lib/apt/lists/*; \
+    apt-get autoremove -y; \
     pwsh --version
 
 # ------------------------------------------------------------------------------
 # Install Git LFS
 # ------------------------------------------------------------------------------
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
     apt-get update; \
     apt-get install -y git-lfs; \
-    git lfs install; \
-    rm -rf /var/lib/apt/lists/*; \
+    git lfs install --system; \
+    apt-get autoremove -y; \
     git lfs version
 
 # ------------------------------------------------------------------------------
 # Install Python3, pip, and venv
 # ------------------------------------------------------------------------------
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
     apt-get update; \
     apt-get install -y python3 python3-pip python3-venv; \
-    rm -rf /var/lib/apt/lists/*; \
+    apt-get autoremove -y; \
     python3 --version; \
     pip3 --version
 
@@ -334,10 +374,12 @@ RUN set -eux; \
 # Install Node.js LTS via NodeSource
 # https://github.com/nodesource/distributions
 # ------------------------------------------------------------------------------
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    set -eux; \
     curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -; \
     apt-get install -y nodejs; \
-    rm -rf /var/lib/apt/lists/*; \
+    apt-get autoremove -y; \
     node --version; \
     npm --version
 
@@ -353,6 +395,38 @@ RUN pip3 install --no-cache-dir yamllint --break-system-packages && yamllint --v
 # https://pre-commit.com
 # ------------------------------------------------------------------------------
 RUN pip3 install --no-cache-dir pre-commit --break-system-packages && pre-commit --version
+
+# ------------------------------------------------------------------------------
+# Configure Git Defaults for Unity-style Repositories
+# ------------------------------------------------------------------------------
+# Optimize git for Unity projects with large binary assets and Windows path
+# lengths. These mirror the Shiro reference container.
+# ------------------------------------------------------------------------------
+RUN git config --system core.longpaths true \
+    && git config --system core.preloadindex true \
+    && git config --system gc.auto 256 \
+    && git config --system lfs.concurrenttransfers 10 \
+    && git config --system pack.windowMemory 256m \
+    && git config --system pack.deltaCacheSize 128m
+
+# ------------------------------------------------------------------------------
+# Pre-create volume mount targets with vscode:vscode ownership
+# ------------------------------------------------------------------------------
+# Docker named volumes copy permissions/contents from the image ONLY on first
+# attach (when the volume is empty). Pre-creating these directories with the
+# correct ownership ensures the vscode user owns them on first run; rebuilds
+# of an existing volume are repaired by post-create.sh / post-start.sh.
+#
+# Targets here MUST stay aligned with cache-contract.sh (4 entries).
+# ------------------------------------------------------------------------------
+RUN mkdir -p /home/vscode/.nuget \
+    && mkdir -p /home/vscode/.dotnet/tools \
+    && mkdir -p /home/vscode/.local/share/powershell \
+    && mkdir -p /home/vscode/.cache/pip \
+    && chown -R vscode:vscode /home/vscode/.nuget \
+    && chown -R vscode:vscode /home/vscode/.dotnet \
+    && chown -R vscode:vscode /home/vscode/.local \
+    && chown -R vscode:vscode /home/vscode/.cache
 
 # ------------------------------------------------------------------------------
 # Configure shell aliases for bash

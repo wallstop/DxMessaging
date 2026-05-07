@@ -14,6 +14,7 @@ on:
       - ".npmignore"
       - "scripts/validate-npm-meta.js"
       - "scripts/__tests__/validate-npm-meta.test.js"
+      - ".github/workflows/validate-npm-meta.yml"
   push:
     branches:
       - main
@@ -30,6 +31,7 @@ on:
       - ".npmignore"
       - "scripts/validate-npm-meta.js"
       - "scripts/__tests__/validate-npm-meta.test.js"
+      - ".github/workflows/validate-npm-meta.yml"
   workflow_dispatch:
 
 concurrency:
@@ -92,3 +94,30 @@ jobs:
 
       - name: Validate NPM package meta files
         run: npm run validate:npm-meta
+
+      - name: "Inspect real npm pack tarball for issue #204 regressions"
+        # Defense-in-depth check that runs `npm pack` (not --dry-run) and inspects the
+        # produced tarball for any build artifact paths. The dry-run validator above
+        # already enforces this, but a real pack on each runner OS catches platform
+        # drift (e.g. case sensitivity, path separators, glob expansion differences).
+        # See https://github.com/wallstop/DxMessaging/issues/204 for the original
+        # GuidDB::CreateMetaFileMappings regression that motivated this guard.
+        #
+        # IMPORTANT: keep the grep alternation below in sync with `buildArtifactPatterns`
+        # in scripts/validate-npm-meta.js. Order matters -- list the most specific
+        # patterns first (`.csproj.user`, `.DotSettings.user`) before the generic
+        # `.user$` so any drift surfaces with the most actionable label.
+        run: |
+          set -euo pipefail
+          npm pack
+          tarball="$(find . -maxdepth 1 -type f -name '*.tgz' -print | sort | head -n1)"
+          echo "Inspecting tarball: ${tarball}"
+          leaks="$(tar -tzf "${tarball}" | grep -E '(^|/)(bin|obj)/|\.pdb$|\.tmp$|\.csproj\.user$|(^|/)\.vs/|(^|/)\.idea/|\.suo$|\.DotSettings\.user$|\.user$' || true)"
+          if [ -n "${leaks}" ]; then
+            echo "::error::npm pack tarball contains forbidden build artifact paths (issue 204 regression):"
+            echo "${leaks}"
+            rm -f -- *.tgz
+            exit 1
+          fi
+          echo "OK: no bin/obj/pdb/tmp/IDE state in tarball."
+          rm -f -- *.tgz

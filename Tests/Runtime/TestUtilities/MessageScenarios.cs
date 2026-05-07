@@ -32,6 +32,26 @@ namespace DxMessaging.Tests.Runtime
             }
         }
 
+        /// <summary>
+        /// Five-kind source covering the three canonical dispatch kinds plus
+        /// the targeted-without-targeting and broadcast-without-source
+        /// dispatch surfaces. Use this source for tests that need to assert
+        /// behavior across the without-context dispatch codepaths in addition
+        /// to the canonical three. Tests consuming this source must handle
+        /// every value of <see cref="MessageKind"/>.
+        /// </summary>
+        public static IEnumerable<MessageScenario> AllKindsIncludingWithoutContext
+        {
+            get
+            {
+                yield return MessageScenario.Untargeted();
+                yield return MessageScenario.Targeted();
+                yield return MessageScenario.Broadcast();
+                yield return MessageScenario.TargetedWithoutTargeting();
+                yield return MessageScenario.BroadcastWithoutSource();
+            }
+        }
+
         public static IEnumerable<MessageScenario> KindsWithComponentTarget
         {
             get
@@ -65,11 +85,35 @@ namespace DxMessaging.Tests.Runtime
             }
         }
 
+        public static IEnumerable<MessageScenario> WithAndWithoutPostProcessorIncludingWithoutContext
+        {
+            get
+            {
+                foreach (MessageScenario scenario in AllKindsIncludingWithoutContext)
+                {
+                    yield return scenario.WithPostProcessor(false);
+                    yield return scenario.WithPostProcessor(true);
+                }
+            }
+        }
+
         public static IEnumerable<MessageScenario> WithDiagnosticsToggle
         {
             get
             {
                 foreach (MessageScenario scenario in AllKinds)
+                {
+                    yield return scenario.WithDiagnostics(false);
+                    yield return scenario.WithDiagnostics(true);
+                }
+            }
+        }
+
+        public static IEnumerable<MessageScenario> WithDiagnosticsToggleIncludingWithoutContext
+        {
+            get
+            {
+                foreach (MessageScenario scenario in AllKindsIncludingWithoutContext)
                 {
                     yield return scenario.WithDiagnostics(false);
                     yield return scenario.WithDiagnostics(true);

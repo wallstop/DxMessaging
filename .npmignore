@@ -18,6 +18,12 @@
 **/*.pdb
 
 # =============================================================================
+# Tooling Output Directories
+# =============================================================================
+.artifacts/
+.artifacts.meta
+
+# =============================================================================
 # SourceGenerator Exclusions
 # =============================================================================
 # Exclude the test project entirely (both folder and .meta file)
@@ -52,6 +58,10 @@ CLAUDE.md.meta
 
 # Devcontainer
 .devcontainer/
+
+# Unity test harness
+.unity-test-project/
+.unity-test-project.meta
 
 # Tool configuration
 .config/
@@ -116,6 +126,10 @@ PLAN.md
 PLAN.md.meta
 GH-PAGES-PLAN.md
 GH-PAGES-PLAN.md.meta
+PERF-PLAN.md
+PERF-PLAN.md.meta
+OLD-PLAN.md
+OLD-PLAN.md.meta
 
 # =============================================================================
 # Python Virtual Environment

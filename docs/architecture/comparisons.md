@@ -28,16 +28,16 @@
 
 ## Performance Benchmarks
 
-These sections are auto-updated by the PlayMode comparison benchmarks in the [Comparison Performance PlayMode tests](https://github.com/wallstop/DxMessaging/blob/master/Tests/Runtime/Benchmarks/ComparisonPerformanceTests.cs). Run the suite locally to refresh the tables.
+These sections are auto-updated by the PlayMode comparison benchmarks in the [Comparison Performance PlayMode tests](https://github.com/wallstop/DxMessaging/blob/master/Tests/Editor/Comparisons/ComparisonPerformanceTests.cs). Run the suite locally to refresh the tables.
 
 ### Comparisons (Windows)
 
 | Message Tech                       | Operations / Second | Allocations? |
 | ---------------------------------- | ------------------- | ------------ |
-| DxMessaging (Untargeted) - No-Copy | 19,199,890          | No           |
-| UniRx MessageBroker                | 17,347,999          | No           |
-| MessagePipe (Global)               | 97,265,117          | No           |
-| Zenject SignalBus                  | 2,347,720           | Yes          |
+| DxMessaging (Untargeted) - No-Copy | 17,074,646          | No           |
+| UniRx MessageBroker                | 17,919,648          | No           |
+| MessagePipe (Global)               | 94,913,633          | No           |
+| Zenject SignalBus                  | 2,495,730           | Yes          |
 
 ### Comparisons (macOS)
 
@@ -317,7 +317,7 @@ public class AchievementSystem
 
 #### What Problems It Solves
 
-- [x] **Performance:** Zero allocations with struct-based messages (see [benchmarks](https://github.com/wallstop/DxMessaging/tree/master/Tests/Runtime/Benchmarks) for comparison data)
+- [x] **Performance:** Zero allocations with struct-based messages (see [benchmarks](https://github.com/wallstop/DxMessaging/tree/master/Tests/Editor/Comparisons) for comparison data)
 - [x] **DI integration:** First-class support for dependency injection
 - [x] **Async messaging:** Native async/await without blocking
 - [x] **Leak detection:** Analyzer catches forgotten subscriptions at compile-time

@@ -152,8 +152,8 @@ echo -e "${BLUE}=== .NET Tools ===${NC}"
 check_tool "csharpier" "csharpier" "--version"
 
 echo ""
-echo -e "${BLUE}=== Node.js Global Tools ===${NC}"
-check_tool "codex" "codex" "--version"
+echo -e "${BLUE}=== AI / Agent CLIs ===${NC}"
+check_optional "codex (@openai)" "codex" "--version"
 
 echo ""
 echo -e "${BLUE}=== npm Configuration ===${NC}"

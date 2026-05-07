@@ -1,9 +1,11 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using DxMessaging.Core;
+    using DxMessaging.Core.Configuration;
     using DxMessaging.Core.DataStructure;
     using DxMessaging.Core.Diagnostics;
     using DxMessaging.Core.Extensions;
@@ -126,6 +128,40 @@ namespace DxMessaging.Tests.Runtime.Core
                 100,
                 "DefaultMessageBufferSize constant should be 100."
             );
+        }
+
+        [Test]
+        public void RuntimeSettingsMessageBufferSizeResizesExistingAndNewBuses()
+        {
+            int originalBufferSize = IMessageBus.GlobalMessageBufferSize;
+            DxMessagingRuntimeSettings settings =
+                ScriptableObject.CreateInstance<DxMessagingRuntimeSettings>();
+            IDisposable overrideToken = null;
+            try
+            {
+                MessageBus existingBus = MessageBus.CreateForInternalUse(new FakeClock());
+                settings._messageBufferSize = 2;
+                overrideToken = DxMessagingRuntimeSettingsProvider.Override(settings);
+
+                Assert.AreEqual(2, IMessageBus.GlobalMessageBufferSize);
+                Assert.AreEqual(2, GetEmissionBuffer(existingBus).Capacity);
+
+                MessageBus newBus = MessageBus.CreateForInternalUse(new FakeClock());
+                Assert.AreEqual(2, GetEmissionBuffer(newBus).Capacity);
+
+                settings._messageBufferSize = 1;
+                DxMessagingRuntimeSettings.RaiseSettingsChanged(settings);
+
+                Assert.AreEqual(1, IMessageBus.GlobalMessageBufferSize);
+                Assert.AreEqual(1, GetEmissionBuffer(existingBus).Capacity);
+                Assert.AreEqual(1, GetEmissionBuffer(newBus).Capacity);
+            }
+            finally
+            {
+                overrideToken?.Dispose();
+                UnityEngine.Object.DestroyImmediate(settings);
+                IMessageBus.GlobalMessageBufferSize = originalBufferSize;
+            }
         }
 
         [UnityTest]

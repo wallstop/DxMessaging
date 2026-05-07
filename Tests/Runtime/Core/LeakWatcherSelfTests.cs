@@ -1,8 +1,10 @@
 #if UNITY_2021_3_OR_NEWER
 namespace DxMessaging.Tests.Runtime.Core
 {
+    using System;
     using System.Collections;
     using DxMessaging.Core;
+    using DxMessaging.Core.Configuration;
     using DxMessaging.Core.MessageBus;
     using DxMessaging.Tests.Runtime;
     using DxMessaging.Tests.Runtime.Scripts.Components;
@@ -153,6 +155,206 @@ namespace DxMessaging.Tests.Runtime.Core
             yield break;
         }
 
+        [UnityTest]
+        public IEnumerator WatcherWithSlotsPassesAfterExplicitTrim(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            GameObject host = new(
+                nameof(WatcherWithSlotsPassesAfterExplicitTrim) + scenario.Kind,
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
+            using IDisposable settingsOverride = ForceTrimEnabledSettings();
+            IMessageBus bus = MessageHandler.MessageBus;
+
+            using (LeakWatcher watcher = LeakWatcher.WatchWithSlots(label: scenario.DisplayName))
+            {
+                int initialSlots = watcher.InitialSlotSnapshot;
+                MessageRegistrationHandle handle = RegisterCountingHandler(scenario, token, hostId);
+                Assert.GreaterOrEqual(
+                    watcher.SlotSnapshot,
+                    initialSlots + 1,
+                    "[{0}] Watcher.SlotSnapshot must reflect occupied slots while registered.",
+                    scenario.Kind
+                );
+
+                token.RemoveRegistration(handle);
+                _ = bus.Trim(force: true);
+
+                Assert.AreEqual(
+                    initialSlots,
+                    watcher.SlotSnapshot,
+                    "[{0}] Watcher.SlotSnapshot must return to the initial value after trim.",
+                    scenario.Kind
+                );
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator WatcherWithSlotsDetectsUnreclaimedSlotWhenNotThrowing(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            GameObject host = new(
+                nameof(WatcherWithSlotsDetectsUnreclaimedSlotWhenNotThrowing) + scenario.Kind,
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
+            using IDisposable settingsOverride = ForceTrimEnabledSettings();
+            IMessageBus bus = MessageHandler.MessageBus;
+
+            int leakedTypeSlots;
+            int leakedTargetSlots;
+            int leakedSlots;
+            int leakedRegistrations;
+            string deltaDescription;
+            try
+            {
+                using (
+                    LeakWatcher watcher = LeakWatcher.WatchWithSlots(
+                        bus,
+                        throwOnLeak: false,
+                        label: scenario.DisplayName
+                    )
+                )
+                {
+                    MessageRegistrationHandle handle = RegisterCountingHandler(
+                        scenario,
+                        token,
+                        hostId
+                    );
+                    token.RemoveRegistration(handle);
+
+                    leakedRegistrations = watcher.LeakedRegistrations;
+                    leakedTypeSlots = watcher.LeakedTypeSlots;
+                    leakedTargetSlots = watcher.LeakedTargetSlots;
+                    leakedSlots = watcher.LeakedSlots;
+                    deltaDescription = watcher.DescribeDelta();
+                }
+
+                Assert.AreEqual(
+                    0,
+                    leakedRegistrations,
+                    "[{0}] WatchWithSlots must keep registration and slot leak accounting separate.",
+                    scenario.Kind
+                );
+                Assert.GreaterOrEqual(
+                    leakedSlots,
+                    1,
+                    "[{0}] WatchWithSlots must detect occupied slots left behind after deregistration without trim.",
+                    scenario.Kind
+                );
+                Assert.AreEqual(leakedSlots, leakedTypeSlots + leakedTargetSlots);
+                StringAssert.Contains("TypeSlots", deltaDescription);
+                StringAssert.Contains("TargetSlots", deltaDescription);
+            }
+            finally
+            {
+                _ = bus.Trim(force: true);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator WatcherWithSlotsThrowsOnSlotOnlyLeak(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            GameObject host = new(
+                nameof(WatcherWithSlotsThrowsOnSlotOnlyLeak) + scenario.Kind,
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
+            using IDisposable settingsOverride = ForceTrimEnabledSettings();
+            IMessageBus bus = MessageHandler.MessageBus;
+            LeakWatcher watcher = LeakWatcher.WatchWithSlots(label: scenario.DisplayName);
+
+            try
+            {
+                MessageRegistrationHandle handle = RegisterCountingHandler(scenario, token, hostId);
+                token.RemoveRegistration(handle);
+
+                AssertionException exception = Assert.Throws<AssertionException>(
+                    watcher.Dispose,
+                    "[{0}] WatchWithSlots must fail when registrations drain but occupied slots remain.",
+                    scenario.Kind
+                );
+                StringAssert.Contains("type slot delta", exception.Message);
+            }
+            finally
+            {
+                _ = bus.Trim(force: true);
+            }
+
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator DefaultWatcherIgnoresSlotOnlyFootprint(
+            [ValueSource(typeof(MessageScenarios), nameof(MessageScenarios.AllKinds))]
+                MessageScenario scenario
+        )
+        {
+            GameObject host = new(
+                nameof(DefaultWatcherIgnoresSlotOnlyFootprint) + scenario.Kind,
+                typeof(EmptyMessageAwareComponent)
+            );
+            _spawned.Add(host);
+            EmptyMessageAwareComponent component = host.GetComponent<EmptyMessageAwareComponent>();
+            MessageRegistrationToken token = GetToken(component);
+            InstanceId hostId = host;
+            using IDisposable settingsOverride = ForceTrimEnabledSettings();
+            IMessageBus bus = MessageHandler.MessageBus;
+
+            try
+            {
+                using (LeakWatcher watcher = LeakWatcher.Watch(label: scenario.DisplayName))
+                {
+                    MessageRegistrationHandle handle = RegisterCountingHandler(
+                        scenario,
+                        token,
+                        hostId
+                    );
+                    token.RemoveRegistration(handle);
+
+                    Assert.GreaterOrEqual(
+                        watcher.LeakedSlots,
+                        1,
+                        "[{0}] The default watcher should still report slot drift.",
+                        scenario.Kind
+                    );
+                    Assert.AreEqual(
+                        0,
+                        watcher.LeakedRegistrations,
+                        "[{0}] Registration counters must be clean before default watcher disposal.",
+                        scenario.Kind
+                    );
+                }
+            }
+            finally
+            {
+                _ = bus.Trim(force: true);
+            }
+
+            yield break;
+        }
+
         private static MessageRegistrationHandle RegisterCountingHandler(
             MessageScenario scenario,
             MessageRegistrationToken token,
@@ -194,6 +396,51 @@ namespace DxMessaging.Tests.Runtime.Core
                         scenario.Kind,
                         "Unsupported message kind."
                     );
+                }
+            }
+        }
+
+        private static IDisposable ForceTrimEnabledSettings()
+        {
+            DxMessagingRuntimeSettings settings =
+                ScriptableObject.CreateInstance<DxMessagingRuntimeSettings>();
+            settings._enableTrimApi = true;
+            settings._evictionEnabled = true;
+            settings._idleEvictionSeconds = 0f;
+            settings._evictionTickIntervalSeconds = 0f;
+            return new RuntimeSettingsScope(
+                DxMessagingRuntimeSettingsProvider.Override(settings),
+                settings
+            );
+        }
+
+        private sealed class RuntimeSettingsScope : IDisposable
+        {
+            private readonly IDisposable _overrideToken;
+            private readonly DxMessagingRuntimeSettings _settings;
+            private bool _disposed;
+
+            public RuntimeSettingsScope(
+                IDisposable overrideToken,
+                DxMessagingRuntimeSettings settings
+            )
+            {
+                _overrideToken = overrideToken;
+                _settings = settings;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                _overrideToken.Dispose();
+                if (_settings != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(_settings);
                 }
             }
         }

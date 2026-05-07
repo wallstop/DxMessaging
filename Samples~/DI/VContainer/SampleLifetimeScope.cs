@@ -18,7 +18,12 @@ namespace DxMessaging.Samples.DI.VContainer
     {
         protected override void Configure(IContainerBuilder builder)
         {
-            builder.Register<MessageBus.MessageBus>(Lifetime.Singleton).As<IMessageBus>();
+            // Always register MessageBus through RegisterDxMessagingBus. The bare pattern
+            // builder.Register<MessageBus>(Lifetime.Singleton).As<IMessageBus>() fails at
+            // resolution time because VContainer's TypeAnalyzer scans both public and private
+            // constructors and prefers the one with the most parameters; that overload takes
+            // an IDxMessagingClock that is not registered with the container.
+            builder.RegisterDxMessagingBus();
             builder.RegisterMessageRegistrationBuilder();
 
             builder.RegisterEntryPoint<ScoreboardService>(Lifetime.Singleton);

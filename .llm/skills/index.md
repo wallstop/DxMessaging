@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-03. Do not edit manually.
+> **Auto-generated** on 2026-05-06. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,60 +9,63 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 144   |
+| Total Skills | 157   |
 | Categories   | 8     |
 
 ---
 
 ## Table of Contents
 
-- [Documentation](#documentation) (27)
-- [GitHub Actions](#github-actions) (5)
+- [Documentation](#documentation) (29)
+- [GitHub Actions](#github-actions) (6)
 - [Packaging](#packaging) (2)
-- [Performance](#performance) (42)
+- [Performance](#performance) (45)
 - [Scripting](#scripting) (15)
 - [Solid](#solid) (15)
-- [Testing](#testing) (37)
-- [Unity](#unity) (1)
+- [Testing](#testing) (38)
+- [Unity](#unity) (7)
 
 ---
 
 ## Documentation
 
-| Skill                                                                                                 | Lines      | Complexity     | Status   | Performance  | Tags                         |
-| ----------------------------------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | ---------------------------- |
-| [ASCII-Only Documentation Policy](./documentation/ascii-only-docs.md)                                 | [ok] 173   | [basic]        | [stable] | [risk: none] | documentation, ascii         |
-| [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | [warn] 296 | [basic]        | [stable] | [risk: none] | changelog, release-notes     |
-| [Changelog Entry Writing and Anti-Patterns Part 1](./documentation/changelog-entry-writing-part-1.md) | [draft] 56 | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Changelog Management](./documentation/changelog-management.md)                                       | [ok] 229   | [basic]        | [stable] | [risk: none] | changelog, documentation     |
-| [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                           | [ok] 250   | [basic]        | [stable] | [risk: none] | changelog, release-workflow  |
-| [Code Samples Must Compile](./documentation/code-samples-must-compile.md)                             | [ok] 139   | [basic]        | [stable] | [risk: none] | documentation, code-samples  |
-| [Documentation Code Samples](./documentation/documentation-code-samples.md)                           | [ok] 213   | [basic]        | [stable] | [risk: none] | documentation, code-samples  |
-| [Documentation Code Samples Part 1](./documentation/documentation-code-samples-part-1.md)             | [draft] 82 | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Documentation Style Guide](./documentation/documentation-style-guide.md)                             | [ok] 204   | [basic]        | [stable] | [risk: none] | documentation, style         |
-| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)                     | [ok] 155   | [basic]        | [stable] | [risk: none] | documentation, workflow      |
-| [Documentation Updates and Maintenance](./documentation/documentation-updates.md)                     | [ok] 149   | [basic]        | [stable] | [risk: none] | documentation, code-comments |
-| [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)               | [ok] 182   | [basic]        | [stable] | [risk: none] | documentation, links         |
-| [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md)           | [ok] 204   | [basic]        | [stable] | [risk: none] | github-actions, ci-cd        |
-| [Human-Prose Documentation Policy](./documentation/human-prose-policy.md)                             | [ok] 187   | [basic]        | [stable] | [risk: none] | documentation, prose         |
-| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)                | [ok] 120   | [basic]        | [stable] | [risk: none] | documentation, links         |
-| [Link Quality and External URL Management Part 1](./documentation/link-quality-guidelines-part-1.md)  | [ok] 196   | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Link Quality and External URL Management Part 2](./documentation/link-quality-guidelines-part-2.md)  | [draft] 64 | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)                        | [ok] 136   | [basic]        | [stable] | [risk: none] | documentation, markdown      |
-| [Markdown Compatibility Guidelines Part 1](./documentation/markdown-compatibility-part-1.md)          | [ok] 202   | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Markdown Compatibility Guidelines Part 2](./documentation/markdown-compatibility-part-2.md)          | [ok] 210   | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                                         | [ok] 199   | [intermediate] | [stable] | [risk: none] | documentation, mermaid       |
-| [Mermaid Diagram Theming Part 1](./documentation/mermaid-theming-part-1.md)                           | [ok] 160   | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                                  | [ok] 252   | [basic]        | [stable] | [risk: none] | documentation, mkdocs        |
-| [MkDocs Navigation Management Part 1](./documentation/mkdocs-navigation-part-1.md)                    | [draft] 71 | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                                  | [ok] 256   | [basic]        | [stable] | [risk: none] | documentation, skills        |
-| [Skill File Sizing Guidelines Part 1](./documentation/skill-file-sizing-part-1.md)                    | [draft] 34 | [intermediate] | [stable] | [risk: low]  | migration, split             |
-| [XML Documentation Standards](./documentation/documentation-xml-docs.md)                              | [ok] 191   | [basic]        | [stable] | [risk: none] | documentation, xml-docs      |
+| Skill                                                                                                 | Lines      | Complexity     | Status   | Performance  | Tags                              |
+| ----------------------------------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | --------------------------------- |
+| [ASCII-Only Documentation Policy](./documentation/ascii-only-docs.md)                                 | [ok] 173   | [basic]        | [stable] | [risk: none] | documentation, ascii              |
+| [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | [warn] 296 | [basic]        | [stable] | [risk: none] | changelog, release-notes          |
+| [Changelog Entry Writing and Anti-Patterns Part 1](./documentation/changelog-entry-writing-part-1.md) | [draft] 56 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [Changelog Management](./documentation/changelog-management.md)                                       | [ok] 229   | [basic]        | [stable] | [risk: none] | changelog, documentation          |
+| [Changelog Release Workflow](./documentation/changelog-release-workflow.md)                           | [ok] 250   | [basic]        | [stable] | [risk: none] | changelog, release-workflow       |
+| [Code Samples Must Compile](./documentation/code-samples-must-compile.md)                             | [ok] 139   | [basic]        | [stable] | [risk: none] | documentation, code-samples       |
+| [Documentation Code Samples](./documentation/documentation-code-samples.md)                           | [ok] 213   | [basic]        | [stable] | [risk: none] | documentation, code-samples       |
+| [Documentation Code Samples Part 1](./documentation/documentation-code-samples-part-1.md)             | [draft] 82 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [Documentation Style Guide](./documentation/documentation-style-guide.md)                             | [ok] 204   | [basic]        | [stable] | [risk: none] | documentation, style              |
+| [Documentation Update Workflow](./documentation/documentation-update-workflow.md)                     | [ok] 155   | [basic]        | [stable] | [risk: none] | documentation, workflow           |
+| [Documentation Updates and Maintenance](./documentation/documentation-updates.md)                     | [ok] 149   | [basic]        | [stable] | [risk: none] | documentation, code-comments      |
+| [External URL Fragment Validation](./documentation/external-url-fragment-validation.md)               | [ok] 182   | [basic]        | [stable] | [risk: none] | documentation, links              |
+| [GitHub Actions Version Consistency](./documentation/github-actions-version-consistency.md)           | [ok] 204   | [basic]        | [stable] | [risk: none] | github-actions, ci-cd             |
+| [Human-Prose Documentation Policy](./documentation/human-prose-policy.md)                             | [ok] 187   | [basic]        | [stable] | [risk: none] | documentation, prose              |
+| [Link Quality and External URL Management](./documentation/link-quality-guidelines.md)                | [ok] 120   | [basic]        | [stable] | [risk: none] | documentation, links              |
+| [Link Quality and External URL Management Part 1](./documentation/link-quality-guidelines-part-1.md)  | [ok] 196   | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [Link Quality and External URL Management Part 2](./documentation/link-quality-guidelines-part-2.md)  | [draft] 64 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [Markdown Compatibility Guidelines](./documentation/markdown-compatibility.md)                        | [ok] 136   | [basic]        | [stable] | [risk: none] | documentation, markdown           |
+| [Markdown Compatibility Guidelines Part 1](./documentation/markdown-compatibility-part-1.md)          | [ok] 202   | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [Markdown Compatibility Guidelines Part 2](./documentation/markdown-compatibility-part-2.md)          | [ok] 210   | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [Memory Reclamation Documentation Maintenance](./documentation/memory-reclamation-docs.md)            | [ok] 143   | [basic]        | [stable] | [risk: none] | documentation, memory-reclamation |
+| [Mermaid Diagram Theming](./documentation/mermaid-theming.md)                                         | [ok] 199   | [intermediate] | [stable] | [risk: none] | documentation, mermaid            |
+| [Mermaid Diagram Theming Part 1](./documentation/mermaid-theming-part-1.md)                           | [ok] 160   | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                                  | [ok] 252   | [basic]        | [stable] | [risk: none] | documentation, mkdocs             |
+| [MkDocs Navigation Management Part 1](./documentation/mkdocs-navigation-part-1.md)                    | [draft] 71 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [No PLAN Vocabulary in Shipping Content](./documentation/no-plan-vocabulary.md)                       | [ok] 154   | [basic]        | [stable] | [risk: none] | documentation, vocabulary         |
+| [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                                  | [ok] 256   | [basic]        | [stable] | [risk: none] | documentation, skills             |
+| [Skill File Sizing Guidelines Part 1](./documentation/skill-file-sizing-part-1.md)                    | [draft] 34 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
+| [XML Documentation Standards](./documentation/documentation-xml-docs.md)                              | [ok] 191   | [basic]        | [stable] | [risk: none] | documentation, xml-docs           |
 
 ## GitHub Actions
 
 | Skill                                                                                                  | Lines      | Complexity     | Status   | Performance    | Tags                  |
 | ------------------------------------------------------------------------------------------------------ | ---------- | -------------- | -------- | -------------- | --------------------- |
+| [CI/CD Devcontainer Workflows](./github-actions/cicd-devcontainer-workflows.md)                        | [ok] 206   | [intermediate] | [stable] | [risk: high]   | github-actions, ci-cd |
 | [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md)                     | [ok] 232   | [intermediate] | [stable] | [risk: low]    | github-actions, git   |
 | [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)                        | [ok] 183   | [intermediate] | [stable] | [risk: medium] | github-actions, ci-cd |
 | [GitHub Actions Workflow Consistency Part 1](./github-actions/workflow-consistency-part-1.md)          | [ok] 196   | [intermediate] | [stable] | [risk: low]    | migration, split      |
@@ -73,7 +76,7 @@
 
 | Skill                                                                               | Lines       | Complexity     | Status   | Performance | Tags             |
 | ----------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ----------- | ---------------- |
-| [npm Package Configuration](./packaging/npm-package-configuration.md)               | [ok] 221    | [intermediate] | [stable] | [risk: low] | npm, packaging   |
+| [npm Package Configuration](./packaging/npm-package-configuration.md)               | [ok] 249    | [intermediate] | [stable] | [risk: low] | npm, packaging   |
 | [npm Package Configuration Part 1](./packaging/npm-package-configuration-part-1.md) | [draft] 110 | [intermediate] | [stable] | [risk: low] | migration, split |
 
 ## Performance
@@ -96,6 +99,9 @@
 | [Collection Pooling with RAII Pattern](./performance/collection-pooling.md)                                        | [draft] 119 | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
 | [Collection Pooling with RAII Pattern Part 1](./performance/collection-pooling-part-1.md)                          | [ok] 206    | [intermediate] | [stable] | [risk: low]      | migration, split      |
 | [Collection Pooling with RAII Pattern Part 2](./performance/collection-pooling-part-2.md)                          | [draft] 57  | [intermediate] | [stable] | [risk: low]      | migration, split      |
+| [DxMessaging Dispatch Hot Path](./performance/dispatch-hot-path.md)                                                | [ok] 213    | [advanced]     | [stable] | [risk: critical] | dispatch, hot-path    |
+| [DxMessaging Memory Reclamation](./performance/memory-reclamation.md)                                              | [ok] 198    | [advanced]     | [stable] | [risk: critical] | memory, reclamation   |
+| [DxMessaging Sweep Gate Must Be Cheap](./performance/sweep-gate-must-be-cheap.md)                                  | [ok] 185    | [advanced]     | [stable] | [risk: critical] | sweep, eviction       |
 | [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 299  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [Git Hook Performance: Stages and Tooling](./performance/git-hook-performance-tooling.md)                          | [ok] 240    | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [High-Performance Cache with Eviction Policies](./performance/cache-eviction-policies.md)                          | [ok] 177    | [advanced]     | [stable] | [risk: high]     | caching, memory       |
@@ -167,7 +173,7 @@
 
 | Skill                                                                                                   | Lines       | Complexity     | Status   | Performance      | Tags                         |
 | ------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ---------------- | ---------------------------- |
-| [Allocation Coverage Required for Dispatch](./testing/allocation-coverage-required-for-dispatch.md)     | [ok] 259    | [intermediate] | [stable] | [risk: critical] | testing, allocation          |
+| [Allocation Coverage Required for Dispatch](./testing/allocation-coverage-required-for-dispatch.md)     | [warn] 262  | [intermediate] | [stable] | [risk: critical] | testing, allocation          |
 | [Data-Driven Coverage Patterns](./testing/test-coverage-data-driven.md)                                 | [ok] 173    | [intermediate] | [stable] | [risk: none]     | testing, data-driven         |
 | [Data-Driven Test Sources](./testing/data-driven-tests-sources.md)                                      | [ok] 256    | [intermediate] | [stable] | [risk: none]     | testing, parameterized       |
 | [Data-Driven Test Usage Patterns](./testing/data-driven-tests-usage.md)                                 | [draft] 108 | [intermediate] | [stable] | [risk: none]     | testing, parameterized       |
@@ -177,6 +183,7 @@
 | [Inspector Overlay Invariants for MessageAwareComponent](./testing/inspector-overlay-invariants.md)     | [ok] 153    | [intermediate] | [stable] | [risk: low]      | testing, editor              |
 | [LeakWatcher: Detecting Registration Leaks in Tests](./testing/leak-watcher-usage.md)                   | [ok] 260    | [basic]        | [stable] | [risk: low]      | testing, leaks               |
 | [Lifecycle Edge-Case Test Coverage](./testing/lifecycle-edge-coverage.md)                               | [ok] 249    | [intermediate] | [stable] | [risk: none]     | testing, lifecycle           |
+| [Memory Reclaim Coverage](./testing/memory-reclaim-coverage.md)                                         | [ok] 184    | [intermediate] | [stable] | [risk: high]     | testing, memory              |
 | [Script Test Coverage Requirements](./testing/script-test-coverage.md)                                  | [ok] 260    | [intermediate] | [stable] | [risk: none]     | testing, scripts             |
 | [Shared Fixtures: Generic Base](./testing/shared-test-fixtures-generic-base.md)                         | [ok] 186    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |
 | [Shared Fixtures: Reference Counting](./testing/shared-test-fixtures-reference-counting.md)             | [ok] 253    | [advanced]     | [stable] | [risk: high]     | testing, fixtures            |
@@ -207,9 +214,15 @@
 
 ## Unity
 
-| Skill                                                                     | Lines      | Complexity     | Status   | Performance  | Tags            |
-| ------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | --------------- |
-| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer |
+| Skill                                                                     | Lines      | Complexity     | Status   | Performance  | Tags                 |
+| ------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | -------------------- |
+| [Devcontainer Cache Contract](./unity/devcontainer-cache-contract.md)     | [ok] 180   | [intermediate] | [stable] | [risk: high] | devcontainer, docker |
+| [Headless Unity Test Runner](./unity/headless-test-runner.md)             | [ok] 224   | [intermediate] | [stable] | [risk: none] | unity, testing       |
+| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
+| [Unity CI Matrix](./unity/unity-ci-matrix.md)                             | [ok] 193   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
+| [Unity License Bootstrap](./unity/unity-license-bootstrap.md)             | [ok] 217   | [basic]        | [stable] | [risk: none] | unity, license       |
+| [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)         | [ok] 215   | [intermediate] | [stable] | [risk: high] | unity, performance   |
+| [UPM Test Harness](./unity/upm-test-harness.md)                           | [ok] 207   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---
 

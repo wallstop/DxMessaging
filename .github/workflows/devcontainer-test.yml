@@ -1,0 +1,141 @@
+# =============================================================================
+# Devcontainer Build + Validation Test
+# =============================================================================
+# Purpose:
+#   Builds the .devcontainer image (with the GHCR-cached layers) and runs an
+#   in-container smoke test verifying:
+#     - .NET SDK (9 + 10 side-by-side, per Phase 1) is present and runnable
+#     - git LFS is installed (Unity LFS workflow)
+#     - PowerShell is installed (parity with .ps1 entry points)
+#     - The host docker socket is reachable inside the container
+#       (docker-outside-of-docker — the linchpin for Unity headless runs)
+#     - The asmdef-discovery node module loads and self-tests cleanly
+#     - The cache-mount contract still holds (validate-caching.sh)
+#     - The Unity test runner script's --help is wired up (smoke test only;
+#       a real Unity run requires the UNITY_LICENSE secret which this gate
+#       does not exercise)
+#     - The script-test Jest suite passes inside the devcontainer image
+#
+# Triggers:
+#   - PRs to master that touch the devcontainer / workflows / Unity scripts
+#   - Pushes to master with the same paths (keep main image cache warm)
+#   - Manual dispatch
+#
+# Critical: eventFilterForPush
+#   devcontainers/ci@v0.3 defaults `eventFilterForPush` to "push", which
+#   silently SKIPS pushing the image on `schedule` / `workflow_dispatch`
+#   events. Setting it to "" makes the `push` knob the single source of
+#   truth (combined with `refFilterForPush: refs/heads/master`). This gotcha
+#   is documented in .llm/skills/github-actions/cicd-devcontainer-workflows.md.
+# =============================================================================
+
+name: Test Devcontainer
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".devcontainer/**"
+      - ".github/**"
+      - "scripts/unity/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".devcontainer/**"
+      - ".github/**"
+      - "scripts/unity/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build + smoke-test devcontainer image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Debug workflow context
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Actor: ${{ github.actor }}"
+
+      - name: Set lowercase repository name
+        id: repo
+        run: |
+          set -euo pipefail
+          repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "repository_lowercase=${repo_lower}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pre-build devcontainer image
+        uses: devcontainers/ci@v0.3
+        env:
+          BUILDKIT_PROGRESS: plain
+        with:
+          imageName: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+          cacheFrom: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+          push: filter
+          refFilterForPush: refs/heads/master
+          # Required: devcontainers/ci defaults eventFilterForPush to "push",
+          # which silently skips push on schedule / workflow_dispatch triggers.
+          # Empty string here makes `push` + `refFilterForPush` the single
+          # source of truth.
+          eventFilterForPush: ""
+
+      - name: Run devcontainer smoke tests
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+          cacheFrom: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+          push: never
+          runCmd: |
+            set -euo pipefail
+            echo "=== Toolchain versions ==="
+            dotnet --version
+            git lfs version
+            pwsh -NoProfile -Command 'Write-Host "PowerShell OK"'
+            node --version
+            python3 --version
+
+            echo "=== .NET 10 SDK + runtime presence ==="
+            dotnet --list-sdks | grep -E '^10\.0' \
+              || (echo "ERROR: .NET 10 SDK not found" >&2 && exit 1)
+            dotnet --list-runtimes | grep -E '^Microsoft\.NETCore\.App 10\.0' \
+              || (echo "ERROR: .NET 10 runtime not found" >&2 && exit 1)
+
+            echo "=== Docker-outside-of-docker reachability ==="
+            docker info >/dev/null \
+              || (echo "ERROR: docker socket not reachable from inside container" >&2 && exit 1)
+
+            echo "=== asmdef-discovery self-test ==="
+            node scripts/unity/lib/asmdef-discovery.js | tail -n 30
+
+            echo "=== Cache-mount contract ==="
+            bash .devcontainer/validate-caching.sh
+
+            echo "=== Unity runner help ==="
+            bash scripts/unity/run-tests.sh --help >/dev/null
+
+            echo "=== Jest script tests ==="
+            node scripts/run-managed-jest.js scripts/__tests__/
+
+            echo "=== All devcontainer smoke checks passed ==="

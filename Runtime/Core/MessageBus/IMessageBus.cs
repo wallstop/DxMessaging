@@ -64,6 +64,21 @@ namespace DxMessaging.Core.MessageBus
         long EmissionId { get; }
 
         /// <summary>
+        /// Reclaim empty message slots and pooled collections owned by this bus.
+        /// </summary>
+        /// <remarks>
+        /// Non-Unity and headless hosts must call this periodically when they need
+        /// deterministic reclamation. The automatic PlayerLoop sweep hook is only
+        /// installed on Unity 2021.3 or newer player/editor hosts.
+        /// </remarks>
+        /// <param name="force">
+        /// When true, ignores idle-age thresholds and drains shared pools to zero.
+        /// When false, only slots past the configured idle threshold are eligible.
+        /// </param>
+        /// <returns>Counts describing what was reclaimed.</returns>
+        TrimResult Trim(bool force = false);
+
+        /// <summary>
         /// Default buffer size for message emission history.
         /// </summary>
         /// <remarks>
@@ -119,6 +134,72 @@ namespace DxMessaging.Core.MessageBus
         bool DiagnosticsMode { get; }
 
         int RegisteredGlobalSequentialIndex { get; }
+
+        /// <summary>
+        /// Number of currently occupied per-message-type slots on this bus.
+        /// </summary>
+        int OccupiedTypeSlots { get; }
+
+        /// <summary>
+        /// Number of currently occupied per-context target/source slots on this bus.
+        /// </summary>
+        int OccupiedTargetSlots { get; }
+
+        /// <summary>
+        /// Result returned by <see cref="Trim"/>.
+        /// </summary>
+        readonly struct TrimResult : IEquatable<TrimResult>
+        {
+            public TrimResult(
+                int typeSlotsEvicted,
+                int targetSlotsEvicted,
+                int pooledCollectionsEvicted,
+                int liveTypeSlotsRemaining
+            )
+            {
+                TypeSlotsEvicted = typeSlotsEvicted;
+                TargetSlotsEvicted = targetSlotsEvicted;
+                PooledCollectionsEvicted = pooledCollectionsEvicted;
+                LiveTypeSlotsRemaining = liveTypeSlotsRemaining;
+            }
+
+            /// <summary>Number of typed-handler slots reset.</summary>
+            public int TypeSlotsEvicted { get; }
+
+            /// <summary>Number of bus target/source context entries removed.</summary>
+            public int TargetSlotsEvicted { get; }
+
+            /// <summary>Number of pooled collections dropped from shared pools.</summary>
+            public int PooledCollectionsEvicted { get; }
+
+            /// <summary>Number of occupied type slots remaining after trim.</summary>
+            public int LiveTypeSlotsRemaining { get; }
+
+            public bool Equals(TrimResult other) =>
+                TypeSlotsEvicted == other.TypeSlotsEvicted
+                && TargetSlotsEvicted == other.TargetSlotsEvicted
+                && PooledCollectionsEvicted == other.PooledCollectionsEvicted
+                && LiveTypeSlotsRemaining == other.LiveTypeSlotsRemaining;
+
+            public override bool Equals(object obj) => obj is TrimResult other && Equals(other);
+
+            public override int GetHashCode() =>
+                (
+                    TypeSlotsEvicted,
+                    TargetSlotsEvicted,
+                    PooledCollectionsEvicted,
+                    LiveTypeSlotsRemaining
+                ).GetHashCode();
+
+            public static bool operator ==(TrimResult left, TrimResult right) => left.Equals(right);
+
+            public static bool operator !=(TrimResult left, TrimResult right) =>
+                !left.Equals(right);
+
+            public override string ToString() =>
+                $"TrimResult(TypeSlotsEvicted={TypeSlotsEvicted}, TargetSlotsEvicted={TargetSlotsEvicted}, PooledCollectionsEvicted={PooledCollectionsEvicted}, LiveTypeSlotsRemaining={LiveTypeSlotsRemaining})";
+        }
+
         int RegisteredBroadcast { get; }
 
         int RegisteredTargeted { get; }
@@ -321,6 +402,11 @@ namespace DxMessaging.Core.MessageBus
         ///         param1: Current message instance by reference
         ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
+        /// <remarks>
+        /// Interceptor delegates registered with this method are retained for the bus lifetime.
+        /// Calling the returned deregistration action removes the interceptor from dispatch, but
+        /// the delegate reference may remain until the final deregistration of that interceptor.
+        /// </remarks>
         /// <returns>The deregistration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
         Action RegisterUntargetedInterceptor<T>(
             UntargetedInterceptor<T> interceptor,
@@ -346,6 +432,11 @@ namespace DxMessaging.Core.MessageBus
         ///         param1: Current message instance by reference
         ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
+        /// <remarks>
+        /// Interceptor delegates registered with this method are retained for the bus lifetime.
+        /// Calling the returned deregistration action removes the interceptor from dispatch, but
+        /// the delegate reference may remain until the final deregistration of that interceptor.
+        /// </remarks>
         /// <returns>The deregistration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
         Action RegisterTargetedInterceptor<T>(TargetedInterceptor<T> interceptor, int priority = 0)
             where T : ITargetedMessage;
@@ -368,6 +459,11 @@ namespace DxMessaging.Core.MessageBus
         ///         param1: Current message instance by reference
         ///     And returns: true if message handling should continue, false if message handling should be stopped.
         /// </note>
+        /// <remarks>
+        /// Interceptor delegates registered with this method are retained for the bus lifetime.
+        /// Calling the returned deregistration action removes the interceptor from dispatch, but
+        /// the delegate reference may remain until the final deregistration of that interceptor.
+        /// </remarks>
         /// <returns>The deregistration action. Should be invoked when the handler no longer wants to intercept messages.</returns>
         Action RegisterBroadcastInterceptor<T>(
             BroadcastInterceptor<T> interceptor,

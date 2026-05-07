@@ -234,6 +234,48 @@ repos:
 
   - repo: local
     hooks:
+      - id: validate-runtime-settings-docs
+        name: Validate runtime-settings docs are in sync
+        entry: node scripts/validate-runtime-settings-docs.js
+        language: system
+        pass_filenames: false
+        files: '^(Runtime/Core/Configuration/.*\.cs|Runtime/Core/MessageBus/(IMessageBus|MessageHandler)\.cs|Runtime/Core/Pooling/.*\.cs|docs/reference/runtime-settings\.md|docs/guides/memory-reclamation\.md|scripts/validate-runtime-settings-docs\.js|scripts/__tests__/validate-runtime-settings-docs\.test\.js)$'
+        stages:
+          - pre-push
+        description: >-
+          Cross-reference public runtime settings, the Trim and
+          OccupiedTypeSlots surface, and the user-facing docs at
+          docs/reference/runtime-settings.md and docs/guides/memory-reclamation.md.
+          Pre-push only; see .llm/skills/performance/git-hook-performance.md.
+      - id: validate-untracked-policy
+        name: Validate no untracked-and-unignored repo paths
+        entry: node scripts/validate-untracked-policy.js
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-push
+        description: >-
+          Fail the push when git ls-files --others --exclude-standard reports
+          any untracked-and-unignored path. Either commit the file or extend
+          .gitignore / .npmignore. Pre-push only; see
+          .llm/skills/performance/git-hook-performance.md.
+      - id: validate-no-plan-vocabulary
+        name: Validate shipping content has no PLAN.md vocabulary
+        entry: node scripts/validate-no-plan-vocabulary.js
+        language: system
+        pass_filenames: false
+        files: '^(Runtime/|Editor/|SourceGenerators/|Samples~/|docs/|llms\.txt|[^/]+\.md|scripts/validate-no-plan-vocabulary\.js|scripts/__tests__/validate-no-plan-vocabulary\.test\.js)'
+        stages:
+          - pre-push
+        description: >-
+          Reject PLAN.md / PERF-PLAN.md / OLD-PLAN.md / GH-PAGES-PLAN.md
+          filename references and T0.0 / P0.0-style milestone tags in shipping
+          content. Pre-push only; see
+          .llm/skills/performance/git-hook-performance.md.
+
+  - repo: local
+    hooks:
       # perf-allow[scans-the-world-with-files]: validator reads the entire CHANGELOG.md and git-diff metadata to enforce coverage-by-section; staged argv would not narrow the changelog scan itself
       - id: validate-changelog-policy
         name: Validate changelog policy
@@ -356,3 +398,31 @@ repos:
         stages:
           - pre-push
         description: Check spelling in changed files. Pre-push only; see .llm/skills/performance/git-hook-performance.md.
+
+  - repo: local
+    hooks:
+      # perf-allow[scans-the-world-with-files,jest-at-pre-commit]: pre-push only; suite verifies cross-file invariants across cache mounts, asmdefs, workflows, allowlist, and skills.
+      - id: unity-contract-tests
+        name: Unity contract tests (Jest)
+        entry: node scripts/run-managed-jest.js
+        args:
+          - --runTestsByPath
+          - scripts/__tests__/unity-test-harness-contract.test.js
+          - scripts/__tests__/unity-runner-script-contract.test.js
+          - scripts/__tests__/unity-perf-baseline-script-contract.test.js
+          - scripts/__tests__/devcontainer-cache-contract.test.js
+          - scripts/__tests__/unity-workflow-shape.test.js
+          - scripts/__tests__/unity-perf-isolation.test.js
+          - scripts/__tests__/claude-permissions-contract.test.js
+          - scripts/__tests__/llm-skills-unity-coverage.test.js
+        language: system
+        pass_filenames: false
+        files: >-
+          ^(\.pre-commit-config\.yaml|package\.json|\.devcontainer/|\.unity-test-project/|scripts/unity/|scripts/__tests__/(unity-test-harness-contract|unity-runner-script-contract|unity-perf-baseline-script-contract|devcontainer-cache-contract|unity-workflow-shape|unity-perf-isolation|claude-permissions-contract|llm-skills-unity-coverage)\.test\.js|\.github/workflows/(script-tests|unity-|devcontainer-)|\.claude/settings\.local\.json|\.llm/skills/unity/|\.llm/skills/github-actions/cicd-devcontainer-workflows\.md|\.llm/context\.md|Tests/.+/.+\.asmdef$)
+        stages:
+          - pre-push
+        description: >-
+          Run Unity / devcontainer contract Jest tests when their tracked
+          surface changes. Locks the Phase 1-3 deliverables (cache mounts,
+          asmdef classification, workflow shape, runner script flags, Claude
+          allowlist, skill file coverage).

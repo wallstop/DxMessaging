@@ -3,6 +3,7 @@ namespace DxMessaging.Tests.Runtime.Core
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Reflection;
@@ -13,6 +14,7 @@ namespace DxMessaging.Tests.Runtime.Core
     using NUnit.Framework;
     using UnityEngine;
     using UnityEngine.TestTools;
+    using Debug = UnityEngine.Debug;
 
     /// <summary>
     /// Pins invariants on the DxMessaging public surface. The fixture is
@@ -26,6 +28,13 @@ namespace DxMessaging.Tests.Runtime.Core
         private const string PublicSurfaceSnapshotFileName = "public-surface.txt";
 
         private const string CoreNamespacePrefix = "DxMessaging.Core";
+        private const string UnityNamespacePrefix = "DxMessaging.Unity";
+
+        private static readonly string[] EffectivelyPublicNamespacePrefixes =
+        {
+            CoreNamespacePrefix,
+            UnityNamespacePrefix,
+        };
 
         /// <summary>
         /// Enumerates every <c>public</c> type in the
@@ -102,6 +111,116 @@ namespace DxMessaging.Tests.Runtime.Core
                     + $"Added types:\n  {addedTxt}\n"
                     + $"Removed types:\n  {removedTxt}\n"
                     + "If the change is intentional, regenerate the snapshot by deleting the file and re-running this test."
+            );
+        }
+
+        /// <summary>
+        /// Asserts that every type considered "public" by the snapshot
+        /// enumerator has an effectively public access chain across both the
+        /// <c>DxMessaging.Core</c> and <c>DxMessaging.Unity</c> assemblies
+        /// (including <c>DxMessaging.Unity.Integrations.Reflex</c>,
+        /// <c>DxMessaging.Unity.Integrations.VContainer</c>, and
+        /// <c>DxMessaging.Unity.Integrations.Zenject</c>). A nested
+        /// <c>public</c> struct inside an <c>internal</c> outer class is
+        /// flagged by <see cref="Type.IsNestedPublic"/> as visible, but its
+        /// effective accessibility is internal because the outer class clamps
+        /// it down. This test pins the invariant directly so the snapshot diff
+        /// only ever surfaces genuinely public-API drift, not declared-public
+        /// types that the CLR cannot actually surface to consumers.
+        /// </summary>
+        /// <remarks>
+        /// Motivating bug: the original
+        /// <c>DxMessaging.Core.DataStructure.CyclicBuffer&lt;T&gt;.CyclicBufferEnumerator</c>
+        /// struct was declared <c>public</c> inside an <c>internal sealed
+        /// class CyclicBuffer&lt;T&gt;</c>. The CLR clamps the effective
+        /// accessibility of the nested struct to internal (matching the
+        /// outer), but reflection still reports <c>IsNestedPublic == true</c>,
+        /// so the snapshot enumerator and any other naive
+        /// <c>IsPublic || IsNestedPublic</c> filter would silently surface it
+        /// as part of the public API. The fix changed the nested struct to
+        /// <c>internal</c>; this test exists to make the bug class
+        /// undetectable-by-eye but always-detectable-by-CI.
+        /// </remarks>
+        [Test]
+        public void NoEffectivelyInternalTypesLeakAsPublic()
+        {
+            HashSet<string> offenders = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (string namespacePrefix in EffectivelyPublicNamespacePrefixes)
+            {
+                foreach (Type type in EnumerateNamespaceTypes(namespacePrefix))
+                {
+                    // Find types that LOOK public to a naive enumerator but
+                    // are actually clamped down by an internal enclosing type.
+                    bool looksPublic = type.IsPublic || type.IsNestedPublic;
+                    if (!looksPublic)
+                    {
+                        continue;
+                    }
+
+                    if (!IsEffectivelyPublic(type))
+                    {
+                        string fullName = type.FullName ?? type.Name;
+                        offenders.Add(fullName);
+                    }
+                }
+            }
+
+            List<string> sorted = offenders.OrderBy(n => n, StringComparer.Ordinal).ToList();
+
+            Assert.That(
+                sorted,
+                Is.Empty,
+                "Found types declared 'public' inside a non-public enclosing type. The CLR exposes them "
+                    + "as IsNestedPublic, but their effective accessibility is clamped down by the outer. "
+                    + "Either mark the inner type 'internal' to match the enclosing scope, OR promote the "
+                    + "enclosing type to 'public' if its surface is intended to be exposed:\n  "
+                    + string.Join("\n  ", sorted)
+            );
+        }
+
+        /// <summary>
+        /// Pins the behavior of <see cref="IsEffectivelyPublic"/> against a
+        /// matrix of synthetic types so that a future refactor cannot quietly
+        /// turn the helper into a constant-true/constant-false function and
+        /// silently disable <see cref="NoEffectivelyInternalTypesLeakAsPublic"/>.
+        /// </summary>
+        [Test]
+        public void IsEffectivelyPublicCorrectlyDetectsKnownPatterns()
+        {
+            // Top-level public type from the BCL.
+            Assert.IsTrue(
+                IsEffectivelyPublic(typeof(string)),
+                "string is a top-level public BCL type and must be effectively public."
+            );
+
+            // Top-level internal type declared in this assembly.
+            Assert.IsFalse(
+                IsEffectivelyPublic(typeof(SomeInternalClass)),
+                "SomeInternalClass is a top-level internal type and must NOT be effectively public."
+            );
+
+            // Nested public inside nested public inside top-level public => public.
+            Assert.IsTrue(
+                IsEffectivelyPublic(typeof(SyntheticOuterPublic.SyntheticInnerPublic)),
+                "Nested public inside top-level public must be effectively public."
+            );
+
+            // Nested public inside top-level internal outer => NOT public.
+            // This is the exact shape of the original
+            // CyclicBuffer<T>.CyclicBufferEnumerator leak.
+            Assert.IsFalse(
+                IsEffectivelyPublic(typeof(SyntheticOuterInternal.SyntheticInnerPublic)),
+                "Nested public inside a top-level internal outer must NOT be effectively public."
+            );
+
+            // Three-level deep: outer public, middle non-public, inner public
+            // => NOT public. This exercises the loop's mid-chain break.
+            Assert.IsFalse(
+                IsEffectivelyPublic(
+                    typeof(SyntheticOuterPublicLevel1.SyntheticMiddleInternal.SyntheticInnerPublic)
+                ),
+                "A 3-level chain where any middle rung is non-public must NOT be effectively public."
             );
         }
 
@@ -207,35 +326,73 @@ namespace DxMessaging.Tests.Runtime.Core
         }
 
         /// <summary>
-        /// Tightens the existing
-        /// <see cref="TestAttributeContractTests.EveryEmitPathHasAllocationCoverage"/>
-        /// invariant by enumerating <see cref="MessageKind"/> directly and
-        /// asserting every value appears in
-        /// <see cref="MessageScenarios.AllKinds"/>. The contract tests already
-        /// pin this; this test is an explicit duplicate so a mistake in one
-        /// location surfaces in the other.
+        /// Pins the canonical three-kind source used by tests that deliberately
+        /// cover only the context-bound dispatch surfaces.
         /// </summary>
         [Test]
-        public void EveryMessageKindAppearsInAllKinds()
+        public void EveryCanonicalMessageKindAppearsInAllKinds()
         {
             HashSet<MessageKind> covered = new HashSet<MessageKind>(
                 MessageScenarios.AllKinds.Select(scenario => scenario.Kind)
             );
 
-            List<string> missing = new List<string>();
-            foreach (MessageKind kind in Enum.GetValues(typeof(MessageKind)))
+            MessageKind[] canonicalKinds =
             {
-                if (!covered.Contains(kind))
-                {
-                    missing.Add(kind.ToString());
-                }
-            }
+                MessageKind.Untargeted,
+                MessageKind.Targeted,
+                MessageKind.Broadcast,
+            };
+
+            List<string> missing = canonicalKinds
+                .Where(kind => !covered.Contains(kind))
+                .Select(kind => kind.ToString())
+                .ToList();
+            List<string> unexpected = covered
+                .Except(canonicalKinds)
+                .Select(kind => kind.ToString())
+                .ToList();
 
             Assert.That(
                 missing,
                 Is.Empty,
-                "MessageScenarios.AllKinds must yield every MessageKind. Missing: "
+                "MessageScenarios.AllKinds must yield the canonical context-bound MessageKind values. Missing: "
                     + string.Join(", ", missing)
+                    + ". Actual: "
+                    + string.Join(", ", covered)
+            );
+            Assert.That(
+                unexpected,
+                Is.Empty,
+                "MessageScenarios.AllKinds must stay limited to canonical context-bound MessageKind values. Unexpected: "
+                    + string.Join(", ", unexpected)
+                    + ". Use MessageScenarios.AllKindsIncludingWithoutContext for the full dispatch surface."
+            );
+        }
+
+        /// <summary>
+        /// Enumerates <see cref="MessageKind"/> directly and asserts every value
+        /// appears in the source intended for full dispatch-surface coverage.
+        /// </summary>
+        [Test]
+        public void EveryMessageKindAppearsInAllKindsIncludingWithoutContext()
+        {
+            HashSet<MessageKind> covered = new HashSet<MessageKind>(
+                MessageScenarios.AllKindsIncludingWithoutContext.Select(scenario => scenario.Kind)
+            );
+
+            List<string> missing = Enum.GetValues(typeof(MessageKind))
+                .Cast<MessageKind>()
+                .Where(kind => !covered.Contains(kind))
+                .Select(kind => kind.ToString())
+                .ToList();
+
+            Assert.That(
+                missing,
+                Is.Empty,
+                "MessageScenarios.AllKindsIncludingWithoutContext must yield every MessageKind. Missing: "
+                    + string.Join(", ", missing)
+                    + ". Actual: "
+                    + string.Join(", ", covered)
             );
         }
 
@@ -243,6 +400,43 @@ namespace DxMessaging.Tests.Runtime.Core
         {
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             List<string> names = new List<string>();
+
+            foreach (Type type in EnumerateNamespaceTypes(CoreNamespacePrefix))
+            {
+                if (!IsEffectivelyPublic(type))
+                {
+                    continue;
+                }
+
+                string fullName = type.FullName;
+                if (string.IsNullOrEmpty(fullName))
+                {
+                    continue;
+                }
+
+                if (seen.Add(fullName))
+                {
+                    names.Add(fullName);
+                }
+            }
+
+            names.Sort(StringComparer.Ordinal);
+            return names;
+        }
+
+        /// <summary>
+        /// Yields every reflectable type in every loaded assembly whose
+        /// namespace is exactly <paramref name="namespacePrefix"/> or starts
+        /// with <c><paramref name="namespacePrefix"/> + "."</c>. Types whose
+        /// declaring assembly throws <see cref="ReflectionTypeLoadException"/>
+        /// are partially recovered (non-null entries from
+        /// <see cref="ReflectionTypeLoadException.Types"/>); types with a null
+        /// namespace are skipped. Centralizing this loop eliminates duplicated
+        /// reflection try/catch blocks across the fixture.
+        /// </summary>
+        private static IEnumerable<Type> EnumerateNamespaceTypes(string namespacePrefix)
+        {
+            string prefixWithDot = namespacePrefix + ".";
 
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -258,42 +452,78 @@ namespace DxMessaging.Tests.Runtime.Core
 
                 foreach (Type type in types)
                 {
-                    if (!type.IsPublic && !type.IsNestedPublic)
-                    {
-                        continue;
-                    }
-
                     if (type.Namespace == null)
                     {
                         continue;
                     }
 
                     if (
-                        !type.Namespace.Equals(CoreNamespacePrefix, StringComparison.Ordinal)
-                        && !type.Namespace.StartsWith(
-                            CoreNamespacePrefix + ".",
-                            StringComparison.Ordinal
-                        )
+                        !type.Namespace.Equals(namespacePrefix, StringComparison.Ordinal)
+                        && !type.Namespace.StartsWith(prefixWithDot, StringComparison.Ordinal)
                     )
                     {
                         continue;
                     }
 
-                    string fullName = type.FullName;
-                    if (string.IsNullOrEmpty(fullName))
-                    {
-                        continue;
-                    }
-
-                    if (seen.Add(fullName))
-                    {
-                        names.Add(fullName);
-                    }
+                    yield return type;
                 }
             }
+        }
 
-            names.Sort(StringComparer.Ordinal);
-            return names;
+        /// <summary>
+        /// Returns true if <paramref name="type"/> is effectively part of the
+        /// public surface, i.e. every enclosing type in the chain is itself
+        /// public. A nested-public type inside an <c>internal</c> outer is
+        /// <em>not</em> effectively public, even though
+        /// <see cref="Type.IsNestedPublic"/> reports true. The CLR exposes the
+        /// declared accessibility on each rung of the nesting ladder, but the
+        /// effective accessibility of a type is the minimum of every rung.
+        /// </summary>
+        /// <remarks>
+        /// Pinned by
+        /// <see cref="IsEffectivelyPublicCorrectlyDetectsKnownPatterns"/> so
+        /// future refactors of this helper cannot silently change behavior
+        /// and disable <see cref="NoEffectivelyInternalTypesLeakAsPublic"/>.
+        /// The motivating bug was the original
+        /// <c>DxMessaging.Core.DataStructure.CyclicBuffer&lt;T&gt;.CyclicBufferEnumerator</c>
+        /// leak; see <see cref="NoEffectivelyInternalTypesLeakAsPublic"/> for
+        /// the full historical context.
+        /// </remarks>
+        private static bool IsEffectivelyPublic(Type type)
+        {
+            if (type == null)
+            {
+                return false;
+            }
+
+            // Fast path: top-level internals and nested non-publics
+            // short-circuit immediately so the common case (most types in a
+            // closed-over assembly) does not pay for the walk-up loop. This
+            // restores parity with the original 'IsPublic || IsNestedPublic'
+            // pre-filter that this helper replaced.
+            if (!type.IsPublic && !type.IsNestedPublic)
+            {
+                return false;
+            }
+
+            // Walk outward to the top-level type. Each non-top-level rung must
+            // be IsNestedPublic; the top-level rung must be IsPublic.
+            Type current = type;
+            while (current.IsNested)
+            {
+                if (!current.IsNestedPublic)
+                {
+                    return false;
+                }
+
+                current = current.DeclaringType;
+                Debug.Assert(
+                    current != null,
+                    "A nested type must have a declaring type in a correct CLR; this is unreachable."
+                );
+            }
+
+            return current.IsPublic;
         }
 
         private static string TryResolveSnapshotPath(out bool resolved)
@@ -379,6 +609,62 @@ namespace DxMessaging.Tests.Runtime.Core
             }
 
             return roots;
+        }
+    }
+
+    /// <summary>
+    /// Synthetic top-level <c>internal</c> sentinel used by
+    /// <see cref="PublicSurfaceContractTests.IsEffectivelyPublicCorrectlyDetectsKnownPatterns"/>
+    /// to verify that the helper rejects top-level internal types. Lives in
+    /// the test asmdef so it does not affect the
+    /// <c>DxMessaging.Core</c>/<c>DxMessaging.Unity</c> public surface scan.
+    /// </summary>
+    internal sealed class SomeInternalClass { }
+
+    /// <summary>
+    /// Synthetic top-level <c>public</c> outer used by
+    /// <see cref="PublicSurfaceContractTests.IsEffectivelyPublicCorrectlyDetectsKnownPatterns"/>.
+    /// Lives in the test asmdef under
+    /// <c>DxMessaging.Tests.Runtime.Core</c>, which is not a scanned
+    /// production namespace, so adding it does NOT affect the snapshot.
+    /// </summary>
+    public static class SyntheticOuterPublic
+    {
+        /// <summary>Inner type for the all-public-chain assertion.</summary>
+        public class SyntheticInnerPublic { }
+    }
+
+    /// <summary>
+    /// Synthetic top-level <c>internal</c> outer used by
+    /// <see cref="PublicSurfaceContractTests.IsEffectivelyPublicCorrectlyDetectsKnownPatterns"/>.
+    /// Models the original <c>CyclicBuffer&lt;T&gt;.CyclicBufferEnumerator</c>
+    /// leak shape: a <c>public</c> nested type inside an <c>internal</c>
+    /// top-level outer. <see cref="SyntheticInnerPublic"/> reports
+    /// <c>IsNestedPublic == true</c>, but its effective accessibility is
+    /// internal because the outer is internal.
+    /// </summary>
+    internal static class SyntheticOuterInternal
+    {
+        /// <summary>Inner type for the broken-chain assertion.</summary>
+        public class SyntheticInnerPublic { }
+    }
+
+    /// <summary>
+    /// Synthetic three-level chain used by
+    /// <see cref="PublicSurfaceContractTests.IsEffectivelyPublicCorrectlyDetectsKnownPatterns"/>.
+    /// Outer is public, middle is internal-nested, inner is nested-public; the
+    /// middle rung breaks the chain so the deepest type is NOT effectively
+    /// public. Pins the loop's mid-chain rejection branch.
+    /// </summary>
+    public static class SyntheticOuterPublicLevel1
+    {
+        /// <summary>
+        /// Internal-nested middle rung that breaks the chain.
+        /// </summary>
+        internal static class SyntheticMiddleInternal
+        {
+            /// <summary>Deepest rung; declared public but unreachable.</summary>
+            public class SyntheticInnerPublic { }
         }
     }
 }
