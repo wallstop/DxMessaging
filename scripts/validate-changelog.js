@@ -585,9 +585,7 @@ function isLikelyUserVisiblePath(filePath) {
     }
 
     if (
-      normalizedPath.startsWith(
-        "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/"
-      )
+      normalizedPath.startsWith("SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/")
     ) {
       return true;
     }
@@ -620,15 +618,52 @@ function parseChangedFilesOutput(commandOutput) {
     .filter(Boolean);
 }
 
-function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.env) {
-  const runGit = (args) =>
-    parseChangedFilesOutput(
-      execFileSyncImpl("git", args, {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"]
-      })
-    );
+function formatGitFailure(error) {
+  if (!error) {
+    return "unknown failure";
+  }
+
+  const stderr = typeof error.stderr === "string" ? error.stderr.trim() : "";
+  if (stderr.length > 0) {
+    return stderr.split("\n")[0];
+  }
+
+  return error.message || String(error);
+}
+
+function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = process.env) {
+  const attemptedSources = [];
+  const failures = [];
+
+  const runGit = (source, args) => {
+    attemptedSources.push(source);
+
+    try {
+      const files = parseChangedFilesOutput(
+        execFileSyncImpl("git", args, {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"]
+        })
+      );
+
+      return {
+        ok: true,
+        files
+      };
+    } catch (error) {
+      failures.push({
+        source,
+        command: `git ${args.join(" ")}`,
+        message: formatGitFailure(error)
+      });
+
+      return {
+        ok: false,
+        files: []
+      };
+    }
+  };
 
   const mergeUniquePaths = (...pathLists) => {
     const merged = [];
@@ -648,36 +683,50 @@ function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.e
     return merged;
   };
 
-  try {
-    const stagedFiles = runGit(["diff", "-M", "--name-only", "--cached"]);
-    if (stagedFiles.length > 0) {
-      return stagedFiles;
-    }
-  } catch {
-    // Ignore and continue with other strategies.
+  const staged = runGit("staged", ["diff", "-M", "--name-only", "--cached"]);
+  if (!staged.ok) {
+    return {
+      files: [],
+      source: "unavailable",
+      attemptedSources,
+      failures
+    };
+  }
+
+  if (staged.ok && staged.files.length > 0) {
+    return {
+      files: staged.files,
+      source: "staged",
+      attemptedSources,
+      failures
+    };
   }
 
   const isCiEnvironment =
     String(env.CI || "").toLowerCase() === "true" || String(env.GITHUB_ACTIONS || "") === "true";
 
   if (!isCiEnvironment) {
-    const unstagedFiles = (() => {
-      try {
-        return runGit(["diff", "-M", "--name-only"]);
-      } catch {
-        return [];
-      }
-    })();
+    const unstaged = runGit("unstaged", ["diff", "-M", "--name-only"]);
+    const untracked = runGit("untracked", ["ls-files", "--others", "--exclude-standard"]);
+    const files = mergeUniquePaths(
+      unstaged.ok ? unstaged.files : [],
+      untracked.ok ? untracked.files : []
+    );
+    if (!unstaged.ok || !untracked.ok) {
+      return {
+        files,
+        source: "unavailable",
+        attemptedSources,
+        failures
+      };
+    }
 
-    const untrackedFiles = (() => {
-      try {
-        return runGit(["ls-files", "--others", "--exclude-standard"]);
-      } catch {
-        return [];
-      }
-    })();
-
-    return mergeUniquePaths(unstagedFiles, untrackedFiles);
+    return {
+      files,
+      source: files.length > 0 ? "local" : "local-empty",
+      attemptedSources,
+      failures
+    };
   }
 
   if (
@@ -685,15 +734,23 @@ function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.e
     typeof env.GITHUB_BASE_REF === "string" &&
     env.GITHUB_BASE_REF.length > 0
   ) {
-    try {
-      const baseRef = `origin/${env.GITHUB_BASE_REF}`;
-      const prFiles = runGit(["diff", "-M", "--name-only", `${baseRef}...HEAD`]);
-      if (prFiles.length > 0) {
-        return prFiles;
-      }
-    } catch {
-      // Ignore and fallback.
+    const baseRef = `origin/${env.GITHUB_BASE_REF}`;
+    const pr = runGit("pull-request", ["diff", "-M", "--name-only", `${baseRef}...HEAD`]);
+    if (pr.ok) {
+      return {
+        files: pr.files,
+        source: pr.files.length > 0 ? "pull-request" : "pull-request-empty",
+        attemptedSources,
+        failures
+      };
     }
+
+    return {
+      files: [],
+      source: "unavailable",
+      attemptedSources,
+      failures
+    };
   }
 
   if (
@@ -702,24 +759,83 @@ function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.e
     env.GITHUB_EVENT_BEFORE &&
     !/^0+$/.test(env.GITHUB_EVENT_BEFORE)
   ) {
-    try {
-      const pushFiles = runGit(["diff", "-M", "--name-only", `${env.GITHUB_EVENT_BEFORE}...HEAD`]);
-      if (pushFiles.length > 0) {
-        return pushFiles;
-      }
-    } catch {
-      // Ignore and fallback.
+    const push = runGit("push", ["diff", "-M", "--name-only", `${env.GITHUB_EVENT_BEFORE}...HEAD`]);
+    if (push.ok) {
+      return {
+        files: push.files,
+        source: push.files.length > 0 ? "push" : "push-empty",
+        attemptedSources,
+        failures
+      };
     }
+
+    return {
+      files: [],
+      source: "unavailable",
+      attemptedSources,
+      failures
+    };
   }
 
-  try {
-    return runGit(["diff", "-M", "--name-only", "HEAD~1...HEAD"]);
-  } catch {
-    return [];
-  }
+  const fallback = runGit("head-fallback", ["diff", "-M", "--name-only", "HEAD~1...HEAD"]);
+  return {
+    files: fallback.ok ? fallback.files : [],
+    source: fallback.ok
+      ? fallback.files.length > 0
+        ? "head-fallback"
+        : "head-fallback-empty"
+      : "unavailable",
+    attemptedSources,
+    failures
+  };
 }
 
-function validateCoverageRule(changedFiles) {
+function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.env) {
+  return getChangedFilesFromGitDetails(execFileSyncImpl, env).files;
+}
+
+function describeChangedFilesSource(diagnostics) {
+  if (!diagnostics || !diagnostics.source) {
+    return "";
+  }
+
+  const attempted =
+    Array.isArray(diagnostics.attemptedSources) && diagnostics.attemptedSources.length > 0
+      ? `; attempted sources: ${diagnostics.attemptedSources.join(", ")}`
+      : "";
+
+  return ` Changed-file source: ${diagnostics.source}${attempted}.`;
+}
+
+function validateChangedFilesDiscovery(diagnostics) {
+  if (!diagnostics || diagnostics.source !== "unavailable") {
+    return [];
+  }
+
+  const failureSummary =
+    diagnostics.failures && diagnostics.failures.length > 0
+      ? diagnostics.failures
+          .map((failure) => `${failure.source}: ${failure.command} (${failure.message})`)
+          .join("; ")
+      : "no Git sources were available";
+
+  return [
+    new Violation(
+      "E006",
+      "ERROR",
+      "Unable to determine changed files for changelog coverage.",
+      null,
+      `Fix the checkout/fetch configuration or pass --changed-file explicitly. Git failures: ${failureSummary}`
+    )
+  ];
+}
+
+function validateCoverageRule(changedFiles, diagnostics = null) {
+  const discoveryErrors = validateChangedFilesDiscovery(diagnostics);
+  if (discoveryErrors.length > 0) {
+    return discoveryErrors;
+  }
+
   if (!Array.isArray(changedFiles) || changedFiles.length === 0) {
     return [];
   }
@@ -742,7 +858,7 @@ function validateCoverageRule(changedFiles) {
       "ERROR",
       "Likely user-visible files changed without a CHANGELOG.md update.",
       null,
-      `Add or mutate an Unreleased changelog entry. Trigger files: ${userVisibleFiles.join(", ")}`
+      `Add or mutate an Unreleased changelog entry. Trigger files: ${userVisibleFiles.join(", ")}.${describeChangedFilesSource(diagnostics)}`
     )
   ];
 }
@@ -751,7 +867,8 @@ function validateChangelogPolicy({
   changelogContent,
   packageJsonContent,
   checkCoverage = false,
-  changedFiles = []
+  changedFiles = [],
+  changedFilesDiagnostics = null
 }) {
   const parsedChangelog = parseChangelog(changelogContent);
   const packageVersion = parsePackageVersion(packageJsonContent);
@@ -759,7 +876,7 @@ function validateChangelogPolicy({
   const errors = [...validateStructuralRules(parsedChangelog, packageVersion)];
 
   if (checkCoverage) {
-    errors.push(...validateCoverageRule(changedFiles));
+    errors.push(...validateCoverageRule(changedFiles, changedFilesDiagnostics));
   }
 
   const heuristicViolations = validateHeuristicRules(parsedChangelog);
@@ -830,10 +947,14 @@ function main() {
     process.exit(1);
   }
 
+  const changedFilesDiagnostics =
+    options.checkCoverage && options.changedFiles.length === 0
+      ? getChangedFilesFromGitDetails()
+      : null;
   const resolvedChangedFiles = options.checkCoverage
     ? options.changedFiles.length > 0
       ? options.changedFiles
-      : getChangedFilesFromGit()
+      : changedFilesDiagnostics.files
     : [];
 
   let result;
@@ -842,7 +963,8 @@ function main() {
       changelogContent,
       packageJsonContent,
       checkCoverage: options.checkCoverage,
-      changedFiles: resolvedChangedFiles
+      changedFiles: resolvedChangedFiles,
+      changedFilesDiagnostics
     });
   } catch (error) {
     console.error(`ERROR: ${error.message}`);
@@ -898,7 +1020,9 @@ module.exports = {
   validateHeuristicRules,
   isLikelyUserVisiblePath,
   parseChangedFilesOutput,
+  getChangedFilesFromGitDetails,
   getChangedFilesFromGit,
+  validateChangedFilesDiscovery,
   validateCoverageRule,
   validateChangelogPolicy,
   main
