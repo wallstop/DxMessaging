@@ -90,9 +90,9 @@
     "prepack": "node scripts/validate-npm-meta.js --check"
   },
   "devDependencies": {
-    "cspell": "9.3.0",
+    "cspell": "10.0.0",
     "jest": "^30.3.0",
-    "markdownlint-cli2": "0.17.1",
+    "markdownlint-cli2": "0.22.1",
     "prettier": "3.8.3"
   },
   "samples": [
