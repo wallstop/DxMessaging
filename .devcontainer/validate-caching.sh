@@ -198,38 +198,79 @@ else
     check_fail "devcontainer.json remoteUser is not vscode; update cache-contract.sh targets or remoteUser"
 fi
 
+check_devcontainer_test_workflow() {
+    local workflow_file="${SCRIPT_DIR}/../.github/workflows/devcontainer-test.yml"
+
+    if [[ ! -f "$workflow_file" ]]; then
+        check_warning "Workflow file not found: ${workflow_file} (expected once Phase 3 lands)"
+        return
+    fi
+
+    check_pass "devcontainer-test workflow file found"
+
+    if grep -q "packages: write" "$workflow_file"; then
+        check_pass "devcontainer-test workflow has packages:write permission"
+    else
+        check_fail "devcontainer-test workflow missing packages:write permission"
+    fi
+
+    if grep -q "docker/login-action@v4" "$workflow_file"; then
+        check_pass "devcontainer-test workflow has current GHCR login step"
+    else
+        check_fail "devcontainer-test workflow missing current GHCR login step"
+    fi
+
+    if grep -q "eventFilterForPush: \"\"" "$workflow_file"; then
+        check_pass "devcontainer-test workflow disables devcontainers/ci event push gate"
+    else
+        check_fail "devcontainer-test workflow missing eventFilterForPush override"
+    fi
+
+    if grep -q "\.devcontainer/validate-caching.sh" "$workflow_file"; then
+        check_pass "devcontainer-test workflow runs validate-caching.sh"
+    else
+        check_warning "devcontainer-test workflow does not run validate-caching.sh (recommended)"
+    fi
+}
+
+check_devcontainer_prebuild_workflow() {
+    local workflow_file="${SCRIPT_DIR}/../.github/workflows/devcontainer-prebuild.yml"
+
+    if [[ ! -f "$workflow_file" ]]; then
+        check_fail "devcontainer-prebuild workflow file not found: ${workflow_file}"
+        return
+    fi
+
+    check_pass "devcontainer-prebuild workflow file found"
+
+    if grep -q "packages: write" "$workflow_file"; then
+        check_pass "devcontainer-prebuild workflow has packages:write permission"
+    else
+        check_fail "devcontainer-prebuild workflow missing packages:write permission"
+    fi
+
+    if grep -q "docker/login-action@v4" "$workflow_file"; then
+        check_pass "devcontainer-prebuild workflow has current GHCR login step"
+    else
+        check_fail "devcontainer-prebuild workflow missing current GHCR login step"
+    fi
+
+    if grep -q "push: never" "$workflow_file" && grep -q 'docker push "${IMAGE}"' "$workflow_file"; then
+        check_pass "devcontainer-prebuild workflow pushes explicitly before verification"
+    else
+        check_fail "devcontainer-prebuild workflow must use push: never plus explicit docker push"
+    fi
+
+    if grep -q 'docker pull "${IMAGE}"' "$workflow_file"; then
+        check_pass "devcontainer-prebuild workflow verifies GHCR pull"
+    else
+        check_fail "devcontainer-prebuild workflow missing GHCR pull verification"
+    fi
+}
+
 log_header "Checking Workflow Configuration"
-
-WORKFLOW_FILE="${SCRIPT_DIR}/../.github/workflows/devcontainer-test.yml"
-if [[ ! -f "$WORKFLOW_FILE" ]]; then
-    check_warning "Workflow file not found: ${WORKFLOW_FILE} (expected once Phase 3 lands)"
-else
-    check_pass "Workflow file found"
-
-    if grep -q "packages: write" "$WORKFLOW_FILE"; then
-        check_pass "Workflow has packages:write permission"
-    else
-        check_fail "Workflow missing packages:write permission"
-    fi
-
-    if grep -q "docker/login-action" "$WORKFLOW_FILE"; then
-        check_pass "Workflow has GHCR login step"
-    else
-        check_fail "Workflow missing GHCR login step"
-    fi
-
-    if grep -q "eventFilterForPush: \"\"" "$WORKFLOW_FILE"; then
-        check_pass "Workflow disables devcontainers/ci event push gate"
-    else
-        check_fail "Workflow missing eventFilterForPush override"
-    fi
-
-    if grep -q "\.devcontainer/validate-caching.sh" "$WORKFLOW_FILE"; then
-        check_pass "Workflow runs validate-caching.sh"
-    else
-        check_warning "Workflow does not run validate-caching.sh (recommended)"
-    fi
-fi
+check_devcontainer_test_workflow
+check_devcontainer_prebuild_workflow
 
 log_header "Checking Runtime Mount State"
 

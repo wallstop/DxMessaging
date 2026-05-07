@@ -48,6 +48,7 @@ describe(".devcontainer cache mount contract", () => {
   const dockerfilePath = path.join(DEVCONTAINER_DIR, "Dockerfile");
   const postCreatePath = path.join(DEVCONTAINER_DIR, "post-create.sh");
   const postStartPath = path.join(DEVCONTAINER_DIR, "post-start.sh");
+  const validateCachingPath = path.join(DEVCONTAINER_DIR, "validate-caching.sh");
 
   let cacheContract;
   let devcontainerJson;
@@ -140,5 +141,14 @@ describe(".devcontainer cache mount contract", () => {
   test("post-start.sh sources cache-contract.sh", () => {
     const postStart = fs.readFileSync(postStartPath, "utf8");
     expect(postStart).toMatch(/source\s+["']?[^"'\s]*cache-contract\.sh/);
+  });
+
+  test("validate-caching.sh checks both devcontainer workflows", () => {
+    const validateCaching = fs.readFileSync(validateCachingPath, "utf8");
+
+    expect(validateCaching).toContain(".github/workflows/devcontainer-test.yml");
+    expect(validateCaching).toContain(".github/workflows/devcontainer-prebuild.yml");
+    expect(validateCaching).toContain('docker push "${IMAGE}"');
+    expect(validateCaching).toContain('docker pull "${IMAGE}"');
   });
 });

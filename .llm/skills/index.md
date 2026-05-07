@@ -65,7 +65,7 @@
 
 | Skill                                                                                                  | Lines      | Complexity     | Status   | Performance    | Tags                  |
 | ------------------------------------------------------------------------------------------------------ | ---------- | -------------- | -------- | -------------- | --------------------- |
-| [CI/CD Devcontainer Workflows](./github-actions/cicd-devcontainer-workflows.md)                        | [ok] 206   | [intermediate] | [stable] | [risk: high]   | github-actions, ci-cd |
+| [CI/CD Devcontainer Workflows](./github-actions/cicd-devcontainer-workflows.md)                        | [ok] 256   | [intermediate] | [stable] | [risk: high]   | github-actions, ci-cd |
 | [Git Renormalize Pattern Validation](./github-actions/git-renormalize-patterns.md)                     | [ok] 232   | [intermediate] | [stable] | [risk: low]    | github-actions, git   |
 | [GitHub Actions Workflow Consistency](./github-actions/workflow-consistency.md)                        | [ok] 183   | [intermediate] | [stable] | [risk: medium] | github-actions, ci-cd |
 | [GitHub Actions Workflow Consistency Part 1](./github-actions/workflow-consistency-part-1.md)          | [ok] 196   | [intermediate] | [stable] | [risk: low]    | migration, split      |

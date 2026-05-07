@@ -33,10 +33,10 @@ impact:
     details: "Pre-built images cut new-contributor onboarding from 15 min to under 2 min"
   maintainability:
     rating: "high"
-    details: "Single skill captures the silent-failure gotcha so it does not bite the next contributor"
+    details: "Single skill captures the silent-failure gotchas so they do not bite the next contributor"
   testability:
     rating: "low"
-    details: "Verified by the explicit pull-back step in devcontainer-prebuild.yml"
+    details: "Verified by an explicit push and pull-back step in devcontainer-prebuild.yml"
 
 prerequisites:
   - "Familiarity with GitHub Actions workflow YAML"
@@ -71,7 +71,7 @@ status: "stable"
 
 # CI/CD Devcontainer Workflows
 
-> **One-line summary**: When using `devcontainers/ci@v0.3` to push images to GHCR, set `eventFilterForPush: ""` explicitly; the default value silently skips pushes on `schedule` and `workflow_dispatch` triggers, breaking pre-build and dispatch flows without any error in the log.
+> **One-line summary**: For same-job GHCR verification, build with `devcontainers/ci@v0.3` and `push: never`, then run `docker push` explicitly before `docker pull`; for workflows that let `devcontainers/ci` publish from its post action, set `eventFilterForPush: ""` explicitly.
 
 ## When to Use
 
@@ -85,6 +85,55 @@ status: "stable"
 - Unity-specific CI (build, test, deploy Unity projects). See [unity-ci-matrix](../unity/unity-ci-matrix.md).
 - General Docker operations unrelated to devcontainers.
 - Local devcontainer development (no CI involved).
+
+## Critical: `devcontainers/ci@v0.3` Post-Action Push Gotcha
+
+`devcontainers/ci@v0.3` pushes images from its post action. Normal workflow steps that follow the action run before that post action.
+
+### The Problem
+
+This is fragile:
+
+```yaml
+- uses: devcontainers/ci@v0.3
+  with:
+    imageName: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+    cacheFrom: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+    push: always
+
+- name: Verify image
+  run: docker pull "ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer:latest"
+```
+
+The `docker pull` step runs before the action-managed push. If the image is not already present in GHCR, the verification step fails with `manifest unknown`. Because `devcontainers/ci` declares `post-if: success()`, that failure also prevents the post action from publishing the image.
+
+### The Fix
+
+For workflows that verify GHCR in the same job, disable the action-managed push and push explicitly:
+
+```yaml
+- uses: devcontainers/ci@v0.3
+  with:
+    imageName: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+    cacheFrom: ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer
+    push: never
+
+- name: Push devcontainer image to GHCR
+  run: |
+    set -euo pipefail
+    IMAGE="ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer:latest"
+    docker image inspect "${IMAGE}" --format 'id={{.Id}} created={{.Created}} size={{.Size}}'
+    docker push "${IMAGE}"
+    docker manifest inspect "${IMAGE}" >/dev/null
+
+- name: Verify image pushed to GHCR
+  run: |
+    set -euo pipefail
+    IMAGE="ghcr.io/${{ steps.repo.outputs.repository_lowercase }}/devcontainer:latest"
+    docker pull "${IMAGE}"
+```
+
+`devcontainer-prebuild.yml` must use this explicit push pattern because its pull-back step is intended to verify the registry state before the job completes.
 
 ## Critical: `devcontainers/ci@v0.3` Event Filter Gotcha
 
@@ -117,7 +166,7 @@ Always set `eventFilterForPush: ""` to disable the event gate:
 
 The DxMessaging workflows that need this:
 
-- `.github/workflows/devcontainer-prebuild.yml` (weekly cron + dispatch).
+- `.github/workflows/devcontainer-prebuild.yml` does **not** use this now because it uses `push: never` plus an explicit `docker push`.
 - `.github/workflows/devcontainer-test.yml` (uses `push: filter` plus `refFilterForPush: refs/heads/master`; the empty `eventFilterForPush` makes the ref filter the single source of truth).
 
 ### Why This Is Dangerous
@@ -178,19 +227,20 @@ When verifying a pushed image, include diagnostics:
     fi
 ```
 
-`devcontainer-prebuild.yml` already includes this step. It is the only check that catches a silently-failed push when `eventFilterForPush` was forgotten.
+`devcontainer-prebuild.yml` includes an explicit push before this step. The pull-back check verifies the registry state after the known push, rather than relying on the action's post step.
 
 ## Common Pitfalls
 
-| Pitfall                                                  | Impact                                                 | Prevention                                            |
-| -------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
-| Missing `eventFilterForPush: ""`                         | Silent push failure on schedule / dispatch             | Always set it explicitly                              |
-| Using `${{ github.repository }}` directly in image names | Case mismatch breaks GHCR                              | Always lowercase convert via the `set lowercase` step |
-| `cacheFrom` on first build                               | Cache miss warnings (non-fatal)                        | Expected on bootstrap; no action needed               |
-| Double `devcontainers/ci` steps building same image      | Wasted CI time                                         | Use `cacheFrom` for the second step                   |
-| No debug context step                                    | Hard to diagnose trigger-related issues                | Always add the debug step                             |
-| Referencing gitignored files in workflow `paths:`        | CI-only failure: file exists locally but not on runner | Run the workflow path linter before merging           |
-| `permissions: packages: write` missing                   | Push fails with 403                                    | Add it at the job level for prebuild workflows        |
+| Pitfall                                                  | Impact                                                     | Prevention                                                          |
+| -------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| Verifying GHCR before `devcontainers/ci` post action     | Pull-back fails with `manifest unknown`; post push skipped | Use `push: never`, then explicit `docker push` before `docker pull` |
+| Missing `eventFilterForPush: ""`                         | Silent push failure on schedule / dispatch                 | Set it explicitly on action-managed publishing steps                |
+| Using `${{ github.repository }}` directly in image names | Case mismatch breaks GHCR                                  | Always lowercase convert via the `set lowercase` step               |
+| `cacheFrom` on first build                               | Cache miss warnings (non-fatal)                            | Expected on bootstrap; no action needed                             |
+| Double `devcontainers/ci` steps building same image      | Wasted CI time                                             | Use `cacheFrom` for the second step                                 |
+| No debug context step                                    | Hard to diagnose trigger-related issues                    | Always add the debug step                                           |
+| Referencing gitignored files in workflow `paths:`        | CI-only failure: file exists locally but not on runner     | Run the workflow path linter before merging                         |
+| `permissions: packages: write` missing                   | Push fails with 403                                        | Add it at the job level for prebuild workflows                      |
 
 ## Related Skills
 
