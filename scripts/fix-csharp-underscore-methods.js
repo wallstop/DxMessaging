@@ -18,6 +18,7 @@ const METHOD_DECLARATION_PATTERN =
 const CSHARP_SOURCE_FILE_PATTERN = /\.cs$/i;
 const META_FILE_PATTERN = /\.meta$/i;
 const WINDOWS_POSIX_DRIVE_PATH_PATTERN = /^\/([A-Za-z])\/(.+)$/;
+const DEBUG_ENV_VAR = "DXMSG_CSHARP_UNDERSCORE_DEBUG";
 
 const EXCLUDED_DIRECTORY_PATTERNS = [
     /(^|[\\/])\.git([\\/]|$)/i,
@@ -157,15 +158,40 @@ function isExcludedPath(fullPath) {
     return EXCLUDED_DIRECTORY_PATTERNS.some((pattern) => pattern.test(fullPath));
 }
 
+function debugLog(message) {
+    if (process.env[DEBUG_ENV_VAR] === "1") {
+        console.error(`[fix-csharp-underscore-methods] ${message}`);
+    }
+}
+
 function pathModuleForPath(value) {
     return /^[A-Za-z]:[\\/]/.test(value) || value.includes("\\") ? path.win32 : path.posix;
 }
 
-function isPathInsideRoot(rootDir, fullPath) {
+function realpathIfExists(fullPath, { realpathSync = fs.realpathSync } = {}) {
+    try {
+        if (typeof realpathSync.native === "function") {
+            return realpathSync.native(fullPath);
+        }
+
+        return realpathSync(fullPath);
+    } catch {
+        return fullPath;
+    }
+}
+
+function canonicalPathForComparison(fullPath, options = {}) {
+    const pathModule = pathModuleForPath(fullPath);
+    return realpathIfExists(pathModule.resolve(fullPath), options);
+}
+
+function isPathInsideRoot(rootDir, fullPath, options = {}) {
+    const canonicalRootDir = canonicalPathForComparison(rootDir, options);
+    const canonicalFullPath = canonicalPathForComparison(fullPath, options);
     const pathModule =
-        pathModuleForPath(rootDir) === path.win32 ? path.win32 : pathModuleForPath(fullPath);
-    const normalizedRootDir = pathModule.resolve(rootDir);
-    const normalizedFullPath = pathModule.resolve(fullPath);
+        pathModuleForPath(canonicalRootDir) === path.win32 ? path.win32 : pathModuleForPath(canonicalFullPath);
+    const normalizedRootDir = pathModule.resolve(canonicalRootDir);
+    const normalizedFullPath = pathModule.resolve(canonicalFullPath);
     const relativePath = pathModule.relative(normalizedRootDir, normalizedFullPath);
 
     if (relativePath === "") {
@@ -176,10 +202,15 @@ function isPathInsideRoot(rootDir, fullPath) {
     return !relativePath.startsWith("..") && !pathModule.isAbsolute(relativePath);
 }
 
-function isExcludedRepoLocalPath(repoRoot, fullPath) {
+function isExcludedRepoLocalPath(repoRoot, fullPath, options = {}) {
+    const canonicalRepoRoot = canonicalPathForComparison(repoRoot, options);
+    const canonicalFullPath = canonicalPathForComparison(fullPath, options);
     const pathModule =
-        pathModuleForPath(repoRoot) === path.win32 ? path.win32 : pathModuleForPath(fullPath);
-    const relativePath = pathModule.relative(pathModule.resolve(repoRoot), pathModule.resolve(fullPath));
+        pathModuleForPath(canonicalRepoRoot) === path.win32 ? path.win32 : pathModuleForPath(canonicalFullPath);
+    const relativePath = pathModule.relative(
+        pathModule.resolve(canonicalRepoRoot),
+        pathModule.resolve(canonicalFullPath)
+    );
 
     if (relativePath === "" || relativePath.startsWith("..") || pathModule.isAbsolute(relativePath)) {
         return false;
@@ -250,16 +281,19 @@ function resolveExplicitFiles(repoRoot, fileArgs) {
         }
 
         if (!fs.existsSync(candidatePath)) {
+            debugLog(`Skipping missing explicit path: raw=${JSON.stringify(rawArg)} resolved=${candidatePath}`);
             continue;
         }
 
         // Apply excluded-directory patterns only for repo-local paths.
         if (isPathInsideRoot(repoRoot, candidatePath) && isExcludedRepoLocalPath(repoRoot, candidatePath)) {
+            debugLog(`Skipping repo-local excluded path: ${candidatePath}`);
             continue;
         }
 
         const stats = fs.statSync(candidatePath);
         if (!stats.isFile() || !isCsharpSourceFile(candidatePath)) {
+            debugLog(`Skipping non-file or non-C# explicit path: ${candidatePath}`);
             continue;
         }
 
@@ -487,10 +521,13 @@ module.exports = {
     CSHARP_SOURCE_FILE_PATTERN,
     META_FILE_PATTERN,
     WINDOWS_POSIX_DRIVE_PATH_PATTERN,
+    DEBUG_ENV_VAR,
     isCsharpSourceFile,
     normalizeExplicitPathArg,
     toWindowsAbsolutePathFromPosixDrivePath,
     resolveCandidatePath,
+    realpathIfExists,
+    canonicalPathForComparison,
     isPathInsideRoot,
     isExcludedRepoLocalPath,
     convertMethodNameToPascalCase,

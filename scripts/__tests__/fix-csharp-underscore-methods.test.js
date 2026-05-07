@@ -6,10 +6,12 @@ const path = require("path");
 const childProcess = require("child_process");
 
 const {
+  DEBUG_ENV_VAR,
   isCsharpSourceFile,
   normalizeExplicitPathArg,
   toWindowsAbsolutePathFromPosixDrivePath,
   resolveCandidatePath,
+  canonicalPathForComparison,
   isPathInsideRoot,
   isExcludedRepoLocalPath,
   convertMethodNameToPascalCase,
@@ -37,8 +39,20 @@ function makeTempGitRepo(label) {
     encoding: "utf8"
   });
 
-  expect(initResult.status).toBe(0);
+  expectSpawnStatus(initResult, 0);
   return tempRepo;
+}
+
+function expectSpawnStatus(result, expectedStatus) {
+  if (result.status !== expectedStatus) {
+    throw new Error(
+      [
+        `Expected subprocess status ${expectedStatus}, received ${result.status}.`,
+        `stdout:\n${result.stdout || "<empty>"}`,
+        `stderr:\n${result.stderr || "<empty>"}`
+      ].join("\n")
+    );
+  }
 }
 
 describe("fix-csharp-underscore-methods", () => {
@@ -106,6 +120,40 @@ describe("fix-csharp-underscore-methods", () => {
       expect(isExcludedRepoLocalPath(repoRoot, filePath)).toBe(expectedExcluded);
     }
   );
+
+  test("repo-local exclusions canonicalize filesystem aliases before comparing paths", () => {
+    const realpathSync = jest.fn((candidatePath) => {
+      const normalizedPath = candidatePath.replace(/\\/g, "/");
+
+      if (normalizedPath === "/private/var/folders/repo") {
+        return "/private/var/folders/repo";
+      }
+
+      if (normalizedPath === "/var/folders/repo") {
+        return "/private/var/folders/repo";
+      }
+
+      if (normalizedPath === "/var/folders/repo/.git/nested/FixMe.cs") {
+        return "/private/var/folders/repo/.git/nested/FixMe.cs";
+      }
+
+      return candidatePath;
+    });
+
+    expect(
+      canonicalPathForComparison("/var/folders/repo/.git/nested/FixMe.cs", { realpathSync })
+    ).toBe("/private/var/folders/repo/.git/nested/FixMe.cs");
+    expect(
+      isPathInsideRoot("/private/var/folders/repo", "/var/folders/repo/.git/nested/FixMe.cs", {
+        realpathSync
+      })
+    ).toBe(true);
+    expect(
+      isExcludedRepoLocalPath("/private/var/folders/repo", "/var/folders/repo/.git/nested/FixMe.cs", {
+        realpathSync
+      })
+    ).toBe(true);
+  });
 
   test("convertMethodNameToPascalCase removes underscores while preserving segment casing", () => {
     expect(convertMethodNameToPascalCase("Parse_Line_Bare")).toBe("ParseLineBare");
@@ -244,7 +292,7 @@ describe("fix-csharp-underscore-methods", () => {
         }
       );
 
-      expect(result.status).toBe(1);
+      expectSpawnStatus(result, 1);
       expect(result.stderr).toContain("Found C# methods with underscores");
       expect(result.stderr).toContain("NeedsFix.cs");
     } finally {
@@ -268,7 +316,7 @@ describe("fix-csharp-underscore-methods", () => {
         encoding: "utf8"
       });
 
-      expect(result.status).toBe(0);
+      expectSpawnStatus(result, 0);
 
       const updated = fs.readFileSync(filePath, "utf8");
       expect(updated).toContain("ParseLineBare");
@@ -302,7 +350,7 @@ describe("fix-csharp-underscore-methods", () => {
         }
       );
 
-      expect(result.status).toBe(1);
+      expectSpawnStatus(result, 1);
       expect(result.stderr).toContain("NeedsFix.cs");
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -325,7 +373,7 @@ describe("fix-csharp-underscore-methods", () => {
         encoding: "utf8"
       });
 
-      expect(result.status).toBe(0);
+      expectSpawnStatus(result, 0);
       const updated = fs.readFileSync(filePath, "utf8");
       expect(updated).toContain("ParseLineBare");
       expect(updated).not.toContain("Parse_Line_Bare");
@@ -352,7 +400,7 @@ describe("fix-csharp-underscore-methods", () => {
         encoding: "utf8"
       });
 
-      expect(result.status).toBe(0);
+      expectSpawnStatus(result, 0);
 
       const updated = fs.readFileSync(filePath, "utf8");
       expect(updated).toContain("ParseLineBare");
@@ -394,7 +442,7 @@ describe("fix-csharp-underscore-methods", () => {
           }
         );
 
-        expect(result.status).toBe(1);
+        expectSpawnStatus(result, 1);
         expect(result.stderr).toContain("Found C# methods with underscores");
         expect(result.stderr).toContain("OutsideSegmentNeedsFix.cs");
       } finally {
@@ -430,7 +478,7 @@ describe("fix-csharp-underscore-methods", () => {
           encoding: "utf8"
         });
 
-        expect(result.status).toBe(0);
+        expectSpawnStatus(result, 0);
 
         const updated = fs.readFileSync(filePath, "utf8");
         expect(updated).toContain("ParseLineBare");
@@ -470,7 +518,7 @@ describe("fix-csharp-underscore-methods", () => {
         }
       );
 
-      expect(result.status).toBe(1);
+      expectSpawnStatus(result, 1);
       expect(result.stderr).toContain("Found C# methods with underscores");
       expect(result.stderr).toContain("OutsideRelativeNeedsFix.cs");
     } finally {
@@ -508,23 +556,27 @@ describe("fix-csharp-underscore-methods", () => {
           [FIXER_SCRIPT_PATH, "--check", filePath],
           {
             cwd: repoRoot,
-            encoding: "utf8"
+            encoding: "utf8",
+            env: { ...process.env, [DEBUG_ENV_VAR]: "1" }
           }
         );
 
-        expect(checkResult.status).toBe(0);
+        expectSpawnStatus(checkResult, 0);
         expect(checkResult.stdout).toContain("No C# files to process.");
+        expect(checkResult.stderr).toContain("Skipping repo-local excluded path");
 
         const rewriteResult = childProcess.spawnSync(
           process.execPath,
           [FIXER_SCRIPT_PATH, filePath],
           {
             cwd: repoRoot,
-            encoding: "utf8"
+            encoding: "utf8",
+            env: { ...process.env, [DEBUG_ENV_VAR]: "1" }
           }
         );
 
-        expect(rewriteResult.status).toBe(0);
+        expectSpawnStatus(rewriteResult, 0);
+        expect(rewriteResult.stderr).toContain("Skipping repo-local excluded path");
 
         const contentAfterRewrite = fs.readFileSync(filePath, "utf8");
         expect(contentAfterRewrite).toContain("Parse_Line_Bare");
