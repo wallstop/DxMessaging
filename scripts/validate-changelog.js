@@ -585,9 +585,7 @@ function isLikelyUserVisiblePath(filePath) {
     }
 
     if (
-      normalizedPath.startsWith(
-        "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/"
-      )
+      normalizedPath.startsWith("SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/")
     ) {
       return true;
     }
@@ -620,15 +618,92 @@ function parseChangedFilesOutput(commandOutput) {
     .filter(Boolean);
 }
 
-function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.env) {
-  const runGit = (args) =>
-    parseChangedFilesOutput(
-      execFileSyncImpl("git", args, {
-        cwd: REPO_ROOT,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"]
-      })
-    );
+function parseChangedFilesStatusOutput(commandOutput) {
+  const text = String(commandOutput || "");
+  if (text.includes("\0")) {
+    const fields = text.split("\0").filter((field) => field.length > 0);
+    const files = [];
+
+    for (let index = 0; index < fields.length; index++) {
+      const status = fields[index];
+      const statusCode = status[0];
+
+      if (statusCode === "R" || statusCode === "C") {
+        files.push(normalizeRepoPath(fields[index + 1]));
+        files.push(normalizeRepoPath(fields[index + 2]));
+        index += 2;
+        continue;
+      }
+
+      files.push(normalizeRepoPath(fields[index + 1]));
+      index++;
+    }
+
+    return files.filter(Boolean);
+  }
+
+  return normalizeToLf(text)
+    .split("\n")
+    .flatMap((line) => {
+      const fields = line.split("\t").filter((field) => field.length > 0);
+      if (fields.length < 2) {
+        return [];
+      }
+
+      const statusCode = fields[0][0];
+      if (statusCode === "R" || statusCode === "C") {
+        return [normalizeRepoPath(fields[1]), normalizeRepoPath(fields[2])];
+      }
+
+      return [normalizeRepoPath(fields[1])];
+    })
+    .filter(Boolean);
+}
+
+function formatGitFailure(error) {
+  if (!error) {
+    return "unknown failure";
+  }
+
+  const stderr = typeof error.stderr === "string" ? error.stderr.trim() : "";
+  if (stderr.length > 0) {
+    return stderr.split("\n")[0];
+  }
+
+  return error.message || String(error);
+}
+
+function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = process.env) {
+  const attemptedSources = [];
+  const failures = [];
+
+  const runGit = (source, args, parseOutput = parseChangedFilesOutput) => {
+    attemptedSources.push(source);
+
+    try {
+      const output = execFileSyncImpl("git", args, {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+
+      return {
+        ok: true,
+        files: parseOutput(output)
+      };
+    } catch (error) {
+      failures.push({
+        source,
+        command: `git ${args.join(" ")}`,
+        message: formatGitFailure(error)
+      });
+
+      return {
+        ok: false,
+        files: []
+      };
+    }
+  };
 
   const mergeUniquePaths = (...pathLists) => {
     const merged = [];
@@ -648,36 +723,54 @@ function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.e
     return merged;
   };
 
-  try {
-    const stagedFiles = runGit(["diff", "-M", "--name-only", "--cached"]);
-    if (stagedFiles.length > 0) {
-      return stagedFiles;
-    }
-  } catch {
-    // Ignore and continue with other strategies.
+  const runGitStatus = (source, args) =>
+    runGit(source, ["diff", "-z", "--name-status", "-M", ...args], parseChangedFilesStatusOutput);
+
+  const staged = runGitStatus("staged", ["--cached"]);
+  if (!staged.ok) {
+    return {
+      files: [],
+      source: "unavailable",
+      attemptedSources,
+      failures
+    };
   }
 
   const isCiEnvironment =
     String(env.CI || "").toLowerCase() === "true" || String(env.GITHUB_ACTIONS || "") === "true";
 
   if (!isCiEnvironment) {
-    const unstagedFiles = (() => {
-      try {
-        return runGit(["diff", "-M", "--name-only"]);
-      } catch {
-        return [];
-      }
-    })();
+    const unstaged = runGitStatus("unstaged", []);
+    const untracked = runGit("untracked", ["ls-files", "--others", "--exclude-standard"]);
+    const files = mergeUniquePaths(
+      staged.files,
+      unstaged.ok ? unstaged.files : [],
+      untracked.ok ? untracked.files : []
+    );
+    if (!unstaged.ok || !untracked.ok) {
+      return {
+        files,
+        source: "unavailable",
+        attemptedSources,
+        failures
+      };
+    }
 
-    const untrackedFiles = (() => {
-      try {
-        return runGit(["ls-files", "--others", "--exclude-standard"]);
-      } catch {
-        return [];
-      }
-    })();
+    return {
+      files,
+      source: files.length > 0 ? "local" : "local-empty",
+      attemptedSources,
+      failures
+    };
+  }
 
-    return mergeUniquePaths(unstagedFiles, untrackedFiles);
+  if (staged.files.length > 0) {
+    return {
+      files: staged.files,
+      source: "staged",
+      attemptedSources,
+      failures
+    };
   }
 
   if (
@@ -685,15 +778,23 @@ function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.e
     typeof env.GITHUB_BASE_REF === "string" &&
     env.GITHUB_BASE_REF.length > 0
   ) {
-    try {
-      const baseRef = `origin/${env.GITHUB_BASE_REF}`;
-      const prFiles = runGit(["diff", "-M", "--name-only", `${baseRef}...HEAD`]);
-      if (prFiles.length > 0) {
-        return prFiles;
-      }
-    } catch {
-      // Ignore and fallback.
+    const baseRef = `origin/${env.GITHUB_BASE_REF}`;
+    const pr = runGitStatus("pull-request", [`${baseRef}...HEAD`]);
+    if (pr.ok) {
+      return {
+        files: pr.files,
+        source: pr.files.length > 0 ? "pull-request" : "pull-request-empty",
+        attemptedSources,
+        failures
+      };
     }
+
+    return {
+      files: [],
+      source: "unavailable",
+      attemptedSources,
+      failures
+    };
   }
 
   if (
@@ -702,24 +803,83 @@ function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.e
     env.GITHUB_EVENT_BEFORE &&
     !/^0+$/.test(env.GITHUB_EVENT_BEFORE)
   ) {
-    try {
-      const pushFiles = runGit(["diff", "-M", "--name-only", `${env.GITHUB_EVENT_BEFORE}...HEAD`]);
-      if (pushFiles.length > 0) {
-        return pushFiles;
-      }
-    } catch {
-      // Ignore and fallback.
+    const push = runGitStatus("push", [`${env.GITHUB_EVENT_BEFORE}...HEAD`]);
+    if (push.ok) {
+      return {
+        files: push.files,
+        source: push.files.length > 0 ? "push" : "push-empty",
+        attemptedSources,
+        failures
+      };
     }
+
+    return {
+      files: [],
+      source: "unavailable",
+      attemptedSources,
+      failures
+    };
   }
 
-  try {
-    return runGit(["diff", "-M", "--name-only", "HEAD~1...HEAD"]);
-  } catch {
-    return [];
-  }
+  const fallback = runGitStatus("head-fallback", ["HEAD~1...HEAD"]);
+  return {
+    files: fallback.ok ? fallback.files : [],
+    source: fallback.ok
+      ? fallback.files.length > 0
+        ? "head-fallback"
+        : "head-fallback-empty"
+      : "unavailable",
+    attemptedSources,
+    failures
+  };
 }
 
-function validateCoverageRule(changedFiles) {
+function getChangedFilesFromGit(execFileSyncImpl = execFileSync, env = process.env) {
+  return getChangedFilesFromGitDetails(execFileSyncImpl, env).files;
+}
+
+function describeChangedFilesSource(diagnostics) {
+  if (!diagnostics || !diagnostics.source) {
+    return "";
+  }
+
+  const attempted =
+    Array.isArray(diagnostics.attemptedSources) && diagnostics.attemptedSources.length > 0
+      ? `; attempted sources: ${diagnostics.attemptedSources.join(", ")}`
+      : "";
+
+  return ` Changed-file source: ${diagnostics.source}${attempted}.`;
+}
+
+function validateChangedFilesDiscovery(diagnostics) {
+  if (!diagnostics || diagnostics.source !== "unavailable") {
+    return [];
+  }
+
+  const failureSummary =
+    diagnostics.failures && diagnostics.failures.length > 0
+      ? diagnostics.failures
+          .map((failure) => `${failure.source}: ${failure.command} (${failure.message})`)
+          .join("; ")
+      : "no Git sources were available";
+
+  return [
+    new Violation(
+      "E006",
+      "ERROR",
+      "Unable to determine changed files for changelog coverage.",
+      null,
+      `Fix the checkout/fetch configuration or pass --changed-file explicitly. Git failures: ${failureSummary}`
+    )
+  ];
+}
+
+function validateCoverageRule(changedFiles, diagnostics = null) {
+  const discoveryErrors = validateChangedFilesDiscovery(diagnostics);
+  if (discoveryErrors.length > 0) {
+    return discoveryErrors;
+  }
+
   if (!Array.isArray(changedFiles) || changedFiles.length === 0) {
     return [];
   }
@@ -742,7 +902,7 @@ function validateCoverageRule(changedFiles) {
       "ERROR",
       "Likely user-visible files changed without a CHANGELOG.md update.",
       null,
-      `Add or mutate an Unreleased changelog entry. Trigger files: ${userVisibleFiles.join(", ")}`
+      `Add or mutate an Unreleased changelog entry. Trigger files: ${userVisibleFiles.join(", ")}.${describeChangedFilesSource(diagnostics)}`
     )
   ];
 }
@@ -751,7 +911,8 @@ function validateChangelogPolicy({
   changelogContent,
   packageJsonContent,
   checkCoverage = false,
-  changedFiles = []
+  changedFiles = [],
+  changedFilesDiagnostics = null
 }) {
   const parsedChangelog = parseChangelog(changelogContent);
   const packageVersion = parsePackageVersion(packageJsonContent);
@@ -759,7 +920,7 @@ function validateChangelogPolicy({
   const errors = [...validateStructuralRules(parsedChangelog, packageVersion)];
 
   if (checkCoverage) {
-    errors.push(...validateCoverageRule(changedFiles));
+    errors.push(...validateCoverageRule(changedFiles, changedFilesDiagnostics));
   }
 
   const heuristicViolations = validateHeuristicRules(parsedChangelog);
@@ -830,10 +991,14 @@ function main() {
     process.exit(1);
   }
 
+  const changedFilesDiagnostics =
+    options.checkCoverage && options.changedFiles.length === 0
+      ? getChangedFilesFromGitDetails()
+      : null;
   const resolvedChangedFiles = options.checkCoverage
     ? options.changedFiles.length > 0
       ? options.changedFiles
-      : getChangedFilesFromGit()
+      : changedFilesDiagnostics.files
     : [];
 
   let result;
@@ -842,7 +1007,8 @@ function main() {
       changelogContent,
       packageJsonContent,
       checkCoverage: options.checkCoverage,
-      changedFiles: resolvedChangedFiles
+      changedFiles: resolvedChangedFiles,
+      changedFilesDiagnostics
     });
   } catch (error) {
     console.error(`ERROR: ${error.message}`);
@@ -898,7 +1064,10 @@ module.exports = {
   validateHeuristicRules,
   isLikelyUserVisiblePath,
   parseChangedFilesOutput,
+  parseChangedFilesStatusOutput,
+  getChangedFilesFromGitDetails,
   getChangedFilesFromGit,
+  validateChangedFilesDiscovery,
   validateCoverageRule,
   validateChangelogPolicy,
   main

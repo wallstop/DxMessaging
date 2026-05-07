@@ -18,7 +18,10 @@ const {
   validateHeuristicRules,
   isLikelyUserVisiblePath,
   parseChangedFilesOutput,
+  parseChangedFilesStatusOutput,
+  getChangedFilesFromGitDetails,
   getChangedFilesFromGit,
+  validateChangedFilesDiscovery,
   validateCoverageRule,
   validateChangelogPolicy
 } = require("../validate-changelog.js");
@@ -40,6 +43,55 @@ function buildValidChangelog(version = "2.2.0") {
     "- Fixed a crash when listeners are disposed during dispatch",
     ""
   ].join("\n");
+}
+
+function formatViolations(violations) {
+  if (violations.length === 0) {
+    return "(none)";
+  }
+
+  return violations.map((violation) => violation.toString()).join("\n");
+}
+
+function expectNoPolicyErrors(result) {
+  if (result.errors.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "Expected changelog policy to produce no errors.",
+      `Package version: ${result.packageVersion}`,
+      `Sections: ${result.parsedChangelog.sections
+        .map((section) => `[${section.version}] at line ${section.line}`)
+        .join(", ")}`,
+      "Errors:",
+      formatViolations(result.errors),
+      "Warnings:",
+      formatViolations(result.warnings)
+    ].join("\n")
+  );
+}
+
+function expectNoPolicyWarnings(result) {
+  if (result.warnings.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "Expected changelog policy to produce no warnings.",
+      `Package version: ${result.packageVersion}`,
+      `Unreleased entries: ${
+        result.parsedChangelog.entries
+          .filter((entry) => entry.version === "Unreleased")
+          .map((entry) => `${entry.category} line ${entry.line}: ${entry.text}`)
+          .join(" | ") || "(none)"
+      }`,
+      "Warnings:",
+      formatViolations(result.warnings)
+    ].join("\n")
+  );
 }
 
 describe("validate-changelog", () => {
@@ -244,29 +296,34 @@ describe("validate-changelog", () => {
   });
 
   describe("coverage checks", () => {
-    test("recognizes user-visible paths", () => {
-      expect(isLikelyUserVisiblePath("Runtime/Core/MessageBus.cs")).toBe(true);
-      expect(isLikelyUserVisiblePath("Editor/CustomEditors/FallbackEditor.cs")).toBe(true);
-      expect(
-        isLikelyUserVisiblePath(
-          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/MessageBusEmitterGenerator.cs"
-        )
-      ).toBe(true);
-      expect(
-        isLikelyUserVisiblePath(
-          "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/MessageAwareComponentBaseCallAnalyzer.cs"
-        )
-      ).toBe(true);
-      expect(isLikelyUserVisiblePath("Runtime/Core/MessageBus.cs.meta")).toBe(false);
-      expect(isLikelyUserVisiblePath("Editor/Analyzers/Analyzer.cs")).toBe(false);
-      expect(
-        isLikelyUserVisiblePath(
-          "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/BaseCallScannerTests.cs"
-        )
-      ).toBe(false);
-      expect(isLikelyUserVisiblePath("SourceGenerators/Directory.Build.props")).toBe(false);
-      expect(isLikelyUserVisiblePath("scripts/validate-changelog.js")).toBe(false);
-      expect(isLikelyUserVisiblePath("CHANGELOG.md")).toBe(false);
+    test.each([
+      ["Runtime/Core/MessageBus.cs", true],
+      ["Editor/CustomEditors/FallbackEditor.cs", true],
+      [
+        "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/MessageBusEmitterGenerator.cs",
+        true
+      ],
+      [
+        "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/Analyzers/MessageAwareComponentBaseCallAnalyzer.cs",
+        true
+      ],
+      ["Samples~/BasicUsage/Example.cs", true],
+      ["Runtime/Core/MessageBus.cs.meta", false],
+      ["Editor/Analyzers/Analyzer.cs", false],
+      ["Editor/Testing/TestHarness.cs", false],
+      [
+        "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/BaseCallScannerTests.cs",
+        false
+      ],
+      ["SourceGenerators/Directory.Build.props", false],
+      ["SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/bin/Debug/File.dll", false],
+      ["scripts/validate-changelog.js", false],
+      ["docs/reference/runtime-settings.md", false],
+      [".github/workflows/changelog-policy-check.yml", false],
+      [".llm/context.md", false],
+      ["CHANGELOG.md", false]
+    ])("classifies %s as user-visible: %s", (filePath, expected) => {
+      expect(isLikelyUserVisiblePath(filePath)).toBe(expected);
     });
 
     test("parses git output with mixed line endings", () => {
@@ -277,29 +334,58 @@ describe("validate-changelog", () => {
       ]);
     });
 
-    test("prefers staged files when staged changes exist", () => {
+    test.each([
+      [
+        "line-delimited rename status",
+        "R100\tRuntime/Core/Old.cs\tscripts/Old.cs\nD\tRuntime/Core/Deleted.cs\n",
+        ["Runtime/Core/Old.cs", "scripts/Old.cs", "Runtime/Core/Deleted.cs"]
+      ],
+      [
+        "NUL-delimited rename status",
+        "R100\0docs/Old.md\0Runtime/Core/New.cs\0M\0Editor\\CustomEditors\\View.cs\0",
+        ["docs/Old.md", "Runtime/Core/New.cs", "Editor/CustomEditors/View.cs"]
+      ]
+    ])("parses %s", (_name, output, expected) => {
+      expect(parseChangedFilesStatusOutput(output)).toEqual(expected);
+    });
+
+    test("merges staged, unstaged, and untracked files outside CI", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
-        if (args.join(" ") === "diff -M --name-only --cached") {
-          return "Runtime/Core/MessageBus.cs\n";
+        const joined = args.join(" ");
+
+        if (joined === "diff -z --name-status -M --cached") {
+          return "M\tRuntime/Core/MessageBus.cs\n";
         }
 
-        throw new Error(`Unexpected git command: ${args.join(" ")}`);
+        if (joined === "diff -z --name-status -M") {
+          return "M\tEditor/CustomEditors/MessagingComponentEditor.cs\n";
+        }
+
+        if (joined === "ls-files --others --exclude-standard") {
+          return "Samples~/BasicUsage/NewSample.cs\n";
+        }
+
+        throw new Error(`Unexpected git command: ${joined}`);
       });
 
       const result = getChangedFilesFromGit(execFileSyncMock, {});
-      expect(result).toEqual(["Runtime/Core/MessageBus.cs"]);
+      expect(result).toEqual([
+        "Runtime/Core/MessageBus.cs",
+        "Editor/CustomEditors/MessagingComponentEditor.cs",
+        "Samples~/BasicUsage/NewSample.cs"
+      ]);
     });
 
     test("uses local unstaged and untracked files outside CI when no staged changes exist", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const joined = args.join(" ");
 
-        if (joined === "diff -M --name-only --cached") {
+        if (joined === "diff -z --name-status -M --cached") {
           return "";
         }
 
-        if (joined === "diff -M --name-only") {
-          return "Runtime/Core/MessageBus.cs\nEditor/CustomEditors/MessagingComponentEditor.cs\n";
+        if (joined === "diff -z --name-status -M") {
+          return "M\tRuntime/Core/MessageBus.cs\nM\tEditor/CustomEditors/MessagingComponentEditor.cs\n";
         }
 
         if (joined === "ls-files --others --exclude-standard") {
@@ -321,12 +407,12 @@ describe("validate-changelog", () => {
       const execFileSyncMock = jest.fn((_command, args) => {
         const joined = args.join(" ");
 
-        if (joined === "diff -M --name-only --cached") {
+        if (joined === "diff -z --name-status -M --cached") {
           return "";
         }
 
-        if (joined === "diff -M --name-only origin/main...HEAD") {
-          return "Runtime/Core/RenamedMessageBus.cs\n";
+        if (joined === "diff -z --name-status -M origin/main...HEAD") {
+          return "M\tRuntime/Core/RenamedMessageBus.cs\n";
         }
 
         throw new Error(`Unexpected git command: ${joined}`);
@@ -342,14 +428,295 @@ describe("validate-changelog", () => {
       expect(result).toEqual(["Runtime/Core/RenamedMessageBus.cs"]);
     });
 
+    test.each([
+      [
+        "pull_request",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "pull_request",
+          GITHUB_BASE_REF: "main"
+        },
+        "diff -z --name-status -M origin/main...HEAD",
+        "pull-request"
+      ],
+      [
+        "push",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "push",
+          GITHUB_EVENT_BEFORE: "abc123"
+        },
+        "diff -z --name-status -M abc123...HEAD",
+        "push"
+      ],
+      [
+        "fallback",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "workflow_dispatch"
+        },
+        "diff -z --name-status -M HEAD~1...HEAD",
+        "head-fallback"
+      ]
+    ])("reports %s changed-file source diagnostics", (_name, env, expectedCommand, source) => {
+      const execFileSyncMock = jest.fn((_command, args) => {
+        const joined = args.join(" ");
+
+        if (joined === "diff -z --name-status -M --cached") {
+          return "";
+        }
+
+        if (joined === expectedCommand) {
+          return "M\tRuntime/Core/MessageBus.cs\n";
+        }
+
+        throw new Error(`Unexpected git command: ${joined}`);
+      });
+
+      const result = getChangedFilesFromGitDetails(execFileSyncMock, env);
+
+      expect(result.files).toEqual(["Runtime/Core/MessageBus.cs"]);
+      expect(result.source).toBe(source);
+      expect(result.attemptedSources).toContain(source);
+      expect(result.failures).toHaveLength(0);
+    });
+
+    test.each([
+      [
+        "pull request",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "pull_request",
+          GITHUB_BASE_REF: "main"
+        },
+        "diff -z --name-status -M origin/main...HEAD",
+        "pull-request-empty"
+      ],
+      [
+        "push",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "push",
+          GITHUB_EVENT_BEFORE: "abc123"
+        },
+        "diff -z --name-status -M abc123...HEAD",
+        "push-empty"
+      ]
+    ])(
+      "treats successful empty %s diffs as authoritative",
+      (_name, env, expectedCommand, source) => {
+        const execFileSyncMock = jest.fn((_command, args) => {
+          const joined = args.join(" ");
+
+          if (joined === "diff -z --name-status -M --cached" || joined === expectedCommand) {
+            return "";
+          }
+
+          throw new Error(`Unexpected fallback command: ${joined}`);
+        });
+
+        const details = getChangedFilesFromGitDetails(execFileSyncMock, env);
+        const errors = validateChangedFilesDiscovery(details);
+
+        expect(details.files).toEqual([]);
+        expect(details.source).toBe(source);
+        expect(details.attemptedSources).not.toContain("head-fallback");
+        expect(errors).toHaveLength(0);
+      }
+    );
+
+    test.each([
+      [
+        "pull request",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "pull_request",
+          GITHUB_BASE_REF: "main"
+        },
+        "diff -z --name-status -M origin/main...HEAD",
+        "pull-request"
+      ],
+      [
+        "push",
+        {
+          CI: "true",
+          GITHUB_ACTIONS: "true",
+          GITHUB_EVENT_NAME: "push",
+          GITHUB_EVENT_BEFORE: "abc123"
+        },
+        "diff -z --name-status -M abc123...HEAD",
+        "push"
+      ]
+    ])(
+      "does not mask a failed %s diff with HEAD fallback",
+      (_name, env, expectedCommand, source) => {
+        const execFileSyncMock = jest.fn((_command, args) => {
+          const joined = args.join(" ");
+
+          if (joined === "diff -z --name-status -M --cached") {
+            return "";
+          }
+
+          if (joined === expectedCommand) {
+            const error = new Error("missing base ref");
+            error.stderr = `fatal: ${source}: no merge base\n`;
+            throw error;
+          }
+
+          throw new Error(`Unexpected fallback command: ${joined}`);
+        });
+
+        const details = getChangedFilesFromGitDetails(execFileSyncMock, env);
+        const errors = validateChangedFilesDiscovery(details);
+
+        expect(details).toEqual(
+          expect.objectContaining({
+            files: [],
+            source: "unavailable",
+            attemptedSources: ["staged", source]
+          })
+        );
+        expect(errors).toHaveLength(1);
+        expect(errors[0].suggestion).toContain(`${source}: git diff -z --name-status -M`);
+      }
+    );
+
+    test("reports local Git discovery failures instead of assuming no changes", () => {
+      const execFileSyncMock = jest.fn((_command, args) => {
+        const error = new Error(`failed ${args.join(" ")}`);
+        error.stderr = "fatal: not a git repository\n";
+        throw error;
+      });
+
+      const details = getChangedFilesFromGitDetails(execFileSyncMock, { CI: "false" });
+      const errors = validateChangedFilesDiscovery(details);
+
+      expect(details).toEqual(
+        expect.objectContaining({
+          files: [],
+          source: "unavailable",
+          attemptedSources: ["staged"]
+        })
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0].code).toBe("E006");
+    });
+
+    test("reports partial local Git discovery failures", () => {
+      const execFileSyncMock = jest.fn((_command, args) => {
+        const joined = args.join(" ");
+
+        if (joined === "diff -z --name-status -M --cached") {
+          return "";
+        }
+
+        if (joined === "diff -z --name-status -M") {
+          return "M\tRuntime/Core/MessageBus.cs\n";
+        }
+
+        const error = new Error("untracked discovery failed");
+        error.stderr = "fatal: unable to list untracked files\n";
+        throw error;
+      });
+
+      const details = getChangedFilesFromGitDetails(execFileSyncMock, { CI: "false" });
+      const errors = validateChangedFilesDiscovery(details);
+
+      expect(details).toEqual(
+        expect.objectContaining({
+          files: ["Runtime/Core/MessageBus.cs"],
+          source: "unavailable",
+          attemptedSources: ["staged", "unstaged", "untracked"]
+        })
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0].suggestion).toContain("untracked: git ls-files");
+    });
+
+    test("reports staged Git discovery failures before CI changed-file discovery", () => {
+      const execFileSyncMock = jest.fn((_command, args) => {
+        const error = new Error(`failed ${args.join(" ")}`);
+        error.stderr = "fatal: bad revision\n";
+        throw error;
+      });
+
+      const details = getChangedFilesFromGitDetails(execFileSyncMock, {
+        CI: "true",
+        GITHUB_ACTIONS: "true",
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_BASE_REF: "main"
+      });
+      const errors = validateChangedFilesDiscovery(details);
+
+      expect(details).toEqual(
+        expect.objectContaining({
+          files: [],
+          source: "unavailable",
+          attemptedSources: ["staged"]
+        })
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toEqual(
+        expect.objectContaining({
+          code: "E006",
+          severity: "ERROR"
+        })
+      );
+      expect(errors[0].suggestion).toContain("staged: git diff -z --name-status -M --cached");
+    });
+
+    test("reports PR Git discovery failures when the base ref is unavailable", () => {
+      const execFileSyncMock = jest.fn((_command, args) => {
+        const joined = args.join(" ");
+
+        if (joined === "diff -z --name-status -M --cached") {
+          return "";
+        }
+
+        const error = new Error(`failed ${joined}`);
+        error.stderr = "fatal: ambiguous argument 'origin/main...HEAD'\n";
+        throw error;
+      });
+
+      const details = getChangedFilesFromGitDetails(execFileSyncMock, {
+        CI: "true",
+        GITHUB_ACTIONS: "true",
+        GITHUB_EVENT_NAME: "pull_request",
+        GITHUB_BASE_REF: "main"
+      });
+      const errors = validateChangedFilesDiscovery(details);
+
+      expect(details).toEqual(
+        expect.objectContaining({
+          files: [],
+          source: "unavailable",
+          attemptedSources: ["staged", "pull-request"]
+        })
+      );
+      expect(errors).toHaveLength(1);
+      expect(errors[0].suggestion).toContain("pull-request: git diff -z --name-status -M");
+      expect(errors[0].suggestion).toContain("ambiguous argument");
+    });
+
     test("fails coverage when user-visible files changed without changelog", () => {
-      const errors = validateCoverageRule([
-        "Runtime/Core/MessageBus.cs",
-        "scripts/validate-changelog.js"
-      ]);
+      const errors = validateCoverageRule(
+        ["Runtime/Core/MessageBus.cs", "scripts/validate-changelog.js"],
+        {
+          source: "pull-request",
+          attemptedSources: ["staged", "pull-request"],
+          failures: []
+        }
+      );
 
       expect(errors).toHaveLength(1);
       expect(errors[0].code).toBe("E004");
+      expect(errors[0].suggestion).toContain("Changed-file source: pull-request");
     });
 
     test("passes coverage when changelog is updated", () => {
@@ -375,6 +742,17 @@ describe("validate-changelog", () => {
       expect(errors).toHaveLength(1);
       expect(errors[0].code).toBe("E004");
     });
+
+    test("fails coverage when a rename removes a user-visible runtime path", () => {
+      const changedFiles = parseChangedFilesStatusOutput(
+        "R100\tRuntime/Core/LegacyMessage.cs\tscripts/LegacyMessage.cs\n"
+      );
+      const errors = validateCoverageRule(changedFiles);
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0].code).toBe("E004");
+      expect(errors[0].suggestion).toContain("Runtime/Core/LegacyMessage.cs");
+    });
   });
 
   describe("integration", () => {
@@ -386,8 +764,8 @@ describe("validate-changelog", () => {
         changedFiles: ["CHANGELOG.md", "Runtime/Core/MessageBus.cs"]
       });
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.warnings).toHaveLength(0);
+      expectNoPolicyErrors(result);
+      expectNoPolicyWarnings(result);
     });
 
     test("returns structural errors and heuristic warnings together", () => {
@@ -423,8 +801,7 @@ describe("validate-changelog", () => {
         checkCoverage: false
       });
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.warnings).toHaveLength(0);
+      expectNoPolicyErrors(result);
     });
   });
 });
