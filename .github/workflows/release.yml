@@ -97,6 +97,9 @@ jobs:
           package_file="$(printf '%s' "${pack_json}" | jq -r '.[0].filename')"
           mv "${package_file}" ".artifacts/release/${package_file}"
           (cd .artifacts/release && sha256sum "${package_file}" > "${package_file}.sha256")
+          # Single-quoted format contains literal backticks for Markdown code fences;
+          # SC2016 heuristically warns of unintended command substitution.
+          # shellcheck disable=SC2016
           printf 'Release %s\n\nPackage: `%s`\n' \
             "${{ needs.verify-tag.outputs.tag }}" \
             "${package_file}" > .artifacts/release/release-notes.md

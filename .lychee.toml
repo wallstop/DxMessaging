@@ -28,5 +28,8 @@ exclude = [
   # GitHub Pages site - not deployed yet, will be available after first successful deploy
   "^https://wallstop\\.github\\.io/DxMessaging",
   # Game Programming Patterns site returns 415 (Unsupported Media Type) to automated clients despite valid content
-  "^https://gameprogrammingpatterns\\.com/"
+  "^https://gameprogrammingpatterns\\.com/",
+  # Unity Support (Zendesk + Cloudflare) returns 403 to non-browser clients regardless of User-Agent;
+  # links are user-facing documentation and stay valid in real browsers.
+  "^https?://support\\.unity\\.com/"
 ]

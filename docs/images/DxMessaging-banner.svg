@@ -1,3 +1,4 @@
+<!-- cspell:words labelledby describedby -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200" role="img"
      aria-labelledby="dxmsgBannerTitle" aria-describedby="dxmsgBannerDesc">
   <title id="dxmsgBannerTitle">DxMessaging: Unity messaging library</title>

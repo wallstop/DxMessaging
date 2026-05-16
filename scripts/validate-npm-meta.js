@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// cspell:words lscache
 /**
  * @fileoverview Validates NPM package meta file integrity.
  *
@@ -331,6 +332,7 @@ const buildArtifactPatterns = [
   { pattern: /(^|\/)\.idea\//, label: "JetBrains IDE state (.idea/)" },
   { pattern: /\.suo$/, label: "Visual Studio solution user options (.suo)" },
   { pattern: /\.DotSettings\.user$/, label: "ReSharper per-user settings (.DotSettings.user)" },
+  { pattern: /\.lscache(\.meta)?$/, label: "C# Dev Kit per-project cache (.lscache)" },
   // Plain `.user` is checked last so the more specific .csproj.user / .DotSettings.user
   // patterns above own their richer messages first.
   { pattern: /\.user$/, label: "per-user IDE settings file (.user)" }
