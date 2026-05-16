@@ -319,7 +319,7 @@ function validateFilesHaveMetaFiles(files) {
 }
 
 // Patterns that catch build artifacts and IDE state that must never ship in the npm tarball.
-// See https://github.com/wallstop/DxMessaging/issues/204 -- pre-2.1.8 npm tarballs shipped
+// See https://github.com/Ambiguous-Interactive/DxMessaging/issues/204 -- pre-2.1.8 npm tarballs shipped
 // SourceGenerator `bin/` and `obj/` outputs whose paths had no .meta partner. Unity then
 // emitted `GuidDB::CreateMetaFileMappings` warnings on every asset-database refresh.
 const buildArtifactPatterns = [
@@ -336,7 +336,7 @@ const buildArtifactPatterns = [
   { pattern: /\.user$/, label: "per-user IDE settings file (.user)" }
 ];
 
-const issue204Reference = "https://github.com/wallstop/DxMessaging/issues/204";
+const issue204Reference = "https://github.com/Ambiguous-Interactive/DxMessaging/issues/204";
 
 /**
  * Validate that no build artifacts, IDE state, or per-user files were packed.
@@ -465,7 +465,7 @@ function isUnityRelevantPackagedDirectory(directory) {
  * Validate that every Unity-relevant file and directory shipped in the tarball
  * has its `.meta` partner shipped alongside it.
  *
- * Issue #204 (https://github.com/wallstop/DxMessaging/issues/204) was triggered
+ * Issue #204 (https://github.com/Ambiguous-Interactive/DxMessaging/issues/204) was triggered
  * by `.cs` files inside `bin/Debug/netstandard2.0/` reaching the published
  * tarball without `.meta` neighbours. Unity then logged
  * `GuidDB::CreateMetaFileMappings` warnings on every asset-database refresh.

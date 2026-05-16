@@ -52,6 +52,16 @@ repos:
         stages:
           - pre-commit
         description: Sync version from package.json to SVG banner (cosmetic, non-blocking).
+      # perf-allow[scans-the-world-with-files]: gated to banner SVG / sync script / validator / package.json; the validator reads only those exact files
+      - id: validate-banner
+        name: Validate banner SVG (encapsulation, sync, accessibility)
+        entry: node scripts/validate-banner.js
+        language: system
+        files: '^(docs/images/DxMessaging-banner\.svg|scripts/validate-banner\.js|scripts/sync-banner-version\.ps1|package\.json)$'
+        pass_filenames: false
+        stages:
+          - pre-commit
+        description: Enforce banner invariants - version-block byte equality with PS heredoc, badge encapsulation, feature labels, accessibility, no-drift.
 
   - repo: local
     hooks:

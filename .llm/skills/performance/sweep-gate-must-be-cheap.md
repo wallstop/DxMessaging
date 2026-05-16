@@ -7,14 +7,14 @@ created: "2026-05-05"
 updated: "2026-05-05"
 
 source:
-  repository: "wallstop/DxMessaging"
+  repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: "Runtime/Core/MessageBus/MessageBus.cs"
     - path: "Runtime/Core/Pooling/StopwatchClock.cs"
     - path: "Runtime/Core/Pooling/IDxMessagingClock.cs"
     - path: "Tests/Editor/Allocations/EmitGateClockReadIsRare.cs"
     - path: "Tests/Editor/Contract/EvictionSweepContractTests.cs"
-  url: "https://github.com/wallstop/DxMessaging"
+  url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
   - "sweep"

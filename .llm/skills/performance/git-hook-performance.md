@@ -7,7 +7,7 @@ created: "2026-05-02"
 updated: "2026-05-02"
 
 source:
-  repository: "wallstop/DxMessaging"
+  repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: ".pre-commit-config.yaml"
     - path: "scripts/lib/precommit-perf-score.js"
@@ -15,7 +15,7 @@ source:
     - path: "scripts/measure-hook-wallclock.js"
     - path: "scripts/run-staged-validators.js"
     - path: "scripts/run-staged-md-pipeline.js"
-  url: "https://github.com/wallstop/DxMessaging"
+  url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
   - "git-hooks"

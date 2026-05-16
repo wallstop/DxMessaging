@@ -7,14 +7,14 @@ created: "2026-05-05"
 updated: "2026-05-05"
 
 source:
-  repository: "wallstop/DxMessaging"
+  repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: ".unity-test-project/Packages/manifest.json"
     - path: ".unity-test-project/Packages/packages-lock.json"
     - path: ".unity-test-project/ProjectSettings/ProjectVersion.txt"
     - path: ".unity-test-project/Assets/Editor/TestRunnerBuilder.cs"
     - path: ".unity-test-project/Assets/Editor/WallstopStudios.DxMessaging.TestHarness.Editor.asmdef"
-  url: "https://github.com/wallstop/DxMessaging"
+  url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
   - "unity"

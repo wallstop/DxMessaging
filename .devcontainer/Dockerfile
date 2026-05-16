@@ -11,7 +11,7 @@ FROM mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm
 ARG TARGETARCH=amd64
 
 # Container labels
-LABEL org.opencontainers.image.source="https://github.com/wallstop/DxMessaging"
+LABEL org.opencontainers.image.source="https://github.com/Ambiguous-Interactive/DxMessaging"
 LABEL org.opencontainers.image.description="DxMessaging development container"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL unity.support="docker-outside-of-docker"

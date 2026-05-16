@@ -90,8 +90,8 @@ function generateSidebar(wikiDir) {
     lines.push('---');
     lines.push('');
     lines.push('**Links**');
-    lines.push('- [📦 GitHub](https://github.com/wallstop/DxMessaging)');
-    lines.push('- [📖 Documentation](https://wallstop.github.io/DxMessaging/)');
+    lines.push('- [📦 GitHub](https://github.com/Ambiguous-Interactive/DxMessaging)');
+    lines.push('- [📖 Documentation](https://ambiguous-interactive.github.io/DxMessaging/)');
 
     return lines.join('\n');
 }

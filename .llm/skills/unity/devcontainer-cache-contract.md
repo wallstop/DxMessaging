@@ -7,7 +7,7 @@ created: "2026-05-05"
 updated: "2026-05-05"
 
 source:
-  repository: "wallstop/DxMessaging"
+  repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: ".devcontainer/cache-contract.sh"
     - path: ".devcontainer/devcontainer.json"
@@ -15,7 +15,7 @@ source:
     - path: ".devcontainer/post-start.sh"
     - path: ".devcontainer/validate-caching.sh"
     - path: ".devcontainer/Dockerfile"
-  url: "https://github.com/wallstop/DxMessaging"
+  url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
   - "devcontainer"

@@ -25,7 +25,7 @@ const path = require("path");
 // - The logical pattern is identical; only the escape syntax differs
 //
 // PowerShell pattern:
-//   '<!-- Version badge \(top right\).*?-->\s*<g[^>]*>\s*<rect[^>]*/?>\s*<text[^>]*>v\d+\.\d+\.\d+[^<]*</text>\s*</g>'
+//   '<!-- Version badge \(top right\).*?-->\s*<g[^>]*>\s*<rect[^>]*/>\s*<text[^>]*>v\d+\.\d+\.\d+[^<]*</text>\s*</g>'
 //
 // JavaScript pattern (below) - note the \/ escapes for forward slashes:
 const VERSION_PATTERN =
@@ -33,6 +33,12 @@ const VERSION_PATTERN =
 
 // SYNC: Keep semver pattern in sync with sync-banner-version.ps1 version validation
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+/;
+
+// SYNC: Keep test-count label pattern in sync with sync-banner-version.ps1 $testCountPattern
+const TEST_COUNT_PATTERN =
+    /(<text\s+x="20"\s+y="13"[^>]*fill="#00d9ff"[^>]*>)(\d+\+ Tests)(<\/text>)/;
+
+const TEST_FILE_NAME_PATTERN = /(?:Test|Tests)\.cs$|\.(?:test|spec)\.js$/;
 
 /**
  * Extracts version from a package.json content string.
@@ -62,9 +68,9 @@ function extractVersion(content) {
  */
 function generateVersionBadge(version) {
     return `<!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->
-  <g transform="translate(720, 25)">
-    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
-    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v${version}</text>
+  <g transform="translate(720, 18)">
+    <rect x="0" y="0" width="62" height="22" rx="11" ry="11" fill="#e94560" opacity="0.95" filter="url(#softShadow)"/>
+    <text x="31" y="15" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" font-weight="700" fill="#ffffff" letter-spacing="0.5">v${version}</text>
   </g>`;
 }
 
@@ -96,6 +102,155 @@ function updateSvgVersion(svgContent, newVersion) {
         return null;
     }
     return svgContent.replace(VERSION_PATTERN, generateVersionBadge(newVersion));
+}
+
+function stripSourceComments(content) {
+    return content
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+function maskJavaScriptNonCode(content) {
+    let result = "";
+    let state = "code";
+    let quote = "";
+    let escaped = false;
+
+    const mask = (char) => (char === "\n" || char === "\r" ? char : " ");
+
+    for (let i = 0; i < content.length;) {
+        const char = content[i];
+        const next = content[i + 1] ?? "";
+
+        if (state === "code") {
+            if (char === "/" && next === "/") {
+                result += mask(char) + mask(next);
+                i += 2;
+                state = "line-comment";
+                continue;
+            }
+            if (char === "/" && next === "*") {
+                result += mask(char) + mask(next);
+                i += 2;
+                state = "block-comment";
+                continue;
+            }
+            if (char === "'" || char === '"' || char === "`") {
+                result += mask(char);
+                quote = char;
+                escaped = false;
+                i++;
+                state = "string";
+                continue;
+            }
+
+            result += char;
+            i++;
+            continue;
+        }
+
+        if (state === "line-comment") {
+            result += mask(char);
+            i++;
+            if (char === "\n" || char === "\r") {
+                state = "code";
+            }
+            continue;
+        }
+
+        if (state === "block-comment") {
+            result += mask(char);
+            if (char === "*" && next === "/") {
+                result += mask(next);
+                i += 2;
+                state = "code";
+                continue;
+            }
+            i++;
+            continue;
+        }
+
+        result += mask(char);
+        i++;
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (char === "\\") {
+            escaped = true;
+            continue;
+        }
+        if (char === quote) {
+            state = "code";
+        }
+    }
+
+    return result;
+}
+
+function countTestMarkers(filePath, content) {
+    if (filePath.endsWith(".cs")) {
+        const source = stripSourceComments(content);
+        return (
+            source.match(
+                /\[(?:UnityTest|Test|TestCase|TestCaseSource|Theory|Fact)\b/g,
+            ) ?? []
+        ).length;
+    }
+    if (/\.(?:test|spec)\.js$/.test(filePath)) {
+        const source = maskJavaScriptNonCode(content);
+        return (source.match(/(?<![\w.])(?:test|it)\s*\(/g) ?? []).length;
+    }
+    return 0;
+}
+
+function roundTestCount(testCount) {
+    const rounded = Math.floor(testCount / 100) * 100;
+    return rounded < 1 ? testCount : rounded;
+}
+
+function updateSvgTestCount(svgContent, testCount) {
+    if (!TEST_COUNT_PATTERN.test(svgContent)) {
+        return null;
+    }
+    return svgContent.replace(
+        TEST_COUNT_PATTERN,
+        `$1${roundTestCount(testCount)}+ Tests$3`,
+    );
+}
+
+function getRepositoryTestFiles(root) {
+    const results = [];
+    const roots = ["Tests", "SourceGenerators", "scripts"];
+    for (const relativeRoot of roots) {
+        const absoluteRoot = path.join(root, relativeRoot);
+        if (!fs.existsSync(absoluteRoot)) {
+            continue;
+        }
+        collectTestFiles(absoluteRoot, results);
+    }
+    return results;
+}
+
+function collectTestFiles(dir, results) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            collectTestFiles(fullPath, results);
+            continue;
+        }
+        if (entry.isFile() && TEST_FILE_NAME_PATTERN.test(entry.name)) {
+            results.push(fullPath);
+        }
+    }
+}
+
+function calculateRepositoryTestCount(root) {
+    return getRepositoryTestFiles(root).reduce(
+        (sum, filePath) =>
+            sum + countTestMarkers(filePath, fs.readFileSync(filePath, "utf-8")),
+        0,
+    );
 }
 
 describe("sync-banner-version", () => {
@@ -162,7 +317,7 @@ describe("sync-banner-version", () => {
             const badge = generateVersionBadge("2.1.4");
             expect(badge).toContain("v2.1.4");
             expect(badge).toContain("<!-- Version badge (top right)");
-            expect(badge).toContain('<g transform="translate(720, 25)">');
+            expect(badge).toContain('<g transform="translate(720, 18)">');
             expect(badge).toContain("</text>");
             expect(badge).toContain("</g>");
         });
@@ -184,9 +339,9 @@ describe("sync-banner-version", () => {
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">
   <!-- Some other content -->
   <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->
-  <g transform="translate(720, 25)">
-    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
-    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v2.1.4</text>
+  <g transform="translate(720, 18)">
+    <rect x="0" y="0" width="62" height="22" rx="11" ry="11" fill="#e94560" opacity="0.95" filter="url(#softShadow)"/>
+    <text x="31" y="15" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" font-weight="700" fill="#ffffff" letter-spacing="0.5">v2.1.4</text>
   </g>
   <!-- More content -->
 </svg>`;
@@ -209,8 +364,8 @@ describe("sync-banner-version", () => {
 
         test("should return null for malformed version badge", () => {
             const malformedSvg = `<!-- Version badge (top right) -->
-  <g transform="translate(720, 25)">
-    <rect x="0" y="-12" width="60" height="22"/>
+  <g transform="translate(720, 18)">
+    <rect x="0" y="0" width="62" height="22"/>
     <text>no version here</text>
   </g>`;
             expect(extractCurrentVersion(malformedSvg)).toBeNull();
@@ -232,9 +387,9 @@ describe("sync-banner-version", () => {
   </defs>
   <!-- Some header content -->
   <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->
-  <g transform="translate(720, 25)">
-    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560" filter="url(#softShadow)"/>
-    <text x="30" y="4" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="12" font-weight="600" fill="#ffffff" letter-spacing="0.5">v1.0.0</text>
+  <g transform="translate(720, 18)">
+    <rect x="0" y="0" width="62" height="22" rx="11" ry="11" fill="#e94560" opacity="0.95" filter="url(#softShadow)"/>
+    <text x="31" y="15" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" font-weight="700" fill="#ffffff" letter-spacing="0.5">v1.0.0</text>
   </g>
   <!-- Footer content -->
 </svg>`;
@@ -271,12 +426,82 @@ describe("sync-banner-version", () => {
         });
     });
 
+    describe("test count calculation", () => {
+        test("should count NUnit and Unity test attributes in C# test files", () => {
+            const content = `
+public class ExampleTests
+{
+    [Test]
+    public void One() {}
+
+    [UnityTest]
+    public IEnumerator Two() { yield break; }
+
+    [TestCase(1)]
+    [TestCaseSource(nameof(Cases))]
+    public void Parameterized(int value) {}
+}`;
+            expect(countTestMarkers("Tests/ExampleTests.cs", content)).toBe(4);
+        });
+
+        test("should count Jest test and it calls in JavaScript test files", () => {
+            const content = `
+describe("suite", () => {
+    test("one", () => {});
+    it("two", () => {});
+    helper.test("not a test declaration");
+});`;
+            expect(countTestMarkers("scripts/__tests__/example.test.js", content)).toBe(2);
+        });
+
+        test("should ignore Jest markers inside JavaScript fixture strings", () => {
+            const content = `
+const source = "test('fixture', () => {}); it('also fixture', () => {});";
+const quoted = 'literal test( and it( text';
+const template = \`template test("not real", () => {})\`;
+describe("suite", () => {
+    test("real", () => {});
+    it("also real", () => {});
+});`;
+            expect(countTestMarkers("scripts/__tests__/example.test.js", content)).toBe(2);
+        });
+
+        test("should ignore test markers inside comments", () => {
+            const content = `
+// [Test]
+/* test("commented", () => {}); */
+[Test]
+public void RealTest() {}`;
+            expect(countTestMarkers("Tests/ExampleTests.cs", content)).toBe(1);
+        });
+
+        test("should round test counts down to stable hundred-count labels", () => {
+            expect(roundTestCount(2305)).toBe(2300);
+            expect(roundTestCount(99)).toBe(99);
+        });
+
+        test("should update the feature-row test count label", () => {
+            const svg = `<svg>
+  <g transform="translate(120, 150)">
+    <text x="20" y="13" fill="#00d9ff">300+ Tests</text>
+  </g>
+</svg>`;
+            const updated = updateSvgTestCount(svg, 2305);
+            expect(updated).toContain("2300+ Tests");
+            expect(updated).toContain('fill="#00d9ff">2300+ Tests</text>');
+        });
+
+        test("should return null when the feature-row test count label is missing", () => {
+            expect(updateSvgTestCount("<svg></svg>", 2305)).toBeNull();
+        });
+    });
+
     describe("VERSION_PATTERN regex", () => {
         test("should match standard version badge format", () => {
             const badge = `<!-- Version badge (top right) - some comment -->
-  <g transform="translate(720, 25)">
-    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560"/>
-    <text x="30" y="4">v1.2.3</text>
+  <g transform="translate(720, 18)">
+    <rect x="0" y="0" width="62" height="22" rx="11" fill="#e94560"/>
+    <text x="31" y="15">v1.2.3</text>
   </g>`;
             expect(VERSION_PATTERN.test(badge)).toBe(true);
         });
@@ -291,7 +516,7 @@ describe("sync-banner-version", () => {
         });
 
         test("should not match without version comment", () => {
-            const noComment = `<g transform="translate(720, 25)">
+            const noComment = `<g transform="translate(720, 18)">
     <rect x="0" y="-12"/>
     <text>v1.2.3</text>
   </g>`;
@@ -387,6 +612,22 @@ describe("sync-banner-version", () => {
                 expect(svgVersion).toBe(packageVersion);
             }
         });
+
+        test("should have matching rounded test count between repository tests and SVG", () => {
+            const svgExists = fs.existsSync(svgPath);
+            expect(svgExists).toBe(true);
+
+            if (svgExists) {
+                const svgContent = fs.readFileSync(svgPath, "utf-8");
+                const labelMatch = svgContent.match(TEST_COUNT_PATTERN);
+                const repositoryTestCount = calculateRepositoryTestCount(repoRoot);
+                const expectedLabel = `${roundTestCount(repositoryTestCount)}+ Tests`;
+
+                expect(repositoryTestCount).toBeGreaterThan(0);
+                expect(labelMatch).not.toBeNull();
+                expect(labelMatch[2]).toBe(expectedLabel);
+            }
+        });
     });
 
     describe("edge cases", () => {
@@ -395,7 +636,7 @@ describe("sync-banner-version", () => {
 <svg>
   <g id="first"><rect/></g>
   <!-- Version badge (top right) -->
-  <g transform="translate(720, 25)">
+  <g transform="translate(720, 18)">
     <rect x="0"/>
     <text>v1.0.0</text>
   </g>
@@ -410,7 +651,7 @@ describe("sync-banner-version", () => {
 <svg>
   <g id="outer">
     <!-- Version badge (top right) -->
-    <g transform="translate(720, 25)">
+    <g transform="translate(720, 18)">
       <rect/>
       <text>v2.5.0</text>
     </g>
@@ -472,9 +713,9 @@ describe("sync-banner-version", () => {
                 '<?xml version="1.0" encoding="UTF-8"?>',
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">',
                 '  <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->',
-                '  <g transform="translate(720, 25)">',
-                '    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560"/>',
-                '    <text x="30" y="4">v1.2.3</text>',
+                '  <g transform="translate(720, 18)">',
+                '    <rect x="0" y="0" width="62" height="22" rx="11" fill="#e94560"/>',
+                '    <text x="31" y="15">v1.2.3</text>',
                 '  </g>',
                 '</svg>',
             ].join('\n');
@@ -487,9 +728,9 @@ describe("sync-banner-version", () => {
                 '<?xml version="1.0" encoding="UTF-8"?>',
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">',
                 '  <!-- Version badge (top right) - text must contain vX.Y.Z for version sync -->',
-                '  <g transform="translate(720, 25)">',
-                '    <rect x="0" y="-12" width="60" height="22" rx="11" fill="#e94560"/>',
-                '    <text x="30" y="4">v2.0.0</text>',
+                '  <g transform="translate(720, 18)">',
+                '    <rect x="0" y="0" width="62" height="22" rx="11" fill="#e94560"/>',
+                '    <text x="31" y="15">v2.0.0</text>',
                 '  </g>',
                 '</svg>',
             ].join('\r\n');

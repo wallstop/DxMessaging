@@ -186,7 +186,7 @@ workflow gate.
 ## Historical PlayMode Benchmarks
 
 The sections below are auto-updated by the Unity PlayMode benchmark tests in
-the [Performance PlayMode benchmark suite](https://github.com/wallstop/DxMessaging/blob/master/Tests/Editor/Benchmarks/PerformanceTests.cs).
+the [Performance PlayMode benchmark suite](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/Tests/Editor/Benchmarks/PerformanceTests.cs).
 
 How it works:
 

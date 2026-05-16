@@ -592,7 +592,7 @@ describe("validate-npm-meta", () => {
     test("validateNpmMeta should pass against the real npm pack --dry-run output on the current branch", () => {
       // Integration check: shells out to the real npm pack flow via the script's own
       // getPackageFiles() and asserts the current branch is clean. This is the live
-      // guardrail that issue #204 (https://github.com/wallstop/DxMessaging/issues/204)
+      // guardrail that issue #204 (https://github.com/Ambiguous-Interactive/DxMessaging/issues/204)
       // cannot regress without the test failing.
       jest.spyOn(console, "log").mockImplementation(() => {});
 
@@ -653,7 +653,7 @@ describe("validate-npm-meta", () => {
   // -------------------------------------------------------------------------
   // Issue #204 regression coverage
   //
-  // GitHub issue #204 (https://github.com/wallstop/DxMessaging/issues/204)
+  // GitHub issue #204 (https://github.com/Ambiguous-Interactive/DxMessaging/issues/204)
   // reported `GuidDB::CreateMetaFileMappings` warnings on every Unity asset-database
   // refresh after installing the npm package. Pre-2.1.8 tarballs shipped
   // SourceGenerator `bin/Debug/netstandard2.0/...` build outputs and `obj/...` files

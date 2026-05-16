@@ -100,7 +100,7 @@ jobs:
         # produced tarball for any build artifact paths. The dry-run validator above
         # already enforces this, but a real pack on each runner OS catches platform
         # drift (e.g. case sensitivity, path separators, glob expansion differences).
-        # See https://github.com/wallstop/DxMessaging/issues/204 for the original
+        # See https://github.com/Ambiguous-Interactive/DxMessaging/issues/204 for the original
         # GuidDB::CreateMetaFileMappings regression that motivated this guard.
         #
         # IMPORTANT: keep the grep alternation below in sync with `buildArtifactPatterns`

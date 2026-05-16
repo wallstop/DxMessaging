@@ -7,12 +7,12 @@ created: "2026-05-05"
 updated: "2026-05-05"
 
 source:
-  repository: "wallstop/DxMessaging"
+  repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: ".github/workflows-disabled/unity-tests.yml"
     - path: ".github/workflows-disabled/unity-il2cpp.yml"
     - path: ".github/workflows-disabled/unity-benchmarks.yml"
-  url: "https://github.com/wallstop/DxMessaging"
+  url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
   - "unity"

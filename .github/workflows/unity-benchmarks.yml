@@ -1,0 +1,106 @@
+name: Unity Benchmarks
+
+on:
+  schedule:
+    - cron: "29 10 * * 3"
+  workflow_dispatch:
+    inputs:
+      unity-version:
+        description: "Pin a single Unity version. Empty = 2022.3.45f1."
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  issues: write
+
+jobs:
+  matrix-config:
+    name: Resolve benchmark matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      unity-versions: ${{ steps.resolve.outputs.unity-versions }}
+    steps:
+      - name: Resolve dispatch overrides
+        id: resolve
+        env:
+          INPUT_UNITY_VERSION: ${{ inputs.unity-version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_UNITY_VERSION:-}" ]; then
+            versions="[\"${INPUT_UNITY_VERSION}\"]"
+          else
+            versions='["2022.3.45f1"]'
+          fi
+          echo "unity-versions=${versions}" >> "${GITHUB_OUTPUT}"
+
+  benchmarks:
+    name: Benchmarks ${{ matrix.unity-version }} ${{ matrix.test-mode }}
+    needs: matrix-config
+    runs-on:
+      group: ambiguous-interactive-organization-builds
+      labels:
+        - self-hosted
+        - Windows
+        - RAM-64GB
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        unity-version: ${{ fromJSON(needs.matrix-config.outputs.unity-versions) }}
+        test-mode:
+          - editmode
+          - playmode
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        env:
+          MANIFEST_HASH: ${{ hashFiles('.unity-test-project/Packages/manifest.json') }}
+          LOCK_HASH: ${{ hashFiles('.unity-test-project/Packages/packages-lock.json') }}
+          VERSION_HASH: ${{ hashFiles('.unity-test-project/ProjectSettings/ProjectVersion.txt') }}
+        with:
+          path: .unity-test-project/Library
+          key: Library-bench-${{ matrix.unity-version }}-${{ matrix.test-mode }}-${{ env.MANIFEST_HASH }}-${{ env.LOCK_HASH }}-${{ env.VERSION_HASH }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.18.0"
+
+      - name: Run Unity benchmarks
+        shell: pwsh
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_VERSION: ${{ matrix.unity-version }}
+          CI: "true"
+        run: |
+          ./scripts/unity/run-tests.ps1 `
+            -Platform "${{ matrix.test-mode }}" `
+            -UnityVersion "${{ matrix.unity-version }}" `
+            -IncludePerf `
+            -Runner docker `
+            -Results ".artifacts/unity/benchmarks/${{ matrix.unity-version }}-${{ matrix.test-mode }}/results.xml"
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unity-benchmarks-${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          path: .artifacts/unity/benchmarks/${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          if-no-files-found: warn
+          retention-days: 90

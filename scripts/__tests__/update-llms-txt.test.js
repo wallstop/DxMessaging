@@ -111,12 +111,12 @@ describe("update-llms-txt.js", () => {
 
     test("should include repository URL", () => {
       const content = generateLlmsTxt();
-      expect(content).toContain("https://github.com/wallstop/DxMessaging");
+      expect(content).toContain("https://github.com/Ambiguous-Interactive/DxMessaging");
     });
 
     test("should include documentation URL", () => {
       const content = generateLlmsTxt();
-      expect(content).toContain("https://wallstop.github.io/DxMessaging/");
+      expect(content).toContain("https://ambiguous-interactive.github.io/DxMessaging/");
     });
 
     test("should include skill count", () => {

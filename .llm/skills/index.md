@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-06. Do not edit manually.
+> **Auto-generated** on 2026-05-08. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,14 +9,14 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 157   |
+| Total Skills | 158   |
 | Categories   | 8     |
 
 ---
 
 ## Table of Contents
 
-- [Documentation](#documentation) (29)
+- [Documentation](#documentation) (30)
 - [GitHub Actions](#github-actions) (6)
 - [Packaging](#packaging) (2)
 - [Performance](#performance) (45)
@@ -32,6 +32,7 @@
 | Skill                                                                                                 | Lines      | Complexity     | Status   | Performance  | Tags                              |
 | ----------------------------------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | --------------------------------- |
 | [ASCII-Only Documentation Policy](./documentation/ascii-only-docs.md)                                 | [ok] 173   | [basic]        | [stable] | [risk: none] | documentation, ascii              |
+| [Banner SVG Conventions](./documentation/banner-svg-conventions.md)                                   | [ok] 199   | [intermediate] | [stable] | [risk: none] | documentation, svg                |
 | [Changelog Entry Writing and Anti-Patterns](./documentation/changelog-entry-writing.md)               | [warn] 296 | [basic]        | [stable] | [risk: none] | changelog, release-notes          |
 | [Changelog Entry Writing and Anti-Patterns Part 1](./documentation/changelog-entry-writing-part-1.md) | [draft] 56 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
 | [Changelog Management](./documentation/changelog-management.md)                                       | [ok] 229   | [basic]        | [stable] | [risk: none] | changelog, documentation          |

@@ -352,6 +352,9 @@ pre-push.md*
 pre-push.txt*
 pr-description.md*
 
+# Local operator runbooks may contain environment-specific execution notes.
+.operator-runbooks/
+
 SourceGenerators/WallstopStudios.DxMessaging.Analyzer/bin.meta
 SourceGenerators/WallstopStudios.DxMessaging.Analyzer/obj.meta
 Temp

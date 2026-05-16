@@ -7,14 +7,14 @@ created: "2026-05-05"
 updated: "2026-05-05"
 
 source:
-  repository: "wallstop/DxMessaging"
+  repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: "scripts/unity/run-tests.sh"
     - path: "scripts/unity/run-tests.ps1"
     - path: "scripts/unity/lib/asmdef-discovery.js"
     - path: "scripts/unity/lib/parse-test-results.py"
     - path: ".github/workflows-disabled/unity-tests.yml"
-  url: "https://github.com/wallstop/DxMessaging"
+  url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
   - "unity"

@@ -74,6 +74,5 @@
       SkipUnchangedFiles="true"
       Condition="Exists('$(UnityAssetsPluginsEditorWallstopDir)')"
     />
-    <!-- Removed copy to Assets/Editor/Wallstop Studios as requested -->
   </Target>
 </Project>

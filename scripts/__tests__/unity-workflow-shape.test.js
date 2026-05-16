@@ -4,9 +4,8 @@
  *
  * These workflows have non-obvious invariants that, if violated, cause silent
  * regressions:
- *   - game-ci backed Unity workflows are temporarily moved out of
- *     .github/workflows while the GitHub-hosted game-ci jobs are disabled.
- *     Local runners remain available.
+ *   - Licensed Unity jobs must only run for same-repo pull requests,
+ *     protected branch pushes, schedules, and manual dispatch.
  *   - All Unity workflows must include manifest, packages-lock, and
  *     ProjectVersion in the exact Library cache key, with no broad restore
  *     keys — otherwise stale Library/ dirs from a prior Unity version corrupt
@@ -28,7 +27,8 @@ const yaml = require("js-yaml");
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows");
 const DISABLED_WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows-disabled");
-const DISABLED_UNITY_WORKFLOWS = ["unity-tests.yml", "unity-il2cpp.yml", "unity-benchmarks.yml"];
+const UNITY_WORKFLOWS = ["unity-tests.yml", "unity-il2cpp.yml", "unity-benchmarks.yml"];
+const UNITY_VERSIONS = ["2021.3.45f1", "2022.3.45f1", "6000.0.32f1"];
 
 function readWorkflow(name) {
   const abs = path.join(WORKFLOWS_DIR, name);
@@ -72,37 +72,65 @@ function expectExactUnityLibraryCache(text) {
   expect(text).not.toContain("restore-keys:");
 }
 
-describe("Unity game-ci workflows disabled in GitHub", () => {
-  test.each(DISABLED_UNITY_WORKFLOWS)("%s is not an active GitHub workflow", (name) => {
-    expect(fs.existsSync(path.join(WORKFLOWS_DIR, name))).toBe(false);
+function getOnBlock(parsed) {
+  return parsed.on || parsed[true];
+}
+
+function expectUnityRunnerGroup(job) {
+  expect(job["runs-on"]).toEqual({
+    group: "ambiguous-interactive-organization-builds",
+    labels: ["self-hosted", "Windows", "RAM-64GB"]
+  });
+}
+
+function expectSameRepoAndProtectedBranchGuard(job) {
+  expect(job.if).toContain("github.event_name != 'pull_request'");
+  expect(job.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+  expect(job.if).toContain("github.event_name != 'push'");
+  expect(job.if).toContain("github.ref_protected");
+}
+
+describe("Unity workflows are active GitHub workflows", () => {
+  test.each(UNITY_WORKFLOWS)("%s exists under .github/workflows", (name) => {
+    expect(fs.existsSync(path.join(WORKFLOWS_DIR, name))).toBe(true);
     expect(fs.existsSync(path.join(DISABLED_WORKFLOWS_DIR, name))).toBe(true);
   });
 });
 
-describe(".github/workflows-disabled/unity-tests.yml", () => {
+describe(".github/workflows/unity-tests.yml", () => {
   let text;
   let parsed;
 
   beforeAll(() => {
-    text = readDisabledWorkflow("unity-tests.yml");
-    parsed = loadDisabledWorkflowYaml("unity-tests.yml");
+    text = readWorkflow("unity-tests.yml");
+    parsed = loadWorkflowYaml("unity-tests.yml");
   });
 
-  test("stays workflow_dispatch only as a disabled template", () => {
-    const onBlock = parsed.on || parsed[true];
-    expect(Object.keys(onBlock).sort()).toEqual(["workflow_dispatch"]);
-    expect(parsed.jobs["matrix-config"].if).toBe("${{ false }}");
+  test("runs for same-repo PRs, protected branch pushes, schedules, and dispatch", () => {
+    const onBlock = getOnBlock(parsed);
+    expect(Object.keys(onBlock).sort()).toEqual([
+      "pull_request",
+      "push",
+      "schedule",
+      "workflow_dispatch"
+    ]);
+    expect(text).not.toContain("pull_request_target");
+    expectSameRepoAndProtectedBranchGuard(parsed.jobs["unity-tests"]);
   });
 
-  test("uses game-ci/unity-test-runner@v4", () => {
-    expect(text).toContain("game-ci/unity-test-runner@v4");
+  test("uses the requested self-hosted Windows runner contract", () => {
+    expectUnityRunnerGroup(parsed.jobs["unity-tests"]);
   });
 
-  test("references secrets.UNITY_LICENSE", () => {
+  test("uses the full Unity version x test mode matrix", () => {
+    for (const unityVersion of UNITY_VERSIONS) {
+      expect(text).toContain(unityVersion);
+    }
+    expect(text).toContain('modes=\'["editmode","playmode"]\'');
+  });
+
+  test("references Unity license secrets", () => {
     expect(text).toMatch(/secrets\.UNITY_LICENSE/);
-  });
-
-  test("references secrets.UNITY_SERIAL for paid serial activation", () => {
     expect(text).toMatch(/secrets\.UNITY_SERIAL/);
   });
 
@@ -115,30 +143,38 @@ describe(".github/workflows-disabled/unity-tests.yml", () => {
   });
 });
 
-describe(".github/workflows-disabled/unity-il2cpp.yml", () => {
+describe(".github/workflows/unity-il2cpp.yml", () => {
   let text;
   let parsed;
 
   beforeAll(() => {
-    text = readDisabledWorkflow("unity-il2cpp.yml");
-    parsed = loadDisabledWorkflowYaml("unity-il2cpp.yml");
+    text = readWorkflow("unity-il2cpp.yml");
+    parsed = loadWorkflowYaml("unity-il2cpp.yml");
   });
 
-  test("stays workflow_dispatch only as a disabled template", () => {
-    const onBlock = parsed.on || parsed[true];
-    expect(Object.keys(onBlock).sort()).toEqual(["workflow_dispatch"]);
-    expect(parsed.jobs["matrix-config"].if).toBe("${{ false }}");
+  test("runs separately for same-repo PRs, protected branch pushes, schedules, and dispatch", () => {
+    const onBlock = getOnBlock(parsed);
+    expect(Object.keys(onBlock).sort()).toEqual([
+      "pull_request",
+      "push",
+      "schedule",
+      "workflow_dispatch"
+    ]);
+    expect(text).not.toContain("pull_request_target");
+    expectSameRepoAndProtectedBranchGuard(parsed.jobs["il2cpp-tests"]);
   });
 
-  test("uses game-ci/unity-builder@v4", () => {
-    expect(text).toContain("game-ci/unity-builder@v4");
+  test("uses the requested self-hosted Windows runner contract", () => {
+    expectUnityRunnerGroup(parsed.jobs["il2cpp-tests"]);
   });
 
-  test("references secrets.UNITY_LICENSE", () => {
+  test("runs the standalone IL2CPP path through the repo runner", () => {
+    expect(text).toContain("-Platform standalone");
+    expect(text).toContain("-Runner docker");
+  });
+
+  test("references Unity license secrets", () => {
     expect(text).toMatch(/secrets\.UNITY_LICENSE/);
-  });
-
-  test("references secrets.UNITY_SERIAL for paid serial activation", () => {
     expect(text).toMatch(/secrets\.UNITY_SERIAL/);
   });
 
@@ -149,31 +185,26 @@ describe(".github/workflows-disabled/unity-il2cpp.yml", () => {
   test("uses actions/upload-artifact@v7", () => {
     expect(text).toContain("actions/upload-artifact@v7");
   });
-
-  test("references secrets.UNITY_SERIAL for paid serial activation", () => {
-    expect(text).toMatch(/secrets\.UNITY_SERIAL/);
-  });
 });
 
-describe(".github/workflows-disabled/unity-benchmarks.yml", () => {
+describe(".github/workflows/unity-benchmarks.yml", () => {
   let text;
   let parsed;
 
   beforeAll(() => {
-    text = readDisabledWorkflow("unity-benchmarks.yml");
-    parsed = loadDisabledWorkflowYaml("unity-benchmarks.yml");
+    text = readWorkflow("unity-benchmarks.yml");
+    parsed = loadWorkflowYaml("unity-benchmarks.yml");
   });
 
-  test("`on:` block has ONLY workflow_dispatch as a disabled template", () => {
+  test("`on:` block has ONLY schedule and workflow_dispatch", () => {
     // YAML 1.1 turns the bare `on` key into `true`; check both keys to
     // tolerate either representation across yaml/parser versions.
-    const onBlock = parsed.on || parsed[true];
+    const onBlock = getOnBlock(parsed);
     expect(onBlock).toBeDefined();
     expect(typeof onBlock).toBe("object");
 
     const triggerKeys = Object.keys(onBlock).sort();
-    expect(triggerKeys).toEqual(["workflow_dispatch"]);
-    expect(parsed.jobs["matrix-config"].if).toBe("${{ false }}");
+    expect(triggerKeys).toEqual(["schedule", "workflow_dispatch"]);
 
     // Belt-and-suspenders text grep: a stray `pull_request:` or `push:`
     // anywhere in the on: block (even commented-out or otherwise missed
@@ -186,12 +217,104 @@ describe(".github/workflows-disabled/unity-benchmarks.yml", () => {
     expect(onSection).not.toMatch(/^\s{2}push:/m);
   });
 
+  test("uses the requested self-hosted Windows runner contract", () => {
+    expectUnityRunnerGroup(parsed.jobs.benchmarks);
+  });
+
+  test("includes perf assemblies through the repo runner", () => {
+    expect(text).toContain("-IncludePerf");
+    expect(text).not.toContain("pull_request_target");
+  });
+
   test("Library cache key references manifest.json, packages-lock.json, and ProjectVersion.txt", () => {
     expectExactUnityLibraryCache(text);
   });
 
   test("uses actions/upload-artifact@v7", () => {
     expect(text).toContain("actions/upload-artifact@v7");
+  });
+});
+
+describe(".github/workflows/release.yml", () => {
+  let text;
+  let parsed;
+
+  beforeAll(() => {
+    text = readWorkflow("release.yml");
+    parsed = loadWorkflowYaml("release.yml");
+  });
+
+  test("is tag-triggered only and validates exact semver tags", () => {
+    const onBlock = getOnBlock(parsed);
+    expect(Object.keys(onBlock)).toEqual(["push"]);
+    expect(onBlock.push).toEqual({ tags: ["v[0-9]*.[0-9]*.[0-9]*"] });
+    expect(text).toContain("^v[0-9]+\\.[0-9]+\\.[0-9]+$");
+    expect(text).toContain("Tag ${tag} does not match package.json version");
+    expect(text).not.toContain("workflow_dispatch");
+  });
+
+  test("validates, runs Unity checks, packs, attests, releases, and publishes with provenance", () => {
+    expect(Object.keys(parsed.jobs).sort()).toEqual([
+      "publish",
+      "unity-checks",
+      "validate",
+      "verify-tag"
+    ]);
+    expect(parsed.jobs.publish["runs-on"]).toBe("ubuntu-latest");
+    expect(text).toContain("npm run validate:npm-meta");
+    expect(text).toContain("npm run test:unity-contracts");
+    expect(text).toContain("npm pack --json");
+    expect(text).toContain("actions/attest-build-provenance@v3");
+    expect(text).toContain("actions/upload-artifact@v7");
+    expect(text).toContain("gh release create");
+    expect(text).toContain("npx --yes --package=npm@^11.5.1 npm publish");
+    expect(text).toContain("--provenance");
+    expect(text).not.toContain("NPM_TOKEN");
+  });
+
+  test("attestation job grants provenance permissions and validates from a full checkout", () => {
+    const attestationJobEntry = Object.entries(parsed.jobs).find(([, job]) =>
+      job.steps.some((step) => step.uses === "actions/attest-build-provenance@v3")
+    );
+    expect(attestationJobEntry).toBeDefined();
+
+    const [, attestationJob] = attestationJobEntry;
+    expect(attestationJob.permissions).toEqual({
+      attestations: "write",
+      contents: "read",
+      "id-token": "write"
+    });
+
+    const checkoutIndex = attestationJob.steps.findIndex(
+      (step) => step.uses === "actions/checkout@v6"
+    );
+    const validateAllIndex = attestationJob.steps.findIndex(
+      (step) => step.run && step.run.includes("npm run validate:all")
+    );
+
+    expect(checkoutIndex).toBeGreaterThanOrEqual(0);
+    expect(validateAllIndex).toBeGreaterThan(checkoutIndex);
+
+    const checkoutStep = attestationJob.steps[checkoutIndex];
+    expect(checkoutStep).toEqual(
+      expect.objectContaining({
+        with: expect.objectContaining({
+          "fetch-depth": 0
+        })
+      })
+    );
+  });
+
+  test("publish job has Trusted Publishing permissions", () => {
+    expect(parsed.jobs.publish.permissions).toEqual({
+      attestations: "write",
+      contents: "write",
+      "id-token": "write"
+    });
+  });
+
+  test("release Unity checks use the requested self-hosted Windows runner contract", () => {
+    expectUnityRunnerGroup(parsed.jobs["unity-checks"]);
   });
 });
 

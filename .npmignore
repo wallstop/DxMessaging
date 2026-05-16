@@ -83,6 +83,9 @@ site.meta
 progress/
 progress.meta
 
+# Local operator runbooks are generated on demand and never packaged.
+.operator-runbooks/
+
 # =============================================================================
 # Node.js / JavaScript Tooling
 # =============================================================================
