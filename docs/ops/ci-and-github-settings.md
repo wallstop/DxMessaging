@@ -10,18 +10,28 @@ This repository splits trust domains:
 - Licensed Unity jobs run only on Ambiguous self-hosted Windows runners.
 - npm publishing runs on GitHub-hosted Ubuntu with OIDC Trusted Publishing.
 
-## Runner Group
+## Self-Hosted Unity Runners
 
-Create or verify this runner contract in the Ambiguous organization:
+Licensed Unity jobs target self-hosted Windows runners by labels only. No
+custom runner group is required; runners may live in the organization's
+default runner group.
 
-- Runner group: `ambiguous-interactive-organization-builds`
-- Labels:
+- Labels (all required on each Unity runner):
   - `self-hosted`
   - `Windows`
   - `RAM-64GB`
 
-Grant the repository access to that runner group. Do not grant broader runner
-groups unless a workflow explicitly needs them.
+To avoid concurrent Unity credential use, the four Unity-credential-using jobs
+share a single job-level concurrency group:
+
+- Concurrency group: `wallstop-organization-builds`
+- `cancel-in-progress: false`
+
+The same group name is used by the `unity-tests`, `unity-il2cpp`,
+`unity-benchmarks`, and `release.yml` `unity-checks` jobs. GitHub Actions
+serializes any matching job across all four workflows so only one Unity
+license-consuming job runs at a time. Lightweight matrix configuration jobs
+run on `ubuntu-latest` and remain parallelizable.
 
 ## Unity Workflows
 

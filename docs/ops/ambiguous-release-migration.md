@@ -26,7 +26,7 @@ PR URLs, public release URLs, and dates when public verification was completed.
 | Unity test workflow                     | `.github/workflows/unity-tests.yml`                              |
 | Unity IL2CPP workflow                   | `.github/workflows/unity-il2cpp.yml`                             |
 | Unity benchmark workflow                | `.github/workflows/unity-benchmarks.yml`                         |
-| Unity self-hosted runner group          | `ambiguous-interactive-organization-builds`                      |
+| Unity job concurrency group             | `wallstop-organization-builds`                                   |
 | GitHub Pages environment                | `github-pages`                                                   |
 | OpenUPM package page                    | `https://openupm.com/packages/com.wallstop-studios.dxmessaging/` |
 
@@ -76,22 +76,29 @@ same network.
 
 Reference: [GitHub repository transfer documentation](https://docs.github.com/articles/about-repository-transfers).
 
-## Runner Group Setup
+## Self-Hosted Unity Runner Setup
 
-Unity workflows require the organization self-hosted runner group
-`ambiguous-interactive-organization-builds` with labels `self-hosted`,
-`Windows`, and `RAM-64GB`.
+Unity workflows target self-hosted Windows runners by labels only. No
+dedicated runner group is provisioned; runners may live in the organization's
+default runner group. License serialization is handled by a job-level
+concurrency group rather than by runner group access controls.
+
+- Required runner labels: `self-hosted`, `Windows`, and `RAM-64GB`.
+- Required job-level concurrency group: `wallstop-organization-builds` with
+  `cancel-in-progress: false`.
 
 - [ ] In the `Ambiguous-Interactive` organization, open **Settings**,
-      **Actions**, then **Runner groups**.
-- [ ] Confirm `ambiguous-interactive-organization-builds` exists and grants
-      repository access to `Ambiguous-Interactive/DxMessaging`.
-- [ ] Confirm the runner group has online Windows runners labeled
+      **Actions**, then **Runners**.
+- [ ] Confirm at least one online self-hosted Windows runner has the labels
       `self-hosted`, `Windows`, and `RAM-64GB`.
 - [ ] Confirm `.github/workflows/unity-tests.yml`,
       `.github/workflows/unity-il2cpp.yml`, `.github/workflows/unity-benchmarks.yml`,
-      and the `unity-checks` job in `.github/workflows/release.yml` all resolve
-      to that group.
+      and the `unity-checks` job in `.github/workflows/release.yml` request
+      `runs-on: [self-hosted, Windows, RAM-64GB]` with no `group:` key.
+- [ ] Confirm those four jobs all declare
+      `concurrency: { group: wallstop-organization-builds, cancel-in-progress: false }`
+      so only one Unity-credential-using job runs at a time across all four
+      workflows.
 - [ ] Keep fork pull requests off self-hosted runners. The Unity workflows only
       allow same-repository pull requests and protected branch pushes; do not
       replace those guards with `pull_request_target`.
@@ -99,9 +106,8 @@ Unity workflows require the organization self-hosted runner group
       workflow also runs trusted Unity checks on `v*` tags, so `vX.Y.Z` tags
       must be covered by GitHub rulesets or tag protection that require the
       approved release process and reviewed release commit.
-- [ ] Remove any temporary runner group access granted only for transfer work.
 
-Reference: [GitHub runner group access documentation](https://docs.github.com/en/actions/hosting-your-own-runners/managing-access-to-self-hosted-runners-using-groups).
+Reference: [GitHub self-hosted runners documentation](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners).
 
 ## GitHub Environments, Secrets, and Protections
 
@@ -269,9 +275,10 @@ Run these checks after the transfer and again after the first tagged release.
 - [ ] `npm run test:scripts` passes.
 - [ ] `.github/workflows/deploy-docs.yml` deploys to
       `https://ambiguous-interactive.github.io/DxMessaging/`.
-- [ ] `.github/workflows/unity-tests.yml` can run on
-      `ambiguous-interactive-organization-builds` for same-repository pull
-      requests or protected branch pushes.
+- [ ] `.github/workflows/unity-tests.yml` can dispatch to self-hosted runners
+      labeled `self-hosted`, `Windows`, and `RAM-64GB` for same-repository
+      pull requests or protected branch pushes, and serializes through the
+      `wallstop-organization-builds` concurrency group.
 - [ ] `.github/workflows/release.yml` succeeds for a real semver tag and does
       not require `NPM_TOKEN`.
 - [ ] npm, OpenUPM, GitHub Releases, and GitHub Pages all point to

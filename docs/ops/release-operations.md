@@ -17,7 +17,7 @@ Canonical public identifiers:
 - Package ID: `com.wallstop-studios.dxmessaging`
 - Documentation site: `https://ambiguous-interactive.github.io/DxMessaging/`
 - Release workflow: `.github/workflows/release.yml`
-- Unity workflow runner group: `ambiguous-interactive-organization-builds`
+- Unity workflow concurrency group: `wallstop-organization-builds` (cancel-in-progress: false)
 - Unity runner labels: `self-hosted`, `Windows`, `RAM-64GB`
 
 Tracked pages:

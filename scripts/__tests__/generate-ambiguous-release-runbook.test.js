@@ -151,7 +151,7 @@ describe("generate-ambiguous-release-runbook", () => {
     ].join("\n");
     const requiredPhrases = [
       "## GitHub Repository Transfer",
-      "## Runner Group Setup",
+      "## Self-Hosted Unity Runner Setup",
       "## GitHub Environments, Secrets, and Protections",
       "### Branches and Tags",
       "## npm Ownership, Trusted Publishing, and Provenance",
@@ -186,7 +186,6 @@ describe("generate-ambiguous-release-runbook", () => {
       ".github/workflows/unity-tests.yml",
       ".github/workflows/unity-il2cpp.yml",
       ".github/workflows/unity-benchmarks.yml",
-      "ambiguous-interactive-organization-builds",
       "RAM-64GB",
       "github-pages",
       "vX.Y.Z"

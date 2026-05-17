@@ -76,11 +76,25 @@ function getOnBlock(parsed) {
   return parsed.on || parsed[true];
 }
 
-function expectUnityRunnerGroup(job) {
-  expect(job["runs-on"]).toEqual({
-    group: "ambiguous-interactive-organization-builds",
-    labels: ["self-hosted", "Windows", "RAM-64GB"]
+function expectUnityRunnerContract(job) {
+  // Labels-only runs-on (object/group form is forbidden — runner groups are
+  // not provisioned for this org).
+  expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
+  // Job-level concurrency group serializes Unity-credential-using jobs
+  // across all four workflows.
+  expect(job.concurrency).toEqual({
+    group: "wallstop-organization-builds",
+    "cancel-in-progress": false
   });
+}
+
+function expectDiagnosticsStep(job) {
+  expect(Array.isArray(job.steps)).toBe(true);
+  const diagnosticsStep = job.steps.find(
+    (step) => step && step.name === "Print runner diagnostics"
+  );
+  expect(diagnosticsStep).toBeDefined();
+  expect(diagnosticsStep.shell).toBe("bash");
 }
 
 function expectSameRepoAndProtectedBranchGuard(job) {
@@ -95,6 +109,101 @@ describe("Unity workflows are active GitHub workflows", () => {
     expect(fs.existsSync(path.join(WORKFLOWS_DIR, name))).toBe(true);
     expect(fs.existsSync(path.join(DISABLED_WORKFLOWS_DIR, name))).toBe(true);
   });
+});
+
+// Data-driven contract for every Unity-credential-using job across all four
+// workflows. Anything that genuinely repeats (runner contract, concurrency
+// contract, license secrets, Library cache contract, upload-artifact version,
+// diagnostics step, same-repo + protected-branch guards) lives here.
+const UNITY_LICENSED_JOBS = [
+  {
+    workflow: "unity-tests.yml",
+    jobId: "unity-tests",
+    requiresProtectedBranchGuard: true,
+    requiresLibraryCache: true,
+    requiresLicenseSecrets: true
+  },
+  {
+    workflow: "unity-il2cpp.yml",
+    jobId: "il2cpp-tests",
+    requiresProtectedBranchGuard: true,
+    requiresLibraryCache: true,
+    requiresLicenseSecrets: true
+  },
+  {
+    workflow: "unity-benchmarks.yml",
+    jobId: "benchmarks",
+    requiresProtectedBranchGuard: false,
+    requiresLibraryCache: true,
+    requiresLicenseSecrets: true
+  },
+  {
+    workflow: "release.yml",
+    jobId: "unity-checks",
+    requiresProtectedBranchGuard: false,
+    requiresLibraryCache: false,
+    requiresLicenseSecrets: true
+  }
+];
+
+describe("Unity-credential-using jobs share the same runner + concurrency contract", () => {
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow job '$jobId' uses labels-only runs-on and the wallstop-organization-builds concurrency group",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      expectUnityRunnerContract(parsed.jobs[jobId]);
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow job '$jobId' has a 'Print runner diagnostics' bash step",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      expectDiagnosticsStep(parsed.jobs[jobId]);
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresLicenseSecrets))(
+    "$workflow references Unity license + serial secrets",
+    ({ workflow }) => {
+      const text = readWorkflow(workflow);
+      expect(text).toMatch(/secrets\.UNITY_LICENSE/);
+      expect(text).toMatch(/secrets\.UNITY_SERIAL/);
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresLibraryCache))(
+    "$workflow declares an exact Library cache key with no broad restore-keys",
+    ({ workflow }) => {
+      expectExactUnityLibraryCache(readWorkflow(workflow));
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow uses actions/upload-artifact@v7 (matches repo baseline)",
+    ({ workflow }) => {
+      // unity-checks in release.yml does not currently upload its own
+      // artifacts (the validate job does), so this assertion only applies
+      // workflow-wide rather than per-job.
+      const text = readWorkflow(workflow);
+      if (workflow === "release.yml") {
+        // release.yml uploads the packed npm artifact from the validate job.
+        expect(text).toContain("actions/upload-artifact@v7");
+      } else {
+        expect(text).toContain("actions/upload-artifact@v7");
+      }
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresProtectedBranchGuard))(
+    "$workflow job '$jobId' guards same-repo + protected-branch execution",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const text = readWorkflow(workflow);
+      expectSameRepoAndProtectedBranchGuard(parsed.jobs[jobId]);
+      expect(text).not.toContain("pull_request_target");
+    }
+  );
 });
 
 describe(".github/workflows/unity-tests.yml", () => {
@@ -115,11 +224,6 @@ describe(".github/workflows/unity-tests.yml", () => {
       "workflow_dispatch"
     ]);
     expect(text).not.toContain("pull_request_target");
-    expectSameRepoAndProtectedBranchGuard(parsed.jobs["unity-tests"]);
-  });
-
-  test("uses the requested self-hosted Windows runner contract", () => {
-    expectUnityRunnerGroup(parsed.jobs["unity-tests"]);
   });
 
   test("uses the full Unity version x test mode matrix", () => {
@@ -127,19 +231,6 @@ describe(".github/workflows/unity-tests.yml", () => {
       expect(text).toContain(unityVersion);
     }
     expect(text).toContain('modes=\'["editmode","playmode"]\'');
-  });
-
-  test("references Unity license secrets", () => {
-    expect(text).toMatch(/secrets\.UNITY_LICENSE/);
-    expect(text).toMatch(/secrets\.UNITY_SERIAL/);
-  });
-
-  test("Library cache key references manifest.json, packages-lock.json, and ProjectVersion.txt", () => {
-    expectExactUnityLibraryCache(text);
-  });
-
-  test("uses actions/upload-artifact@v7 (matches repo baseline)", () => {
-    expect(text).toContain("actions/upload-artifact@v7");
   });
 });
 
@@ -161,29 +252,11 @@ describe(".github/workflows/unity-il2cpp.yml", () => {
       "workflow_dispatch"
     ]);
     expect(text).not.toContain("pull_request_target");
-    expectSameRepoAndProtectedBranchGuard(parsed.jobs["il2cpp-tests"]);
-  });
-
-  test("uses the requested self-hosted Windows runner contract", () => {
-    expectUnityRunnerGroup(parsed.jobs["il2cpp-tests"]);
   });
 
   test("runs the standalone IL2CPP path through the repo runner", () => {
     expect(text).toContain("-Platform standalone");
     expect(text).toContain("-Runner docker");
-  });
-
-  test("references Unity license secrets", () => {
-    expect(text).toMatch(/secrets\.UNITY_LICENSE/);
-    expect(text).toMatch(/secrets\.UNITY_SERIAL/);
-  });
-
-  test("Library cache key references manifest.json, packages-lock.json, and ProjectVersion.txt", () => {
-    expectExactUnityLibraryCache(text);
-  });
-
-  test("uses actions/upload-artifact@v7", () => {
-    expect(text).toContain("actions/upload-artifact@v7");
   });
 });
 
@@ -217,21 +290,9 @@ describe(".github/workflows/unity-benchmarks.yml", () => {
     expect(onSection).not.toMatch(/^\s{2}push:/m);
   });
 
-  test("uses the requested self-hosted Windows runner contract", () => {
-    expectUnityRunnerGroup(parsed.jobs.benchmarks);
-  });
-
   test("includes perf assemblies through the repo runner", () => {
     expect(text).toContain("-IncludePerf");
     expect(text).not.toContain("pull_request_target");
-  });
-
-  test("Library cache key references manifest.json, packages-lock.json, and ProjectVersion.txt", () => {
-    expectExactUnityLibraryCache(text);
-  });
-
-  test("uses actions/upload-artifact@v7", () => {
-    expect(text).toContain("actions/upload-artifact@v7");
   });
 });
 
@@ -311,10 +372,6 @@ describe(".github/workflows/release.yml", () => {
       contents: "write",
       "id-token": "write"
     });
-  });
-
-  test("release Unity checks use the requested self-hosted Windows runner contract", () => {
-    expectUnityRunnerGroup(parsed.jobs["unity-checks"]);
   });
 });
 

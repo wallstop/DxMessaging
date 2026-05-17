@@ -21,6 +21,7 @@ const {
   findLockfileInstallViolations,
   detectBashSyntaxPattern,
   findWindowsBashPortabilityViolations,
+  findForbiddenRunsOnGroupViolations,
   findChangelogCoverageCheckoutViolations,
   validateWorkflow
 } = require("../validate-workflows.js");
@@ -636,6 +637,121 @@ describe("windows matrix bash shell portability policy", () => {
     const violations = findWindowsBashPortabilityViolations("test.yml", lines);
 
     expect(violations).toHaveLength(expectedViolationCount);
+  });
+});
+
+describe("findForbiddenRunsOnGroupViolations", () => {
+  test.each([
+    {
+      name: "flags multi-line runs-on with a group: key",
+      lines: [
+        "jobs:",
+        "  unity:",
+        "    runs-on:",
+        "      group: some-runner-group",
+        "      labels:",
+        "        - self-hosted",
+        "        - Windows",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 1
+    },
+    {
+      name: "flags inline mapping runs-on with a group: key",
+      lines: [
+        "jobs:",
+        "  unity:",
+        "    runs-on: { group: some-runner-group, labels: [self-hosted, Windows] }",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 1
+    },
+    {
+      name: "allows labels-only inline array runs-on",
+      lines: [
+        "jobs:",
+        "  unity:",
+        "    runs-on: [self-hosted, Windows, RAM-64GB]",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 0
+    },
+    {
+      name: "allows labels-only block list runs-on",
+      lines: [
+        "jobs:",
+        "  unity:",
+        "    runs-on:",
+        "      - self-hosted",
+        "      - Windows",
+        "      - RAM-64GB",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 0
+    },
+    {
+      name: "allows plain scalar runs-on",
+      lines: [
+        "jobs:",
+        "  ubuntu:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 0
+    },
+    {
+      name: "does not confuse concurrency.group with runs-on.group (multi-line)",
+      lines: [
+        "jobs:",
+        "  unity:",
+        "    concurrency:",
+        "      group: wallstop-organization-builds",
+        "      cancel-in-progress: false",
+        "    runs-on:",
+        "      labels:",
+        "        - self-hosted",
+        "        - Windows",
+        "        - RAM-64GB",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 0
+    },
+    {
+      name: "still flags runs-on.group when a sibling concurrency.group is present",
+      lines: [
+        "jobs:",
+        "  unity:",
+        "    concurrency:",
+        "      group: wallstop-organization-builds",
+        "      cancel-in-progress: false",
+        "    runs-on:",
+        "      group: some-runner-group",
+        "      labels:",
+        "        - self-hosted",
+        "        - Windows",
+        "        - RAM-64GB",
+        "    steps:",
+        "      - run: echo hello"
+      ],
+      expectedViolations: 1
+    }
+  ])("$name", ({ lines, expectedViolations }) => {
+    const violations = findForbiddenRunsOnGroupViolations("test.yml", lines);
+
+    expect(violations).toHaveLength(expectedViolations);
+    if (expectedViolations > 0) {
+      for (const violation of violations) {
+        expect(violation.severity).toBe("error");
+        expect(violation.message).toContain("runs-on.group is forbidden");
+        expect(violation.message).toContain("wallstop-organization-builds");
+      }
+    }
   });
 });
 

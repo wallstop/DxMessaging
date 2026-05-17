@@ -927,6 +927,104 @@ function stepHasFullHistoryCheckout(lines, step) {
     return false;
 }
 
+/**
+ * Detects use of the object-form `runs-on:` with a `group:` key, e.g.:
+ *
+ *     runs-on:
+ *       group: some-runner-group
+ *       labels:
+ *         - self-hosted
+ *
+ * Runner groups are not provisioned for this org. The supported contract
+ * is labels-only `runs-on`. Unity-credential-using jobs additionally rely
+ * on the `wallstop-organization-builds` job-level concurrency group to
+ * serialize across workflows.
+ *
+ * Strategy: walk each job's lines; when we see a `runs-on:` value that
+ * is empty (i.e., the value is given via the next-line object block),
+ * inspect the indented child block for a `group:` key. Inline mapping
+ * forms (`runs-on: { group: ..., labels: [...] }`) are also covered by
+ * the inline regex.
+ */
+function findForbiddenRunsOnGroupViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+
+    for (const job of jobs) {
+        const startIndex = job.startLine - 1;
+        const endIndex = job.endLine - 1;
+
+        for (let i = startIndex + 1; i <= endIndex; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            const indent = getIndent(line);
+
+            if (trimmed.length === 0 || trimmed.startsWith("#")) {
+                continue;
+            }
+
+            if (indent <= job.indent) {
+                break;
+            }
+
+            if (indent !== job.indent + 2) {
+                continue;
+            }
+
+            // Inline mapping form: `runs-on: { group: foo, labels: [...] }`
+            const inlineRunsOn = /^\s*runs-on:\s*\{([^}]*)\}\s*(?:#.*)?$/.exec(line);
+            if (inlineRunsOn && /\bgroup\s*:/.test(inlineRunsOn[1])) {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        i + 1,
+                        line.trim(),
+                        `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on and rely on the wallstop-organization-builds concurrency group to serialize Unity-credential-using jobs.`,
+                        "error"
+                    )
+                );
+                continue;
+            }
+
+            // Multi-line object form: bare `runs-on:` followed by indented mapping.
+            if (!/^\s*runs-on:\s*(?:#.*)?$/.test(line)) {
+                continue;
+            }
+
+            const runsOnIndent = indent;
+
+            for (let j = i + 1; j <= endIndex; j++) {
+                const childLine = lines[j];
+                const childTrimmed = childLine.trim();
+                const childIndent = getIndent(childLine);
+
+                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+                    continue;
+                }
+
+                if (childIndent <= runsOnIndent) {
+                    break;
+                }
+
+                if (/^\s*group\s*:/.test(childLine)) {
+                    violations.push(
+                        new Violation(
+                            relativePath,
+                            j + 1,
+                            childLine.trim(),
+                            `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on and rely on the wallstop-organization-builds concurrency group to serialize Unity-credential-using jobs.`,
+                            "error"
+                        )
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    return violations;
+}
+
 function findChangelogCoverageCheckoutViolations(relativePath, lines) {
     const violations = [];
     const jobs = extractJobs(lines);
@@ -1045,6 +1143,10 @@ function validateWorkflow(filePath, options = {}) {
         );
 
         violations.push(
+            ...findForbiddenRunsOnGroupViolations(relativePath, lines)
+        );
+
+        violations.push(
             ...findChangelogCoverageCheckoutViolations(relativePath, lines)
         );
     } catch (error) {
@@ -1104,18 +1206,18 @@ function main() {
     const warnings = allViolations.filter((v) => v.severity === "warning");
 
     if (allViolations.length === 0) {
-        console.log("✅ All workflow files passed validation.\n");
+        console.log("[OK] All workflow files passed validation.\n");
         console.log("No workflow policy violations detected.");
         process.exit(0);
     }
 
     if (errors.length > 0) {
-        console.log(`\n❌ Found ${errors.length} error(s):\n`);
+        console.log(`\n[ERROR] Found ${errors.length} error(s):\n`);
         errors.forEach((v) => console.log(v.toString() + "\n"));
     }
 
     if (warnings.length > 0) {
-        console.log(`\n⚠️  Found ${warnings.length} warning(s):\n`);
+        console.log(`\n[WARN] Found ${warnings.length} warning(s):\n`);
         warnings.forEach((v) => console.log(v.toString() + "\n"));
     }
 
@@ -1152,6 +1254,7 @@ if (typeof module !== 'undefined' && module.exports) {
         extractJobSteps,
         detectBashSyntaxPattern,
         findWindowsBashPortabilityViolations,
+        findForbiddenRunsOnGroupViolations,
         runTextInvokesChangelogCoverage,
         stepHasFullHistoryCheckout,
         findChangelogCoverageCheckoutViolations,

@@ -57,18 +57,34 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository) &&
         (github.event_name != 'push' || github.ref_protected)
       }}
-    runs-on:
-      group: ambiguous-interactive-organization-builds
-      labels:
-        - self-hosted
-        - Windows
-        - RAM-64GB
+    concurrency:
+      group: wallstop-organization-builds
+      cancel-in-progress: false
+    runs-on: [self-hosted, Windows, RAM-64GB]
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         unity-version: ${{ fromJSON(needs.matrix-config.outputs.unity-versions) }}
     steps:
+      - name: Print runner diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Runner diagnostics"
+          echo "Runner name:           ${RUNNER_NAME:-<unset>}"
+          echo "Runner OS:             ${RUNNER_OS:-<unset>}"
+          echo "Runner arch:           ${RUNNER_ARCH:-<unset>}"
+          echo "Runner workspace:      ${RUNNER_WORKSPACE:-<unset>}"
+          echo "Concurrency group:     wallstop-organization-builds (cancel-in-progress: false)"
+          echo "Requested labels:      self-hosted, Windows, RAM-64GB"
+          echo "GitHub workflow:       ${GITHUB_WORKFLOW:-<unset>}"
+          echo "GitHub job:            ${GITHUB_JOB:-<unset>}"
+          echo "GitHub run id/attempt: ${GITHUB_RUN_ID:-<unset>} / ${GITHUB_RUN_ATTEMPT:-<unset>}"
+          echo "GitHub ref:            ${GITHUB_REF:-<unset>} (protected=${GITHUB_REF_PROTECTED:-<unset>})"
+          echo "GitHub event:          ${GITHUB_EVENT_NAME:-<unset>}"
+          echo "::endgroup::"
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
