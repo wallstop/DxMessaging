@@ -34,7 +34,6 @@ jobs:
     timeout-minutes: 2
     outputs:
       unity-versions: ${{ steps.resolve.outputs.unity-versions }}
-      runner-labels: ${{ steps.runners.outputs.labels }}
     steps:
       - name: Resolve dispatch overrides
         id: resolve
@@ -49,17 +48,6 @@ jobs:
           fi
           echo "unity-versions=${versions}" >> "${GITHUB_OUTPUT}"
 
-      - name: Resolve runner labels
-        id: runners
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo 'labels=["self-hosted","Windows","RAM-64GB","fast"]' >> "$GITHUB_OUTPUT"
-          else
-            echo 'labels=["self-hosted","Windows","RAM-64GB"]' >> "$GITHUB_OUTPUT"
-          fi
-
   il2cpp-tests:
     name: IL2CPP ${{ matrix.unity-version }}
     needs: matrix-config
@@ -69,17 +57,19 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository) &&
         (github.event_name != 'push' || github.ref_protected)
       }}
-    runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}
+    runs-on: [self-hosted, Windows, RAM-64GB]
     timeout-minutes: 120
+    concurrency:
+      group: unity-pro-license
+      cancel-in-progress: false
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         unity-version: ${{ fromJSON(needs.matrix-config.outputs.unity-versions) }}
     steps:
       - name: Print runner diagnostics
         shell: bash
-        env:
-          REQUESTED_LABELS: ${{ needs.matrix-config.outputs.runner-labels }}
         run: |
           set -euo pipefail
           echo "::group::Runner diagnostics"
@@ -87,8 +77,9 @@ jobs:
           echo "Runner OS:             ${RUNNER_OS:-<unset>}"
           echo "Runner arch:           ${RUNNER_ARCH:-<unset>}"
           echo "Runner workspace:      ${RUNNER_WORKSPACE:-<unset>}"
-          echo "Concurrency group:     <none> (per-runner serialization)"
-          printf 'Requested labels:      %s\n' "${REQUESTED_LABELS:-<unset>}"
+          echo "Concurrency group:     unity-pro-license (single-seat Unity Pro license; cross-workflow serialization)"
+          echo "Matrix max-parallel:   1 (within-workflow license serialization)"
+          echo "Requested labels:      self-hosted, Windows, RAM-64GB"
           echo "GitHub workflow:       ${GITHUB_WORKFLOW:-<unset>}"
           echo "GitHub job:            ${GITHUB_JOB:-<unset>}"
           echo "GitHub run id/attempt: ${GITHUB_RUN_ID:-<unset>} / ${GITHUB_RUN_ATTEMPT:-<unset>}"

@@ -77,26 +77,35 @@ function getOnBlock(parsed) {
 }
 
 function expectUnityRunnerContract(job, expectation) {
-  // The wallstop-organization-builds job-level concurrency group has been
-  // removed; per-runner serialization (each self-hosted agent only runs one
-  // job at a time) plus per-machine Unity caches make a shared lock both
-  // unnecessary and harmful (it caused matrix-eviction cancellations and
-  // runner-pickup stalls).
-  expect(job.concurrency).toBeUndefined();
+  // Unity Pro is a single-seat license, so every Unity-credential-using
+  // job shares the `unity-pro-license` concurrency group with
+  // `cancel-in-progress: false`. This serializes Unity work across all
+  // four workflows so two licensed jobs cannot run simultaneously on
+  // ELI-MACHINE and DAD-MACHINE and fight for the license.
+  expect(job.concurrency).toEqual({
+    group: "unity-pro-license",
+    "cancel-in-progress": false
+  });
 
-  if (expectation.runsOnKind === "dynamic-matrix-config") {
-    // PR-triggered Unity workflows route via the matrix-config job's
-    // `runner-labels` output so PRs land on the `fast` machine
-    // (ELI-MACHINE) while push/schedule/dispatch can land on either.
-    expect(job["runs-on"]).toBe("${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}");
-    const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
-    expect(needs).toContain("matrix-config");
-  } else if (expectation.runsOnKind === "static-windows-64gb") {
-    // Non-PR Unity jobs (benchmarks, release.unity-checks) stay on the
-    // broader labels-only set so either Windows machine can pick them up.
-    expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
+  // All four Unity-credential-using jobs request the same static label set
+  // so either Windows machine can pick up any job. Within-workflow matrix
+  // serialization is provided by `strategy.max-parallel: 1` (asserted
+  // separately); cross-workflow serialization comes from the shared
+  // concurrency group above.
+  expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
+
+  if (expectation.hasMatrix) {
+    // The validator (findMatrixConcurrencyEvictionViolations) requires
+    // matrix + shared concurrency group to declare max-parallel: 1; here
+    // we assert the contract directly so a regression is caught even if
+    // the validator rule shifts.
+    expect(job.strategy).toBeDefined();
+    expect(job.strategy["max-parallel"]).toBe(1);
   } else {
-    throw new Error(`Unknown runsOnKind '${expectation.runsOnKind}' in test contract`);
+    // Non-matrix jobs (release.unity-checks) need no max-parallel.
+    if (job.strategy !== undefined) {
+      expect(job.strategy["max-parallel"]).toBeUndefined();
+    }
   }
 }
 
@@ -134,7 +143,7 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: true,
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
-    runsOnKind: "dynamic-matrix-config"
+    hasMatrix: true
   },
   {
     workflow: "unity-il2cpp.yml",
@@ -142,7 +151,7 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: true,
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
-    runsOnKind: "dynamic-matrix-config"
+    hasMatrix: true
   },
   {
     workflow: "unity-benchmarks.yml",
@@ -150,7 +159,7 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: false,
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
-    runsOnKind: "static-windows-64gb"
+    hasMatrix: true
   },
   {
     workflow: "release.yml",
@@ -158,33 +167,43 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: false,
     requiresLibraryCache: false,
     requiresLicenseSecrets: true,
-    runsOnKind: "static-windows-64gb"
+    hasMatrix: false
   }
 ];
 
-const UNITY_DYNAMIC_RUNNER_WORKFLOWS = UNITY_LICENSED_JOBS.filter(
-  (job) => job.runsOnKind === "dynamic-matrix-config"
-);
-
 describe("Unity-credential-using jobs share the same runner + concurrency contract", () => {
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow job '$jobId' has no job-level concurrency block and uses the expected runs-on shape",
-    ({ workflow, jobId, runsOnKind }) => {
+    "$workflow job '$jobId' uses static [self-hosted, Windows, RAM-64GB] runs-on and the unity-pro-license group",
+    ({ workflow, jobId, hasMatrix }) => {
       const parsed = loadWorkflowYaml(workflow);
-      expectUnityRunnerContract(parsed.jobs[jobId], { runsOnKind });
+      expectUnityRunnerContract(parsed.jobs[jobId], { hasMatrix });
     }
   );
 
-  test.each(UNITY_DYNAMIC_RUNNER_WORKFLOWS)(
-    "$workflow matrix-config job emits literal PR/non-PR runner-labels branches",
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow contains exactly one literal 'group: unity-pro-license' occurrence",
     ({ workflow }) => {
+      // Defense-in-depth: even if the structural assertion above ever
+      // regressed silently (e.g., due to YAML parser quirks), the raw text
+      // must still reference the canonical group name exactly so log
+      // readers can grep for the licensing serialization mechanism.
+      //
+      // We further assert exactly ONE occurrence of `group: unity-pro-license`
+      // per workflow file: introducing a second group declaration (for
+      // example, an accidentally-duplicated job or a workflow-level
+      // concurrency block reusing the license group name) would silently
+      // alter the serialization semantics and is treated as a regression.
+      // This complements the structural assertion above; both checks catch
+      // different regressions.
       const text = readWorkflow(workflow);
-      // The validator lexically scans this exact echo text, so the quoting
-      // style matters. Match by literal substring to catch any drift.
-      expect(text).toContain(`echo 'labels=["self-hosted","Windows","RAM-64GB","fast"]' >> "$GITHUB_OUTPUT"`);
-      expect(text).toContain(`echo 'labels=["self-hosted","Windows","RAM-64GB"]' >> "$GITHUB_OUTPUT"`);
-      // And the bash if-branch must key off the pull_request event.
-      expect(text).toMatch(/if\s*\[\[\s*"\$\{\{\s*github\.event_name\s*\}\}"\s*==\s*"pull_request"\s*\]\];\s*then/);
+      expect(text).toMatch(/group:\s*unity-pro-license/);
+      // Anchor the count to the YAML declaration form (`group: <single-space>
+      // unity-pro-license` at the start of a line, allowing leading
+      // indentation). Diagnostic `echo` lines that print the human-readable
+      // string `Concurrency group:     unity-pro-license` use multiple
+      // spaces and live mid-line, so they do not collide with this anchor.
+      const declarationOccurrences = text.match(/^\s*group: unity-pro-license\b/gm) || [];
+      expect(declarationOccurrences).toHaveLength(1);
     }
   );
 

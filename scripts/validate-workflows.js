@@ -23,6 +23,9 @@
  * - Jobs with `runs-on: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}`
  *   that omit `<jobId>` from their `needs:` declaration (runtime would
  *   fail loudly but late; the static check surfaces typos at validation).
+ * - Workflow lines that exceed the yamllint line-length ceiling (loaded from
+ *   .yamllint.yaml when available; defaults to 200). This provides earlier
+ *   feedback in `npm run validate:workflows` before git-hook execution.
  *
  * @usage
  *   node scripts/validate-workflows.js
@@ -48,6 +51,7 @@ const { normalizeToLf } = require("./lib/quote-parser");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
+const DEFAULT_WORKFLOW_LINE_LENGTH = 200;
 
 /**
  * Represents a validation violation.
@@ -65,6 +69,143 @@ class Violation {
         const prefix = this.severity === "error" ? "ERROR" : "WARN";
         return `[${prefix}] ${this.file}:${this.line}: ${this.message}\n  Pattern: ${this.pattern}`;
     }
+}
+
+function resolveWorkflowLineLengthMax(repoRoot = REPO_ROOT) {
+    return resolveWorkflowLineLengthPolicy(repoRoot).max;
+}
+
+function parseYamlBoolean(rawValue) {
+    if (typeof rawValue !== "string") {
+        return null;
+    }
+
+    const normalized = rawValue.trim().toLowerCase();
+    if (normalized === "true") {
+        return true;
+    }
+    if (normalized === "false") {
+        return false;
+    }
+
+    return null;
+}
+
+function resolveWorkflowLineLengthPolicy(repoRoot = REPO_ROOT) {
+    const policy = {
+        max: DEFAULT_WORKFLOW_LINE_LENGTH,
+        allowNonBreakableWords: true,
+        allowNonBreakableInlineMappings: false,
+    };
+
+    const configPath = path.join(repoRoot, ".yamllint.yaml");
+
+    let content;
+    try {
+        content = fs.readFileSync(configPath, "utf8");
+    } catch (_error) {
+        return policy;
+    }
+
+    const lines = normalizeToLf(content).split("\n");
+    let inLineLengthBlock = false;
+    let blockIndent = -1;
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        if (!inLineLengthBlock) {
+            if (/^\s*line-length:\s*(?:#.*)?$/.test(line)) {
+                inLineLengthBlock = true;
+                blockIndent = getIndent(line);
+            }
+            continue;
+        }
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        const indent = getIndent(line);
+        if (indent <= blockIndent) {
+            break;
+        }
+
+        const maxMatch = /^\s*max:\s*([0-9]+)\s*(?:#.*)?$/.exec(line);
+        if (maxMatch) {
+            const parsedMax = Number.parseInt(maxMatch[1], 10);
+            if (Number.isFinite(parsedMax) && parsedMax > 0) {
+                policy.max = parsedMax;
+            }
+            continue;
+        }
+
+        const allowWordsMatch = /^\s*allow-non-breakable-words:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
+        if (allowWordsMatch) {
+            const parsedBoolean = parseYamlBoolean(allowWordsMatch[1]);
+            if (parsedBoolean !== null) {
+                policy.allowNonBreakableWords = parsedBoolean;
+            }
+            continue;
+        }
+
+        const allowInlineMappingsMatch = /^\s*allow-non-breakable-inline-mappings:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
+        if (!allowInlineMappingsMatch) {
+            continue;
+        }
+
+        const parsedBoolean = parseYamlBoolean(allowInlineMappingsMatch[1]);
+        if (parsedBoolean !== null) {
+            policy.allowNonBreakableInlineMappings = parsedBoolean;
+        }
+    }
+
+    // yamllint semantics: enabling inline mappings implies non-breakable words.
+    if (policy.allowNonBreakableInlineMappings) {
+        policy.allowNonBreakableWords = true;
+    }
+
+    return policy;
+}
+
+function lineHasNonBreakableWordOverflow(line, maxLength) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) {
+        return false;
+    }
+
+    const tokens = trimmed.split(/\s+/);
+    return tokens.some((token) => token.length > maxLength);
+}
+
+function findWorkflowLineLengthViolations(relativePath, lines, maxLength, options = {}) {
+    const violations = [];
+    const allowNonBreakableWords = options.allowNonBreakableWords === true;
+
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        const length = line.length;
+
+        if (length <= maxLength) {
+            continue;
+        }
+
+        if (allowNonBreakableWords && lineHasNonBreakableWordOverflow(line, maxLength)) {
+            continue;
+        }
+
+        violations.push(
+            new Violation(
+                relativePath,
+                index + 1,
+                line.trim(),
+                `Workflow line exceeds ${maxLength} characters (${length}). Break long run/script statements across lines so validate:workflows catches this before git hooks.`,
+                "error"
+            )
+        );
+    }
+
+    return violations;
 }
 
 function getIndent(line) {
@@ -1240,6 +1381,11 @@ function extractWorkflowConcurrencyGroup(lines) {
 /**
  * Returns true when the job declares a `strategy.matrix:` block. Detects the
  * standard multi-line form; this is the only form actually used in this repo.
+ *
+ * Limitation: the flow-style mapping form `strategy: { matrix: {...},
+ * max-parallel: 1 }` is silently unanalyzable by this helper and would
+ * return `false`. No active workflow uses flow style; if a future author
+ * introduces it, expand this helper before relying on it.
  */
 function jobHasMatrix(lines, job) {
     const startIndex = job.startLine - 1;
@@ -1281,6 +1427,76 @@ function jobHasMatrix(lines, job) {
     }
 
     return false;
+}
+
+/**
+ * Returns the integer value of `strategy.max-parallel:` for the given job, or
+ * `null` when the key is absent or not parseable as a positive integer.
+ *
+ * The check accepts the standard form `max-parallel: <int>` (with optional
+ * single or double quoting around the value) nested directly under
+ * `strategy:` at the job's `indent + 4` column. This matches every form used
+ * in this repository; expressions such as `${{ ... }}` are deliberately not
+ * resolved (a non-literal value cannot be statically guaranteed to be 1).
+ *
+ * Limitations:
+ *   - The flow-style mapping form `strategy: { matrix: {...},
+ *     max-parallel: 1 }` is silently unanalyzable and returns `null`. No
+ *     active workflow uses flow style; if a future author introduces it,
+ *     expand this helper before relying on it.
+ *   - Float-looking values like `max-parallel: 1.0` are intentionally
+ *     rejected (return `null`). GitHub Actions documents `max-parallel`
+ *     as an integer, and YAML tooling that round-trips floats can change
+ *     the value's representation in surprising ways.
+ */
+function extractJobMatrixMaxParallel(lines, job) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+
+    let inStrategy = false;
+    let strategyIndent = -1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= job.indent) {
+            break;
+        }
+
+        if (!inStrategy) {
+            if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
+                inStrategy = true;
+                strategyIndent = indent;
+            }
+            continue;
+        }
+
+        if (indent <= strategyIndent) {
+            inStrategy = false;
+            strategyIndent = -1;
+            continue;
+        }
+
+        const maxParallelMatch = /^\s*max-parallel:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
+        if (maxParallelMatch && indent === strategyIndent + 2) {
+            const raw = maxParallelMatch[1];
+            if (/^[0-9]+$/.test(raw)) {
+                const parsed = Number.parseInt(raw, 10);
+                if (Number.isFinite(parsed) && parsed > 0) {
+                    return parsed;
+                }
+            }
+            return null;
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -1663,7 +1879,7 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
                 relativePath,
                 workflowConcurrency.line,
                 `concurrency.group: ${workflowConcurrency.group}`,
-                `Workflow-level concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Use per-runner serialization (each self-hosted agent only runs one job at a time) and rely on each workflow's own \${{ github.workflow }}-\${{ github.ref }} group if PR-level deduplication is needed.`,
+                `Workflow-level concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: job-level 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' on every Unity-credential-using job, combined with 'strategy.max-parallel: 1' on any matrix in those jobs. The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. Use the workflow's own \${{ github.workflow }}-\${{ github.ref }} group at workflow level if PR-level deduplication is needed. (Historical sentinel name: 'wallstop-organization-builds'.)`,
                 "error"
             )
         );
@@ -1682,7 +1898,7 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
                     relativePath,
                     concurrency.line,
                     `concurrency.group: ${concurrency.group}`,
-                    `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Use per-matrix expansion via \${{ matrix.* }} if serialization is needed, or rely on natural per-runner serialization.`,
+                    `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' plus 'strategy.max-parallel: 1' on the matrix in this job (cross-workflow serialization without matrix eviction). The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. (Historical sentinel name: 'wallstop-organization-builds'.)`,
                     "error"
                 )
             );
@@ -1693,12 +1909,23 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
 }
 
 /**
- * Checks for jobs that combine `strategy.matrix:` with a `concurrency.group:`
- * whose expression does NOT include any `${{ matrix.* }}` token. Such a
- * configuration is the general form of the wallstop-organization-builds
- * footgun: GitHub Actions concurrency reserves one in-progress slot and one
- * pending slot per group, so every third matrix entry to enqueue evicts the
- * previously-queued one.
+ * Checks for jobs that combine `strategy.matrix:` with a shared
+ * `concurrency.group:` that exposes the matrix-eviction footgun. GitHub
+ * Actions concurrency reserves one in-progress slot and one pending slot
+ * per group, so without mitigation every third matrix entry to enqueue
+ * evicts the previously-queued one (the original
+ * `wallstop-organization-builds` incident).
+ *
+ * A matrix + shared concurrency group is permitted IFF either:
+ *   (a) The group expression includes a `${{ matrix.* }}` token, so each
+ *       matrix entry occupies its own per-combination slot (no eviction by
+ *       construction).
+ *   (b) The strategy declares `max-parallel: 1`, which serializes matrix
+ *       entries internally to the workflow run. Entries 2..N queue inside
+ *       GitHub's matrix engine, not inside the concurrency group, so the
+ *       group sees exactly one entrant per workflow run.
+ *
+ * Anything else is a violation.
  *
  * Workflow-level concurrency is intentionally not checked here: a workflow-
  * level concurrency group applies to the whole workflow run, not to each
@@ -1722,16 +1949,28 @@ function findMatrixConcurrencyEvictionViolations(relativePath, lines) {
             continue;
         }
 
+        // Escape hatch (a): per-entry slot via ${{ matrix.* }} expansion.
         if (/\$\{\{\s*matrix\./.test(concurrency.group)) {
             continue;
         }
+
+        // Escape hatch (b): explicit serialization via max-parallel: 1.
+        const maxParallel = extractJobMatrixMaxParallel(lines, job);
+        if (maxParallel === 1) {
+            continue;
+        }
+
+        const maxParallelDescription =
+            maxParallel === null
+                ? "no strategy.max-parallel declaration"
+                : `strategy.max-parallel: ${maxParallel}`;
 
         violations.push(
             new Violation(
                 relativePath,
                 concurrency.line,
                 `concurrency.group: ${concurrency.group}`,
-                `Job '${job.id}' combines strategy.matrix with a concurrency.group ('${concurrency.group}') that does not expand any \${{ matrix.* }} token. GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, or drop the job-level concurrency block entirely.`,
+                `Job '${job.id}' combines strategy.matrix with a shared concurrency.group ('${concurrency.group}') (${maxParallelDescription}). GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Allowed escape hatches: (a) expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, or (b) declare 'strategy.max-parallel: 1' so matrix entries serialize internally and never compete for the same group slot. Otherwise drop the job-level concurrency block entirely.`,
                 "error"
             )
         );
@@ -2012,6 +2251,8 @@ function validateWorkflow(filePath, options = {}) {
     const repoRoot = options.repoRoot || REPO_ROOT;
     const isIgnoredPathFn = options.isIgnoredPathFn || isGitIgnoredPath;
     const relativePath = path.relative(repoRoot, filePath).replace(/\\/g, "/");
+    const lineLengthPolicy = resolveWorkflowLineLengthPolicy(repoRoot);
+    const maxWorkflowLineLength = lineLengthPolicy.max;
 
     let content;
     try {
@@ -2024,6 +2265,15 @@ function validateWorkflow(filePath, options = {}) {
     }
 
     const lines = normalizeToLf(content).split("\n");
+
+    violations.push(
+        ...findWorkflowLineLengthViolations(
+            relativePath,
+            lines,
+            maxWorkflowLineLength,
+            lineLengthPolicy
+        )
+    );
 
     lines.forEach((line, index) => {
         const lineNumber = index + 1;
@@ -2218,6 +2468,7 @@ if (typeof module !== 'undefined' && module.exports) {
         extractWorkflowConcurrencyGroup,
         extractConcurrencyGroupFromBlock,
         jobHasMatrix,
+        extractJobMatrixMaxParallel,
         extractJobRunsOn,
         extractJobNeeds,
         parseInlineLabelArray,
@@ -2227,6 +2478,9 @@ if (typeof module !== 'undefined' && module.exports) {
         runTextInvokesChangelogCoverage,
         stepHasFullHistoryCheckout,
         findChangelogCoverageCheckoutViolations,
+        resolveWorkflowLineLengthPolicy,
+        resolveWorkflowLineLengthMax,
+        findWorkflowLineLengthViolations,
         validateWorkflow,
         Violation,
     };

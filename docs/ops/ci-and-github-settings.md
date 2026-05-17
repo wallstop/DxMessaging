@@ -23,28 +23,108 @@ default runner group.
 - Speed marker applied only to `ELI-MACHINE`:
   - `fast`
 
-There is no shared job-level concurrency group on Unity jobs. The previous
-single-slot `wallstop-organization-builds` group caused matrix-eviction
-cancellations and runner-pickup stalls; that group name is now a reserved
-sentinel that the workflow validator hard-rejects anywhere it appears.
+Unity Pro is a single-seat license: only one machine can be activated at
+a time. All four Unity-credential-using jobs (`unity-tests`,
+`il2cpp-tests`, `benchmarks`, and the `unity-checks` job in
+`release.yml`) declare:
+
+```yaml
+concurrency:
+  group: unity-pro-license
+  cancel-in-progress: false
+```
+
+so two licensed jobs cannot run simultaneously across the two Windows
+machines and fight for the license. The previous single-slot
+`wallstop-organization-builds` group is a reserved sentinel that the
+workflow validator hard-rejects anywhere it appears; the new
+`unity-pro-license` group serves the same serialization purpose under a
+non-overloaded name.
+
+The three Unity matrix jobs (`unity-tests`, `il2cpp-tests`, `benchmarks`)
+additionally declare `strategy.max-parallel: 1` so matrix entries serialize
+internally to the workflow run and do not compete for the single
+concurrency slot (the validator's `findMatrixConcurrencyEvictionViolations`
+check enforces this combination).
 
 Per-runner Unity-cache safety is provided by each runner agent's exclusive
 workspace - a single self-hosted agent only ever runs one job at a time, so
-`.unity-test-project/Library` directories cannot collide. No additional
-concurrency group is required for cache isolation.
+`.unity-test-project/Library` directories cannot collide.
 
-Event-aware runner routing is emitted from each Unity workflow's
-`matrix-config` job through a `runner-labels` output and consumed by
-`runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}`:
+Runner routing is uniform across all four Unity-credential-using jobs:
 
-- Pull-request events route to `[self-hosted, Windows, RAM-64GB, fast]`
-  (ELI-MACHINE only) for interactive feedback isolation.
-- `push`, `schedule`, `workflow_dispatch`, and release-tag events route to
-  `[self-hosted, Windows, RAM-64GB]` so either Windows machine can pick
-  them up.
+```yaml
+runs-on: [self-hosted, Windows, RAM-64GB]
+```
+
+Both ELI-MACHINE and DAD-MACHINE are eligible to pick up any Unity job;
+the `fast` label remains on ELI-MACHINE only for future opt-in hotfix
+dispatch but no job requests it today.
 
 Lightweight matrix configuration jobs run on `ubuntu-latest` and remain
 parallelizable.
+
+### Workflow-level vs job-level concurrency interaction
+
+The Unity workflows declare workflow-level `concurrency: { group:
+${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }`
+so rapid same-branch pushes supersede the older workflow run. The
+licensed Unity jobs inside each workflow separately declare a job-level
+`concurrency: { group: unity-pro-license, cancel-in-progress: false }`.
+The two groups operate at different scopes and do not interact directly.
+
+On rapid same-branch pushes, the workflow-level group cancels the
+_older_ workflow run; any of its jobs that have not yet started will
+never start, and any running step is sent SIGTERM. However, the
+job-level `cancel-in-progress: false` on the license group prevents the
+license-holding job itself from being preempted, so a job that has
+already entered the `unity-pro-license` slot keeps running until it
+completes; the new workflow's `unity-checks`/`unity-tests`/etc. job
+then waits on the license slot until the old job releases it. This is
+the intended behavior - it protects in-flight Unity activation and
+asset import state from being torn down mid-run - but operators should
+expect a brief gap between "newer push" and "newer Unity job actually
+starts" while the older job drains.
+
+## Stuck-Job Watchdog
+
+A known GitHub Actions dispatcher bug ([Community Discussion #186811](https://github.com/orgs/community/discussions/186811))
+causes self-hosted runners to report Online/Idle while `runner_id` stays
+at 0 for 7+ minutes, leaving a queued job indefinitely stuck even when an
+idle runner's labels are a superset of the job's requested labels.
+
+`.github/workflows/stuck-job-watchdog.yml` runs every 10 minutes on
+`ubuntu-latest`, lists queued workflow runs older than 10 minutes
+(`MIN_QUEUE_AGE_SECONDS=600`), fetches the org runner inventory
+(falling back to repo runners on 403), and identifies the subset that
+are genuinely dispatcher-stuck. A run is considered stuck only when ALL
+of the following hold: the run is `status: queued`, no job in the run
+is `in_progress` (a run with an in-progress job is by definition
+holding/using a runner, not dispatcher-stuck), at least one job is
+queued, at least one idle runner's labels satisfy a queued job's label
+requirements, the run's workflow file is not in the exclusion list, and
+the run is not the watchdog's own run.
+
+For each genuinely-stuck run the watchdog `gh run cancel`s the run
+(the documented recovery for a queued-only run; `gh run rerun --failed`
+cannot rerun a run that never reached `failed` status - see cli/cli
+issue #9221). For runs triggered by `push`, `schedule`, or
+`workflow_dispatch` on a workflow that declares `workflow_dispatch:`
+the watchdog then re-dispatches the workflow on the same `ref` via the
+REST API. For `pull_request`-triggered runs, the watchdog only cancels
+and writes a clear `GITHUB_STEP_SUMMARY` instruction asking the
+operator to click "Re-run all jobs" in the GitHub UI - there is no
+safe API path to re-trigger a `pull_request` run without pushing a
+commit, so the watchdog does not attempt it.
+
+`release.yml` is excluded by default (`EXCLUDED_WORKFLOW_FILES=
+("release.yml")`) so a spurious cancel cannot double-publish or break
+attestation. Additional exclusions may be set via the
+`WATCHDOG_EXCLUDED_WORKFLOWS` repository variable (whitespace-separated
+list of workflow filenames).
+
+Cancel attempts are capped at 2 per run-id per 24 hours via a small
+state file on the `watchdog-state` orphan branch.
 
 ## Unity Workflows
 
@@ -147,21 +227,27 @@ multi-line mapping, inline mapping, or scalar-shorthand form).
 
 Workflow-shape contract checklist:
 
-1. Confirm none of the four Unity-credential-using jobs (`unity-tests`,
-   `il2cpp-tests`, `benchmarks`, `unity-checks`) declares a job-level
-   `concurrency:` block.
-1. Confirm the active Unity workflows (`unity-tests.yml`, `unity-il2cpp.yml`)
-   expose a `runner-labels` output on their `matrix-config` job that the
-   licensed job consumes through
-   `runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}`.
+1. Confirm each of the four Unity-credential-using jobs (`unity-tests`,
+   `il2cpp-tests`, `benchmarks`, `unity-checks`) declares the job-level
+   `concurrency:` block with `group: unity-pro-license` and
+   `cancel-in-progress: false`.
+1. Confirm the three Unity matrix jobs (`unity-tests`, `il2cpp-tests`,
+   `benchmarks`) declare `strategy.max-parallel: 1`. The `unity-checks`
+   release job has no matrix and therefore no `max-parallel`.
+1. Confirm each of the four jobs declares the uniform static label set
+   `runs-on: [self-hosted, Windows, RAM-64GB]` so either Windows machine
+   can pick up any Unity job.
 1. Confirm `wallstop-organization-builds` does not appear anywhere under
    `.github/workflows/*.yml` (sentinel guard).
+1. Confirm `.github/workflows/stuck-job-watchdog.yml` exists and is
+   enabled (queue auto-recovery for the GitHub Actions dispatcher bug).
 
 Trigger safe workflows after transfer:
 
 1. `workflow_dispatch` for Unity Tests with one Unity version and one mode.
 1. `workflow_dispatch` for Unity IL2CPP.
 1. `workflow_dispatch` for Unity Benchmarks if runner capacity allows it.
-1. A same-repository pull request to confirm licensed checks run on the
-   `fast` ELI-MACHINE runner.
+1. A same-repository pull request to confirm licensed checks land on a
+   Windows runner and serialize correctly (only one matrix entry running
+   at a time, no eviction messages).
 1. A fork pull request dry run to confirm licensed checks skip.

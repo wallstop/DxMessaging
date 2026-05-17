@@ -20,6 +20,7 @@ const {
   extractEmittedLabelSetsFromBash,
   extractJobConcurrencyGroup,
   extractWorkflowConcurrencyGroup,
+  extractJobMatrixMaxParallel,
   extractJobNeeds,
   parseInlineLabelArray,
   extractJobs,
@@ -94,7 +95,7 @@ jobs:
 });
 
 describe("findMatrixConcurrencyEvictionViolations", () => {
-  test("flags matrix job with a concurrency.group lacking ${{ matrix.* }} expansion", () => {
+  test("flags matrix job with a shared concurrency.group and no max-parallel declaration", () => {
     const lines = asLines(`
 jobs:
   unity:
@@ -116,6 +117,33 @@ jobs:
     expect(violations[0].severity).toBe("error");
     expect(violations[0].message).toContain("shared-unity-lock");
     expect(violations[0].message).toContain("\${{ matrix.* }}");
+    expect(violations[0].message).toContain("max-parallel: 1");
+    expect(violations[0].message).toContain("no strategy.max-parallel declaration");
+  });
+
+  test("flags matrix job with a shared concurrency.group and max-parallel > 1", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    concurrency:
+      group: shared-unity-lock
+      cancel-in-progress: false
+    strategy:
+      max-parallel: 2
+      matrix:
+        unity-version:
+          - "2021.3.45f1"
+          - "2022.3.45f1"
+    steps:
+      - run: echo hi
+`);
+
+    const violations = findMatrixConcurrencyEvictionViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("shared-unity-lock");
+    expect(violations[0].message).toContain("strategy.max-parallel: 2");
   });
 
   test("allows matrix job whose concurrency.group expands ${{ matrix.unity-version }}", () => {
@@ -132,6 +160,34 @@ jobs:
           - "2021.3.45f1"
         test-mode:
           - editmode
+    steps:
+      - run: echo hi
+`);
+    expect(findMatrixConcurrencyEvictionViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("allows matrix job with shared concurrency.group when strategy.max-parallel: 1 is declared", () => {
+    // This is the canonical Unity-Pro-license configuration: all four
+    // Unity-credential-using jobs share `unity-pro-license` and rely on
+    // matrix-internal serialization (`max-parallel: 1`) so matrix entries
+    // never compete for the same group slot.
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    concurrency:
+      group: unity-pro-license
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        unity-version:
+          - "2021.3.45f1"
+          - "2022.3.45f1"
+        test-mode:
+          - editmode
+          - playmode
     steps:
       - run: echo hi
 `);
@@ -165,6 +221,123 @@ jobs:
       - run: echo hi
 `);
     expect(findMatrixConcurrencyEvictionViolations("test.yml", lines)).toEqual([]);
+  });
+});
+
+describe("extractJobMatrixMaxParallel", () => {
+  function jobOf(text) {
+    const lines = asLines(text);
+    const jobs = extractJobs(lines);
+    return { lines, job: jobs[0] };
+  }
+
+  test("returns the integer value for `max-parallel: 1`", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    strategy:
+      max-parallel: 1
+      matrix:
+        unity-version:
+          - "2021.3.45f1"
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBe(1);
+  });
+
+  test("returns the integer value for `max-parallel: 4`", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      matrix:
+        node:
+          - 20
+          - 22
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBe(4);
+  });
+
+  test("returns the integer for a double-quoted scalar `max-parallel: \"1\"`", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: "1"
+      matrix:
+        node:
+          - 20
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBe(1);
+  });
+
+  test("returns the integer for a single-quoted scalar `max-parallel: '1'`", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: '1'
+      matrix:
+        node:
+          - 20
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBe(1);
+  });
+
+  test("returns null when `max-parallel:` is absent", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node:
+          - 20
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBeNull();
+  });
+
+  test("returns null when the value is non-integer (expression form)", () => {
+    // We refuse to statically resolve ${{ ... }} expressions; a dynamic
+    // value cannot be guaranteed to be 1.
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: \${{ vars.MAX_PARALLEL }}
+      matrix:
+        node:
+          - 20
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBeNull();
+  });
+
+  test("returns null when there is no strategy block", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobMatrixMaxParallel(lines, job)).toBeNull();
   });
 });
 

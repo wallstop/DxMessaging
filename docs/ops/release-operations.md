@@ -17,14 +17,27 @@ Canonical public identifiers:
 - Package ID: `com.wallstop-studios.dxmessaging`
 - Documentation site: `https://ambiguous-interactive.github.io/DxMessaging/`
 - Release workflow: `.github/workflows/release.yml`
-- Unity workflow concurrency group: None on Unity-credential-using jobs;
-  per-runner serialization (one job per self-hosted agent) replaces it.
-  The legacy name `wallstop-organization-builds` is a reserved sentinel
+- Unity workflow concurrency group: every Unity-credential-using job
+  shares `concurrency.group: unity-pro-license` with
+  `cancel-in-progress: false` (single-seat Unity Pro license; only one
+  job may hold the license at a time). The three matrix jobs
+  (`unity-tests`, `il2cpp-tests`, `benchmarks`) additionally declare
+  `strategy.max-parallel: 1` so matrix entries serialize internally and
+  do not compete for the shared license slot (which would otherwise
+  evict each other under GitHub's 1-running + 1-pending limit). The
+  legacy name `wallstop-organization-builds` remains a reserved sentinel
   that the validator hard-rejects anywhere in `.github/workflows/*.yml`.
-- Unity runner labels: `self-hosted`, `Windows`, `RAM-64GB` (both Windows
-  runners); PR-triggered Unity jobs additionally require `fast` (ELI-MACHINE
-  only) and resolve their `runs-on` through the workflow's `matrix-config`
-  job `runner-labels` output.
+- Unity runner labels: uniform static `runs-on: [self-hosted, Windows,
+RAM-64GB]` across all four Unity-credential-using jobs, so either
+  ELI-MACHINE or DAD-MACHINE can pick up any Unity job. The `fast`
+  marker remains on ELI-MACHINE for a future opt-in hotfix dispatch but
+  no currently-active workflow requests it.
+- Stuck-job watchdog: `.github/workflows/stuck-job-watchdog.yml` runs
+  every 10 minutes to detect and recover from the known GitHub Actions
+  self-hosted dispatcher bug (Community Discussion #186811) where a
+  queued run never receives an Online/Idle runner. The watchdog
+  excludes `release.yml` from auto-cancellation to protect attestation
+  and publishing flows.
 
 Tracked pages:
 

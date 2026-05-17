@@ -23,6 +23,9 @@ const {
   findWindowsBashPortabilityViolations,
   findForbiddenRunsOnGroupViolations,
   findChangelogCoverageCheckoutViolations,
+  resolveWorkflowLineLengthPolicy,
+  resolveWorkflowLineLengthMax,
+  findWorkflowLineLengthViolations,
   validateWorkflow
 } = require("../validate-workflows.js");
 
@@ -816,6 +819,135 @@ describe("validateWorkflow newline handling", () => {
   });
 });
 
+describe("workflow line-length guard", () => {
+  test("flags workflow lines above configured maximum", () => {
+    const lines = ["name: Test", `${"x".repeat(201)}`];
+
+    const violations = findWorkflowLineLengthViolations("test.yml", lines, 200);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toEqual(
+      expect.objectContaining({
+        file: "test.yml",
+        line: 2,
+        severity: "error"
+      })
+    );
+    expect(violations[0].message).toContain("Workflow line exceeds 200 characters (201)");
+  });
+
+  test("allows lines at or below configured maximum", () => {
+    const lines = ["name: Test", `${"x".repeat(200)}`];
+
+    const violations = findWorkflowLineLengthViolations("test.yml", lines, 200);
+
+    expect(violations).toHaveLength(0);
+  });
+
+  test("allows overlong non-breakable words when enabled", () => {
+    const lines = ["name: Test", `key: ${"x".repeat(205)}`];
+
+    const violations = findWorkflowLineLengthViolations("test.yml", lines, 200, {
+      allowNonBreakableWords: true
+    });
+
+    expect(violations).toHaveLength(0);
+  });
+
+  test("still fails overlong non-breakable words when disabled", () => {
+    const lines = ["name: Test", `key: ${"x".repeat(205)}`];
+
+    const violations = findWorkflowLineLengthViolations("test.yml", lines, 200, {
+      allowNonBreakableWords: false
+    });
+
+    expect(violations).toHaveLength(1);
+  });
+});
+
+describe("resolveWorkflowLineLengthPolicy", () => {
+  test("loads max and non-breakable options from .yamllint.yaml", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-policy-yamllint-"));
+    try {
+      fs.writeFileSync(
+        path.join(tempDir, ".yamllint.yaml"),
+        [
+          "rules:",
+          "  line-length:",
+          "    max: 180",
+          "    allow-non-breakable-words: false",
+          "    allow-non-breakable-inline-mappings: false"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const policy = resolveWorkflowLineLengthPolicy(tempDir);
+
+      expect(policy).toEqual({
+        max: 180,
+        allowNonBreakableWords: false,
+        allowNonBreakableInlineMappings: false
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("treats inline-mappings option as implying non-breakable words", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-policy-inline-map-"));
+    try {
+      fs.writeFileSync(
+        path.join(tempDir, ".yamllint.yaml"),
+        [
+          "rules:",
+          "  line-length:",
+          "    max: 200",
+          "    allow-non-breakable-words: false",
+          "    allow-non-breakable-inline-mappings: true"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const policy = resolveWorkflowLineLengthPolicy(tempDir);
+      expect(policy.allowNonBreakableInlineMappings).toBe(true);
+      expect(policy.allowNonBreakableWords).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolveWorkflowLineLengthMax", () => {
+  test("loads max from .yamllint.yaml when present", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-yamllint-"));
+    try {
+      fs.writeFileSync(
+        path.join(tempDir, ".yamllint.yaml"),
+        [
+          "rules:",
+          "  line-length:",
+          "    max: 187",
+          "    allow-non-breakable-words: true"
+        ].join("\n"),
+        "utf8"
+      );
+
+      expect(resolveWorkflowLineLengthMax(tempDir)).toBe(187);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to default when .yamllint.yaml is absent", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-yamllint-missing-"));
+    try {
+      expect(resolveWorkflowLineLengthMax(tempDir)).toBe(200);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("findChangelogCoverageCheckoutViolations", () => {
   test.each([
     ["direct changelog validator", "node scripts/validate-changelog.js --check-coverage"],
@@ -1029,6 +1161,48 @@ describe("validateWorkflow policy integration", () => {
       expect(
         errorMessages.some((message) =>
           message.includes("must not fail when the lockfile is absent")
+        )
+      ).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports workflow line-length violations using repo yamllint ceiling", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-workflows-line-length-"));
+    try {
+      const workflowDir = path.join(tempDir, ".github", "workflows");
+      fs.mkdirSync(workflowDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, ".yamllint.yaml"),
+        ["rules:", "  line-length:", "    max: 40"].join("\n"),
+        "utf8"
+      );
+
+      const workflowPath = path.join(workflowDir, "line-length.yml");
+      fs.writeFileSync(
+        workflowPath,
+        [
+          "name: Line Length",
+          "jobs:",
+          "  lint:",
+          "    runs-on: ubuntu-latest",
+          "    steps:",
+          "      - run: echo this workflow line is intentionally longer than forty chars"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const violations = validateWorkflow(workflowPath, {
+        repoRoot: tempDir,
+        isIgnoredPathFn: () => false
+      });
+
+      expect(
+        violations.some(
+          (violation) =>
+            violation.severity === "error"
+            && violation.message.includes("Workflow line exceeds 40 characters")
         )
       ).toBe(true);
     } finally {
