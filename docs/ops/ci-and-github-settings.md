@@ -20,18 +20,31 @@ default runner group.
   - `self-hosted`
   - `Windows`
   - `RAM-64GB`
+- Speed marker applied only to `ELI-MACHINE`:
+  - `fast`
 
-To avoid concurrent Unity credential use, the four Unity-credential-using jobs
-share a single job-level concurrency group:
+There is no shared job-level concurrency group on Unity jobs. The previous
+single-slot `wallstop-organization-builds` group caused matrix-eviction
+cancellations and runner-pickup stalls; that group name is now a reserved
+sentinel that the workflow validator hard-rejects anywhere it appears.
 
-- Concurrency group: `wallstop-organization-builds`
-- `cancel-in-progress: false`
+Per-runner Unity-cache safety is provided by each runner agent's exclusive
+workspace - a single self-hosted agent only ever runs one job at a time, so
+`.unity-test-project/Library` directories cannot collide. No additional
+concurrency group is required for cache isolation.
 
-The same group name is used by the `unity-tests`, `unity-il2cpp`,
-`unity-benchmarks`, and `release.yml` `unity-checks` jobs. GitHub Actions
-serializes any matching job across all four workflows so only one Unity
-license-consuming job runs at a time. Lightweight matrix configuration jobs
-run on `ubuntu-latest` and remain parallelizable.
+Event-aware runner routing is emitted from each Unity workflow's
+`matrix-config` job through a `runner-labels` output and consumed by
+`runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}`:
+
+- Pull-request events route to `[self-hosted, Windows, RAM-64GB, fast]`
+  (ELI-MACHINE only) for interactive feedback isolation.
+- `push`, `schedule`, `workflow_dispatch`, and release-tag events route to
+  `[self-hosted, Windows, RAM-64GB]` so either Windows machine can pick
+  them up.
+
+Lightweight matrix configuration jobs run on `ubuntu-latest` and remain
+parallelizable.
 
 ## Unity Workflows
 
@@ -128,10 +141,27 @@ npm run test:unity-contracts
 node scripts/validate-workflows.js
 ```
 
+The validator hard-fails if any workflow reintroduces the reserved
+`wallstop-organization-builds` group name (workflow-level or job-level, in
+multi-line mapping, inline mapping, or scalar-shorthand form).
+
+Workflow-shape contract checklist:
+
+1. Confirm none of the four Unity-credential-using jobs (`unity-tests`,
+   `il2cpp-tests`, `benchmarks`, `unity-checks`) declares a job-level
+   `concurrency:` block.
+1. Confirm the active Unity workflows (`unity-tests.yml`, `unity-il2cpp.yml`)
+   expose a `runner-labels` output on their `matrix-config` job that the
+   licensed job consumes through
+   `runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}`.
+1. Confirm `wallstop-organization-builds` does not appear anywhere under
+   `.github/workflows/*.yml` (sentinel guard).
+
 Trigger safe workflows after transfer:
 
 1. `workflow_dispatch` for Unity Tests with one Unity version and one mode.
 1. `workflow_dispatch` for Unity IL2CPP.
 1. `workflow_dispatch` for Unity Benchmarks if runner capacity allows it.
-1. A same-repository pull request to confirm licensed checks run.
+1. A same-repository pull request to confirm licensed checks run on the
+   `fast` ELI-MACHINE runner.
 1. A fork pull request dry run to confirm licensed checks skip.

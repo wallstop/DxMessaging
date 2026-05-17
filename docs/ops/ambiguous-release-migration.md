@@ -12,23 +12,23 @@ PR URLs, public release URLs, and dates when public verification was completed.
 
 ## Public Identifiers
 
-| Surface                                 | Public value                                                     |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| GitHub repository                       | `Ambiguous-Interactive/DxMessaging`                              |
-| Canonical repository URL                | `https://github.com/Ambiguous-Interactive/DxMessaging`           |
-| GitHub Pages URL                        | `https://ambiguous-interactive.github.io/DxMessaging/`           |
-| Unity and npm package id                | `com.wallstop-studios.dxmessaging`                               |
-| Display name                            | `DxMessaging`                                                    |
-| Minimum Unity version in `package.json` | `2021.3`                                                         |
-| Release workflow                        | `.github/workflows/release.yml`                                  |
-| Documentation workflow                  | `.github/workflows/deploy-docs.yml`                              |
-| npm package validation workflow         | `.github/workflows/validate-npm-meta.yml`                        |
-| Unity test workflow                     | `.github/workflows/unity-tests.yml`                              |
-| Unity IL2CPP workflow                   | `.github/workflows/unity-il2cpp.yml`                             |
-| Unity benchmark workflow                | `.github/workflows/unity-benchmarks.yml`                         |
-| Unity job concurrency group             | `wallstop-organization-builds`                                   |
-| GitHub Pages environment                | `github-pages`                                                   |
-| OpenUPM package page                    | `https://openupm.com/packages/com.wallstop-studios.dxmessaging/` |
+| Surface                                 | Public value                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------ |
+| GitHub repository                       | `Ambiguous-Interactive/DxMessaging`                                      |
+| Canonical repository URL                | `https://github.com/Ambiguous-Interactive/DxMessaging`                   |
+| GitHub Pages URL                        | `https://ambiguous-interactive.github.io/DxMessaging/`                   |
+| Unity and npm package id                | `com.wallstop-studios.dxmessaging`                                       |
+| Display name                            | `DxMessaging`                                                            |
+| Minimum Unity version in `package.json` | `2021.3`                                                                 |
+| Release workflow                        | `.github/workflows/release.yml`                                          |
+| Documentation workflow                  | `.github/workflows/deploy-docs.yml`                                      |
+| npm package validation workflow         | `.github/workflows/validate-npm-meta.yml`                                |
+| Unity test workflow                     | `.github/workflows/unity-tests.yml`                                      |
+| Unity IL2CPP workflow                   | `.github/workflows/unity-il2cpp.yml`                                     |
+| Unity benchmark workflow                | `.github/workflows/unity-benchmarks.yml`                                 |
+| Unity job concurrency group             | None (per-runner serialization; `wallstop-organization-builds` reserved) |
+| GitHub Pages environment                | `github-pages`                                                           |
+| OpenUPM package page                    | `https://openupm.com/packages/com.wallstop-studios.dxmessaging/`         |
 
 ## Transfer Inventory
 
@@ -80,25 +80,43 @@ Reference: [GitHub repository transfer documentation](https://docs.github.com/ar
 
 Unity workflows target self-hosted Windows runners by labels only. No
 dedicated runner group is provisioned; runners may live in the organization's
-default runner group. License serialization is handled by a job-level
-concurrency group rather than by runner group access controls.
+default runner group. License serialization is provided by each runner
+agent's exclusive workspace (a single self-hosted agent only ever runs one
+job at a time), not by a shared concurrency group.
 
-- Required runner labels: `self-hosted`, `Windows`, and `RAM-64GB`.
-- Required job-level concurrency group: `wallstop-organization-builds` with
-  `cancel-in-progress: false`.
+- Required runner labels on both Windows runners: `self-hosted`, `Windows`,
+  `RAM-64GB`.
+- Additional speed marker applied only to `ELI-MACHINE`: `fast`.
+- No job-level `concurrency:` block on any Unity-credential-using job. The
+  legacy `wallstop-organization-builds` name is a reserved sentinel; the
+  workflow validator hard-rejects it anywhere it appears (workflow- or
+  job-level, multi-line or scalar-shorthand form).
+- PR-triggered Unity jobs route to `[self-hosted, Windows, RAM-64GB, fast]`
+  via the `matrix-config` job's `runner-labels` output; `push`, `schedule`,
+  `workflow_dispatch`, and tag events route to `[self-hosted, Windows,
+RAM-64GB]` so either Windows machine can pick them up.
 
 - [ ] In the `Ambiguous-Interactive` organization, open **Settings**,
       **Actions**, then **Runners**.
 - [ ] Confirm at least one online self-hosted Windows runner has the labels
       `self-hosted`, `Windows`, and `RAM-64GB`.
-- [ ] Confirm `.github/workflows/unity-tests.yml`,
-      `.github/workflows/unity-il2cpp.yml`, `.github/workflows/unity-benchmarks.yml`,
-      and the `unity-checks` job in `.github/workflows/release.yml` request
-      `runs-on: [self-hosted, Windows, RAM-64GB]` with no `group:` key.
-- [ ] Confirm those four jobs all declare
-      `concurrency: { group: wallstop-organization-builds, cancel-in-progress: false }`
-      so only one Unity-credential-using job runs at a time across all four
-      workflows.
+- [ ] Confirm `ELI-MACHINE` additionally has the `fast` label so PR-triggered
+      Unity jobs can route to it.
+- [ ] Confirm `.github/workflows/unity-tests.yml` and
+      `.github/workflows/unity-il2cpp.yml` declare a `matrix-config` job
+      with a `runner-labels` output, and that the licensed job consumes it
+      via `runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}`.
+- [ ] Confirm `.github/workflows/unity-benchmarks.yml` `benchmarks` and the
+      `unity-checks` job in `.github/workflows/release.yml` request the
+      static `runs-on: [self-hosted, Windows, RAM-64GB]` label set (these
+      jobs do not need PR-only routing).
+- [ ] Confirm none of those four jobs declares a job-level `concurrency:`
+      block. Per-runner serialization (each self-hosted agent runs one job
+      at a time) keeps Unity caches and license use safe without a shared
+      group.
+- [ ] Confirm the string `wallstop-organization-builds` does not appear
+      anywhere under `.github/workflows/*.yml` (it is reserved and the
+      validator hard-fails any reintroduction).
 - [ ] Keep fork pull requests off self-hosted runners. The Unity workflows only
       allow same-repository pull requests and protected branch pushes; do not
       replace those guards with `pull_request_target`.
@@ -277,8 +295,12 @@ Run these checks after the transfer and again after the first tagged release.
       `https://ambiguous-interactive.github.io/DxMessaging/`.
 - [ ] `.github/workflows/unity-tests.yml` can dispatch to self-hosted runners
       labeled `self-hosted`, `Windows`, and `RAM-64GB` for same-repository
-      pull requests or protected branch pushes, and serializes through the
-      `wallstop-organization-builds` concurrency group.
+      pull requests or protected branch pushes. PR runs land on the `fast`
+      ELI-MACHINE runner via the `matrix-config` `runner-labels` output;
+      push/schedule/dispatch runs land on either Windows machine. No
+      shared concurrency group is in use; per-runner serialization keeps
+      Unity caches isolated, and `wallstop-organization-builds` must never
+      reappear in any workflow.
 - [ ] `.github/workflows/release.yml` succeeds for a real semver tag and does
       not require `NPM_TOKEN`.
 - [ ] npm, OpenUPM, GitHub Releases, and GitHub Pages all point to

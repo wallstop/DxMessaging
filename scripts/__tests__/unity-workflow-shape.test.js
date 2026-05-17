@@ -76,16 +76,28 @@ function getOnBlock(parsed) {
   return parsed.on || parsed[true];
 }
 
-function expectUnityRunnerContract(job) {
-  // Labels-only runs-on (object/group form is forbidden — runner groups are
-  // not provisioned for this org).
-  expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
-  // Job-level concurrency group serializes Unity-credential-using jobs
-  // across all four workflows.
-  expect(job.concurrency).toEqual({
-    group: "wallstop-organization-builds",
-    "cancel-in-progress": false
-  });
+function expectUnityRunnerContract(job, expectation) {
+  // The wallstop-organization-builds job-level concurrency group has been
+  // removed; per-runner serialization (each self-hosted agent only runs one
+  // job at a time) plus per-machine Unity caches make a shared lock both
+  // unnecessary and harmful (it caused matrix-eviction cancellations and
+  // runner-pickup stalls).
+  expect(job.concurrency).toBeUndefined();
+
+  if (expectation.runsOnKind === "dynamic-matrix-config") {
+    // PR-triggered Unity workflows route via the matrix-config job's
+    // `runner-labels` output so PRs land on the `fast` machine
+    // (ELI-MACHINE) while push/schedule/dispatch can land on either.
+    expect(job["runs-on"]).toBe("${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}");
+    const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
+    expect(needs).toContain("matrix-config");
+  } else if (expectation.runsOnKind === "static-windows-64gb") {
+    // Non-PR Unity jobs (benchmarks, release.unity-checks) stay on the
+    // broader labels-only set so either Windows machine can pick them up.
+    expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
+  } else {
+    throw new Error(`Unknown runsOnKind '${expectation.runsOnKind}' in test contract`);
+  }
 }
 
 function expectDiagnosticsStep(job) {
@@ -121,39 +133,75 @@ const UNITY_LICENSED_JOBS = [
     jobId: "unity-tests",
     requiresProtectedBranchGuard: true,
     requiresLibraryCache: true,
-    requiresLicenseSecrets: true
+    requiresLicenseSecrets: true,
+    runsOnKind: "dynamic-matrix-config"
   },
   {
     workflow: "unity-il2cpp.yml",
     jobId: "il2cpp-tests",
     requiresProtectedBranchGuard: true,
     requiresLibraryCache: true,
-    requiresLicenseSecrets: true
+    requiresLicenseSecrets: true,
+    runsOnKind: "dynamic-matrix-config"
   },
   {
     workflow: "unity-benchmarks.yml",
     jobId: "benchmarks",
     requiresProtectedBranchGuard: false,
     requiresLibraryCache: true,
-    requiresLicenseSecrets: true
+    requiresLicenseSecrets: true,
+    runsOnKind: "static-windows-64gb"
   },
   {
     workflow: "release.yml",
     jobId: "unity-checks",
     requiresProtectedBranchGuard: false,
     requiresLibraryCache: false,
-    requiresLicenseSecrets: true
+    requiresLicenseSecrets: true,
+    runsOnKind: "static-windows-64gb"
   }
 ];
 
+const UNITY_DYNAMIC_RUNNER_WORKFLOWS = UNITY_LICENSED_JOBS.filter(
+  (job) => job.runsOnKind === "dynamic-matrix-config"
+);
+
 describe("Unity-credential-using jobs share the same runner + concurrency contract", () => {
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow job '$jobId' uses labels-only runs-on and the wallstop-organization-builds concurrency group",
-    ({ workflow, jobId }) => {
+    "$workflow job '$jobId' has no job-level concurrency block and uses the expected runs-on shape",
+    ({ workflow, jobId, runsOnKind }) => {
       const parsed = loadWorkflowYaml(workflow);
-      expectUnityRunnerContract(parsed.jobs[jobId]);
+      expectUnityRunnerContract(parsed.jobs[jobId], { runsOnKind });
     }
   );
+
+  test.each(UNITY_DYNAMIC_RUNNER_WORKFLOWS)(
+    "$workflow matrix-config job emits literal PR/non-PR runner-labels branches",
+    ({ workflow }) => {
+      const text = readWorkflow(workflow);
+      // The validator lexically scans this exact echo text, so the quoting
+      // style matters. Match by literal substring to catch any drift.
+      expect(text).toContain(`echo 'labels=["self-hosted","Windows","RAM-64GB","fast"]' >> "$GITHUB_OUTPUT"`);
+      expect(text).toContain(`echo 'labels=["self-hosted","Windows","RAM-64GB"]' >> "$GITHUB_OUTPUT"`);
+      // And the bash if-branch must key off the pull_request event.
+      expect(text).toMatch(/if\s*\[\[\s*"\$\{\{\s*github\.event_name\s*\}\}"\s*==\s*"pull_request"\s*\]\];\s*then/);
+    }
+  );
+
+  test("no active Unity workflow declares concurrency.group: wallstop-organization-builds", () => {
+    // The legacy sentinel must never reappear. Cross-check by raw text so
+    // even commented or otherwise-skipped references are caught.
+    for (const { workflow } of UNITY_LICENSED_JOBS) {
+      const text = readWorkflow(workflow);
+      // Covers all three YAML forms the validator catches:
+      //   - block:    `concurrency:\n  group: wallstop-organization-builds`
+      //   - flow-map: `concurrency: { group: wallstop-organization-builds, ... }`
+      //   - scalar:   `concurrency: wallstop-organization-builds`
+      expect(text).not.toMatch(
+        /(?:concurrency|group):\s*["']?wallstop-organization-builds/
+      );
+    }
+  });
 
   test.each(UNITY_LICENSED_JOBS)(
     "$workflow job '$jobId' has a 'Print runner diagnostics' bash step",

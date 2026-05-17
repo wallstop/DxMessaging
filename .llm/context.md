@@ -81,6 +81,22 @@ For Unity-side tests in `Tests/Editor/` or `Tests/Runtime/` (excludes Benchmarks
 - ARM Mac (Apple Silicon): not supported locally -- use a non-ARM local shell or Codespace while Unity GitHub workflows are disabled
 - For source-generator tests (no Unity), use `dotnet test SourceGenerators/...Tests`
 
+## GitHub Actions / CI Runners
+
+- Self-hosted runner topology (org-level, group "Default"):
+  - `ELI-MACHINE`: `self-hosted, X64, RAM-64GB, Windows, fast`
+  - `DAD-MACHINE`: `self-hosted, X64, RAM-64GB, Windows`
+  - `box-linux`: `self-hosted, Linux, X64, RAM-64GB`
+  - `mac-mini`: `self-hosted, RAM-16GB, macOS, ARM64`
+  - `old-linux`: `self-hosted, Linux, X64, RAM-16GB, old`
+  - `ubuntu-latest-large`: GitHub-hosted large runner
+- Never use a single shared `concurrency.group` across multiple matrix entries. GitHub Actions retains only one running + one pending slot per group, so every third matrix entry to enqueue cancels the previously-queued one. If serialization is needed, expand the group with at least one `${{ matrix.* }}` token (for example `unity-${{ matrix.unity-version }}-${{ matrix.test-mode }}`).
+- The concurrency group name `wallstop-organization-builds` is a reserved sentinel. The validator hard-fails any workflow that reintroduces it, because that group is the historical root cause of Unity matrix-eviction cancellations and runner-pickup stalls.
+- PR-triggered Unity jobs route to `[self-hosted, Windows, RAM-64GB, fast]` (ELI-MACHINE only) for interactive feedback isolation; push, schedule, workflow_dispatch, and release-triggered jobs use the broader `[self-hosted, Windows, RAM-64GB]` so either Windows machine can pick them up. The event-aware routing is emitted from each workflow's `matrix-config` job via a `runner-labels` output consumed by `runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}`.
+- Per-runner Unity-cache safety is provided by each runner agent's exclusive workspace (a single self-hosted agent only runs one job at a time, so `.unity-test-project/Library` directories cannot collide). No concurrency group is needed for cache isolation.
+- Enforcement: `scripts/validate-workflows.js` (`npm run validate:workflows`) lints every workflow file for the sentinel group, matrix-without-expansion concurrency, and the self-hosted label allowlist. The shape contract test `scripts/__tests__/unity-workflow-shape.test.js` plus `scripts/__tests__/validate-workflows-concurrency-and-labels.test.js` keep the Unity-credential-using jobs honest. The validator scans `.github/workflows/*.yml` only; the `.github/workflows-disabled/*` mirror is intentionally left at the old `${{ github.workflow }}-${{ github.ref }}` group shape and is not policed.
+- The workflow validator is invoked in CI by `.github/workflows/actionlint.yml` (Validate workflow patterns step) so any reintroduction of the sentinel, matrix-eviction footgun, or off-allowlist label set fails the PR before merge.
+
 ## Devcontainer Workflow
 
 The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outside-of-docker). Unity tests spawn ephemeral `unityci/editor` containers via the host docker socket; the image is pulled lazily on first use, the `.unity-test-project/Library` cache is preserved in a named volume across runs. See [Devcontainer Cache Contract](./skills/unity/devcontainer-cache-contract.md) and [Headless Test Runner](./skills/unity/headless-test-runner.md).

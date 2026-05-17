@@ -44,9 +44,6 @@ jobs:
   benchmarks:
     name: Benchmarks ${{ matrix.unity-version }} ${{ matrix.test-mode }}
     needs: matrix-config
-    concurrency:
-      group: wallstop-organization-builds
-      cancel-in-progress: false
     runs-on: [self-hosted, Windows, RAM-64GB]
     timeout-minutes: 120
     strategy:
@@ -66,7 +63,7 @@ jobs:
           echo "Runner OS:             ${RUNNER_OS:-<unset>}"
           echo "Runner arch:           ${RUNNER_ARCH:-<unset>}"
           echo "Runner workspace:      ${RUNNER_WORKSPACE:-<unset>}"
-          echo "Concurrency group:     wallstop-organization-builds (cancel-in-progress: false)"
+          echo "Concurrency group:     <none> (per-runner serialization)"
           echo "Requested labels:      self-hosted, Windows, RAM-64GB"
           echo "GitHub workflow:       ${GITHUB_WORKFLOW:-<unset>}"
           echo "GitHub job:            ${GITHUB_JOB:-<unset>}"

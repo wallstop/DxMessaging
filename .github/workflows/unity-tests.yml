@@ -44,6 +44,7 @@ jobs:
     outputs:
       unity-versions: ${{ steps.resolve.outputs.unity-versions }}
       test-modes: ${{ steps.resolve.outputs.test-modes }}
+      runner-labels: ${{ steps.runners.outputs.labels }}
     steps:
       - name: Resolve dispatch overrides
         id: resolve
@@ -67,6 +68,17 @@ jobs:
             echo "test-modes=${modes}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Resolve runner labels
+        id: runners
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo 'labels=["self-hosted","Windows","RAM-64GB","fast"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'labels=["self-hosted","Windows","RAM-64GB"]' >> "$GITHUB_OUTPUT"
+          fi
+
   unity-tests:
     name: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
     needs: matrix-config
@@ -76,10 +88,7 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository) &&
         (github.event_name != 'push' || github.ref_protected)
       }}
-    concurrency:
-      group: wallstop-organization-builds
-      cancel-in-progress: false
-    runs-on: [self-hosted, Windows, RAM-64GB]
+    runs-on: ${{ fromJSON(needs.matrix-config.outputs.runner-labels) }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -89,6 +98,8 @@ jobs:
     steps:
       - name: Print runner diagnostics
         shell: bash
+        env:
+          REQUESTED_LABELS: ${{ needs.matrix-config.outputs.runner-labels }}
         run: |
           set -euo pipefail
           echo "::group::Runner diagnostics"
@@ -96,8 +107,8 @@ jobs:
           echo "Runner OS:             ${RUNNER_OS:-<unset>}"
           echo "Runner arch:           ${RUNNER_ARCH:-<unset>}"
           echo "Runner workspace:      ${RUNNER_WORKSPACE:-<unset>}"
-          echo "Concurrency group:     wallstop-organization-builds (cancel-in-progress: false)"
-          echo "Requested labels:      self-hosted, Windows, RAM-64GB"
+          echo "Concurrency group:     <none> (per-runner serialization)"
+          printf 'Requested labels:      %s\n' "${REQUESTED_LABELS:-<unset>}"
           echo "GitHub workflow:       ${GITHUB_WORKFLOW:-<unset>}"
           echo "GitHub job:            ${GITHUB_JOB:-<unset>}"
           echo "GitHub run id/attempt: ${GITHUB_RUN_ID:-<unset>} / ${GITHUB_RUN_ATTEMPT:-<unset>}"

@@ -6,6 +6,23 @@
  * - Single-line multi-pattern `git add --renormalize` commands (FORBIDDEN)
  * - `git add --renormalize` commands without existence checks
  * - Bash syntax in Windows-targeting jobs without Bash-compatible shell overrides
+ * - Object-form `runs-on.group:` (runner groups are not provisioned for this org)
+ * - Sentinel reuse of `concurrency.group: wallstop-organization-builds`
+ *   (legacy single-slot Unity lock that caused matrix-eviction cancellations;
+ *   reserved so it cannot be reintroduced). Scans workflow-level AND
+ *   per-job blocks; covers multi-line mapping, inline mapping, and
+ *   scalar-shorthand (`concurrency: <name>`) forms.
+ * - Jobs that declare BOTH `strategy.matrix` AND a `concurrency.group` without
+ *   any `${{ matrix.* }}` expansion in the group expression (single-slot lock
+ *   across a matrix that silently evicts pending entries).
+ * - Self-hosted `runs-on` label sets that are not in the documented allowlist
+ *   (catches typos like `RAM-64Gb` that produce jobs no runner can pick up).
+ *   Dynamic
+ *   `${{ fromJSON(needs.<job>.outputs.<output>) }}` values are accepted only
+ *   when the emitting bash block produces allowlisted label sets.
+ * - Jobs with `runs-on: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}`
+ *   that omit `<jobId>` from their `needs:` declaration (runtime would
+ *   fail loudly but late; the static check surfaces typos at validation).
  *
  * @usage
  *   node scripts/validate-workflows.js
@@ -936,9 +953,11 @@ function stepHasFullHistoryCheckout(lines, step) {
  *         - self-hosted
  *
  * Runner groups are not provisioned for this org. The supported contract
- * is labels-only `runs-on`. Unity-credential-using jobs additionally rely
- * on the `wallstop-organization-builds` job-level concurrency group to
- * serialize across workflows.
+ * is labels-only `runs-on`. Unity-credential-using jobs rely on natural
+ * per-runner serialization (each self-hosted agent only runs one job at
+ * a time, so per-machine Unity-cache workspaces cannot collide) and on
+ * per-matrix concurrency expansion when serialization is needed; they no
+ * longer share a single org-wide concurrency group.
  *
  * Strategy: walk each job's lines; when we see a `runs-on:` value that
  * is empty (i.e., the value is given via the next-line object block),
@@ -979,7 +998,7 @@ function findForbiddenRunsOnGroupViolations(relativePath, lines) {
                         relativePath,
                         i + 1,
                         line.trim(),
-                        `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on and rely on the wallstop-organization-builds concurrency group to serialize Unity-credential-using jobs.`,
+                        `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on; Unity-credential-using jobs rely on natural per-runner serialization (one job per runner agent) and per-matrix concurrency expansion when needed, not on a shared org-wide concurrency group.`,
                         "error"
                     )
                 );
@@ -1012,7 +1031,7 @@ function findForbiddenRunsOnGroupViolations(relativePath, lines) {
                             relativePath,
                             j + 1,
                             childLine.trim(),
-                            `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on and rely on the wallstop-organization-builds concurrency group to serialize Unity-credential-using jobs.`,
+                            `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on; Unity-credential-using jobs rely on natural per-runner serialization (one job per runner agent) and per-matrix concurrency expansion when needed, not on a shared org-wide concurrency group.`,
                             "error"
                         )
                     );
@@ -1020,6 +1039,926 @@ function findForbiddenRunsOnGroupViolations(relativePath, lines) {
                 }
             }
         }
+    }
+
+    return violations;
+}
+
+// Documented self-hosted runner label allowlist. Each entry is the sorted
+// (case-sensitive) label set — preserving casing intentionally so that typos
+// like `RAM-64Gb` are flagged as non-allowlisted. Order-insensitive.
+const SELF_HOSTED_LABEL_ALLOWLIST = [
+    ["RAM-64GB", "Windows", "self-hosted"],
+    ["RAM-64GB", "Windows", "fast", "self-hosted"],
+    ["Linux", "RAM-64GB", "X64", "self-hosted"],
+    ["ARM64", "macOS", "self-hosted"],
+];
+
+function sortedLabelKey(labels) {
+    return labels.slice().sort().join("|");
+}
+
+const ALLOWLIST_KEYS = new Set(
+    SELF_HOSTED_LABEL_ALLOWLIST.map((set) => sortedLabelKey(set))
+);
+
+function formatAllowlistForMessage() {
+    return SELF_HOSTED_LABEL_ALLOWLIST
+        .map((set) => `[${set.join(", ")}]`)
+        .join(", ");
+}
+
+/**
+ * Extracts a concurrency.group value (string) and line number from a YAML
+ * block whose key starts at the given containing indent (so any directly-
+ * nested key sits at containingIndent + 2). Returns null when no
+ * concurrency block / group key is found.
+ *
+ * Supports three forms:
+ *
+ *   1. Multi-line mapping form:
+ *
+ *        concurrency:
+ *          group: foo
+ *          cancel-in-progress: false
+ *
+ *   2. Inline mapping form:
+ *
+ *        concurrency: { group: foo, cancel-in-progress: false }
+ *
+ *   3. Scalar shorthand form (GitHub Actions treats the entire value as the
+ *      group name; cancel-in-progress is implicitly false / the default):
+ *
+ *        concurrency: foo
+ *        concurrency: "foo"
+ *        concurrency: 'foo'
+ *
+ *   The shorthand was previously missed by the sentinel/matrix-eviction
+ *   checks; that gap is closed here so a single line `concurrency:
+ *   wallstop-organization-builds` is detected. For shorthand the returned
+ *   cancelInProgress is undefined (GitHub Actions defaults the field).
+ *
+ * Returns { group, line, cancelInProgress } where line is 1-indexed.
+ */
+function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containingIndent) {
+    const targetIndent = containingIndent + 2;
+
+    for (let i = startIndex; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        // Workflow-level scanning passes containingIndent = -2 (so target
+        // indent is 0). We still need to stop when we leave the block.
+        if (indent < targetIndent && i !== startIndex) {
+            break;
+        }
+
+        if (indent !== targetIndent) {
+            continue;
+        }
+
+        // Inline mapping form: `concurrency: { group: foo, ... }`
+        const inlineMapMatch = /^\s*concurrency:\s*\{([^}]*)\}\s*(?:#.*)?$/.exec(line);
+        if (inlineMapMatch) {
+            const inner = inlineMapMatch[1];
+            const groupMatch = /\bgroup\s*:\s*["']?([^,"'}]+?)["']?\s*(?:,|$)/.exec(inner);
+            const cancelMatch = /\bcancel-in-progress\s*:\s*(true|false)/.exec(inner);
+            if (groupMatch) {
+                return {
+                    group: groupMatch[1].trim(),
+                    line: i + 1,
+                    cancelInProgress: cancelMatch ? cancelMatch[1] === "true" : undefined,
+                };
+            }
+            return null;
+        }
+
+        // Multi-line block form: bare `concurrency:` followed by indented mapping.
+        if (/^\s*concurrency:\s*(?:#.*)?$/.test(line)) {
+            const concurrencyIndent = indent;
+            let group = null;
+            let groupLine = -1;
+            let cancelInProgress;
+            for (let j = i + 1; j <= endIndex; j++) {
+                const childLine = lines[j];
+                const childTrimmed = childLine.trim();
+                const childIndent = getIndent(childLine);
+
+                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+                    continue;
+                }
+
+                if (childIndent <= concurrencyIndent) {
+                    break;
+                }
+
+                const childGroupMatch = /^\s*group\s*:\s*["']?(.+?)["']?\s*(?:#.*)?$/.exec(childLine);
+                if (childGroupMatch && group === null) {
+                    group = childGroupMatch[1].trim();
+                    groupLine = j + 1;
+                    continue;
+                }
+                const childCancelMatch = /^\s*cancel-in-progress\s*:\s*(true|false)\s*(?:#.*)?$/.exec(childLine);
+                if (childCancelMatch) {
+                    cancelInProgress = childCancelMatch[1] === "true";
+                }
+            }
+
+            if (group !== null) {
+                return { group, line: groupLine, cancelInProgress };
+            }
+            return null;
+        }
+
+        // Scalar shorthand form: `concurrency: <name>` where the value is a
+        // bare identifier or quoted string (NOT an inline mapping, NOT a
+        // YAML block/folded scalar, NOT empty, NOT the YAML null marker).
+        const shorthandMatch = /^\s*concurrency:\s*(.+?)\s*(?:#.*)?$/.exec(line);
+        if (shorthandMatch) {
+            const rawValue = shorthandMatch[1].trim();
+            // Skip non-scalar leaders: inline mapping `{`, block/folded
+            // scalars `|`/`>`, YAML null `~`, or empty (the multi-line case
+            // we already returned for above).
+            if (rawValue.length === 0
+                || rawValue === "~"
+                || rawValue.startsWith("{")
+                || rawValue.startsWith("|")
+                || rawValue.startsWith(">")) {
+                continue;
+            }
+            const stripped = rawValue.replace(/^(["'])(.*)\1$/, "$2");
+            if (stripped.length === 0) {
+                continue;
+            }
+            return {
+                group: stripped,
+                line: i + 1,
+                cancelInProgress: undefined,
+            };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Extracts a job's concurrency.group value (string) and line number, or
+ * null when no concurrency block / group key is found. Delegates to
+ * extractConcurrencyGroupFromBlock; preserved as a thin wrapper for
+ * backwards-compatible exports and clarity at call sites.
+ */
+function extractJobConcurrencyGroup(lines, job) {
+    return extractConcurrencyGroupFromBlock(
+        lines,
+        job.startLine, // 1-indexed job header; first child sits at startLine + 0 (0-indexed = job.startLine)
+        job.endLine - 1,
+        job.indent
+    );
+}
+
+/**
+ * Extracts a workflow-level (top-level) concurrency.group value and line
+ * number, or null when no top-level concurrency block / group key is
+ * found. Workflow-level concurrency applies to the whole workflow run,
+ * not per-matrix-entry, so this is only useful for the sentinel-name
+ * guard.
+ */
+function extractWorkflowConcurrencyGroup(lines) {
+    return extractConcurrencyGroupFromBlock(
+        lines,
+        0,
+        lines.length - 1,
+        -2
+    );
+}
+
+/**
+ * Returns true when the job declares a `strategy.matrix:` block. Detects the
+ * standard multi-line form; this is the only form actually used in this repo.
+ */
+function jobHasMatrix(lines, job) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+
+    let inStrategy = false;
+    let strategyIndent = -1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= job.indent) {
+            break;
+        }
+
+        if (!inStrategy) {
+            if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
+                inStrategy = true;
+                strategyIndent = indent;
+            }
+            continue;
+        }
+
+        if (indent <= strategyIndent) {
+            inStrategy = false;
+            strategyIndent = -1;
+            continue;
+        }
+
+        if (/^\s*matrix:\s*(?:#.*)?$/.test(line) && indent === strategyIndent + 2) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Returns the set of job ids referenced by the job's `needs:` declaration,
+ * as a string[] (or empty array when no needs are declared). Supports the
+ * scalar form (`needs: foo`), the inline-array form (`needs: [foo, bar]`),
+ * and the multi-line block-list form (`needs:` then `  - foo`).
+ */
+function extractJobNeeds(lines, job) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= job.indent) {
+            break;
+        }
+
+        if (indent !== job.indent + 2) {
+            continue;
+        }
+
+        const needsMatch = /^\s*needs:\s*(.*?)\s*(?:#.*)?$/.exec(line);
+        if (!needsMatch) {
+            continue;
+        }
+
+        const raw = needsMatch[1].trim();
+
+        if (raw.length === 0) {
+            // Multi-line block list form.
+            const items = [];
+            for (let j = i + 1; j <= endIndex; j++) {
+                const childLine = lines[j];
+                const childTrimmed = childLine.trim();
+                const childIndent = getIndent(childLine);
+
+                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+                    continue;
+                }
+
+                if (childIndent <= indent) {
+                    break;
+                }
+
+                const itemMatch = /^\s*-\s*["']?([A-Za-z0-9_-]+)["']?\s*(?:#.*)?$/.exec(childLine);
+                if (itemMatch) {
+                    items.push(itemMatch[1]);
+                }
+            }
+            return items;
+        }
+
+        if (raw.startsWith("[")) {
+            const inner = raw.slice(1, -1);
+            return inner
+                .split(",")
+                .map((part) => part.trim().replace(/^["']|["']$/g, ""))
+                .filter((part) => part.length > 0);
+        }
+
+        // Scalar form.
+        const stripped = raw.replace(/^(["'])(.*)\1$/, "$2").trim();
+        if (stripped.length === 0) {
+            return [];
+        }
+        return [stripped];
+    }
+
+    return [];
+}
+
+/**
+ * Returns the job's `runs-on:` value text and the 1-indexed line. The value
+ * is the raw text following the colon (without the `runs-on:` prefix); for
+ * multi-line block list form the value will be empty and `blockList` will
+ * hold the gathered child entries.
+ *
+ * Result: { line, raw, blockList?: string[] } or null when no `runs-on:` is
+ * declared at the job-key indent.
+ */
+function extractJobRunsOn(lines, job) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const indent = getIndent(line);
+
+        if (trimmed.length === 0 || trimmed.startsWith("#")) {
+            continue;
+        }
+
+        if (indent <= job.indent) {
+            break;
+        }
+
+        if (indent !== job.indent + 2) {
+            continue;
+        }
+
+        const runsOnMatch = /^\s*runs-on:\s*(.*?)\s*(?:#.*)?$/.exec(line);
+        if (!runsOnMatch) {
+            continue;
+        }
+
+        const raw = runsOnMatch[1].trim();
+        const lineNumber = i + 1;
+
+        if (raw.length === 0) {
+            // Multi-line: collect block list children or object children.
+            const blockList = [];
+            for (let j = i + 1; j <= endIndex; j++) {
+                const childLine = lines[j];
+                const childTrimmed = childLine.trim();
+                const childIndent = getIndent(childLine);
+
+                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+                    continue;
+                }
+
+                if (childIndent <= indent) {
+                    break;
+                }
+
+                const itemMatch = /^\s*-\s*["']?([^"'#\s]+)["']?\s*(?:#.*)?$/.exec(childLine);
+                if (itemMatch) {
+                    blockList.push(itemMatch[1].trim());
+                }
+            }
+
+            return { line: lineNumber, raw: "", blockList };
+        }
+
+        return { line: lineNumber, raw };
+    }
+
+    return null;
+}
+
+/**
+ * Parses an inline array form like `[self-hosted, Windows, RAM-64GB]` or
+ * `["self-hosted", "Windows", "RAM-64GB"]` into a string[] of labels.
+ * Returns null if the value is not a recognizable inline array.
+ *
+ * Throws on a trailing-comma form (`[a, b, c,]`); the empty element it
+ * produces would otherwise show up as a phantom blank label in downstream
+ * error messages and confuse the operator.
+ */
+function parseInlineLabelArray(raw) {
+    const match = /^\[\s*(.*?)\s*\]$/.exec(raw);
+    if (!match) {
+        return null;
+    }
+
+    const inner = match[1].trim();
+    if (inner.length === 0) {
+        return [];
+    }
+
+    const parts = inner.split(",").map((part) => part.trim().replace(/^["']|["']$/g, ""));
+    if (parts.some((part) => part.length === 0)) {
+        throw new Error(
+            `Trailing or duplicate comma in label list '${raw}'. Remove the empty element.`
+        );
+    }
+    return parts;
+}
+
+/**
+ * Extracts the bash run-text and outputs map of all jobs in the workflow,
+ * indexed by jobId. Used to validate that a dynamic runs-on backed by
+ * `${{ fromJSON(needs.<jobId>.outputs.<output>) }}` ultimately produces an
+ * allowlisted label set.
+ */
+function extractJobOutputsSourceMap(lines) {
+    const jobs = extractJobs(lines);
+    const result = {};
+
+    for (const job of jobs) {
+        const startIndex = job.startLine - 1;
+        const endIndex = job.endLine - 1;
+        const outputs = {};
+
+        // Map outputs key -> { stepId, outputKey }
+        let inOutputs = false;
+        let outputsIndent = -1;
+        for (let i = startIndex + 1; i <= endIndex; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            const indent = getIndent(line);
+
+            if (trimmed.length === 0 || trimmed.startsWith("#")) {
+                continue;
+            }
+
+            if (indent <= job.indent) {
+                break;
+            }
+
+            if (!inOutputs) {
+                if (indent === job.indent + 2 && /^\s*outputs:\s*(?:#.*)?$/.test(line)) {
+                    inOutputs = true;
+                    outputsIndent = indent;
+                }
+                continue;
+            }
+
+            if (indent <= outputsIndent) {
+                inOutputs = false;
+                outputsIndent = -1;
+                continue;
+            }
+
+            const outputMatch = /^\s*([A-Za-z0-9_-]+):\s*\$\{\{\s*steps\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\}\}\s*(?:#.*)?$/.exec(line);
+            if (outputMatch) {
+                outputs[outputMatch[1]] = {
+                    stepId: outputMatch[2],
+                    outputKey: outputMatch[3],
+                };
+            }
+        }
+
+        // Collect each step's id + run text so we can resolve outputs->bash.
+        const steps = extractJobSteps(lines, job);
+        const stepsById = {};
+        for (const step of steps) {
+            let stepId = null;
+            for (let i = step.startIndex; i <= step.endIndex; i++) {
+                // Allow the optional `- ` step-list marker before `id:`.
+                const stepIdMatch = /^\s*(?:-\s+)?id:\s*["']?([A-Za-z0-9_-]+)["']?\s*(?:#.*)?$/.exec(lines[i]);
+                if (stepIdMatch) {
+                    stepId = stepIdMatch[1];
+                    break;
+                }
+            }
+            if (stepId) {
+                stepsById[stepId] = step;
+            }
+        }
+
+        result[job.id] = { outputs, stepsById };
+    }
+
+    return result;
+}
+
+/**
+ * Given an emitting step's run text, lexically scan for every `labels=...`
+ * assignment. The value must be a JSON array. Supports two bash quoting
+ * conventions used in workflow `echo` statements:
+ *
+ *   echo 'labels=[...]' >> "$GITHUB_OUTPUT"   # entire pair wrapped in single quotes
+ *   echo "labels=[...]" >> "$GITHUB_OUTPUT"   # entire pair wrapped in double quotes
+ *   labels=[...]                              # bare assignment
+ *
+ * Returns the array of parsed label arrays (each a string[]). Malformed
+ * JSON yields a null entry so the caller can flag it. Lines that do not
+ * contain `labels=` are ignored (they may be `if`/`else`/`fi` shell
+ * control flow).
+ */
+function extractEmittedLabelSetsFromBash(runText) {
+    if (typeof runText !== "string" || runText.length === 0) {
+        return [];
+    }
+
+    const sets = [];
+
+    // Walk the text once and lexically extract every `labels=[...]` payload
+    // using balanced-bracket scanning. The previous regex `[^\]]*` would
+    // mismatch any label literal that happened to contain a `]` character
+    // (rare in practice but easy to step on with `${VAR}` expansions or
+    // future label names like `foo[bar]`).
+    let cursor = 0;
+    while (cursor < runText.length) {
+        const labelAnchor = runText.indexOf("labels=", cursor);
+        if (labelAnchor === -1) {
+            break;
+        }
+        const openBracket = labelAnchor + "labels=".length;
+        if (runText[openBracket] !== "[") {
+            // `labels=` without an array follower; skip past the anchor
+            // entirely to avoid re-matching the same position.
+            cursor = openBracket;
+            continue;
+        }
+
+        // Walk from openBracket looking for the matching `]` while
+        // tracking JSON-style string spans so a `]` inside a string is
+        // ignored.
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+        let endIndex = -1;
+        for (let k = openBracket; k < runText.length; k++) {
+            const ch = runText[k];
+            if (inString) {
+                if (escape) {
+                    escape = false;
+                    continue;
+                }
+                if (ch === "\\") {
+                    escape = true;
+                    continue;
+                }
+                if (ch === '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (ch === '"') {
+                inString = true;
+                continue;
+            }
+            if (ch === "[") {
+                depth++;
+                continue;
+            }
+            if (ch === "]") {
+                depth--;
+                if (depth === 0) {
+                    endIndex = k;
+                    break;
+                }
+            }
+        }
+
+        if (endIndex === -1) {
+            // Unterminated `labels=[...`; record as malformed and stop.
+            sets.push(null);
+            break;
+        }
+
+        const payload = runText.slice(openBracket, endIndex + 1);
+        try {
+            const parsed = JSON.parse(payload);
+            if (Array.isArray(parsed)) {
+                sets.push(parsed.map((item) => String(item)));
+            } else {
+                sets.push(null);
+            }
+        } catch (_error) {
+            sets.push(null);
+        }
+
+        cursor = endIndex + 1;
+    }
+
+    return sets;
+}
+
+/**
+ * Checks for the legacy sentinel `concurrency.group: wallstop-organization-builds`.
+ * This group historically serialized every Unity-credential-using job into a
+ * single org-wide slot; combined with cancel-in-progress: false, every 3rd
+ * matrix entry to queue evicted the previously-queued one. The validator
+ * permanently bans this group name so the pattern cannot re-emerge.
+ *
+ * Scans both:
+ *   - Workflow-level (top-level) `concurrency:` blocks.
+ *   - Per-job `concurrency:` blocks (multi-line, inline mapping, and scalar
+ *     shorthand forms).
+ */
+function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
+    const violations = [];
+
+    // Workflow-level scan first; the sentinel name is forbidden anywhere.
+    const workflowConcurrency = extractWorkflowConcurrencyGroup(lines);
+    if (workflowConcurrency && workflowConcurrency.group === "wallstop-organization-builds") {
+        violations.push(
+            new Violation(
+                relativePath,
+                workflowConcurrency.line,
+                `concurrency.group: ${workflowConcurrency.group}`,
+                `Workflow-level concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Use per-runner serialization (each self-hosted agent only runs one job at a time) and rely on each workflow's own \${{ github.workflow }}-\${{ github.ref }} group if PR-level deduplication is needed.`,
+                "error"
+            )
+        );
+    }
+
+    const jobs = extractJobs(lines);
+    for (const job of jobs) {
+        const concurrency = extractJobConcurrencyGroup(lines, job);
+        if (!concurrency) {
+            continue;
+        }
+
+        if (concurrency.group === "wallstop-organization-builds") {
+            violations.push(
+                new Violation(
+                    relativePath,
+                    concurrency.line,
+                    `concurrency.group: ${concurrency.group}`,
+                    `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Use per-matrix expansion via \${{ matrix.* }} if serialization is needed, or rely on natural per-runner serialization.`,
+                    "error"
+                )
+            );
+        }
+    }
+
+    return violations;
+}
+
+/**
+ * Checks for jobs that combine `strategy.matrix:` with a `concurrency.group:`
+ * whose expression does NOT include any `${{ matrix.* }}` token. Such a
+ * configuration is the general form of the wallstop-organization-builds
+ * footgun: GitHub Actions concurrency reserves one in-progress slot and one
+ * pending slot per group, so every third matrix entry to enqueue evicts the
+ * previously-queued one.
+ *
+ * Workflow-level concurrency is intentionally not checked here: a workflow-
+ * level concurrency group applies to the whole workflow run, not to each
+ * matrix entry of a single job inside it. Matrix entries within one run all
+ * share the workflow-level group by definition, so the per-matrix-eviction
+ * concept (where successive matrix entries kick each other out) does not
+ * apply. The sentinel-name guard above already covers the workflow-level
+ * case.
+ */
+function findMatrixConcurrencyEvictionViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+
+    for (const job of jobs) {
+        if (!jobHasMatrix(lines, job)) {
+            continue;
+        }
+
+        const concurrency = extractJobConcurrencyGroup(lines, job);
+        if (!concurrency) {
+            continue;
+        }
+
+        if (/\$\{\{\s*matrix\./.test(concurrency.group)) {
+            continue;
+        }
+
+        violations.push(
+            new Violation(
+                relativePath,
+                concurrency.line,
+                `concurrency.group: ${concurrency.group}`,
+                `Job '${job.id}' combines strategy.matrix with a concurrency.group ('${concurrency.group}') that does not expand any \${{ matrix.* }} token. GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, or drop the job-level concurrency block entirely.`,
+                "error"
+            )
+        );
+    }
+
+    return violations;
+}
+
+/**
+ * Checks every `runs-on:` value that references `self-hosted` against a
+ * documented allowlist of valid label sets. Catches typos such as
+ * `RAM-64Gb` that would silently produce a job no runner can pick up.
+ *
+ * Dynamic forms (`${{ fromJSON(needs.<jobId>.outputs.<output>) }}`) are
+ * resolved by walking back to the emitting job and lexically scanning the
+ * step that produces that output for `labels='...'` assignments. Every
+ * emitted label set must be in the allowlist.
+ */
+function findSelfHostedLabelAllowlistViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+    const outputsMap = extractJobOutputsSourceMap(lines);
+
+    for (const job of jobs) {
+        const runsOn = extractJobRunsOn(lines, job);
+        if (!runsOn) {
+            continue;
+        }
+
+        const raw = runsOn.raw;
+
+        // Inline array form: [self-hosted, Windows, RAM-64GB]
+        if (raw.startsWith("[")) {
+            let labels;
+            try {
+                labels = parseInlineLabelArray(raw);
+            } catch (parseError) {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        runsOn.line,
+                        `runs-on: ${raw}`,
+                        `Job '${job.id}': malformed inline runs-on label array: ${parseError.message}`,
+                        "error"
+                    )
+                );
+                continue;
+            }
+            if (!labels) {
+                continue;
+            }
+            if (!labels.some((label) => label === "self-hosted")) {
+                continue;
+            }
+            if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        runsOn.line,
+                        `runs-on: ${raw}`,
+                        `Job '${job.id}': self-hosted runs-on label set [${labels.join(", ")}] is not in the documented allowlist (${formatAllowlistForMessage()}). If a new runner topology is needed, update SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js. To route dynamically by event, use the matrix-config 'runner-labels' output pattern.`,
+                        "error"
+                    )
+                );
+            }
+            continue;
+        }
+
+        // Multi-line block list form.
+        if (raw === "" && runsOn.blockList && runsOn.blockList.length > 0) {
+            const labels = runsOn.blockList;
+            if (!labels.some((label) => label === "self-hosted")) {
+                continue;
+            }
+            if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        runsOn.line,
+                        `runs-on: [${labels.join(", ")}]`,
+                        `Job '${job.id}': self-hosted runs-on label set [${labels.join(", ")}] is not in the documented allowlist (${formatAllowlistForMessage()}). If a new runner topology is needed, update SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js. To route dynamically by event, use the matrix-config 'runner-labels' output pattern.`,
+                        "error"
+                    )
+                );
+            }
+            continue;
+        }
+
+        // Dynamic form: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}
+        const dynamicMatch = /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(raw);
+        if (dynamicMatch) {
+            const sourceJobId = dynamicMatch[1];
+            const sourceOutputKey = dynamicMatch[2];
+            const sourceJob = outputsMap[sourceJobId];
+
+            if (!sourceJob || !sourceJob.outputs[sourceOutputKey]) {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        runsOn.line,
+                        `runs-on: ${raw}`,
+                        `Job '${job.id}': dynamic runs-on references needs.${sourceJobId}.outputs.${sourceOutputKey} but that source job/output cannot be resolved. The validator must lexically prove the emitted label set is allowlisted (${formatAllowlistForMessage()}). Ensure the emitting job declares the output and its step uses an 'id:' that matches the outputs binding.`,
+                        "error"
+                    )
+                );
+                continue;
+            }
+
+            const { stepId } = sourceJob.outputs[sourceOutputKey];
+            const sourceStep = sourceJob.stepsById[stepId];
+
+            if (!sourceStep || !sourceStep.run || typeof sourceStep.run.text !== "string") {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        runsOn.line,
+                        `runs-on: ${raw}`,
+                        `Job '${job.id}': dynamic runs-on points at step id '${stepId}' in job '${sourceJobId}' but its run: block could not be located. Use a literal bash run block with 'labels=[...]' assignments so the validator can prove each branch produces an allowlisted label set (${formatAllowlistForMessage()}).`,
+                        "error"
+                    )
+                );
+                continue;
+            }
+
+            const emittedSets = extractEmittedLabelSetsFromBash(sourceStep.run.text);
+            if (emittedSets.length === 0) {
+                violations.push(
+                    new Violation(
+                        relativePath,
+                        runsOn.line,
+                        `runs-on: ${raw}`,
+                        `Job '${job.id}': dynamic runs-on points at step id '${stepId}' in job '${sourceJobId}' but the run block emits no 'labels=[...]' assignments. Use literal 'echo \\'labels=[...]\\' >> "$GITHUB_OUTPUT"' lines so the validator can prove each branch produces an allowlisted label set (${formatAllowlistForMessage()}).`,
+                        "error"
+                    )
+                );
+                continue;
+            }
+
+            for (const labels of emittedSets) {
+                if (labels === null) {
+                    violations.push(
+                        new Violation(
+                            relativePath,
+                            runsOn.line,
+                            `runs-on: ${raw}`,
+                            `Job '${job.id}': dynamic runs-on source step '${stepId}' (job '${sourceJobId}') has a malformed 'labels=...' JSON value. Emit a literal JSON array of labels.`,
+                            "error"
+                        )
+                    );
+                    continue;
+                }
+                if (!labels.some((label) => label === "self-hosted")) {
+                    continue;
+                }
+                if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
+                    violations.push(
+                        new Violation(
+                            relativePath,
+                            runsOn.line,
+                            `runs-on: ${raw}`,
+                            `Job '${job.id}': dynamic runs-on source step '${stepId}' (job '${sourceJobId}') emits label set [${labels.join(", ")}] which is not in the documented allowlist (${formatAllowlistForMessage()}). Update the emitting bash branches or extend SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js.`,
+                            "error"
+                        )
+                    );
+                }
+            }
+            continue;
+        }
+
+        // Plain scalar form: `runs-on: ubuntu-latest`, `runs-on: 'self-hosted'`,
+        // or `runs-on: "self-hosted"`. Strip outer quotes; if the remaining
+        // identifier equals 'self-hosted' alone, it lacks the required
+        // platform/RAM modifiers and is not in the allowlist.
+        const scalarStripped = raw.replace(/^(["'])(.*)\1$/, "$2").trim();
+        if (scalarStripped === "self-hosted") {
+            violations.push(
+                new Violation(
+                    relativePath,
+                    runsOn.line,
+                    `runs-on: ${raw}`,
+                    `Job '${job.id}': self-hosted runs-on label set [self-hosted] is not in the documented allowlist (${formatAllowlistForMessage()}). Bare 'self-hosted' lacks the required platform/RAM modifiers; specify the full label set or use the matrix-config 'runner-labels' output pattern.`,
+                    "error"
+                )
+            );
+        }
+    }
+
+    return violations;
+}
+
+/**
+ * Checks that every job whose `runs-on:` resolves a dependent job's
+ * output via `${{ fromJSON(needs.<jobId>.outputs.<output>) }}` actually
+ * declares `needs:` containing that `<jobId>`. Runtime would fail loudly
+ * (the expression returns null and the runner picker errors out), but
+ * static detection surfaces the typo at validation time.
+ */
+function findDynamicRunsOnMissingNeedsViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+
+    for (const job of jobs) {
+        const runsOn = extractJobRunsOn(lines, job);
+        if (!runsOn || typeof runsOn.raw !== "string") {
+            continue;
+        }
+
+        const dynamicMatch = /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(runsOn.raw);
+        if (!dynamicMatch) {
+            continue;
+        }
+
+        const dependencyJobId = dynamicMatch[1];
+        const declaredNeeds = extractJobNeeds(lines, job);
+        if (declaredNeeds.includes(dependencyJobId)) {
+            continue;
+        }
+
+        violations.push(
+            new Violation(
+                relativePath,
+                runsOn.line,
+                `runs-on: ${runsOn.raw}`,
+                `Job '${job.id}': dynamic runs-on references needs.${dependencyJobId}.outputs.${dynamicMatch[2]} but '${dependencyJobId}' is not in the job's needs: list (declared: [${declaredNeeds.join(", ")}]). Add '${dependencyJobId}' to needs: so the expression resolves at runtime.`,
+                "error"
+            )
+        );
     }
 
     return violations;
@@ -1147,6 +2086,22 @@ function validateWorkflow(filePath, options = {}) {
         );
 
         violations.push(
+            ...findForbiddenSharedConcurrencyViolations(relativePath, lines)
+        );
+
+        violations.push(
+            ...findMatrixConcurrencyEvictionViolations(relativePath, lines)
+        );
+
+        violations.push(
+            ...findSelfHostedLabelAllowlistViolations(relativePath, lines)
+        );
+
+        violations.push(
+            ...findDynamicRunsOnMissingNeedsViolations(relativePath, lines)
+        );
+
+        violations.push(
             ...findChangelogCoverageCheckoutViolations(relativePath, lines)
         );
     } catch (error) {
@@ -1255,6 +2210,20 @@ if (typeof module !== 'undefined' && module.exports) {
         detectBashSyntaxPattern,
         findWindowsBashPortabilityViolations,
         findForbiddenRunsOnGroupViolations,
+        findForbiddenSharedConcurrencyViolations,
+        findMatrixConcurrencyEvictionViolations,
+        findSelfHostedLabelAllowlistViolations,
+        findDynamicRunsOnMissingNeedsViolations,
+        extractJobConcurrencyGroup,
+        extractWorkflowConcurrencyGroup,
+        extractConcurrencyGroupFromBlock,
+        jobHasMatrix,
+        extractJobRunsOn,
+        extractJobNeeds,
+        parseInlineLabelArray,
+        extractJobOutputsSourceMap,
+        extractEmittedLabelSetsFromBash,
+        SELF_HOSTED_LABEL_ALLOWLIST,
         runTextInvokesChangelogCoverage,
         stepHasFullHistoryCheckout,
         findChangelogCoverageCheckoutViolations,

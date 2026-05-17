@@ -17,8 +17,14 @@ Canonical public identifiers:
 - Package ID: `com.wallstop-studios.dxmessaging`
 - Documentation site: `https://ambiguous-interactive.github.io/DxMessaging/`
 - Release workflow: `.github/workflows/release.yml`
-- Unity workflow concurrency group: `wallstop-organization-builds` (cancel-in-progress: false)
-- Unity runner labels: `self-hosted`, `Windows`, `RAM-64GB`
+- Unity workflow concurrency group: None on Unity-credential-using jobs;
+  per-runner serialization (one job per self-hosted agent) replaces it.
+  The legacy name `wallstop-organization-builds` is a reserved sentinel
+  that the validator hard-rejects anywhere in `.github/workflows/*.yml`.
+- Unity runner labels: `self-hosted`, `Windows`, `RAM-64GB` (both Windows
+  runners); PR-triggered Unity jobs additionally require `fast` (ELI-MACHINE
+  only) and resolve their `runs-on` through the workflow's `matrix-config`
+  job `runner-labels` output.
 
 Tracked pages:
 

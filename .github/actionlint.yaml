@@ -9,4 +9,12 @@ self-hosted-runner:
     # unity-il2cpp.yml, unity-tests.yml). Add additional custom labels here
     # as new runner pools are introduced.
     - RAM-64GB
+    # Speed marker applied to ELI-MACHINE only; PR-triggered Unity jobs
+    # use [self-hosted, Windows, RAM-64GB, fast] for interactive feedback
+    # isolation.
+    - fast
+    # Legacy marker applied to old-linux (documented in .llm/context.md);
+    # reserved here so any future inline `runs-on: [self-hosted, Linux,
+    # ..., old]` does not trip an actionlint false-positive.
+    - old
 config-variables: null

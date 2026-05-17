@@ -749,7 +749,7 @@ describe("findForbiddenRunsOnGroupViolations", () => {
       for (const violation of violations) {
         expect(violation.severity).toBe("error");
         expect(violation.message).toContain("runs-on.group is forbidden");
-        expect(violation.message).toContain("wallstop-organization-builds");
+        expect(violation.message).toContain("per-runner serialization");
       }
     }
   });
