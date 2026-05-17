@@ -33,11 +33,18 @@ RAM-64GB]` across all four Unity-credential-using jobs, so either
   marker remains on ELI-MACHINE for a future opt-in hotfix dispatch but
   no currently-active workflow requests it.
 - Stuck-job watchdog: `.github/workflows/stuck-job-watchdog.yml` runs
-  every 10 minutes to detect and recover from the known GitHub Actions
+  every 5 minutes to detect and recover from the known GitHub Actions
   self-hosted dispatcher bug (Community Discussion #186811) where a
   queued run never receives an Online/Idle runner. The watchdog
   excludes `release.yml` from auto-cancellation to protect attestation
-  and publishing flows.
+  and publishing flows. For immediate one-click recovery of a single
+  stuck run, operators dispatch `.github/workflows/unstick-run.yml`
+  from the Actions tab with the stuck run id (it bypasses the cron
+  wait and the queue-age threshold). Note that GitHub `schedule:` cron
+  triggers fire only from the repository default branch, so the
+  watchdog cron is INACTIVE until `stuck-job-watchdog.yml` reaches
+  `master`; until then, use `unstick-run.yml` or the watchdog's manual
+  `workflow_dispatch` trigger.
 
 Tracked pages:
 

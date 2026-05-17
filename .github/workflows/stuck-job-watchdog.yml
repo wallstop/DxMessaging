@@ -8,7 +8,9 @@ name: Stuck Job Watchdog
 #
 # Detection requires ALL of the following to be true:
 #   * The workflow run is `status: queued` AND older than MIN_QUEUE_AGE_SECONDS
-#     (default 600s, conservative to avoid racing legitimate concurrency waits).
+#     (default 300s / 5 min; round-2 false-positive guards below -- zero
+#     in-progress jobs, self-run exclusion, excluded-workflow list -- make
+#     the previous conservative 600s buffer unnecessary).
 #   * No job in the run is `status: in_progress` - a run with even one
 #     in-progress job is by definition holding/using a runner, not
 #     dispatcher-stuck. This is what prevents false positives for matrix
@@ -46,7 +48,7 @@ name: Stuck Job Watchdog
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -73,7 +75,7 @@ jobs:
           STATE_BRANCH: watchdog-state
           STATE_DIR: .watchdog-state
           MAX_CANCELS_PER_DAY: "2"
-          MIN_QUEUE_AGE_SECONDS: "600"
+          MIN_QUEUE_AGE_SECONDS: "300"
           DEFAULT_EXCLUDED_WORKFLOWS: "release.yml"
           EXTRA_EXCLUDED_WORKFLOWS: ${{ vars.WATCHDOG_EXCLUDED_WORKFLOWS }}
         run: |

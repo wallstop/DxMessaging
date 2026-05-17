@@ -129,9 +129,16 @@ RAM-64GB]` so either Windows machine can pick up any Unity job. The
       anywhere under `.github/workflows/*.yml` (it is reserved and the
       validator hard-fails any reintroduction).
 - [ ] Confirm `.github/workflows/stuck-job-watchdog.yml` is enabled. It
-      audits queued runs every 10 minutes and reruns those that an idle
-      runner could service, mitigating the GitHub Actions dispatcher bug
-      tracked at <https://github.com/orgs/community/discussions/186811>.
+      audits queued runs every 5 minutes and cancels and (where safe)
+      re-dispatches those that an idle runner could service, mitigating
+      the GitHub Actions dispatcher bug tracked at
+      <https://github.com/orgs/community/discussions/186811>.
+- [ ] Confirm `.github/workflows/unstick-run.yml` is present for manual
+      one-click recovery of a single run id. Operators dispatch it from
+      the Actions tab with the stuck run's id when they cannot wait for
+      the watchdog cron, or when the watchdog is not yet on the default
+      branch (GitHub `schedule:` cron triggers fire only from the
+      default branch).
 - [ ] Keep fork pull requests off self-hosted runners. The Unity workflows only
       allow same-repository pull requests and protected branch pushes; do not
       replace those guards with `pull_request_target`.

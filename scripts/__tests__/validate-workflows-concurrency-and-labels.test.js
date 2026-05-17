@@ -1,16 +1,37 @@
 /**
- * @fileoverview Tests for the three new validator checks added to
- * scripts/validate-workflows.js after the unity matrix-eviction incident:
+ * @fileoverview Tests for validator checks in scripts/validate-workflows.js
+ * AND workflow-shape contracts for the stuck-job-recovery workflows.
+ *
+ * Validator-check suites (added after the unity matrix-eviction incident):
  *
  *   - findForbiddenSharedConcurrencyViolations  (sentinel guard)
  *   - findMatrixConcurrencyEvictionViolations   (matrix-without-expansion guard)
  *   - findSelfHostedLabelAllowlistViolations    (self-hosted label allowlist)
+ *   - findDynamicRunsOnMissingNeedsViolations   (dynamic runs-on / needs guard)
+ *   - extractEmittedLabelSetsFromBash + extractJobConcurrencyGroup /
+ *     extractWorkflowConcurrencyGroup / extractJobMatrixMaxParallel /
+ *     extractJobNeeds / parseInlineLabelArray (helper-extractor contracts)
  *
- * Each suite covers positive (clean), negative (each violation form), and
- * the order-insensitive equivalence required by the allowlist comparison.
+ * Each validator suite covers positive (clean), negative (each violation
+ * form), and the order-insensitive equivalence required by the allowlist
+ * comparison.
+ *
+ * Workflow-shape contract suites (added with the GitHub Actions dispatcher
+ * stuck-run recovery workflows -- Community Discussion #186811):
+ *
+ *   - unstick-run.yml workflow contract  (manual one-click recovery
+ *     workflow: trigger inputs, permissions, concurrency, and the inline
+ *     bash safety guards)
+ *   - stuck-job-watchdog.yml tightened thresholds  (cron `*\/5` and
+ *     MIN_QUEUE_AGE_SECONDS=300 invariants so we cannot accidentally
+ *     regress to the looser pre-tightening cadence)
  */
 
 "use strict";
+
+const fs = require("fs");
+const path = require("path");
+const yaml = require("js-yaml");
 
 const {
   findForbiddenSharedConcurrencyViolations,
@@ -25,6 +46,30 @@ const {
   parseInlineLabelArray,
   extractJobs,
 } = require("../validate-workflows.js");
+
+const REPO_ROOT_FOR_FILES = path.resolve(__dirname, "..", "..");
+const WORKFLOWS_DIR_FOR_FILES = path.join(REPO_ROOT_FOR_FILES, ".github", "workflows");
+const UNSTICK_RUN_PATH = path.join(WORKFLOWS_DIR_FOR_FILES, "unstick-run.yml");
+const STUCK_WATCHDOG_PATH = path.join(WORKFLOWS_DIR_FOR_FILES, "stuck-job-watchdog.yml");
+
+function loadWorkflowYamlFromPath(absPath) {
+  const text = fs.readFileSync(absPath, "utf8");
+  // js-yaml interprets bare `on` as YAML 1.1 boolean true; load with the
+  // default schema and let the caller pull either `on` or `true`.
+  return yaml.load(text);
+}
+
+function getOnBlock(doc) {
+  // Pull the trigger block whether it parses as `on` (string key) or
+  // `true` (YAML 1.1 boolean coercion).
+  if (doc && Object.prototype.hasOwnProperty.call(doc, "on")) {
+    return doc.on;
+  }
+  if (doc && Object.prototype.hasOwnProperty.call(doc, true)) {
+    return doc[true];
+  }
+  return undefined;
+}
 
 function asLines(text) {
   // Strip a single leading blank line so test fixtures can start with `\n`.
@@ -1028,5 +1073,136 @@ jobs:
 `);
     const violations = findForbiddenSharedConcurrencyViolations("test.yml", lines);
     expect(violations.some((v) => v.message.includes("wallstop-organization-builds"))).toBe(true);
+  });
+});
+
+describe("unstick-run.yml workflow contract", () => {
+  let doc;
+  let raw;
+
+  beforeAll(() => {
+    raw = fs.readFileSync(UNSTICK_RUN_PATH, "utf8");
+    doc = loadWorkflowYamlFromPath(UNSTICK_RUN_PATH);
+  });
+
+  test("file exists at .github/workflows/unstick-run.yml", () => {
+    expect(fs.existsSync(UNSTICK_RUN_PATH)).toBe(true);
+  });
+
+  test("parses cleanly with js-yaml", () => {
+    expect(doc).toBeTruthy();
+    expect(typeof doc).toBe("object");
+  });
+
+  test("declares workflow_dispatch trigger with a required string run_id input", () => {
+    const onBlock = getOnBlock(doc);
+    expect(onBlock).toBeTruthy();
+    expect(onBlock).toHaveProperty("workflow_dispatch");
+
+    const dispatch = onBlock.workflow_dispatch;
+    expect(dispatch).toBeTruthy();
+    expect(dispatch.inputs).toBeTruthy();
+    expect(dispatch.inputs.run_id).toBeTruthy();
+    expect(dispatch.inputs.run_id.required).toBe(true);
+    expect(dispatch.inputs.run_id.type).toBe("string");
+  });
+
+  test("run_id input has a non-empty description (so the GitHub UI dispatch dialog guides operators)", () => {
+    // Positive smoke: the GitHub Actions "Run workflow" dropdown renders
+    // input descriptions as helper text under each field. An empty or
+    // missing description leaves the operator guessing what value to
+    // paste, which is exactly the failure mode this workflow exists to
+    // prevent (a wrong run id, dispatched at the wrong moment, cancels
+    // the wrong run).
+    const onBlock = getOnBlock(doc);
+    const runIdInput = onBlock.workflow_dispatch.inputs.run_id;
+    expect(typeof runIdInput.description).toBe("string");
+    expect(runIdInput.description.trim().length).toBeGreaterThan(0);
+  });
+
+  test("declares optional force_redispatch and bypass_exclusion boolean inputs", () => {
+    const onBlock = getOnBlock(doc);
+    const inputs = onBlock.workflow_dispatch.inputs;
+    expect(inputs.force_redispatch).toBeTruthy();
+    expect(inputs.force_redispatch.type).toBe("boolean");
+    expect(inputs.force_redispatch.default).toBe(false);
+    expect(inputs.bypass_exclusion).toBeTruthy();
+    expect(inputs.bypass_exclusion.type).toBe("boolean");
+    expect(inputs.bypass_exclusion.default).toBe(false);
+  });
+
+  test("runs on ubuntu-latest", () => {
+    expect(doc.jobs).toBeTruthy();
+    const jobIds = Object.keys(doc.jobs);
+    expect(jobIds).toHaveLength(1);
+    const job = doc.jobs[jobIds[0]];
+    expect(job["runs-on"]).toBe("ubuntu-latest");
+  });
+
+  test("declares exact permissions: { actions: write, contents: read }", () => {
+    expect(doc.permissions).toEqual({
+      actions: "write",
+      contents: "read",
+    });
+  });
+
+  test("does NOT declare contents: write (unstick workflow must never touch the state branch)", () => {
+    // Defense in depth: even if the permissions block were ever rewritten,
+    // a bare `contents: write` would be a regression.
+    expect(doc.permissions).not.toHaveProperty("contents", "write");
+    expect(raw).not.toMatch(/contents:\s*write/);
+  });
+
+  test("declares a concurrency group keyed on inputs.run_id with cancel-in-progress: false", () => {
+    expect(doc.concurrency).toBeTruthy();
+    expect(doc.concurrency.group).toMatch(/unstick-run-\$\{\{\s*inputs\.run_id\s*\}\}/);
+    expect(doc.concurrency["cancel-in-progress"]).toBe(false);
+  });
+
+  test("inline bash references MIN_AGE_SECONDS=30 (fresh-run guard)", () => {
+    expect(raw).toMatch(/MIN_AGE_SECONDS:\s*"30"/);
+  });
+
+  test("inline bash invokes 'gh run cancel' (the recovery action)", () => {
+    expect(raw).toMatch(/gh run cancel\s+"\$\{run_id\}"/);
+  });
+
+  test("inline bash validates run_id with a positive-integer regex", () => {
+    expect(raw).toMatch(/\[\[\s+"\$\{run_id\}"\s+=~\s+\^\[0-9\]\+\$\s+\]\]/);
+  });
+
+  test("inline bash respects the workflow exclusion list with a bypass_exclusion opt-out", () => {
+    expect(raw).toMatch(/DEFAULT_EXCLUDED_WORKFLOWS:\s*"release\.yml"/);
+    expect(raw).toMatch(/bypass_exclusion/);
+  });
+
+  test("optional REST re-dispatch is gated behind force_redispatch=true", () => {
+    expect(raw).toMatch(/\$\{force_redispatch\}.*==.*"true"/s);
+    expect(raw).toMatch(/actions\/workflows\/\$\{run_workflow_id\}\/dispatches/);
+  });
+});
+
+describe("stuck-job-watchdog.yml tightened thresholds", () => {
+  let raw;
+
+  beforeAll(() => {
+    raw = fs.readFileSync(STUCK_WATCHDOG_PATH, "utf8");
+  });
+
+  test("file exists", () => {
+    expect(fs.existsSync(STUCK_WATCHDOG_PATH)).toBe(true);
+  });
+
+  test("schedule cron is exactly '*/5 * * * *' (tightened from */10)", () => {
+    // Use a line-level regex so accidental whitespace or alternate cron
+    // entries are still caught.
+    expect(raw).toMatch(/-\s*cron:\s*"\*\/5 \* \* \* \*"/);
+    // Negative assertion to catch a regression to the looser schedule.
+    expect(raw).not.toMatch(/-\s*cron:\s*"\*\/10 \* \* \* \*"/);
+  });
+
+  test("MIN_QUEUE_AGE_SECONDS env value is 300 (tightened from 600)", () => {
+    expect(raw).toMatch(/MIN_QUEUE_AGE_SECONDS:\s*"300"/);
+    expect(raw).not.toMatch(/MIN_QUEUE_AGE_SECONDS:\s*"600"/);
   });
 });

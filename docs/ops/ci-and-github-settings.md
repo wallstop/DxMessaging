@@ -86,24 +86,33 @@ asset import state from being torn down mid-run - but operators should
 expect a brief gap between "newer push" and "newer Unity job actually
 starts" while the older job drains.
 
-## Stuck-Job Watchdog
+## Stuck-Job Recovery
 
 A known GitHub Actions dispatcher bug ([Community Discussion #186811](https://github.com/orgs/community/discussions/186811))
 causes self-hosted runners to report Online/Idle while `runner_id` stays
 at 0 for 7+ minutes, leaving a queued job indefinitely stuck even when an
 idle runner's labels are a superset of the job's requested labels.
 
-`.github/workflows/stuck-job-watchdog.yml` runs every 10 minutes on
-`ubuntu-latest`, lists queued workflow runs older than 10 minutes
-(`MIN_QUEUE_AGE_SECONDS=600`), fetches the org runner inventory
-(falling back to repo runners on 403), and identifies the subset that
-are genuinely dispatcher-stuck. A run is considered stuck only when ALL
-of the following hold: the run is `status: queued`, no job in the run
-is `in_progress` (a run with an in-progress job is by definition
-holding/using a runner, not dispatcher-stuck), at least one job is
-queued, at least one idle runner's labels satisfy a queued job's label
-requirements, the run's workflow file is not in the exclusion list, and
-the run is not the watchdog's own run.
+Two workflows together provide recovery: an auto-watchdog that audits
+the queue on a cron schedule, and a manual one-click recovery workflow
+for a single run id.
+
+### Auto-watchdog: `.github/workflows/stuck-job-watchdog.yml`
+
+Runs every 5 minutes on `ubuntu-latest`, lists queued workflow runs
+older than 5 minutes (`MIN_QUEUE_AGE_SECONDS=300`), fetches the org
+runner inventory (falling back to repo runners on 403), and identifies
+the subset that are genuinely dispatcher-stuck. A run is considered
+stuck only when ALL of the following hold: the run is `status: queued`,
+no job in the run is `in_progress` (a run with an in-progress job is by
+definition holding/using a runner, not dispatcher-stuck), at least one
+job is queued, at least one idle runner's labels satisfy a queued job's
+label requirements, the run's workflow file is not in the exclusion
+list, and the run is not the watchdog's own run.
+
+Worst-case time-to-recover under the tightened thresholds is roughly
+10 minutes (5-min cron interval + 300s queue-age threshold + cancel /
+redispatch latency).
 
 For each genuinely-stuck run the watchdog `gh run cancel`s the run
 (the documented recovery for a queued-only run; `gh run rerun --failed`
@@ -125,6 +134,45 @@ list of workflow filenames).
 
 Cancel attempts are capped at 2 per run-id per 24 hours via a small
 state file on the `watchdog-state` orphan branch.
+
+GitHub `schedule:` cron triggers only fire from the repository default
+branch. Until `stuck-job-watchdog.yml` is on `master`, the cron is
+INACTIVE and only manual `workflow_dispatch` from the Actions tab
+works. After merge to `master` the cron resumes automatically and runs
+every 5 minutes.
+
+### Manual one-click recovery: `.github/workflows/unstick-run.yml`
+
+`workflow_dispatch`-only workflow that targets a single explicit run id
+rather than auto-scanning. Use this when:
+
+1. The watchdog is not yet on the default branch (see the cron caveat
+   above) and a job is stuck right now.
+1. You want immediate recovery and do not want to wait for the next
+   cron tick or the queue-age threshold.
+
+Inputs:
+
+- `run_id` (required, string of digits): the GitHub Actions run id to
+  recover. Find it in the URL of the stuck run.
+- `force_redispatch` (optional, boolean, default `false`): when true,
+  attempt REST `actions/workflows/{id}/dispatches` after cancel. Only
+  valid for `push` / `schedule` / `workflow_dispatch` events on a
+  branch where the workflow file declares `workflow_dispatch:`.
+- `bypass_exclusion` (optional, boolean, default `false`): operate on a
+  run whose workflow file is in the exclusion list (e.g. `release.yml`).
+  Use deliberately.
+
+Behavior mirrors the watchdog's per-run logic: validates the run id is
+a positive integer, confirms the run exists and is `queued` and older
+than `MIN_AGE_SECONDS=30` (guards against accidental cancellation of
+fresh runs), honors the same exclusion list unless `bypass_exclusion`
+is true, then `gh run cancel`s and optionally REST-redispatches. It
+does NOT touch the watchdog state branch and does NOT count against the
+watchdog's per-run cancel cap.
+
+To invoke: repo Actions tab -> "Unstick Run" workflow -> "Run workflow"
+dropdown -> select branch -> enter the run id.
 
 ## Unity Workflows
 
@@ -241,6 +289,13 @@ Workflow-shape contract checklist:
    `.github/workflows/*.yml` (sentinel guard).
 1. Confirm `.github/workflows/stuck-job-watchdog.yml` exists and is
    enabled (queue auto-recovery for the GitHub Actions dispatcher bug).
+   Once merged to the default branch, the 5-minute cron fires
+   automatically.
+1. Confirm `.github/workflows/unstick-run.yml` exists for manual
+   one-click recovery of a single run id (operator dispatches it from
+   the Actions tab with the stuck run's id). The workflow is
+   `workflow_dispatch`-only -- there is no cron, push, or PR trigger.
+   (See "Stuck-Job Recovery" subsection above for the operator runbook.)
 
 Trigger safe workflows after transfer:
 
