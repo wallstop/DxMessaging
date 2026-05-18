@@ -173,7 +173,7 @@ describe("stripJsCommentsAndStrings", () => {
         expect(stripped).toContain("var a = 1;");
     });
 
-    test("block comments containing \"foo\" do not cause subsequent strings to be misparsed", () => {
+    test("block comments containing \"foo\" do not cause subsequent strings to be mis-parsed", () => {
         const source = [
             "/* a block comment with \"foo\" inside */",
             "var a = \"--testRunner\";",
