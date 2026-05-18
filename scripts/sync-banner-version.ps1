@@ -248,7 +248,7 @@ $newVersionText = @"
 
 # Pattern to find the feature-row test count label. The label is updated from
 # repository test files so it does not drift as coverage changes.
-$testCountPattern = '(<text\s+x="20"\s+y="13"[^>]*fill="#00d9ff"[^>]*>)(\d+\+ Tests)(</text>)'
+$testCountPattern = '(<text(?=[^>]*\bx="20")(?=[^>]*\by="13")(?=[^>]*\bfill="#00d9ff")[^>]*>)(\d+\+ Tests)(</text>)'
 
 # Read the SVG content
 try {

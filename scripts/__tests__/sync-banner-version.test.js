@@ -36,7 +36,7 @@ const SEMVER_PATTERN = /^\d+\.\d+\.\d+/;
 
 // SYNC: Keep test-count label pattern in sync with sync-banner-version.ps1 $testCountPattern
 const TEST_COUNT_PATTERN =
-    /(<text\s+x="20"\s+y="13"[^>]*fill="#00d9ff"[^>]*>)(\d+\+ Tests)(<\/text>)/;
+    /(<text(?=[^>]*\bx="20")(?=[^>]*\by="13")(?=[^>]*\bfill="#00d9ff")[^>]*>)(\d+\+ Tests)(<\/text>)/;
 
 const TEST_FILE_NAME_PATTERN = /(?:Test|Tests)\.cs$|\.(?:test|spec)\.js$/;
 

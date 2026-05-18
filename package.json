@@ -70,6 +70,9 @@
     "check:package-json-format": "node scripts/run-managed-prettier.js --check package.json",
     "check:prettier:hooks": "node scripts/run-managed-prettier.js --check \"**/*.{md,markdown,json,asmdef,asmref,yml,yaml}\"",
     "check:cspell:scripts": "npx --yes cspell@10.0.0 --no-progress --no-summary \"scripts/**/*.js\"",
+    "check:workflow-cspell": "npx --yes cspell@10.0.0 --no-progress --no-summary \".github/workflows/**/*.yml\" \".github/workflows/**/*.yaml\"",
+    "check:banner-sync": "node scripts/validate-banner.js",
+    "sync:banner": "bash scripts/sync-banner-version.sh",
     "check:yaml": "npm run format:yaml:check && pre-commit run yamllint --all-files",
     "lint:markdown": "markdownlint-cli2 \"**/*.md\" \"**/*.markdown\"",
     "generate:ambiguous-release-runbook": "node scripts/generate-ambiguous-release-runbook.js",
@@ -89,7 +92,7 @@
     "validate:untracked-policy": "node scripts/validate-untracked-policy.js",
     "validate:vscode-settings": "node scripts/validate-vscode-settings.js",
     "validate:workflows": "node scripts/validate-workflows.js",
-    "preflight:pre-commit": "npm run validate:node-tooling && npm run validate:hook-markdown && npm run check:package-json-format && npm run check:prettier:hooks && npm run validate:pre-commit-tooling && npm run check:cspell:scripts && npm run check:yaml && node scripts/generate-skills-index.js --check && npm run validate:npm-meta && npm run validate:repo-identity && npm run validate:changelog:coverage && pre-commit run --hook-stage pre-push script-parser-tests --all-files && npm run validate:runtime-settings-docs && npm run validate:no-plan-vocabulary && npm run validate:untracked-policy",
+    "preflight:pre-commit": "npm run validate:node-tooling && npm run validate:hook-markdown && npm run check:package-json-format && npm run check:prettier:hooks && npm run validate:pre-commit-tooling && npm run check:cspell:scripts && npm run check:workflow-cspell && npm run validate:workflows && npm run check:yaml && npm run check:banner-sync && node scripts/generate-skills-index.js --check && npm run validate:npm-meta && npm run validate:repo-identity && npm run validate:changelog:coverage && pre-commit run --hook-stage pre-push script-parser-tests --all-files && npm run validate:runtime-settings-docs && npm run validate:no-plan-vocabulary && npm run validate:untracked-policy",
     "prepack": "node scripts/validate-npm-meta.js --check"
   },
   "devDependencies": {

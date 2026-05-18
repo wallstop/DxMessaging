@@ -29,6 +29,9 @@ const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
 const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
+const REQUIRED_WORKFLOW_CSPELL_COMMAND = "npm run check:workflow-cspell";
+const REQUIRED_WORKFLOW_VALIDATION_COMMAND = "npm run validate:workflows";
+const REQUIRED_BANNER_SYNC_COMMAND = "npm run check:banner-sync";
 const REQUIRED_CHANGELOG_VALIDATION_COMMAND = "npm run validate:changelog:coverage";
 const REQUIRED_PARSER_SUITE_HOOK_ID = "script-parser-tests";
 const REQUIRED_PARSER_SUITE_TEST_PATHS = [
@@ -168,6 +171,18 @@ function hasRequiredHookMarkdownCommand(preflightScript) {
 
 function hasRequiredScriptsCspellCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_SCRIPTS_CSPELL_COMMAND);
+}
+
+function hasRequiredWorkflowCspellCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_WORKFLOW_CSPELL_COMMAND);
+}
+
+function hasRequiredWorkflowValidationCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_WORKFLOW_VALIDATION_COMMAND);
+}
+
+function hasRequiredBannerSyncCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_BANNER_SYNC_COMMAND);
 }
 
 function hasRequiredChangelogValidationCommand(preflightScript) {
@@ -500,6 +515,39 @@ function validatePreflightScriptPolicy(
     );
   }
 
+  if (!hasRequiredWorkflowCspellCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_WORKFLOW_CSPELL_COMMAND}' so workflow spelling regressions are caught before hooks.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (!hasRequiredWorkflowValidationCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_WORKFLOW_VALIDATION_COMMAND}' so workflow policy regressions are caught before hooks.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (!hasRequiredBannerSyncCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_BANNER_SYNC_COMMAND}' so banner drift is caught before push-time checks.`,
+        preflightScript
+      )
+    );
+  }
+
   if (!hasRequiredChangelogValidationCommand(preflightScript)) {
     violations.push(
       new Violation(
@@ -673,6 +721,9 @@ module.exports = {
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
   hasRequiredScriptsCspellCommand,
+  hasRequiredWorkflowCspellCommand,
+  hasRequiredWorkflowValidationCommand,
+  hasRequiredBannerSyncCommand,
   hasRequiredChangelogValidationCommand,
   hasNpxInstallPolicy,
   usesManagedJestWrapper,
@@ -692,6 +743,9 @@ module.exports = {
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
+  REQUIRED_WORKFLOW_CSPELL_COMMAND,
+  REQUIRED_WORKFLOW_VALIDATION_COMMAND,
+  REQUIRED_BANNER_SYNC_COMMAND,
   REQUIRED_CHANGELOG_VALIDATION_COMMAND,
   REQUIRED_PARSER_SUITE_HOOK_ID,
   REQUIRED_PARSER_SUITE_TEST_PATHS,

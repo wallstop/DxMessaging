@@ -17,8 +17,6 @@
  *
  *   Sync / drift
  *     1. The version-badge block matches scripts/sync-banner-version.ps1
- *        heredoc once $version is substituted from package.json.
- *     2. The version printed in the SVG matches package.json.
  *     3. The feature-row test-count label matches the repository test count.
  *
  *   Hard requirements
@@ -457,7 +455,7 @@ function roundTestCount(testCount) {
 function checkRepositoryTestCount(svgFile, svgText) {
     const errs = [];
     const labelMatch = svgText.match(
-        /<text\s+x="20"\s+y="13"[^>]*fill="#00d9ff"[^>]*>(\d+\+ Tests)<\/text>/g,
+        /<text(?=[^>]*\bx="20")(?=[^>]*\by="13")(?=[^>]*\bfill="#00d9ff")[^>]*>(\d+\+ Tests)<\/text>/g,
     );
     if (labelMatch === null) {
         // checkFeatureRow reports the missing label with more context.
@@ -956,7 +954,7 @@ function checkFeatureRow(svgFile, svgText) {
     const inner = rowMatch[1];
     // The label (not the emoji) is in a <text> with fill="#00d9ff".
     const labelRe =
-        /<text\s+x="20"\s+y="13"[^>]*fill="#00d9ff"[^>]*>([^<]+)<\/text>/g;
+        /<text(?=[^>]*\bx="20")(?=[^>]*\by="13")(?=[^>]*\bfill="#00d9ff")[^>]*>([^<]+)<\/text>/g;
     const labels = [];
     let m;
     while ((m = labelRe.exec(inner)) !== null) {
