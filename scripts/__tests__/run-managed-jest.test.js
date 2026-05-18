@@ -26,6 +26,7 @@ const {
     hasHealthyLocalJestInstall,
     runIsolatedFallbackJest,
     runManagedJest,
+    runLocalJest,
 } = require("../run-managed-jest.js");
 
 describe("run-managed-jest", () => {
@@ -266,7 +267,7 @@ describe("run-managed-jest", () => {
         ).toBe(true);
     });
 
-    test("runIsolatedFallbackJest injects isolated testRunner when caller did not provide one", () => {
+    test("runIsolatedFallbackJest does not inject --testRunner when caller did not provide one", () => {
         const jestSpec = "jest@30.3.0";
         const { jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
         const runCommandFn = jest.fn(() => ({ status: 0, error: null }));
@@ -289,8 +290,6 @@ describe("run-managed-jest", () => {
             jestBinPath,
             true,
             expect.objectContaining({
-                testRunnerPath: jestRunnerPath,
-                testRunnerInjected: true,
                 callerProvidedTestRunner: false,
                 nodePathOverride: expect.stringContaining(
                     path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules")
@@ -299,12 +298,7 @@ describe("run-managed-jest", () => {
         );
         expect(runCommandFn).toHaveBeenCalledWith(
             process.execPath,
-            [
-                jestBinPath,
-                "--testRunner",
-                jestRunnerPath,
-                "--version",
-            ],
+            [jestBinPath, "--version"],
             expect.objectContaining({
                 env: expect.objectContaining({
                     NODE_PATH: expect.stringContaining(
@@ -353,8 +347,6 @@ describe("run-managed-jest", () => {
             jestBinPath,
             false,
             expect.objectContaining({
-                testRunnerPath: null,
-                testRunnerInjected: false,
                 callerProvidedTestRunner: true,
                 nodePathOverride: expect.stringContaining(
                     path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0", "node_modules")
@@ -378,7 +370,7 @@ describe("run-managed-jest", () => {
         expect(runCommandFn).not.toHaveBeenCalled();
     });
 
-    test("runIsolatedFallbackJest returns null when runner injection is required but unavailable", () => {
+    test("runIsolatedFallbackJest returns null when isolated runner is unavailable and caller provided no override", () => {
         const jestSpec = "jest@30.3.0";
         const runCommandFn = jest.fn();
         const warnFn = jest.fn();
@@ -424,6 +416,136 @@ describe("run-managed-jest", () => {
         expect(result).toBe(true);
     });
 
+    test("hasHealthyLocalJestInstall returns false when tryLoadModule throws even though existsSync is true", () => {
+        const localRunnerPath = path.join(REPO_ROOT, "node_modules", "jest-circus", "build", "runner.js");
+        const tryLoadModuleFn = jest.fn(() => false);
+        const result = hasHealthyLocalJestInstall(
+            () => localRunnerPath,
+            () => true,
+            tryLoadModuleFn
+        );
+        expect(result).toBe(false);
+        expect(tryLoadModuleFn).toHaveBeenCalledWith("jest-circus/runner");
+    });
+
+    test("runLocalJest does not inject --testRunner when validation passes", () => {
+        const resolvedPath = path.join(REPO_ROOT, "node_modules", "jest-circus", "build", "runner.js");
+        const runCommandFn = jest.fn(() => ({ status: 0, error: null }));
+        const warnFn = jest.fn();
+
+        const result = runLocalJest(["--version"], {
+            moduleResolver: () => resolvedPath,
+            tryLoadModuleFn: () => true,
+            existsSyncFn: () => true,
+            runCommandFn,
+            warnFn,
+        });
+
+        expect(result).toEqual({ status: 0, error: null });
+        expect(runCommandFn).toHaveBeenCalledWith(
+            process.execPath,
+            [LOCAL_JEST_BIN, "--version"]
+        );
+        const invocationArgs = runCommandFn.mock.calls[0][1];
+        expect(invocationArgs).not.toContain("--testRunner");
+    });
+
+    test("runLocalJest does not inject --testRunner when the caller already provided one", () => {
+        const userRunnerPath = path.join(REPO_ROOT, "custom-runner.js");
+        const runCommandFn = jest.fn(() => ({ status: 0, error: null }));
+        const moduleResolver = jest.fn();
+        const tryLoadModuleFn = jest.fn();
+
+        const result = runLocalJest(["--testRunner", userRunnerPath, "--version"], {
+            moduleResolver,
+            tryLoadModuleFn,
+            existsSyncFn: () => true,
+            runCommandFn,
+            warnFn: () => {},
+        });
+
+        expect(result).toEqual({ status: 0, error: null });
+        expect(moduleResolver).not.toHaveBeenCalled();
+        expect(tryLoadModuleFn).not.toHaveBeenCalled();
+        expect(runCommandFn).toHaveBeenCalledWith(
+            process.execPath,
+            [LOCAL_JEST_BIN, "--testRunner", userRunnerPath, "--version"]
+        );
+    });
+
+    test("runLocalJest returns null when load-validation of jest-circus/runner fails", () => {
+        const resolvedPath = path.join(REPO_ROOT, "node_modules", "jest-circus", "build", "runner.js");
+        const runCommandFn = jest.fn();
+        const warnFn = jest.fn();
+
+        const result = runLocalJest(["--version"], {
+            moduleResolver: () => resolvedPath,
+            tryLoadModuleFn: () => false,
+            existsSyncFn: () => true,
+            runCommandFn,
+            warnFn,
+        });
+
+        expect(result).toBeNull();
+        expect(runCommandFn).not.toHaveBeenCalled();
+        expect(warnFn.mock.calls.some((call) => String(call[0]).includes("failed load validation"))).toBe(true);
+    });
+
+    test("runManagedJest cascades local → isolated → npm exec when earlier tiers return null", () => {
+        // Regression coverage for the full fallback cascade: gate fails, then
+        // isolated fallback prep fails, then npm exec succeeds. This is the
+        // exact code path exercised when a hook runs in an environment with a
+        // corrupted local node_modules and no /tmp write access for the
+        // isolated cache.
+        const npmExecResult = { status: 0, error: null };
+        const runLocalJestFn = jest.fn(() => null);
+        const runIsolatedFallbackJestFn = jest.fn(() => null);
+        const runNpmExecJestFn = jest.fn(() => npmExecResult);
+        const runNpxJestFn = jest.fn();
+        const printLocalJestFallbackWarningFn = jest.fn();
+
+        existsSyncSpy.mockReturnValue(true);
+
+        const result = runManagedJest(["--version"], {
+            hasHealthyLocalJestInstallFn: () => true,
+            getNpmMajorVersionFn: () => 10,
+            runLocalJestFn,
+            runIsolatedFallbackJestFn,
+            runNpmExecJestFn,
+            runNpxJestFn,
+            printLocalJestFallbackWarningFn,
+        });
+
+        expect(result).toEqual(npmExecResult);
+        expect(runLocalJestFn).toHaveBeenCalledTimes(1);
+        expect(runIsolatedFallbackJestFn).toHaveBeenCalledTimes(1);
+        expect(runNpmExecJestFn).toHaveBeenCalledTimes(1);
+        expect(runNpxJestFn).not.toHaveBeenCalled();
+    });
+
+    test("runManagedJest falls through to isolated/npm-exec when runLocalJest returns null", () => {
+        const isolatedResult = { status: 0, error: null };
+        const runLocalJestFn = jest.fn(() => null);
+        const runIsolatedFallbackJestFn = jest.fn(() => isolatedResult);
+        const runNpmExecJestFn = jest.fn();
+        const printLocalJestFallbackWarningFn = jest.fn();
+
+        existsSyncSpy.mockReturnValue(true);
+
+        const result = runManagedJest(["--version"], {
+            hasHealthyLocalJestInstallFn: () => true,
+            runLocalJestFn,
+            runIsolatedFallbackJestFn,
+            runNpmExecJestFn,
+            printLocalJestFallbackWarningFn,
+        });
+
+        expect(result).toEqual(isolatedResult);
+        expect(runLocalJestFn).toHaveBeenCalledWith(["--version"]);
+        expect(runIsolatedFallbackJestFn).toHaveBeenCalledWith(["--version"]);
+        expect(runNpmExecJestFn).not.toHaveBeenCalled();
+    });
+
     test("resolveLocalModule resolves local jest-circus runner from repository dependencies", () => {
         const resolvedPath = resolveLocalModule("jest-circus/runner");
         expect(typeof resolvedPath).toBe("string");
@@ -433,15 +555,26 @@ describe("run-managed-jest", () => {
     test("runManagedJest uses local jest when installed", () => {
         existsSyncSpy.mockReturnValue(true);
         spawnSyncSpy.mockReturnValue({ status: 0 });
+        const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
-        const result = runManagedJest(["--version"]);
+        try {
+            const result = runManagedJest(["--version"]);
 
-        expect(result).toEqual({ status: 0, error: null });
-        expect(spawnSyncSpy).toHaveBeenCalledWith(
-            process.execPath,
-            [LOCAL_JEST_BIN, "--version"],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
-        );
+            expect(result).toEqual({ status: 0, error: null });
+            expect(spawnSyncSpy).toHaveBeenCalledWith(
+                process.execPath,
+                [LOCAL_JEST_BIN, "--version"],
+                expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            );
+            // Regression guard: never inject --testRunner with a hardcoded
+            // jest-circus runner path. Jest 27+ resolves its bundled default
+            // runner reliably; injecting absolute paths has caused Windows
+            // failures ("Module ... in the testRunner option was not found").
+            const invocationArgs = spawnSyncSpy.mock.calls[0][1];
+            expect(invocationArgs).not.toContain("--testRunner");
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 
     test("runManagedJest uses npm exec fallback when local jest is missing and npm>=7", () => {

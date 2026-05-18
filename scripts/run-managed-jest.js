@@ -73,8 +73,52 @@ function runCommand(command, args, spawnOptions = {}) {
     };
 }
 
-function runLocalJest(args) {
-    return runCommand(process.execPath, [LOCAL_JEST_BIN, ...args]);
+function tryLoadModule(
+    moduleSpecifier,
+    repoRequire = REPO_REQUIRE
+) {
+    try {
+        repoRequire(moduleSpecifier);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function runLocalJest(args, options = {}) {
+    const {
+        moduleResolver = resolveLocalModule,
+        tryLoadModuleFn = tryLoadModule,
+        hasCliOptionFn = hasCliOption,
+        runCommandFn = runCommand,
+        existsSyncFn = fs.existsSync,
+        warnFn = console.warn,
+    } = options;
+
+    // Validate local jest-circus is healthy as a precondition. We deliberately
+    // DO NOT inject `--testRunner` with an absolute path: Jest 27+ defaults to
+    // jest-circus and its own internal resolver finds the bundled runner more
+    // reliably than we can second-guess from outside (notably on Windows, where
+    // jest-config's runner validator has rejected absolute paths that
+    // require.resolve + fs.existsSync both report as valid). If the caller
+    // explicitly passes `--testRunner`, we forward it unchanged.
+    const callerProvidedTestRunner = hasCliOptionFn(args, "--testRunner");
+
+    if (!callerProvidedTestRunner) {
+        const resolvedRunnerPath = moduleResolver("jest-circus/runner");
+        if (
+            !resolvedRunnerPath ||
+            !existsSyncFn(resolvedRunnerPath) ||
+            !isPathInsideDirectory(resolvedRunnerPath, REPO_NODE_MODULES) ||
+            !tryLoadModuleFn("jest-circus/runner")
+        ) {
+            warnFn("⚠️ Local jest-circus/runner failed load validation; falling back to managed Jest.");
+            return null;
+        }
+    }
+
+    const invocationArgs = [LOCAL_JEST_BIN, ...args];
+    return runCommandFn(process.execPath, invocationArgs);
 }
 
 function getPinnedFallbackJestSpec(
@@ -300,18 +344,12 @@ function printIsolatedFallbackSelection(
     jestBinPath,
     cacheHit,
     {
-        testRunnerPath = null,
-        testRunnerInjected = false,
         callerProvidedTestRunner = false,
         nodePathOverride = null,
     } = {}
 ) {
     const cacheLabel = cacheHit ? "cache hit" : "fresh install";
     console.warn(`⚠️ Using isolated fallback Jest (${cacheLabel}): ${jestBinPath}`);
-
-    if (testRunnerInjected && testRunnerPath) {
-        console.warn(`⚠️ Injected isolated Jest test runner: ${testRunnerPath}`);
-    }
 
     if (callerProvidedTestRunner) {
         console.warn("⚠️ Caller provided --testRunner; managed runner did not override it.");
@@ -341,21 +379,23 @@ function runIsolatedFallbackJest(
         return null;
     }
 
-    const invocationArgs = [prepared.jestBinPath];
+    // Validate the isolated jest-circus runner exists as a healthy-install
+    // precondition, but DO NOT inject `--testRunner` with an absolute path.
+    // Jest 27+ defaults to jest-circus and its own resolver, walking up from
+    // the isolated jest binary, reliably finds the sibling jest-circus we just
+    // installed. Passing an absolute path triggers a separate jest-config
+    // validator path that has been observed to reject otherwise-valid paths on
+    // Windows. If the caller explicitly passes `--testRunner`, forward it.
     const callerProvidedTestRunner = hasCliOptionFn(args, "--testRunner");
 
-    let injectedRunnerPath = null;
     if (!callerProvidedTestRunner) {
         if (!prepared.jestRunnerPath || !existsSyncFn(prepared.jestRunnerPath)) {
             warnFn(`⚠️ Isolated fallback Jest runner unavailable at expected path: ${prepared.jestRunnerPath}`);
             return null;
         }
-
-        invocationArgs.push("--testRunner", prepared.jestRunnerPath);
-        injectedRunnerPath = prepared.jestRunnerPath;
     }
 
-    invocationArgs.push(...args);
+    const invocationArgs = [prepared.jestBinPath, ...args];
 
     const isolatedNodeModulesPath = path.dirname(
         path.dirname(path.dirname(prepared.jestBinPath))
@@ -363,8 +403,6 @@ function runIsolatedFallbackJest(
     const isolatedNodePathEnv = buildNodePathEnv(isolatedNodeModulesPath);
 
     printIsolatedFallbackSelectionFn(prepared.jestBinPath, prepared.cacheHit, {
-        testRunnerPath: injectedRunnerPath,
-        testRunnerInjected: Boolean(injectedRunnerPath),
         callerProvidedTestRunner,
         nodePathOverride: isolatedNodePathEnv.NODE_PATH,
     });
@@ -413,7 +451,8 @@ function resolveLocalModule(moduleSpecifier) {
 
 function hasHealthyLocalJestInstall(
     moduleResolver = resolveLocalModule,
-    existsSyncFn = fs.existsSync
+    existsSyncFn = fs.existsSync,
+    tryLoadModuleFn = tryLoadModule
 ) {
     if (!existsSyncFn(LOCAL_JEST_BIN)) {
         return false;
@@ -428,7 +467,11 @@ function hasHealthyLocalJestInstall(
         return false;
     }
 
-    return isPathInsideDirectory(circusRunnerPath, REPO_NODE_MODULES);
+    if (!isPathInsideDirectory(circusRunnerPath, REPO_NODE_MODULES)) {
+        return false;
+    }
+
+    return tryLoadModuleFn("jest-circus/runner");
 }
 
 function printLocalJestFallbackWarning() {
@@ -445,13 +488,18 @@ function runManagedJest(args, options = {}) {
         hasHealthyLocalJestInstallFn = hasHealthyLocalJestInstall,
         getNpmMajorVersionFn = getNpmMajorVersion,
         printLocalJestFallbackWarningFn = printLocalJestFallbackWarning,
+        runLocalJestFn = runLocalJest,
         runIsolatedFallbackJestFn = runIsolatedFallbackJest,
         runNpmExecJestFn = runNpmExecJest,
         runNpxJestFn = runNpxJest,
     } = options;
 
     if (hasHealthyLocalJestInstallFn()) {
-        return runLocalJest(args);
+        const localResult = runLocalJestFn(args);
+        if (localResult !== null) {
+            return localResult;
+        }
+        // Local Jest could not be safely prepared; fall through to the managed fallback chain.
     }
 
     const hasLocalJestBinary = fs.existsSync(LOCAL_JEST_BIN);
@@ -512,6 +560,7 @@ module.exports = {
     normalizeForPathComparison,
     isPathInsideDirectory,
     resolveLocalModule,
+    tryLoadModule,
     hasHealthyLocalJestInstall,
     printLocalJestFallbackWarning,
     sanitizeCacheKey,

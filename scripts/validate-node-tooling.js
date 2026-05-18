@@ -319,6 +319,14 @@ async function validateTooling(options = {}) {
         violations.push(`${tool.name}: failed to resolve ${tool.entry}`);
       } else if (!existsSyncFn(resolvedPath)) {
         violations.push(`${tool.name}: resolved ${tool.entry} to missing file: ${resolvedPath}`);
+      } else {
+        try {
+          requireFn(resolvedPath);
+        } catch (error) {
+          violations.push(
+            `${tool.name}: resolved ${tool.entry} could not be loaded: ${error.message}`
+          );
+        }
       }
     }
   }

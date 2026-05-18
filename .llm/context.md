@@ -26,6 +26,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Never commit repository settings that auto-approve chat-invoked terminal commands.
 - Ensure fenced markdown examples are closed and do not swallow real sections (for example `## See Also`).
 - Run file-scoped validation during editing; do not treat git hooks as the first signal of quality issues.
+- When editing `.llm/context.md` or `.llm/skills/**/*.md`, run `npm run validate:llm-markdown` before finishing.
 - For user-visible code edits (`Runtime/`, `Samples~/`, user-facing `Editor/`, or shipped `SourceGenerators/` code), run `npm run validate:changelog:coverage` before finishing and resolve any `W002` warnings by rewriting entries around user impact.
 - When editing `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, or `.js` files, run file-scoped cspell on touched files and update `.cspell.json` in the same change for legitimate domain terms.
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
@@ -50,6 +51,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate local Node tool dependency health: `npm run validate:node-tooling`
 - Run Unity/devcontainer contract tests: `npm run test:unity-contracts`
 - Run markdown hook parity check: `npm run validate:hook-markdown`
+- Validate `.llm` markdown policy bundle: `npm run validate:llm-markdown`
 - Run parser hook suite exactly as pre-push executes it: `pre-commit run --hook-stage pre-push script-parser-tests --all-files`
 - Check package.json format explicitly: `npm run check:package-json-format`
 - Check hook-managed Prettier targets: `npm run check:prettier:hooks`
@@ -129,6 +131,7 @@ The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outsid
 - For Jest in hooks or npm scripts, use `node scripts/run-managed-jest.js` instead of bare `jest` invocations.
 - When editing `scripts/run-managed-jest.js`, `scripts/verify-managed-jest-fallback.js`, or `scripts/validate-node-tooling.js`, run `npm run validate:node-tooling` first so missing Jest runner dependencies are caught before hook-time.
 - For managed Jest tooling edits, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/run-managed-jest.test.js scripts/__tests__/verify-managed-jest-fallback.test.js scripts/__tests__/validate-node-tooling.test.js` and then `pre-commit run --hook-stage pre-push script-tests --all-files`.
+- If a Node-backed hook reports "testRunner option was not found" or any `jest-circus` resolution failure: (1) `scripts/run-managed-jest.js` must NOT inject `--testRunner <abs-path>` -- Jest 27+ resolves `jest-circus` natively, and absolute-path injection breaks jest-config's runner validator on Windows. The source-scan regression test `scripts/__tests__/run-managed-jest-no-injected-test-runner.test.js` enforces this and runs under the `script-parser-tests` pre-push hook. (2) Run `npm run validate:node-tooling`; if that passes but the hook still fails, run `npm ci` and re-run the validator before retrying.
 - For Prettier in npm scripts (`format:*`, `check:prettier:hooks`) and ad-hoc invocations, use `node scripts/run-managed-prettier.js` instead of hardcoded `prettier@X.Y.Z` commands. The managed runner resolves versions in this order: package-lock.json, package.json, then static fallback. Pre-commit hook entries themselves use the inline `bash -c '[ -f node_modules/prettier/bin/prettier.cjs ] && exec node ...; else exec npx --yes --package=prettier@<pinned> prettier ...; fi'` pattern (cspell/markdownlint shape) plus the parity test at `scripts/__tests__/prettier-version-parity.test.js`.
 - For `npm`/`npx` child-process calls in `scripts/*.js` (`spawnSync`, `execFileSync`, `execSync`), use `spawnPlatformCommandSync()` from `scripts/lib/shell-command.js`. Do not call `spawnSync(toShellCommand(...))` directly; the helper applies Windows shell-shim execution rules consistently.
 - For validators that depend on `git` metadata (for example ignore-policy checks), treat `ENOENT`/missing-git failures as hard errors; never silently default to permissive behavior.

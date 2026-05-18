@@ -241,13 +241,15 @@ jobs:
             exit 1
           fi
 
-          if ! grep -Fq "Injected isolated Jest test runner" "$output_file"; then
-            echo "::error::Expected isolated fallback test runner injection diagnostics."
-            exit 1
-          fi
+          # NOTE: scripts/run-managed-jest.js intentionally does NOT inject
+          # --testRunner (Jest 27+ resolves jest-circus by default; injecting
+          # absolute paths breaks jest-config's runner validator on Windows).
+          # The "Injected isolated Jest test runner" diagnostic is therefore
+          # absent by design. Re-introducing that injection is blocked by
+          # scripts/__tests__/run-managed-jest-no-injected-test-runner.test.js.
 
       - name: Verify managed Jest fallback test
         run: >-
           node scripts/run-managed-jest.js --runTestsByPath
           scripts/__tests__/run-managed-jest.test.js --testNamePattern
-          "runIsolatedFallbackJest injects isolated testRunner when caller did not provide one"
+          "runIsolatedFallbackJest does not inject --testRunner when caller did not provide one"

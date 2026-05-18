@@ -27,6 +27,7 @@ const REQUIRED_PRECHECK_PARSER_COMMAND =
   "pre-commit run --hook-stage pre-push script-parser-tests --all-files";
 const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
 const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
+const REQUIRED_LLM_MARKDOWN_COMMAND = "npm run validate:llm-markdown";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
 const REQUIRED_WORKFLOW_CSPELL_COMMAND = "npm run check:workflow-cspell";
@@ -167,6 +168,10 @@ function hasRequiredNodeToolingCommand(preflightScript) {
 
 function hasRequiredHookMarkdownCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_HOOK_MARKDOWN_COMMAND);
+}
+
+function hasRequiredLlmMarkdownCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_LLM_MARKDOWN_COMMAND);
 }
 
 function hasRequiredScriptsCspellCommand(preflightScript) {
@@ -504,6 +509,17 @@ function validatePreflightScriptPolicy(
     );
   }
 
+  if (!hasRequiredLlmMarkdownCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_LLM_MARKDOWN_COMMAND}' so .llm markdown policy violations are caught before hook-time.`,
+        preflightScript
+      )
+    );
+  }
+
   if (!hasRequiredScriptsCspellCommand(preflightScript)) {
     violations.push(
       new Violation(
@@ -720,6 +736,7 @@ module.exports = {
   hasRequiredPackageJsonFormatCommand,
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
+  hasRequiredLlmMarkdownCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
   hasRequiredWorkflowValidationCommand,
@@ -741,6 +758,7 @@ module.exports = {
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
+  REQUIRED_LLM_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,

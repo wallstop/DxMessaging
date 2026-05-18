@@ -104,6 +104,34 @@ describe("validate-node-tooling", () => {
     ]);
   });
 
+  test("reports load failure when resolve-based entry exists but cannot be required", async () => {
+    const resolvedRunnerPath = "/repo/node_modules/jest-circus/build/runner.js";
+    const violations = await validateTooling({
+      existsSyncFn: () => true,
+      resolveModuleFn: () => resolvedRunnerPath,
+      requireFn: (modulePath) => {
+        if (modulePath === resolvedRunnerPath) {
+          throw new Error("Unexpected end of file");
+        }
+        return {};
+      },
+      enforceManagedNpxCliAvailability: false,
+      scriptSources: [],
+      toolSpecs: [
+        {
+          name: "jest-circus",
+          requiredFiles: [],
+          load: "resolve",
+          entry: "jest-circus/runner"
+        }
+      ]
+    });
+
+    expect(violations).toEqual([
+      "jest-circus: resolved jest-circus/runner could not be loaded: Unexpected end of file"
+    ]);
+  });
+
   test("validateManagedNpxPolicy reports direct npx process spawns", () => {
     const violations = validateManagedNpxPolicy({
       scriptSources: [

@@ -15,6 +15,7 @@ const {
   hasRequiredPackageJsonFormatCommand,
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
+  hasRequiredLlmMarkdownCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
   hasRequiredWorkflowValidationCommand,
@@ -33,6 +34,7 @@ const {
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
+  REQUIRED_LLM_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
@@ -49,6 +51,7 @@ function requiredPreflightScript({ remove = [] } = {}) {
   const requiredCommands = [
     REQUIRED_NODE_TOOLING_COMMAND,
     REQUIRED_HOOK_MARKDOWN_COMMAND,
+    REQUIRED_LLM_MARKDOWN_COMMAND,
     REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
     "npm run validate:pre-commit-tooling",
     REQUIRED_SCRIPTS_CSPELL_COMMAND,
@@ -228,6 +231,24 @@ describe("validate-pre-commit-tooling", () => {
     const script = "npm run validate:pre-commit-tooling && echo npm run validate:hook-markdown";
 
     expect(hasRequiredHookMarkdownCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredLlmMarkdownCommand detects .llm markdown precheck step", () => {
+    const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
+      REQUIRED_LLM_MARKDOWN_COMMAND,
+      REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+      REQUIRED_PRECHECK_PARSER_COMMAND
+    ].join(" && ");
+
+    expect(hasRequiredLlmMarkdownCommand(script)).toBe(true);
+  });
+
+  test("hasRequiredLlmMarkdownCommand rejects substring-only matches", () => {
+    const script = "npm run validate:pre-commit-tooling && echo npm run validate:llm-markdown";
+
+    expect(hasRequiredLlmMarkdownCommand(script)).toBe(false);
   });
 
   test("hasRequiredScriptsCspellCommand detects script cspell command as chained step", () => {
@@ -727,6 +748,7 @@ describe("validate-pre-commit-tooling", () => {
     );
     expect(preflightScript).toContain(REQUIRED_NODE_TOOLING_COMMAND);
     expect(preflightScript).toContain("npm run validate:hook-markdown");
+    expect(preflightScript).toContain(REQUIRED_LLM_MARKDOWN_COMMAND);
     expect(preflightScript).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
     expect(preflightScript).toContain("npm run check:prettier:hooks");
     expect(preflightScript).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
@@ -886,6 +908,42 @@ describe("validate-pre-commit-tooling", () => {
     expect(violations).toHaveLength(1);
     expect(violations[0].hookId).toBe("preflight-script");
     expect(violations[0].message).toContain(REQUIRED_HOOK_MARKDOWN_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports missing .llm markdown precheck command", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": requiredPreflightScript({
+              remove: [REQUIRED_LLM_MARKDOWN_COMMAND]
+            })
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_LLM_MARKDOWN_COMMAND);
   });
 
   test("validatePreflightScriptPolicy reports missing scripts cspell precheck command", () => {
