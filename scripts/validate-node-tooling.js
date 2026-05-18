@@ -79,7 +79,10 @@ function formatInstallGuidance() {
     "Repair local Node tooling before running hooks:",
     "  npm install",
     "If package-lock.json is present and should be authoritative in this workspace, use:",
-    "  npm ci"
+    "  npm ci",
+    "Then re-validate the pre-push environment end-to-end:",
+    "  npm run preflight:pre-push",
+    "Skill reference: .llm/skills/scripting/jest-hook-robustness.md"
   ].join("\n");
 }
 

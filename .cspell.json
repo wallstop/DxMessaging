@@ -39,6 +39,7 @@
   "words": [
     "DxMessaging",
     "dxmessaging",
+    "jestrc",
     "metas",
     "mtimes",
     "nofilter",
@@ -249,6 +250,7 @@
     "Ldstr",
     "materialised",
     "misaligning",
+    "mojibake",
     "monomorphization",
     "normalise",
     "Normalise",

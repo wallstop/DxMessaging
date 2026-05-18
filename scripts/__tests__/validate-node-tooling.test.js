@@ -245,4 +245,10 @@ describe("validate-node-tooling", () => {
     expect(formatInstallGuidance()).toContain("npm install");
     expect(formatInstallGuidance()).toContain("npm ci");
   });
+
+  test("install guidance references preflight:pre-push and the jest-hook-robustness skill", () => {
+    const guidance = formatInstallGuidance();
+    expect(guidance).toContain("npm run preflight:pre-push");
+    expect(guidance).toContain(".llm/skills/scripting/jest-hook-robustness.md");
+  });
 });

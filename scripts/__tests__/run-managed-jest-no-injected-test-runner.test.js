@@ -31,20 +31,10 @@
 const fs = require("fs");
 const path = require("path");
 
+const { stripJsCommentsAndStrings } = require("../lib/source-stripping");
+
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const RUN_MANAGED_JEST_PATH = path.join(REPO_ROOT, "scripts", "run-managed-jest.js");
-
-function stripCommentsAndStrings(source) {
-    // Strip block comments first.
-    let result = source.replace(/\/\*[\s\S]*?\*\//g, "");
-    // Then line comments.
-    result = result.replace(/(^|[^:\\])\/\/[^\n]*/g, "$1");
-    // Then string literals (single, double, backtick — including escapes).
-    result = result.replace(/'(?:\\.|[^'\\])*'/g, "''");
-    result = result.replace(/"(?:\\.|[^"\\])*"/g, '""');
-    result = result.replace(/`(?:\\.|[^`\\])*`/g, "``");
-    return result;
-}
 
 describe("run-managed-jest source: forbidden --testRunner injection patterns", () => {
     let source;
@@ -52,7 +42,7 @@ describe("run-managed-jest source: forbidden --testRunner injection patterns", (
 
     beforeAll(() => {
         source = fs.readFileSync(RUN_MANAGED_JEST_PATH, "utf8");
-        strippedSource = stripCommentsAndStrings(source);
+        strippedSource = stripJsCommentsAndStrings(source);
     });
 
     test("source file is readable and non-trivial", () => {

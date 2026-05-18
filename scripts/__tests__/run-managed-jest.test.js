@@ -27,6 +27,10 @@ const {
     runIsolatedFallbackJest,
     runManagedJest,
     runLocalJest,
+    runCommandCapturingStderr,
+    attemptIsolatedCacheReset,
+    attemptNpmCiRecovery,
+    printActionableRepairBanner,
 } = require("../run-managed-jest.js");
 
 describe("run-managed-jest", () => {
@@ -554,17 +558,22 @@ describe("run-managed-jest", () => {
 
     test("runManagedJest uses local jest when installed", () => {
         existsSyncSpy.mockReturnValue(true);
-        spawnSyncSpy.mockReturnValue({ status: 0 });
+        spawnSyncSpy.mockReturnValue({ status: 0, stderr: Buffer.from("") });
         const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
         try {
             const result = runManagedJest(["--version"]);
 
-            expect(result).toEqual({ status: 0, error: null });
+            expect(result).toEqual(
+                expect.objectContaining({ status: 0, error: null, stderr: "" })
+            );
             expect(spawnSyncSpy).toHaveBeenCalledWith(
                 process.execPath,
                 [LOCAL_JEST_BIN, "--version"],
-                expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+                expect.objectContaining({
+                    cwd: REPO_ROOT,
+                    stdio: ["inherit", "inherit", "pipe"],
+                })
             );
             // Regression guard: never inject --testRunner with a hardcoded
             // jest-circus runner path. Jest 27+ resolves its bundled default
@@ -582,11 +591,13 @@ describe("run-managed-jest", () => {
         const pinnedFallbackJestSpec = getPinnedFallbackJestSpec();
         spawnSyncSpy
             .mockReturnValueOnce({ status: 0, stdout: "11.11.0\n", stderr: "" })
-            .mockReturnValueOnce({ status: 0 });
+            .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
 
         const result = runManagedJest(["--runTestsByPath", "scripts/__tests__/alpha.test.js"]);
 
-        expect(result).toEqual({ status: 0, error: null });
+        expect(result).toEqual(
+            expect.objectContaining({ status: 0, error: null, stderr: "" })
+        );
         expect(spawnSyncSpy).toHaveBeenNthCalledWith(
             1,
             toShellCommand("npm"),
@@ -605,7 +616,10 @@ describe("run-managed-jest", () => {
                 "--runTestsByPath",
                 "scripts/__tests__/alpha.test.js",
             ],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            expect.objectContaining({
+                cwd: REPO_ROOT,
+                stdio: ["inherit", "inherit", "pipe"],
+            })
         );
     });
 
@@ -614,7 +628,7 @@ describe("run-managed-jest", () => {
         const pinnedFallbackJestSpec = getPinnedFallbackJestSpec();
         spawnSyncSpy
             .mockReturnValueOnce({ status: 0, stdout: "11.11.0\n", stderr: "" })
-            .mockReturnValueOnce({ status: 0 });
+            .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
         const fallbackWarningSpy = jest.fn();
 
         const result = runManagedJest(["--version"], {
@@ -623,7 +637,9 @@ describe("run-managed-jest", () => {
             runIsolatedFallbackJestFn: () => null,
         });
 
-        expect(result).toEqual({ status: 0, error: null });
+        expect(result).toEqual(
+            expect.objectContaining({ status: 0, error: null, stderr: "" })
+        );
         expect(fallbackWarningSpy).toHaveBeenCalledTimes(1);
         expect(spawnSyncSpy).toHaveBeenNthCalledWith(
             1,
@@ -635,7 +651,10 @@ describe("run-managed-jest", () => {
             2,
             toShellCommand("npm"),
             ["exec", "--yes", `--package=${pinnedFallbackJestSpec}`, "--", "jest", "--version"],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            expect.objectContaining({
+                cwd: REPO_ROOT,
+                stdio: ["inherit", "inherit", "pipe"],
+            })
         );
     });
 
@@ -661,16 +680,21 @@ describe("run-managed-jest", () => {
         const pinnedFallbackJestSpec = getPinnedFallbackJestSpec();
         spawnSyncSpy
             .mockReturnValueOnce({ status: 0, stdout: "6.14.18\n", stderr: "" })
-            .mockReturnValueOnce({ status: 0 });
+            .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
 
         const result = runManagedJest(["--version"]);
 
-        expect(result).toEqual({ status: 0, error: null });
+        expect(result).toEqual(
+            expect.objectContaining({ status: 0, error: null, stderr: "" })
+        );
         expect(spawnSyncSpy).toHaveBeenNthCalledWith(
             2,
             toShellCommand("npx"),
             ["--yes", `--package=${pinnedFallbackJestSpec}`, "jest", "--version"],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            expect.objectContaining({
+                cwd: REPO_ROOT,
+                stdio: ["inherit", "inherit", "pipe"],
+            })
         );
     });
 
@@ -679,16 +703,21 @@ describe("run-managed-jest", () => {
         const pinnedFallbackJestSpec = getPinnedFallbackJestSpec();
         spawnSyncSpy
             .mockReturnValueOnce({ status: 1, stdout: "", stderr: "npm unavailable" })
-            .mockReturnValueOnce({ status: 0 });
+            .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
 
         const result = runManagedJest(["--version"]);
 
-        expect(result).toEqual({ status: 0, error: null });
+        expect(result).toEqual(
+            expect.objectContaining({ status: 0, error: null, stderr: "" })
+        );
         expect(spawnSyncSpy).toHaveBeenNthCalledWith(
             2,
             toShellCommand("npx"),
             ["--yes", `--package=${pinnedFallbackJestSpec}`, "jest", "--version"],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            expect.objectContaining({
+                cwd: REPO_ROOT,
+                stdio: ["inherit", "inherit", "pipe"],
+            })
         );
     });
 
@@ -698,22 +727,451 @@ describe("run-managed-jest", () => {
         spawnSyncSpy
             .mockReturnValueOnce({ status: 0, stdout: "11.11.0\n", stderr: "" })
             .mockReturnValueOnce({ status: null, error: { code: "EACCES", message: "npm denied" } })
-            .mockReturnValueOnce({ status: 0 });
+            .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
 
         const result = runManagedJest(["--version"]);
 
-        expect(result).toEqual({ status: 0, error: null });
+        expect(result).toEqual(
+            expect.objectContaining({ status: 0, error: null, stderr: "" })
+        );
         expect(spawnSyncSpy).toHaveBeenNthCalledWith(
             2,
             toShellCommand("npm"),
             ["exec", "--yes", `--package=${pinnedFallbackJestSpec}`, "--", "jest", "--version"],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            expect.objectContaining({
+                cwd: REPO_ROOT,
+                stdio: ["inherit", "inherit", "pipe"],
+            })
         );
         expect(spawnSyncSpy).toHaveBeenNthCalledWith(
             3,
             toShellCommand("npx"),
             ["--yes", `--package=${pinnedFallbackJestSpec}`, "jest", "--version"],
-            expect.objectContaining({ cwd: REPO_ROOT, stdio: "inherit" })
+            expect.objectContaining({
+                cwd: REPO_ROOT,
+                stdio: ["inherit", "inherit", "pipe"],
+            })
         );
+    });
+});
+
+describe("run-managed-jest self-heal and decoder integration", () => {
+    test("runCommandCapturingStderr returns { status, error, stderr } with stderr decoded", () => {
+        // Use a tiny node invocation to validate the wiring end-to-end. This
+        // is cross-platform because we invoke process.execPath directly (not
+        // npm/npx), so no shell shim is involved.
+        const writeStderrSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+        try {
+            const result = runCommandCapturingStderr(
+                process.execPath,
+                ["-e", "process.stderr.write('hello'); process.exit(7);"]
+            );
+
+            expect(typeof result.stderr).toBe("string");
+            expect(result.stderr).toContain("hello");
+            expect(result.status).toBe(7);
+            expect(result.error).toBeNull();
+        } finally {
+            writeStderrSpy.mockRestore();
+        }
+    });
+
+    test("isolated-path MISSING_TEST_RUNNER stderr triggers exactly one cache reset and one retry", () => {
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Module /tmp/foo/runner.js in the testRunner option was not found.",
+        };
+        const recoveredResult = {
+            status: 0,
+            error: null,
+            stderr: "",
+        };
+        const runIsolatedFallbackJestFn = jest
+            .fn()
+            .mockReturnValueOnce(failingResult)
+            .mockReturnValueOnce(recoveredResult);
+        const attemptIsolatedCacheResetFn = jest.fn(() => true);
+        const attemptNpmCiRecoveryFn = jest.fn();
+        const runLocalJestFn = jest.fn();
+        const printActionableRepairBannerFn = jest.fn();
+        const printLocalJestFallbackWarningFn = jest.fn();
+        const existsSyncSpy = jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
+        try {
+            const result = runManagedJest(["--version"], {
+                hasHealthyLocalJestInstallFn: () => false,
+                runLocalJestFn,
+                runIsolatedFallbackJestFn,
+                attemptIsolatedCacheResetFn,
+                attemptNpmCiRecoveryFn,
+                printActionableRepairBannerFn,
+                printLocalJestFallbackWarningFn,
+                getPinnedFallbackJestSpecFn: () => "jest@30.3.0",
+            });
+
+            expect(result).toBe(recoveredResult);
+            expect(runIsolatedFallbackJestFn).toHaveBeenCalledTimes(2);
+            expect(attemptIsolatedCacheResetFn).toHaveBeenCalledTimes(1);
+            expect(attemptIsolatedCacheResetFn).toHaveBeenCalledWith("jest@30.3.0");
+            // npm-ci recovery is scoped to the local tier; isolated reset
+            // never invokes it.
+            expect(attemptNpmCiRecoveryFn).not.toHaveBeenCalled();
+            // No banner on successful self-heal.
+            expect(printActionableRepairBannerFn).not.toHaveBeenCalled();
+        } finally {
+            existsSyncSpy.mockRestore();
+        }
+    });
+
+    test("local-path MISSING_LOCAL_JEST stderr triggers exactly one npm ci recovery", () => {
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Error: Cannot find module 'jest/bin/jest.js'",
+        };
+        const recoveredResult = {
+            status: 0,
+            error: null,
+            stderr: "",
+        };
+        const runLocalJestFn = jest
+            .fn()
+            .mockReturnValueOnce(failingResult)
+            .mockReturnValueOnce(recoveredResult);
+        const attemptNpmCiRecoveryFn = jest.fn(() => ({ status: 0, error: null }));
+        const attemptIsolatedCacheResetFn = jest.fn();
+        const printActionableRepairBannerFn = jest.fn();
+
+        const result = runManagedJest(["--version"], {
+            hasHealthyLocalJestInstallFn: () => true,
+            runLocalJestFn,
+            attemptNpmCiRecoveryFn,
+            attemptIsolatedCacheResetFn,
+            printActionableRepairBannerFn,
+        });
+
+        expect(result).toBe(recoveredResult);
+        expect(runLocalJestFn).toHaveBeenCalledTimes(2);
+        expect(attemptNpmCiRecoveryFn).toHaveBeenCalledTimes(1);
+        // Local-tier failures must never trigger isolated cache reset.
+        expect(attemptIsolatedCacheResetFn).not.toHaveBeenCalled();
+        expect(printActionableRepairBannerFn).not.toHaveBeenCalled();
+    });
+
+    test("no decoder match passes status through unchanged with no recovery", () => {
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Some other Jest assertion failure: expected true to be false",
+        };
+        const runLocalJestFn = jest.fn(() => failingResult);
+        const attemptNpmCiRecoveryFn = jest.fn();
+        const attemptIsolatedCacheResetFn = jest.fn();
+        const printActionableRepairBannerFn = jest.fn();
+
+        const result = runManagedJest(["--version"], {
+            hasHealthyLocalJestInstallFn: () => true,
+            runLocalJestFn,
+            attemptNpmCiRecoveryFn,
+            attemptIsolatedCacheResetFn,
+            printActionableRepairBannerFn,
+        });
+
+        expect(result).toBe(failingResult);
+        expect(runLocalJestFn).toHaveBeenCalledTimes(1);
+        expect(attemptNpmCiRecoveryFn).not.toHaveBeenCalled();
+        expect(attemptIsolatedCacheResetFn).not.toHaveBeenCalled();
+        expect(printActionableRepairBannerFn).not.toHaveBeenCalled();
+    });
+
+    test("local-tier MISSING_TEST_RUNNER stderr does NOT invoke attemptIsolatedCacheReset and falls through to isolated tier", () => {
+        // The LOCAL tier must scope cache reset to the isolated path only. It
+        // also has no in-place repair for a MISSING_TEST_RUNNER stderr (npm
+        // ci wouldn't fix a missing runner module), so the wrapper falls
+        // through to the isolated-fallback tier. No banner is printed at the
+        // local tier because a later tier may self-heal or surface its own
+        // diagnostic.
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Module /tmp/foo/runner.js in the testRunner option was not found.",
+        };
+        const isolatedResult = { status: 0, error: null };
+        const runLocalJestFn = jest.fn(() => failingResult);
+        const runIsolatedFallbackJestFn = jest.fn(() => isolatedResult);
+        const attemptIsolatedCacheResetFn = jest.fn();
+        const attemptNpmCiRecoveryFn = jest.fn();
+        const printActionableRepairBannerFn = jest.fn();
+        const printLocalJestFallbackWarningFn = jest.fn();
+        const existsSyncSpyLocal = jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
+        try {
+            const result = runManagedJest(["--version"], {
+                hasHealthyLocalJestInstallFn: () => true,
+                runLocalJestFn,
+                runIsolatedFallbackJestFn,
+                attemptIsolatedCacheResetFn,
+                attemptNpmCiRecoveryFn,
+                printActionableRepairBannerFn,
+                printLocalJestFallbackWarningFn,
+            });
+
+            expect(result).toBe(isolatedResult);
+            expect(runLocalJestFn).toHaveBeenCalledTimes(1);
+            expect(runIsolatedFallbackJestFn).toHaveBeenCalledTimes(1);
+            // Local tier must never invoke isolated cache reset.
+            expect(attemptIsolatedCacheResetFn).not.toHaveBeenCalled();
+            // npm ci is not appropriate for MISSING_TEST_RUNNER — selfHeal flag is isolatedCacheReset, not npmCi.
+            expect(attemptNpmCiRecoveryFn).not.toHaveBeenCalled();
+            // No banner at the local tier: fall-through defers to later tiers.
+            expect(printActionableRepairBannerFn).not.toHaveBeenCalled();
+        } finally {
+            existsSyncSpyLocal.mockRestore();
+        }
+    });
+
+    test("runLocalJest returns null when stderr matches MISSING_TEST_RUNNER so caller falls through to isolated tier", () => {
+        // Production behavior: when `runLocalJest` itself observes a
+        // MISSING_TEST_RUNNER stderr from the spawned Jest process, it treats
+        // the local install as unhealthy and returns null. This avoids
+        // forcing every caller to special-case the failure mode.
+        const resolvedPath = path.join(REPO_ROOT, "node_modules", "jest-circus", "build", "runner.js");
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Module /tmp/foo/runner.js in the testRunner option was not found.",
+        };
+        const runCommandFn = jest.fn(() => failingResult);
+        const warnFn = jest.fn();
+
+        const result = runLocalJest(["--version"], {
+            moduleResolver: () => resolvedPath,
+            tryLoadModuleFn: () => true,
+            existsSyncFn: () => true,
+            runCommandFn,
+            warnFn,
+        });
+
+        expect(result).toBeNull();
+        expect(runCommandFn).toHaveBeenCalledTimes(1);
+        expect(
+            warnFn.mock.calls.some((call) => String(call[0]).includes("MISSING_TEST_RUNNER"))
+        ).toBe(true);
+    });
+
+    test("runLocalJest passes MISSING_LOCAL_JEST stderr through to caller (handled by runManagedJest)", () => {
+        // Local-tier MISSING_LOCAL_JEST is recoverable in-place via `npm ci`,
+        // so `runLocalJest` does NOT collapse it to null. The caller decides
+        // whether to attempt recovery.
+        const resolvedPath = path.join(REPO_ROOT, "node_modules", "jest-circus", "build", "runner.js");
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Error: Cannot find module 'jest/bin/jest.js'",
+        };
+        const runCommandFn = jest.fn(() => failingResult);
+
+        const result = runLocalJest(["--version"], {
+            moduleResolver: () => resolvedPath,
+            tryLoadModuleFn: () => true,
+            existsSyncFn: () => true,
+            runCommandFn,
+            warnFn: () => {},
+        });
+
+        expect(result).toBe(failingResult);
+    });
+
+    test("banner is printed exactly once per final failure", () => {
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Error: Cannot find module 'jest-circus/runner'",
+        };
+        const runIsolatedFallbackJestFn = jest.fn(() => failingResult);
+        const attemptIsolatedCacheResetFn = jest.fn(() => true);
+        const printActionableRepairBannerFn = jest.fn();
+        const printLocalJestFallbackWarningFn = jest.fn();
+        const existsSyncSpy = jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
+        try {
+            // Both the initial isolated attempt and the retry fail with the
+            // same CORRUPT_ISOLATED_CACHE stderr.
+            const result = runManagedJest(["--version"], {
+                hasHealthyLocalJestInstallFn: () => false,
+                runIsolatedFallbackJestFn,
+                attemptIsolatedCacheResetFn,
+                printActionableRepairBannerFn,
+                printLocalJestFallbackWarningFn,
+                getPinnedFallbackJestSpecFn: () => "jest@30.3.0",
+            });
+
+            expect(result).toBe(failingResult);
+            // Initial call + retry = 2 isolated invocations.
+            expect(runIsolatedFallbackJestFn).toHaveBeenCalledTimes(2);
+            expect(attemptIsolatedCacheResetFn).toHaveBeenCalledTimes(1);
+            // Banner printed exactly once after the retry fails.
+            expect(printActionableRepairBannerFn).toHaveBeenCalledTimes(1);
+        } finally {
+            existsSyncSpy.mockRestore();
+        }
+    });
+
+    test("no banner is printed when self-heal retry succeeds", () => {
+        const failingResult = {
+            status: 1,
+            error: null,
+            stderr: "Module /tmp/foo/runner.js in the testRunner option was not found.",
+        };
+        const successResult = {
+            status: 0,
+            error: null,
+            stderr: "",
+        };
+        const runIsolatedFallbackJestFn = jest
+            .fn()
+            .mockReturnValueOnce(failingResult)
+            .mockReturnValueOnce(successResult);
+        const attemptIsolatedCacheResetFn = jest.fn(() => true);
+        const printActionableRepairBannerFn = jest.fn();
+        const printLocalJestFallbackWarningFn = jest.fn();
+        const existsSyncSpy = jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
+        try {
+            const result = runManagedJest(["--version"], {
+                hasHealthyLocalJestInstallFn: () => false,
+                runIsolatedFallbackJestFn,
+                attemptIsolatedCacheResetFn,
+                printActionableRepairBannerFn,
+                printLocalJestFallbackWarningFn,
+                getPinnedFallbackJestSpecFn: () => "jest@30.3.0",
+            });
+
+            expect(result).toBe(successResult);
+            expect(printActionableRepairBannerFn).not.toHaveBeenCalled();
+        } finally {
+            existsSyncSpy.mockRestore();
+        }
+    });
+
+    test("attemptIsolatedCacheReset deletes the isolated install directory", () => {
+        const rmSyncFn = jest.fn();
+        const warnFn = jest.fn();
+        const ok = attemptIsolatedCacheReset("jest@30.3.0", { rmSyncFn, warnFn });
+
+        expect(ok).toBe(true);
+        expect(rmSyncFn).toHaveBeenCalledTimes(1);
+        const [installDir, options] = rmSyncFn.mock.calls[0];
+        expect(installDir).toContain(path.join("dxmessaging-managed-jest", "jest_30.3.0"));
+        expect(options).toEqual({ recursive: true, force: true });
+        expect(warnFn).not.toHaveBeenCalled();
+    });
+
+    test("attemptIsolatedCacheReset refuses to delete when jestSpec resolves outside ISOLATED_JEST_CACHE_ROOT (parent traversal)", () => {
+        // sanitizeCacheKey("..") returns "..", which would naively resolve to
+        // the parent of ISOLATED_JEST_CACHE_ROOT. Defense-in-depth: refuse to
+        // rm anything that isn't a strict descendant of the cache root.
+        const rmSyncFn = jest.fn();
+        const warnFn = jest.fn();
+
+        const ok = attemptIsolatedCacheReset("..", { rmSyncFn, warnFn });
+
+        expect(ok).toBe(false);
+        expect(rmSyncFn).not.toHaveBeenCalled();
+        expect(
+            warnFn.mock.calls.some((call) => String(call[0]).includes("not a descendant"))
+        ).toBe(true);
+    });
+
+    test("attemptIsolatedCacheReset refuses to delete when jestSpec resolves to ISOLATED_JEST_CACHE_ROOT itself (empty key)", () => {
+        // Empty input sanitizes to "_" which IS a descendant, so use the
+        // current-directory traversal ".". sanitizeCacheKey(".") returns ".",
+        // which resolves back to the cache root itself — also forbidden.
+        const rmSyncFn = jest.fn();
+        const warnFn = jest.fn();
+
+        const ok = attemptIsolatedCacheReset(".", { rmSyncFn, warnFn });
+
+        expect(ok).toBe(false);
+        expect(rmSyncFn).not.toHaveBeenCalled();
+        expect(
+            warnFn.mock.calls.some((call) => String(call[0]).includes("not a descendant"))
+        ).toBe(true);
+    });
+
+    test("attemptIsolatedCacheReset deletes successfully when jestSpec resolves under ISOLATED_JEST_CACHE_ROOT", () => {
+        const rmSyncFn = jest.fn();
+        const warnFn = jest.fn();
+
+        const ok = attemptIsolatedCacheReset("jest@30.3.0", { rmSyncFn, warnFn });
+
+        expect(ok).toBe(true);
+        expect(rmSyncFn).toHaveBeenCalledTimes(1);
+        const [installDir] = rmSyncFn.mock.calls[0];
+        expect(installDir.startsWith(path.resolve(ISOLATED_JEST_CACHE_ROOT))).toBe(true);
+        expect(installDir).not.toBe(path.resolve(ISOLATED_JEST_CACHE_ROOT));
+    });
+
+    test("attemptIsolatedCacheReset returns false when rm fails", () => {
+        const rmSyncFn = jest.fn(() => {
+            throw new Error("EBUSY: resource busy");
+        });
+        const warnFn = jest.fn();
+        const ok = attemptIsolatedCacheReset("jest@30.3.0", { rmSyncFn, warnFn });
+
+        expect(ok).toBe(false);
+        expect(warnFn).toHaveBeenCalledTimes(1);
+        expect(warnFn.mock.calls[0][0]).toContain("EBUSY");
+    });
+
+    test("attemptNpmCiRecovery invokes npm ci and returns the runCommand result", () => {
+        const runCommandFn = jest.fn(() => ({ status: 0, error: null }));
+        const warnFn = jest.fn();
+        const result = attemptNpmCiRecovery({ runCommandFn, warnFn });
+
+        expect(result).toEqual({ status: 0, error: null });
+        expect(runCommandFn).toHaveBeenCalledTimes(1);
+        const [command, args, options] = runCommandFn.mock.calls[0];
+        expect(command).toBe("npm");
+        expect(args).toEqual(["ci", "--no-audit", "--no-fund"]);
+        expect(options).toEqual(expect.objectContaining({ cwd: REPO_ROOT }));
+    });
+
+    test("attemptNpmCiRecovery returns the failure result and warns when npm ci fails", () => {
+        const failureResult = { status: 1, error: null };
+        const runCommandFn = jest.fn(() => failureResult);
+        const warnFn = jest.fn();
+        const result = attemptNpmCiRecovery({ runCommandFn, warnFn });
+
+        expect(result).toBe(failureResult);
+        // Assert content, not call count: the wrapper announces the attempt
+        // and then the failure. Exact call count is brittle to future logging
+        // additions.
+        const warnMessages = warnFn.mock.calls.map((call) => String(call[0]));
+        expect(warnMessages.some((message) => message.includes("Attempting `npm ci` recovery"))).toBe(true);
+        expect(warnMessages.some((message) => message.includes("did not succeed"))).toBe(true);
+    });
+
+    test("printActionableRepairBanner writes the banner once, no-op on null decoded", () => {
+        const writeFn = jest.fn();
+
+        printActionableRepairBanner(null, { writeFn, envCi: "" });
+        expect(writeFn).not.toHaveBeenCalled();
+
+        const decoded = {
+            kind: "MISSING_TEST_RUNNER",
+            regex: /x/,
+            summary: "Test summary.",
+            rootCauses: ["cause one"],
+            repairCommands: ["do thing"],
+            skillRef: ".llm/skills/scripting/jest-hook-robustness.md",
+            selfHeal: { retryOnce: true },
+            capturedMatch: null,
+        };
+        printActionableRepairBanner(decoded, { writeFn, envCi: "1" });
+        expect(writeFn).toHaveBeenCalledTimes(1);
+        expect(writeFn.mock.calls[0][0]).toContain("jest-hook diagnostic: MISSING_TEST_RUNNER");
+        expect(writeFn.mock.calls[0][0]).toContain("do thing");
     });
 });

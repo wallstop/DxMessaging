@@ -6,6 +6,11 @@
  * 1) Prefer local devDependency (node_modules/jest/bin/jest.js).
  * 2) If local Jest is missing, provision a pinned fallback via npm exec.
  * 3) If npm is too old for npm exec (or unavailable), fall back to npx.
+ *
+ * Discovery note: stderr-based self-heal and the actionable repair banner are
+ * implemented in scripts/lib/jest-error-decoder.js. That module is pure (no
+ * I/O), so its `PATTERNS` table is the single source of truth for what
+ * failures we recognize and what repair we attempt.
  */
 
 "use strict";
@@ -20,6 +25,10 @@ const {
     isShellShimCommand,
     spawnPlatformCommandSync,
 } = require("./lib/shell-command");
+const {
+    decodeJestStderr,
+    formatRepairBanner,
+} = require("./lib/jest-error-decoder");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const REPO_NODE_MODULES = path.join(REPO_ROOT, "node_modules");
@@ -73,6 +82,219 @@ function runCommand(command, args, spawnOptions = {}) {
     };
 }
 
+/**
+ * Like runCommand() but captures stderr so the wrapper can decode the failure
+ * mode after the child exits. stderr is BATCH-FORWARDED: spawnSync (which we
+ * use to keep the rest of this module synchronous) buffers the entire stderr
+ * stream until the child exits, and only then writes it through to the
+ * parent's stderr. Output appears in one burst at the end rather than as it
+ * is produced.
+ *
+ * All Jest invocations that need stderr decoding (local + isolated) use this
+ * capturing wrapper. Batch-forwarding stderr is acceptable because:
+ *   (1) successful Jest runs produce minimal stderr,
+ *   (2) failed runs need the captured stderr for decoder-driven self-healing
+ *       (e.g. the local-tier MISSING_TEST_RUNNER fall-through into the
+ *       isolated fallback), and
+ *   (3) `spawnSync` cannot truly stream stderr in a synchronous API; the
+ *       alternative (async child_process.spawn with a `data` listener
+ *       mirroring chunks) would require either a busy-wait loop or a worker
+ *       thread to keep the call synchronous, both of which add complexity
+ *       for marginal benefit on these low-volume paths.
+ *
+ * IMPORTANT: `stdio` is intentionally NOT overridable via spawnOptions.
+ * Capture mode requires the stderr pipe; if a caller could pass
+ * `stdio: "inherit"` we would silently lose decode capability and report an
+ * empty `stderr` string, which is worse than the current behavior of "decode
+ * is sometimes useful".
+ *
+ * @param {string} command Executable name.
+ * @param {string[]} args Command arguments.
+ * @param {object} spawnOptions Additional spawnSync options. `stdio` keys are
+ *   ignored to protect capture-mode invariants.
+ * @returns {{status: number|null, error: Error|null, stderr: string}}
+ */
+function runCommandCapturingStderr(command, args, spawnOptions = {}) {
+    const spawnSyncImpl = isShellShimCommand(command)
+        ? spawnPlatformCommandSync
+        : childProcess.spawnSync;
+
+    // Note the order: spawnOptions spread FIRST, then our defaults override.
+    // This protects the stdio invariant against caller-supplied keys while
+    // still letting callers pass cwd, env, encoding, etc.
+    const merged = {
+        cwd: REPO_ROOT,
+        ...spawnOptions,
+        // stdio is NEVER overridable by callers: capture mode requires this
+        // exact pipe configuration for the stderr decoder to function.
+        stdio: ["inherit", "inherit", "pipe"],
+    };
+
+    const result = spawnSyncImpl(command, args, merged);
+
+    let stderrBuffer = result.stderr;
+    let stderrText = "";
+    if (stderrBuffer) {
+        if (Buffer.isBuffer(stderrBuffer)) {
+            // Forward captured bytes to the parent's stderr in a single batch.
+            // This happens AFTER the child has exited (see JSDoc above); stderr
+            // is not streamed as it is produced. Banner output (printed by
+            // callers) lands after this burst so ordering is preserved.
+            try {
+                process.stderr.write(stderrBuffer);
+            } catch {
+                // Swallow write errors (e.g. EPIPE when stderr was closed)
+                // so we always return the captured buffer to the caller.
+            }
+            stderrText = stderrBuffer.toString("utf8");
+        } else if (typeof stderrBuffer === "string") {
+            try {
+                process.stderr.write(stderrBuffer);
+            } catch {
+                // Swallow write errors (see above).
+            }
+            stderrText = stderrBuffer;
+        }
+    }
+
+    return {
+        status: result.status,
+        error: result.error || null,
+        stderr: stderrText,
+    };
+}
+
+/**
+ * Delete the isolated managed-Jest install directory for the given spec so
+ * the next invocation re-bootstraps from scratch. Returns true on success,
+ * false on error (errors are logged via warnFn).
+ *
+ * Scoped to the isolated fallback path only; never touches local node_modules.
+ *
+ * Safety: the resolved install directory is validated to be a STRICT
+ * descendant of ISOLATED_JEST_CACHE_ROOT before any deletion. This prevents
+ * `sanitizeCacheKey("..")` (which preserves "..", since `.` is in the
+ * allow-list) from being weaponized into deleting the cache root's parent
+ * (typically the OS temp dir).
+ *
+ * @param {string} jestSpec Pinned jest spec (e.g. "jest@30.3.0").
+ * @param {object} options Dependency injection options.
+ * @returns {boolean}
+ */
+function attemptIsolatedCacheReset(
+    jestSpec,
+    { rmSyncFn = fs.rmSync, warnFn = console.warn } = {}
+) {
+    const { installDir } = getIsolatedJestPaths(jestSpec);
+
+    // Defense-in-depth: refuse to delete anything that does not normalize to
+    // a strict descendant of the isolated cache root. This blocks
+    // path-traversal inputs like "..", ".", or absolute paths.
+    const cacheRoot = path.resolve(ISOLATED_JEST_CACHE_ROOT);
+    const resolvedInstallDir = path.resolve(installDir);
+    const relativePath = path.relative(cacheRoot, resolvedInstallDir);
+    if (
+        relativePath === "" ||
+        relativePath.startsWith("..") ||
+        path.isAbsolute(relativePath)
+    ) {
+        warnFn(
+            `WARNING: Refusing to reset isolated managed-Jest cache; resolved path is not a descendant of ${cacheRoot}: ${resolvedInstallDir}`
+        );
+        return false;
+    }
+
+    try {
+        rmSyncFn(resolvedInstallDir, { recursive: true, force: true });
+        return true;
+    } catch (error) {
+        const detail = error && error.message ? error.message : String(error);
+        warnFn(`WARNING: Failed to reset isolated managed-Jest cache at ${resolvedInstallDir}: ${detail}`);
+        return false;
+    }
+}
+
+/**
+ * Run `npm ci --no-audit --no-fund` against the repository root in an attempt
+ * to repair a partially-installed node_modules. Returns the raw runCommand
+ * result so the caller can decide whether to retry.
+ *
+ * @param {object} options Dependency injection options.
+ * @returns {{status: number|null, error: Error|null}}
+ */
+function attemptNpmCiRecovery({
+    runCommandFn = runCommand,
+    warnFn = console.warn,
+} = {}) {
+    warnFn("WARNING: Attempting `npm ci` recovery to repair local node_modules...");
+    const result = runCommandFn("npm", ["ci", "--no-audit", "--no-fund"], {
+        cwd: REPO_ROOT,
+    });
+
+    if (!result || result.status !== 0) {
+        const detail = result && result.error && result.error.message
+            ? result.error.message
+            : `status=${result ? result.status : "null"}`;
+        warnFn(`WARNING: \`npm ci\` recovery did not succeed (${detail}).`);
+    }
+
+    return result;
+}
+
+/**
+ * Print the actionable repair banner to stderr. No-op when decoded is null.
+ *
+ * The banner is preceded by a single blank line so it stands out from the
+ * batch-forwarded Jest stderr that `runCommandCapturingStderr` writes
+ * immediately before this function is called.
+ *
+ * @param {object|null} decoded Output of decodeJestStderr().
+ * @param {object} [options] Dependency injection options.
+ * @param {Function} [options.writeFn] Where to write the banner (defaults to
+ *   process.stderr.write bound to stderr).
+ * @param {string|null|undefined} [options.envCi] CI env value to pass through
+ *   to the formatter. Defaults to process.env.CI. Accepts any truthy/falsy
+ *   string per isTruthyEnv semantics.
+ * @param {object} [options.env] Full env object to pass to the formatter,
+ *   overriding envCi. Tests use this to inject deterministic env.
+ * @param {boolean} [options.isTTY] Whether the destination stream is a TTY.
+ *   Defaults to process.stderr.isTTY (banner is written to stderr).
+ */
+function printActionableRepairBanner(
+    decoded,
+    {
+        writeFn = process.stderr.write.bind(process.stderr),
+        envCi = process.env.CI,
+        env = null,
+        isTTY = undefined,
+    } = {}
+) {
+    if (!decoded) {
+        return;
+    }
+
+    const formatterEnv = env || { CI: envCi };
+    const formatterOptions = { color: true, env: formatterEnv };
+    if (typeof isTTY === "boolean") {
+        formatterOptions.isTTY = isTTY;
+    }
+
+    const banner = formatRepairBanner(decoded, formatterOptions);
+    if (!banner) {
+        return;
+    }
+
+    // Prefix with a blank line so the banner visually separates from the
+    // batch-forwarded Jest stderr that arrived just before.
+    const output = `\n${banner}`;
+    try {
+        writeFn(output);
+    } catch {
+        // Swallow write errors (e.g. EPIPE) so failure to print the banner
+        // never masks the underlying Jest exit code. This is intentional.
+    }
+}
+
 function tryLoadModule(
     moduleSpecifier,
     repoRequire = REPO_REQUIRE
@@ -90,8 +312,15 @@ function runLocalJest(args, options = {}) {
         moduleResolver = resolveLocalModule,
         tryLoadModuleFn = tryLoadModule,
         hasCliOptionFn = hasCliOption,
-        runCommandFn = runCommand,
+        // Deliberate tradeoff: local Jest uses the stderr-capturing wrapper
+        // (not a stdio:"inherit" passthrough) because the MISSING_TEST_RUNNER
+        // decode + fall-through into the isolated tier requires the decoder
+        // to see the child's stderr text. The cost is that stderr is
+        // batch-forwarded after the child exits rather than streamed; see
+        // the JSDoc on runCommandCapturingStderr for the full rationale.
+        runCommandFn = runCommandCapturingStderr,
         existsSyncFn = fs.existsSync,
+        decodeJestStderrFn = decodeJestStderr,
         warnFn = console.warn,
     } = options;
 
@@ -112,13 +341,32 @@ function runLocalJest(args, options = {}) {
             !isPathInsideDirectory(resolvedRunnerPath, REPO_NODE_MODULES) ||
             !tryLoadModuleFn("jest-circus/runner")
         ) {
-            warnFn("⚠️ Local jest-circus/runner failed load validation; falling back to managed Jest.");
+            warnFn("WARNING: Local jest-circus/runner failed load validation; falling back to managed Jest.");
             return null;
         }
     }
 
     const invocationArgs = [LOCAL_JEST_BIN, ...args];
-    return runCommandFn(process.execPath, invocationArgs);
+    const result = runCommandFn(process.execPath, invocationArgs);
+
+    // If local Jest emitted MISSING_TEST_RUNNER stderr, the local install is
+    // effectively unhealthy: the isolated-fallback tier (which CAN reset its
+    // cache) is the correct place to recover. Return null so `runManagedJest`
+    // falls through to the isolated tier rather than printing a banner and
+    // exiting. We intentionally only fall through for MISSING_TEST_RUNNER;
+    // MISSING_LOCAL_JEST is handled in `runManagedJest` because it can be
+    // self-healed in-place via `npm ci`.
+    if (result && result.status !== 0) {
+        const decoded = decodeJestStderrFn(result.stderr);
+        if (decoded && decoded.kind === "MISSING_TEST_RUNNER") {
+            warnFn(
+                "WARNING: Local Jest reported MISSING_TEST_RUNNER; treating local tier as unhealthy and falling through to isolated fallback."
+            );
+            return null;
+        }
+    }
+
+    return result;
 }
 
 function getPinnedFallbackJestSpec(
@@ -140,7 +388,7 @@ function getPinnedFallbackJestSpec(
 
 function runNpmExecJest(args) {
     const jestSpec = getPinnedFallbackJestSpec();
-    return runCommand("npm", [
+    return runCommandCapturingStderr("npm", [
         "exec",
         "--yes",
         `--package=${jestSpec}`,
@@ -152,7 +400,7 @@ function runNpmExecJest(args) {
 
 function runNpxJest(args) {
     const jestSpec = getPinnedFallbackJestSpec();
-    return runCommand("npx", [
+    return runCommandCapturingStderr("npx", [
         "--yes",
         `--package=${jestSpec}`,
         "jest",
@@ -365,7 +613,7 @@ function runIsolatedFallbackJest(
     {
         getPinnedFallbackJestSpecFn = getPinnedFallbackJestSpec,
         prepareIsolatedFallbackJestFn = prepareIsolatedFallbackJest,
-        runCommandFn = runCommand,
+        runCommandFn = runCommandCapturingStderr,
         printIsolatedFallbackSelectionFn = printIsolatedFallbackSelection,
         existsSyncFn = fs.existsSync,
         hasCliOptionFn = hasCliOption,
@@ -492,41 +740,155 @@ function runManagedJest(args, options = {}) {
         runIsolatedFallbackJestFn = runIsolatedFallbackJest,
         runNpmExecJestFn = runNpmExecJest,
         runNpxJestFn = runNpxJest,
+        decodeJestStderrFn = decodeJestStderr,
+        printActionableRepairBannerFn = printActionableRepairBanner,
+        attemptIsolatedCacheResetFn = attemptIsolatedCacheReset,
+        attemptNpmCiRecoveryFn = attemptNpmCiRecovery,
+        getPinnedFallbackJestSpecFn = getPinnedFallbackJestSpec,
     } = options;
 
+    // ---- Local Jest path ----
+    //
+    // Self-heal scope: this tier may invoke `npm ci` ONCE when stderr signals
+    // a missing local jest binary. We deliberately do NOT call
+    // attemptIsolatedCacheReset here; the isolated cache lives under
+    // os.tmpdir() and has no causal relationship to a corrupted local
+    // node_modules. Cache reset is scoped to the isolated-fallback tier only.
     if (hasHealthyLocalJestInstallFn()) {
         const localResult = runLocalJestFn(args);
+
         if (localResult !== null) {
-            return localResult;
+            if (localResult.status === 0) {
+                return localResult;
+            }
+
+            const decoded = decodeJestStderrFn(localResult.stderr);
+
+            if (
+                decoded &&
+                decoded.selfHeal &&
+                decoded.selfHeal.npmCi &&
+                decoded.selfHeal.retryOnce
+            ) {
+                const recovery = attemptNpmCiRecoveryFn();
+                if (recovery && recovery.status === 0) {
+                    const retryResult = runLocalJestFn(args);
+                    if (retryResult !== null) {
+                        if (retryResult.status !== 0) {
+                            const retryDecoded = decodeJestStderrFn(retryResult.stderr);
+                            printActionableRepairBannerFn(retryDecoded);
+                        }
+                        return retryResult;
+                    }
+                    // Retry path failed-through (returned null); fall through
+                    // to the managed fallback chain below. Banner is deferred
+                    // to whichever later tier produces the final error.
+                } else {
+                    printActionableRepairBannerFn(decoded);
+                    return localResult;
+                }
+            } else if (decoded && decoded.kind === "MISSING_TEST_RUNNER") {
+                // Local Jest reports its testRunner is invalid. The local tier
+                // has no in-place repair for this (cache reset is scoped to the
+                // isolated tier, by design). Fall through to the isolated
+                // fallback tier instead of giving up here so that path's
+                // self-heal can attempt a recovery.
+                //
+                // Banner is intentionally NOT printed here; whichever later
+                // tier produces the final error will surface it (or self-heal
+                // will succeed and there is nothing to surface).
+                //
+                // Mirrors the production `runLocalJest` behavior of returning
+                // null when its own runCommandCapturingStderr observes the
+                // same stderr signature — this branch covers the case where a
+                // caller-injected `runLocalJestFn` mock returns the failing
+                // result directly.
+            } else if (decoded) {
+                printActionableRepairBannerFn(decoded);
+                return localResult;
+            } else {
+                return localResult;
+            }
         }
-        // Local Jest could not be safely prepared; fall through to the managed fallback chain.
+        // Local Jest could not be safely prepared (or returned MISSING_TEST_RUNNER);
+        // fall through to the managed fallback chain.
     }
 
     const hasLocalJestBinary = fs.existsSync(LOCAL_JEST_BIN);
 
+    // ---- Isolated fallback path ----
+    //
+    // Self-heal scope: this tier may delete the isolated cache directory ONCE
+    // when stderr signals a corrupt cache or missing test runner. The reset
+    // never touches the repo's node_modules.
     if (hasLocalJestBinary) {
         printLocalJestFallbackWarningFn();
 
-        const isolatedFallbackResult = runIsolatedFallbackJestFn(args);
-        if (isolatedFallbackResult) {
-            return isolatedFallbackResult;
+        const isolatedResult = runIsolatedFallbackJestFn(args);
+        if (isolatedResult) {
+            if (isolatedResult.status === 0) {
+                return isolatedResult;
+            }
+
+            const decoded = decodeJestStderrFn(isolatedResult.stderr);
+            if (
+                decoded &&
+                decoded.selfHeal &&
+                decoded.selfHeal.isolatedCacheReset &&
+                decoded.selfHeal.retryOnce
+            ) {
+                const jestSpec = getPinnedFallbackJestSpecFn();
+                const resetOk = attemptIsolatedCacheResetFn(jestSpec);
+                if (resetOk) {
+                    const retryResult = runIsolatedFallbackJestFn(args);
+                    if (retryResult) {
+                        if (retryResult.status !== 0) {
+                            const retryDecoded = decodeJestStderrFn(retryResult.stderr);
+                            printActionableRepairBannerFn(retryDecoded);
+                        }
+                        return retryResult;
+                    }
+                    // Retry returned null; fall through to npm exec/npx.
+                } else {
+                    printActionableRepairBannerFn(decoded);
+                    return isolatedResult;
+                }
+            } else if (decoded) {
+                printActionableRepairBannerFn(decoded);
+                return isolatedResult;
+            } else {
+                return isolatedResult;
+            }
         }
 
         console.warn("⚠️ Isolated fallback Jest was unavailable; trying npm exec/npx fallback.");
     }
 
+    // ---- npm exec / npx fallback paths ----
+    //
+    // No self-healing here: these are last-resort, network-bound, and slow.
+    // We only decode stderr and print a banner on failure so the user knows
+    // what to repair manually.
     const npmMajor = getNpmMajorVersionFn();
 
+    let finalResult;
     if (npmMajor === null || npmMajor < 7) {
-        return runNpxJestFn(args);
+        finalResult = runNpxJestFn(args);
+    } else {
+        const npmExecResult = runNpmExecJestFn(args);
+        if (isCommandUnavailable(npmExecResult)) {
+            finalResult = runNpxJestFn(args);
+        } else {
+            finalResult = npmExecResult;
+        }
     }
 
-    const npmExecResult = runNpmExecJestFn(args);
-    if (isCommandUnavailable(npmExecResult)) {
-        return runNpxJestFn(args);
+    if (finalResult && finalResult.status !== 0) {
+        const decoded = decodeJestStderrFn(finalResult.stderr);
+        printActionableRepairBannerFn(decoded);
     }
 
-    return npmExecResult;
+    return finalResult;
 }
 
 function printManagedJestLaunchError(error) {
@@ -578,6 +940,7 @@ module.exports = {
     getNpmMajorVersion,
     getPinnedFallbackJestSpec,
     runCommand,
+    runCommandCapturingStderr,
     runLocalJest,
     runNpmExecJest,
     runNpxJest,
@@ -586,6 +949,11 @@ module.exports = {
     isCommandUnavailable,
     runManagedJest,
     printManagedJestLaunchError,
+    attemptIsolatedCacheReset,
+    attemptNpmCiRecovery,
+    printActionableRepairBanner,
+    decodeJestStderr,
+    formatRepairBanner,
 };
 
 if (require.main === module) {
