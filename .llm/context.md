@@ -32,6 +32,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
 - For dynamic `import()` in `scripts/*.js`, convert filesystem paths with `pathToFileURL(...).href` before importing (raw Windows drive-letter paths fail Node's ESM loader).
 - When editing `.pre-commit-config.yaml`, `scripts/*` hook tooling, `.github/workflows/*.yml`, or hook-related scripts in `package.json`, run `npm run preflight:pre-commit` before finishing.
+- When editing `.pre-commit-config.yaml`, `scripts/run-managed-jest.js`, `scripts/run-managed-prettier.js`, `scripts/validate-node-tooling.js`, `scripts/validate-pre-commit-tooling.js`, `.github/workflows/*.yml`, or any file gated by the `script-parser-tests`, `script-tests`, or `unity-contract-tests` pre-push hooks, run `npm run preflight:pre-push` before reporting the task complete. On a `testRunner option was not found` or any `jest-circus` resolution error, run `npm run doctor` and consult [Jest Hook Robustness](./skills/scripting/jest-hook-robustness.md).
 - When editing `.github/workflows/*.yml` or `.github/workflows/*.yaml`, run `npm run check:workflow-cspell`, `npm run validate:workflows`, and `npm run check:yaml` before finishing so spelling, policy, and line-length issues are surfaced before hook-time.
 - When editing repository tests (`Tests/**`, `SourceGenerators/**`, `scripts/**/*.test.js`, `scripts/**/*.spec.js`) or banner sync tooling, run `npm run check:banner-sync` before finishing so badge drift is caught before push-time.
 - `npm run check:banner-sync` validates banner freshness only. If it reports drift, run `npm run sync:banner` and re-run `npm run check:banner-sync`.
@@ -48,6 +49,8 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Script tests: `npm run test:scripts`
 - Validate pre-commit Node tooling policy: `npm run validate:pre-commit-tooling`
 - Pre-commit Node tooling preflight: `npm run preflight:pre-commit`
+- Pre-push hook parity preflight: `npm run preflight:pre-push`
+- Diagnose local Node/hook environment: `npm run doctor`
 - Validate local Node tool dependency health: `npm run validate:node-tooling`
 - Run Unity/devcontainer contract tests: `npm run test:unity-contracts`
 - Run markdown hook parity check: `npm run validate:hook-markdown`
@@ -131,7 +134,7 @@ The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outsid
 - For Jest in hooks or npm scripts, use `node scripts/run-managed-jest.js` instead of bare `jest` invocations.
 - When editing `scripts/run-managed-jest.js`, `scripts/verify-managed-jest-fallback.js`, or `scripts/validate-node-tooling.js`, run `npm run validate:node-tooling` first so missing Jest runner dependencies are caught before hook-time.
 - For managed Jest tooling edits, run `node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/run-managed-jest.test.js scripts/__tests__/verify-managed-jest-fallback.test.js scripts/__tests__/validate-node-tooling.test.js` and then `pre-commit run --hook-stage pre-push script-tests --all-files`.
-- If a Node-backed hook reports "testRunner option was not found" or any `jest-circus` resolution failure: (1) `scripts/run-managed-jest.js` must NOT inject `--testRunner <abs-path>` -- Jest 27+ resolves `jest-circus` natively, and absolute-path injection breaks jest-config's runner validator on Windows. The source-scan regression test `scripts/__tests__/run-managed-jest-no-injected-test-runner.test.js` enforces this and runs under the `script-parser-tests` pre-push hook. (2) Run `npm run validate:node-tooling`; if that passes but the hook still fails, run `npm ci` and re-run the validator before retrying.
+- For Jest-driven pre-push hooks (`script-parser-tests`, `script-tests`, `unity-contract-tests`), follow [Jest Hook Robustness](./skills/scripting/jest-hook-robustness.md). The wrapper at `scripts/run-managed-jest.js` MUST NOT inject `--testRunner <abs-path>`; the policy is enforced by `scripts/__tests__/run-managed-jest-no-injected-test-runner.test.js` (narrow source-scan) and `scripts/__tests__/no-testrunner-injection-policy.test.js` (repo-wide policy). Before pushing, run `npm run preflight:pre-push`.
 - For Prettier in npm scripts (`format:*`, `check:prettier:hooks`) and ad-hoc invocations, use `node scripts/run-managed-prettier.js` instead of hardcoded `prettier@X.Y.Z` commands. The managed runner resolves versions in this order: package-lock.json, package.json, then static fallback. Pre-commit hook entries themselves use the inline `bash -c '[ -f node_modules/prettier/bin/prettier.cjs ] && exec node ...; else exec npx --yes --package=prettier@<pinned> prettier ...; fi'` pattern (cspell/markdownlint shape) plus the parity test at `scripts/__tests__/prettier-version-parity.test.js`.
 - For `npm`/`npx` child-process calls in `scripts/*.js` (`spawnSync`, `execFileSync`, `execSync`), use `spawnPlatformCommandSync()` from `scripts/lib/shell-command.js`. Do not call `spawnSync(toShellCommand(...))` directly; the helper applies Windows shell-shim execution rules consistently.
 - For validators that depend on `git` metadata (for example ignore-policy checks), treat `ENOENT`/missing-git failures as hard errors; never silently default to permissive behavior.
@@ -212,6 +215,8 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [Code Samples Must Compile](./skills/documentation/code-samples-must-compile.md)
 - [Human-Prose Documentation Policy](./skills/documentation/human-prose-policy.md)
 - [Cross-Platform Script Compatibility](./skills/scripting/cross-platform-compatibility.md)
+- [Jest Hook Robustness](./skills/scripting/jest-hook-robustness.md)
+- [Let Tools Resolve Modules](./skills/scripting/let-tools-resolve-modules.md)
 - [Test Failure Investigation and Zero-Flaky Policy](./skills/testing/test-failure-investigation.md)
 - [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md)
 - [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md)

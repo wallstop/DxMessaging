@@ -282,6 +282,7 @@ budget directly.
 - [Git Hook Performance: Stages and Tooling](git-hook-performance-tooling.md)
 - [Cross-Platform Script Compatibility](../scripting/cross-platform-compatibility.md)
 - [JavaScript Code Quality](../scripting/javascript-code-quality.md)
+- [Jest Hook Robustness](../scripting/jest-hook-robustness.md)
 
 ## References
 

@@ -152,6 +152,23 @@ jobs:
       - name: Run parser script tests hook
         run: pre-commit run --hook-stage pre-push script-parser-tests --all-files
 
+      - name: Run script tests hook
+        run: pre-commit run --hook-stage pre-push script-tests --all-files
+
+      - name: Run Unity contract tests hook
+        run: pre-commit run --hook-stage pre-push unity-contract-tests --all-files
+
+      - name: Run pre-push preflight (parity check)
+        # Redundant by design: if `preflight:pre-push` diverges from the
+        # explicit pre-push hook invocations above (e.g., someone adds a
+        # new pre-push hook to .pre-commit-config.yaml but forgets to
+        # widen the npm script), this step fails fast and points the
+        # author at the discrepancy. The coverage Jest test catches the
+        # static case; this step catches drift the test cannot model
+        # (per-platform shell quirks, npm script chaining, env handling).
+        shell: bash
+        run: npm run preflight:pre-push
+
       - name: Diagnose managed Jest fallback environment
         shell: bash
         run: |

@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-08. Do not edit manually.
+> **Auto-generated** on 2026-05-18. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 158   |
+| Total Skills | 160   |
 | Categories   | 8     |
 
 ---
@@ -20,7 +20,7 @@
 - [GitHub Actions](#github-actions) (6)
 - [Packaging](#packaging) (2)
 - [Performance](#performance) (45)
-- [Scripting](#scripting) (15)
+- [Scripting](#scripting) (17)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
 - [Unity](#unity) (7)
@@ -103,7 +103,7 @@
 | [DxMessaging Dispatch Hot Path](./performance/dispatch-hot-path.md)                                                | [ok] 213    | [advanced]     | [stable] | [risk: critical] | dispatch, hot-path    |
 | [DxMessaging Memory Reclamation](./performance/memory-reclamation.md)                                              | [ok] 198    | [advanced]     | [stable] | [risk: critical] | memory, reclamation   |
 | [DxMessaging Sweep Gate Must Be Cheap](./performance/sweep-gate-must-be-cheap.md)                                  | [ok] 185    | [advanced]     | [stable] | [risk: critical] | sweep, eviction       |
-| [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 299  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
+| [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 300  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [Git Hook Performance: Stages and Tooling](./performance/git-hook-performance-tooling.md)                          | [ok] 240    | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [High-Performance Cache with Eviction Policies](./performance/cache-eviction-policies.md)                          | [ok] 177    | [advanced]     | [stable] | [risk: high]     | caching, memory       |
 | [Object Pooling Anti-Patterns](./performance/object-pooling-anti-patterns.md)                                      | [ok] 145    | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
@@ -134,10 +134,12 @@
 
 | Skill                                                                                                    | Lines       | Complexity     | Status   | Performance  | Tags                             |
 | -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ------------ | -------------------------------- |
-| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [ok] 225    | [intermediate] | [stable] | [risk: none] | cross-platform, case-sensitivity |
+| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [ok] 227    | [intermediate] | [stable] | [risk: none] | cross-platform, case-sensitivity |
 | [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                              | [ok] 159    | [intermediate] | [stable] | [risk: none] | javascript, code-quality         |
 | [JavaScript Code Quality Practices Part 1](./scripting/javascript-code-quality-part-1.md)                | [ok] 178    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
+| [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 207    | [intermediate] | [stable] | [risk: none] | jest, pre-commit                 |
+| [Let Tools Resolve Modules](./scripting/let-tools-resolve-modules.md)                                    | [ok] 152    | [basic]        | [stable] | [risk: none] | cross-platform, tooling          |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 105 | [intermediate] | [stable] | [risk: none] | powershell, scripting            |
 | [PowerShell Scripting Best Practices Part 1](./scripting/powershell-best-practices-part-1.md)            | [ok] 204    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [PowerShell Scripting Best Practices Part 2](./scripting/powershell-best-practices-part-2.md)            | [ok] 139    | [intermediate] | [stable] | [risk: low]  | migration, split                 |

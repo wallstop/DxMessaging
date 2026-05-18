@@ -216,6 +216,8 @@ Before merging scripts:
 - [Shell Best Practices](./shell-best-practices.md) - Shell-specific case sensitivity patterns
 - [PowerShell Best Practices](./powershell-best-practices.md) - PowerShell scripting patterns
 - [Test Coverage Requirements](../testing/comprehensive-test-coverage.md) - General test coverage requirements
+- [Jest Hook Robustness](./jest-hook-robustness.md)
+- [Let Tools Resolve Modules](./let-tools-resolve-modules.md)
 
 ## Changelog
 
