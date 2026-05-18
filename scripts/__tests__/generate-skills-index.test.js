@@ -10,8 +10,6 @@
 
 "use strict";
 
-const childProcess = require("child_process");
-
 const {
     applyBrandCapitalization,
     categoryToTitle,
@@ -20,7 +18,6 @@ const {
     BRAND_NAMES,
 } = require('../generate-skills-index.js');
 const { normalizeToLf } = require('../lib/quote-parser');
-const { toShellCommand, spawnPlatformCommandSync } = require('../lib/shell-command');
 
 describe("generate-skills-index", () => {
     describe("BRAND_NAMES mapping", () => {
@@ -379,136 +376,133 @@ describe("generate-skills-index", () => {
     });
 
     describe("formatWithPrettier", () => {
-        test("passes base command to provided spawn implementation", () => {
-            const spawnSyncMock = jest.fn(() => ({
-                status: 0,
-                stdout: "formatted output",
-                stderr: "",
-            }));
+        test("prefers local in-process Prettier when available", async () => {
+            const localPrettier = {
+                resolveConfig: jest.fn(async () => ({ tabWidth: 4 })),
+                getFileInfo: jest.fn(async () => ({ ignored: false })),
+                format: jest.fn(async () => "formatted in-process"),
+            };
+            const loadLocalPrettierFn = jest.fn(() => localPrettier);
+            const runBundledNpxCommandFn = jest.fn();
 
-            const result = formatWithPrettier("raw input", spawnSyncMock);
+            const result = await formatWithPrettier("raw input", {
+                loadLocalPrettierFn,
+                runBundledNpxCommandFn,
+                indexPath: "/repo/.llm/skills/index.md",
+            });
 
-            expect(result).toBe("formatted output");
-            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
-            const [command, args, options] = spawnSyncMock.mock.calls[0];
-            expect(command).toBe("npx");
-            expect(args[0]).toBe("--yes");
-            expect(args[1].startsWith("--package=prettier@")).toBe(true);
-            expect(args[2]).toBe("prettier");
-            expect(args).toContain("--stdin-filepath");
-            expect(options).toEqual(
+            expect(result).toBe("formatted in-process");
+            expect(loadLocalPrettierFn).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    input: "raw input",
-                    encoding: "utf8",
-                    cwd: expect.any(String),
+                    localPrettierModulePath: expect.stringContaining("node_modules/prettier/index.cjs"),
+                    localPrettierBinPath: expect.stringContaining("node_modules/prettier/bin/prettier.cjs"),
                 })
             );
-        });
-
-        test("delegates platform resolution to spawn helper when wrapper enforces win32", () => {
-            const spawnSyncMock = jest.fn(() => ({
-                status: 0,
-                stdout: "formatted output",
-                stderr: "",
-            }));
-
-            const win32Wrapper = (command, args, options) =>
-                spawnPlatformCommandSync(command, args, options, spawnSyncMock, "win32");
-
-            const result = formatWithPrettier("raw input", win32Wrapper);
-
-            expect(result).toBe("formatted output");
-            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
-            expect(spawnSyncMock).toHaveBeenCalledWith(
-                "npx.cmd",
-                expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]),
+            expect(localPrettier.resolveConfig).toHaveBeenCalledWith(
+                "/repo/.llm/skills/index.md",
+                { editorconfig: true }
+            );
+            expect(localPrettier.getFileInfo).toHaveBeenCalledWith(
+                "/repo/.llm/skills/index.md",
+                { resolveConfig: false }
+            );
+            expect(localPrettier.format).toHaveBeenCalledWith(
+                "raw input",
                 expect.objectContaining({
-                    input: "raw input",
-                    encoding: "utf8",
-                    cwd: expect.any(String),
-                    shell: true,
-                    windowsHide: true,
+                    tabWidth: 4,
+                    filepath: "/repo/.llm/skills/index.md",
                 })
             );
+            expect(runBundledNpxCommandFn).not.toHaveBeenCalled();
         });
 
-        test("delegates platform resolution to spawn helper when wrapper enforces non-win32", () => {
-            const spawnSyncMock = jest.fn(() => ({
-                status: 0,
-                stdout: "formatted output",
-                stderr: "",
-            }));
-
-            const linuxWrapper = (command, args, options) =>
-                spawnPlatformCommandSync(command, args, options, spawnSyncMock, "linux");
-
-            const result = formatWithPrettier("raw input", linuxWrapper);
-
-            expect(result).toBe("formatted output");
-            expect(spawnSyncMock).toHaveBeenCalledTimes(1);
-
-            const [command, args, options] = spawnSyncMock.mock.calls[0];
-            expect(command).toBe("npx");
-            expect(args).toEqual(expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]));
-            expect(options).toEqual(
-                expect.objectContaining({
-                    input: "raw input",
-                    encoding: "utf8",
-                    cwd: expect.any(String),
-                })
-            );
-            expect(options.shell).toBeUndefined();
-            expect(options.windowsHide).toBeUndefined();
-        });
-
-        test("throws when prettier execution fails", () => {
-            const spawnSyncMock = jest.fn(() => ({
-                status: 1,
-                stdout: "",
-                stderr: "boom",
-            }));
-
-            expect(() => formatWithPrettier("raw", spawnSyncMock)).toThrow("Prettier failed: boom");
-        });
-
-        test("rethrows child process launch errors", () => {
-            const launchError = new Error("spawn failed");
-            const spawnSyncMock = jest.fn(() => ({
-                error: launchError,
-                status: null,
-                stdout: "",
-                stderr: "",
-            }));
-
-            expect(() => formatWithPrettier("raw", spawnSyncMock)).toThrow("spawn failed");
-        });
-
-        test("default invocation resolves npx via platform-aware spawn helper", () => {
-            const spawnSyncSpy = jest
-                .spyOn(childProcess, "spawnSync")
-                .mockReturnValue({ status: 0, stdout: "formatted output", stderr: "" });
-
-            const result = formatWithPrettier("raw input");
-
-            const expectedOptions = {
-                input: "raw input",
-                encoding: "utf8",
-                cwd: expect.any(String),
+        test("returns original content when local Prettier marks index file ignored", async () => {
+            const localPrettier = {
+                resolveConfig: jest.fn(async () => ({})),
+                getFileInfo: jest.fn(async () => ({ ignored: true })),
+                format: jest.fn(async () => "should not run"),
             };
 
-            if (process.platform === "win32") {
-                expectedOptions.shell = true;
-                expectedOptions.windowsHide = true;
-            }
+            const result = await formatWithPrettier("raw input", {
+                loadLocalPrettierFn: () => localPrettier,
+                runBundledNpxCommandFn: jest.fn(),
+                indexPath: "/repo/.llm/skills/index.md",
+            });
 
-            expect(result).toBe("formatted output");
-            expect(spawnSyncSpy).toHaveBeenCalledWith(
-                toShellCommand("npx"),
-                expect.arrayContaining(["--yes", "prettier", "--stdin-filepath"]),
-                expect.objectContaining(expectedOptions)
+            expect(result).toBe("raw input");
+            expect(localPrettier.format).not.toHaveBeenCalled();
+        });
+
+        test("falls back to bundled npm npx-cli when local Prettier is unavailable", async () => {
+            const runBundledNpxCommandFn = jest.fn(() => ({
+                status: 0,
+                stdout: "formatted fallback",
+                stderr: "",
+            }));
+
+            const result = await formatWithPrettier("raw input", {
+                loadLocalPrettierFn: () => null,
+                runBundledNpxCommandFn,
+                getPinnedPrettierSpecFn: () => "prettier@3.8.3",
+                indexPath: "/repo/.llm/skills/index.md",
+                repoRoot: "/repo",
+            });
+
+            expect(result).toBe("formatted fallback");
+            expect(runBundledNpxCommandFn).toHaveBeenCalledWith(
+                [
+                    "--yes",
+                    "--package=prettier@3.8.3",
+                    "prettier",
+                    "--stdin-filepath",
+                    "/repo/.llm/skills/index.md",
+                ],
+                {
+                    cwd: "/repo",
+                    input: "raw input",
+                    encoding: "utf8",
+                }
             );
+        });
 
-            spawnSyncSpy.mockRestore();
+        test("throws clear fallback error when bundled npx prettier exits non-zero", async () => {
+            await expect(
+                formatWithPrettier("raw", {
+                    loadLocalPrettierFn: () => null,
+                    runBundledNpxCommandFn: () => ({
+                        status: 1,
+                        stdout: "",
+                        stderr: "boom",
+                    }),
+                })
+            ).rejects.toThrow("Prettier fallback via bundled npm npx-cli.js failed: boom");
+        });
+
+        test("surfaces actionable error when bundled npm npx-cli is missing", async () => {
+            await expect(
+                formatWithPrettier("raw", {
+                    loadLocalPrettierFn: () => null,
+                    runBundledNpxCommandFn: () => {
+                        throw new Error("Unable to locate npm's npx-cli.js next to the active Node executable.");
+                    },
+                })
+            ).rejects.toThrow("Unable to locate npm's npx-cli.js");
+        });
+
+        test("rethrows child process launch errors from bundled npx fallback", async () => {
+            const launchError = new Error("spawn failed");
+
+            await expect(
+                formatWithPrettier("raw", {
+                    loadLocalPrettierFn: () => null,
+                    runBundledNpxCommandFn: () => ({
+                        error: launchError,
+                        status: null,
+                        stdout: "",
+                        stderr: "",
+                    }),
+                })
+            ).rejects.toThrow("spawn failed");
         });
     });
 

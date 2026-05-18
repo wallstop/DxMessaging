@@ -120,6 +120,10 @@ function sanitizeCacheKey(value) {
     return String(value).replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
+function getDefaultIsolatedJestRunnerPath(installDir) {
+    return path.join(installDir, "node_modules", "jest-circus", "build", "runner.js");
+}
+
 function getIsolatedJestPaths(jestSpec) {
     const cacheKey = sanitizeCacheKey(jestSpec);
     const installDir = path.join(ISOLATED_JEST_CACHE_ROOT, cacheKey);
@@ -127,8 +131,37 @@ function getIsolatedJestPaths(jestSpec) {
         installDir,
         packageJsonPath: path.join(installDir, "package.json"),
         jestBinPath: path.join(installDir, "node_modules", "jest", "bin", "jest.js"),
-        jestRunnerPath: path.join(installDir, "node_modules", "jest-circus", "build", "runner.js"),
+        jestRunnerPath: getDefaultIsolatedJestRunnerPath(installDir),
     };
+}
+
+function resolveIsolatedJestRunnerPath(
+    installDir,
+    {
+        existsSyncFn = fs.existsSync,
+        createRequireFn = createRequire,
+    } = {}
+) {
+    const packageJsonPath = path.join(installDir, "package.json");
+    const defaultRunnerPath = getDefaultIsolatedJestRunnerPath(installDir);
+
+    try {
+        if (existsSyncFn(packageJsonPath)) {
+            const isolatedRequire = createRequireFn(packageJsonPath);
+            const resolvedRunnerPath = isolatedRequire.resolve("jest-circus/runner");
+            if (existsSyncFn(resolvedRunnerPath)) {
+                return resolvedRunnerPath;
+            }
+        }
+    } catch {
+        // Fall back to the legacy internal path for compatibility with older layouts.
+    }
+
+    if (existsSyncFn(defaultRunnerPath)) {
+        return defaultRunnerPath;
+    }
+
+    return null;
 }
 
 function hasCliOption(args, optionName) {
@@ -171,24 +204,33 @@ function prepareIsolatedFallbackJest(
         mkdirSyncFn = fs.mkdirSync,
         writeFileSyncFn = fs.writeFileSync,
         runCommandFn = runCommand,
+        resolveIsolatedJestRunnerPathFn = resolveIsolatedJestRunnerPath,
         warnFn = console.warn,
     } = {}
 ) {
-    const { installDir, packageJsonPath, jestBinPath, jestRunnerPath } = getIsolatedJestPaths(jestSpec);
+    const {
+        installDir,
+        packageJsonPath,
+        jestBinPath,
+        jestRunnerPath: defaultJestRunnerPath,
+    } = getIsolatedJestPaths(jestSpec);
 
     const hasCachedJestBin = existsSyncFn(jestBinPath);
-    const hasCachedJestRunner = existsSyncFn(jestRunnerPath);
+    const cachedJestRunnerPath = resolveIsolatedJestRunnerPathFn(installDir, {
+        existsSyncFn,
+    });
+    const hasCachedJestRunner = typeof cachedJestRunnerPath === "string";
 
     if (hasCachedJestBin && hasCachedJestRunner) {
         return {
             jestBinPath,
-            jestRunnerPath,
+            jestRunnerPath: cachedJestRunnerPath,
             cacheHit: true,
         };
     }
 
     if (hasCachedJestBin && !hasCachedJestRunner) {
-        warnFn(`⚠️ Isolated fallback cache is missing Jest runner; reinstalling fallback: ${jestRunnerPath}`);
+        warnFn(`⚠️ Isolated fallback cache is missing Jest runner; reinstalling fallback: ${defaultJestRunnerPath}`);
     }
 
     mkdirSyncFn(installDir, { recursive: true });
@@ -234,8 +276,12 @@ function prepareIsolatedFallbackJest(
         };
     }
 
-    if (!existsSyncFn(jestRunnerPath)) {
-        warnFn(`⚠️ Isolated fallback Jest runner missing after install: ${jestRunnerPath}`);
+    const installedJestRunnerPath = resolveIsolatedJestRunnerPathFn(installDir, {
+        existsSyncFn,
+    });
+
+    if (!installedJestRunnerPath) {
+        warnFn(`⚠️ Isolated fallback Jest runner missing after install (legacy fallback path: ${defaultJestRunnerPath}).`);
         return {
             jestBinPath: null,
             jestRunnerPath: null,
@@ -245,7 +291,7 @@ function prepareIsolatedFallbackJest(
 
     return {
         jestBinPath,
-        jestRunnerPath,
+        jestRunnerPath: installedJestRunnerPath,
         cacheHit: false,
     };
 }
@@ -469,7 +515,9 @@ module.exports = {
     hasHealthyLocalJestInstall,
     printLocalJestFallbackWarning,
     sanitizeCacheKey,
+    getDefaultIsolatedJestRunnerPath,
     getIsolatedJestPaths,
+    resolveIsolatedJestRunnerPath,
     hasCliOption,
     buildNodePathEnv,
     writeIsolatedJestCacheManifest,

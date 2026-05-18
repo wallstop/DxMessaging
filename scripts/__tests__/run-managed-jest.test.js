@@ -13,7 +13,9 @@ const {
     FALLBACK_JEST_SPEC,
     ISOLATED_JEST_CACHE_ROOT,
     getPinnedFallbackJestSpec,
+    getDefaultIsolatedJestRunnerPath,
     getIsolatedJestPaths,
+    resolveIsolatedJestRunnerPath,
     hasCliOption,
     buildNodePathEnv,
     prepareIsolatedFallbackJest,
@@ -115,6 +117,50 @@ describe("run-managed-jest", () => {
         { value: { status: 1, error: null }, expected: false },
     ])("isCommandUnavailable(%j) -> $expected", ({ value, expected }) => {
         expect(isCommandUnavailable(value)).toBe(expected);
+    });
+
+    test("resolveIsolatedJestRunnerPath prefers module-resolution output", () => {
+        const installDir = path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0");
+        const packageJsonPath = path.join(installDir, "package.json");
+        const resolvedRunnerPath = path.join(
+            installDir,
+            "node_modules",
+            "jest-circus",
+            "build",
+            "runner.mjs"
+        );
+        const existsSyncFn = jest.fn(
+            (targetPath) => targetPath === packageJsonPath || targetPath === resolvedRunnerPath
+        );
+        const resolveFn = jest.fn(() => resolvedRunnerPath);
+        const createRequireFn = jest.fn(() => ({ resolve: resolveFn }));
+
+        const runnerPath = resolveIsolatedJestRunnerPath(installDir, {
+            existsSyncFn,
+            createRequireFn,
+        });
+
+        expect(runnerPath).toBe(resolvedRunnerPath);
+        expect(createRequireFn).toHaveBeenCalledWith(packageJsonPath);
+        expect(resolveFn).toHaveBeenCalledWith("jest-circus/runner");
+    });
+
+    test("resolveIsolatedJestRunnerPath falls back to legacy path when resolution fails", () => {
+        const installDir = path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0");
+        const packageJsonPath = path.join(installDir, "package.json");
+        const legacyRunnerPath = getDefaultIsolatedJestRunnerPath(installDir);
+        const existsSyncFn = jest.fn(
+            (targetPath) => targetPath === packageJsonPath || targetPath === legacyRunnerPath
+        );
+
+        const runnerPath = resolveIsolatedJestRunnerPath(installDir, {
+            existsSyncFn,
+            createRequireFn: () => {
+                throw new Error("resolution unavailable");
+            },
+        });
+
+        expect(runnerPath).toBe(legacyRunnerPath);
     });
 
     test("prepareIsolatedFallbackJest reuses cached isolated binary when available", () => {

@@ -250,6 +250,20 @@ describe("run-staged-md-pipeline", () => {
       expect(toImportFileUrl(windowsPath)).toBe("file:///D:/repo/markdownlint-cli2.mjs");
     });
 
+    test("toImportFileUrl normalizes Windows UNC absolute paths to file URLs", () => {
+      const uncPath = String.raw`\\fileserver\engineering\markdownlint-cli2.mjs`;
+      expect(toImportFileUrl(uncPath)).toBe(
+        "file://fileserver/engineering/markdownlint-cli2.mjs"
+      );
+    });
+
+    test("toImportFileUrl preserves forward-slash UNC absolute paths", () => {
+      const uncPath = "//fileserver/engineering/markdownlint-cli2.mjs";
+      expect(toImportFileUrl(uncPath)).toBe(
+        "file://fileserver/engineering/markdownlint-cli2.mjs"
+      );
+    });
+
     test("markdownlint argv uses POSIX repo-relative paths", () => {
       const repoRoot = path.resolve(__dirname, "../..");
       const absPaths = [

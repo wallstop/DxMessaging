@@ -28,14 +28,16 @@ const {
     stripMatchingBoundaryQuotes,
     normalizeToLf,
 } = require("./lib/quote-parser");
-const { spawnPlatformCommandSync } = require("./lib/shell-command");
 const { getPinnedPrettierSpec } = require("./lib/prettier-version");
+const { loadLocalPrettier, runBundledNpxCommand } = require("./lib/managed-prettier");
 
 const SKILLS_DIR = path.join(__dirname, "..", ".llm", "skills");
 const INDEX_PATH = path.join(SKILLS_DIR, "index.md");
 const EXCLUDED_FILES = ["index.md", "specification.md"];
 const EXCLUDED_DIRS = ["templates"];
 const REPO_ROOT = path.join(__dirname, "..");
+const PRETTIER_LOCAL_BIN = path.join(REPO_ROOT, "node_modules", "prettier", "bin", "prettier.cjs");
+const PRETTIER_LOCAL_MODULE = path.join(REPO_ROOT, "node_modules", "prettier", "index.cjs");
 
 /**
  * Brand name capitalization mapping.
@@ -123,33 +125,68 @@ function getLatestSkillDate(skills) {
     return new Date().toISOString().split("T")[0];
 }
 
-function formatWithPrettier(content, spawnSyncImpl = spawnPlatformCommandSync) {
-    const prettierSpec = getPinnedPrettierSpec();
-    const prettierArgs = [
-        "--yes",
-        `--package=${prettierSpec}`,
-        "prettier",
-        "--stdin-filepath",
-        INDEX_PATH,
-    ];
+async function formatWithPrettier(content, options = {}) {
+    const {
+        loadLocalPrettierFn = loadLocalPrettier,
+        runBundledNpxCommandFn = runBundledNpxCommand,
+        getPinnedPrettierSpecFn = getPinnedPrettierSpec,
+        prettierModulePath = PRETTIER_LOCAL_MODULE,
+        prettierBinPath = PRETTIER_LOCAL_BIN,
+        indexPath = INDEX_PATH,
+        repoRoot = REPO_ROOT,
+    } = options;
 
-    // Keep the base command token here; platform-specific shim resolution belongs in spawnPlatformCommandSync.
-    const result = spawnSyncImpl("npx", prettierArgs, {
-        cwd: REPO_ROOT,
-        input: content,
-        encoding: "utf8",
+    const prettier = loadLocalPrettierFn({
+        localPrettierModulePath: prettierModulePath,
+        localPrettierBinPath: prettierBinPath,
     });
+
+    if (prettier) {
+        const optionsFromConfig = await prettier.resolveConfig(indexPath, { editorconfig: true });
+        const fileInfo = await prettier.getFileInfo(indexPath, {
+            resolveConfig: false,
+        });
+
+        if (fileInfo.ignored) {
+            return content;
+        }
+
+        return prettier.format(content, {
+            ...(optionsFromConfig || {}),
+            filepath: indexPath,
+        });
+    }
+
+    const prettierSpec = getPinnedPrettierSpecFn();
+    const result = runBundledNpxCommandFn(
+        [
+            "--yes",
+            `--package=${prettierSpec}`,
+            "prettier",
+            "--stdin-filepath",
+            indexPath,
+        ],
+        {
+            cwd: repoRoot,
+            input: content,
+            encoding: "utf8",
+        }
+    );
 
     if (result.error) {
         throw result.error;
     }
 
     if (result.status !== 0) {
-        const details = result.stderr ? result.stderr.trim() : "Unknown error";
-        throw new Error(`Prettier failed: ${details}`);
+        const details = result.stderr
+            ? result.stderr.trim()
+            : result.stdout
+              ? result.stdout.trim()
+              : "Unknown error";
+        throw new Error(`Prettier fallback via bundled npm npx-cli.js failed: ${details}`);
     }
 
-    return result.stdout;
+    return typeof result.stdout === "string" ? result.stdout : content;
 }
 
 /**
@@ -478,7 +515,7 @@ function generateIndex(skills) {
 /**
  * Main entry point.
  */
-function main() {
+async function main() {
     const args = process.argv.slice(2);
     const checkOnly = args.includes("--check");
 
@@ -494,7 +531,7 @@ function main() {
     let formattedContent;
 
     try {
-        formattedContent = formatWithPrettier(indexContent);
+        formattedContent = await formatWithPrettier(indexContent);
     } catch (error) {
         console.error(`Failed to format index with Prettier: ${error.message}`);
         return 1;
@@ -539,5 +576,11 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // Only run main when executed directly (not when required as a module)
 if (require.main === module) {
-    process.exit(main());
+    main().then(
+        (code) => process.exit(code),
+        (error) => {
+            console.error(`generate-skills-index: fatal error: ${error.stack || error.message}`);
+            process.exit(1);
+        }
+    );
 }

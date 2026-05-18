@@ -39,6 +39,13 @@ const path = require("path");
 const childProcess = require("child_process");
 const { pathToFileURL } = require("url");
 const { spawnPlatformCommandSync } = require("./lib/shell-command");
+const {
+  TOOL_LOAD_ERROR_PATTERNS,
+  isRecoverableToolLoadError,
+  resolveBundledNpxCliPath,
+  runBundledNpxCommand,
+  loadLocalPrettier
+} = require("./lib/managed-prettier");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 
@@ -67,13 +74,8 @@ const MARKDOWNLINT_CLI2_MODULE = path.join(
   "markdownlint-cli2",
   "markdownlint-cli2.mjs"
 );
-const TOOL_LOAD_ERROR_PATTERNS = [
-  /Cannot find package/i,
-  /Cannot find module/i,
-  /ERR_MODULE_NOT_FOUND/i,
-  /MODULE_NOT_FOUND/i
-];
 const WINDOWS_ABSOLUTE_PATH_RE = /^[A-Za-z]:[\\/]/;
+const WINDOWS_UNC_ABSOLUTE_PATH_RE = /^(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+/;
 
 function readPackageJson() {
   return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
@@ -89,11 +91,6 @@ function getPackageSpec(packageName) {
   return `${packageName}@${version.replace(/^[~^]/, "")}`;
 }
 
-function isRecoverableToolLoadError(error) {
-  const message = `${error?.code || ""}\n${error?.message || ""}\n${error?.stack || ""}`;
-  return TOOL_LOAD_ERROR_PATTERNS.some((pattern) => pattern.test(message));
-}
-
 function runToolCommand(command, args, options = {}) {
   const runner =
     command === "npm" || command === "npx" ? spawnPlatformCommandSync : childProcess.spawnSync;
@@ -104,28 +101,17 @@ function runToolCommand(command, args, options = {}) {
   });
 }
 
-function resolveBundledNpxCliPath({
-  execPath = process.execPath,
-  existsSyncFn = fs.existsSync
-} = {}) {
-  const candidate = path.join(path.dirname(execPath), "node_modules", "npm", "bin", "npx-cli.js");
-  return existsSyncFn(candidate) ? candidate : null;
-}
-
 function runNpxCommand(args, options = {}) {
   const {
     execPath = process.execPath,
     resolveBundledNpxCliPathFn = resolveBundledNpxCliPath,
     runToolCommandFn = runToolCommand
   } = options;
-  const npxCliPath = resolveBundledNpxCliPathFn({ execPath });
-  if (npxCliPath) {
-    return runToolCommandFn(execPath, [npxCliPath, ...args]);
-  }
-
-  throw new Error(
-    "Unable to locate npm's npx-cli.js next to the active Node executable. Run `npm install` in a shell with a complete Node/npm installation, or ensure npm is installed with this Node runtime."
-  );
+  return runBundledNpxCommand(args, {
+    execPath,
+    resolveBundledNpxCliPathFn,
+    runCommandFn: runToolCommandFn
+  });
 }
 
 function toImportFileUrl(modulePath) {
@@ -138,6 +124,16 @@ function toImportFileUrl(modulePath) {
     // Fallback for runtimes that ignore the `windows` option.
     const normalized = modulePath.replace(/\\/g, "/");
     return pathToFileURL(`/${normalized}`).href;
+  }
+
+  if (WINDOWS_UNC_ABSOLUTE_PATH_RE.test(modulePath)) {
+    const windowsUrl = pathToFileURL(modulePath, { windows: true }).href;
+    if (/^file:\/\/[^/]/.test(windowsUrl)) {
+      return windowsUrl;
+    }
+
+    const normalized = modulePath.replace(/\\/g, "/").replace(/^\/+/, "//");
+    return new URL(`file:${normalized}`).href;
   }
 
   return pathToFileURL(modulePath).href;
@@ -200,28 +196,11 @@ function applyInProcessFixers(absPath, content, modifiedSet) {
 }
 
 async function loadPrettier() {
-  // Prefer the local devDependency (matches the inlined hook entry's fast
-  // path). The CJS entry point exposes the same async surface used by
-  // `prettier --write` internally.
-  if (fs.existsSync(PRETTIER_LOCAL_MODULE)) {
-    try {
-      // eslint-disable-next-line global-require
-      return require(PRETTIER_LOCAL_MODULE);
-    } catch (error) {
-      if (isRecoverableToolLoadError(error)) {
-        return null;
-      }
-      throw error;
-    }
-  }
-  if (fs.existsSync(PRETTIER_LOCAL_BIN)) {
-    // The bin file is not directly require()-able; if the entry module
-    // is missing but the bin is present, the install is corrupt.
-    throw new Error(
-      "Prettier devDependency layout is unexpected: bin present but index.cjs missing. Run `npm install` to repair."
-    );
-  }
-  return null;
+  return loadLocalPrettier({
+    localPrettierModulePath: PRETTIER_LOCAL_MODULE,
+    localPrettierBinPath: PRETTIER_LOCAL_BIN,
+    isRecoverableToolLoadErrorFn: isRecoverableToolLoadError
+  });
 }
 
 function runNpxPrettier(absPath, modifiedSet) {
@@ -582,6 +561,8 @@ module.exports = {
   PRETTIER_LOCAL_BIN,
   PRETTIER_LOCAL_MODULE,
   MARKDOWNLINT_CLI2_MODULE,
+  WINDOWS_ABSOLUTE_PATH_RE,
+  WINDOWS_UNC_ABSOLUTE_PATH_RE,
   TOOL_LOAD_ERROR_PATTERNS,
   readPackageJson,
   getPackageSpec,

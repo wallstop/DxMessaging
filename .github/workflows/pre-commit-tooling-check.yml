@@ -137,6 +137,9 @@ jobs:
             npm i --no-audit --no-fund
           fi
 
+      - name: Validate local Node tooling health
+        run: npm run validate:node-tooling
+
       - name: Validate pre-commit Node tooling policy
         run: pre-commit run validate-pre-commit-tooling --all-files
 
@@ -157,12 +160,12 @@ jobs:
           echo "npm: $(npm --version)"
           node <<'NODE'
           const fs = require("fs");
-          const runnerPath = "node_modules/jest-circus/build/runner.js";
-          console.log("runner exists before deletion:", fs.existsSync(runnerPath));
           try {
-            console.log("resolved runner path:", require.resolve("jest-circus/runner"));
+            const runnerPath = require.resolve("jest-circus/runner");
+            console.log("resolved runner path before deletion:", runnerPath);
+            console.log("runner exists before deletion:", fs.existsSync(runnerPath));
           } catch (error) {
-            console.log(`resolved runner path: unavailable (${error.message})`);
+            console.log(`resolved runner path before deletion: unavailable (${error.message})`);
           }
           NODE
 
@@ -175,11 +178,16 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const fs = require("fs");
-          const runnerPath = "node_modules/jest-circus/build/runner.js";
-          const exists = fs.existsSync(runnerPath);
-          console.log("runner exists after deletion:", exists);
-          if (exists) {
+          try {
+            const runnerPath = require.resolve("jest-circus/runner");
+            const exists = fs.existsSync(runnerPath);
+            console.log("resolved runner path after deletion:", runnerPath);
+            console.log("runner exists after deletion:", exists);
+            if (exists) {
               process.exit(1);
+            }
+          } catch (error) {
+            console.log(`resolved runner path after deletion: unavailable (${error.message})`);
           }
           NODE
 

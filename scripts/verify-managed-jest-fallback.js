@@ -17,13 +17,16 @@ function isManagedRunnerPathSafe(runnerPath, { pathModule = path } = {}) {
 
     const normalizedPath = pathModule
         .resolve(runnerPath)
-        .replace(/\\/g, "/")
-        .toLowerCase();
+        .replace(/\\/g, "/");
+    const comparisonPath = process.platform === "win32"
+        ? normalizedPath.toLowerCase()
+        : normalizedPath;
+    const runnerFilePattern = /\/runner\.(?:[cm]?js)$/;
 
     return (
-        normalizedPath.includes("/node_modules/")
-        && normalizedPath.includes("/jest-circus/")
-        && normalizedPath.endsWith("/runner.js")
+        comparisonPath.includes("/node_modules/")
+        && comparisonPath.includes("/jest-circus/")
+        && runnerFilePattern.test(comparisonPath)
     );
 }
 

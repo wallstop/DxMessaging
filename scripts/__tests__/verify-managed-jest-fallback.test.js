@@ -33,6 +33,22 @@ describe("verify-managed-jest-fallback", () => {
         ).toBe(true);
     });
 
+    test("isManagedRunnerPathSafe accepts Windows-style managed runner paths", () => {
+        const pathModule = { resolve: (inputPath) => inputPath };
+        expect(
+            isManagedRunnerPathSafe(
+                "C:\\repo\\node_modules\\jest-circus\\build\\runner.cjs",
+                { pathModule }
+            )
+        ).toBe(true);
+        expect(
+            isManagedRunnerPathSafe(
+                "C:\\repo\\node_modules\\jest-circus\\build\\runner.mjs",
+                { pathModule }
+            )
+        ).toBe(true);
+    });
+
     test("assertManagedRunnerPathSafe rejects unexpected deletion targets", () => {
         expect(() => assertManagedRunnerPathSafe("/tmp/runner.js")).toThrow(
             "Refusing to delete unexpected runner path"

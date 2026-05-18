@@ -3,9 +3,38 @@
 
 const fs = require("fs");
 const path = require("path");
+const { createRequire } = require("module");
 const { pathToFileURL } = require("url");
+const { resolveBundledNpxCliPath } = require("./lib/managed-prettier");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
+const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
+const SCRIPTS_DIR = path.join(REPO_ROOT, "scripts");
+
+const UNSAFE_DIRECT_NPX_PATTERNS = [
+  /\b(?:childProcess\.)?(?:spawnSync|execSync|execFileSync)\s*\(\s*(["'`])npx(?:\.cmd)?\1/,
+  /\bspawnPlatformCommandSync\s*\(\s*(["'`])npx(?:\.cmd)?\1/,
+  /\b\w*spawnSyncImpl\s*\(\s*(["'`])npx(?:\.cmd)?\1/
+];
+
+const UNSAFE_PROCESS_INVOKER_NAMES = [
+  "spawnSync",
+  "execSync",
+  "execFileSync",
+  "spawnPlatformCommandSync"
+];
+
+const NPX_COMMAND_ASSIGNMENT_RE =
+  /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(["'`])npx(?:\.cmd)?\2/g;
+const PROCESS_INVOKER_ALIAS_ASSIGNMENT_RE =
+  /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:childProcess\.)?(?:spawnSync|execSync|execFileSync|spawnPlatformCommandSync)|\w*spawnSyncImpl)\b/g;
+const CHILD_PROCESS_DESTRUCTURE_RE =
+  /\b(?:const|let|var)\s*\{([^}]+)\}\s*=\s*childProcess\b/g;
+
+const MANAGED_NPX_POLICY_GUIDANCE =
+  "Use scripts/lib/managed-prettier.js runBundledNpxCommand() for PATH-independent npm CLI invocation.";
+const MANAGED_NPX_CLI_GUIDANCE =
+  "Managed npx fallback requires npm's bundled npx-cli.js next to the active Node runtime.";
 
 const TOOL_SPECS = [
   {
@@ -23,11 +52,26 @@ const TOOL_SPECS = [
   {
     name: "cspell",
     requiredFiles: ["node_modules/cspell/bin.mjs"]
+  },
+  {
+    name: "jest",
+    requiredFiles: ["node_modules/jest/bin/jest.js"]
+  },
+  {
+    name: "jest-circus",
+    requiredFiles: [],
+    load: "resolve",
+    entry: "jest-circus/runner"
   }
 ];
 
 function toAbs(repoRelativePath) {
   return path.join(REPO_ROOT, ...repoRelativePath.split("/"));
+}
+
+function toRepoRelative(absPath) {
+  const rel = path.relative(REPO_ROOT, absPath).split(path.sep).join("/");
+  return rel.startsWith("..") ? absPath.split(path.sep).join("/") : rel;
 }
 
 function formatInstallGuidance() {
@@ -43,12 +87,205 @@ async function importToolEntry(absPath) {
   return import(pathToFileURL(absPath).href);
 }
 
+function resolveRepoModule(moduleSpecifier, moduleResolver = REPO_REQUIRE.resolve.bind(REPO_REQUIRE)) {
+  try {
+    return moduleResolver(moduleSpecifier);
+  } catch {
+    return null;
+  }
+}
+
+function hasUnsafeDirectNpxUsage(content) {
+  if (UNSAFE_DIRECT_NPX_PATTERNS.some((pattern) => pattern.test(content))) {
+    return true;
+  }
+
+  const npxCommandVariables = collectNpxCommandVariableNames(content);
+  if (npxCommandVariables.size === 0) {
+    return false;
+  }
+
+  const processInvokerNames = collectUnsafeProcessInvokerNames(content);
+  const invokerPattern = [...processInvokerNames].map(escapeRegex).join("|");
+  const npxVarPattern = [...npxCommandVariables].map(escapeRegex).join("|");
+
+  if (!invokerPattern || !npxVarPattern) {
+    return false;
+  }
+
+  const variableInvocationPattern = new RegExp(
+    `\\b(?:${invokerPattern})\\s*\\(\\s*(?:${npxVarPattern})\\b`
+  );
+
+  return variableInvocationPattern.test(content);
+}
+
+function collectNpxCommandVariableNames(content) {
+  const names = new Set();
+  NPX_COMMAND_ASSIGNMENT_RE.lastIndex = 0;
+
+  let match;
+  while ((match = NPX_COMMAND_ASSIGNMENT_RE.exec(content)) !== null) {
+    names.add(match[1]);
+  }
+
+  return names;
+}
+
+function collectUnsafeProcessInvokerNames(content) {
+  const names = new Set(UNSAFE_PROCESS_INVOKER_NAMES);
+
+  PROCESS_INVOKER_ALIAS_ASSIGNMENT_RE.lastIndex = 0;
+  let aliasMatch;
+  while ((aliasMatch = PROCESS_INVOKER_ALIAS_ASSIGNMENT_RE.exec(content)) !== null) {
+    names.add(aliasMatch[1]);
+  }
+
+  CHILD_PROCESS_DESTRUCTURE_RE.lastIndex = 0;
+  let destructureMatch;
+  while ((destructureMatch = CHILD_PROCESS_DESTRUCTURE_RE.exec(content)) !== null) {
+    const bindings = destructureMatch[1].split(",");
+    for (const rawBinding of bindings) {
+      const binding = rawBinding.trim();
+      if (!binding) {
+        continue;
+      }
+
+      const destructured = /^([A-Za-z_$][\w$]*)(?:\s*:\s*([A-Za-z_$][\w$]*))?/.exec(binding);
+      if (!destructured) {
+        continue;
+      }
+
+      const imported = destructured[1];
+      const localName = destructured[2] || imported;
+
+      if (
+        UNSAFE_PROCESS_INVOKER_NAMES.includes(imported) ||
+        imported.endsWith("spawnSyncImpl")
+      ) {
+        names.add(localName);
+      }
+    }
+  }
+
+  return names;
+}
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function collectScriptPaths(
+  scriptsDir = SCRIPTS_DIR,
+  readdirSyncFn = fs.readdirSync,
+  current = scriptsDir,
+  files = []
+) {
+  const entries = readdirSyncFn(current, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(current, entry.name);
+
+    if (entry.isDirectory()) {
+      if (entry.name === "__tests__") {
+        continue;
+      }
+
+      collectScriptPaths(scriptsDir, readdirSyncFn, fullPath, files);
+      continue;
+    }
+
+    if (entry.isFile() && fullPath.endsWith(".js")) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+function validateManagedNpxPolicy(options = {}) {
+  const {
+    scriptSources,
+    scriptsDir = SCRIPTS_DIR,
+    readdirSyncFn = fs.readdirSync,
+    readFileSyncFn = fs.readFileSync
+  } = options;
+  const violations = [];
+
+  let sources = scriptSources;
+  if (!Array.isArray(sources)) {
+    sources = collectScriptPaths(scriptsDir, readdirSyncFn).map((filePath) => ({ filePath }));
+  }
+
+  for (const source of sources) {
+    const filePath = source.filePath;
+    if (typeof filePath !== "string" || filePath.length === 0) {
+      continue;
+    }
+
+    let content = source.content;
+    if (typeof content !== "string") {
+      try {
+        content = readFileSyncFn(filePath, "utf8");
+      } catch (error) {
+        violations.push(
+          `managed-npx-policy: unable to read ${toRepoRelative(filePath)}: ${error.message}`
+        );
+        continue;
+      }
+    }
+
+    if (hasUnsafeDirectNpxUsage(content)) {
+      violations.push(
+        `managed-npx-policy: ${toRepoRelative(filePath)} uses direct npx process spawning. ${MANAGED_NPX_POLICY_GUIDANCE}`
+      );
+    }
+  }
+
+  return violations;
+}
+
+function validateManagedNpxCliAvailability(options = {}) {
+  const {
+    execPath = process.execPath,
+    resolveBundledNpxCliPathFn = resolveBundledNpxCliPath,
+    existsSyncFn = fs.existsSync
+  } = options;
+
+  const resolvedNpxCliPath = resolveBundledNpxCliPathFn({
+    execPath,
+    existsSyncFn
+  });
+
+  if (!resolvedNpxCliPath) {
+    return [
+      `managed-npx-policy: unable to resolve npm bundled npx-cli.js for ${execPath}. ${MANAGED_NPX_CLI_GUIDANCE}`
+    ];
+  }
+
+  if (!existsSyncFn(resolvedNpxCliPath)) {
+    return [
+      `managed-npx-policy: resolved npm bundled npx-cli.js path is missing: ${resolvedNpxCliPath}. ${MANAGED_NPX_CLI_GUIDANCE}`
+    ];
+  }
+
+  return [];
+}
+
 async function validateTooling(options = {}) {
   const {
     existsSyncFn = fs.existsSync,
     requireFn = require,
     importFn = importToolEntry,
-    toolSpecs = TOOL_SPECS
+    resolveModuleFn = resolveRepoModule,
+    resolveBundledNpxCliPathFn = resolveBundledNpxCliPath,
+    execPath = process.execPath,
+    toolSpecs = TOOL_SPECS,
+    scriptSources,
+    scriptsDir = SCRIPTS_DIR,
+    readdirSyncFn = fs.readdirSync,
+    readFileSyncFn = fs.readFileSync,
+    enforceManagedNpxCliAvailability = true
   } = options;
   const violations = [];
 
@@ -75,6 +312,34 @@ async function validateTooling(options = {}) {
         violations.push(`${tool.name}: failed to import ${tool.entry}: ${error.message}`);
       }
     }
+
+    if (tool.entry && tool.load === "resolve") {
+      const resolvedPath = resolveModuleFn(tool.entry);
+      if (!resolvedPath) {
+        violations.push(`${tool.name}: failed to resolve ${tool.entry}`);
+      } else if (!existsSyncFn(resolvedPath)) {
+        violations.push(`${tool.name}: resolved ${tool.entry} to missing file: ${resolvedPath}`);
+      }
+    }
+  }
+
+  violations.push(
+    ...validateManagedNpxPolicy({
+      scriptSources,
+      scriptsDir,
+      readdirSyncFn,
+      readFileSyncFn
+    })
+  );
+
+  if (enforceManagedNpxCliAvailability) {
+    violations.push(
+      ...validateManagedNpxCliAvailability({
+        execPath,
+        resolveBundledNpxCliPathFn,
+        existsSyncFn
+      })
+    );
   }
 
   return violations;
@@ -97,10 +362,21 @@ async function main() {
 
 module.exports = {
   REPO_ROOT,
+  SCRIPTS_DIR,
   TOOL_SPECS,
+  UNSAFE_DIRECT_NPX_PATTERNS,
+  MANAGED_NPX_POLICY_GUIDANCE,
   toAbs,
+  toRepoRelative,
   formatInstallGuidance,
   importToolEntry,
+  resolveRepoModule,
+  hasUnsafeDirectNpxUsage,
+  collectNpxCommandVariableNames,
+  collectUnsafeProcessInvokerNames,
+  collectScriptPaths,
+  validateManagedNpxPolicy,
+  validateManagedNpxCliAvailability,
   validateTooling,
   main
 };

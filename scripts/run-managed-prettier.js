@@ -12,7 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
-const { isShellShimCommand, spawnPlatformCommandSync } = require("./lib/shell-command");
+const { runBundledNpxCommand } = require("./lib/managed-prettier");
 const { getPinnedPrettierSpec } = require("./lib/prettier-version");
 
 const REPO_ROOT = path.join(__dirname, "..");
@@ -25,11 +25,7 @@ const LOCAL_PRETTIER_BIN = path.join(
 );
 
 function runCommand(command, args, options = {}) {
-    const spawnSyncImpl = isShellShimCommand(command)
-        ? spawnPlatformCommandSync
-        : childProcess.spawnSync;
-
-    const result = spawnSyncImpl(command, args, {
+    const result = childProcess.spawnSync(command, args, {
         cwd: REPO_ROOT,
         stdio: "inherit",
         ...options,
@@ -45,13 +41,32 @@ function runLocalPrettier(args) {
     return runCommand(process.execPath, [LOCAL_PRETTIER_BIN, ...args]);
 }
 
-function runNpxPrettier(args, prettierSpec = getPinnedPrettierSpec()) {
-    return runCommand("npx", [
-        "--yes",
-        `--package=${prettierSpec}`,
-        "prettier",
-        ...args,
-    ]);
+function runNpxPrettier(args, prettierSpec = getPinnedPrettierSpec(), options = {}) {
+    const {
+        runBundledNpxCommandFn = runBundledNpxCommand,
+    } = options;
+
+    try {
+        const result = runBundledNpxCommandFn([
+            "--yes",
+            `--package=${prettierSpec}`,
+            "prettier",
+            ...args,
+        ], {
+            cwd: REPO_ROOT,
+            stdio: "inherit",
+        });
+
+        return {
+            status: result.status,
+            error: result.error || null,
+        };
+    } catch (error) {
+        return {
+            status: null,
+            error,
+        };
+    }
 }
 
 function runManagedPrettier(args, options = {}) {
