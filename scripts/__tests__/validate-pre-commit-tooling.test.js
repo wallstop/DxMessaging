@@ -406,6 +406,19 @@ describe("validate-pre-commit-tooling", () => {
     expect(hasInlinedPrettierEntry("node scripts/run-managed-jest.js")).toBe(false);
   });
 
+  test("hasInlinedPrettierEntry also accepts the managed-runner shape (integrity-gate phase)", () => {
+    // The integrity-gate phase moved the prettier hook entry from the
+    // inlined `bash -c` form to `node scripts/run-managed-prettier.js`.
+    // Both forms must be accepted; the managed-runner form performs the
+    // same local-vs-npx dispatch internally AND gates on node_modules
+    // integrity ahead of either branch.
+    expect(
+      hasInlinedPrettierEntry("node scripts/run-managed-prettier.js --write")
+    ).toBe(true);
+    // Wrong invocation - missing the `node` token - is not accepted.
+    expect(hasInlinedPrettierEntry("scripts/run-managed-prettier.js --write")).toBe(false);
+  });
+
   test("hasInlinedPrettierInvocation only enforces inlining for the prettier hook id", () => {
     const inlined =
       "bash -c 'if [ -f node_modules/prettier/bin/prettier.cjs ]; then " +

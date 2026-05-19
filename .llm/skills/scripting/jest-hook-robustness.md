@@ -2,7 +2,7 @@
 title: "Jest Hook Robustness"
 id: "jest-hook-robustness"
 category: "scripting"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-05-18"
 updated: "2026-05-18"
 
@@ -110,11 +110,24 @@ Validation Error:
 
 The wrapper had been passing an absolute path such as
 `C:\Users\...\node_modules\jest-circus\build\runner.js` via `--testRunner`.
-jest-config's internal resolver rejects that path on Windows because of how it
-normalizes drive letters and slashes during runner validation. Jest 27+ defaults
-to `jest-circus` and resolves the bundled runner via its own resolver walking
-up from the Jest binary, which is more reliable than any caller-side
-pre-resolution.
+jest-config's internal resolver rejects that path on Windows because of
+how it normalizes drive letters and slashes. Jest 27+ defaults to
+`jest-circus` and resolves the bundled runner via its own resolver,
+which is more reliable than any caller-side pre-resolution.
+
+## Partial-extract failure class
+
+The Windows `testRunner option was not found` error has a second root cause
+that the `--testRunner`-injection-avoidance contract alone does not fix:
+the repository's `node_modules/jest-circus/build/runner.js` (and similar
+critical files) can be missing or zero-byte on disk after a partial
+extract. The integrity gate
+(`scripts/lib/node-modules-integrity.js`) closes that loop by probing
+the on-disk critical-file list BEFORE Jest is invoked and calling
+`npm ci` when a partial extract is detected. See
+[Integrity Gate Robustness](./integrity-gate-robustness.md) for the
+full state diagram, refusal rules, env-var matrix, and the path-classifier
+dispatch that decides between `npm ci` and isolated cache reset.
 
 ## The fix invariant
 
@@ -136,24 +149,15 @@ Both tests run under the `script-parser-tests` pre-push hook.
 
 ## Agentic workflow
 
-Before reporting done for any change that touches `.pre-commit-config.yaml`,
-`scripts/run-managed-jest.js`, `scripts/validate-pre-commit-tooling.js`,
-`scripts/validate-node-tooling.js`, `.github/workflows/*.yml`, or any file
-gated by `script-parser-tests`, `script-tests`, or `unity-contract-tests`,
-run:
-
-```bash
-npm run preflight:pre-push
-```
-
-For triage on a fresh clone or a flaky workstation:
-
-```bash
-npm run doctor
-```
-
-The doctor prints Node, npm, `jest-circus` install state, and the isolated
-cache directory; it reports the manual repair commands listed below.
+Before reporting done for any change that touches
+`.pre-commit-config.yaml`, `scripts/run-managed-jest.js`,
+`scripts/validate-pre-commit-tooling.js`,
+`scripts/validate-node-tooling.js`, `.github/workflows/*.yml`, or any
+file gated by `script-parser-tests`, `script-tests`, or
+`unity-contract-tests`, run `npm run preflight:pre-push`. For triage on
+a fresh clone or a flaky workstation, run `npm run doctor` -- it prints
+Node, npm, `jest-circus` install state, and the isolated cache
+directory and reports the manual repair commands listed below.
 
 ## Hook self-heal protocol
 
@@ -195,12 +199,14 @@ the shared helper and case-sensitivity rules.
 
 ## See Also
 
+- [Integrity Gate Robustness](./integrity-gate-robustness.md)
 - [Cross-Platform Script Compatibility](./cross-platform-compatibility.md)
 - [Git Hook Performance Budget](../performance/git-hook-performance.md)
 - [Let Tools Resolve Modules](./let-tools-resolve-modules.md)
 
 ## Changelog
 
-| Version | Date       | Changes                                         |
-| ------- | ---------- | ----------------------------------------------- |
-| 1.0.0   | 2026-05-18 | Initial version after the pre-push.txt failure. |
+| Version | Date       | Changes                                                                                          |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| 1.0.0   | 2026-05-18 | Initial version after the pre-push.txt failure.                                                  |
+| 1.1.0   | 2026-05-18 | Added integrity-gate auto-repair flow, state diagram, refusal rules, and environment-var matrix. |

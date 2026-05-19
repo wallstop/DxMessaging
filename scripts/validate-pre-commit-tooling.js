@@ -282,14 +282,26 @@ function hasManagedJestInvocation(hookIdOrEntry, maybeEntry) {
   return usesManagedJestWrapper(entry);
 }
 
-// Round-4: the prettier hook now inlines its bin via `bash -c` (cspell /
-// markdownlint pattern), so there is no managed-wrapper requirement to
-// enforce here. The pinned `prettier@<v>` literal in the hook entry is
-// validated against package.json devDependencies by
+// Round-4: the prettier hook inlined its bin via `bash -c` (cspell /
+// markdownlint pattern). Phase X (integrity gate): the hook now routes
+// through `node scripts/run-managed-prettier.js`, which performs the same
+// local-bin-vs-npx-fallback dispatch internally AND adds an integrity
+// probe ahead of either branch. The pinned `prettier@<v>` literal lives in
+// scripts/lib/prettier-version.js#FALLBACK_PRETTIER_SPEC and is validated
+// against package.json devDependencies by
 // `scripts/__tests__/prettier-version-parity.test.js`.
+//
+// `hasInlinedPrettierEntry` accepts EITHER:
+//   (a) the legacy inlined shape (local bin + pinned npx --package=...), OR
+//   (b) the managed-runner shape (`node scripts/run-managed-prettier.js`).
 function hasInlinedPrettierEntry(entry) {
   if (!/\bprettier\b/.test(entry)) {
     return false;
+  }
+
+  const usesManagedRunner = /\bnode\b\s+scripts\/run-managed-prettier\.js\b/.test(entry);
+  if (usesManagedRunner) {
+    return true;
   }
 
   const usesLocalBin = /\bnode_modules\/prettier\/bin\/prettier\.cjs\b/.test(entry);

@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 160   |
+| Total Skills | 161   |
 | Categories   | 8     |
 
 ---
@@ -20,7 +20,7 @@
 - [GitHub Actions](#github-actions) (6)
 - [Packaging](#packaging) (2)
 - [Performance](#performance) (45)
-- [Scripting](#scripting) (17)
+- [Scripting](#scripting) (18)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
 - [Unity](#unity) (7)
@@ -135,10 +135,11 @@
 | Skill                                                                                                    | Lines       | Complexity     | Status   | Performance  | Tags                             |
 | -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ------------ | -------------------------------- |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [ok] 227    | [intermediate] | [stable] | [risk: none] | cross-platform, case-sensitivity |
+| [Integrity Gate Robustness](./scripting/integrity-gate-robustness.md)                                    | [ok] 226    | [intermediate] | [stable] | [risk: low]  | integrity, auto-repair           |
 | [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                              | [ok] 159    | [intermediate] | [stable] | [risk: none] | javascript, code-quality         |
 | [JavaScript Code Quality Practices Part 1](./scripting/javascript-code-quality-part-1.md)                | [ok] 178    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
-| [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 207    | [intermediate] | [stable] | [risk: none] | jest, pre-commit                 |
+| [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 213    | [intermediate] | [stable] | [risk: none] | jest, pre-commit                 |
 | [Let Tools Resolve Modules](./scripting/let-tools-resolve-modules.md)                                    | [ok] 152    | [basic]        | [stable] | [risk: none] | cross-platform, tooling          |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 105 | [intermediate] | [stable] | [risk: none] | powershell, scripting            |
 | [PowerShell Scripting Best Practices Part 1](./scripting/powershell-best-practices-part-1.md)            | [ok] 204    | [intermediate] | [stable] | [risk: low]  | migration, split                 |

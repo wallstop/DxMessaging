@@ -6,6 +6,10 @@ const path = require("path");
 const { createRequire } = require("module");
 const { pathToFileURL } = require("url");
 const { resolveBundledNpxCliPath } = require("./lib/managed-prettier");
+const {
+  INTEGRITY_TARGETS,
+  probeIntegrity
+} = require("./lib/node-modules-integrity");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
@@ -36,6 +40,14 @@ const MANAGED_NPX_POLICY_GUIDANCE =
 const MANAGED_NPX_CLI_GUIDANCE =
   "Managed npx fallback requires npm's bundled npx-cli.js next to the active Node runtime.";
 
+// TOOL_SPECS preserves the load-time loadability checks (require/import/
+// resolve) that validate-node-tooling has always performed. The file
+// existence / non-zero-size layer was previously duplicated here; it now
+// lives in scripts/lib/node-modules-integrity.js#INTEGRITY_TARGETS and
+// validateTooling iterates that list separately. `requiredFiles` is kept on
+// TOOL_SPECS for backward compatibility with consumers (e.g. doctor.js) but
+// reflects the same source-of-truth list as INTEGRITY_TARGETS via the
+// helper below.
 const TOOL_SPECS = [
   {
     name: "prettier",
@@ -278,12 +290,16 @@ function validateManagedNpxCliAvailability(options = {}) {
 async function validateTooling(options = {}) {
   const {
     existsSyncFn = fs.existsSync,
+    statSyncFn = fs.statSync,
     requireFn = require,
     importFn = importToolEntry,
     resolveModuleFn = resolveRepoModule,
     resolveBundledNpxCliPathFn = resolveBundledNpxCliPath,
     execPath = process.execPath,
     toolSpecs = TOOL_SPECS,
+    integrityTargets = INTEGRITY_TARGETS,
+    probeIntegrityFn = probeIntegrity,
+    enforceIntegrityProbe = true,
     scriptSources,
     scriptsDir = SCRIPTS_DIR,
     readdirSyncFn = fs.readdirSync,
@@ -292,6 +308,26 @@ async function validateTooling(options = {}) {
   } = options;
   const violations = [];
 
+  if (enforceIntegrityProbe) {
+    const integrity = probeIntegrityFn({
+      repoRoot: REPO_ROOT,
+      existsSyncFn,
+      statSyncFn,
+      targets: integrityTargets
+    });
+    if (integrity && !integrity.ok) {
+      for (const entry of integrity.missing) {
+        if (entry.reason === "missing") {
+          violations.push(`${entry.tool}: missing ${entry.relPath}`);
+        } else if (entry.reason === "empty") {
+          violations.push(`${entry.tool}: ${entry.relPath} is empty (size 0)`);
+        } else {
+          violations.push(`${entry.tool}: ${entry.relPath} integrity probe failed (${entry.reason})`);
+        }
+      }
+    }
+  }
+
   for (const tool of toolSpecs) {
     for (const requiredFile of tool.requiredFiles) {
       const absPath = toAbs(requiredFile);
@@ -299,6 +335,10 @@ async function validateTooling(options = {}) {
         violations.push(`${tool.name}: missing ${requiredFile}`);
       }
     }
+    // (note: file existence checks above duplicate the integrity probe
+    // below for unmanaged callers passing a custom toolSpecs. The integrity
+    // probe covers INTEGRITY_TARGETS specifically; the loop above honors
+    // any extra requiredFiles a caller supplies.)
 
     if (tool.entry && tool.load === "require") {
       try {
@@ -375,6 +415,7 @@ module.exports = {
   REPO_ROOT,
   SCRIPTS_DIR,
   TOOL_SPECS,
+  INTEGRITY_TARGETS,
   UNSAFE_DIRECT_NPX_PATTERNS,
   MANAGED_NPX_POLICY_GUIDANCE,
   toAbs,

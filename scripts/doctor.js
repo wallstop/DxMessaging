@@ -51,6 +51,10 @@ const precommitPerfScore = require("./lib/precommit-perf-score");
 const shellCommand = require("./lib/shell-command");
 const { isTruthyEnv } = require("./lib/jest-error-decoder");
 const { ISOLATED_JEST_CACHE_ROOT } = require("./run-managed-jest");
+const {
+    INTEGRITY_TARGETS,
+    probeIntegrity,
+} = require("./lib/node-modules-integrity");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
@@ -113,10 +117,33 @@ function checkNodeModulesFreshness(options = {}) {
     const {
         requireResolveFn = (specifier) => REPO_REQUIRE.resolve(specifier),
         existsSyncFn = fs.existsSync,
+        statSyncFn = fs.statSync,
         requireFn = (absPath) => REPO_REQUIRE(absPath),
         toolSpecs = TOOL_SPECS,
+        integrityTargets = INTEGRITY_TARGETS,
+        probeIntegrityFn = probeIntegrity,
         repoRoot = REPO_ROOT,
     } = options;
+
+    // Step 10: file-existence (and zero-byte) audits delegate to
+    // probeIntegrity from scripts/lib/node-modules-integrity.js. The doctor
+    // remains read-only; we only present the structured probe results in
+    // the existing per-tool layout.
+    const integrityResult = probeIntegrityFn({
+        repoRoot,
+        existsSyncFn,
+        statSyncFn,
+        targets: integrityTargets,
+    });
+    const integrityMissingByTool = new Map();
+    if (integrityResult && Array.isArray(integrityResult.missing)) {
+        for (const entry of integrityResult.missing) {
+            if (!integrityMissingByTool.has(entry.tool)) {
+                integrityMissingByTool.set(entry.tool, []);
+            }
+            integrityMissingByTool.get(entry.tool).push(entry);
+        }
+    }
 
     const lines = [];
     let failed = 0;
@@ -125,8 +152,26 @@ function checkNodeModulesFreshness(options = {}) {
         const issues = [];
         const checks = [];
 
+        // Surface integrity probe entries scoped to this tool first.
+        const integrityEntries = integrityMissingByTool.get(tool.name) || [];
+        for (const entry of integrityEntries) {
+            if (entry.reason === "missing") {
+                issues.push(`missing required file ${entry.relPath}`);
+            } else if (entry.reason === "empty") {
+                issues.push(`${entry.relPath} is empty (size 0)`);
+            } else {
+                issues.push(`${entry.relPath} integrity probe: ${entry.reason}`);
+            }
+        }
+
         for (const requiredFile of tool.requiredFiles || []) {
             const absPath = path.join(repoRoot, ...requiredFile.split("/"));
+            // Skip the existsSync check when integrity has already flagged
+            // this same path; avoids duplicate lines in the report.
+            const alreadyFlagged = integrityEntries.some((e) => e.relPath === requiredFile);
+            if (alreadyFlagged) {
+                continue;
+            }
             if (!existsSyncFn(absPath)) {
                 issues.push(`missing required file ${requiredFile}`);
             } else {

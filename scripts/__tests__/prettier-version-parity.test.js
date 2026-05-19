@@ -60,16 +60,22 @@ function findHookBlockText(content, hookId) {
 
 function findPinnedPrettierFallbackVersion(blockText) {
     if (!blockText) return null;
-    // Match the inlined `npx --yes --package=prettier@<semver>` form. The
-    // hook entry is wrapped across multiple lines via a folded YAML scalar,
-    // so allow any whitespace (including newlines) between tokens.
-    const re = /--package=prettier@(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/;
+    // The hook entry routes through scripts/run-managed-prettier.js, which
+    // reads the pinned fallback spec from scripts/lib/prettier-version.js.
+    // The block-level parity check matches any `prettier@<semver>` mention
+    // (typically in the hook description / comment); the
+    // FALLBACK_PRETTIER_SPEC test below is the canonical pin.
+    const re = /prettier@(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/;
     const match = blockText.match(re);
     return match ? match[1] : null;
 }
 
 function findLocalPrettierBinReference(blockText) {
     if (!blockText) return null;
+    // The managed wrapper script reads LOCAL_PRETTIER_BIN at this path; the
+    // hook block must reference it either inline (legacy) or in the
+    // description so a future audit reading the hook block alone can
+    // confirm the local-bin contract.
     return /\bnode_modules\/prettier\/bin\/prettier\.cjs\b/.test(blockText);
 }
 

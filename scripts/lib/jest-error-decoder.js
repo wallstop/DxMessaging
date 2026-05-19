@@ -53,7 +53,13 @@ const PATTERNS = Object.freeze([
             PREFLIGHT_COMMAND,
         ]),
         skillRef: SKILL_REF,
-        selfHeal: Object.freeze({ isolatedCacheReset: true, retryOnce: true }),
+        // MISSING_TEST_RUNNER can be caused by either a partial repo
+        // node_modules install (the Windows failure mode that motivated this
+        // skill) or by a corrupt isolated managed-Jest cache. Both isolated
+        // cache reset and `npm ci` are appropriate recovery channels; the
+        // runtime decides which to attempt based on the resolved runner
+        // path's containing tree.
+        selfHeal: Object.freeze({ isolatedCacheReset: true, npmCi: true, retryOnce: true }),
     }),
     Object.freeze({
         kind: "CORRUPT_ISOLATED_CACHE",
@@ -95,6 +101,30 @@ const PATTERNS = Object.freeze([
         ]),
         skillRef: SKILL_REF,
         selfHeal: Object.freeze({ npmCi: true, retryOnce: true }),
+    }),
+    // PARTIAL_NODE_MODULES_INSTALL is a sentinel that the integrity gate
+    // surfaces synthetically when probeIntegrity() reports missing/empty
+    // critical files but the auto-repair flow has already exhausted its
+    // budget. The regex deliberately matches only the synthetic sentinel
+    // string the gate emits, so the decoder never auto-binds to ambient
+    // Jest stderr. Pattern is listed LAST so the more-specific entries
+    // above always win when both could match.
+    Object.freeze({
+        kind: "PARTIAL_NODE_MODULES_INSTALL",
+        regex: /^__INTEGRITY_GATE_FAILURE__$/,
+        summary:
+            "Repository node_modules is partially extracted; auto-repair could not recover.",
+        rootCauses: Object.freeze([
+            "partial node_modules extract on Windows (long paths, antivirus, interrupted install)",
+            "npm install reported 'up to date' without re-extracting",
+        ]),
+        repairCommands: Object.freeze([
+            "npm ci",
+            "node scripts/validate-node-tooling.js",
+            PREFLIGHT_COMMAND,
+        ]),
+        skillRef: SKILL_REF,
+        selfHeal: Object.freeze({ npmCi: false, retryOnce: false }),
     }),
 ]);
 

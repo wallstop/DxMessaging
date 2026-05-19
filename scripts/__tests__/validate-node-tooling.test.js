@@ -18,6 +18,7 @@ describe("validate-node-tooling", () => {
       requireFn: () => ({}),
       importFn: async () => ({}),
       enforceManagedNpxCliAvailability: false,
+      enforceIntegrityProbe: false,
       scriptSources: [],
       toolSpecs: [
         {
@@ -46,6 +47,7 @@ describe("validate-node-tooling", () => {
         throw new Error("Cannot find package 'fast-glob' imported from globby/index.js");
       },
       enforceManagedNpxCliAvailability: false,
+      enforceIntegrityProbe: false,
       scriptSources: [],
       toolSpecs: [
         {
@@ -68,6 +70,7 @@ describe("validate-node-tooling", () => {
       existsSyncFn: () => true,
       resolveModuleFn: () => null,
       enforceManagedNpxCliAvailability: false,
+      enforceIntegrityProbe: false,
       scriptSources: [],
       toolSpecs: [
         {
@@ -88,6 +91,7 @@ describe("validate-node-tooling", () => {
       existsSyncFn: () => false,
       resolveModuleFn: () => resolvedRunnerPath,
       enforceManagedNpxCliAvailability: false,
+      enforceIntegrityProbe: false,
       scriptSources: [],
       toolSpecs: [
         {
@@ -116,6 +120,7 @@ describe("validate-node-tooling", () => {
         return {};
       },
       enforceManagedNpxCliAvailability: false,
+      enforceIntegrityProbe: false,
       scriptSources: [],
       toolSpecs: [
         {
@@ -229,6 +234,7 @@ describe("validate-node-tooling", () => {
   test("validateTooling includes managed npx-cli availability violations by default", async () => {
     const violations = await validateTooling({
       existsSyncFn: () => true,
+      statSyncFn: () => ({ size: 100 }),
       requireFn: () => ({}),
       importFn: async () => ({}),
       resolveBundledNpxCliPathFn: () => null,
@@ -239,6 +245,53 @@ describe("validate-node-tooling", () => {
     expect(violations).toEqual([
       expect.stringContaining("unable to resolve npm bundled npx-cli.js")
     ]);
+  });
+
+  test("flags missing jest-circus/build/runner.js even when bin/jest.js exists (integrity layer)", async () => {
+    // Step 6: the integrity probe layer must surface the partial-extract
+    // failure mode (`testRunner option was not found`) - bin/jest.js present
+    // but build/runner.js missing - as a violation.
+    const violations = await validateTooling({
+      existsSyncFn: (abs) => !abs.endsWith("runner.js"),
+      statSyncFn: () => ({ size: 100 }),
+      requireFn: () => ({}),
+      importFn: async () => ({}),
+      resolveModuleFn: () => "/repo/node_modules/jest-circus/build/runner.js",
+      enforceManagedNpxCliAvailability: false,
+      scriptSources: [],
+      toolSpecs: []
+    });
+    expect(
+      violations.some((v) =>
+        v.includes("jest-circus: missing node_modules/jest-circus/build/runner.js")
+      )
+    ).toBe(true);
+  });
+
+  test("flags zero-byte critical files (size 0) via the integrity layer", async () => {
+    const violations = await validateTooling({
+      existsSyncFn: () => true,
+      statSyncFn: (abs) =>
+        abs.endsWith("prettier/index.cjs") ? { size: 0 } : { size: 100 },
+      requireFn: () => ({}),
+      importFn: async () => ({}),
+      resolveModuleFn: () => "/repo/node_modules/jest-circus/build/runner.js",
+      enforceManagedNpxCliAvailability: false,
+      scriptSources: [],
+      toolSpecs: []
+    });
+    expect(
+      violations.some((v) =>
+        v.includes("prettier: node_modules/prettier/index.cjs is empty (size 0)")
+      )
+    ).toBe(true);
+  });
+
+  test("INTEGRITY_TARGETS is the source of truth shared with the gate", () => {
+    const { INTEGRITY_TARGETS: gateTargets } = require("../lib/node-modules-integrity");
+    const { INTEGRITY_TARGETS: validatorTargets } = require("../validate-node-tooling");
+    // The validator re-exports the same frozen array reference.
+    expect(validatorTargets).toBe(gateTargets);
   });
 
   test("install guidance keeps hooks out of dependency bootstrapping", () => {

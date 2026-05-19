@@ -25,10 +25,29 @@ const {
     isShellShimCommand,
     spawnPlatformCommandSync,
 } = require("./lib/shell-command");
+const jestErrorDecoderModule = require("./lib/jest-error-decoder");
 const {
     decodeJestStderr,
     formatRepairBanner,
-} = require("./lib/jest-error-decoder");
+    isTruthyEnv,
+} = jestErrorDecoderModule;
+const {
+    normalizeForPathComparison,
+    isPathInsideDirectory,
+    classifyCapturedPath,
+    PATH_CLASS_REPO,
+    PATH_CLASS_ISOLATED,
+    PATH_CLASS_UNKNOWN,
+} = require("./lib/path-classifier");
+const {
+    INTEGRITY_TARGETS,
+    probeIntegrity,
+    probeIntegrityInSubprocess,
+} = require("./lib/node-modules-integrity");
+const {
+    isAutoRepairAllowed: defaultIsAutoRepairAllowed,
+    runIntegrityGateWithRecovery,
+} = require("./lib/integrity-gate-with-recovery");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const REPO_NODE_MODULES = path.join(REPO_ROOT, "node_modules");
@@ -193,9 +212,15 @@ function attemptIsolatedCacheReset(
     const cacheRoot = path.resolve(ISOLATED_JEST_CACHE_ROOT);
     const resolvedInstallDir = path.resolve(installDir);
     const relativePath = path.relative(cacheRoot, resolvedInstallDir);
+    // Reject the cache root itself ("") and any genuine parent-traversal
+    // (either bare ".." or any path whose first segment is ".."). The
+    // ".." + path.sep check intentionally rejects only segment-boundary
+    // traversal: a sanitized key like "..foo" is NOT a traversal and
+    // must not trip the guard.
     if (
         relativePath === "" ||
-        relativePath.startsWith("..") ||
+        relativePath === ".." ||
+        relativePath.startsWith(".." + path.sep) ||
         path.isAbsolute(relativePath)
     ) {
         warnFn(
@@ -224,8 +249,26 @@ function attemptIsolatedCacheReset(
  */
 function attemptNpmCiRecovery({
     runCommandFn = runCommand,
+    rmSyncFn = fs.rmSync,
+    envFn = () => process.env,
     warnFn = console.warn,
 } = {}) {
+    const env = (envFn && envFn()) || process.env;
+    const aggressive = isTruthyEnv(env.DXMSG_HOOK_AGGRESSIVE_RECOVERY);
+
+    if (aggressive) {
+        const nodeModulesPath = path.join(REPO_ROOT, "node_modules");
+        warnFn(
+            `WARNING: DXMSG_HOOK_AGGRESSIVE_RECOVERY=1 -> removing ${nodeModulesPath} before npm ci.`
+        );
+        try {
+            rmSyncFn(nodeModulesPath, { recursive: true, force: true });
+        } catch (error) {
+            const detail = error && error.message ? error.message : String(error);
+            warnFn(`WARNING: Aggressive recovery rm-rf failed (${detail}); continuing with npm ci.`);
+        }
+    }
+
     warnFn("WARNING: Attempting `npm ci` recovery to repair local node_modules...");
     const result = runCommandFn("npm", ["ci", "--no-audit", "--no-fund"], {
         cwd: REPO_ROOT,
@@ -495,6 +538,7 @@ function prepareIsolatedFallbackJest(
         existsSyncFn = fs.existsSync,
         mkdirSyncFn = fs.mkdirSync,
         writeFileSyncFn = fs.writeFileSync,
+        rmSyncFn = fs.rmSync,
         runCommandFn = runCommand,
         resolveIsolatedJestRunnerPathFn = resolveIsolatedJestRunnerPath,
         warnFn = console.warn,
@@ -523,6 +567,48 @@ function prepareIsolatedFallbackJest(
 
     if (hasCachedJestBin && !hasCachedJestRunner) {
         warnFn(`⚠️ Isolated fallback cache is missing Jest runner; reinstalling fallback: ${defaultJestRunnerPath}`);
+    }
+
+    // Idempotency fix (Step 3): when the install dir already exists but the
+    // cached runner is missing (or the bin is missing), `npm install` against
+    // a half-populated tree can short-circuit with "up to date" without ever
+    // re-extracting. Tear the dir down first and re-create from scratch.
+    //
+    // Safety: mirror the path-traversal validation from
+    // `attemptIsolatedCacheReset`. We refuse to rm anything that does not
+    // resolve to a strict descendant of ISOLATED_JEST_CACHE_ROOT, so a
+    // poisoned `jestSpec` cannot weaponize this code path into deleting an
+    // unrelated directory.
+    if (existsSyncFn(installDir) && !(hasCachedJestBin && hasCachedJestRunner)) {
+        const cacheRoot = path.resolve(ISOLATED_JEST_CACHE_ROOT);
+        const resolvedInstallDir = path.resolve(installDir);
+        const relativePath = path.relative(cacheRoot, resolvedInstallDir);
+        // Mirror the segment-boundary traversal guard from
+        // `attemptIsolatedCacheReset`: reject "" (the cache root itself),
+        // bare ".." and ".." followed by path.sep (genuine parent
+        // traversal), and absolute paths. A sanitized key like "..foo"
+        // resolves under the cache root, is NOT a traversal, and must not
+        // trip the guard.
+        const isStrictDescendant =
+            relativePath !== "" &&
+            relativePath !== ".." &&
+            !relativePath.startsWith(".." + path.sep) &&
+            !path.isAbsolute(relativePath);
+
+        if (!isStrictDescendant) {
+            warnFn(
+                `WARNING: Refusing to rm partial isolated fallback install dir; resolved path is not a descendant of ${cacheRoot}: ${resolvedInstallDir}`
+            );
+        } else {
+            try {
+                rmSyncFn(resolvedInstallDir, { recursive: true, force: true });
+            } catch (error) {
+                const detail = error && error.message ? error.message : String(error);
+                warnFn(
+                    `WARNING: Failed to rm partial isolated fallback install dir at ${resolvedInstallDir}: ${detail}`
+                );
+            }
+        }
     }
 
     mkdirSyncFn(installDir, { recursive: true });
@@ -672,23 +758,6 @@ function isCommandUnavailable(result) {
     return result.status === 127;
 }
 
-function normalizeForPathComparison(targetPath) {
-    let resolved = path.resolve(targetPath);
-    try {
-        resolved = fs.realpathSync.native ? fs.realpathSync.native(resolved) : fs.realpathSync(resolved);
-    } catch {
-        // Keep resolved path when target is unavailable; callers handle existence separately.
-    }
-    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
-function isPathInsideDirectory(filePath, directoryPath) {
-    const normalizedFilePath = normalizeForPathComparison(filePath);
-    const normalizedDirectoryPath = normalizeForPathComparison(directoryPath);
-    const relativePath = path.relative(normalizedDirectoryPath, normalizedFilePath);
-    return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
-}
-
 function resolveLocalModule(moduleSpecifier) {
     try {
         return REPO_REQUIRE.resolve(moduleSpecifier);
@@ -745,7 +814,65 @@ function runManagedJest(args, options = {}) {
         attemptIsolatedCacheResetFn = attemptIsolatedCacheReset,
         attemptNpmCiRecoveryFn = attemptNpmCiRecovery,
         getPinnedFallbackJestSpecFn = getPinnedFallbackJestSpec,
+        // Integrity gate dependencies (Step 5). Tests inject deterministic
+        // fakes; the production defaults wire through to the real probe and
+        // the real npm-ci recovery.
+        runIntegrityGateWithRecoveryFn = runIntegrityGateWithRecovery,
+        probeIntegrityFn = probeIntegrity,
+        probeIntegrityInSubprocessFn = probeIntegrityInSubprocess,
+        isAutoRepairAllowedFn = null,
+        // Used by the isolated-tier post-Jest MISSING_TEST_RUNNER routing.
+        // Injected for testability; defaults to the production classifier.
+        classifyCapturedPathFn = classifyCapturedPath,
+        envFn = () => process.env,
+        warnFn = console.warn,
     } = options;
+
+    // ---- Integrity gate (runs BEFORE any tier) ----
+    //
+    // The gate confirms the on-disk node_modules tree has the critical files
+    // every managed tool depends on. The Windows failure mode that motivated
+    // this rewrite (`testRunner option was not found`) was caused by a
+    // partial extract that the existing tier-level self-heal could not see.
+    //
+    // Opt-outs (use isTruthyEnv for shell-script-style truthiness):
+    //   - DXMSG_HOOK_SKIP_INTEGRITY=1 -> bypass the gate entirely.
+    //   - DXMSG_HOOK_NO_AUTOREPAIR=1 -> still probe, but if integrity fails,
+    //     skip npm ci and proceed to Jest invocation with a degraded gate.
+    const env = (envFn && envFn()) || process.env;
+    if (!isTruthyEnv(env.DXMSG_HOOK_SKIP_INTEGRITY)) {
+        const resolvedIsAutoRepairAllowed = isAutoRepairAllowedFn !== null
+            ? isAutoRepairAllowedFn
+            : () => defaultIsAutoRepairAllowed({
+                env,
+                repoRoot: REPO_ROOT,
+                getNpmMajorVersionFn,
+            });
+
+        const gateResult = runIntegrityGateWithRecoveryFn({
+            repoRoot: REPO_ROOT,
+            probeIntegrityFn,
+            probeIntegrityInSubprocessFn,
+            attemptNpmCiRecoveryFn,
+            isAutoRepairAllowedFn: resolvedIsAutoRepairAllowed,
+            printActionableRepairBannerFn,
+            decoder: jestErrorDecoderModule,
+            warnFn,
+        });
+
+        if (!gateResult || !gateResult.ok) {
+            if (isTruthyEnv(env.DXMSG_HOOK_NO_AUTOREPAIR)) {
+                // Degraded mode: proceed to tier dispatch even though
+                // integrity is bad. The operator has explicitly asked us not
+                // to repair; banner is already printed by the gate.
+                warnFn(
+                    "WARNING: integrity gate failed but DXMSG_HOOK_NO_AUTOREPAIR=1 -> proceeding to Jest invocation with degraded gate."
+                );
+            } else {
+                return { status: 1, error: null };
+            }
+        }
+    }
 
     // ---- Local Jest path ----
     //
@@ -764,7 +891,30 @@ function runManagedJest(args, options = {}) {
 
             const decoded = decodeJestStderrFn(localResult.stderr);
 
-            if (
+            if (decoded && decoded.kind === "MISSING_TEST_RUNNER") {
+                // Local Jest reports its testRunner is invalid. The local tier
+                // has no in-place repair for this (cache reset is scoped to the
+                // isolated tier, by design). Fall through to the isolated
+                // fallback tier instead of giving up here so that path's
+                // self-heal can attempt a recovery.
+                //
+                // Banner is intentionally NOT printed here; whichever later
+                // tier produces the final error will surface it (or self-heal
+                // will succeed and there is nothing to surface).
+                //
+                // Mirrors the production `runLocalJest` behavior of returning
+                // null when its own runCommandCapturingStderr observes the
+                // same stderr signature — this branch covers the case where a
+                // caller-injected `runLocalJestFn` mock returns the failing
+                // result directly.
+                //
+                // Note: MISSING_TEST_RUNNER's selfHeal now includes
+                // `npmCi: true` so the integrity gate can choose npm-ci
+                // recovery for repo-tree partial extracts. The tier-level
+                // dispatcher must NOT attempt npm ci here; by the time the
+                // local tier runs, the integrity gate has already verified
+                // node_modules integrity (or aborted upstream).
+            } else if (
                 decoded &&
                 decoded.selfHeal &&
                 decoded.selfHeal.npmCi &&
@@ -787,22 +937,6 @@ function runManagedJest(args, options = {}) {
                     printActionableRepairBannerFn(decoded);
                     return localResult;
                 }
-            } else if (decoded && decoded.kind === "MISSING_TEST_RUNNER") {
-                // Local Jest reports its testRunner is invalid. The local tier
-                // has no in-place repair for this (cache reset is scoped to the
-                // isolated tier, by design). Fall through to the isolated
-                // fallback tier instead of giving up here so that path's
-                // self-heal can attempt a recovery.
-                //
-                // Banner is intentionally NOT printed here; whichever later
-                // tier produces the final error will surface it (or self-heal
-                // will succeed and there is nothing to surface).
-                //
-                // Mirrors the production `runLocalJest` behavior of returning
-                // null when its own runCommandCapturingStderr observes the
-                // same stderr signature — this branch covers the case where a
-                // caller-injected `runLocalJestFn` mock returns the failing
-                // result directly.
             } else if (decoded) {
                 printActionableRepairBannerFn(decoded);
                 return localResult;
@@ -837,21 +971,119 @@ function runManagedJest(args, options = {}) {
                 decoded.selfHeal.isolatedCacheReset &&
                 decoded.selfHeal.retryOnce
             ) {
-                const jestSpec = getPinnedFallbackJestSpecFn();
-                const resetOk = attemptIsolatedCacheResetFn(jestSpec);
-                if (resetOk) {
-                    const retryResult = runIsolatedFallbackJestFn(args);
-                    if (retryResult) {
-                        if (retryResult.status !== 0) {
-                            const retryDecoded = decodeJestStderrFn(retryResult.stderr);
-                            printActionableRepairBannerFn(retryDecoded);
-                        }
-                        return retryResult;
+                // MISSING_TEST_RUNNER carries BOTH npmCi and
+                // isolatedCacheReset self-heal flags because the same
+                // stderr can come from either a partial repo
+                // node_modules extract or a corrupt isolated cache.
+                // Classify the captured runner path to choose the right
+                // recovery:
+                //   - "repo"     -> attemptNpmCiRecovery (gated by the
+                //                   production isAutoRepairAllowed check).
+                //                   On success, retry the isolated tier.
+                //   - "isolated" -> existing behavior: cache reset + retry.
+                //   - "unknown"  -> refuse to auto-repair; print banner only.
+                // CORRUPT_ISOLATED_CACHE carries only isolatedCacheReset
+                // and falls through to the legacy isolated reset branch.
+                const supportsNpmCi = Boolean(
+                    decoded.selfHeal && decoded.selfHeal.npmCi
+                );
+                const capturedPath =
+                    decoded.capturedMatch && typeof decoded.capturedMatch[1] === "string"
+                        ? decoded.capturedMatch[1]
+                        : null;
+                const classification = supportsNpmCi
+                    ? classifyCapturedPathFn(capturedPath, {
+                          repoNodeModules: REPO_NODE_MODULES,
+                          isolatedCacheRoot: ISOLATED_JEST_CACHE_ROOT,
+                      })
+                    : PATH_CLASS_ISOLATED;
+
+                if (classification === PATH_CLASS_REPO) {
+                    // Repo-tier partial extract surfacing as MISSING_TEST_RUNNER.
+                    // Run the production auto-repair gate, then npm ci, then
+                    // a subprocess re-probe before retrying the isolated tier.
+                    const resolvedIsAutoRepairAllowed = isAutoRepairAllowedFn !== null
+                        ? isAutoRepairAllowedFn
+                        : () => defaultIsAutoRepairAllowed({
+                            env,
+                            repoRoot: REPO_ROOT,
+                            getNpmMajorVersionFn,
+                        });
+                    const repairDecision = resolvedIsAutoRepairAllowed();
+                    if (!repairDecision || !repairDecision.allowed) {
+                        warnFn(
+                            `WARNING: post-Jest MISSING_TEST_RUNNER classified as repo, but auto-repair refused (${repairDecision && repairDecision.reason ? repairDecision.reason : "no reason"}); printing banner only.`
+                        );
+                        printActionableRepairBannerFn(decoded);
+                        return isolatedResult;
                     }
-                    // Retry returned null; fall through to npm exec/npx.
-                } else {
+                    const recovery = attemptNpmCiRecoveryFn();
+                    if (recovery && recovery.status === 0) {
+                        // Re-probe to make sure the partial extract is
+                        // actually fixed; if so, retry the isolated tier
+                        // (the local install was unhealthy enough to fall
+                        // through here, so we retry isolated rather than
+                        // ricocheting back to runLocalJestFn).
+                        const reprobe = probeIntegrityInSubprocessFn({ repoRoot: REPO_ROOT });
+                        if (reprobe && reprobe.ok) {
+                            const retryResult = runIsolatedFallbackJestFn(args);
+                            if (retryResult) {
+                                if (retryResult.status !== 0) {
+                                    const retryDecoded = decodeJestStderrFn(retryResult.stderr);
+                                    printActionableRepairBannerFn(retryDecoded);
+                                }
+                                return retryResult;
+                            }
+                            // Retry returned null; fall through to npm exec/npx.
+                        } else {
+                            printActionableRepairBannerFn(decoded);
+                            return isolatedResult;
+                        }
+                    } else {
+                        printActionableRepairBannerFn(decoded);
+                        return isolatedResult;
+                    }
+                } else if (classification === PATH_CLASS_UNKNOWN) {
+                    // Path lives outside both the repo node_modules and the
+                    // isolated cache. We have no safe recovery to attempt;
+                    // surface the banner and return.
+                    //
+                    // We distinguish null/undefined ("(null)") from the empty
+                    // string ("(empty)") in the operator-facing warning so a
+                    // stderr regression that captures "" instead of dropping
+                    // the field entirely is debuggable from log triage.
+                    let pathLabel;
+                    if (capturedPath === null || capturedPath === undefined) {
+                        pathLabel = "(null)";
+                    } else if (capturedPath === "") {
+                        pathLabel = "(empty)";
+                    } else {
+                        pathLabel = capturedPath;
+                    }
+                    warnFn(
+                        `WARNING: post-Jest MISSING_TEST_RUNNER captured path ${pathLabel} is outside both the repo and isolated trees; refusing to auto-repair.`
+                    );
                     printActionableRepairBannerFn(decoded);
                     return isolatedResult;
+                } else {
+                    // PATH_CLASS_ISOLATED (or CORRUPT_ISOLATED_CACHE which
+                    // never opts into npmCi): existing behavior.
+                    const jestSpec = getPinnedFallbackJestSpecFn();
+                    const resetOk = attemptIsolatedCacheResetFn(jestSpec);
+                    if (resetOk) {
+                        const retryResult = runIsolatedFallbackJestFn(args);
+                        if (retryResult) {
+                            if (retryResult.status !== 0) {
+                                const retryDecoded = decodeJestStderrFn(retryResult.stderr);
+                                printActionableRepairBannerFn(retryDecoded);
+                            }
+                            return retryResult;
+                        }
+                        // Retry returned null; fall through to npm exec/npx.
+                    } else {
+                        printActionableRepairBannerFn(decoded);
+                        return isolatedResult;
+                    }
                 }
             } else if (decoded) {
                 printActionableRepairBannerFn(decoded);
@@ -921,6 +1153,10 @@ module.exports = {
     ISOLATED_JEST_CACHE_ROOT,
     normalizeForPathComparison,
     isPathInsideDirectory,
+    classifyCapturedPath,
+    PATH_CLASS_REPO,
+    PATH_CLASS_ISOLATED,
+    PATH_CLASS_UNKNOWN,
     resolveLocalModule,
     tryLoadModule,
     hasHealthyLocalJestInstall,
@@ -954,6 +1190,12 @@ module.exports = {
     printActionableRepairBanner,
     decodeJestStderr,
     formatRepairBanner,
+    isTruthyEnv,
+    INTEGRITY_TARGETS,
+    probeIntegrity,
+    probeIntegrityInSubprocess,
+    runIntegrityGateWithRecovery,
+    isAutoRepairAllowed: defaultIsAutoRepairAllowed,
 };
 
 if (require.main === module) {

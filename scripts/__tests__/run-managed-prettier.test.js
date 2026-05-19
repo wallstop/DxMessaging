@@ -28,6 +28,11 @@ describe("run-managed-prettier", () => {
         const runNpxPrettierFn = jest.fn(() => ({ status: 1, error: null }));
 
         const result = runManagedPrettier(["--check", "README.md"], {
+            // Bypass the integrity gate so this tier-fallback test is
+            // independent of on-disk node_modules state. See
+            // scripts/__tests__/run-managed-cspell.test.js for the same
+            // pattern.
+            envFn: () => ({ DXMSG_HOOK_SKIP_INTEGRITY: "1" }),
             existsSyncFn: () => true,
             runLocalPrettierFn,
             runNpxPrettierFn,
@@ -43,6 +48,8 @@ describe("run-managed-prettier", () => {
         const runNpxPrettierFn = jest.fn(() => ({ status: 0, error: null }));
 
         const result = runManagedPrettier(["--write", "README.md"], {
+            // Bypass the integrity gate (see rationale above).
+            envFn: () => ({ DXMSG_HOOK_SKIP_INTEGRITY: "1" }),
             existsSyncFn: () => false,
             runLocalPrettierFn,
             runNpxPrettierFn,
@@ -170,5 +177,89 @@ describe("run-managed-prettier", () => {
                 runCommandFn: jest.fn(),
             })
         ).toThrow(MISSING_BUNDLED_NPX_CLI_MESSAGE);
+    });
+
+    test("integrity gate runs BEFORE prettier tier dispatch", () => {
+        // Step 7: prettier wrapper mirrors the jest wrapper's gate. If the
+        // gate fails and auto-repair is allowed, npm ci runs and we then
+        // re-probe before the local prettier path is taken.
+        const probeIntegrityFn = jest.fn(() => ({
+            ok: false,
+            missing: [{ tool: "prettier", relPath: "node_modules/prettier/index.cjs", reason: "missing" }],
+        }));
+        const probeIntegrityInSubprocessFn = jest.fn(() => ({ ok: true, missing: [] }));
+        const attemptNpmCiRecoveryFn = jest.fn(() => ({ status: 0, error: null }));
+        const isAutoRepairAllowedFn = jest.fn(() => ({ allowed: true, reason: null }));
+        const runLocalPrettierFn = jest.fn(() => ({ status: 0, error: null }));
+        const runNpxPrettierFn = jest.fn();
+
+        const result = runManagedPrettier(["--check", "README.md"], {
+            envFn: () => ({}),
+            probeIntegrityFn,
+            probeIntegrityInSubprocessFn,
+            attemptNpmCiRecoveryFn,
+            isAutoRepairAllowedFn,
+            existsSyncFn: () => true,
+            runLocalPrettierFn,
+            runNpxPrettierFn,
+        });
+
+        expect(probeIntegrityFn).toHaveBeenCalledTimes(1);
+        expect(isAutoRepairAllowedFn).toHaveBeenCalledTimes(1);
+        expect(attemptNpmCiRecoveryFn).toHaveBeenCalledTimes(1);
+        expect(probeIntegrityInSubprocessFn).toHaveBeenCalledTimes(1);
+        // Tier dispatch happens AFTER gate succeeds.
+        expect(probeIntegrityInSubprocessFn.mock.invocationCallOrder[0]).toBeLessThan(
+            runLocalPrettierFn.mock.invocationCallOrder[0]
+        );
+        expect(result).toEqual({ status: 0, error: null });
+    });
+
+    test("integrity gate failure with no auto-repair returns status=1 without invoking prettier", () => {
+        const probeIntegrityFn = jest.fn(() => ({
+            ok: false,
+            missing: [{ tool: "prettier", relPath: "x", reason: "missing" }],
+        }));
+        const probeIntegrityInSubprocessFn = jest.fn(() => ({
+            ok: false,
+            missing: [{ tool: "prettier", relPath: "x", reason: "missing" }],
+        }));
+        const attemptNpmCiRecoveryFn = jest.fn(() => ({ status: 0, error: null }));
+        const isAutoRepairAllowedFn = jest.fn(() => ({ allowed: true, reason: null }));
+        const runLocalPrettierFn = jest.fn();
+        const printActionableRepairBannerFn = jest.fn();
+
+        const result = runManagedPrettier(["--check", "README.md"], {
+            envFn: () => ({}),
+            probeIntegrityFn,
+            probeIntegrityInSubprocessFn,
+            attemptNpmCiRecoveryFn,
+            isAutoRepairAllowedFn,
+            existsSyncFn: () => true,
+            runLocalPrettierFn,
+            runNpxPrettierFn: jest.fn(),
+            printActionableRepairBannerFn,
+        });
+
+        expect(runLocalPrettierFn).not.toHaveBeenCalled();
+        expect(printActionableRepairBannerFn).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({ status: 1, error: null });
+    });
+
+    test("DXMSG_HOOK_SKIP_INTEGRITY=1 bypasses the prettier integrity gate", () => {
+        const probeIntegrityFn = jest.fn();
+        const runLocalPrettierFn = jest.fn(() => ({ status: 0, error: null }));
+
+        const result = runManagedPrettier(["--check", "README.md"], {
+            envFn: () => ({ DXMSG_HOOK_SKIP_INTEGRITY: "1" }),
+            probeIntegrityFn,
+            existsSyncFn: () => true,
+            runLocalPrettierFn,
+            runNpxPrettierFn: jest.fn(),
+        });
+
+        expect(probeIntegrityFn).not.toHaveBeenCalled();
+        expect(runLocalPrettierFn).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({ status: 0, error: null });
     });
 });

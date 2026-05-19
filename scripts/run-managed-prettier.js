@@ -14,6 +14,21 @@ const path = require("path");
 const childProcess = require("child_process");
 const { runBundledNpxCommand } = require("./lib/managed-prettier");
 const { getPinnedPrettierSpec } = require("./lib/prettier-version");
+const jestErrorDecoderModule = require("./lib/jest-error-decoder");
+const { isTruthyEnv } = jestErrorDecoderModule;
+const {
+    probeIntegrity,
+    probeIntegrityInSubprocess,
+} = require("./lib/node-modules-integrity");
+const {
+    isAutoRepairAllowed: defaultIsAutoRepairAllowed,
+    runIntegrityGateWithRecovery,
+} = require("./lib/integrity-gate-with-recovery");
+const {
+    getNpmMajorVersion,
+    attemptNpmCiRecovery,
+    printActionableRepairBanner,
+} = require("./run-managed-jest");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const LOCAL_PRETTIER_BIN = path.join(
@@ -74,7 +89,52 @@ function runManagedPrettier(args, options = {}) {
         existsSyncFn = fs.existsSync,
         runLocalPrettierFn = runLocalPrettier,
         runNpxPrettierFn = runNpxPrettier,
+        // Integrity gate dependencies (Step 7). Same shape as
+        // run-managed-jest; the gate logic lives in
+        // scripts/lib/integrity-gate-with-recovery.js.
+        runIntegrityGateWithRecoveryFn = runIntegrityGateWithRecovery,
+        probeIntegrityFn = probeIntegrity,
+        probeIntegrityInSubprocessFn = probeIntegrityInSubprocess,
+        attemptNpmCiRecoveryFn = attemptNpmCiRecovery,
+        getNpmMajorVersionFn = getNpmMajorVersion,
+        printActionableRepairBannerFn = printActionableRepairBanner,
+        isAutoRepairAllowedFn = null,
+        envFn = () => process.env,
+        warnFn = console.warn,
     } = options;
+
+    // ---- Integrity gate (runs BEFORE tier dispatch) ----
+    const env = (envFn && envFn()) || process.env;
+    if (!isTruthyEnv(env.DXMSG_HOOK_SKIP_INTEGRITY)) {
+        const resolvedIsAutoRepairAllowed = isAutoRepairAllowedFn !== null
+            ? isAutoRepairAllowedFn
+            : () => defaultIsAutoRepairAllowed({
+                env,
+                repoRoot: REPO_ROOT,
+                getNpmMajorVersionFn,
+            });
+
+        const gateResult = runIntegrityGateWithRecoveryFn({
+            repoRoot: REPO_ROOT,
+            probeIntegrityFn,
+            probeIntegrityInSubprocessFn,
+            attemptNpmCiRecoveryFn,
+            isAutoRepairAllowedFn: resolvedIsAutoRepairAllowed,
+            printActionableRepairBannerFn,
+            decoder: jestErrorDecoderModule,
+            warnFn,
+        });
+
+        if (!gateResult || !gateResult.ok) {
+            if (isTruthyEnv(env.DXMSG_HOOK_NO_AUTOREPAIR)) {
+                warnFn(
+                    "WARNING: integrity gate failed but DXMSG_HOOK_NO_AUTOREPAIR=1 -> proceeding to Prettier invocation with degraded gate."
+                );
+            } else {
+                return { status: 1, error: null };
+            }
+        }
+    }
 
     if (existsSyncFn(LOCAL_PRETTIER_BIN)) {
         return runLocalPrettierFn(args);

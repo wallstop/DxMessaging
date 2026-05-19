@@ -70,10 +70,23 @@ function runBundledNpxCommand(args, options = {}) {
   return runCommandFn(execPath, [npxCliPath, ...args], resolvedOptions);
 }
 
+function isHealthyFile(absPath, existsSyncFn, statSyncFn) {
+  if (!existsSyncFn(absPath)) {
+    return false;
+  }
+  try {
+    const stats = statSyncFn(absPath);
+    return Boolean(stats) && typeof stats.size === "number" && stats.size > 0;
+  } catch {
+    return false;
+  }
+}
+
 function loadLocalPrettier({
   localPrettierModulePath,
   localPrettierBinPath,
   existsSyncFn = fs.existsSync,
+  statSyncFn = fs.statSync,
   requireFn = require,
   isRecoverableToolLoadErrorFn = isRecoverableToolLoadError
 } = {}) {
@@ -83,7 +96,16 @@ function loadLocalPrettier({
     );
   }
 
-  if (existsSyncFn(localPrettierModulePath)) {
+  // Phase 4: probe BOTH the module path and the bin path for presence
+  // AND non-zero size. The bin path was previously only checked as a
+  // tie-breaker for the "unexpected layout" error. We now treat a
+  // zero-byte module OR a zero-byte bin as missing - either condition
+  // means Prettier will fail to run on Windows partial-extract systems
+  // even though existsSync says "yes".
+  const moduleHealthy = isHealthyFile(localPrettierModulePath, existsSyncFn, statSyncFn);
+  const binHealthy = isHealthyFile(localPrettierBinPath, existsSyncFn, statSyncFn);
+
+  if (moduleHealthy && binHealthy) {
     try {
       return requireFn(localPrettierModulePath);
     } catch (error) {
@@ -94,7 +116,9 @@ function loadLocalPrettier({
     }
   }
 
-  if (existsSyncFn(localPrettierBinPath)) {
+  // Existing failure case preserved: bin present without index.cjs is
+  // surfaced as an explicit error so the operator knows what to repair.
+  if (existsSyncFn(localPrettierBinPath) && !existsSyncFn(localPrettierModulePath)) {
     throw new Error(
       "Prettier devDependency layout is unexpected: bin present but index.cjs missing. Run `npm install` to repair."
     );

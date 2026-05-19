@@ -19,9 +19,26 @@ const CONTEXT_PATH = path.join(REPO_ROOT, ".llm", "context.md");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
 
 const REQUIRED_SKILL_RELATIVE_PATHS = [
+    "scripting/integrity-gate-robustness.md",
     "scripting/jest-hook-robustness.md",
     "scripting/let-tools-resolve-modules.md",
 ];
+
+// Phrases that anchor each skill's content. If a skill is silently wiped or
+// rewritten without these terms, the human-prose intent has been lost.
+const SKILL_CONTENT_ANCHORS = {
+    "scripting/integrity-gate-robustness.md": [
+        "INTEGRITY_TARGETS",
+        "findZeroByteNativeBinaries",
+        "DXMSG_HOOK_NO_AUTOREPAIR",
+    ],
+    "scripting/jest-hook-robustness.md": [
+        "testRunner",
+    ],
+    "scripting/let-tools-resolve-modules.md": [
+        "resolve",
+    ],
+};
 
 describe(".llm/skills jest-hook-robustness coverage", () => {
     test.each(REQUIRED_SKILL_RELATIVE_PATHS.map((rel) => [rel]))(
@@ -60,6 +77,28 @@ describe(".llm/skills jest-hook-robustness coverage", () => {
                 .split(/\r?\n/)
                 .find((line) => line.trim().length > 0);
             expect(firstNonBlank).toMatch(/^(#\s|---\s*$)/);
+        }
+    );
+
+    test.each(REQUIRED_SKILL_RELATIVE_PATHS.map((rel) => [rel]))(
+        "%s contains its content anchor phrases (content not silently wiped)",
+        (relativePath) => {
+            const absPath = path.join(SKILLS_DIR, relativePath);
+            if (!fs.existsSync(absPath)) {
+                throw new Error(
+                    `Skill ${relativePath} missing -- cannot check anchors.`
+                );
+            }
+            const anchors = SKILL_CONTENT_ANCHORS[relativePath];
+            if (!Array.isArray(anchors) || anchors.length === 0) {
+                throw new Error(
+                    `No content anchors registered for ${relativePath}; add at least one to SKILL_CONTENT_ANCHORS.`
+                );
+            }
+            const content = fs.readFileSync(absPath, "utf8");
+            for (const anchor of anchors) {
+                expect(content).toContain(anchor);
+            }
         }
     );
 

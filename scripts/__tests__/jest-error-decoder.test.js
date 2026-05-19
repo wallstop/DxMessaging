@@ -12,22 +12,58 @@ const {
 } = require("../lib/jest-error-decoder");
 
 describe("jest-error-decoder", () => {
-    test("PATTERNS is frozen and contains the three expected kinds in most-specific-first order", () => {
+    test("PATTERNS is frozen and contains the four expected kinds in most-specific-first order", () => {
         expect(Object.isFrozen(PATTERNS)).toBe(true);
         const kinds = PATTERNS.map((entry) => entry.kind);
         // Order is precedence: MISSING_TEST_RUNNER (most specific) wins over
         // the broader "Cannot find module" patterns when both would match.
+        // PARTIAL_NODE_MODULES_INSTALL is last because its sentinel regex
+        // never matches naturally — it is emitted synthetically by the
+        // integrity gate when auto-repair has been exhausted.
         expect(kinds).toEqual([
             "MISSING_TEST_RUNNER",
             "CORRUPT_ISOLATED_CACHE",
             "MISSING_LOCAL_JEST",
+            "PARTIAL_NODE_MODULES_INSTALL",
         ]);
+        expect(PATTERNS.length).toBe(4);
+        expect(PATTERNS[PATTERNS.length - 1].kind).toBe("PARTIAL_NODE_MODULES_INSTALL");
         for (const entry of PATTERNS) {
             expect(Object.isFrozen(entry)).toBe(true);
             expect(Object.isFrozen(entry.rootCauses)).toBe(true);
             expect(Object.isFrozen(entry.repairCommands)).toBe(true);
             expect(Object.isFrozen(entry.selfHeal)).toBe(true);
         }
+    });
+
+    test("MISSING_TEST_RUNNER advertises BOTH isolatedCacheReset and npmCi selfHeal flags", () => {
+        // The Windows failure that motivated this rewrite was caused by a
+        // partial extract of the repo's node_modules — npm ci is the right
+        // recovery, NOT isolated-cache reset. The original entry only set
+        // isolatedCacheReset; we now expose both so the runtime tier
+        // dispatcher can pick the correct channel based on the resolved
+        // runner path's containing tree.
+        const missingTestRunner = PATTERNS.find((p) => p.kind === "MISSING_TEST_RUNNER");
+        expect(missingTestRunner).toBeTruthy();
+        expect(missingTestRunner.selfHeal.isolatedCacheReset).toBe(true);
+        expect(missingTestRunner.selfHeal.npmCi).toBe(true);
+        expect(missingTestRunner.selfHeal.retryOnce).toBe(true);
+    });
+
+    test("PARTIAL_NODE_MODULES_INSTALL is the lowest-priority entry and only matches the integrity-gate sentinel", () => {
+        const sentinel = PATTERNS[PATTERNS.length - 1];
+        expect(sentinel.kind).toBe("PARTIAL_NODE_MODULES_INSTALL");
+        // The regex must NOT match ambient Jest stderr; only the explicit
+        // synthetic sentinel emitted by the gate's banner-print path.
+        expect(sentinel.regex.test("Cannot find module 'jest-circus/runner'")).toBe(false);
+        expect(sentinel.regex.test("Module /tmp/x/runner.js in the testRunner option was not found.")).toBe(false);
+        expect(sentinel.regex.test("__INTEGRITY_GATE_FAILURE__")).toBe(true);
+        // Decoding the sentinel string returns this entry.
+        const decoded = decodeJestStderr("__INTEGRITY_GATE_FAILURE__");
+        expect(decoded).not.toBeNull();
+        expect(decoded.kind).toBe("PARTIAL_NODE_MODULES_INSTALL");
+        expect(decoded.selfHeal.npmCi).toBe(false);
+        expect(decoded.selfHeal.retryOnce).toBe(false);
     });
 
     test("PATTERNS cannot be mutated by consumers", () => {

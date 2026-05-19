@@ -98,6 +98,12 @@ describe("doctor.js status helpers", () => {
 });
 
 describe("checkNodeModulesFreshness", () => {
+    // Step 10: checkNodeModulesFreshness now consumes probeIntegrity from
+    // scripts/lib/node-modules-integrity.js as the file-existence + size
+    // layer. Tests inject a no-op `probeIntegrityFn` so the existing fake-fs
+    // fixtures remain authoritative for the legacy `requiredFiles` path.
+    const noopProbeIntegrity = () => ({ ok: true, missing: [] });
+
     test("returns ok when every tool resolves, exists, and loads", () => {
         const toolSpecs = [
             {
@@ -125,6 +131,7 @@ describe("checkNodeModulesFreshness", () => {
         ];
 
         const section = checkNodeModulesFreshness({
+            probeIntegrityFn: noopProbeIntegrity,
             toolSpecs,
             existsSyncFn: () => true,
             requireResolveFn: () => "/repo/node_modules/jest-circus/build/runner.js",
@@ -153,6 +160,7 @@ describe("checkNodeModulesFreshness", () => {
         ];
 
         const section = checkNodeModulesFreshness({
+            probeIntegrityFn: noopProbeIntegrity,
             toolSpecs,
             existsSyncFn: (absPath) => !absPath.includes("missing-tool"),
             requireFn: noopRequire,
@@ -178,6 +186,7 @@ describe("checkNodeModulesFreshness", () => {
         ];
 
         const section = checkNodeModulesFreshness({
+            probeIntegrityFn: noopProbeIntegrity,
             toolSpecs,
             existsSyncFn: () => true,
             requireFn: () => {
@@ -210,6 +219,7 @@ describe("checkNodeModulesFreshness", () => {
         ];
 
         const section = checkNodeModulesFreshness({
+            probeIntegrityFn: noopProbeIntegrity,
             toolSpecs,
             existsSyncFn: () => true,
             requireFn: noopRequire,
@@ -238,6 +248,7 @@ describe("checkNodeModulesFreshness", () => {
         ];
 
         const section = checkNodeModulesFreshness({
+            probeIntegrityFn: noopProbeIntegrity,
             toolSpecs,
             existsSyncFn: () => true,
             requireFn: noopRequire,
