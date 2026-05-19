@@ -6,10 +6,7 @@ const path = require("path");
 const { createRequire } = require("module");
 const { pathToFileURL } = require("url");
 const { resolveBundledNpxCliPath } = require("./lib/managed-prettier");
-const {
-  INTEGRITY_TARGETS,
-  probeIntegrity
-} = require("./lib/node-modules-integrity");
+const { INTEGRITY_TARGETS, probeIntegrity } = require("./lib/node-modules-integrity");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
@@ -32,8 +29,7 @@ const NPX_COMMAND_ASSIGNMENT_RE =
   /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(["'`])npx(?:\.cmd)?\2/g;
 const PROCESS_INVOKER_ALIAS_ASSIGNMENT_RE =
   /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:childProcess\.)?(?:spawnSync|execSync|execFileSync|spawnPlatformCommandSync)|\w*spawnSyncImpl)\b/g;
-const CHILD_PROCESS_DESTRUCTURE_RE =
-  /\b(?:const|let|var)\s*\{([^}]+)\}\s*=\s*childProcess\b/g;
+const CHILD_PROCESS_DESTRUCTURE_RE = /\b(?:const|let|var)\s*\{([^}]+)\}\s*=\s*childProcess\b/g;
 
 const MANAGED_NPX_POLICY_GUIDANCE =
   "Use scripts/lib/managed-prettier.js runBundledNpxCommand() for PATH-independent npm CLI invocation.";
@@ -102,7 +98,10 @@ async function importToolEntry(absPath) {
   return import(pathToFileURL(absPath).href);
 }
 
-function resolveRepoModule(moduleSpecifier, moduleResolver = REPO_REQUIRE.resolve.bind(REPO_REQUIRE)) {
+function resolveRepoModule(
+  moduleSpecifier,
+  moduleResolver = REPO_REQUIRE.resolve.bind(REPO_REQUIRE)
+) {
   try {
     return moduleResolver(moduleSpecifier);
   } catch {
@@ -174,10 +173,7 @@ function collectUnsafeProcessInvokerNames(content) {
       const imported = destructured[1];
       const localName = destructured[2] || imported;
 
-      if (
-        UNSAFE_PROCESS_INVOKER_NAMES.includes(imported) ||
-        imported.endsWith("spawnSyncImpl")
-      ) {
+      if (UNSAFE_PROCESS_INVOKER_NAMES.includes(imported) || imported.endsWith("spawnSyncImpl")) {
         names.add(localName);
       }
     }
@@ -322,7 +318,9 @@ async function validateTooling(options = {}) {
         } else if (entry.reason === "empty") {
           violations.push(`${entry.tool}: ${entry.relPath} is empty (size 0)`);
         } else {
-          violations.push(`${entry.tool}: ${entry.relPath} integrity probe failed (${entry.reason})`);
+          violations.push(
+            `${entry.tool}: ${entry.relPath} integrity probe failed (${entry.reason})`
+          );
         }
       }
     }

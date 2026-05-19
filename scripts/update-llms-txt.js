@@ -90,9 +90,7 @@ function countSkillFiles() {
  */
 function hasValidLastUpdatedLine(content) {
   const lines = normalizeToLf(content).split("\n");
-  const lastUpdatedLines = lines.filter((line) =>
-    line.startsWith("**Last Updated:**")
-  );
+  const lastUpdatedLines = lines.filter((line) => line.startsWith("**Last Updated:**"));
 
   if (lastUpdatedLines.length !== 1) {
     return false;
@@ -137,7 +135,7 @@ function getPackageInfo() {
     version: pkg.version,
     description: pkg.description,
     name: pkg.name,
-    displayName: pkg.displayName,
+    displayName: pkg.displayName
   };
 }
 
@@ -151,9 +149,7 @@ function generateLlmsTxt() {
   const currentDate = new Date().toISOString().split("T")[0];
 
   // Format skill categories for display
-  const skillCategoriesText = skillCategories
-    .map((cat) => `  - **${cat}/**`)
-    .join("\n");
+  const skillCategoriesText = skillCategories.map((cat) => `  - **${cat}/**`).join("\n");
 
   return `# DxMessaging
 
@@ -473,9 +469,7 @@ function normalizeForComparison(str) {
 
   // Normalize the Last Updated line by replacing the date with a fixed placeholder,
   // while keeping the marker text so that structural differences are still detected.
-  return normalized
-    .replace(/^\*\*Last Updated:\*\*.*$/m, "**Last Updated:** <DATE>")
-    .trim();
+  return normalized.replace(/^\*\*Last Updated:\*\*.*$/m, "**Last Updated:** <DATE>").trim();
 }
 
 /**
@@ -499,7 +493,9 @@ function main() {
 
       // Validate that both contents contain a correctly formatted "**Last Updated:**" line
       if (!hasValidLastUpdatedLine(currentContent) || !hasValidLastUpdatedLine(newContent)) {
-        console.error("ERROR: llms.txt is missing or has an invalid '**Last Updated:**' line (expected ISO date)");
+        console.error(
+          "ERROR: llms.txt is missing or has an invalid '**Last Updated:**' line (expected ISO date)"
+        );
         process.exit(1);
       }
 
@@ -536,5 +532,5 @@ module.exports = {
   getSkillCategories,
   hasValidLastUpdatedLine,
   normalizeForComparison,
-  normalizeToLf,
+  normalizeToLf
 };

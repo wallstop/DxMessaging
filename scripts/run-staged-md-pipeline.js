@@ -54,6 +54,7 @@ const fixMd029Md051 = require("./fix-md029-md051");
 const ascii = require("./validate-docs-ascii");
 const codePatterns = require("./validate-doc-code-patterns");
 const prose = require("./validate-docs-prose");
+const outOfTreeLinks = require("./validate-docs-out-of-tree-links");
 const sharedFormatters = require("./lib/staged-doc-formatters");
 
 // Mirror the per-hook YAML filter that this pipeline replaces:
@@ -373,7 +374,7 @@ async function runMarkdownlintInProcess(absPaths, modifiedSet, options = {}) {
 }
 
 function runValidators(absPath, content) {
-  const violations = { ascii: [], codePatterns: [], prose: [] };
+  const violations = { ascii: [], codePatterns: [], prose: [], outOfTreeLinks: [] };
   const warnings = { ascii: [] };
 
   const asciiResult = ascii.scanContent(absPath, content, false);
@@ -384,6 +385,12 @@ function runValidators(absPath, content) {
 
   const proseResult = prose.scanContent(absPath, content);
   violations.prose.push(...proseResult.violations);
+
+  // Out-of-tree link guard only applies to Markdown files under docs/;
+  // mkdocs only renders that subtree, so the policy is scoped there.
+  if (outOfTreeLinks.isDocsMarkdown(absPath)) {
+    violations.outOfTreeLinks.push(...outOfTreeLinks.scanContent(absPath, content));
+  }
 
   return { violations, warnings };
 }
@@ -427,7 +434,8 @@ async function runStagedMdPipeline(filePaths, options = {}) {
   const aggregated = {
     ascii: { violations: [], warnings: [] },
     codePatterns: { violations: [] },
-    prose: { violations: [] }
+    prose: { violations: [] },
+    outOfTreeLinks: { violations: [] }
   };
   let markdownlintErrors = 0;
   // Tracks files the per-file loop actually processed (i.e. files that
@@ -478,6 +486,7 @@ async function runStagedMdPipeline(filePaths, options = {}) {
     aggregated.ascii.warnings.push(...v.warnings.ascii);
     aggregated.codePatterns.violations.push(...v.violations.codePatterns);
     aggregated.prose.violations.push(...v.violations.prose);
+    aggregated.outOfTreeLinks.violations.push(...v.violations.outOfTreeLinks);
   }
 
   return {
@@ -517,6 +526,15 @@ function reportPipelineResult(result) {
       emit(formatProseViolation(v), true);
     }
     totalViolations += result.violations.prose.violations.length;
+  }
+
+  if (result.violations.outOfTreeLinks && result.violations.outOfTreeLinks.violations.length > 0) {
+    emit("-- validate-docs-out-of-tree-links --", true);
+    for (const v of result.violations.outOfTreeLinks.violations) {
+      const rel = toRepoRelative(v.file);
+      emit(`${rel}:${v.line}: out-of-tree link "${v.url}" -- ${v.reason}`, true);
+    }
+    totalViolations += result.violations.outOfTreeLinks.violations.length;
   }
 
   if (result.markdownlintErrors > 0) {

@@ -14,6 +14,8 @@ const {
   parseHookConfigs,
   hasRequiredParserPrecheckCommand,
   hasRequiredPackageJsonFormatCommand,
+  hasRequiredYamlValidationCommand,
+  hasRequiredYamlCommentsCheckCommand,
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
   hasRequiredChangedDocsCommand,
@@ -29,9 +31,11 @@ const {
   hasInlinedPrettierEntry,
   hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
+  hasGuardedYamlCommentRestagePattern,
   hasPortableHookInvocation,
   usesManagedNodeRepair,
   hasRequiredSerialManagedRepairHook,
+  hasRequiredSerialYamlCommentFixerHook,
   validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
@@ -43,6 +47,8 @@ const {
   REQUIRED_CHANGED_DOCS_COMMAND,
   REQUIRED_LLM_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+  REQUIRED_YAML_VALIDATION_COMMAND,
+  REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_VALIDATION_COMMAND,
@@ -61,6 +67,7 @@ function requiredPreflightScript({ remove = [] } = {}) {
     REQUIRED_CHANGED_DOCS_COMMAND,
     REQUIRED_LLM_MARKDOWN_COMMAND,
     REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+    REQUIRED_YAML_VALIDATION_COMMAND,
     "npm run validate:pre-commit-tooling",
     REQUIRED_SCRIPTS_CSPELL_COMMAND,
     REQUIRED_WORKFLOW_CSPELL_COMMAND,
@@ -228,6 +235,39 @@ describe("validate-pre-commit-tooling", () => {
     const script = "npm run validate:pre-commit-tooling && echo npm run check:package-json-format";
 
     expect(hasRequiredPackageJsonFormatCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredYamlValidationCommand detects yaml precheck step", () => {
+    const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+      REQUIRED_YAML_VALIDATION_COMMAND,
+      REQUIRED_PRECHECK_PARSER_COMMAND
+    ].join(" && ");
+
+    expect(hasRequiredYamlValidationCommand(script)).toBe(true);
+  });
+
+  test("hasRequiredYamlValidationCommand rejects substring-only matches", () => {
+    const script = "npm run validate:pre-commit-tooling && echo npm run check:yaml";
+
+    expect(hasRequiredYamlValidationCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredYamlCommentsCheckCommand detects yaml comment check in check:yaml script", () => {
+    const yamlScript = [
+      "npm run format:yaml:check",
+      REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
+      "pre-commit run yamllint --all-files"
+    ].join(" && ");
+
+    expect(hasRequiredYamlCommentsCheckCommand(yamlScript)).toBe(true);
+  });
+
+  test("hasRequiredYamlCommentsCheckCommand rejects missing yaml comment check", () => {
+    const yamlScript = "npm run format:yaml:check && pre-commit run yamllint --all-files";
+
+    expect(hasRequiredYamlCommentsCheckCommand(yamlScript)).toBe(false);
   });
 
   test("hasRequiredNodeToolingCommand detects node tooling health precheck step", () => {
@@ -469,11 +509,23 @@ describe("validate-pre-commit-tooling", () => {
 
   test("managed node-repair hooks require require_serial true", () => {
     const managedHook = {
+      id: "prettier",
       entry: "node scripts/run-managed-prettier.js --write",
       requireSerial: "true"
     };
     const partitionedHook = {
+      id: "cspell",
       entry: "node scripts/run-managed-cspell.js --no-progress --no-summary",
+      requireSerial: undefined
+    };
+    const yamlCommentFixerHook = {
+      id: "fix-yaml-comments-line-length",
+      entry: "node scripts/run-and-restage.js node scripts/fix-yaml-comments-line-length.js --",
+      requireSerial: "true"
+    };
+    const yamlCommentFixerMissingSerial = {
+      id: "fix-yaml-comments-line-length",
+      entry: "node scripts/run-and-restage.js node scripts/fix-yaml-comments-line-length.js --",
       requireSerial: undefined
     };
 
@@ -481,6 +533,9 @@ describe("validate-pre-commit-tooling", () => {
     expect(hasRequiredSerialManagedRepairHook(managedHook)).toBe(true);
     expect(hasRequiredSerialManagedRepairHook(partitionedHook)).toBe(false);
     expect(hasRequiredSerialManagedRepairHook({ entry: "node scripts/check-eol.js" })).toBe(true);
+    expect(hasRequiredSerialYamlCommentFixerHook(yamlCommentFixerHook)).toBe(true);
+    expect(hasRequiredSerialYamlCommentFixerHook(yamlCommentFixerMissingSerial)).toBe(false);
+    expect(hasRequiredSerialYamlCommentFixerHook({ id: "other" })).toBe(true);
   });
 
   test("validateHookEntries rejects managed Prettier without require_serial", () => {
@@ -501,6 +556,32 @@ describe("validate-pre-commit-tooling", () => {
         message: expect.stringContaining("require_serial: true")
       })
     ]);
+  });
+
+  test("validateHookEntries rejects yaml comment fixer without guarded restage and require_serial", () => {
+    const content = [
+      "repos:",
+      "  - repo: local",
+      "    hooks:",
+      "      - id: fix-yaml-comments-line-length",
+      "        entry: node scripts/fix-yaml-comments-line-length.js",
+      "        language: system"
+    ].join("\n");
+
+    const violations = validateHookEntries(parseHookEntries(content), parseHookConfigs(content));
+
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hookId: "fix-yaml-comments-line-length",
+          message: expect.stringContaining("run-and-restage")
+        }),
+        expect.objectContaining({
+          hookId: "fix-yaml-comments-line-length",
+          message: expect.stringContaining("require_serial: true")
+        })
+      ])
+    );
   });
 
   test("hasInlinedPrettierInvocation only enforces inlining for the prettier hook id", () => {
@@ -554,6 +635,26 @@ describe("validate-pre-commit-tooling", () => {
         "bash -c 'node scripts/fix-csharp-underscore-methods.js \"$@\" && { git diff --quiet -- '\''$@'\'' || git add '\''$@'\''; }' --"
       )
     ).toBe(false);
+  });
+
+  test("hasGuardedYamlCommentRestagePattern requires shell-neutral restage wrapper", () => {
+    expect(
+      hasGuardedYamlCommentRestagePattern(
+        "fix-yaml-comments-line-length",
+        "node scripts/fix-yaml-comments-line-length.js"
+      )
+    ).toBe(false);
+
+    expect(
+      hasGuardedYamlCommentRestagePattern(
+        "fix-yaml-comments-line-length",
+        "node scripts/run-and-restage.js node scripts/fix-yaml-comments-line-length.js --"
+      )
+    ).toBe(true);
+
+    expect(hasGuardedYamlCommentRestagePattern("other-hook", "node scripts/check-eol.js")).toBe(
+      true
+    );
   });
 
   test("hasPortableHookInvocation rejects direct shell dependencies", () => {
@@ -863,6 +964,7 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain(REQUIRED_CHANGELOG_VALIDATION_COMMAND);
     expect(packageJson.scripts["check:workflow-cspell"]).toContain("cspell@10.0.0");
     expect(packageJson.scripts["check:banner-sync"]).toBe("node scripts/validate-banner.js");
+    expect(packageJson.scripts["check:yaml"]).toContain(REQUIRED_YAML_COMMENTS_CHECK_COMMAND);
     expect(packageJson.scripts["check:yaml"]).toContain("pre-commit run yamllint --all-files");
     expect(preflightScript).toContain("npm run check:yaml");
     expect(preflightScript).toContain("node scripts/generate-skills-index.js --check");
@@ -975,6 +1077,82 @@ describe("validate-pre-commit-tooling", () => {
     expect(violations).toHaveLength(1);
     expect(violations[0].hookId).toBe("preflight-script");
     expect(violations[0].message).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports missing YAML validation precheck command", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": requiredPreflightScript({
+              remove: [REQUIRED_YAML_VALIDATION_COMMAND]
+            }),
+            "check:yaml": [
+              "npm run format:yaml:check",
+              REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
+              "pre-commit run yamllint --all-files"
+            ].join(" && ")
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_YAML_VALIDATION_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports missing YAML comment check in check:yaml script", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": requiredPreflightScript(),
+            "check:yaml": "npm run format:yaml:check && pre-commit run yamllint --all-files"
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_YAML_COMMENTS_CHECK_COMMAND);
   });
 
   test("validatePreflightScriptPolicy reports missing markdown hook parity precheck command", () => {

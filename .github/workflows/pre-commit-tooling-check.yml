@@ -143,6 +143,9 @@ jobs:
       - name: Validate pre-commit Node tooling policy
         run: pre-commit run validate-pre-commit-tooling --all-files
 
+      - name: Validate devcontainer JSONC usage policy
+        run: pre-commit run validate-devcontainer-jsonc-usage --all-files
+
       - name: Validate YAML formatting and lint policy
         run: pre-commit run yamllint --all-files
 
@@ -170,6 +173,9 @@ jobs:
         run: npm run preflight:pre-push
 
       - name: Diagnose managed Jest fallback environment
+        # Quick diagnostic-only step (node --version + 5-line script). Add a
+        # per-step timeout so a wedged probe is obvious in CI logs.
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
@@ -190,6 +196,8 @@ jobs:
         run: node scripts/verify-managed-jest-fallback.js --force-delete-managed-runner
 
       - name: Confirm managed Jest runner was removed
+        # Quick assertion (filesystem stat + 8-line script). Add timeout.
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
@@ -209,6 +217,22 @@ jobs:
           NODE
 
       - name: Diagnose isolated Jest fallback resolution inputs
+        # DXMSG_HOOK_NO_AUTOREPAIR=1: this diagnostic step runs immediately
+        # after the previous step deleted node_modules/jest-circus/build/runner.js
+        # to force the isolated-fallback path. The production integrity gate
+        # in scripts/run-managed-jest.js would observe the missing runner and
+        # auto-run `npm ci` to repair the local install, which would re-create
+        # the runner and silently restore the local tier (defeating the test's
+        # purpose). NO_AUTOREPAIR lets the integrity probe still run (so the
+        # diagnostic banner appears in CI logs) but suppresses the repair, so
+        # this step accurately reports the resolution state that the next
+        # assertion step depends on.
+        # timeout-minutes: diagnostic step that loads the run-managed-jest
+        # module and prints a handful of resolved paths; should complete in
+        # seconds. A per-step timeout makes wedged require() calls obvious.
+        timeout-minutes: 2
+        env:
+          DXMSG_HOOK_NO_AUTOREPAIR: "1"
         shell: bash
         run: |
           set -euo pipefail
@@ -247,6 +271,23 @@ jobs:
           NODE
 
       - name: Assert isolated Jest fallback path is active
+        # DXMSG_HOOK_NO_AUTOREPAIR=1: the previous "Remove managed Jest runner
+        # to force fallback path" step deletes node_modules/jest-circus/build/runner.js.
+        # Production scripts/run-managed-jest.js (correctly) repairs that via
+        # the integrity gate + npm ci before the tier dispatcher runs, which
+        # would defeat this assertion. NO_AUTOREPAIR keeps the integrity probe
+        # (and its diagnostic logging) active but skips the npm ci repair so
+        # the local tier remains unhealthy and the isolated-fallback selection
+        # diagnostic is emitted. Coverage:
+        #   scripts/__tests__/run-managed-jest-fallback-integrity-isolation.test.js.
+        # timeout-minutes: a small assertion that prints --version + greps for
+        # one diagnostic line should never run longer than ~2 minutes. If the
+        # integrity probe wedges (network stall, npm registry hang) the 10-
+        # minute job timeout would obscure the actual cause; a per-step
+        # timeout produces the clear "step timed out" log entry.
+        timeout-minutes: 2
+        env:
+          DXMSG_HOOK_NO_AUTOREPAIR: "1"
         shell: bash
         run: |
           set -euo pipefail
@@ -255,6 +296,9 @@ jobs:
 
           if ! grep -Fq "Using isolated fallback Jest" "$output_file"; then
             echo "::error::Expected isolated fallback Jest to be used after removing local runner."
+            echo "::error::Active DXMSG_* env vars (one-line dump):"
+            env | grep -E '^DXMSG_' | tr '\n' ' ' || true
+            echo ""
             exit 1
           fi
 

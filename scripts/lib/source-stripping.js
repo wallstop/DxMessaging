@@ -67,188 +67,188 @@
  */
 
 function stripJsCommentsAndStrings(source) {
-    if (typeof source !== "string") {
-        return "";
-    }
-    if (source.length === 0) {
-        return "";
-    }
+  if (typeof source !== "string") {
+    return "";
+  }
+  if (source.length === 0) {
+    return "";
+  }
 
-    const out = [];
-    // Stack permits templateExpr nesting (e.g. `a${`b${c}d`}e`). The top of
-    // the stack is the active state.
-    const stack = [{ kind: "code" }];
-    const n = source.length;
-    let i = 0;
+  const out = [];
+  // Stack permits templateExpr nesting (e.g. `a${`b${c}d`}e`). The top of
+  // the stack is the active state.
+  const stack = [{ kind: "code" }];
+  const n = source.length;
+  let i = 0;
 
-    while (i < n) {
-        const frame = stack[stack.length - 1];
-        const state = frame.kind;
-        const ch = source[i];
-        const next = i + 1 < n ? source[i + 1] : "";
+  while (i < n) {
+    const frame = stack[stack.length - 1];
+    const state = frame.kind;
+    const ch = source[i];
+    const next = i + 1 < n ? source[i + 1] : "";
 
-        if (state === "code" || state === "templateExpr") {
-            if (ch === "/" && next === "/") {
-                stack.push({ kind: "lineComment" });
-                i += 2;
-                continue;
-            }
-            if (ch === "/" && next === "*") {
-                stack.push({ kind: "blockComment" });
-                i += 2;
-                continue;
-            }
-            if (ch === "'") {
-                stack.push({ kind: "stringSingle" });
-                out.push("'");
-                i++;
-                continue;
-            }
-            if (ch === "\"") {
-                stack.push({ kind: "stringDouble" });
-                out.push("\"");
-                i++;
-                continue;
-            }
-            if (ch === "`") {
-                stack.push({ kind: "templateLiteral" });
-                out.push("`");
-                i++;
-                continue;
-            }
-
-            if (state === "templateExpr") {
-                if (ch === "{") {
-                    frame.depth = (frame.depth || 0) + 1;
-                    out.push(ch);
-                    i++;
-                    continue;
-                }
-                if (ch === "}") {
-                    if ((frame.depth || 0) === 0) {
-                        // Closing brace of the `${...}` expression itself;
-                        // pop back to the surrounding template literal.
-                        stack.pop();
-                        out.push("}");
-                        i++;
-                        continue;
-                    }
-                    frame.depth -= 1;
-                    out.push(ch);
-                    i++;
-                    continue;
-                }
-            }
-
-            out.push(ch);
-            i++;
-            continue;
-        }
-
-        if (state === "lineComment") {
-            if (ch === "\n") {
-                stack.pop();
-                out.push("\n");
-                i++;
-                continue;
-            }
-            // Defensive: a `\r` immediately before `\n` is part of CRLF; we
-            // preserve neither the `\r` nor the comment payload, only the
-            // `\n` (when we reach it on the next iteration).
-            i++;
-            continue;
-        }
-
-        if (state === "blockComment") {
-            if (ch === "*" && next === "/") {
-                stack.pop();
-                i += 2;
-                continue;
-            }
-            if (ch === "\n") {
-                out.push("\n");
-            }
-            i++;
-            continue;
-        }
-
-        if (state === "stringSingle") {
-            if (ch === "\\" && i + 1 < n) {
-                // Skip the escape sequence entirely (both chars). For
-                // multi-line escapes like `\<newline>` we still drop the
-                // backslash and the newline — the line-count invariant in
-                // the file as a whole is unaffected because such constructs
-                // also remove a logical line from the source. The dominant
-                // case (single-char escapes) is correct.
-                i += 2;
-                continue;
-            }
-            if (ch === "'") {
-                stack.pop();
-                out.push("'");
-                i++;
-                continue;
-            }
-            if (ch === "\n") {
-                // Unterminated single-quoted string spanning a newline —
-                // legal in source only via an escape; preserve the newline
-                // so line numbers remain stable.
-                out.push("\n");
-            }
-            i++;
-            continue;
-        }
-
-        if (state === "stringDouble") {
-            if (ch === "\\" && i + 1 < n) {
-                i += 2;
-                continue;
-            }
-            if (ch === "\"") {
-                stack.pop();
-                out.push("\"");
-                i++;
-                continue;
-            }
-            if (ch === "\n") {
-                out.push("\n");
-            }
-            i++;
-            continue;
-        }
-
-        if (state === "templateLiteral") {
-            if (ch === "\\" && i + 1 < n) {
-                i += 2;
-                continue;
-            }
-            if (ch === "`") {
-                stack.pop();
-                out.push("`");
-                i++;
-                continue;
-            }
-            if (ch === "$" && next === "{") {
-                stack.push({ kind: "templateExpr", depth: 0 });
-                out.push("${");
-                i += 2;
-                continue;
-            }
-            if (ch === "\n") {
-                out.push("\n");
-            }
-            i++;
-            continue;
-        }
-
-        // Defensive: unknown state, advance one char to guarantee forward
-        // progress. This branch is unreachable given the states above.
+    if (state === "code" || state === "templateExpr") {
+      if (ch === "/" && next === "/") {
+        stack.push({ kind: "lineComment" });
+        i += 2;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        stack.push({ kind: "blockComment" });
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        stack.push({ kind: "stringSingle" });
+        out.push("'");
         i++;
+        continue;
+      }
+      if (ch === '"') {
+        stack.push({ kind: "stringDouble" });
+        out.push('"');
+        i++;
+        continue;
+      }
+      if (ch === "`") {
+        stack.push({ kind: "templateLiteral" });
+        out.push("`");
+        i++;
+        continue;
+      }
+
+      if (state === "templateExpr") {
+        if (ch === "{") {
+          frame.depth = (frame.depth || 0) + 1;
+          out.push(ch);
+          i++;
+          continue;
+        }
+        if (ch === "}") {
+          if ((frame.depth || 0) === 0) {
+            // Closing brace of the `${...}` expression itself;
+            // pop back to the surrounding template literal.
+            stack.pop();
+            out.push("}");
+            i++;
+            continue;
+          }
+          frame.depth -= 1;
+          out.push(ch);
+          i++;
+          continue;
+        }
+      }
+
+      out.push(ch);
+      i++;
+      continue;
     }
 
-    return out.join("");
+    if (state === "lineComment") {
+      if (ch === "\n") {
+        stack.pop();
+        out.push("\n");
+        i++;
+        continue;
+      }
+      // Defensive: a `\r` immediately before `\n` is part of CRLF; we
+      // preserve neither the `\r` nor the comment payload, only the
+      // `\n` (when we reach it on the next iteration).
+      i++;
+      continue;
+    }
+
+    if (state === "blockComment") {
+      if (ch === "*" && next === "/") {
+        stack.pop();
+        i += 2;
+        continue;
+      }
+      if (ch === "\n") {
+        out.push("\n");
+      }
+      i++;
+      continue;
+    }
+
+    if (state === "stringSingle") {
+      if (ch === "\\" && i + 1 < n) {
+        // Skip the escape sequence entirely (both chars). For
+        // multi-line escapes like `\<newline>` we still drop the
+        // backslash and the newline — the line-count invariant in
+        // the file as a whole is unaffected because such constructs
+        // also remove a logical line from the source. The dominant
+        // case (single-char escapes) is correct.
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        stack.pop();
+        out.push("'");
+        i++;
+        continue;
+      }
+      if (ch === "\n") {
+        // Unterminated single-quoted string spanning a newline —
+        // legal in source only via an escape; preserve the newline
+        // so line numbers remain stable.
+        out.push("\n");
+      }
+      i++;
+      continue;
+    }
+
+    if (state === "stringDouble") {
+      if (ch === "\\" && i + 1 < n) {
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        stack.pop();
+        out.push('"');
+        i++;
+        continue;
+      }
+      if (ch === "\n") {
+        out.push("\n");
+      }
+      i++;
+      continue;
+    }
+
+    if (state === "templateLiteral") {
+      if (ch === "\\" && i + 1 < n) {
+        i += 2;
+        continue;
+      }
+      if (ch === "`") {
+        stack.pop();
+        out.push("`");
+        i++;
+        continue;
+      }
+      if (ch === "$" && next === "{") {
+        stack.push({ kind: "templateExpr", depth: 0 });
+        out.push("${");
+        i += 2;
+        continue;
+      }
+      if (ch === "\n") {
+        out.push("\n");
+      }
+      i++;
+      continue;
+    }
+
+    // Defensive: unknown state, advance one char to guarantee forward
+    // progress. This branch is unreachable given the states above.
+    i++;
+  }
+
+  return out.join("");
 }
 
 module.exports = {
-    stripJsCommentsAndStrings,
+  stripJsCommentsAndStrings
 };

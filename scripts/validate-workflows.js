@@ -26,6 +26,9 @@
  * - Workflow lines that exceed the yamllint line-length ceiling (loaded from
  *   .yamllint.yaml when available; defaults to 200). This provides earlier
  *   feedback in `npm run validate:workflows` before git-hook execution.
+ * - .pre-commit-config.yaml lines that exceed the same yamllint line-length
+ *   ceiling so hook-policy YAML drift is surfaced during preflight instead of
+ *   only at hook-time.
  *
  * @usage
  *   node scripts/validate-workflows.js
@@ -51,169 +54,196 @@ const { normalizeToLf } = require("./lib/quote-parser");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
+const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
 const DEFAULT_WORKFLOW_LINE_LENGTH = 200;
 
 /**
  * Represents a validation violation.
  */
 class Violation {
-    constructor(file, line, pattern, message, severity = "error") {
-        this.file = file;
-        this.line = line;
-        this.pattern = pattern;
-        this.message = message;
-        this.severity = severity;
-    }
+  constructor(file, line, pattern, message, severity = "error") {
+    this.file = file;
+    this.line = line;
+    this.pattern = pattern;
+    this.message = message;
+    this.severity = severity;
+  }
 
-    toString() {
-        const prefix = this.severity === "error" ? "ERROR" : "WARN";
-        return `[${prefix}] ${this.file}:${this.line}: ${this.message}\n  Pattern: ${this.pattern}`;
-    }
+  toString() {
+    const prefix = this.severity === "error" ? "ERROR" : "WARN";
+    return `[${prefix}] ${this.file}:${this.line}: ${this.message}\n  Pattern: ${this.pattern}`;
+  }
 }
 
 function resolveWorkflowLineLengthMax(repoRoot = REPO_ROOT) {
-    return resolveWorkflowLineLengthPolicy(repoRoot).max;
+  return resolveWorkflowLineLengthPolicy(repoRoot).max;
 }
 
 function parseYamlBoolean(rawValue) {
-    if (typeof rawValue !== "string") {
-        return null;
-    }
-
-    const normalized = rawValue.trim().toLowerCase();
-    if (normalized === "true") {
-        return true;
-    }
-    if (normalized === "false") {
-        return false;
-    }
-
+  if (typeof rawValue !== "string") {
     return null;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+  if (normalized === "false") {
+    return false;
+  }
+
+  return null;
 }
 
 function resolveWorkflowLineLengthPolicy(repoRoot = REPO_ROOT) {
-    const policy = {
-        max: DEFAULT_WORKFLOW_LINE_LENGTH,
-        allowNonBreakableWords: true,
-        allowNonBreakableInlineMappings: false,
-    };
+  const policy = {
+    max: DEFAULT_WORKFLOW_LINE_LENGTH,
+    allowNonBreakableWords: true,
+    allowNonBreakableInlineMappings: false
+  };
 
-    const configPath = path.join(repoRoot, ".yamllint.yaml");
+  const configPath = path.join(repoRoot, ".yamllint.yaml");
 
-    let content;
-    try {
-        content = fs.readFileSync(configPath, "utf8");
-    } catch (_error) {
-        return policy;
-    }
-
-    const lines = normalizeToLf(content).split("\n");
-    let inLineLengthBlock = false;
-    let blockIndent = -1;
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-
-        if (!inLineLengthBlock) {
-            if (/^\s*line-length:\s*(?:#.*)?$/.test(line)) {
-                inLineLengthBlock = true;
-                blockIndent = getIndent(line);
-            }
-            continue;
-        }
-
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        const indent = getIndent(line);
-        if (indent <= blockIndent) {
-            break;
-        }
-
-        const maxMatch = /^\s*max:\s*([0-9]+)\s*(?:#.*)?$/.exec(line);
-        if (maxMatch) {
-            const parsedMax = Number.parseInt(maxMatch[1], 10);
-            if (Number.isFinite(parsedMax) && parsedMax > 0) {
-                policy.max = parsedMax;
-            }
-            continue;
-        }
-
-        const allowWordsMatch = /^\s*allow-non-breakable-words:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
-        if (allowWordsMatch) {
-            const parsedBoolean = parseYamlBoolean(allowWordsMatch[1]);
-            if (parsedBoolean !== null) {
-                policy.allowNonBreakableWords = parsedBoolean;
-            }
-            continue;
-        }
-
-        const allowInlineMappingsMatch = /^\s*allow-non-breakable-inline-mappings:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
-        if (!allowInlineMappingsMatch) {
-            continue;
-        }
-
-        const parsedBoolean = parseYamlBoolean(allowInlineMappingsMatch[1]);
-        if (parsedBoolean !== null) {
-            policy.allowNonBreakableInlineMappings = parsedBoolean;
-        }
-    }
-
-    // yamllint semantics: enabling inline mappings implies non-breakable words.
-    if (policy.allowNonBreakableInlineMappings) {
-        policy.allowNonBreakableWords = true;
-    }
-
+  let content;
+  try {
+    content = fs.readFileSync(configPath, "utf8");
+  } catch (_error) {
     return policy;
+  }
+
+  const lines = normalizeToLf(content).split("\n");
+  let inLineLengthBlock = false;
+  let blockIndent = -1;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!inLineLengthBlock) {
+      if (/^\s*line-length:\s*(?:#.*)?$/.test(line)) {
+        inLineLengthBlock = true;
+        blockIndent = getIndent(line);
+      }
+      continue;
+    }
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const indent = getIndent(line);
+    if (indent <= blockIndent) {
+      break;
+    }
+
+    const maxMatch = /^\s*max:\s*([0-9]+)\s*(?:#.*)?$/.exec(line);
+    if (maxMatch) {
+      const parsedMax = Number.parseInt(maxMatch[1], 10);
+      if (Number.isFinite(parsedMax) && parsedMax > 0) {
+        policy.max = parsedMax;
+      }
+      continue;
+    }
+
+    const allowWordsMatch = /^\s*allow-non-breakable-words:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
+    if (allowWordsMatch) {
+      const parsedBoolean = parseYamlBoolean(allowWordsMatch[1]);
+      if (parsedBoolean !== null) {
+        policy.allowNonBreakableWords = parsedBoolean;
+      }
+      continue;
+    }
+
+    const allowInlineMappingsMatch =
+      /^\s*allow-non-breakable-inline-mappings:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
+    if (!allowInlineMappingsMatch) {
+      continue;
+    }
+
+    const parsedBoolean = parseYamlBoolean(allowInlineMappingsMatch[1]);
+    if (parsedBoolean !== null) {
+      policy.allowNonBreakableInlineMappings = parsedBoolean;
+    }
+  }
+
+  // yamllint semantics: enabling inline mappings implies non-breakable words.
+  if (policy.allowNonBreakableInlineMappings) {
+    policy.allowNonBreakableWords = true;
+  }
+
+  return policy;
 }
 
 function lineHasNonBreakableWordOverflow(line, maxLength) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) {
-        return false;
-    }
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
 
-    const tokens = trimmed.split(/\s+/);
-    return tokens.some((token) => token.length > maxLength);
+  const tokens = trimmed.split(/\s+/);
+  return tokens.some((token) => token.length > maxLength);
 }
 
 function findWorkflowLineLengthViolations(relativePath, lines, maxLength, options = {}) {
-    const violations = [];
-    const allowNonBreakableWords = options.allowNonBreakableWords === true;
+  const violations = [];
+  const allowNonBreakableWords = options.allowNonBreakableWords === true;
+  const contextLabel = typeof options.contextLabel === "string" ? options.contextLabel : "Workflow";
 
-    for (let index = 0; index < lines.length; index++) {
-        const line = lines[index];
-        const length = line.length;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const length = line.length;
 
-        if (length <= maxLength) {
-            continue;
-        }
-
-        if (allowNonBreakableWords && lineHasNonBreakableWordOverflow(line, maxLength)) {
-            continue;
-        }
-
-        violations.push(
-            new Violation(
-                relativePath,
-                index + 1,
-                line.trim(),
-                `Workflow line exceeds ${maxLength} characters (${length}). Break long run/script statements across lines so validate:workflows catches this before git hooks.`,
-                "error"
-            )
-        );
+    if (length <= maxLength) {
+      continue;
     }
 
-    return violations;
+    if (allowNonBreakableWords && lineHasNonBreakableWordOverflow(line, maxLength)) {
+      continue;
+    }
+
+    violations.push(
+      new Violation(
+        relativePath,
+        index + 1,
+        line.trim(),
+        `${contextLabel} line exceeds ${maxLength} characters (${length}). Break long lines so validate:workflows catches this before git hooks.`,
+        "error"
+      )
+    );
+  }
+
+  return violations;
+}
+
+function validatePreCommitConfigLineLengths(options = {}) {
+  const repoRoot = options.repoRoot || REPO_ROOT;
+  const preCommitConfigPath = options.preCommitConfigPath || PRE_COMMIT_CONFIG_PATH;
+  const relativePath = path.relative(repoRoot, preCommitConfigPath).replace(/\\/g, "/");
+  const lineLengthPolicy = resolveWorkflowLineLengthPolicy(repoRoot);
+
+  let content;
+  try {
+    content = fs.readFileSync(preCommitConfigPath, "utf8");
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return [];
+    }
+
+    return [new Violation(relativePath, 0, "", `Failed to read file: ${error.message}`)];
+  }
+
+  const lines = normalizeToLf(content).split("\n");
+  return findWorkflowLineLengthViolations(relativePath, lines, lineLengthPolicy.max, {
+    ...lineLengthPolicy,
+    contextLabel: "YAML"
+  });
 }
 
 function getIndent(line) {
-    return line.length - line.trimStart().length;
+  return line.length - line.trimStart().length;
 }
 
 function usesVariableExtensionPattern(line) {
-    return /\*\.\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/.test(line);
+  return /\*\.\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/.test(line);
 }
 
 /**
@@ -224,44 +254,41 @@ function usesVariableExtensionPattern(line) {
  * @returns {boolean} True if the line contains a forbidden pattern
  */
 function isForbiddenRenormalizePattern(line) {
-    // Match lines that have git add --renormalize with multiple file patterns
-    // Forbidden: git add --renormalize -- '*.md' '*.json' '*.yml'
-    // Allowed: git add --renormalize -- "*.$ext" "**/*.$ext" (single extension via variable)
+  // Match lines that have git add --renormalize with multiple file patterns
+  // Forbidden: git add --renormalize -- '*.md' '*.json' '*.yml'
+  // Allowed: git add --renormalize -- "*.$ext" "**/*.$ext" (single extension via variable)
 
-    const trimmed = line.trim();
+  const trimmed = line.trim();
 
-    // Must contain git add --renormalize
-    if (!trimmed.includes("git add") || !trimmed.includes("--renormalize")) {
-        return false;
-    }
+  // Must contain git add --renormalize
+  if (!trimmed.includes("git add") || !trimmed.includes("--renormalize")) {
+    return false;
+  }
 
-    // Skip lines that use shell variable expansion (part of a loop)
-    if (usesVariableExtensionPattern(trimmed)) {
-        return false;
-    }
+  // Skip lines that use shell variable expansion (part of a loop)
+  if (usesVariableExtensionPattern(trimmed)) {
+    return false;
+  }
 
-    const commandMatch =
-        /git add --renormalize\s+--\s+(.+?)(?:\s*(?:&&|\|\||;|\|)\s*.+)?$/.exec(
-            trimmed
-        );
-    const renormalizeArgs = commandMatch ? commandMatch[1] : trimmed;
+  const commandMatch = /git add --renormalize\s+--\s+(.+?)(?:\s*(?:&&|\|\||;|\|)\s*.+)?$/.exec(
+    trimmed
+  );
+  const renormalizeArgs = commandMatch ? commandMatch[1] : trimmed;
 
-    // Skip lines that target a single specific file (e.g., '.config/dotnet-tools.json')
-    // These are safe because the file definitely exists or the step would have failed earlier
-    const singleFilePattern = /^["']?[^"'*?\s]+["']?$/;
-    if (singleFilePattern.test(renormalizeArgs)) {
-        return false;
-    }
+  // Skip lines that target a single specific file (e.g., '.config/dotnet-tools.json')
+  // These are safe because the file definitely exists or the step would have failed earlier
+  const singleFilePattern = /^["']?[^"'*?\s]+["']?$/;
+  if (singleFilePattern.test(renormalizeArgs)) {
+    return false;
+  }
 
-    // Count distinct file extension patterns (*.ext or **/*.ext)
-    // Use a Set to count unique extensions
-    const extensionPatterns = renormalizeArgs.match(/\*\.(\w+)/g) || [];
-    const uniqueExtensions = new Set(
-        extensionPatterns.map((p) => p.replace("*.", ""))
-    );
+  // Count distinct file extension patterns (*.ext or **/*.ext)
+  // Use a Set to count unique extensions
+  const extensionPatterns = renormalizeArgs.match(/\*\.(\w+)/g) || [];
+  const uniqueExtensions = new Set(extensionPatterns.map((p) => p.replace("*.", "")));
 
-    // If there are multiple unique extensions on one line, it's forbidden
-    return uniqueExtensions.size > 1;
+  // If there are multiple unique extensions on one line, it's forbidden
+  return uniqueExtensions.size > 1;
 }
 
 /**
@@ -273,783 +300,782 @@ function isForbiddenRenormalizePattern(line) {
  * @returns {boolean} True if properly guarded
  */
 function hasExistenceCheck(lines, lineIndex) {
-    // Look backwards for an existence check pattern
-    // Pattern: if git ls-files "*.ext" | grep -q .; then
-    // or: if git ls-files "*.$ext" | grep -q .; then
-    const lookbackLines = 10;
-    const startIndex = Math.max(0, lineIndex - lookbackLines);
+  // Look backwards for an existence check pattern
+  // Pattern: if git ls-files "*.ext" | grep -q .; then
+  // or: if git ls-files "*.$ext" | grep -q .; then
+  const lookbackLines = 10;
+  const startIndex = Math.max(0, lineIndex - lookbackLines);
 
-    for (let i = lineIndex - 1; i >= startIndex; i--) {
-        const line = lines[i];
-        if (
-            line.includes("git ls-files") &&
-            line.includes("grep -q") &&
-            (line.includes("then") || lines[i + 1]?.includes("then"))
-        ) {
-            return true;
-        }
-        // Also check for a for-loop with if-check pattern
-        if (line.includes("for ext in") || line.includes("for EXT in")) {
-            // Check if there's a git ls-files check between the for and the renormalize
-            for (let j = i + 1; j < lineIndex; j++) {
-                if (lines[j].includes("git ls-files") && lines[j].includes("grep -q")) {
-                    return true;
-                }
-            }
-        }
+  for (let i = lineIndex - 1; i >= startIndex; i--) {
+    const line = lines[i];
+    if (
+      line.includes("git ls-files") &&
+      line.includes("grep -q") &&
+      (line.includes("then") || lines[i + 1]?.includes("then"))
+    ) {
+      return true;
     }
-    return false;
+    // Also check for a for-loop with if-check pattern
+    if (line.includes("for ext in") || line.includes("for EXT in")) {
+      // Check if there's a git ls-files check between the for and the renormalize
+      for (let j = i + 1; j < lineIndex; j++) {
+        if (lines[j].includes("git ls-files") && lines[j].includes("grep -q")) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 function isGitIgnoredPath(repoRoot, relativePath, execFileSyncImpl = execFileSync) {
-    if (typeof relativePath !== "string" || relativePath.trim().length === 0) {
-        return false;
+  if (typeof relativePath !== "string" || relativePath.trim().length === 0) {
+    return false;
+  }
+
+  const runCheckIgnore = (args) =>
+    execFileSyncImpl("git", args, {
+      cwd: repoRoot,
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+
+  const isUnsupportedNoIndex = (error) => {
+    const stderr = error && error.stderr ? String(error.stderr) : "";
+    const message = error && error.message ? String(error.message) : "";
+    const combined = `${message}\n${stderr}`;
+
+    return (
+      (error && typeof error.status === "number" && error.status === 129) ||
+      /unknown option|unknown switch/i.test(combined) ||
+      (/check-ignore/i.test(combined) && /no-index/i.test(combined))
+    );
+  };
+
+  const throwGitUnavailableError = (phase) => {
+    throw new Error(
+      `Unable to evaluate git ignore status for '${relativePath}': git executable was not found on PATH (${phase}).`
+    );
+  };
+
+  try {
+    runCheckIgnore(["check-ignore", "--quiet", "--no-index", "--", relativePath]);
+    return true;
+  } catch (error) {
+    if (error && typeof error.status === "number" && error.status === 1) {
+      return false;
     }
 
-    const runCheckIgnore = (args) =>
-        execFileSyncImpl("git", args, {
-            cwd: repoRoot,
-            stdio: ["ignore", "ignore", "pipe"],
-        });
+    if (error && error.code === "ENOENT") {
+      throwGitUnavailableError("check-ignore --no-index");
+    }
 
-    const isUnsupportedNoIndex = (error) => {
-        const stderr =
-            error && error.stderr
-                ? String(error.stderr)
-                : "";
-        const message = error && error.message ? String(error.message) : "";
-        const combined = `${message}\n${stderr}`;
-
-        return (
-            (error && typeof error.status === "number" && error.status === 129)
-            || /unknown option|unknown switch/i.test(combined)
-            || /check-ignore/i.test(combined) && /no-index/i.test(combined)
-        );
-    };
-
-    const throwGitUnavailableError = (phase) => {
-        throw new Error(
-            `Unable to evaluate git ignore status for '${relativePath}': git executable was not found on PATH (${phase}).`
-        );
-    };
-
-    try {
-        runCheckIgnore(["check-ignore", "--quiet", "--no-index", "--", relativePath]);
+    if (isUnsupportedNoIndex(error)) {
+      try {
+        runCheckIgnore(["check-ignore", "--quiet", "--", relativePath]);
         return true;
-    } catch (error) {
-        if (error && typeof error.status === "number" && error.status === 1) {
-            return false;
+      } catch (fallbackError) {
+        if (
+          fallbackError &&
+          typeof fallbackError.status === "number" &&
+          fallbackError.status === 1
+        ) {
+          return false;
         }
 
-        if (error && error.code === "ENOENT") {
-            throwGitUnavailableError("check-ignore --no-index");
+        if (fallbackError && fallbackError.code === "ENOENT") {
+          throwGitUnavailableError("check-ignore fallback");
         }
 
-        if (isUnsupportedNoIndex(error)) {
-            try {
-                runCheckIgnore(["check-ignore", "--quiet", "--", relativePath]);
-                return true;
-            } catch (fallbackError) {
-                if (
-                    fallbackError
-                    && typeof fallbackError.status === "number"
-                    && fallbackError.status === 1
-                ) {
-                    return false;
-                }
-
-                if (fallbackError && fallbackError.code === "ENOENT") {
-                    throwGitUnavailableError("check-ignore fallback");
-                }
-
-                const fallbackMessage =
-                    fallbackError && fallbackError.message
-                        ? fallbackError.message
-                        : String(fallbackError);
-                throw new Error(
-                    `Unable to evaluate git ignore status for '${relativePath}' after falling back from --no-index: ${fallbackMessage}`
-                );
-            }
-        }
-
-        const message = error && error.message ? error.message : String(error);
+        const fallbackMessage =
+          fallbackError && fallbackError.message ? fallbackError.message : String(fallbackError);
         throw new Error(
-            `Unable to evaluate git ignore status for '${relativePath}': ${message}`
+          `Unable to evaluate git ignore status for '${relativePath}' after falling back from --no-index: ${fallbackMessage}`
         );
+      }
     }
+
+    const message = error && error.message ? error.message : String(error);
+    throw new Error(`Unable to evaluate git ignore status for '${relativePath}': ${message}`);
+  }
 }
 
 function extractWorkflowPathEntries(lines) {
-    const entries = [];
-    let inPathsBlock = false;
-    let pathsIndent = -1;
+  const entries = [];
+  let inPathsBlock = false;
+  let pathsIndent = -1;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (!inPathsBlock && /^\s*paths:\s*$/.test(line)) {
-            inPathsBlock = true;
-            pathsIndent = indent;
-            continue;
-        }
-
-        if (!inPathsBlock) {
-            continue;
-        }
-
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= pathsIndent && !/^\s*-\s+/.test(line)) {
-            inPathsBlock = false;
-            pathsIndent = -1;
-
-            if (/^\s*paths:\s*$/.test(line)) {
-                inPathsBlock = true;
-                pathsIndent = indent;
-            }
-            continue;
-        }
-
-        const pathEntry = /^\s*-\s*["']?([^"'#]+)["']?\s*(?:#.*)?$/.exec(line);
-        if (pathEntry) {
-            entries.push({
-                line: i + 1,
-                path: pathEntry[1].trim(),
-            });
-        }
+    if (!inPathsBlock && /^\s*paths:\s*$/.test(line)) {
+      inPathsBlock = true;
+      pathsIndent = indent;
+      continue;
     }
 
-    return entries;
+    if (!inPathsBlock) {
+      continue;
+    }
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indent <= pathsIndent && !/^\s*-\s+/.test(line)) {
+      inPathsBlock = false;
+      pathsIndent = -1;
+
+      if (/^\s*paths:\s*$/.test(line)) {
+        inPathsBlock = true;
+        pathsIndent = indent;
+      }
+      continue;
+    }
+
+    const pathEntry = /^\s*-\s*["']?([^"'#]+)["']?\s*(?:#.*)?$/.exec(line);
+    if (pathEntry) {
+      entries.push({
+        line: i + 1,
+        path: pathEntry[1].trim()
+      });
+    }
+  }
+
+  return entries;
 }
 
 function isLiteralPath(pathValue) {
-    return !/[\*\?\[\]\{\}]|\$\{\{/.test(pathValue) && !pathValue.startsWith("!");
+  return !/[\*\?\[\]\{\}]|\$\{\{/.test(pathValue) && !pathValue.startsWith("!");
 }
 
 function findIgnoredPathViolations(
-    relativePath,
-    lines,
-    repoRoot = REPO_ROOT,
-    isIgnoredPathFn = isGitIgnoredPath
+  relativePath,
+  lines,
+  repoRoot = REPO_ROOT,
+  isIgnoredPathFn = isGitIgnoredPath
 ) {
-    const violations = [];
-    const entries = extractWorkflowPathEntries(lines);
+  const violations = [];
+  const entries = extractWorkflowPathEntries(lines);
 
-    for (const entry of entries) {
-        if (!isLiteralPath(entry.path)) {
-            continue;
-        }
-
-        if (!isIgnoredPathFn(repoRoot, entry.path)) {
-            continue;
-        }
-
-        violations.push(
-            new Violation(
-                relativePath,
-                entry.line,
-                entry.path,
-                `Workflow trigger path '${entry.path}' is ignored by git and cannot trigger this workflow. Remove it from paths filters or update ignore policy.`,
-                "error"
-            )
-        );
+  for (const entry of entries) {
+    if (!isLiteralPath(entry.path)) {
+      continue;
     }
 
-    return violations;
+    if (!isIgnoredPathFn(repoRoot, entry.path)) {
+      continue;
+    }
+
+    violations.push(
+      new Violation(
+        relativePath,
+        entry.line,
+        entry.path,
+        `Workflow trigger path '${entry.path}' is ignored by git and cannot trigger this workflow. Remove it from paths filters or update ignore policy.`,
+        "error"
+      )
+    );
+  }
+
+  return violations;
 }
 
 function extractRunBlocks(lines) {
-    const blocks = [];
+  const blocks = [];
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const blockRunMatch = /^(\s*)(?:-\s+)?run:\s*[>|][+-]?\s*$/.exec(line);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const blockRunMatch = /^(\s*)(?:-\s+)?run:\s*[>|][+-]?\s*$/.exec(line);
 
-        if (blockRunMatch) {
-            const baseIndent = blockRunMatch[1].length;
-            const blockLines = [];
-            let j = i + 1;
+    if (blockRunMatch) {
+      const baseIndent = blockRunMatch[1].length;
+      const blockLines = [];
+      let j = i + 1;
 
-            while (j < lines.length) {
-                const nextLine = lines[j];
-                const trimmed = nextLine.trim();
-                const nextIndent = getIndent(nextLine);
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        const trimmed = nextLine.trim();
+        const nextIndent = getIndent(nextLine);
 
-                if (trimmed.length > 0 && nextIndent <= baseIndent) {
-                    break;
-                }
-
-                blockLines.push(nextLine.trim());
-                j++;
-            }
-
-            blocks.push({
-                startLine: i + 1,
-                text: blockLines.join("\n").trim(),
-            });
-
-            i = j - 1;
-            continue;
+        if (trimmed.length > 0 && nextIndent <= baseIndent) {
+          break;
         }
 
-        const inlineRunMatch = /^\s*(?:-\s+)?run:\s*(.+?)\s*$/.exec(line);
-        if (inlineRunMatch) {
-            blocks.push({
-                startLine: i + 1,
-                text: inlineRunMatch[1].trim(),
-            });
-        }
+        blockLines.push(nextLine.trim());
+        j++;
+      }
+
+      blocks.push({
+        startLine: i + 1,
+        text: blockLines.join("\n").trim()
+      });
+
+      i = j - 1;
+      continue;
     }
 
-    return blocks;
+    const inlineRunMatch = /^\s*(?:-\s+)?run:\s*(.+?)\s*$/.exec(line);
+    if (inlineRunMatch) {
+      blocks.push({
+        startLine: i + 1,
+        text: inlineRunMatch[1].trim()
+      });
+    }
+  }
+
+  return blocks;
 }
 
 function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) {
-    const violations = [];
+  const violations = [];
 
-    if (!packageLockIgnored) {
-        return violations;
-    }
-
-    const runBlocks = extractRunBlocks(lines);
-
-    for (const block of runBlocks) {
-        const hasNpmCi = /(^|\n|;|&&)\s*npm\s+ci\b/m.test(block.text);
-        const hasNpmInstall = /(^|\n|;|&&)\s*npm\s+(?:install|i)\b/m.test(block.text);
-
-        if (hasNpmInstall && !hasNpmCi) {
-            violations.push(
-                new Violation(
-                    relativePath,
-                    block.startLine,
-                    "npm install",
-                    "Repository ignores package-lock.json, so dependency install blocks must be lockfile-aware. Use npm ci when package-lock.json exists and npm install fallback when it does not.",
-                    "error"
-                )
-            );
-            continue;
-        }
-
-        if (!hasNpmCi) {
-            continue;
-        }
-
-        const hasLockfileCheck =
-            /\[\s*-f\s+package-lock\.json\s*\]/.test(block.text) ||
-            /\btest\s+-f\s+package-lock\.json\b/.test(block.text);
-        const hasAnyIfElseFallback =
-            /\bif\b[\s\S]*?\bnpm\s+ci\b[\s\S]*?\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
-        const hasOrFallbackInstall =
-            /\bnpm\s+ci\b\s*\|\|\s*\bnpm\s+(?:install|i)\b/.test(block.text);
-        const hasMissingLockfileHardFail =
-            /\[\s*!\s+-f\s+package-lock\.json\s*\][\s\S]*?\bexit\s+1\b/.test(block.text);
-
-        if (hasOrFallbackInstall) {
-            continue;
-        }
-
-        if (hasMissingLockfileHardFail) {
-            violations.push(
-                new Violation(
-                    relativePath,
-                    block.startLine,
-                    "npm ci",
-                    "Repository ignores package-lock.json, so workflows must not fail when the lockfile is absent. Use npm ci/npm install fallback.",
-                    "error"
-                )
-            );
-            continue;
-        }
-
-        if (!hasLockfileCheck || !hasAnyIfElseFallback) {
-            violations.push(
-                new Violation(
-                    relativePath,
-                    block.startLine,
-                    "npm ci",
-                    "Repository ignores package-lock.json, so npm ci blocks must include a lockfile presence check and npm install fallback.",
-                    "error"
-                )
-            );
-        }
-    }
-
+  if (!packageLockIgnored) {
     return violations;
+  }
+
+  const runBlocks = extractRunBlocks(lines);
+
+  for (const block of runBlocks) {
+    const hasNpmCi = /(^|\n|;|&&)\s*npm\s+ci\b/m.test(block.text);
+    const hasNpmInstall = /(^|\n|;|&&)\s*npm\s+(?:install|i)\b/m.test(block.text);
+
+    if (hasNpmInstall && !hasNpmCi) {
+      violations.push(
+        new Violation(
+          relativePath,
+          block.startLine,
+          "npm install",
+          "Repository ignores package-lock.json, so dependency install blocks must be lockfile-aware. Use npm ci when package-lock.json exists and npm install fallback when it does not.",
+          "error"
+        )
+      );
+      continue;
+    }
+
+    if (!hasNpmCi) {
+      continue;
+    }
+
+    const hasLockfileCheck =
+      /\[\s*-f\s+package-lock\.json\s*\]/.test(block.text) ||
+      /\btest\s+-f\s+package-lock\.json\b/.test(block.text);
+    const hasAnyIfElseFallback =
+      /\bif\b[\s\S]*?\bnpm\s+ci\b[\s\S]*?\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
+    const hasOrFallbackInstall = /\bnpm\s+ci\b\s*\|\|\s*\bnpm\s+(?:install|i)\b/.test(block.text);
+    const hasMissingLockfileHardFail =
+      /\[\s*!\s+-f\s+package-lock\.json\s*\][\s\S]*?\bexit\s+1\b/.test(block.text);
+
+    if (hasOrFallbackInstall) {
+      continue;
+    }
+
+    if (hasMissingLockfileHardFail) {
+      violations.push(
+        new Violation(
+          relativePath,
+          block.startLine,
+          "npm ci",
+          "Repository ignores package-lock.json, so workflows must not fail when the lockfile is absent. Use npm ci/npm install fallback.",
+          "error"
+        )
+      );
+      continue;
+    }
+
+    if (!hasLockfileCheck || !hasAnyIfElseFallback) {
+      violations.push(
+        new Violation(
+          relativePath,
+          block.startLine,
+          "npm ci",
+          "Repository ignores package-lock.json, so npm ci blocks must include a lockfile presence check and npm install fallback.",
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
 }
 
 function extractJobs(lines) {
-    const jobs = [];
-    let inJobsBlock = false;
-    let jobsIndent = -1;
+  const jobs = [];
+  let inJobsBlock = false;
+  let jobsIndent = -1;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (!inJobsBlock && /^\s*jobs:\s*$/.test(line)) {
-            inJobsBlock = true;
-            jobsIndent = indent;
-            continue;
-        }
-
-        if (!inJobsBlock) {
-            continue;
-        }
-
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= jobsIndent) {
-            break;
-        }
-
-        const jobHeader = /^\s*([A-Za-z0-9_-]+):\s*$/.exec(line);
-        if (!jobHeader || indent !== jobsIndent + 2) {
-            continue;
-        }
-
-        let endLine = lines.length - 1;
-        for (let j = i + 1; j < lines.length; j++) {
-            const nextLine = lines[j];
-            const nextTrimmed = nextLine.trim();
-            const nextIndent = getIndent(nextLine);
-
-            if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
-                continue;
-            }
-
-            if (nextIndent <= jobsIndent) {
-                endLine = j - 1;
-                break;
-            }
-
-            if (
-                nextIndent === jobsIndent + 2
-                && /^\s*[A-Za-z0-9_-]+:\s*$/.test(nextLine)
-            ) {
-                endLine = j - 1;
-                break;
-            }
-        }
-
-        jobs.push({
-            id: jobHeader[1],
-            startLine: i + 1,
-            endLine: endLine + 1,
-            indent,
-        });
-
-        i = endLine;
+    if (!inJobsBlock && /^\s*jobs:\s*$/.test(line)) {
+      inJobsBlock = true;
+      jobsIndent = indent;
+      continue;
     }
 
-    return jobs;
+    if (!inJobsBlock) {
+      continue;
+    }
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indent <= jobsIndent) {
+      break;
+    }
+
+    const jobHeader = /^\s*([A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (!jobHeader || indent !== jobsIndent + 2) {
+      continue;
+    }
+
+    let endLine = lines.length - 1;
+    for (let j = i + 1; j < lines.length; j++) {
+      const nextLine = lines[j];
+      const nextTrimmed = nextLine.trim();
+      const nextIndent = getIndent(nextLine);
+
+      if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
+        continue;
+      }
+
+      if (nextIndent <= jobsIndent) {
+        endLine = j - 1;
+        break;
+      }
+
+      if (nextIndent === jobsIndent + 2 && /^\s*[A-Za-z0-9_-]+:\s*$/.test(nextLine)) {
+        endLine = j - 1;
+        break;
+      }
+    }
+
+    jobs.push({
+      id: jobHeader[1],
+      startLine: i + 1,
+      endLine: endLine + 1,
+      indent
+    });
+
+    i = endLine;
+  }
+
+  return jobs;
 }
 
 function extractDefaultRunShellFromBlock(lines, startIndex, endIndex, defaultsIndent) {
-    let runIndent = -1;
+  let runIndent = -1;
 
-    for (let i = startIndex + 1; i <= endIndex && i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex && i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= defaultsIndent) {
-            break;
-        }
-
-        if (runIndent === -1 && /^\s*run:\s*$/.test(line) && indent === defaultsIndent + 2) {
-            runIndent = indent;
-            continue;
-        }
-
-        if (runIndent !== -1) {
-            if (indent <= runIndent) {
-                break;
-            }
-
-            const shellMatch = /^\s*shell:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
-            if (shellMatch && indent === runIndent + 2) {
-                return shellMatch[1].toLowerCase();
-            }
-        }
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return null;
+    if (indent <= defaultsIndent) {
+      break;
+    }
+
+    if (runIndent === -1 && /^\s*run:\s*$/.test(line) && indent === defaultsIndent + 2) {
+      runIndent = indent;
+      continue;
+    }
+
+    if (runIndent !== -1) {
+      if (indent <= runIndent) {
+        break;
+      }
+
+      const shellMatch = /^\s*shell:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
+      if (shellMatch && indent === runIndent + 2) {
+        return shellMatch[1].toLowerCase();
+      }
+    }
+  }
+
+  return null;
 }
 
 function extractWorkflowDefaultsShell(lines) {
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!/^\s*defaults:\s*$/.test(line) || getIndent(line) !== 0) {
-            continue;
-        }
-
-        return extractDefaultRunShellFromBlock(lines, i, lines.length - 1, 0);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/^\s*defaults:\s*$/.test(line) || getIndent(line) !== 0) {
+      continue;
     }
 
-    return null;
+    return extractDefaultRunShellFromBlock(lines, i, lines.length - 1, 0);
+  }
+
+  return null;
 }
 
 function extractJobDefaultsShell(lines, job) {
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= job.indent) {
-            break;
-        }
-
-        if (!/^\s*defaults:\s*$/.test(line) || indent !== job.indent + 2) {
-            continue;
-        }
-
-        return extractDefaultRunShellFromBlock(lines, i, endIndex, indent);
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return null;
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (!/^\s*defaults:\s*$/.test(line) || indent !== job.indent + 2) {
+      continue;
+    }
+
+    return extractDefaultRunShellFromBlock(lines, i, endIndex, indent);
+  }
+
+  return null;
 }
 
 function jobTargetsWindows(lines, job) {
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
-    let runsOnValue = null;
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
+  let runsOnValue = null;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= job.indent) {
-            break;
-        }
-
-        if (indent !== job.indent + 2) {
-            continue;
-        }
-
-        const runsOnMatch = /^\s*runs-on:\s*(.+?)\s*$/.exec(line);
-        if (!runsOnMatch) {
-            continue;
-        }
-
-        runsOnValue = runsOnMatch[1].trim();
-        break;
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    if (!runsOnValue) {
-        return false;
+    if (indent <= job.indent) {
+      break;
     }
 
-    if (/\bwindows(?:-[a-z0-9]+)?\b/i.test(runsOnValue)) {
-        return true;
+    if (indent !== job.indent + 2) {
+      continue;
     }
 
-    if (!/matrix\./i.test(runsOnValue)) {
-        return false;
+    const runsOnMatch = /^\s*runs-on:\s*(.+?)\s*$/.exec(line);
+    if (!runsOnMatch) {
+      continue;
     }
 
-    let inMatrixBlock = false;
-    let matrixIndent = -1;
+    runsOnValue = runsOnMatch[1].trim();
+    break;
+  }
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
-
-        if (!inMatrixBlock && /^\s*matrix:\s*$/.test(line)) {
-            inMatrixBlock = true;
-            matrixIndent = indent;
-            continue;
-        }
-
-        if (!inMatrixBlock) {
-            continue;
-        }
-
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= matrixIndent) {
-            inMatrixBlock = false;
-            matrixIndent = -1;
-            continue;
-        }
-
-        if (/\bwindows(?:-[a-z0-9]+)?\b/i.test(line)) {
-            return true;
-        }
-    }
-
+  if (!runsOnValue) {
     return false;
+  }
+
+  if (/\bwindows(?:-[a-z0-9]+)?\b/i.test(runsOnValue)) {
+    return true;
+  }
+
+  if (!/matrix\./i.test(runsOnValue)) {
+    return false;
+  }
+
+  let inMatrixBlock = false;
+  let matrixIndent = -1;
+
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
+
+    if (!inMatrixBlock && /^\s*matrix:\s*$/.test(line)) {
+      inMatrixBlock = true;
+      matrixIndent = indent;
+      continue;
+    }
+
+    if (!inMatrixBlock) {
+      continue;
+    }
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indent <= matrixIndent) {
+      inMatrixBlock = false;
+      matrixIndent = -1;
+      continue;
+    }
+
+    if (/\bwindows(?:-[a-z0-9]+)?\b/i.test(line)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function extractStepRun(lines, stepStartIndex, stepEndIndex) {
-    for (let i = stepStartIndex; i <= stepEndIndex; i++) {
-        const line = lines[i];
-        const blockRunMatch = /^(\s*)(?:-\s+)?run:\s*[>|][+-]?\s*$/.exec(line);
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
+    const blockRunMatch = /^(\s*)(?:-\s+)?run:\s*[>|][+-]?\s*$/.exec(line);
 
-        if (blockRunMatch) {
-            const baseIndent = blockRunMatch[1].length;
-            const blockLines = [];
-            let j = i + 1;
+    if (blockRunMatch) {
+      const baseIndent = blockRunMatch[1].length;
+      const blockLines = [];
+      let j = i + 1;
 
-            while (j <= stepEndIndex) {
-                const nextLine = lines[j];
-                const trimmed = nextLine.trim();
-                const nextIndent = getIndent(nextLine);
+      while (j <= stepEndIndex) {
+        const nextLine = lines[j];
+        const trimmed = nextLine.trim();
+        const nextIndent = getIndent(nextLine);
 
-                if (trimmed.length > 0 && nextIndent <= baseIndent) {
-                    break;
-                }
-
-                blockLines.push(nextLine.trim());
-                j++;
-            }
-
-            return {
-                line: i + 1,
-                text: blockLines.join("\n").trim(),
-            };
+        if (trimmed.length > 0 && nextIndent <= baseIndent) {
+          break;
         }
 
-        const inlineRunMatch = /^\s*(?:-\s+)?run:\s*(.+?)\s*$/.exec(line);
-        if (inlineRunMatch) {
-            return {
-                line: i + 1,
-                text: inlineRunMatch[1].trim(),
-            };
-        }
+        blockLines.push(nextLine.trim());
+        j++;
+      }
+
+      return {
+        line: i + 1,
+        text: blockLines.join("\n").trim()
+      };
     }
 
-    return null;
+    const inlineRunMatch = /^\s*(?:-\s+)?run:\s*(.+?)\s*$/.exec(line);
+    if (inlineRunMatch) {
+      return {
+        line: i + 1,
+        text: inlineRunMatch[1].trim()
+      };
+    }
+  }
+
+  return null;
 }
 
 function extractStepShell(lines, stepStartIndex, stepEndIndex) {
-    for (let i = stepStartIndex; i <= stepEndIndex; i++) {
-        const line = lines[i];
-        const shellMatch = /^\s*shell:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
 
-        if (shellMatch) {
-            return shellMatch[1].toLowerCase();
-        }
+    // Quoted shell string -- captures everything between matching quotes
+    // (supports the Git Bash absolute-path escape hatch which contains
+    // spaces). The previous regex split on whitespace and returned an
+    // empty match for those cases.
+    const quotedMatch = /^\s*shell:\s*(['"])(.*?)\1\s*(?:#.*)?$/.exec(line);
+    if (quotedMatch) {
+      return quotedMatch[2].toLowerCase();
     }
 
-    return null;
+    // Unquoted (single token) shell value: `shell: pwsh`, `shell: bash`.
+    const bareMatch = /^\s*shell:\s*([^\s'"#]+)\s*(?:#.*)?$/.exec(line);
+    if (bareMatch) {
+      return bareMatch[1].toLowerCase();
+    }
+  }
+
+  return null;
 }
 
 function extractStepUses(lines, stepStartIndex, stepEndIndex) {
-    for (let i = stepStartIndex; i <= stepEndIndex; i++) {
-        const line = lines[i];
-        const usesMatch = /^\s*(?:-\s+)?uses:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/i.exec(line);
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
+    const usesMatch = /^\s*(?:-\s+)?uses:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/i.exec(line);
 
-        if (usesMatch) {
-            return usesMatch[1].toLowerCase();
-        }
+    if (usesMatch) {
+      return usesMatch[1].toLowerCase();
     }
+  }
 
-    return null;
+  return null;
 }
 
 function extractJobSteps(lines, job) {
-    const steps = [];
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
-    let stepsStartIndex = -1;
-    let stepsIndent = -1;
+  const steps = [];
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
+  let stepsStartIndex = -1;
+  let stepsIndent = -1;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        if (/^\s*steps:\s*$/.test(line) && getIndent(line) === job.indent + 2) {
-            stepsStartIndex = i;
-            stepsIndent = getIndent(line);
-            break;
-        }
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    if (/^\s*steps:\s*$/.test(line) && getIndent(line) === job.indent + 2) {
+      stepsStartIndex = i;
+      stepsIndent = getIndent(line);
+      break;
     }
+  }
 
-    if (stepsStartIndex === -1) {
-        return steps;
-    }
-
-    let i = stepsStartIndex + 1;
-    while (i <= endIndex) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
-
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            i++;
-            continue;
-        }
-
-        if (indent <= stepsIndent) {
-            break;
-        }
-
-        if (!(indent === stepsIndent + 2 && /^\s*-\s+/.test(line))) {
-            i++;
-            continue;
-        }
-
-        const stepStartIndex = i;
-        let stepEndIndex = endIndex;
-
-        for (let j = i + 1; j <= endIndex; j++) {
-            const nextLine = lines[j];
-            const nextTrimmed = nextLine.trim();
-            const nextIndent = getIndent(nextLine);
-
-            if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
-                continue;
-            }
-
-            if (nextIndent <= stepsIndent) {
-                stepEndIndex = j - 1;
-                break;
-            }
-
-            if (nextIndent === stepsIndent + 2 && /^\s*-\s+/.test(nextLine)) {
-                stepEndIndex = j - 1;
-                break;
-            }
-        }
-
-        const run = extractStepRun(lines, stepStartIndex, stepEndIndex);
-        steps.push({
-            startIndex: stepStartIndex,
-            endIndex: stepEndIndex,
-            shell: extractStepShell(lines, stepStartIndex, stepEndIndex),
-            uses: extractStepUses(lines, stepStartIndex, stepEndIndex),
-            run,
-        });
-
-        i = stepEndIndex + 1;
-    }
-
+  if (stepsStartIndex === -1) {
     return steps;
+  }
+
+  let i = stepsStartIndex + 1;
+  while (i <= endIndex) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      i++;
+      continue;
+    }
+
+    if (indent <= stepsIndent) {
+      break;
+    }
+
+    if (!(indent === stepsIndent + 2 && /^\s*-\s+/.test(line))) {
+      i++;
+      continue;
+    }
+
+    const stepStartIndex = i;
+    let stepEndIndex = endIndex;
+
+    for (let j = i + 1; j <= endIndex; j++) {
+      const nextLine = lines[j];
+      const nextTrimmed = nextLine.trim();
+      const nextIndent = getIndent(nextLine);
+
+      if (nextTrimmed.length === 0 || nextTrimmed.startsWith("#")) {
+        continue;
+      }
+
+      if (nextIndent <= stepsIndent) {
+        stepEndIndex = j - 1;
+        break;
+      }
+
+      if (nextIndent === stepsIndent + 2 && /^\s*-\s+/.test(nextLine)) {
+        stepEndIndex = j - 1;
+        break;
+      }
+    }
+
+    const run = extractStepRun(lines, stepStartIndex, stepEndIndex);
+    steps.push({
+      startIndex: stepStartIndex,
+      endIndex: stepEndIndex,
+      shell: extractStepShell(lines, stepStartIndex, stepEndIndex),
+      uses: extractStepUses(lines, stepStartIndex, stepEndIndex),
+      run
+    });
+
+    i = stepEndIndex + 1;
+  }
+
+  return steps;
 }
 
 const BASH_SYNTAX_PATTERNS = [
-    {
-        label: "if/elif [ ... ] conditional",
-        regex: /^(?:if|elif)\s+\[\[?/,
-    },
-    {
-        label: "for ... in loop",
-        regex: /^for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\b/,
-    },
-    {
-        label: "while [ ... ] loop",
-        regex: /^while\s+\[\[?/,
-    },
-    {
-        label: "until [ ... ] loop",
-        regex: /^until\s+\[\[?/,
-    },
-    {
-        label: "set -e/-o shell option",
-        regex: /^set\s+-[A-Za-z]/,
-    },
-    {
-        label: "test -f/-d shell check",
-        regex: /^test\s+-[A-Za-z]/,
-    },
-    {
-        label: "logical chaining operator (&&/||)",
-        regex: /&&|\|\|/,
-    },
+  {
+    label: "if/elif [ ... ] conditional",
+    regex: /^(?:if|elif)\s+\[\[?/
+  },
+  {
+    label: "for ... in loop",
+    regex: /^for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\b/
+  },
+  {
+    label: "while [ ... ] loop",
+    regex: /^while\s+\[\[?/
+  },
+  {
+    label: "until [ ... ] loop",
+    regex: /^until\s+\[\[?/
+  },
+  {
+    label: "set -e/-o shell option",
+    regex: /^set\s+-[A-Za-z]/
+  },
+  {
+    label: "test -f/-d shell check",
+    regex: /^test\s+-[A-Za-z]/
+  },
+  {
+    label: "logical chaining operator (&&/||)",
+    regex: /&&|\|\|/
+  }
 ];
 
 function detectBashSyntaxPattern(runText) {
-    if (typeof runText !== "string" || runText.trim().length === 0) {
-        return null;
-    }
-
-    const runLines = runText.split("\n");
-
-    for (const rawLine of runLines) {
-        const line = rawLine.trim();
-        if (line.length === 0 || line.startsWith("#")) {
-            continue;
-        }
-
-        for (const pattern of BASH_SYNTAX_PATTERNS) {
-            if (pattern.regex.test(line)) {
-                return pattern.label;
-            }
-        }
-    }
-
+  if (typeof runText !== "string" || runText.trim().length === 0) {
     return null;
+  }
+
+  const runLines = runText.split("\n");
+
+  for (const rawLine of runLines) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) {
+      continue;
+    }
+
+    for (const pattern of BASH_SYNTAX_PATTERNS) {
+      if (pattern.regex.test(line)) {
+        return pattern.label;
+      }
+    }
+  }
+
+  return null;
 }
 
 function isBashCompatibleShell(shell) {
-    return shell === "bash" || shell === "sh";
+  return shell === "bash" || shell === "sh";
 }
 
 function findWindowsBashPortabilityViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
-    const workflowDefaultsShell = extractWorkflowDefaultsShell(lines);
+  const violations = [];
+  const jobs = extractJobs(lines);
+  const workflowDefaultsShell = extractWorkflowDefaultsShell(lines);
 
-    for (const job of jobs) {
-        if (!jobTargetsWindows(lines, job)) {
-            continue;
-        }
-
-        const jobDefaultsShell = extractJobDefaultsShell(lines, job);
-        const steps = extractJobSteps(lines, job);
-
-        for (const step of steps) {
-            if (!step.run || typeof step.run.text !== "string") {
-                continue;
-            }
-
-            const bashPattern = detectBashSyntaxPattern(step.run.text);
-            if (!bashPattern) {
-                continue;
-            }
-
-            const effectiveShell = step.shell || jobDefaultsShell || workflowDefaultsShell;
-            if (isBashCompatibleShell(effectiveShell)) {
-                continue;
-            }
-
-            violations.push(
-                new Violation(
-                    relativePath,
-                    step.run.line,
-                    bashPattern,
-                    `Windows-targeting workflow job '${job.id}' uses Bash syntax (${bashPattern}) without a Bash-compatible shell. Add 'shell: bash' to the step or set 'defaults.run.shell: bash' at job/workflow scope.`,
-                    "error"
-                )
-            );
-        }
+  for (const job of jobs) {
+    if (!jobTargetsWindows(lines, job)) {
+      continue;
     }
 
-    return violations;
+    const jobDefaultsShell = extractJobDefaultsShell(lines, job);
+    const steps = extractJobSteps(lines, job);
+
+    for (const step of steps) {
+      if (!step.run || typeof step.run.text !== "string") {
+        continue;
+      }
+
+      const bashPattern = detectBashSyntaxPattern(step.run.text);
+      if (!bashPattern) {
+        continue;
+      }
+
+      const effectiveShell = step.shell || jobDefaultsShell || workflowDefaultsShell;
+      if (isBashCompatibleShell(effectiveShell)) {
+        continue;
+      }
+
+      violations.push(
+        new Violation(
+          relativePath,
+          step.run.line,
+          bashPattern,
+          `Windows-targeting workflow job '${job.id}' uses Bash syntax (${bashPattern}) without a Bash-compatible shell. Add 'shell: bash' to the step or set 'defaults.run.shell: bash' at job/workflow scope.`,
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
 }
 
 /**
@@ -1072,61 +1098,61 @@ function findWindowsBashPortabilityViolations(relativePath, lines) {
  * `validate:changelog:coverage`.
  */
 const NPM_SCRIPTS_REQUIRING_GIT_HISTORY = Object.freeze([
-    "validate:changelog:coverage",
-    "preflight:pre-commit",
-    "preflight:pre-push",
-    "validate:all",
+  "validate:changelog:coverage",
+  "preflight:pre-commit",
+  "preflight:pre-push",
+  "validate:all"
 ]);
 
 function buildNpmRunRegexAlternation(scriptNames) {
-    // Escape regex metacharacters present in script names (e.g. ":").
-    const escaped = scriptNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    // No current prefix collision exists across the script names above
-    // (the entries are not prefixes of each other under the regex `\b`
-    // word-boundary terminator). The trailing `\b` in the consumer regex
-    // ensures e.g. "preflight:pre-commit" would not be matched by a
-    // hypothetical "preflight:pre" entry.
-    return escaped.join("|");
+  // Escape regex metacharacters present in script names (e.g. ":").
+  const escaped = scriptNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // No current prefix collision exists across the script names above
+  // (the entries are not prefixes of each other under the regex `\b`
+  // word-boundary terminator). The trailing `\b` in the consumer regex
+  // ensures e.g. "preflight:pre-commit" would not be matched by a
+  // hypothetical "preflight:pre" entry.
+  return escaped.join("|");
 }
 
 function runTextInvokesChangelogCoverage(runText) {
-    if (typeof runText !== "string" || runText.trim().length === 0) {
-        return false;
-    }
+  if (typeof runText !== "string" || runText.trim().length === 0) {
+    return false;
+  }
 
-    const npmAlternation = buildNpmRunRegexAlternation(NPM_SCRIPTS_REQUIRING_GIT_HISTORY);
-    const npmRunRegex = new RegExp(`npm\\s+run\\s+(?:${npmAlternation})\\b`);
+  const npmAlternation = buildNpmRunRegexAlternation(NPM_SCRIPTS_REQUIRING_GIT_HISTORY);
+  const npmRunRegex = new RegExp(`npm\\s+run\\s+(?:${npmAlternation})\\b`);
 
-    return (
-        /validate-changelog\.js\b[\s\S]*--check-coverage/.test(runText)
-        || /pre-commit\s+run\b[\s\S]*\bvalidate-changelog-policy\b/.test(runText)
-        || npmRunRegex.test(runText)
-        // Bare `git diff origin/...` / `git merge-base origin/...` / `git log
-        // origin/...` style commands require origin/<base>; flag them too.
-        || /\bgit\s+diff\s+[^|]*origin\//.test(runText)
-        || /\bgit\s+merge-base\s+[^|]*origin\//.test(runText)
-    );
+  return (
+    /validate-changelog\.js\b[\s\S]*--check-coverage/.test(runText) ||
+    /pre-commit\s+run\b[\s\S]*\bvalidate-changelog-policy\b/.test(runText) ||
+    npmRunRegex.test(runText) ||
+    // Bare `git diff origin/...` / `git merge-base origin/...` / `git log
+    // origin/...` style commands require origin/<base>; flag them too.
+    /\bgit\s+diff\s+[^|]*origin\//.test(runText) ||
+    /\bgit\s+merge-base\s+[^|]*origin\//.test(runText)
+  );
 }
 
 function stepHasFullHistoryCheckout(lines, step) {
-    if (!step || typeof step.uses !== "string" || !step.uses.startsWith("actions/checkout@")) {
-        return false;
-    }
-
-    for (let i = step.startIndex; i <= step.endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (/^fetch-depth:\s*["']?0["']?\s*(?:#.*)?$/.test(trimmed)) {
-            return true;
-        }
-    }
-
+  if (!step || typeof step.uses !== "string" || !step.uses.startsWith("actions/checkout@")) {
     return false;
+  }
+
+  for (let i = step.startIndex; i <= step.endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (/^fetch-depth:\s*["']?0["']?\s*(?:#.*)?$/.test(trimmed)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -1151,106 +1177,102 @@ function stepHasFullHistoryCheckout(lines, step) {
  * the inline regex.
  */
 function findForbiddenRunsOnGroupViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
+  const violations = [];
+  const jobs = extractJobs(lines);
 
-    for (const job of jobs) {
-        const startIndex = job.startLine - 1;
-        const endIndex = job.endLine - 1;
+  for (const job of jobs) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
 
-        for (let i = startIndex + 1; i <= endIndex; i++) {
-            const line = lines[i];
-            const trimmed = line.trim();
-            const indent = getIndent(line);
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      const indent = getIndent(line);
 
-            if (trimmed.length === 0 || trimmed.startsWith("#")) {
-                continue;
-            }
+      if (trimmed.length === 0 || trimmed.startsWith("#")) {
+        continue;
+      }
 
-            if (indent <= job.indent) {
-                break;
-            }
+      if (indent <= job.indent) {
+        break;
+      }
 
-            if (indent !== job.indent + 2) {
-                continue;
-            }
+      if (indent !== job.indent + 2) {
+        continue;
+      }
 
-            // Inline mapping form: `runs-on: { group: foo, labels: [...] }`
-            const inlineRunsOn = /^\s*runs-on:\s*\{([^}]*)\}\s*(?:#.*)?$/.exec(line);
-            if (inlineRunsOn && /\bgroup\s*:/.test(inlineRunsOn[1])) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        i + 1,
-                        line.trim(),
-                        `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on; Unity-credential-using jobs rely on natural per-runner serialization (one job per runner agent) and per-matrix concurrency expansion when needed, not on a shared org-wide concurrency group.`,
-                        "error"
-                    )
-                );
-                continue;
-            }
+      // Inline mapping form: `runs-on: { group: foo, labels: [...] }`
+      const inlineRunsOn = /^\s*runs-on:\s*\{([^}]*)\}\s*(?:#.*)?$/.exec(line);
+      if (inlineRunsOn && /\bgroup\s*:/.test(inlineRunsOn[1])) {
+        violations.push(
+          new Violation(
+            relativePath,
+            i + 1,
+            line.trim(),
+            `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on; Unity-credential-using jobs rely on natural per-runner serialization (one job per runner agent) and per-matrix concurrency expansion when needed, not on a shared org-wide concurrency group.`,
+            "error"
+          )
+        );
+        continue;
+      }
 
-            // Multi-line object form: bare `runs-on:` followed by indented mapping.
-            if (!/^\s*runs-on:\s*(?:#.*)?$/.test(line)) {
-                continue;
-            }
+      // Multi-line object form: bare `runs-on:` followed by indented mapping.
+      if (!/^\s*runs-on:\s*(?:#.*)?$/.test(line)) {
+        continue;
+      }
 
-            const runsOnIndent = indent;
+      const runsOnIndent = indent;
 
-            for (let j = i + 1; j <= endIndex; j++) {
-                const childLine = lines[j];
-                const childTrimmed = childLine.trim();
-                const childIndent = getIndent(childLine);
+      for (let j = i + 1; j <= endIndex; j++) {
+        const childLine = lines[j];
+        const childTrimmed = childLine.trim();
+        const childIndent = getIndent(childLine);
 
-                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
-                    continue;
-                }
-
-                if (childIndent <= runsOnIndent) {
-                    break;
-                }
-
-                if (/^\s*group\s*:/.test(childLine)) {
-                    violations.push(
-                        new Violation(
-                            relativePath,
-                            j + 1,
-                            childLine.trim(),
-                            `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on; Unity-credential-using jobs rely on natural per-runner serialization (one job per runner agent) and per-matrix concurrency expansion when needed, not on a shared org-wide concurrency group.`,
-                            "error"
-                        )
-                    );
-                    break;
-                }
-            }
+        if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+          continue;
         }
-    }
 
-    return violations;
+        if (childIndent <= runsOnIndent) {
+          break;
+        }
+
+        if (/^\s*group\s*:/.test(childLine)) {
+          violations.push(
+            new Violation(
+              relativePath,
+              j + 1,
+              childLine.trim(),
+              `Job '${job.id}': runs-on.group is forbidden -- runner groups are not provisioned for this org. Use labels-only runs-on; Unity-credential-using jobs rely on natural per-runner serialization (one job per runner agent) and per-matrix concurrency expansion when needed, not on a shared org-wide concurrency group.`,
+              "error"
+            )
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  return violations;
 }
 
 // Documented self-hosted runner label allowlist. Each entry is the sorted
 // (case-sensitive) label set — preserving casing intentionally so that typos
 // like `RAM-64Gb` are flagged as non-allowlisted. Order-insensitive.
 const SELF_HOSTED_LABEL_ALLOWLIST = [
-    ["RAM-64GB", "Windows", "self-hosted"],
-    ["RAM-64GB", "Windows", "fast", "self-hosted"],
-    ["Linux", "RAM-64GB", "X64", "self-hosted"],
-    ["ARM64", "macOS", "self-hosted"],
+  ["RAM-64GB", "Windows", "self-hosted"],
+  ["RAM-64GB", "Windows", "fast", "self-hosted"],
+  ["Linux", "RAM-64GB", "X64", "self-hosted"],
+  ["ARM64", "macOS", "self-hosted"]
 ];
 
 function sortedLabelKey(labels) {
-    return labels.slice().sort().join("|");
+  return labels.slice().sort().join("|");
 }
 
-const ALLOWLIST_KEYS = new Set(
-    SELF_HOSTED_LABEL_ALLOWLIST.map((set) => sortedLabelKey(set))
-);
+const ALLOWLIST_KEYS = new Set(SELF_HOSTED_LABEL_ALLOWLIST.map((set) => sortedLabelKey(set)));
 
 function formatAllowlistForMessage() {
-    return SELF_HOSTED_LABEL_ALLOWLIST
-        .map((set) => `[${set.join(", ")}]`)
-        .join(", ");
+  return SELF_HOSTED_LABEL_ALLOWLIST.map((set) => `[${set.join(", ")}]`).join(", ");
 }
 
 /**
@@ -1286,109 +1308,113 @@ function formatAllowlistForMessage() {
  * Returns { group, line, cancelInProgress } where line is 1-indexed.
  */
 function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containingIndent) {
-    const targetIndent = containingIndent + 2;
+  const targetIndent = containingIndent + 2;
 
-    for (let i = startIndex; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        // Workflow-level scanning passes containingIndent = -2 (so target
-        // indent is 0). We still need to stop when we leave the block.
-        if (indent < targetIndent && i !== startIndex) {
-            break;
-        }
-
-        if (indent !== targetIndent) {
-            continue;
-        }
-
-        // Inline mapping form: `concurrency: { group: foo, ... }`
-        const inlineMapMatch = /^\s*concurrency:\s*\{([^}]*)\}\s*(?:#.*)?$/.exec(line);
-        if (inlineMapMatch) {
-            const inner = inlineMapMatch[1];
-            const groupMatch = /\bgroup\s*:\s*["']?([^,"'}]+?)["']?\s*(?:,|$)/.exec(inner);
-            const cancelMatch = /\bcancel-in-progress\s*:\s*(true|false)/.exec(inner);
-            if (groupMatch) {
-                return {
-                    group: groupMatch[1].trim(),
-                    line: i + 1,
-                    cancelInProgress: cancelMatch ? cancelMatch[1] === "true" : undefined,
-                };
-            }
-            return null;
-        }
-
-        // Multi-line block form: bare `concurrency:` followed by indented mapping.
-        if (/^\s*concurrency:\s*(?:#.*)?$/.test(line)) {
-            const concurrencyIndent = indent;
-            let group = null;
-            let groupLine = -1;
-            let cancelInProgress;
-            for (let j = i + 1; j <= endIndex; j++) {
-                const childLine = lines[j];
-                const childTrimmed = childLine.trim();
-                const childIndent = getIndent(childLine);
-
-                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
-                    continue;
-                }
-
-                if (childIndent <= concurrencyIndent) {
-                    break;
-                }
-
-                const childGroupMatch = /^\s*group\s*:\s*["']?(.+?)["']?\s*(?:#.*)?$/.exec(childLine);
-                if (childGroupMatch && group === null) {
-                    group = childGroupMatch[1].trim();
-                    groupLine = j + 1;
-                    continue;
-                }
-                const childCancelMatch = /^\s*cancel-in-progress\s*:\s*(true|false)\s*(?:#.*)?$/.exec(childLine);
-                if (childCancelMatch) {
-                    cancelInProgress = childCancelMatch[1] === "true";
-                }
-            }
-
-            if (group !== null) {
-                return { group, line: groupLine, cancelInProgress };
-            }
-            return null;
-        }
-
-        // Scalar shorthand form: `concurrency: <name>` where the value is a
-        // bare identifier or quoted string (NOT an inline mapping, NOT a
-        // YAML block/folded scalar, NOT empty, NOT the YAML null marker).
-        const shorthandMatch = /^\s*concurrency:\s*(.+?)\s*(?:#.*)?$/.exec(line);
-        if (shorthandMatch) {
-            const rawValue = shorthandMatch[1].trim();
-            // Skip non-scalar leaders: inline mapping `{`, block/folded
-            // scalars `|`/`>`, YAML null `~`, or empty (the multi-line case
-            // we already returned for above).
-            if (rawValue.length === 0
-                || rawValue === "~"
-                || rawValue.startsWith("{")
-                || rawValue.startsWith("|")
-                || rawValue.startsWith(">")) {
-                continue;
-            }
-            const stripped = rawValue.replace(/^(["'])(.*)\1$/, "$2");
-            if (stripped.length === 0) {
-                continue;
-            }
-            return {
-                group: stripped,
-                line: i + 1,
-                cancelInProgress: undefined,
-            };
-        }
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return null;
+    // Workflow-level scanning passes containingIndent = -2 (so target
+    // indent is 0). We still need to stop when we leave the block.
+    if (indent < targetIndent && i !== startIndex) {
+      break;
+    }
+
+    if (indent !== targetIndent) {
+      continue;
+    }
+
+    // Inline mapping form: `concurrency: { group: foo, ... }`
+    const inlineMapMatch = /^\s*concurrency:\s*\{([^}]*)\}\s*(?:#.*)?$/.exec(line);
+    if (inlineMapMatch) {
+      const inner = inlineMapMatch[1];
+      const groupMatch = /\bgroup\s*:\s*["']?([^,"'}]+?)["']?\s*(?:,|$)/.exec(inner);
+      const cancelMatch = /\bcancel-in-progress\s*:\s*(true|false)/.exec(inner);
+      if (groupMatch) {
+        return {
+          group: groupMatch[1].trim(),
+          line: i + 1,
+          cancelInProgress: cancelMatch ? cancelMatch[1] === "true" : undefined
+        };
+      }
+      return null;
+    }
+
+    // Multi-line block form: bare `concurrency:` followed by indented mapping.
+    if (/^\s*concurrency:\s*(?:#.*)?$/.test(line)) {
+      const concurrencyIndent = indent;
+      let group = null;
+      let groupLine = -1;
+      let cancelInProgress;
+      for (let j = i + 1; j <= endIndex; j++) {
+        const childLine = lines[j];
+        const childTrimmed = childLine.trim();
+        const childIndent = getIndent(childLine);
+
+        if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+          continue;
+        }
+
+        if (childIndent <= concurrencyIndent) {
+          break;
+        }
+
+        const childGroupMatch = /^\s*group\s*:\s*["']?(.+?)["']?\s*(?:#.*)?$/.exec(childLine);
+        if (childGroupMatch && group === null) {
+          group = childGroupMatch[1].trim();
+          groupLine = j + 1;
+          continue;
+        }
+        const childCancelMatch = /^\s*cancel-in-progress\s*:\s*(true|false)\s*(?:#.*)?$/.exec(
+          childLine
+        );
+        if (childCancelMatch) {
+          cancelInProgress = childCancelMatch[1] === "true";
+        }
+      }
+
+      if (group !== null) {
+        return { group, line: groupLine, cancelInProgress };
+      }
+      return null;
+    }
+
+    // Scalar shorthand form: `concurrency: <name>` where the value is a
+    // bare identifier or quoted string (NOT an inline mapping, NOT a
+    // YAML block/folded scalar, NOT empty, NOT the YAML null marker).
+    const shorthandMatch = /^\s*concurrency:\s*(.+?)\s*(?:#.*)?$/.exec(line);
+    if (shorthandMatch) {
+      const rawValue = shorthandMatch[1].trim();
+      // Skip non-scalar leaders: inline mapping `{`, block/folded
+      // scalars `|`/`>`, YAML null `~`, or empty (the multi-line case
+      // we already returned for above).
+      if (
+        rawValue.length === 0 ||
+        rawValue === "~" ||
+        rawValue.startsWith("{") ||
+        rawValue.startsWith("|") ||
+        rawValue.startsWith(">")
+      ) {
+        continue;
+      }
+      const stripped = rawValue.replace(/^(["'])(.*)\1$/, "$2");
+      if (stripped.length === 0) {
+        continue;
+      }
+      return {
+        group: stripped,
+        line: i + 1,
+        cancelInProgress: undefined
+      };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -1398,12 +1424,12 @@ function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containin
  * backwards-compatible exports and clarity at call sites.
  */
 function extractJobConcurrencyGroup(lines, job) {
-    return extractConcurrencyGroupFromBlock(
-        lines,
-        job.startLine, // 1-indexed job header; first child sits at startLine + 0 (0-indexed = job.startLine)
-        job.endLine - 1,
-        job.indent
-    );
+  return extractConcurrencyGroupFromBlock(
+    lines,
+    job.startLine, // 1-indexed job header; first child sits at startLine + 0 (0-indexed = job.startLine)
+    job.endLine - 1,
+    job.indent
+  );
 }
 
 /**
@@ -1414,12 +1440,7 @@ function extractJobConcurrencyGroup(lines, job) {
  * guard.
  */
 function extractWorkflowConcurrencyGroup(lines) {
-    return extractConcurrencyGroupFromBlock(
-        lines,
-        0,
-        lines.length - 1,
-        -2
-    );
+  return extractConcurrencyGroupFromBlock(lines, 0, lines.length - 1, -2);
 }
 
 /**
@@ -1432,45 +1453,45 @@ function extractWorkflowConcurrencyGroup(lines) {
  * introduces it, expand this helper before relying on it.
  */
 function jobHasMatrix(lines, job) {
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
 
-    let inStrategy = false;
-    let strategyIndent = -1;
+  let inStrategy = false;
+  let strategyIndent = -1;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= job.indent) {
-            break;
-        }
-
-        if (!inStrategy) {
-            if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
-                inStrategy = true;
-                strategyIndent = indent;
-            }
-            continue;
-        }
-
-        if (indent <= strategyIndent) {
-            inStrategy = false;
-            strategyIndent = -1;
-            continue;
-        }
-
-        if (/^\s*matrix:\s*(?:#.*)?$/.test(line) && indent === strategyIndent + 2) {
-            return true;
-        }
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return false;
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (!inStrategy) {
+      if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
+        inStrategy = true;
+        strategyIndent = indent;
+      }
+      continue;
+    }
+
+    if (indent <= strategyIndent) {
+      inStrategy = false;
+      strategyIndent = -1;
+      continue;
+    }
+
+    if (/^\s*matrix:\s*(?:#.*)?$/.test(line) && indent === strategyIndent + 2) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -1494,53 +1515,53 @@ function jobHasMatrix(lines, job) {
  *     the value's representation in surprising ways.
  */
 function extractJobMatrixMaxParallel(lines, job) {
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
 
-    let inStrategy = false;
-    let strategyIndent = -1;
+  let inStrategy = false;
+  let strategyIndent = -1;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= job.indent) {
-            break;
-        }
-
-        if (!inStrategy) {
-            if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
-                inStrategy = true;
-                strategyIndent = indent;
-            }
-            continue;
-        }
-
-        if (indent <= strategyIndent) {
-            inStrategy = false;
-            strategyIndent = -1;
-            continue;
-        }
-
-        const maxParallelMatch = /^\s*max-parallel:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
-        if (maxParallelMatch && indent === strategyIndent + 2) {
-            const raw = maxParallelMatch[1];
-            if (/^[0-9]+$/.test(raw)) {
-                const parsed = Number.parseInt(raw, 10);
-                if (Number.isFinite(parsed) && parsed > 0) {
-                    return parsed;
-                }
-            }
-            return null;
-        }
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return null;
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (!inStrategy) {
+      if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
+        inStrategy = true;
+        strategyIndent = indent;
+      }
+      continue;
+    }
+
+    if (indent <= strategyIndent) {
+      inStrategy = false;
+      strategyIndent = -1;
+      continue;
+    }
+
+    const maxParallelMatch = /^\s*max-parallel:\s*["']?([^"'\s#]+)["']?\s*(?:#.*)?$/.exec(line);
+    if (maxParallelMatch && indent === strategyIndent + 2) {
+      const raw = maxParallelMatch[1];
+      if (/^[0-9]+$/.test(raw)) {
+        const parsed = Number.parseInt(raw, 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -1550,74 +1571,74 @@ function extractJobMatrixMaxParallel(lines, job) {
  * and the multi-line block-list form (`needs:` then `  - foo`).
  */
 function extractJobNeeds(lines, job) {
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= job.indent) {
-            break;
-        }
-
-        if (indent !== job.indent + 2) {
-            continue;
-        }
-
-        const needsMatch = /^\s*needs:\s*(.*?)\s*(?:#.*)?$/.exec(line);
-        if (!needsMatch) {
-            continue;
-        }
-
-        const raw = needsMatch[1].trim();
-
-        if (raw.length === 0) {
-            // Multi-line block list form.
-            const items = [];
-            for (let j = i + 1; j <= endIndex; j++) {
-                const childLine = lines[j];
-                const childTrimmed = childLine.trim();
-                const childIndent = getIndent(childLine);
-
-                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
-                    continue;
-                }
-
-                if (childIndent <= indent) {
-                    break;
-                }
-
-                const itemMatch = /^\s*-\s*["']?([A-Za-z0-9_-]+)["']?\s*(?:#.*)?$/.exec(childLine);
-                if (itemMatch) {
-                    items.push(itemMatch[1]);
-                }
-            }
-            return items;
-        }
-
-        if (raw.startsWith("[")) {
-            const inner = raw.slice(1, -1);
-            return inner
-                .split(",")
-                .map((part) => part.trim().replace(/^["']|["']$/g, ""))
-                .filter((part) => part.length > 0);
-        }
-
-        // Scalar form.
-        const stripped = raw.replace(/^(["'])(.*)\1$/, "$2").trim();
-        if (stripped.length === 0) {
-            return [];
-        }
-        return [stripped];
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return [];
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (indent !== job.indent + 2) {
+      continue;
+    }
+
+    const needsMatch = /^\s*needs:\s*(.*?)\s*(?:#.*)?$/.exec(line);
+    if (!needsMatch) {
+      continue;
+    }
+
+    const raw = needsMatch[1].trim();
+
+    if (raw.length === 0) {
+      // Multi-line block list form.
+      const items = [];
+      for (let j = i + 1; j <= endIndex; j++) {
+        const childLine = lines[j];
+        const childTrimmed = childLine.trim();
+        const childIndent = getIndent(childLine);
+
+        if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+          continue;
+        }
+
+        if (childIndent <= indent) {
+          break;
+        }
+
+        const itemMatch = /^\s*-\s*["']?([A-Za-z0-9_-]+)["']?\s*(?:#.*)?$/.exec(childLine);
+        if (itemMatch) {
+          items.push(itemMatch[1]);
+        }
+      }
+      return items;
+    }
+
+    if (raw.startsWith("[")) {
+      const inner = raw.slice(1, -1);
+      return inner
+        .split(",")
+        .map((part) => part.trim().replace(/^["']|["']$/g, ""))
+        .filter((part) => part.length > 0);
+    }
+
+    // Scalar form.
+    const stripped = raw.replace(/^(["'])(.*)\1$/, "$2").trim();
+    if (stripped.length === 0) {
+      return [];
+    }
+    return [stripped];
+  }
+
+  return [];
 }
 
 /**
@@ -1630,63 +1651,63 @@ function extractJobNeeds(lines, job) {
  * declared at the job-key indent.
  */
 function extractJobRunsOn(lines, job) {
-    const startIndex = job.startLine - 1;
-    const endIndex = job.endLine - 1;
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
 
-    for (let i = startIndex + 1; i <= endIndex; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        const indent = getIndent(line);
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
 
-        if (trimmed.length === 0 || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        if (indent <= job.indent) {
-            break;
-        }
-
-        if (indent !== job.indent + 2) {
-            continue;
-        }
-
-        const runsOnMatch = /^\s*runs-on:\s*(.*?)\s*(?:#.*)?$/.exec(line);
-        if (!runsOnMatch) {
-            continue;
-        }
-
-        const raw = runsOnMatch[1].trim();
-        const lineNumber = i + 1;
-
-        if (raw.length === 0) {
-            // Multi-line: collect block list children or object children.
-            const blockList = [];
-            for (let j = i + 1; j <= endIndex; j++) {
-                const childLine = lines[j];
-                const childTrimmed = childLine.trim();
-                const childIndent = getIndent(childLine);
-
-                if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
-                    continue;
-                }
-
-                if (childIndent <= indent) {
-                    break;
-                }
-
-                const itemMatch = /^\s*-\s*["']?([^"'#\s]+)["']?\s*(?:#.*)?$/.exec(childLine);
-                if (itemMatch) {
-                    blockList.push(itemMatch[1].trim());
-                }
-            }
-
-            return { line: lineNumber, raw: "", blockList };
-        }
-
-        return { line: lineNumber, raw };
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return null;
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (indent !== job.indent + 2) {
+      continue;
+    }
+
+    const runsOnMatch = /^\s*runs-on:\s*(.*?)\s*(?:#.*)?$/.exec(line);
+    if (!runsOnMatch) {
+      continue;
+    }
+
+    const raw = runsOnMatch[1].trim();
+    const lineNumber = i + 1;
+
+    if (raw.length === 0) {
+      // Multi-line: collect block list children or object children.
+      const blockList = [];
+      for (let j = i + 1; j <= endIndex; j++) {
+        const childLine = lines[j];
+        const childTrimmed = childLine.trim();
+        const childIndent = getIndent(childLine);
+
+        if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+          continue;
+        }
+
+        if (childIndent <= indent) {
+          break;
+        }
+
+        const itemMatch = /^\s*-\s*["']?([^"'#\s]+)["']?\s*(?:#.*)?$/.exec(childLine);
+        if (itemMatch) {
+          blockList.push(itemMatch[1].trim());
+        }
+      }
+
+      return { line: lineNumber, raw: "", blockList };
+    }
+
+    return { line: lineNumber, raw };
+  }
+
+  return null;
 }
 
 /**
@@ -1699,23 +1720,23 @@ function extractJobRunsOn(lines, job) {
  * error messages and confuse the operator.
  */
 function parseInlineLabelArray(raw) {
-    const match = /^\[\s*(.*?)\s*\]$/.exec(raw);
-    if (!match) {
-        return null;
-    }
+  const match = /^\[\s*(.*?)\s*\]$/.exec(raw);
+  if (!match) {
+    return null;
+  }
 
-    const inner = match[1].trim();
-    if (inner.length === 0) {
-        return [];
-    }
+  const inner = match[1].trim();
+  if (inner.length === 0) {
+    return [];
+  }
 
-    const parts = inner.split(",").map((part) => part.trim().replace(/^["']|["']$/g, ""));
-    if (parts.some((part) => part.length === 0)) {
-        throw new Error(
-            `Trailing or duplicate comma in label list '${raw}'. Remove the empty element.`
-        );
-    }
-    return parts;
+  const parts = inner.split(",").map((part) => part.trim().replace(/^["']|["']$/g, ""));
+  if (parts.some((part) => part.length === 0)) {
+    throw new Error(
+      `Trailing or duplicate comma in label list '${raw}'. Remove the empty element.`
+    );
+  }
+  return parts;
 }
 
 /**
@@ -1725,75 +1746,80 @@ function parseInlineLabelArray(raw) {
  * allowlisted label set.
  */
 function extractJobOutputsSourceMap(lines) {
-    const jobs = extractJobs(lines);
-    const result = {};
+  const jobs = extractJobs(lines);
+  const result = {};
 
-    for (const job of jobs) {
-        const startIndex = job.startLine - 1;
-        const endIndex = job.endLine - 1;
-        const outputs = {};
+  for (const job of jobs) {
+    const startIndex = job.startLine - 1;
+    const endIndex = job.endLine - 1;
+    const outputs = {};
 
-        // Map outputs key -> { stepId, outputKey }
-        let inOutputs = false;
-        let outputsIndent = -1;
-        for (let i = startIndex + 1; i <= endIndex; i++) {
-            const line = lines[i];
-            const trimmed = line.trim();
-            const indent = getIndent(line);
+    // Map outputs key -> { stepId, outputKey }
+    let inOutputs = false;
+    let outputsIndent = -1;
+    for (let i = startIndex + 1; i <= endIndex; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      const indent = getIndent(line);
 
-            if (trimmed.length === 0 || trimmed.startsWith("#")) {
-                continue;
-            }
+      if (trimmed.length === 0 || trimmed.startsWith("#")) {
+        continue;
+      }
 
-            if (indent <= job.indent) {
-                break;
-            }
+      if (indent <= job.indent) {
+        break;
+      }
 
-            if (!inOutputs) {
-                if (indent === job.indent + 2 && /^\s*outputs:\s*(?:#.*)?$/.test(line)) {
-                    inOutputs = true;
-                    outputsIndent = indent;
-                }
-                continue;
-            }
-
-            if (indent <= outputsIndent) {
-                inOutputs = false;
-                outputsIndent = -1;
-                continue;
-            }
-
-            const outputMatch = /^\s*([A-Za-z0-9_-]+):\s*\$\{\{\s*steps\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\}\}\s*(?:#.*)?$/.exec(line);
-            if (outputMatch) {
-                outputs[outputMatch[1]] = {
-                    stepId: outputMatch[2],
-                    outputKey: outputMatch[3],
-                };
-            }
+      if (!inOutputs) {
+        if (indent === job.indent + 2 && /^\s*outputs:\s*(?:#.*)?$/.test(line)) {
+          inOutputs = true;
+          outputsIndent = indent;
         }
+        continue;
+      }
 
-        // Collect each step's id + run text so we can resolve outputs->bash.
-        const steps = extractJobSteps(lines, job);
-        const stepsById = {};
-        for (const step of steps) {
-            let stepId = null;
-            for (let i = step.startIndex; i <= step.endIndex; i++) {
-                // Allow the optional `- ` step-list marker before `id:`.
-                const stepIdMatch = /^\s*(?:-\s+)?id:\s*["']?([A-Za-z0-9_-]+)["']?\s*(?:#.*)?$/.exec(lines[i]);
-                if (stepIdMatch) {
-                    stepId = stepIdMatch[1];
-                    break;
-                }
-            }
-            if (stepId) {
-                stepsById[stepId] = step;
-            }
-        }
+      if (indent <= outputsIndent) {
+        inOutputs = false;
+        outputsIndent = -1;
+        continue;
+      }
 
-        result[job.id] = { outputs, stepsById };
+      const outputMatch =
+        /^\s*([A-Za-z0-9_-]+):\s*\$\{\{\s*steps\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\}\}\s*(?:#.*)?$/.exec(
+          line
+        );
+      if (outputMatch) {
+        outputs[outputMatch[1]] = {
+          stepId: outputMatch[2],
+          outputKey: outputMatch[3]
+        };
+      }
     }
 
-    return result;
+    // Collect each step's id + run text so we can resolve outputs->bash.
+    const steps = extractJobSteps(lines, job);
+    const stepsById = {};
+    for (const step of steps) {
+      let stepId = null;
+      for (let i = step.startIndex; i <= step.endIndex; i++) {
+        // Allow the optional `- ` step-list marker before `id:`.
+        const stepIdMatch = /^\s*(?:-\s+)?id:\s*["']?([A-Za-z0-9_-]+)["']?\s*(?:#.*)?$/.exec(
+          lines[i]
+        );
+        if (stepIdMatch) {
+          stepId = stepIdMatch[1];
+          break;
+        }
+      }
+      if (stepId) {
+        stepsById[stepId] = step;
+      }
+    }
+
+    result[job.id] = { outputs, stepsById };
+  }
+
+  return result;
 }
 
 /**
@@ -1811,93 +1837,93 @@ function extractJobOutputsSourceMap(lines) {
  * control flow).
  */
 function extractEmittedLabelSetsFromBash(runText) {
-    if (typeof runText !== "string" || runText.length === 0) {
-        return [];
+  if (typeof runText !== "string" || runText.length === 0) {
+    return [];
+  }
+
+  const sets = [];
+
+  // Walk the text once and lexically extract every `labels=[...]` payload
+  // using balanced-bracket scanning. The previous regex `[^\]]*` would
+  // mismatch any label literal that happened to contain a `]` character
+  // (rare in practice but easy to step on with `${VAR}` expansions or
+  // future label names like `foo[bar]`).
+  let cursor = 0;
+  while (cursor < runText.length) {
+    const labelAnchor = runText.indexOf("labels=", cursor);
+    if (labelAnchor === -1) {
+      break;
+    }
+    const openBracket = labelAnchor + "labels=".length;
+    if (runText[openBracket] !== "[") {
+      // `labels=` without an array follower; skip past the anchor
+      // entirely to avoid re-matching the same position.
+      cursor = openBracket;
+      continue;
     }
 
-    const sets = [];
-
-    // Walk the text once and lexically extract every `labels=[...]` payload
-    // using balanced-bracket scanning. The previous regex `[^\]]*` would
-    // mismatch any label literal that happened to contain a `]` character
-    // (rare in practice but easy to step on with `${VAR}` expansions or
-    // future label names like `foo[bar]`).
-    let cursor = 0;
-    while (cursor < runText.length) {
-        const labelAnchor = runText.indexOf("labels=", cursor);
-        if (labelAnchor === -1) {
-            break;
+    // Walk from openBracket looking for the matching `]` while
+    // tracking JSON-style string spans so a `]` inside a string is
+    // ignored.
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let endIndex = -1;
+    for (let k = openBracket; k < runText.length; k++) {
+      const ch = runText[k];
+      if (inString) {
+        if (escape) {
+          escape = false;
+          continue;
         }
-        const openBracket = labelAnchor + "labels=".length;
-        if (runText[openBracket] !== "[") {
-            // `labels=` without an array follower; skip past the anchor
-            // entirely to avoid re-matching the same position.
-            cursor = openBracket;
-            continue;
+        if (ch === "\\") {
+          escape = true;
+          continue;
         }
-
-        // Walk from openBracket looking for the matching `]` while
-        // tracking JSON-style string spans so a `]` inside a string is
-        // ignored.
-        let depth = 0;
-        let inString = false;
-        let escape = false;
-        let endIndex = -1;
-        for (let k = openBracket; k < runText.length; k++) {
-            const ch = runText[k];
-            if (inString) {
-                if (escape) {
-                    escape = false;
-                    continue;
-                }
-                if (ch === "\\") {
-                    escape = true;
-                    continue;
-                }
-                if (ch === '"') {
-                    inString = false;
-                }
-                continue;
-            }
-            if (ch === '"') {
-                inString = true;
-                continue;
-            }
-            if (ch === "[") {
-                depth++;
-                continue;
-            }
-            if (ch === "]") {
-                depth--;
-                if (depth === 0) {
-                    endIndex = k;
-                    break;
-                }
-            }
+        if (ch === '"') {
+          inString = false;
         }
-
-        if (endIndex === -1) {
-            // Unterminated `labels=[...`; record as malformed and stop.
-            sets.push(null);
-            break;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === "[") {
+        depth++;
+        continue;
+      }
+      if (ch === "]") {
+        depth--;
+        if (depth === 0) {
+          endIndex = k;
+          break;
         }
-
-        const payload = runText.slice(openBracket, endIndex + 1);
-        try {
-            const parsed = JSON.parse(payload);
-            if (Array.isArray(parsed)) {
-                sets.push(parsed.map((item) => String(item)));
-            } else {
-                sets.push(null);
-            }
-        } catch (_error) {
-            sets.push(null);
-        }
-
-        cursor = endIndex + 1;
+      }
     }
 
-    return sets;
+    if (endIndex === -1) {
+      // Unterminated `labels=[...`; record as malformed and stop.
+      sets.push(null);
+      break;
+    }
+
+    const payload = runText.slice(openBracket, endIndex + 1);
+    try {
+      const parsed = JSON.parse(payload);
+      if (Array.isArray(parsed)) {
+        sets.push(parsed.map((item) => String(item)));
+      } else {
+        sets.push(null);
+      }
+    } catch (_error) {
+      sets.push(null);
+    }
+
+    cursor = endIndex + 1;
+  }
+
+  return sets;
 }
 
 /**
@@ -1913,43 +1939,43 @@ function extractEmittedLabelSetsFromBash(runText) {
  *     shorthand forms).
  */
 function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
-    const violations = [];
+  const violations = [];
 
-    // Workflow-level scan first; the sentinel name is forbidden anywhere.
-    const workflowConcurrency = extractWorkflowConcurrencyGroup(lines);
-    if (workflowConcurrency && workflowConcurrency.group === "wallstop-organization-builds") {
-        violations.push(
-            new Violation(
-                relativePath,
-                workflowConcurrency.line,
-                `concurrency.group: ${workflowConcurrency.group}`,
-                `Workflow-level concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: job-level 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' on every Unity-credential-using job, combined with 'strategy.max-parallel: 1' on any matrix in those jobs. The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. Use the workflow's own \${{ github.workflow }}-\${{ github.ref }} group at workflow level if PR-level deduplication is needed. (Historical sentinel name: 'wallstop-organization-builds'.)`,
-                "error"
-            )
-        );
+  // Workflow-level scan first; the sentinel name is forbidden anywhere.
+  const workflowConcurrency = extractWorkflowConcurrencyGroup(lines);
+  if (workflowConcurrency && workflowConcurrency.group === "wallstop-organization-builds") {
+    violations.push(
+      new Violation(
+        relativePath,
+        workflowConcurrency.line,
+        `concurrency.group: ${workflowConcurrency.group}`,
+        `Workflow-level concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: job-level 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' on every Unity-credential-using job, combined with 'strategy.max-parallel: 1' on any matrix in those jobs. The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. Use the workflow's own \${{ github.workflow }}-\${{ github.ref }} group at workflow level if PR-level deduplication is needed. (Historical sentinel name: 'wallstop-organization-builds'.)`,
+        "error"
+      )
+    );
+  }
+
+  const jobs = extractJobs(lines);
+  for (const job of jobs) {
+    const concurrency = extractJobConcurrencyGroup(lines, job);
+    if (!concurrency) {
+      continue;
     }
 
-    const jobs = extractJobs(lines);
-    for (const job of jobs) {
-        const concurrency = extractJobConcurrencyGroup(lines, job);
-        if (!concurrency) {
-            continue;
-        }
-
-        if (concurrency.group === "wallstop-organization-builds") {
-            violations.push(
-                new Violation(
-                    relativePath,
-                    concurrency.line,
-                    `concurrency.group: ${concurrency.group}`,
-                    `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' plus 'strategy.max-parallel: 1' on the matrix in this job (cross-workflow serialization without matrix eviction). The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. (Historical sentinel name: 'wallstop-organization-builds'.)`,
-                    "error"
-                )
-            );
-        }
+    if (concurrency.group === "wallstop-organization-builds") {
+      violations.push(
+        new Violation(
+          relativePath,
+          concurrency.line,
+          `concurrency.group: ${concurrency.group}`,
+          `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' plus 'strategy.max-parallel: 1' on the matrix in this job (cross-workflow serialization without matrix eviction). The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. (Historical sentinel name: 'wallstop-organization-builds'.)`,
+          "error"
+        )
+      );
     }
+  }
 
-    return violations;
+  return violations;
 }
 
 /**
@@ -1980,47 +2006,47 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
  * case.
  */
 function findMatrixConcurrencyEvictionViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
+  const violations = [];
+  const jobs = extractJobs(lines);
 
-    for (const job of jobs) {
-        if (!jobHasMatrix(lines, job)) {
-            continue;
-        }
-
-        const concurrency = extractJobConcurrencyGroup(lines, job);
-        if (!concurrency) {
-            continue;
-        }
-
-        // Escape hatch (a): per-entry slot via ${{ matrix.* }} expansion.
-        if (/\$\{\{\s*matrix\./.test(concurrency.group)) {
-            continue;
-        }
-
-        // Escape hatch (b): explicit serialization via max-parallel: 1.
-        const maxParallel = extractJobMatrixMaxParallel(lines, job);
-        if (maxParallel === 1) {
-            continue;
-        }
-
-        const maxParallelDescription =
-            maxParallel === null
-                ? "no strategy.max-parallel declaration"
-                : `strategy.max-parallel: ${maxParallel}`;
-
-        violations.push(
-            new Violation(
-                relativePath,
-                concurrency.line,
-                `concurrency.group: ${concurrency.group}`,
-                `Job '${job.id}' combines strategy.matrix with a shared concurrency.group ('${concurrency.group}') (${maxParallelDescription}). GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Allowed escape hatches: (a) expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, or (b) declare 'strategy.max-parallel: 1' so matrix entries serialize internally and never compete for the same group slot. Otherwise drop the job-level concurrency block entirely.`,
-                "error"
-            )
-        );
+  for (const job of jobs) {
+    if (!jobHasMatrix(lines, job)) {
+      continue;
     }
 
-    return violations;
+    const concurrency = extractJobConcurrencyGroup(lines, job);
+    if (!concurrency) {
+      continue;
+    }
+
+    // Escape hatch (a): per-entry slot via ${{ matrix.* }} expansion.
+    if (/\$\{\{\s*matrix\./.test(concurrency.group)) {
+      continue;
+    }
+
+    // Escape hatch (b): explicit serialization via max-parallel: 1.
+    const maxParallel = extractJobMatrixMaxParallel(lines, job);
+    if (maxParallel === 1) {
+      continue;
+    }
+
+    const maxParallelDescription =
+      maxParallel === null
+        ? "no strategy.max-parallel declaration"
+        : `strategy.max-parallel: ${maxParallel}`;
+
+    violations.push(
+      new Violation(
+        relativePath,
+        concurrency.line,
+        `concurrency.group: ${concurrency.group}`,
+        `Job '${job.id}' combines strategy.matrix with a shared concurrency.group ('${concurrency.group}') (${maxParallelDescription}). GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Allowed escape hatches: (a) expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, or (b) declare 'strategy.max-parallel: 1' so matrix entries serialize internally and never compete for the same group slot. Otherwise drop the job-level concurrency block entirely.`,
+        "error"
+      )
+    );
+  }
+
+  return violations;
 }
 
 /**
@@ -2034,175 +2060,178 @@ function findMatrixConcurrencyEvictionViolations(relativePath, lines) {
  * emitted label set must be in the allowlist.
  */
 function findSelfHostedLabelAllowlistViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
-    const outputsMap = extractJobOutputsSourceMap(lines);
+  const violations = [];
+  const jobs = extractJobs(lines);
+  const outputsMap = extractJobOutputsSourceMap(lines);
 
-    for (const job of jobs) {
-        const runsOn = extractJobRunsOn(lines, job);
-        if (!runsOn) {
-            continue;
-        }
-
-        const raw = runsOn.raw;
-
-        // Inline array form: [self-hosted, Windows, RAM-64GB]
-        if (raw.startsWith("[")) {
-            let labels;
-            try {
-                labels = parseInlineLabelArray(raw);
-            } catch (parseError) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        runsOn.line,
-                        `runs-on: ${raw}`,
-                        `Job '${job.id}': malformed inline runs-on label array: ${parseError.message}`,
-                        "error"
-                    )
-                );
-                continue;
-            }
-            if (!labels) {
-                continue;
-            }
-            if (!labels.some((label) => label === "self-hosted")) {
-                continue;
-            }
-            if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        runsOn.line,
-                        `runs-on: ${raw}`,
-                        `Job '${job.id}': self-hosted runs-on label set [${labels.join(", ")}] is not in the documented allowlist (${formatAllowlistForMessage()}). If a new runner topology is needed, update SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js. To route dynamically by event, use the matrix-config 'runner-labels' output pattern.`,
-                        "error"
-                    )
-                );
-            }
-            continue;
-        }
-
-        // Multi-line block list form.
-        if (raw === "" && runsOn.blockList && runsOn.blockList.length > 0) {
-            const labels = runsOn.blockList;
-            if (!labels.some((label) => label === "self-hosted")) {
-                continue;
-            }
-            if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        runsOn.line,
-                        `runs-on: [${labels.join(", ")}]`,
-                        `Job '${job.id}': self-hosted runs-on label set [${labels.join(", ")}] is not in the documented allowlist (${formatAllowlistForMessage()}). If a new runner topology is needed, update SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js. To route dynamically by event, use the matrix-config 'runner-labels' output pattern.`,
-                        "error"
-                    )
-                );
-            }
-            continue;
-        }
-
-        // Dynamic form: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}
-        const dynamicMatch = /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(raw);
-        if (dynamicMatch) {
-            const sourceJobId = dynamicMatch[1];
-            const sourceOutputKey = dynamicMatch[2];
-            const sourceJob = outputsMap[sourceJobId];
-
-            if (!sourceJob || !sourceJob.outputs[sourceOutputKey]) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        runsOn.line,
-                        `runs-on: ${raw}`,
-                        `Job '${job.id}': dynamic runs-on references needs.${sourceJobId}.outputs.${sourceOutputKey} but that source job/output cannot be resolved. The validator must lexically prove the emitted label set is allowlisted (${formatAllowlistForMessage()}). Ensure the emitting job declares the output and its step uses an 'id:' that matches the outputs binding.`,
-                        "error"
-                    )
-                );
-                continue;
-            }
-
-            const { stepId } = sourceJob.outputs[sourceOutputKey];
-            const sourceStep = sourceJob.stepsById[stepId];
-
-            if (!sourceStep || !sourceStep.run || typeof sourceStep.run.text !== "string") {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        runsOn.line,
-                        `runs-on: ${raw}`,
-                        `Job '${job.id}': dynamic runs-on points at step id '${stepId}' in job '${sourceJobId}' but its run: block could not be located. Use a literal bash run block with 'labels=[...]' assignments so the validator can prove each branch produces an allowlisted label set (${formatAllowlistForMessage()}).`,
-                        "error"
-                    )
-                );
-                continue;
-            }
-
-            const emittedSets = extractEmittedLabelSetsFromBash(sourceStep.run.text);
-            if (emittedSets.length === 0) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        runsOn.line,
-                        `runs-on: ${raw}`,
-                        `Job '${job.id}': dynamic runs-on points at step id '${stepId}' in job '${sourceJobId}' but the run block emits no 'labels=[...]' assignments. Use literal 'echo \\'labels=[...]\\' >> "$GITHUB_OUTPUT"' lines so the validator can prove each branch produces an allowlisted label set (${formatAllowlistForMessage()}).`,
-                        "error"
-                    )
-                );
-                continue;
-            }
-
-            for (const labels of emittedSets) {
-                if (labels === null) {
-                    violations.push(
-                        new Violation(
-                            relativePath,
-                            runsOn.line,
-                            `runs-on: ${raw}`,
-                            `Job '${job.id}': dynamic runs-on source step '${stepId}' (job '${sourceJobId}') has a malformed 'labels=...' JSON value. Emit a literal JSON array of labels.`,
-                            "error"
-                        )
-                    );
-                    continue;
-                }
-                if (!labels.some((label) => label === "self-hosted")) {
-                    continue;
-                }
-                if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
-                    violations.push(
-                        new Violation(
-                            relativePath,
-                            runsOn.line,
-                            `runs-on: ${raw}`,
-                            `Job '${job.id}': dynamic runs-on source step '${stepId}' (job '${sourceJobId}') emits label set [${labels.join(", ")}] which is not in the documented allowlist (${formatAllowlistForMessage()}). Update the emitting bash branches or extend SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js.`,
-                            "error"
-                        )
-                    );
-                }
-            }
-            continue;
-        }
-
-        // Plain scalar form: `runs-on: ubuntu-latest`, `runs-on: 'self-hosted'`,
-        // or `runs-on: "self-hosted"`. Strip outer quotes; if the remaining
-        // identifier equals 'self-hosted' alone, it lacks the required
-        // platform/RAM modifiers and is not in the allowlist.
-        const scalarStripped = raw.replace(/^(["'])(.*)\1$/, "$2").trim();
-        if (scalarStripped === "self-hosted") {
-            violations.push(
-                new Violation(
-                    relativePath,
-                    runsOn.line,
-                    `runs-on: ${raw}`,
-                    `Job '${job.id}': self-hosted runs-on label set [self-hosted] is not in the documented allowlist (${formatAllowlistForMessage()}). Bare 'self-hosted' lacks the required platform/RAM modifiers; specify the full label set or use the matrix-config 'runner-labels' output pattern.`,
-                    "error"
-                )
-            );
-        }
+  for (const job of jobs) {
+    const runsOn = extractJobRunsOn(lines, job);
+    if (!runsOn) {
+      continue;
     }
 
-    return violations;
+    const raw = runsOn.raw;
+
+    // Inline array form: [self-hosted, Windows, RAM-64GB]
+    if (raw.startsWith("[")) {
+      let labels;
+      try {
+        labels = parseInlineLabelArray(raw);
+      } catch (parseError) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runsOn.line,
+            `runs-on: ${raw}`,
+            `Job '${job.id}': malformed inline runs-on label array: ${parseError.message}`,
+            "error"
+          )
+        );
+        continue;
+      }
+      if (!labels) {
+        continue;
+      }
+      if (!labels.some((label) => label === "self-hosted")) {
+        continue;
+      }
+      if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runsOn.line,
+            `runs-on: ${raw}`,
+            `Job '${job.id}': self-hosted runs-on label set [${labels.join(", ")}] is not in the documented allowlist (${formatAllowlistForMessage()}). If a new runner topology is needed, update SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js. To route dynamically by event, use the matrix-config 'runner-labels' output pattern.`,
+            "error"
+          )
+        );
+      }
+      continue;
+    }
+
+    // Multi-line block list form.
+    if (raw === "" && runsOn.blockList && runsOn.blockList.length > 0) {
+      const labels = runsOn.blockList;
+      if (!labels.some((label) => label === "self-hosted")) {
+        continue;
+      }
+      if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runsOn.line,
+            `runs-on: [${labels.join(", ")}]`,
+            `Job '${job.id}': self-hosted runs-on label set [${labels.join(", ")}] is not in the documented allowlist (${formatAllowlistForMessage()}). If a new runner topology is needed, update SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js. To route dynamically by event, use the matrix-config 'runner-labels' output pattern.`,
+            "error"
+          )
+        );
+      }
+      continue;
+    }
+
+    // Dynamic form: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}
+    const dynamicMatch =
+      /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(
+        raw
+      );
+    if (dynamicMatch) {
+      const sourceJobId = dynamicMatch[1];
+      const sourceOutputKey = dynamicMatch[2];
+      const sourceJob = outputsMap[sourceJobId];
+
+      if (!sourceJob || !sourceJob.outputs[sourceOutputKey]) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runsOn.line,
+            `runs-on: ${raw}`,
+            `Job '${job.id}': dynamic runs-on references needs.${sourceJobId}.outputs.${sourceOutputKey} but that source job/output cannot be resolved. The validator must lexically prove the emitted label set is allowlisted (${formatAllowlistForMessage()}). Ensure the emitting job declares the output and its step uses an 'id:' that matches the outputs binding.`,
+            "error"
+          )
+        );
+        continue;
+      }
+
+      const { stepId } = sourceJob.outputs[sourceOutputKey];
+      const sourceStep = sourceJob.stepsById[stepId];
+
+      if (!sourceStep || !sourceStep.run || typeof sourceStep.run.text !== "string") {
+        violations.push(
+          new Violation(
+            relativePath,
+            runsOn.line,
+            `runs-on: ${raw}`,
+            `Job '${job.id}': dynamic runs-on points at step id '${stepId}' in job '${sourceJobId}' but its run: block could not be located. Use a literal bash run block with 'labels=[...]' assignments so the validator can prove each branch produces an allowlisted label set (${formatAllowlistForMessage()}).`,
+            "error"
+          )
+        );
+        continue;
+      }
+
+      const emittedSets = extractEmittedLabelSetsFromBash(sourceStep.run.text);
+      if (emittedSets.length === 0) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runsOn.line,
+            `runs-on: ${raw}`,
+            `Job '${job.id}': dynamic runs-on points at step id '${stepId}' in job '${sourceJobId}' but the run block emits no 'labels=[...]' assignments. Use literal 'echo \\'labels=[...]\\' >> "$GITHUB_OUTPUT"' lines so the validator can prove each branch produces an allowlisted label set (${formatAllowlistForMessage()}).`,
+            "error"
+          )
+        );
+        continue;
+      }
+
+      for (const labels of emittedSets) {
+        if (labels === null) {
+          violations.push(
+            new Violation(
+              relativePath,
+              runsOn.line,
+              `runs-on: ${raw}`,
+              `Job '${job.id}': dynamic runs-on source step '${stepId}' (job '${sourceJobId}') has a malformed 'labels=...' JSON value. Emit a literal JSON array of labels.`,
+              "error"
+            )
+          );
+          continue;
+        }
+        if (!labels.some((label) => label === "self-hosted")) {
+          continue;
+        }
+        if (!ALLOWLIST_KEYS.has(sortedLabelKey(labels))) {
+          violations.push(
+            new Violation(
+              relativePath,
+              runsOn.line,
+              `runs-on: ${raw}`,
+              `Job '${job.id}': dynamic runs-on source step '${stepId}' (job '${sourceJobId}') emits label set [${labels.join(", ")}] which is not in the documented allowlist (${formatAllowlistForMessage()}). Update the emitting bash branches or extend SELF_HOSTED_LABEL_ALLOWLIST in scripts/validate-workflows.js.`,
+              "error"
+            )
+          );
+        }
+      }
+      continue;
+    }
+
+    // Plain scalar form: `runs-on: ubuntu-latest`, `runs-on: 'self-hosted'`,
+    // or `runs-on: "self-hosted"`. Strip outer quotes; if the remaining
+    // identifier equals 'self-hosted' alone, it lacks the required
+    // platform/RAM modifiers and is not in the allowlist.
+    const scalarStripped = raw.replace(/^(["'])(.*)\1$/, "$2").trim();
+    if (scalarStripped === "self-hosted") {
+      violations.push(
+        new Violation(
+          relativePath,
+          runsOn.line,
+          `runs-on: ${raw}`,
+          `Job '${job.id}': self-hosted runs-on label set [self-hosted] is not in the documented allowlist (${formatAllowlistForMessage()}). Bare 'self-hosted' lacks the required platform/RAM modifiers; specify the full label set or use the matrix-config 'runner-labels' output pattern.`,
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
 }
 
 /**
@@ -2213,75 +2242,78 @@ function findSelfHostedLabelAllowlistViolations(relativePath, lines) {
  * static detection surfaces the typo at validation time.
  */
 function findDynamicRunsOnMissingNeedsViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
+  const violations = [];
+  const jobs = extractJobs(lines);
 
-    for (const job of jobs) {
-        const runsOn = extractJobRunsOn(lines, job);
-        if (!runsOn || typeof runsOn.raw !== "string") {
-            continue;
-        }
-
-        const dynamicMatch = /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(runsOn.raw);
-        if (!dynamicMatch) {
-            continue;
-        }
-
-        const dependencyJobId = dynamicMatch[1];
-        const declaredNeeds = extractJobNeeds(lines, job);
-        if (declaredNeeds.includes(dependencyJobId)) {
-            continue;
-        }
-
-        violations.push(
-            new Violation(
-                relativePath,
-                runsOn.line,
-                `runs-on: ${runsOn.raw}`,
-                `Job '${job.id}': dynamic runs-on references needs.${dependencyJobId}.outputs.${dynamicMatch[2]} but '${dependencyJobId}' is not in the job's needs: list (declared: [${declaredNeeds.join(", ")}]). Add '${dependencyJobId}' to needs: so the expression resolves at runtime.`,
-                "error"
-            )
-        );
+  for (const job of jobs) {
+    const runsOn = extractJobRunsOn(lines, job);
+    if (!runsOn || typeof runsOn.raw !== "string") {
+      continue;
     }
 
-    return violations;
+    const dynamicMatch =
+      /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(
+        runsOn.raw
+      );
+    if (!dynamicMatch) {
+      continue;
+    }
+
+    const dependencyJobId = dynamicMatch[1];
+    const declaredNeeds = extractJobNeeds(lines, job);
+    if (declaredNeeds.includes(dependencyJobId)) {
+      continue;
+    }
+
+    violations.push(
+      new Violation(
+        relativePath,
+        runsOn.line,
+        `runs-on: ${runsOn.raw}`,
+        `Job '${job.id}': dynamic runs-on references needs.${dependencyJobId}.outputs.${dynamicMatch[2]} but '${dependencyJobId}' is not in the job's needs: list (declared: [${declaredNeeds.join(", ")}]). Add '${dependencyJobId}' to needs: so the expression resolves at runtime.`,
+        "error"
+      )
+    );
+  }
+
+  return violations;
 }
 
 function findChangelogCoverageCheckoutViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
+  const violations = [];
+  const jobs = extractJobs(lines);
 
-    for (const job of jobs) {
-        const steps = extractJobSteps(lines, job);
-        let latestCheckoutHasFullHistory = false;
+  for (const job of jobs) {
+    const steps = extractJobSteps(lines, job);
+    let latestCheckoutHasFullHistory = false;
 
-        for (const step of steps) {
-            if (typeof step.uses === "string" && step.uses.startsWith("actions/checkout@")) {
-                latestCheckoutHasFullHistory = stepHasFullHistoryCheckout(lines, step);
-                continue;
-            }
+    for (const step of steps) {
+      if (typeof step.uses === "string" && step.uses.startsWith("actions/checkout@")) {
+        latestCheckoutHasFullHistory = stepHasFullHistoryCheckout(lines, step);
+        continue;
+      }
 
-            if (!step.run || !runTextInvokesChangelogCoverage(step.run.text)) {
-                continue;
-            }
+      if (!step.run || !runTextInvokesChangelogCoverage(step.run.text)) {
+        continue;
+      }
 
-            if (latestCheckoutHasFullHistory) {
-                continue;
-            }
+      if (latestCheckoutHasFullHistory) {
+        continue;
+      }
 
-            violations.push(
-                new Violation(
-                    relativePath,
-                    step.run.line,
-                    step.run.text,
-                    `Workflow job '${job.id}' runs a git-history-aware step without a preceding full-history checkout. Set actions/checkout fetch-depth: 0 so origin/<base> refs are available for changelog coverage / git diff origin commands. Allowlist of git-history-requiring npm scripts: ${NPM_SCRIPTS_REQUIRING_GIT_HISTORY.join(", ")}.`,
-                    "error"
-                )
-            );
-        }
+      violations.push(
+        new Violation(
+          relativePath,
+          step.run.line,
+          step.run.text,
+          `Workflow job '${job.id}' runs a git-history-aware step without a preceding full-history checkout. Set actions/checkout fetch-depth: 0 so origin/<base> refs are available for changelog coverage / git diff origin commands. Allowlist of git-history-requiring npm scripts: ${NPM_SCRIPTS_REQUIRING_GIT_HISTORY.join(", ")}.`,
+          "error"
+        )
+      );
     }
+  }
 
-    return violations;
+  return violations;
 }
 
 /**
@@ -2291,33 +2323,33 @@ function findChangelogCoverageCheckoutViolations(relativePath, lines) {
  * caller cannot statically resolve the labels.
  */
 function extractStaticJobLabels(lines, job) {
-    const runsOn = extractJobRunsOn(lines, job);
-    if (!runsOn) {
-        return null;
-    }
-    const raw = runsOn.raw;
+  const runsOn = extractJobRunsOn(lines, job);
+  if (!runsOn) {
+    return null;
+  }
+  const raw = runsOn.raw;
 
-    if (raw.startsWith("[")) {
-        try {
-            return parseInlineLabelArray(raw);
-        } catch (_error) {
-            return null;
-        }
+  if (raw.startsWith("[")) {
+    try {
+      return parseInlineLabelArray(raw);
+    } catch (_error) {
+      return null;
     }
+  }
 
-    if (raw === "" && Array.isArray(runsOn.blockList) && runsOn.blockList.length > 0) {
-        return runsOn.blockList.slice();
-    }
+  if (raw === "" && Array.isArray(runsOn.blockList) && runsOn.blockList.length > 0) {
+    return runsOn.blockList.slice();
+  }
 
-    if (raw.length === 0) {
-        return null;
-    }
+  if (raw.length === 0) {
+    return null;
+  }
 
-    if (raw.startsWith("${{")) {
-        return null;
-    }
+  if (raw.startsWith("${{")) {
+    return null;
+  }
 
-    return [raw.replace(/^(["'])(.*)\1$/, "$2").trim()];
+  return [raw.replace(/^(["'])(.*)\1$/, "$2").trim()];
 }
 
 /**
@@ -2338,34 +2370,34 @@ function extractStaticJobLabels(lines, job) {
  * and the `runner-preflight` job in `.github/workflows/release.yml`.
  */
 function jobIsRunnerAccessPreflight(lines, job) {
-    // (1) Must not itself be self-hosted (cannot gate self-hosted access).
-    const labels = extractStaticJobLabels(lines, job);
-    if (Array.isArray(labels) && labels.some((label) => label === "self-hosted")) {
-        return false;
-    }
-    // The runs-on value must be statically resolvable AND look like a
-    // hosted runner (ubuntu-*, windows-*, macos-*) for us to accept the
-    // job as a preflight. A dynamic runs-on (matrix expression) cannot be
-    // proved to run on a hosted runner.
-    if (!Array.isArray(labels) || labels.length === 0) {
-        return false;
-    }
-    const hostedRunnerPattern = /^(ubuntu|windows|macos)(?:-[A-Za-z0-9.+_-]+)?$/;
-    const hasHostedLabel = labels.some((label) => hostedRunnerPattern.test(label));
-    if (!hasHostedLabel) {
-        return false;
-    }
-    // (2) At least one step must reference the runners endpoint marker.
-    const steps = extractJobSteps(lines, job);
-    for (const step of steps) {
-        if (!step.run) {
-            continue;
-        }
-        if (/actions\/runners\b/.test(step.run.text)) {
-            return true;
-        }
-    }
+  // (1) Must not itself be self-hosted (cannot gate self-hosted access).
+  const labels = extractStaticJobLabels(lines, job);
+  if (Array.isArray(labels) && labels.some((label) => label === "self-hosted")) {
     return false;
+  }
+  // The runs-on value must be statically resolvable AND look like a
+  // hosted runner (ubuntu-*, windows-*, macos-*) for us to accept the
+  // job as a preflight. A dynamic runs-on (matrix expression) cannot be
+  // proved to run on a hosted runner.
+  if (!Array.isArray(labels) || labels.length === 0) {
+    return false;
+  }
+  const hostedRunnerPattern = /^(ubuntu|windows|macos)(?:-[A-Za-z0-9.+_-]+)?$/;
+  const hasHostedLabel = labels.some((label) => hostedRunnerPattern.test(label));
+  if (!hasHostedLabel) {
+    return false;
+  }
+  // (2) At least one step must reference the runners endpoint marker.
+  const steps = extractJobSteps(lines, job);
+  for (const step of steps) {
+    if (!step.run) {
+      continue;
+    }
+    if (/actions\/runners\b/.test(step.run.text)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -2388,54 +2420,291 @@ function jobIsRunnerAccessPreflight(lines, job) {
  *     GitHub Actions.
  */
 function findSelfHostedRunnerPreflightViolations(relativePath, lines) {
-    const violations = [];
-    const jobs = extractJobs(lines);
-    const jobsById = new Map();
-    for (const job of jobs) {
-        jobsById.set(job.id, job);
+  const violations = [];
+  const jobs = extractJobs(lines);
+  const jobsById = new Map();
+  for (const job of jobs) {
+    jobsById.set(job.id, job);
+  }
+
+  for (const job of jobs) {
+    const labels = extractStaticJobLabels(lines, job);
+    if (!labels) {
+      continue;
+    }
+    if (!labels.some((label) => label === "self-hosted")) {
+      continue;
+    }
+    if (jobIsRunnerAccessPreflight(lines, job)) {
+      continue;
     }
 
-    for (const job of jobs) {
-        const labels = extractStaticJobLabels(lines, job);
-        if (!labels) {
-            continue;
-        }
-        if (!labels.some((label) => label === "self-hosted")) {
-            continue;
-        }
-        if (jobIsRunnerAccessPreflight(lines, job)) {
-            continue;
-        }
+    const needs = extractJobNeeds(lines, job) || [];
+    let needsCoveredByPreflight = false;
+    for (const needsTarget of needs) {
+      const target = jobsById.get(needsTarget);
+      if (!target) {
+        continue;
+      }
+      if (jobIsRunnerAccessPreflight(lines, target)) {
+        needsCoveredByPreflight = true;
+        break;
+      }
+    }
+    if (needsCoveredByPreflight) {
+      continue;
+    }
 
-        const needs = extractJobNeeds(lines, job) || [];
-        let needsCoveredByPreflight = false;
-        for (const needsTarget of needs) {
-            const target = jobsById.get(needsTarget);
-            if (!target) {
-                continue;
-            }
-            if (jobIsRunnerAccessPreflight(lines, target)) {
-                needsCoveredByPreflight = true;
-                break;
-            }
-        }
-        if (needsCoveredByPreflight) {
-            continue;
-        }
+    const runsOn = extractJobRunsOn(lines, job);
+    violations.push(
+      new Violation(
+        relativePath,
+        runsOn ? runsOn.line : job.startLine,
+        runsOn ? `runs-on: ${runsOn.raw || labels.join(", ")}` : `job: ${job.id}`,
+        `Job '${job.id}' targets self-hosted labels [${labels.join(", ")}] without depending on a preflight job that probes runner availability via gh api orgs/<owner>/actions/runners (or repos/<repo>/actions/runners as fallback). Without the preflight, a missing runner-group ACL or offline runner causes the job to queue forever with no error. Add a preflight job running on a hosted runner (e.g. ubuntu-latest) whose step text references actions/runners, then reference it via 'needs:'. See docs/runbooks/unity-runners-after-transfer.md for the runbook the preflight points operators to.`,
+        "error"
+      )
+    );
+  }
 
-        const runsOn = extractJobRunsOn(lines, job);
-        violations.push(
+  return violations;
+}
+
+/**
+ * Self-hosted Windows runner contract: `shell: bash` on these runners is
+ * unreliable because GitHub's runner agent resolves `bash` via WhichUtil.Which
+ * against the host PATH. On the DAD-MACHINE Windows runner that PATH puts
+ * `C:\Windows\System32` ahead of `C:\Program Files\Git\bin`, so `bash` resolves
+ * to the WSL stub. If no WSL distro is installed (the default on a CI box),
+ * the step fails immediately with
+ *   "Windows Subsystem for Linux has no installed distributions."
+ *
+ * This rule forbids `shell: bash` (and unspecified `run:` that defaults to
+ * `bash`) for any step inside a job whose `runs-on:` resolves to a
+ * self-hosted Windows label set. Allowed alternatives:
+ *   - `shell: pwsh` (preferred for shell-agnostic content)
+ *   - `shell: powershell`
+ *   - `shell: 'C:\Program Files\Git\bin\bash.EXE --noprofile --norc ... {0}'`
+ *     (explicit absolute path -- escape hatch for steps that genuinely need
+ *     POSIX bash semantics; the validator accepts any path ending in
+ *     bash.exe/bash.EXE that does NOT live under System32).
+ *   - Composite actions (`uses: ./.github/actions/...`) which encapsulate
+ *     their own shell choice.
+ */
+function isSelfHostedWindowsLabelSet(labels) {
+  if (!Array.isArray(labels) || labels.length === 0) {
+    return false;
+  }
+  const hasSelfHosted = labels.some((label) => label === "self-hosted");
+  const hasWindows = labels.some((label) => /^Windows$/i.test(label));
+  return hasSelfHosted && hasWindows;
+}
+
+function isAllowedSelfHostedWindowsShell(shellValue) {
+  if (typeof shellValue !== "string") {
+    return false;
+  }
+  const trimmed = shellValue.trim();
+  if (trimmed === "") {
+    return false;
+  }
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "pwsh" || lowered === "powershell" || lowered === "cmd") {
+    return true;
+  }
+  // Explicit-path bash escape hatch. Accept any shell line that names a
+  // bash.exe whose directory clearly is NOT System32 (the WSL stub) and
+  // contains a `{0}` placeholder (GitHub Actions shell-string contract).
+  // extractStepShell lowercases the captured value so the regex matches
+  // bash.exe in lowercase; we still preserve the case-insensitive
+  // system32 reject.
+  const explicitBashRe = /(?:^|["'\\/])bash\.exe\b[^{}]*\{0\}/;
+  if (explicitBashRe.test(lowered) && !/[\\/]system32[\\/]bash\.exe/i.test(lowered)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Resolve a job's runs-on labels for the shell-bash policy. Returns
+ *   { kind: "static", labelSets: [string[]] }      -- statically known
+ *   { kind: "dynamic-resolved", labelSets: [string[], ...] }
+ *                                                  -- dynamic but every
+ *                                                     emitted branch is
+ *                                                     statically known
+ *   { kind: "dynamic-unresolved" }                 -- dynamic and cannot
+ *                                                     be statically proven
+ *   { kind: "none" }                               -- runs-on is missing
+ *                                                     or unrecognized
+ *
+ * This is the same resolution strategy used by the
+ * findSelfHostedLabelAllowlistViolations rule -- reuse keeps the two
+ * rules in lock-step.
+ */
+function resolveJobLabelSetsForShellPolicy(lines, job, outputsMap) {
+  const runsOn = extractJobRunsOn(lines, job);
+  if (!runsOn) {
+    return { kind: "none" };
+  }
+  const raw = runsOn.raw;
+
+  // Static inline / block-list / scalar forms.
+  const staticLabels = extractStaticJobLabels(lines, job);
+  if (Array.isArray(staticLabels) && staticLabels.length > 0) {
+    return { kind: "static", labelSets: [staticLabels] };
+  }
+
+  // Dynamic form: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}.
+  const dynamicMatch =
+    /^\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)\s*\)\s*\}\}$/.exec(
+      raw
+    );
+  if (!dynamicMatch) {
+    return { kind: "none" };
+  }
+  const sourceJobId = dynamicMatch[1];
+  const sourceOutputKey = dynamicMatch[2];
+  const sourceJob = outputsMap[sourceJobId];
+  if (!sourceJob || !sourceJob.outputs[sourceOutputKey]) {
+    return { kind: "dynamic-unresolved" };
+  }
+  const { stepId } = sourceJob.outputs[sourceOutputKey];
+  const sourceStep = sourceJob.stepsById[stepId];
+  if (!sourceStep || !sourceStep.run || typeof sourceStep.run.text !== "string") {
+    return { kind: "dynamic-unresolved" };
+  }
+  const emittedSets = extractEmittedLabelSetsFromBash(sourceStep.run.text);
+  if (emittedSets.length === 0) {
+    return { kind: "dynamic-unresolved" };
+  }
+  // Reject malformed (null) sets so the caller can surface them.
+  const labelSets = [];
+  for (const labels of emittedSets) {
+    if (labels === null) {
+      return { kind: "dynamic-unresolved" };
+    }
+    labelSets.push(labels);
+  }
+  return { kind: "dynamic-resolved", labelSets };
+}
+
+function findForbidPlainShellBashOnSelfHostedWindowsViolations(relativePath, lines) {
+  const violations = [];
+  const jobs = extractJobs(lines);
+  const workflowDefaultsShell = extractWorkflowDefaultsShell(lines);
+  const outputsMap = extractJobOutputsSourceMap(lines);
+
+  for (const job of jobs) {
+    const resolution = resolveJobLabelSetsForShellPolicy(lines, job, outputsMap);
+
+    if (resolution.kind === "none") {
+      continue;
+    }
+
+    if (resolution.kind === "dynamic-unresolved") {
+      // We can't statically prove the resolved label set, so we can't
+      // mechanically apply (or skip) the shell:bash policy. Emit a
+      // WARNING so the maintainer is aware the rule cannot statically
+      // verify this job and must do an out-of-band review.
+      const runsOn = extractJobRunsOn(lines, job);
+      violations.push(
+        new Violation(
+          relativePath,
+          runsOn ? runsOn.line : job.startLine,
+          runsOn ? `runs-on: ${runsOn.raw}` : `job: ${job.id}`,
+          `Job '${job.id}': dynamic runs-on cannot be statically resolved; shell:bash policy for self-hosted Windows runners cannot be mechanically verified. If the resolved label set may include self-hosted Windows, audit the steps' shell choices manually or refactor the emitting job to use literal echo 'labels=[...]' >> "$GITHUB_OUTPUT" lines so the validator can prove the labels.`,
+          "warning"
+        )
+      );
+      continue;
+    }
+
+    // Apply the policy only if ANY resolved label set is self-hosted
+    // Windows. (For dynamic-resolved jobs, all branches matter -- if
+    // even one branch is self-hosted-Windows, the steps' shells must
+    // satisfy the policy because the runtime could pick that branch.)
+    const appliesToAtLeastOneBranch = resolution.labelSets.some((labels) =>
+      isSelfHostedWindowsLabelSet(labels)
+    );
+    if (!appliesToAtLeastOneBranch) {
+      continue;
+    }
+
+    const jobDefaultsShell = extractJobDefaultsShell(lines, job);
+    const steps = extractJobSteps(lines, job);
+
+    for (const step of steps) {
+      // `uses:` steps inherit the composite action's shell decisions;
+      // the rule applies to inline `run:` steps only.
+      if (!step.run) {
+        continue;
+      }
+
+      const stepShell = step.shell;
+      // Resolve `effectiveShell` AND record where it came from. The
+      // source annotation is appended to any subsequent violation
+      // message so a fixture can mutation-test the rule by NULL-ing
+      // the workflow-defaults lookup: the resulting violation would
+      // lose the `via workflow defaults` substring (or the message
+      // would change shape entirely).
+      let effectiveShell;
+      let effectiveShellSource;
+      if (typeof stepShell === "string" && stepShell.length > 0) {
+        effectiveShell = stepShell;
+        effectiveShellSource = "step";
+      } else if (typeof jobDefaultsShell === "string" && jobDefaultsShell.length > 0) {
+        effectiveShell = jobDefaultsShell;
+        effectiveShellSource = "job defaults";
+      } else if (typeof workflowDefaultsShell === "string" && workflowDefaultsShell.length > 0) {
+        effectiveShell = workflowDefaultsShell;
+        effectiveShellSource = "workflow defaults";
+      } else {
+        effectiveShell = "";
+        effectiveShellSource = null;
+      }
+
+      // Step-level explicit shell wins. If it is an allowed value we
+      // are done; if it is bash/sh, flag.
+      if (typeof effectiveShell === "string" && effectiveShell.length > 0) {
+        const isBash = effectiveShell === "bash" || effectiveShell === "sh";
+        if (isBash) {
+          const sourceAnnotation = effectiveShellSource
+            ? ` (resolved via ${effectiveShellSource})`
+            : "";
+          violations.push(
             new Violation(
-                relativePath,
-                runsOn ? runsOn.line : job.startLine,
-                runsOn ? `runs-on: ${runsOn.raw || labels.join(", ")}` : `job: ${job.id}`,
-                `Job '${job.id}' targets self-hosted labels [${labels.join(", ")}] without depending on a preflight job that probes runner availability via gh api orgs/<owner>/actions/runners (or repos/<repo>/actions/runners as fallback). Without the preflight, a missing runner-group ACL or offline runner causes the job to queue forever with no error. Add a preflight job running on a hosted runner (e.g. ubuntu-latest) whose step text references actions/runners, then reference it via 'needs:'. See docs/runbooks/unity-runners-after-transfer.md for the runbook the preflight points operators to.`,
-                "error"
+              relativePath,
+              step.run.line,
+              `shell: ${effectiveShell}${sourceAnnotation}`,
+              `Job '${job.id}' step (line ${step.run.line}): shell: ${effectiveShell}${sourceAnnotation} on a self-hosted Windows runner is forbidden -- the runner agent's PATH resolves bash to the WSL stub (C:\\Windows\\System32\\bash.exe) which fails with "Windows Subsystem for Linux has no installed distributions." Use shell: pwsh, an explicit absolute Git Bash path with a {0} placeholder, or the composite action at .github/actions/print-self-hosted-runner-diagnostics for diagnostic blocks.`,
+              "error"
             )
-        );
-    }
+          );
+          continue;
+        }
+        if (isAllowedSelfHostedWindowsShell(effectiveShell)) {
+          continue;
+        }
+        // Other shell values (e.g. `python`) are out of scope; let
+        // them through.
+        continue;
+      }
 
-    return violations;
+      // No shell specified anywhere. GitHub Actions defaults to bash
+      // on Windows when the workflow has no defaults.run.shell. Flag.
+      violations.push(
+        new Violation(
+          relativePath,
+          step.run.line,
+          "shell: <unspecified>",
+          `Job '${job.id}' step (line ${step.run.line}): no shell specified for a self-hosted Windows runner -- the default bash resolves to the WSL stub (C:\\Windows\\System32\\bash.exe). Add shell: pwsh to the step (or set defaults.run.shell: pwsh on the job/workflow). For pure echo-style diagnostic blocks prefer the composite action at .github/actions/print-self-hosted-runner-diagnostics.`,
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
 }
 
 /**
@@ -2445,254 +2714,233 @@ function findSelfHostedRunnerPreflightViolations(relativePath, lines) {
  * @returns {Violation[]} Array of violations found
  */
 function validateWorkflow(filePath, options = {}) {
-    const violations = [];
-    const repoRoot = options.repoRoot || REPO_ROOT;
-    const isIgnoredPathFn = options.isIgnoredPathFn || isGitIgnoredPath;
-    const relativePath = path.relative(repoRoot, filePath).replace(/\\/g, "/");
-    const lineLengthPolicy = resolveWorkflowLineLengthPolicy(repoRoot);
-    const maxWorkflowLineLength = lineLengthPolicy.max;
+  const violations = [];
+  const repoRoot = options.repoRoot || REPO_ROOT;
+  const isIgnoredPathFn = options.isIgnoredPathFn || isGitIgnoredPath;
+  const relativePath = path.relative(repoRoot, filePath).replace(/\\/g, "/");
+  const lineLengthPolicy = resolveWorkflowLineLengthPolicy(repoRoot);
+  const maxWorkflowLineLength = lineLengthPolicy.max;
 
-    let content;
-    try {
-        content = fs.readFileSync(filePath, "utf8");
-    } catch (error) {
-        violations.push(
-            new Violation(relativePath, 0, "", `Failed to read file: ${error.message}`)
-        );
-        return violations;
-    }
-
-    const lines = normalizeToLf(content).split("\n");
-
-    violations.push(
-        ...findWorkflowLineLengthViolations(
-            relativePath,
-            lines,
-            maxWorkflowLineLength,
-            lineLengthPolicy
-        )
-    );
-
-    lines.forEach((line, index) => {
-        const lineNumber = index + 1;
-
-        // Check for forbidden single-line multi-pattern renormalize
-        if (isForbiddenRenormalizePattern(line)) {
-            violations.push(
-                new Violation(
-                    relativePath,
-                    lineNumber,
-                    line.trim(),
-                    "FORBIDDEN: Single-line multi-pattern git add --renormalize. Use per-extension loop pattern instead.",
-                    "error"
-                )
-            );
-        }
-
-        // Check for unguarded renormalize commands (warning only for non-variable patterns)
-        if (
-            line.includes("git add") &&
-            line.includes("--renormalize") &&
-            !usesVariableExtensionPattern(line) &&
-            line.includes("*.")
-        ) {
-            if (!hasExistenceCheck(lines, index)) {
-                violations.push(
-                    new Violation(
-                        relativePath,
-                        lineNumber,
-                        line.trim(),
-                        "WARNING: git add --renormalize without existence check may fail if pattern matches no files.",
-                        "warning"
-                    )
-                );
-            }
-        }
-    });
-
-    try {
-        violations.push(
-            ...findIgnoredPathViolations(
-                relativePath,
-                lines,
-                repoRoot,
-                isIgnoredPathFn
-            )
-        );
-
-        const packageLockIgnored = isIgnoredPathFn(repoRoot, "package-lock.json");
-        violations.push(
-            ...findLockfileInstallViolations(relativePath, lines, packageLockIgnored)
-        );
-
-        violations.push(
-            ...findWindowsBashPortabilityViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findForbiddenRunsOnGroupViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findForbiddenSharedConcurrencyViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findMatrixConcurrencyEvictionViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findSelfHostedLabelAllowlistViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findDynamicRunsOnMissingNeedsViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findChangelogCoverageCheckoutViolations(relativePath, lines)
-        );
-
-        violations.push(
-            ...findSelfHostedRunnerPreflightViolations(relativePath, lines)
-        );
-    } catch (error) {
-        violations.push(
-            new Violation(
-                relativePath,
-                0,
-                "git check-ignore",
-                `Workflow validation failed while evaluating ignore policy: ${error.message}`,
-                "error"
-            )
-        );
-    }
-
+  let content;
+  try {
+    content = fs.readFileSync(filePath, "utf8");
+  } catch (error) {
+    violations.push(new Violation(relativePath, 0, "", `Failed to read file: ${error.message}`));
     return violations;
+  }
+
+  const lines = normalizeToLf(content).split("\n");
+
+  violations.push(
+    ...findWorkflowLineLengthViolations(
+      relativePath,
+      lines,
+      maxWorkflowLineLength,
+      lineLengthPolicy
+    )
+  );
+
+  lines.forEach((line, index) => {
+    const lineNumber = index + 1;
+
+    // Check for forbidden single-line multi-pattern renormalize
+    if (isForbiddenRenormalizePattern(line)) {
+      violations.push(
+        new Violation(
+          relativePath,
+          lineNumber,
+          line.trim(),
+          "FORBIDDEN: Single-line multi-pattern git add --renormalize. Use per-extension loop pattern instead.",
+          "error"
+        )
+      );
+    }
+
+    // Check for unguarded renormalize commands (warning only for non-variable patterns)
+    if (
+      line.includes("git add") &&
+      line.includes("--renormalize") &&
+      !usesVariableExtensionPattern(line) &&
+      line.includes("*.")
+    ) {
+      if (!hasExistenceCheck(lines, index)) {
+        violations.push(
+          new Violation(
+            relativePath,
+            lineNumber,
+            line.trim(),
+            "WARNING: git add --renormalize without existence check may fail if pattern matches no files.",
+            "warning"
+          )
+        );
+      }
+    }
+  });
+
+  try {
+    violations.push(...findIgnoredPathViolations(relativePath, lines, repoRoot, isIgnoredPathFn));
+
+    const packageLockIgnored = isIgnoredPathFn(repoRoot, "package-lock.json");
+    violations.push(...findLockfileInstallViolations(relativePath, lines, packageLockIgnored));
+
+    violations.push(...findWindowsBashPortabilityViolations(relativePath, lines));
+
+    violations.push(...findForbiddenRunsOnGroupViolations(relativePath, lines));
+
+    violations.push(...findForbiddenSharedConcurrencyViolations(relativePath, lines));
+
+    violations.push(...findMatrixConcurrencyEvictionViolations(relativePath, lines));
+
+    violations.push(...findSelfHostedLabelAllowlistViolations(relativePath, lines));
+
+    violations.push(...findDynamicRunsOnMissingNeedsViolations(relativePath, lines));
+
+    violations.push(...findChangelogCoverageCheckoutViolations(relativePath, lines));
+
+    violations.push(...findSelfHostedRunnerPreflightViolations(relativePath, lines));
+
+    violations.push(...findForbidPlainShellBashOnSelfHostedWindowsViolations(relativePath, lines));
+  } catch (error) {
+    violations.push(
+      new Violation(
+        relativePath,
+        0,
+        "git check-ignore",
+        `Workflow validation failed while evaluating ignore policy: ${error.message}`,
+        "error"
+      )
+    );
+  }
+
+  return violations;
 }
 
 /**
  * Main entry point.
  */
 function main() {
-    console.log("Validating workflow files for policy and reliability patterns...\n");
+  console.log("Validating workflow files for policy and reliability patterns...\n");
 
-    if (!fs.existsSync(WORKFLOWS_DIR)) {
-        console.log(`Workflows directory not found: ${WORKFLOWS_DIR}`);
-        console.log("Nothing to validate.");
-        process.exit(0);
-    }
-
-    let workflowFiles;
+  let workflowFiles = [];
+  if (!fs.existsSync(WORKFLOWS_DIR)) {
+    console.log(`Workflows directory not found: ${WORKFLOWS_DIR}`);
+  } else {
     try {
-        workflowFiles = fs
-            .readdirSync(WORKFLOWS_DIR)
-            .filter((file) => file.endsWith(".yml") || file.endsWith(".yaml"));
+      workflowFiles = fs
+        .readdirSync(WORKFLOWS_DIR)
+        .filter((file) => file.endsWith(".yml") || file.endsWith(".yaml"));
     } catch (error) {
-        // Unlike recursive scanners, this validator cannot proceed without the workflows root.
-        console.error(`Unable to read workflows directory: ${error.message}`);
-        process.exit(1);
+      // Unlike recursive scanners, this validator cannot proceed without the workflows root.
+      console.error(`Unable to read workflows directory: ${error.message}`);
+      process.exit(1);
     }
+  }
 
-    if (workflowFiles.length === 0) {
-        console.log("No workflow files found.");
-        process.exit(0);
-    }
-
+  if (workflowFiles.length > 0) {
     console.log(`Found ${workflowFiles.length} workflow file(s)\n`);
+  } else {
+    console.log("No workflow files found.\n");
+  }
 
-    const allViolations = [];
+  const allViolations = [];
 
-    workflowFiles.forEach((file) => {
-        const filePath = path.join(WORKFLOWS_DIR, file);
-        const violations = validateWorkflow(filePath);
-        allViolations.push(...violations);
-    });
+  workflowFiles.forEach((file) => {
+    const filePath = path.join(WORKFLOWS_DIR, file);
+    const violations = validateWorkflow(filePath);
+    allViolations.push(...violations);
+  });
 
-    const errors = allViolations.filter((v) => v.severity === "error");
-    const warnings = allViolations.filter((v) => v.severity === "warning");
+  allViolations.push(...validatePreCommitConfigLineLengths());
 
-    if (allViolations.length === 0) {
-        console.log("[OK] All workflow files passed validation.\n");
-        console.log("No workflow policy violations detected.");
-        process.exit(0);
-    }
+  const errors = allViolations.filter((v) => v.severity === "error");
+  const warnings = allViolations.filter((v) => v.severity === "warning");
 
-    if (errors.length > 0) {
-        console.log(`\n[ERROR] Found ${errors.length} error(s):\n`);
-        errors.forEach((v) => console.log(v.toString() + "\n"));
-    }
-
-    if (warnings.length > 0) {
-        console.log(`\n[WARN] Found ${warnings.length} warning(s):\n`);
-        warnings.forEach((v) => console.log(v.toString() + "\n"));
-    }
-
-    console.log("\n--- Summary ---");
-    console.log(`Errors:   ${errors.length}`);
-    console.log(`Warnings: ${warnings.length}`);
-
-    if (errors.length > 0) {
-        console.log("\nValidation FAILED. Please fix the errors above.");
-        console.log(
-            "\nSee .llm/skills/github-actions/git-renormalize-patterns.md for renormalize guidance."
-        );
-        process.exit(1);
-    }
-
-    console.log("\nValidation passed with warnings.");
+  if (allViolations.length === 0) {
+    console.log("[OK] All workflow files passed validation.\n");
+    console.log("No workflow policy violations detected.");
     process.exit(0);
+  }
+
+  if (errors.length > 0) {
+    console.log(`\n[ERROR] Found ${errors.length} error(s):\n`);
+    errors.forEach((v) => console.log(v.toString() + "\n"));
+  }
+
+  if (warnings.length > 0) {
+    console.log(`\n[WARN] Found ${warnings.length} warning(s):\n`);
+    warnings.forEach((v) => console.log(v.toString() + "\n"));
+  }
+
+  console.log("\n--- Summary ---");
+  console.log(`Errors:   ${errors.length}`);
+  console.log(`Warnings: ${warnings.length}`);
+
+  if (errors.length > 0) {
+    console.log("\nValidation FAILED. Please fix the errors above.");
+    console.log(
+      "\nSee .llm/skills/github-actions/git-renormalize-patterns.md for renormalize guidance."
+    );
+    process.exit(1);
+  }
+
+  console.log("\nValidation passed with warnings.");
+  process.exit(0);
 }
 
 // Export for testing when required as a module
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        isForbiddenRenormalizePattern,
-        hasExistenceCheck,
-        isGitIgnoredPath,
-        extractWorkflowPathEntries,
-        findIgnoredPathViolations,
-        extractRunBlocks,
-        findLockfileInstallViolations,
-        extractJobs,
-        extractWorkflowDefaultsShell,
-        extractJobDefaultsShell,
-        jobTargetsWindows,
-        extractJobSteps,
-        detectBashSyntaxPattern,
-        findWindowsBashPortabilityViolations,
-        findForbiddenRunsOnGroupViolations,
-        findForbiddenSharedConcurrencyViolations,
-        findMatrixConcurrencyEvictionViolations,
-        findSelfHostedLabelAllowlistViolations,
-        findDynamicRunsOnMissingNeedsViolations,
-        extractJobConcurrencyGroup,
-        extractWorkflowConcurrencyGroup,
-        extractConcurrencyGroupFromBlock,
-        jobHasMatrix,
-        extractJobMatrixMaxParallel,
-        extractJobRunsOn,
-        extractJobNeeds,
-        parseInlineLabelArray,
-        extractJobOutputsSourceMap,
-        extractEmittedLabelSetsFromBash,
-        SELF_HOSTED_LABEL_ALLOWLIST,
-        runTextInvokesChangelogCoverage,
-        stepHasFullHistoryCheckout,
-        findChangelogCoverageCheckoutViolations,
-        NPM_SCRIPTS_REQUIRING_GIT_HISTORY,
-        extractStaticJobLabels,
-        jobIsRunnerAccessPreflight,
-        findSelfHostedRunnerPreflightViolations,
-        resolveWorkflowLineLengthPolicy,
-        resolveWorkflowLineLengthMax,
-        findWorkflowLineLengthViolations,
-        validateWorkflow,
-        Violation,
-    };
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    isForbiddenRenormalizePattern,
+    hasExistenceCheck,
+    isGitIgnoredPath,
+    extractWorkflowPathEntries,
+    findIgnoredPathViolations,
+    extractRunBlocks,
+    findLockfileInstallViolations,
+    extractJobs,
+    extractWorkflowDefaultsShell,
+    extractJobDefaultsShell,
+    jobTargetsWindows,
+    extractJobSteps,
+    detectBashSyntaxPattern,
+    findWindowsBashPortabilityViolations,
+    findForbiddenRunsOnGroupViolations,
+    findForbiddenSharedConcurrencyViolations,
+    findMatrixConcurrencyEvictionViolations,
+    findSelfHostedLabelAllowlistViolations,
+    findDynamicRunsOnMissingNeedsViolations,
+    extractJobConcurrencyGroup,
+    extractWorkflowConcurrencyGroup,
+    extractConcurrencyGroupFromBlock,
+    jobHasMatrix,
+    extractJobMatrixMaxParallel,
+    extractJobRunsOn,
+    extractJobNeeds,
+    parseInlineLabelArray,
+    extractJobOutputsSourceMap,
+    extractEmittedLabelSetsFromBash,
+    SELF_HOSTED_LABEL_ALLOWLIST,
+    runTextInvokesChangelogCoverage,
+    stepHasFullHistoryCheckout,
+    findChangelogCoverageCheckoutViolations,
+    NPM_SCRIPTS_REQUIRING_GIT_HISTORY,
+    extractStaticJobLabels,
+    jobIsRunnerAccessPreflight,
+    findSelfHostedRunnerPreflightViolations,
+    isSelfHostedWindowsLabelSet,
+    isAllowedSelfHostedWindowsShell,
+    findForbidPlainShellBashOnSelfHostedWindowsViolations,
+    resolveJobLabelSetsForShellPolicy,
+    resolveWorkflowLineLengthPolicy,
+    resolveWorkflowLineLengthMax,
+    findWorkflowLineLengthViolations,
+    validatePreCommitConfigLineLengths,
+    validateWorkflow,
+    Violation
+  };
 }
 
 // Only run main when executed directly (not when required as a module)
 if (require.main === module) {
-    main();
+  main();
 }

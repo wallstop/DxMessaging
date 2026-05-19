@@ -6,6 +6,8 @@
  * - npx calls must explicitly set install policy via --yes/-y or --no.
  * - Jest-related hooks must use scripts/run-managed-jest.js for deterministic execution.
  * - yamllint must be configured as a non-optional hook (no conditional skip wrappers).
+ * - YAML comment auto-wrap hook must use run-and-restage + require_serial.
+ * - preflight:pre-commit must include YAML policy checks, including comment drift checks.
  */
 
 "use strict";
@@ -30,6 +32,8 @@ const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
 const REQUIRED_CHANGED_DOCS_COMMAND = "npm run validate:changed-docs";
 const REQUIRED_LLM_MARKDOWN_COMMAND = "npm run validate:llm-markdown";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
+const REQUIRED_YAML_VALIDATION_COMMAND = "npm run check:yaml";
+const REQUIRED_YAML_COMMENTS_CHECK_COMMAND = "npm run check:yaml:comments";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
 const REQUIRED_WORKFLOW_CSPELL_COMMAND = "npm run check:workflow-cspell";
 const REQUIRED_WORKFLOW_VALIDATION_COMMAND = "npm run validate:workflows";
@@ -202,6 +206,10 @@ function hasRequiredPackageJsonFormatCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
 }
 
+function hasRequiredYamlValidationCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_YAML_VALIDATION_COMMAND);
+}
+
 function hasRequiredNodeToolingCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_NODE_TOOLING_COMMAND);
 }
@@ -236,6 +244,14 @@ function hasRequiredBannerSyncCommand(preflightScript) {
 
 function hasRequiredChangelogValidationCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_CHANGELOG_VALIDATION_COMMAND);
+}
+
+function hasRequiredYamlCommentsCheckCommand(yamlCheckScript) {
+  if (typeof yamlCheckScript !== "string" || yamlCheckScript.trim().length === 0) {
+    return false;
+  }
+
+  return hasRequiredPreflightCommand(yamlCheckScript, REQUIRED_YAML_COMMENTS_CHECK_COMMAND);
 }
 
 function hasRequiredParserSuiteTestPaths(
@@ -373,6 +389,18 @@ function hasGuardedFixerRestagePattern(hookId, entry) {
   );
 }
 
+function hasGuardedYamlCommentRestagePattern(hookId, entry) {
+  if (hookId !== "fix-yaml-comments-line-length") {
+    return true;
+  }
+
+  return (
+    /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
+    /\bnode\b\s+scripts\/fix-yaml-comments-line-length\.js\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
+}
+
 function hasPortableHookInvocation(entry) {
   return !/^\s*(?:bash|sh|pwsh|powershell)(?:\s|$)/.test(entry);
 }
@@ -383,6 +411,14 @@ function usesManagedNodeRepair(entry) {
 
 function hasRequiredSerialManagedRepairHook(hook) {
   if (!usesManagedNodeRepair(hook.entry)) {
+    return true;
+  }
+
+  return hook.requireSerial === "true";
+}
+
+function hasRequiredSerialYamlCommentFixerHook(hook) {
+  if (hook.id !== "fix-yaml-comments-line-length") {
     return true;
   }
 
@@ -444,6 +480,17 @@ function validateHookEntries(entries, hookConfigs = []) {
       );
     }
 
+    if (!hasGuardedYamlCommentRestagePattern(hook.id, hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "fix-yaml-comments-line-length must use node scripts/run-and-restage.js with '--' so staged YAML comment auto-wrap is shell-neutral and diff-guarded.",
+          hook.entry
+        )
+      );
+    }
+
     if (!hasPortableHookInvocation(hook.entry)) {
       violations.push(
         new Violation(
@@ -461,6 +508,17 @@ function validateHookEntries(entries, hookConfigs = []) {
           hook.id,
           hook.line,
           "Managed Prettier/cspell hooks must set require_serial: true so npm ci self-heal is single-writer across pre-commit filename partitions.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasRequiredSerialYamlCommentFixerHook(enrichedHook)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "fix-yaml-comments-line-length must set require_serial: true so restage writes stay single-writer across filename partitions.",
           hook.entry
         )
       );
@@ -588,6 +646,17 @@ function validatePreflightScriptPolicy(
     );
   }
 
+  if (!hasRequiredYamlValidationCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_YAML_VALIDATION_COMMAND}' so YAML lint/format policy drift is caught before hooks.`,
+        preflightScript
+      )
+    );
+  }
+
   if (!hasRequiredNodeToolingCommand(preflightScript)) {
     violations.push(
       new Violation(
@@ -683,6 +752,22 @@ function validatePreflightScriptPolicy(
         1,
         `preflight:pre-commit must include '${REQUIRED_CHANGELOG_VALIDATION_COMMAND}' so changelog policy drift is caught before hooks.`,
         preflightScript
+      )
+    );
+  }
+
+  const yamlCheckScript = packageJson?.scripts?.["check:yaml"];
+  if (
+    typeof yamlCheckScript === "string" &&
+    yamlCheckScript.trim().length > 0 &&
+    !hasRequiredYamlCommentsCheckCommand(yamlCheckScript)
+  ) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `package.json scripts.check:yaml must include '${REQUIRED_YAML_COMMENTS_CHECK_COMMAND}' so breakable long YAML comment lines are auto-detected before yamllint hook-time.`,
+        String(yamlCheckScript || "")
       )
     );
   }
@@ -848,6 +933,8 @@ module.exports = {
   hasRequiredPreflightCommand,
   hasRequiredParserPrecheckCommand,
   hasRequiredPackageJsonFormatCommand,
+  hasRequiredYamlValidationCommand,
+  hasRequiredYamlCommentsCheckCommand,
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
   hasRequiredChangedDocsCommand,
@@ -864,9 +951,11 @@ module.exports = {
   hasInlinedPrettierEntry,
   hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
+  hasGuardedYamlCommentRestagePattern,
   hasPortableHookInvocation,
   usesManagedNodeRepair,
   hasRequiredSerialManagedRepairHook,
+  hasRequiredSerialYamlCommentFixerHook,
   validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
@@ -879,6 +968,8 @@ module.exports = {
   REQUIRED_CHANGED_DOCS_COMMAND,
   REQUIRED_LLM_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+  REQUIRED_YAML_VALIDATION_COMMAND,
+  REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_VALIDATION_COMMAND,

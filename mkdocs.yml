@@ -219,3 +219,6 @@ nav:
       - Troubleshooting: reference/troubleshooting.md
       - Analyzers: reference/analyzers.md
       - Compatibility: reference/compatibility.md
+  - Runbooks:
+      - Unity Runners After Transfer: runbooks/unity-runners-after-transfer.md
+      - Windows Partial Extract: runbooks/windows-partial-extract.md

@@ -682,10 +682,10 @@ function getChangedFilesFromGitDetails(execFileSyncImpl = execFileSync, env = pr
 
     try {
       const output = execFileSyncImpl("git", args, {
-          cwd: REPO_ROOT,
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "pipe"]
-        });
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"]
+      });
 
       return {
         ok: true,
@@ -876,7 +876,10 @@ function probeShallowCloneState(execFileSyncImpl = execFileSync) {
     isShallow: isShallow.ok ? isShallow.output === "true" : null,
     originRefs:
       originRefs.ok && originRefs.output.length > 0
-        ? originRefs.output.split("\n").map((line) => line.trim()).filter(Boolean)
+        ? originRefs.output
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
         : [],
     originRefsProbeError: originRefs.ok ? null : originRefs.error
   };
@@ -889,9 +892,7 @@ function formatShallowCloneDiagnostic(shallowState) {
 
   const parts = [];
   if (shallowState.isShallow === true) {
-    parts.push(
-      "Repository is a SHALLOW clone (git rev-parse --is-shallow-repository = true)"
-    );
+    parts.push("Repository is a SHALLOW clone (git rev-parse --is-shallow-repository = true)");
   } else if (shallowState.isShallow === false) {
     parts.push("Repository is a full clone (not shallow)");
   } else {
@@ -907,10 +908,7 @@ function formatShallowCloneDiagnostic(shallowState) {
   return ` ${parts.join("; ")}.`;
 }
 
-function validateChangedFilesDiscovery(
-  diagnostics,
-  shallowProbeImpl = probeShallowCloneState
-) {
+function validateChangedFilesDiscovery(diagnostics, shallowProbeImpl = probeShallowCloneState) {
   if (!diagnostics || diagnostics.source !== "unavailable") {
     return [];
   }
@@ -922,8 +920,7 @@ function validateChangedFilesDiscovery(
           .join("; ")
       : "no Git sources were available";
 
-  const shallowState =
-    typeof shallowProbeImpl === "function" ? shallowProbeImpl() : null;
+  const shallowState = typeof shallowProbeImpl === "function" ? shallowProbeImpl() : null;
   const shallowDiagnostic = formatShallowCloneDiagnostic(shallowState);
 
   // Build a suggestion that NAMES the fix when the shallow-clone signature

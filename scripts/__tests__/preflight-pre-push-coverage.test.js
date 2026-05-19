@@ -26,10 +26,7 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("../lib/quote-parser");
-const {
-    findAllHookBlocks,
-    extractStagesFromHookBlock,
-} = require("../lib/precommit-yaml");
+const { findAllHookBlocks, extractStagesFromHookBlock } = require("../lib/precommit-yaml");
 
 /**
  * Allow-list of pre-push hook ids that are intentionally NOT invoked by
@@ -45,143 +42,139 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 const CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
 
-const BULK_PRE_PUSH_TOKENS = [
-    /\bpre-commit\s+run\b/,
-    /--hook-stage\s+pre-push\b/,
-    /--all-files\b/,
-];
+const BULK_PRE_PUSH_TOKENS = [/\bpre-commit\s+run\b/, /--hook-stage\s+pre-push\b/, /--all-files\b/];
 
 function escapeRegex(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function scriptHasBulkPrePushInvocation(script) {
-    return BULK_PRE_PUSH_TOKENS.every((rx) => rx.test(script));
+  return BULK_PRE_PUSH_TOKENS.every((rx) => rx.test(script));
 }
 
 function loadConfigLines() {
-    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
-    return normalizeToLf(raw).split("\n");
+  const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+  return normalizeToLf(raw).split("\n");
 }
 
 function loadPackageJson() {
-    const raw = fs.readFileSync(PACKAGE_JSON_PATH, "utf8");
-    return JSON.parse(raw);
+  const raw = fs.readFileSync(PACKAGE_JSON_PATH, "utf8");
+  return JSON.parse(raw);
 }
 
 function getPrePushHookIds(configLines) {
-    const blocks = findAllHookBlocks(configLines);
-    const ids = [];
-    for (const block of blocks) {
-        const stages = extractStagesFromHookBlock(block);
-        if (stages.includes("pre-push")) {
-            ids.push(block.id);
-        }
+  const blocks = findAllHookBlocks(configLines);
+  const ids = [];
+  for (const block of blocks) {
+    const stages = extractStagesFromHookBlock(block);
+    if (stages.includes("pre-push")) {
+      ids.push(block.id);
     }
-    return ids;
+  }
+  return ids;
 }
 
 function getAllHookIds(configLines) {
-    const blocks = findAllHookBlocks(configLines);
-    return blocks.map((block) => block.id);
+  const blocks = findAllHookBlocks(configLines);
+  return blocks.map((block) => block.id);
 }
 
 describe("preflight:pre-push static coverage", () => {
-    test("preflight:pre-push npm script exists and is a non-empty string", () => {
-        const pkg = loadPackageJson();
-        expect(pkg.scripts).toBeDefined();
-        const value = pkg.scripts["preflight:pre-push"];
-        expect(typeof value).toBe("string");
-        expect(value.trim().length).toBeGreaterThan(0);
-    });
+  test("preflight:pre-push npm script exists and is a non-empty string", () => {
+    const pkg = loadPackageJson();
+    expect(pkg.scripts).toBeDefined();
+    const value = pkg.scripts["preflight:pre-push"];
+    expect(typeof value).toBe("string");
+    expect(value.trim().length).toBeGreaterThan(0);
+  });
 
-    test("preflight:pre-push chain calls preflight:pre-commit first", () => {
-        // The fast preflight gate is intentionally first in the chain so a
-        // cheap failure (e.g., yamllint, formatter, a sub-second validator)
-        // surfaces before the multi-minute pre-push sweep begins. If a
-        // future refactor reorders these, the agent loses its fast-feedback
-        // signal and pre-push doctor reports become misleading.
-        const pkg = loadPackageJson();
-        const script = pkg.scripts["preflight:pre-push"];
-        expect(script).toContain("npm run preflight:pre-commit");
+  test("preflight:pre-push chain calls preflight:pre-commit first", () => {
+    // The fast preflight gate is intentionally first in the chain so a
+    // cheap failure (e.g., yamllint, formatter, a sub-second validator)
+    // surfaces before the multi-minute pre-push sweep begins. If a
+    // future refactor reorders these, the agent loses its fast-feedback
+    // signal and pre-push doctor reports become misleading.
+    const pkg = loadPackageJson();
+    const script = pkg.scripts["preflight:pre-push"];
+    expect(script).toContain("npm run preflight:pre-commit");
 
-        const preCommitIndex = script.indexOf("npm run preflight:pre-commit");
-        const prePushIndex = script.indexOf("pre-commit run --hook-stage pre-push");
-        expect(preCommitIndex).toBeGreaterThanOrEqual(0);
-        expect(prePushIndex).toBeGreaterThan(preCommitIndex);
-    });
+    const preCommitIndex = script.indexOf("npm run preflight:pre-commit");
+    const prePushIndex = script.indexOf("pre-commit run --hook-stage pre-push");
+    expect(preCommitIndex).toBeGreaterThanOrEqual(0);
+    expect(prePushIndex).toBeGreaterThan(preCommitIndex);
+  });
 
-    test("preflight:pre-push covers every pre-push hook in .pre-commit-config.yaml", () => {
-        const configLines = loadConfigLines();
-        const prePushIds = getPrePushHookIds(configLines);
-        expect(prePushIds.length).toBeGreaterThan(0);
+  test("preflight:pre-push covers every pre-push hook in .pre-commit-config.yaml", () => {
+    const configLines = loadConfigLines();
+    const prePushIds = getPrePushHookIds(configLines);
+    expect(prePushIds.length).toBeGreaterThan(0);
 
-        const pkg = loadPackageJson();
-        const script = pkg.scripts["preflight:pre-push"];
+    const pkg = loadPackageJson();
+    const script = pkg.scripts["preflight:pre-push"];
 
-        // Bulk form: `pre-commit run --hook-stage pre-push --all-files` runs
-        // every hook whose stages: includes pre-push, so coverage is
-        // automatic. This is the canonical shape today. The detector matches
-        // the three required tokens independently so flag-order variations
-        // (e.g., `--show-diff-on-failure` inserted anywhere) still resolve.
-        if (scriptHasBulkPrePushInvocation(script)) {
-            // Bulk form covers everything; nothing further to assert here.
-            // The bulk form is the canonical shape and the explicit-form
-            // branch below only fires if a future refactor switches to
-            // per-hook invocations.
-            return;
-        }
+    // Bulk form: `pre-commit run --hook-stage pre-push --all-files` runs
+    // every hook whose stages: includes pre-push, so coverage is
+    // automatic. This is the canonical shape today. The detector matches
+    // the three required tokens independently so flag-order variations
+    // (e.g., `--show-diff-on-failure` inserted anywhere) still resolve.
+    if (scriptHasBulkPrePushInvocation(script)) {
+      // Bulk form covers everything; nothing further to assert here.
+      // The bulk form is the canonical shape and the explicit-form
+      // branch below only fires if a future refactor switches to
+      // per-hook invocations.
+      return;
+    }
 
-        const exemptIds = new Set(PREFLIGHT_EXEMPT_HOOKS.map((entry) => entry.id));
-        const missing = [];
+    const exemptIds = new Set(PREFLIGHT_EXEMPT_HOOKS.map((entry) => entry.id));
+    const missing = [];
 
-        for (const hookId of prePushIds) {
-            if (exemptIds.has(hookId)) {
-                continue;
-            }
+    for (const hookId of prePushIds) {
+      if (exemptIds.has(hookId)) {
+        continue;
+      }
 
-            // Match `pre-commit run --hook-stage pre-push <hookId>` allowing
-            // optional flags (e.g., --all-files, --files <paths>) between
-            // the stage flag and the hook id, but the hook id must appear
-            // as a whole token following the stage flag.
-            // Escape the hook id so any regex metacharacters (`.`, `+`, etc.)
-            // that future hook ids might use are matched literally rather
-            // than as regex syntax. Today's ids are kebab/alnum, but the
-            // protection is the whole point of this audit fence.
-            const escapedId = escapeRegex(hookId);
-            const explicitPattern = new RegExp(
-                `pre-commit\\s+run\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*--hook-stage\\s+pre-push\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*${escapedId}(?:\\s|$|&|;)`
-            );
-            if (!explicitPattern.test(script)) {
-                missing.push(hookId);
-            }
-        }
+      // Match `pre-commit run --hook-stage pre-push <hookId>` allowing
+      // optional flags (e.g., --all-files, --files <paths>) between
+      // the stage flag and the hook id, but the hook id must appear
+      // as a whole token following the stage flag.
+      // Escape the hook id so any regex metacharacters (`.`, `+`, etc.)
+      // that future hook ids might use are matched literally rather
+      // than as regex syntax. Today's ids are kebab/alnum, but the
+      // protection is the whole point of this audit fence.
+      const escapedId = escapeRegex(hookId);
+      const explicitPattern = new RegExp(
+        `pre-commit\\s+run\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*--hook-stage\\s+pre-push\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*${escapedId}(?:\\s|$|&|;)`
+      );
+      if (!explicitPattern.test(script)) {
+        missing.push(hookId);
+      }
+    }
 
-        expect(missing).toEqual([]);
-    });
+    expect(missing).toEqual([]);
+  });
 
-    test("PREFLIGHT_EXEMPT_HOOKS entries reference real hook ids", () => {
-        const configLines = loadConfigLines();
-        const allIds = new Set(getAllHookIds(configLines));
+  test("PREFLIGHT_EXEMPT_HOOKS entries reference real hook ids", () => {
+    const configLines = loadConfigLines();
+    const allIds = new Set(getAllHookIds(configLines));
 
-        for (const entry of PREFLIGHT_EXEMPT_HOOKS) {
-            expect(typeof entry.id).toBe("string");
-            expect(entry.id.length).toBeGreaterThan(0);
-            expect(typeof entry.reason).toBe("string");
-            expect(entry.reason.trim().length).toBeGreaterThan(0);
-            // Dead-entry guard: if a hook was renamed or removed, force the
-            // allow-list to be updated rather than silently masking a real
-            // gap in coverage.
-            expect(allIds.has(entry.id)).toBe(true);
-        }
-    });
+    for (const entry of PREFLIGHT_EXEMPT_HOOKS) {
+      expect(typeof entry.id).toBe("string");
+      expect(entry.id.length).toBeGreaterThan(0);
+      expect(typeof entry.reason).toBe("string");
+      expect(entry.reason.trim().length).toBeGreaterThan(0);
+      // Dead-entry guard: if a hook was renamed or removed, force the
+      // allow-list to be updated rather than silently masking a real
+      // gap in coverage.
+      expect(allIds.has(entry.id)).toBe(true);
+    }
+  });
 
-    test("at least one pre-push hook exists (sanity)", () => {
-        // Defensive: if the parser silently returns zero hooks (e.g., a
-        // breaking change to precommit-yaml.js), the coverage assertion
-        // above would vacuously pass. Keep an explicit floor here.
-        const configLines = loadConfigLines();
-        const prePushIds = getPrePushHookIds(configLines);
-        expect(prePushIds.length).toBeGreaterThanOrEqual(5);
-    });
+  test("at least one pre-push hook exists (sanity)", () => {
+    // Defensive: if the parser silently returns zero hooks (e.g., a
+    // breaking change to precommit-yaml.js), the coverage assertion
+    // above would vacuously pass. Keep an explicit floor here.
+    const configLines = loadConfigLines();
+    const prePushIds = getPrePushHookIds(configLines);
+    expect(prePushIds.length).toBeGreaterThanOrEqual(5);
+  });
 });

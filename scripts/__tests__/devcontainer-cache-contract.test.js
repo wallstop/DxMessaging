@@ -12,7 +12,9 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const childProcess = require("child_process");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const DEVCONTAINER_DIR = path.join(REPO_ROOT, ".devcontainer");
@@ -172,5 +174,191 @@ describe(".devcontainer cache mount contract", () => {
     expect(validateCaching).toContain(".github/workflows/devcontainer-prebuild.yml");
     expect(validateCaching).toContain('docker push "${IMAGE}"');
     expect(validateCaching).toContain('docker pull "${IMAGE}"');
+  });
+});
+
+/**
+ * Inline behavioural tests for matches_expected_mount in validate-caching.sh.
+ * The function previously used a brittle `*",type=volume"*` glob that happened
+ * to tolerate extra mount fields by accident. The hardened version parses the
+ * comma-separated `key=value` pairs explicitly so:
+ *   - additional spec-allowed fields (bind-propagation, consistency, ...) are
+ *     accepted, with an INFO diagnostic emitted to stderr,
+ *   - permuted ordering still matches (key=value pair order is irrelevant),
+ *   - type other than `volume` (e.g. bind) is rejected.
+ */
+function canRunBash() {
+  try {
+    const result = childProcess.spawnSync("bash", ["--version"], {
+      stdio: "ignore"
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+const HAS_BASH_FOR_MOUNT_FN = canRunBash();
+
+(HAS_BASH_FOR_MOUNT_FN ? describe : describe.skip)(
+  "matches_expected_mount (validate-caching.sh)",
+  () => {
+    const VALIDATE_CACHING_PATH = path.join(DEVCONTAINER_DIR, "validate-caching.sh");
+
+    // The function uses ${BLUE}/${NC} for the INFO diagnostic. We declare
+    // them empty so the script under test prints clean text we can assert on.
+    // Extract the function body once and stage it to a temp file. This is
+    // more robust than inline `$(awk ...)` substitution -- variable
+    // interpolation and parentheses inside the extracted function survive
+    // the cleaner code path. The test does NOT use `set -e` so the false
+    // branch of the function does not abort the shell before NOMATCH.
+    const extractFunction = () => {
+      const content = fs.readFileSync(VALIDATE_CACHING_PATH, "utf8");
+      const startIdx = content.indexOf("matches_expected_mount() {");
+      if (startIdx < 0) {
+        throw new Error("matches_expected_mount() not found in validate-caching.sh");
+      }
+      // Find the first standalone `}` line after startIdx.
+      const after = content.slice(startIdx);
+      const closeIdx = after.search(/\n\}\n/);
+      if (closeIdx < 0) {
+        throw new Error("matches_expected_mount() close brace not found");
+      }
+      return after.slice(0, closeIdx + 2); // include the closing }\n
+    };
+    const MATCHES_FN_BODY = extractFunction();
+
+    let tempDir;
+    let scriptPath;
+    beforeAll(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "matches-expected-mount-"));
+      scriptPath = path.join(tempDir, "harness.sh");
+      const wrapper = [
+        "#!/usr/bin/env bash",
+        'BLUE=""',
+        'NC=""',
+        MATCHES_FN_BODY,
+        'if matches_expected_mount "$1" "$2" "$3"; then',
+        "  echo MATCH",
+        "else",
+        "  echo NOMATCH",
+        "fi",
+        ""
+      ].join("\n");
+      fs.writeFileSync(scriptPath, wrapper, "utf8");
+      fs.chmodSync(scriptPath, 0o755);
+    });
+    afterAll(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    function runMatches(mountEntry, sourceName, targetDir) {
+      return childProcess.spawnSync("bash", [scriptPath, mountEntry, sourceName, targetDir], {
+        encoding: "utf8"
+      });
+    }
+
+    test("matches canonical source,target,type-volume entry", () => {
+      const result = runMatches(
+        "source=dxm-cache,target=/cache,type=volume",
+        "dxm-cache",
+        "/cache"
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe("MATCH");
+      expect(result.stderr).toBe("");
+    });
+
+    test("permuted field order still matches", () => {
+      const result = runMatches(
+        "type=volume,target=/cache,source=dxm-cache",
+        "dxm-cache",
+        "/cache"
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe("MATCH");
+    });
+
+    test("accepts spec-allowed extra fields and surfaces INFO diagnostic", () => {
+      const result = runMatches(
+        "source=dxm-cache,target=/cache,type=volume,bind-propagation=rprivate",
+        "dxm-cache",
+        "/cache"
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe("MATCH");
+      expect(result.stderr).toMatch(/INFO/);
+      expect(result.stderr).toMatch(/bind-propagation=rprivate/);
+    });
+
+    test("rejects entry with wrong type (bind instead of volume)", () => {
+      const result = runMatches("source=dxm-cache,target=/cache,type=bind", "dxm-cache", "/cache");
+      expect(result.stdout.trim()).toBe("NOMATCH");
+    });
+
+    test("rejects entry with wrong source name", () => {
+      const result = runMatches("source=other,target=/cache,type=volume", "dxm-cache", "/cache");
+      expect(result.stdout.trim()).toBe("NOMATCH");
+    });
+
+    test("rejects entry with wrong target dir", () => {
+      const result = runMatches(
+        "source=dxm-cache,target=/elsewhere,type=volume",
+        "dxm-cache",
+        "/cache"
+      );
+      expect(result.stdout.trim()).toBe("NOMATCH");
+    });
+  }
+);
+
+// =============================================================================
+// Round-3 NIT-E: sourcing guard. validate-caching.sh must NOT run the full
+// validation flow when sourced; only the helper library imports above the
+// guard should fire. Confirmed by spawning a child bash that sources the
+// file and inspecting the resulting environment + stdout.
+// =============================================================================
+(HAS_BASH_FOR_MOUNT_FN ? describe : describe.skip)("validate-caching.sh sourcing guard", () => {
+  const VALIDATE_CACHING_PATH = path.join(DEVCONTAINER_DIR, "validate-caching.sh");
+
+  test("sourcing the script does NOT run the validation flow", () => {
+    // When sourced, the BASH_SOURCE[0] != $0 guard returns 0 BEFORE the
+    // validation flow's counters (CHECKS_PASSED, CHECKS_TOTAL, ...) are
+    // initialized. We assert both that the script does not exit non-zero
+    // AND that the validation summary block was never emitted to stdout.
+    const child = childProcess.spawnSync(
+      "bash",
+      [
+        "-c",
+        // Use `source` so $0 of the parent shell (bash -c) differs from
+        // BASH_SOURCE[0] of the sourced file. Print a sentinel afterwards
+        // so we can tell sourcing returned rather than process-exiting.
+        `source "${VALIDATE_CACHING_PATH}"; echo "DONE_SOURCING"; echo "CHECKS_TOTAL=\${CHECKS_TOTAL:-<unset>}"`
+      ],
+      { encoding: "utf8" }
+    );
+
+    expect(child.status).toBe(0);
+    expect(child.stdout).toContain("DONE_SOURCING");
+    // The validation flow header ("Checking Contract and Static Files")
+    // would print BEFORE the sentinel if the guard were broken. Its
+    // absence is the load-bearing assertion.
+    expect(child.stdout).not.toContain("Checking Contract and Static Files");
+    expect(child.stdout).not.toContain("Validation Summary");
+    // Counter variables are defined AFTER the guard returns, so they
+    // must be unset when sourcing completes.
+    expect(child.stdout).toContain("CHECKS_TOTAL=<unset>");
+  });
+
+  test("executing the script directly DOES run the validation flow", () => {
+    // Sanity check the other direction: the guard must not over-fire.
+    // We do NOT assert the final exit status (the runtime mount-point
+    // check is expected to fail outside a properly-mounted container);
+    // we only assert that the validation flow's stdout headers appear,
+    // which proves the guard let execution through.
+    const child = childProcess.spawnSync("bash", [VALIDATE_CACHING_PATH], { encoding: "utf8" });
+
+    expect(child.stdout).toContain("Checking Contract and Static Files");
+    expect(child.stdout).toContain("Validation Summary");
   });
 });

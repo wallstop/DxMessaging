@@ -6,20 +6,20 @@
   Mirrors scripts/check-eol.ps1 behavior used in CI.
   Source of truth for extension lists: scripts/lib/eol-policy.js and .gitattributes.
 */
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
-const { normalizeToLf } = require('./lib/quote-parser');
-const { crlfExts, lfExts } = require('./lib/eol-policy');
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
+const { normalizeToLf } = require("./lib/quote-parser");
+const { crlfExts, lfExts } = require("./lib/eol-policy");
 
 function splitNormalizedLines(text) {
-  return normalizeToLf(text).split('\n');
+  return normalizeToLf(text).split("\n");
 }
 
 function getGitRepoRoot() {
-  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
     cwd: process.cwd(),
-    encoding: 'utf8'
+    encoding: "utf8"
   });
   if (result.status === 0 && result.stdout) {
     return result.stdout.trim();
@@ -35,7 +35,7 @@ const targetArgs = [];
 
 // Parse arguments: --all checks entire repo, otherwise paths are checked
 for (const arg of argv) {
-  if (arg === '--all') {
+  if (arg === "--all") {
     checkEntireRepo = true;
     continue;
   }
@@ -60,7 +60,7 @@ const excludeRegexes = [
 // (source of truth), scripts/check-eol.ps1 extension lists, and .gitattributes.
 
 // Git hooks directory - files here need LF regardless of extension
-const hooksDir = path.join('scripts', 'hooks');
+const hooksDir = path.join("scripts", "hooks");
 
 // All text file extensions we validate
 const exts = new Set([...crlfExts, ...lfExts]);
@@ -72,7 +72,7 @@ const exts = new Set([...crlfExts, ...lfExts]);
  */
 function isGitHook(filePath) {
   const rel = path.relative(repoRoot, filePath);
-  return rel.startsWith(hooksDir + path.sep) && path.extname(filePath) === '';
+  return rel.startsWith(hooksDir + path.sep) && path.extname(filePath) === "";
 }
 
 /**
@@ -121,7 +121,9 @@ function resolveTargets(targets) {
     // Paths are resolved relative to git repo root (not cwd), matching git's behavior
     const targetPath = path.resolve(repoRoot, rawTarget);
     if (!fs.existsSync(targetPath)) {
-      console.warn(`Warning: path does not exist, skipping: ${rawTarget} (resolved to: ${targetPath})`);
+      console.warn(
+        `Warning: path does not exist, skipping: ${rawTarget} (resolved to: ${targetPath})`
+      );
       continue;
     }
 
@@ -155,9 +157,9 @@ function resolveTargets(targets) {
  * @returns {string[]} Array of staged file paths relative to repo root.
  */
 function getStagedFiles() {
-  const result = spawnSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'], {
+  const result = spawnSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], {
     cwd: repoRoot,
-    encoding: 'utf8'
+    encoding: "utf8"
   });
 
   if (result.status !== 0) {
@@ -181,9 +183,9 @@ function getIndexEolIssues(files) {
   }
 
   const relPaths = files.map((file) => path.relative(repoRoot, file));
-  const result = spawnSync('git', ['ls-files', '--eol', '--', ...relPaths], {
+  const result = spawnSync("git", ["ls-files", "--eol", "--", ...relPaths], {
     cwd: repoRoot,
-    encoding: 'utf8'
+    encoding: "utf8"
   });
 
   if (result.status !== 0 || !result.stdout) {
@@ -196,7 +198,7 @@ function getIndexEolIssues(files) {
     if (!line) {
       continue;
     }
-    const tabIndex = line.indexOf('\t');
+    const tabIndex = line.indexOf("\t");
     if (tabIndex < 0) {
       continue;
     }
@@ -205,7 +207,7 @@ function getIndexEolIssues(files) {
     const ext = path.extname(filePath).toLowerCase();
     const fullPath = path.resolve(repoRoot, filePath);
     const isHook = isGitHook(fullPath);
-    
+
     // Skip if not a known text file extension and not a git hook
     if (!exts.has(ext) && !isHook) {
       continue;
@@ -213,16 +215,16 @@ function getIndexEolIssues(files) {
 
     // git ls-files --eol output format: i/[eol] w/[eol] attr/[attrs] [path]
     const parts = meta.split(/\s+/);
-    const indexToken = parts.find((part) => part.startsWith('i/'));
-    const attrToken = parts.find((part) => part.startsWith('attr/'));
+    const indexToken = parts.find((part) => part.startsWith("i/"));
+    const attrToken = parts.find((part) => part.startsWith("attr/"));
     if (!indexToken) {
       continue;
     }
-    if (attrToken === 'attr/-text') {
+    if (attrToken === "attr/-text") {
       continue;
     }
 
-    if (indexToken !== 'i/lf' && indexToken !== 'i/none') {
+    if (indexToken !== "i/lf" && indexToken !== "i/none") {
       issues.push({ path: filePath, indexEol: indexToken });
     }
   }
@@ -245,10 +247,10 @@ function hasBom(buf) {
  * @returns {boolean} True if non-CRLF line endings are found.
  */
 function hasNonCrlfEol(buf) {
-  const txt = buf.toString('utf8');
+  const txt = buf.toString("utf8");
   // Strip all valid CRLF pairs; any remaining bare \n or \r is invalid
-  const stripped = txt.replace(/\r\n/g, '');
-  return stripped.includes('\n') || stripped.includes('\r');
+  const stripped = txt.replace(/\r\n/g, "");
+  return stripped.includes("\n") || stripped.includes("\r");
 }
 
 /**
@@ -258,9 +260,9 @@ function hasNonCrlfEol(buf) {
  * @returns {boolean} True if non-LF line endings are found.
  */
 function hasNonLfEol(buf) {
-  const txt = buf.toString('utf8');
+  const txt = buf.toString("utf8");
   // CRLF or bare CR are invalid for LF-only files
-  return txt.includes('\r');
+  return txt.includes("\r");
 }
 
 function main() {
@@ -290,7 +292,7 @@ function main() {
   }
 
   if (textFiles.length === 0) {
-    console.log('EOL check skipped: no matching files to verify.');
+    console.log("EOL check skipped: no matching files to verify.");
     return 0;
   }
 
@@ -326,12 +328,14 @@ function main() {
   }
 
   if (bomFiles.length === 0 && badEolFiles.length === 0 && indexEolIssues.length === 0) {
-    console.log(`EOL check passed: ${textFiles.length} file(s) verified (CRLF for C#/.NET files, LF for all other text files), no BOMs detected.`);
+    console.log(
+      `EOL check passed: ${textFiles.length} file(s) verified (CRLF for C#/.NET files, LF for all other text files), no BOMs detected.`
+    );
     return 0;
   }
 
   if (bomFiles.length) {
-    console.error('Files contain a UTF-8 BOM (should be no BOM):');
+    console.error("Files contain a UTF-8 BOM (should be no BOM):");
     for (const f of bomFiles) {
       console.error(`  ${f}`);
     }
@@ -348,26 +352,28 @@ function main() {
     });
 
     if (crlfViolations.length) {
-      console.error('C#/.NET files require CRLF line endings but contain LF or bare CR:');
+      console.error("C#/.NET files require CRLF line endings but contain LF or bare CR:");
       for (const f of crlfViolations) {
         console.error(`  ${f}`);
       }
     }
     if (lfViolations.length) {
-      console.error('Text files require LF line endings but contain CRLF or bare CR:');
+      console.error("Text files require LF line endings but contain CRLF or bare CR:");
       for (const f of lfViolations) {
         console.error(`  ${f}`);
       }
     }
   }
   if (indexEolIssues.length) {
-    console.error('Git index contains non-normalized line endings (expected LF in repo for text files):');
+    console.error(
+      "Git index contains non-normalized line endings (expected LF in repo for text files):"
+    );
     for (const issue of indexEolIssues) {
       console.error(`  ${issue.path} (${issue.indexEol})`);
     }
     console.error('Fix: Run "node scripts/fix-eol.js" then re-stage affected files.');
   }
-  console.error('EOL/BOM policy violations detected.');
+  console.error("EOL/BOM policy violations detected.");
   return 1;
 }
 
@@ -382,5 +388,5 @@ module.exports = {
   hasNonLfEol,
   getStagedFiles,
   getIndexEolIssues,
-  main,
+  main
 };

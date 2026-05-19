@@ -894,7 +894,9 @@ describe("validate-changelog", () => {
       // with isShallow=null, an empty originRefs array, and an error
       // message naming the underlying cause so the diagnostic is useful.
       const gitMissingImpl = (cmd, args) => {
-        const err = new Error(`spawn ${cmd} ENOENT (simulated: git not installed; args=${args.join(" ")})`);
+        const err = new Error(
+          `spawn ${cmd} ENOENT (simulated: git not installed; args=${args.join(" ")})`
+        );
         err.code = "ENOENT";
         throw err;
       };

@@ -35,97 +35,97 @@ const PREFLIGHT_COMMAND = "npm run preflight:pre-push";
  * present. The runtime self-heal path uses the narrower per-spec reset.
  */
 const ISOLATED_CACHE_RESET_COMMAND =
-    "node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })\"";
+  "node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })\"";
 
 const PATTERNS = Object.freeze([
-    Object.freeze({
-        kind: "MISSING_TEST_RUNNER",
-        regex: /Module\s+(.+?)\s+in the testRunner option was not found\./i,
-        summary: "Jest's runner validator rejected the testRunner module path.",
-        rootCauses: Object.freeze([
-            "partial node_modules install (jest-circus not fully extracted)",
-            "isolated managed-jest cache corruption",
-            "legacy --testRunner injection re-introduced from a regressed wrapper or hook entry",
-        ]),
-        repairCommands: Object.freeze([
-            "npm ci",
-            "node scripts/validate-node-tooling.js",
-            PREFLIGHT_COMMAND,
-        ]),
-        skillRef: SKILL_REF,
-        // MISSING_TEST_RUNNER can be caused by either a partial repo
-        // node_modules install (the Windows failure mode that motivated this
-        // skill) or by a corrupt isolated managed-Jest cache. Both isolated
-        // cache reset and `npm ci` are appropriate recovery channels; the
-        // runtime decides which to attempt based on the resolved runner
-        // path's containing tree.
-        selfHeal: Object.freeze({ isolatedCacheReset: true, npmCi: true, retryOnce: true }),
-    }),
-    Object.freeze({
-        kind: "CORRUPT_ISOLATED_CACHE",
-        // Anchor on Cannot find module to avoid colliding with MISSING_LOCAL_JEST.
-        // The trailing (?!-) keeps us from grabbing "jest-circus-..." extensions.
-        regex: /Cannot find module ['"]jest-circus(?:\/runner)?['"]/i,
-        summary: "Isolated managed-Jest cache is missing jest-circus.",
-        rootCauses: Object.freeze([
-            "previous fallback install was interrupted",
-            "cache directory was partially deleted",
-        ]),
-        repairCommands: Object.freeze([
-            ISOLATED_CACHE_RESET_COMMAND,
-            "node scripts/run-managed-jest.js --version",
-            PREFLIGHT_COMMAND,
-        ]),
-        skillRef: SKILL_REF,
-        selfHeal: Object.freeze({ isolatedCacheReset: true, retryOnce: true }),
-    }),
-    Object.freeze({
-        kind: "MISSING_LOCAL_JEST",
-        // Anchored on either a line start OR an "Error:" prefix so a short
-        // module identifier ending in ": Cannot find module 'jest'" (e.g. the
-        // tail of an unrelated diagnostic) cannot accidentally trigger this
-        // pattern. The (?![\w-]) suffix prevents matching jest-circus, jest-cli,
-        // etc. Multiline flag is required for the `^` anchor to find the start
-        // of any line, not just the start of the whole buffer.
-        regex: /^(?:\s*Error:\s+)?Cannot find module ['"](?:jest|jest\/bin\/jest(?:\.js)?)['"](?![\w-])/m,
-        summary: "Local jest binary missing from node_modules.",
-        rootCauses: Object.freeze([
-            "partial install",
-            "postinstall validator skipped",
-            "node_modules wiped",
-        ]),
-        repairCommands: Object.freeze([
-            "npm ci",
-            "node scripts/validate-node-tooling.js",
-            PREFLIGHT_COMMAND,
-        ]),
-        skillRef: SKILL_REF,
-        selfHeal: Object.freeze({ npmCi: true, retryOnce: true }),
-    }),
-    // PARTIAL_NODE_MODULES_INSTALL is a sentinel that the integrity gate
-    // surfaces synthetically when probeIntegrity() reports missing/empty
-    // critical files but the auto-repair flow has already exhausted its
-    // budget. The regex deliberately matches only the synthetic sentinel
-    // string the gate emits, so the decoder never auto-binds to ambient
-    // Jest stderr. Pattern is listed LAST so the more-specific entries
-    // above always win when both could match.
-    Object.freeze({
-        kind: "PARTIAL_NODE_MODULES_INSTALL",
-        regex: /^__INTEGRITY_GATE_FAILURE__$/,
-        summary:
-            "Repository node_modules is partially extracted; auto-repair could not recover.",
-        rootCauses: Object.freeze([
-            "partial node_modules extract on Windows (long paths, antivirus, interrupted install)",
-            "npm install reported 'up to date' without re-extracting",
-        ]),
-        repairCommands: Object.freeze([
-            "npm ci",
-            "node scripts/validate-node-tooling.js",
-            PREFLIGHT_COMMAND,
-        ]),
-        skillRef: SKILL_REF,
-        selfHeal: Object.freeze({ npmCi: false, retryOnce: false }),
-    }),
+  Object.freeze({
+    kind: "MISSING_TEST_RUNNER",
+    regex: /Module\s+(.+?)\s+in the testRunner option was not found\./i,
+    summary: "Jest's runner validator rejected the testRunner module path.",
+    rootCauses: Object.freeze([
+      "partial node_modules install (jest-circus not fully extracted)",
+      "isolated managed-jest cache corruption",
+      "legacy --testRunner injection re-introduced from a regressed wrapper or hook entry"
+    ]),
+    repairCommands: Object.freeze([
+      "npm ci",
+      "node scripts/validate-node-tooling.js",
+      PREFLIGHT_COMMAND
+    ]),
+    skillRef: SKILL_REF,
+    // MISSING_TEST_RUNNER can be caused by either a partial repo
+    // node_modules install (the Windows failure mode that motivated this
+    // skill) or by a corrupt isolated managed-Jest cache. Both isolated
+    // cache reset and `npm ci` are appropriate recovery channels; the
+    // runtime decides which to attempt based on the resolved runner
+    // path's containing tree.
+    selfHeal: Object.freeze({ isolatedCacheReset: true, npmCi: true, retryOnce: true })
+  }),
+  Object.freeze({
+    kind: "CORRUPT_ISOLATED_CACHE",
+    // Anchor on Cannot find module to avoid colliding with MISSING_LOCAL_JEST.
+    // The trailing (?!-) keeps us from grabbing "jest-circus-..." extensions.
+    regex: /Cannot find module ['"]jest-circus(?:\/runner)?['"]/i,
+    summary: "Isolated managed-Jest cache is missing jest-circus.",
+    rootCauses: Object.freeze([
+      "previous fallback install was interrupted",
+      "cache directory was partially deleted"
+    ]),
+    repairCommands: Object.freeze([
+      ISOLATED_CACHE_RESET_COMMAND,
+      "node scripts/run-managed-jest.js --version",
+      PREFLIGHT_COMMAND
+    ]),
+    skillRef: SKILL_REF,
+    selfHeal: Object.freeze({ isolatedCacheReset: true, retryOnce: true })
+  }),
+  Object.freeze({
+    kind: "MISSING_LOCAL_JEST",
+    // Anchored on either a line start OR an "Error:" prefix so a short
+    // module identifier ending in ": Cannot find module 'jest'" (e.g. the
+    // tail of an unrelated diagnostic) cannot accidentally trigger this
+    // pattern. The (?![\w-]) suffix prevents matching jest-circus, jest-cli,
+    // etc. Multiline flag is required for the `^` anchor to find the start
+    // of any line, not just the start of the whole buffer.
+    regex:
+      /^(?:\s*Error:\s+)?Cannot find module ['"](?:jest|jest\/bin\/jest(?:\.js)?)['"](?![\w-])/m,
+    summary: "Local jest binary missing from node_modules.",
+    rootCauses: Object.freeze([
+      "partial install",
+      "postinstall validator skipped",
+      "node_modules wiped"
+    ]),
+    repairCommands: Object.freeze([
+      "npm ci",
+      "node scripts/validate-node-tooling.js",
+      PREFLIGHT_COMMAND
+    ]),
+    skillRef: SKILL_REF,
+    selfHeal: Object.freeze({ npmCi: true, retryOnce: true })
+  }),
+  // PARTIAL_NODE_MODULES_INSTALL is a sentinel that the integrity gate
+  // surfaces synthetically when probeIntegrity() reports missing/empty
+  // critical files but the auto-repair flow has already exhausted its
+  // budget. The regex deliberately matches only the synthetic sentinel
+  // string the gate emits, so the decoder never auto-binds to ambient
+  // Jest stderr. Pattern is listed LAST so the more-specific entries
+  // above always win when both could match.
+  Object.freeze({
+    kind: "PARTIAL_NODE_MODULES_INSTALL",
+    regex: /^__INTEGRITY_GATE_FAILURE__$/,
+    summary: "Repository node_modules is partially extracted; auto-repair could not recover.",
+    rootCauses: Object.freeze([
+      "partial node_modules extract on Windows (long paths, antivirus, interrupted install)",
+      "npm install reported 'up to date' without re-extracting"
+    ]),
+    repairCommands: Object.freeze([
+      "npm ci",
+      "node scripts/validate-node-tooling.js",
+      PREFLIGHT_COMMAND
+    ]),
+    skillRef: SKILL_REF,
+    selfHeal: Object.freeze({ npmCi: false, retryOnce: false })
+  })
 ]);
 
 /**
@@ -136,14 +136,20 @@ const PATTERNS = Object.freeze([
  * @returns {boolean}
  */
 function isTruthyEnv(value) {
-    if (value == null) {
-        return false;
-    }
-    const stringValue = String(value).trim().toLowerCase();
-    if (stringValue === "" || stringValue === "0" || stringValue === "false" || stringValue === "no" || stringValue === "off") {
-        return false;
-    }
-    return true;
+  if (value == null) {
+    return false;
+  }
+  const stringValue = String(value).trim().toLowerCase();
+  if (
+    stringValue === "" ||
+    stringValue === "0" ||
+    stringValue === "false" ||
+    stringValue === "no" ||
+    stringValue === "off"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -160,35 +166,35 @@ function isTruthyEnv(value) {
  *   null when no pattern matched or input is empty.
  */
 function decodeJestStderr(stderr) {
-    let text;
-    if (Buffer.isBuffer(stderr)) {
-        text = stderr.toString("utf8");
-    } else if (typeof stderr === "string") {
-        text = stderr;
-    } else {
-        return null;
-    }
-
-    if (text.length === 0) {
-        return null;
-    }
-
-    for (const pattern of PATTERNS) {
-        const match = pattern.regex.exec(text);
-        if (match) {
-            return {
-                kind: pattern.kind,
-                summary: pattern.summary,
-                rootCauses: pattern.rootCauses,
-                repairCommands: pattern.repairCommands,
-                skillRef: pattern.skillRef,
-                selfHeal: pattern.selfHeal,
-                capturedMatch: match,
-            };
-        }
-    }
-
+  let text;
+  if (Buffer.isBuffer(stderr)) {
+    text = stderr.toString("utf8");
+  } else if (typeof stderr === "string") {
+    text = stderr;
+  } else {
     return null;
+  }
+
+  if (text.length === 0) {
+    return null;
+  }
+
+  for (const pattern of PATTERNS) {
+    const match = pattern.regex.exec(text);
+    if (match) {
+      return {
+        kind: pattern.kind,
+        summary: pattern.summary,
+        rootCauses: pattern.rootCauses,
+        repairCommands: pattern.repairCommands,
+        skillRef: pattern.skillRef,
+        selfHeal: pattern.selfHeal,
+        capturedMatch: match
+      };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -207,54 +213,51 @@ function decodeJestStderr(stderr) {
  * @returns {string} The banner, or "" when decoded is null.
  */
 function formatRepairBanner(decoded, options = {}) {
-    if (!decoded) {
-        return "";
-    }
+  if (!decoded) {
+    return "";
+  }
 
-    const color = Boolean(options && options.color);
-    const env = (options && options.env) || process.env;
-    const isTTY = options && Object.prototype.hasOwnProperty.call(options, "isTTY")
-        ? Boolean(options.isTTY)
-        : Boolean(process.stderr && process.stderr.isTTY);
+  const color = Boolean(options && options.color);
+  const env = (options && options.env) || process.env;
+  const isTTY =
+    options && Object.prototype.hasOwnProperty.call(options, "isTTY")
+      ? Boolean(options.isTTY)
+      : Boolean(process.stderr && process.stderr.isTTY);
 
-    const horizontal = "=".repeat(64);
-    const divider = "-".repeat(64);
+  const horizontal = "=".repeat(64);
+  const divider = "-".repeat(64);
 
-    const rootCauseLines = decoded.rootCauses.map((cause) => `  - ${cause}`);
-    const repairLines = decoded.repairCommands.map(
-        (command, index) => `  ${index + 1}. ${command}`
-    );
+  const rootCauseLines = decoded.rootCauses.map((cause) => `  - ${cause}`);
+  const repairLines = decoded.repairCommands.map((command, index) => `  ${index + 1}. ${command}`);
 
-    const headerLine = `jest-hook diagnostic: ${decoded.kind}`;
-    const ciIsSet = isTruthyEnv(env && env.CI);
-    const shouldColorize = color && isTTY && !ciIsSet;
-    const decoratedHeader = shouldColorize
-        ? `\x1b[31m${headerLine}\x1b[0m`
-        : headerLine;
+  const headerLine = `jest-hook diagnostic: ${decoded.kind}`;
+  const ciIsSet = isTruthyEnv(env && env.CI);
+  const shouldColorize = color && isTTY && !ciIsSet;
+  const decoratedHeader = shouldColorize ? `\x1b[31m${headerLine}\x1b[0m` : headerLine;
 
-    const lines = [
-        horizontal,
-        decoratedHeader,
-        divider,
-        `Summary: ${decoded.summary}`,
-        "",
-        "Most likely root cause:",
-        ...rootCauseLines,
-        "",
-        "Suggested repair (run in order):",
-        ...repairLines,
-        "",
-        `Skill reference: ${decoded.skillRef}`,
-        `Run after repair: ${PREFLIGHT_COMMAND}`,
-        horizontal,
-    ];
+  const lines = [
+    horizontal,
+    decoratedHeader,
+    divider,
+    `Summary: ${decoded.summary}`,
+    "",
+    "Most likely root cause:",
+    ...rootCauseLines,
+    "",
+    "Suggested repair (run in order):",
+    ...repairLines,
+    "",
+    `Skill reference: ${decoded.skillRef}`,
+    `Run after repair: ${PREFLIGHT_COMMAND}`,
+    horizontal
+  ];
 
-    return `${lines.join("\n")}\n`;
+  return `${lines.join("\n")}\n`;
 }
 
 module.exports = {
-    PATTERNS,
-    decodeJestStderr,
-    formatRepairBanner,
-    isTruthyEnv,
+  PATTERNS,
+  decodeJestStderr,
+  formatRepairBanner,
+  isTruthyEnv
 };

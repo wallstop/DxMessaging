@@ -60,13 +60,15 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Check package.json format explicitly: `npm run check:package-json-format`
 - Check hook-managed Prettier targets: `npm run check:prettier:hooks`
 - Validate YAML formatting and lint policy: `npm run check:yaml`
+- Auto-wrap breakable YAML comments to line-length policy: `npm run format:yaml:comments`
+- Check YAML comment line-length auto-wrap drift: `npm run check:yaml:comments`
 - Validate npm package meta integrity: `npm run validate:npm-meta`
 - Validate changelog structure plus changed-file coverage: `npm run validate:changelog:coverage`
 - Check C# method naming (no underscores): `node scripts/fix-csharp-underscore-methods.js --check --all`
 - Auto-fix C# method naming on selected files: `node scripts/fix-csharp-underscore-methods.js <changed-files...>`
 - File-scoped spellcheck: `npx --yes cspell@10.0.0 --no-progress --no-summary <changed-files...>`
 - Script-wide spellcheck preflight: `npm run check:cspell:scripts`
-- Note: Prettier does not auto-wrap long YAML lines; yamllint enforces the 200-character limit.
+- Note: Prettier does not auto-wrap long YAML lines; use `format:yaml:comments` for breakable YAML comments and rely on yamllint for non-breakable overflows.
 - For long `.pre-commit-config.yaml` values (especially `description:` fields), use YAML folded scalars (`>-`) instead of single-line strings.
 - For `.github/workflows/*.yml` `run:` blocks, keep shell statements multiline (`run: |` plus line breaks) instead of single long lines; `validate:workflows` enforces the same line-length ceiling early to keep hooks as a last-resort check.
 - Auto-fix markdown fragments/lists: `node scripts/fix-md029-md051.js <changed-docs.md ...>`

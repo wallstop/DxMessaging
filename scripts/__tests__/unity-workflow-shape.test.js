@@ -115,7 +115,11 @@ function expectDiagnosticsStep(job) {
     (step) => step && step.name === "Print runner diagnostics"
   );
   expect(diagnosticsStep).toBeDefined();
-  expect(diagnosticsStep.shell).toBe("bash");
+  // The diagnostics step uses a composite action that wraps PowerShell.
+  // `shell: bash` previously failed on self-hosted Windows runners because
+  // the agent's PATH resolves `bash` to C:\Windows\System32\bash.exe (the
+  // WSL stub). See FIX #4 sweep in dev/wallstop/swap.
+  expect(diagnosticsStep.uses).toBe("./.github/actions/print-self-hosted-runner-diagnostics");
 }
 
 function expectSameRepoAndProtectedBranchGuard(job) {
@@ -216,9 +220,7 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       //   - block:    `concurrency:\n  group: wallstop-organization-builds`
       //   - flow-map: `concurrency: { group: wallstop-organization-builds, ... }`
       //   - scalar:   `concurrency: wallstop-organization-builds`
-      expect(text).not.toMatch(
-        /(?:concurrency|group):\s*["']?wallstop-organization-builds/
-      );
+      expect(text).not.toMatch(/(?:concurrency|group):\s*["']?wallstop-organization-builds/);
     }
   });
 

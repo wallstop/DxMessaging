@@ -1,0 +1,107 @@
+name: Print self-hosted runner diagnostics
+description: >-
+  Emit a self-contained diagnostic block for a self-hosted Windows Unity
+  runner. Uses PowerShell so we never depend on the runner-host PATH
+  ordering between WSL bash and Git Bash. Surfaces the resolved bash path
+  and warns when the WSL stub at System32\bash.exe leaks ahead of
+  C:\Program Files\Git\bin\bash.exe so the operator can fix the agent
+  PATH before queueing further Unity work.
+
+inputs:
+  concurrency-note:
+    description: One-line note describing the job's concurrency contract.
+    required: false
+    default: "unity-pro-license (single-seat Unity Pro license; cross-workflow serialization)"
+  matrix-note:
+    description: One-line note describing the matrix/within-workflow serialization.
+    required: false
+    default: ""
+  requested-labels:
+    description: Human-readable runs-on label set for this job.
+    required: false
+    default: "self-hosted, Windows, RAM-64GB"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Emit runner diagnostics
+      shell: pwsh
+      env:
+        # Surfaced as inputs so the diagnostic line per workflow stays
+        # accurate (release.unity-checks does not have a matrix; the
+        # other three do). Empty strings render as "n/a".
+        DXMSG_DIAG_CONCURRENCY_NOTE: ${{ inputs.concurrency-note }}
+        DXMSG_DIAG_MATRIX_NOTE: ${{ inputs.matrix-note }}
+        DXMSG_DIAG_REQUESTED_LABELS: ${{ inputs.requested-labels }}
+      run: |
+        $ErrorActionPreference = 'Continue'
+        function Default-Value {
+            param([string]$value, [string]$fallback = '<unset>')
+            if ([string]::IsNullOrEmpty($value)) { return $fallback }
+            return $value
+        }
+        Write-Output "::group::Runner diagnostics"
+        Write-Output ("Runner name:           " + (Default-Value $env:RUNNER_NAME))
+        Write-Output ("Runner OS:             " + (Default-Value $env:RUNNER_OS))
+        Write-Output ("Runner arch:           " + (Default-Value $env:RUNNER_ARCH))
+        Write-Output ("Runner workspace:      " + (Default-Value $env:RUNNER_WORKSPACE))
+        Write-Output ("Concurrency group:     " + (Default-Value $env:DXMSG_DIAG_CONCURRENCY_NOTE 'n/a'))
+        $matrixNote = $env:DXMSG_DIAG_MATRIX_NOTE
+        if (-not [string]::IsNullOrEmpty($matrixNote)) {
+            Write-Output ("Matrix max-parallel:   " + $matrixNote)
+        }
+        Write-Output ("Requested labels:      " + $env:DXMSG_DIAG_REQUESTED_LABELS)
+        Write-Output ("GitHub workflow:       " + (Default-Value $env:GITHUB_WORKFLOW))
+        Write-Output ("GitHub job:            " + (Default-Value $env:GITHUB_JOB))
+        $runId = Default-Value $env:GITHUB_RUN_ID
+        $runAttempt = Default-Value $env:GITHUB_RUN_ATTEMPT
+        Write-Output ("GitHub run id/attempt: " + $runId + " / " + $runAttempt)
+        $githubRef = Default-Value $env:GITHUB_REF
+        $refProtected = Default-Value $env:GITHUB_REF_PROTECTED
+        Write-Output ("GitHub ref:            " + $githubRef + " (protected=" + $refProtected + ")")
+        Write-Output ("GitHub event:          " + (Default-Value $env:GITHUB_EVENT_NAME))
+        Write-Output ""
+        Write-Output ("PowerShell version:    " + $PSVersionTable.PSVersion.ToString())
+        # PATH-walk that mirrors actions/runner WhichUtil. The runner agent
+        # resolves shell:bash by walking $env:Path entries in order and
+        # returning the first directory that contains bash.exe (no PATHEXT
+        # search, no PowerShell-specific aliases). PowerShell's Get-Command
+        # consults aliases, functions, and built-ins BEFORE PATH, so it can
+        # report a bash binding that the runner agent will never actually
+        # pick. Reproduce the agent's algorithm explicitly. We probe for
+        # bash.exe first (the standard Windows artifact), then bash without
+        # an extension as a fallback for unconventional installs.
+        $resolvedBash = $null
+        $pathEntries = ($env:Path -split ';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        foreach ($candidateName in @('bash.exe', 'bash')) {
+            foreach ($pathEntry in $pathEntries) {
+                $candidatePath = Join-Path $pathEntry $candidateName
+                if (Test-Path $candidatePath -PathType Leaf) {
+                    $resolvedBash = $candidatePath
+                    break
+                }
+            }
+            if ($null -ne $resolvedBash) { break }
+        }
+        if ($null -ne $resolvedBash) {
+            Write-Output ("Resolved bash:         " + $resolvedBash)
+            # The WSL stub sits at C:\Windows\System32\bash.exe and tries to
+            # launch a WSL distro; on Unity runners that distro is usually
+            # not installed and `shell: bash` steps fail with
+            # "Windows Subsystem for Linux has no installed distributions."
+            # When that stub wins the PATH resolution race, surface a
+            # ::warning:: so the operator fixes the runner-host PATH
+            # ordering (Git Bash must precede System32 in PATH).
+            if ($resolvedBash -match '\\System32\\bash(\.exe)?$' -or $resolvedBash -match '/System32/bash(\.exe)?$') {
+                Write-Output ("::warning::self-hosted runner PATH resolves bash to the WSL stub; ensure Git Bash precedes System32 in PATH")
+            }
+        } else {
+            Write-Output "Resolved bash:         (not on PATH)"
+        }
+        $pathParts = ($env:Path -split ';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $head = $pathParts | Select-Object -First 10
+        Write-Output "PATH (first 10 entries):"
+        foreach ($entry in $head) {
+            Write-Output ("  - " + $entry)
+        }
+        Write-Output "::endgroup::"

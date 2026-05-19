@@ -16,25 +16,21 @@ const childProcess = require("child_process");
 const VALIDATOR = path.join(__dirname, "validate-node-tooling.js");
 
 try {
-    const result = childProcess.spawnSync(
-        process.execPath,
-        [VALIDATOR],
-        { stdio: "inherit" }
-    );
+  const result = childProcess.spawnSync(process.execPath, [VALIDATOR], { stdio: "inherit" });
 
-    if (result.error) {
-        console.warn(
-            `⚠️ postinstall: validate-node-tooling launch failed (${result.error.message}); continuing.`
-        );
-    } else if (typeof result.status === "number" && result.status !== 0) {
-        console.warn(
-            "⚠️ postinstall: validate-node-tooling reported drift; install continues (non-fatal)."
-        );
-    }
-} catch (error) {
+  if (result.error) {
     console.warn(
-        `⚠️ postinstall: unexpected error running validate-node-tooling (${error.message}); continuing.`
+      `⚠️ postinstall: validate-node-tooling launch failed (${result.error.message}); continuing.`
     );
+  } else if (typeof result.status === "number" && result.status !== 0) {
+    console.warn(
+      "⚠️ postinstall: validate-node-tooling reported drift; install continues (non-fatal)."
+    );
+  }
+} catch (error) {
+  console.warn(
+    `⚠️ postinstall: unexpected error running validate-node-tooling (${error.message}); continuing.`
+  );
 }
 
 process.exit(0);

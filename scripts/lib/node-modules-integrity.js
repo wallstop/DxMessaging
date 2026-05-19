@@ -53,53 +53,49 @@ const childProcess = require("child_process");
  * tests assert this).
  */
 const INTEGRITY_TARGETS = Object.freeze([
-    Object.freeze({
-        tool: "prettier",
-        files: Object.freeze([
-            Object.freeze({ relPath: "node_modules/prettier/index.cjs", minBytes: 1 }),
-            Object.freeze({ relPath: "node_modules/prettier/bin/prettier.cjs", minBytes: 1 }),
-        ]),
-    }),
-    Object.freeze({
-        tool: "markdownlint-cli2",
-        files: Object.freeze([
-            Object.freeze({
-                relPath: "node_modules/markdownlint-cli2/markdownlint-cli2.mjs",
-                minBytes: 1,
-            }),
-        ]),
-    }),
-    Object.freeze({
-        tool: "cspell",
-        files: Object.freeze([
-            Object.freeze({ relPath: "node_modules/cspell/bin.mjs", minBytes: 1 }),
-        ]),
-    }),
-    Object.freeze({
-        tool: "jest",
-        files: Object.freeze([
-            Object.freeze({ relPath: "node_modules/jest/bin/jest.js", minBytes: 1 }),
-        ]),
-    }),
-    Object.freeze({
-        tool: "jest-circus",
-        files: Object.freeze([
-            Object.freeze({ relPath: "node_modules/jest-circus/build/runner.js", minBytes: 1 }),
-            Object.freeze({ relPath: "node_modules/jest-circus/build/index.js", minBytes: 1 }),
-            // Verified live on the repo: jestAdapterInit.js lives directly
-            // under build/, not under build/legacy-code-todo-rewrite/. The
-            // plan called for the legacy path but on-disk inspection at
-            // 2026-05-18 shows the flat layout; we follow on-disk truth.
-            Object.freeze({
-                relPath: "node_modules/jest-circus/build/jestAdapterInit.js",
-                minBytes: 1,
-            }),
-        ]),
-    }),
+  Object.freeze({
+    tool: "prettier",
+    files: Object.freeze([
+      Object.freeze({ relPath: "node_modules/prettier/index.cjs", minBytes: 1 }),
+      Object.freeze({ relPath: "node_modules/prettier/bin/prettier.cjs", minBytes: 1 })
+    ])
+  }),
+  Object.freeze({
+    tool: "markdownlint-cli2",
+    files: Object.freeze([
+      Object.freeze({
+        relPath: "node_modules/markdownlint-cli2/markdownlint-cli2.mjs",
+        minBytes: 1
+      })
+    ])
+  }),
+  Object.freeze({
+    tool: "cspell",
+    files: Object.freeze([Object.freeze({ relPath: "node_modules/cspell/bin.mjs", minBytes: 1 })])
+  }),
+  Object.freeze({
+    tool: "jest",
+    files: Object.freeze([Object.freeze({ relPath: "node_modules/jest/bin/jest.js", minBytes: 1 })])
+  }),
+  Object.freeze({
+    tool: "jest-circus",
+    files: Object.freeze([
+      Object.freeze({ relPath: "node_modules/jest-circus/build/runner.js", minBytes: 1 }),
+      Object.freeze({ relPath: "node_modules/jest-circus/build/index.js", minBytes: 1 }),
+      // Verified live on the repo: jestAdapterInit.js lives directly
+      // under build/, not under build/legacy-code-todo-rewrite/. The
+      // plan called for the legacy path but on-disk inspection at
+      // 2026-05-18 shows the flat layout; we follow on-disk truth.
+      Object.freeze({
+        relPath: "node_modules/jest-circus/build/jestAdapterInit.js",
+        minBytes: 1
+      })
+    ])
+  })
 ]);
 
 function joinRepoPath(repoRoot, relPath) {
-    return path.join(repoRoot, ...relPath.split("/"));
+  return path.join(repoRoot, ...relPath.split("/"));
 }
 
 /**
@@ -115,55 +111,55 @@ function joinRepoPath(repoRoot, relPath) {
  * @returns {{ok: boolean, missing: Array<{tool: string, relPath: string, reason: string}>}}
  */
 function probeIntegrity(options = {}) {
-    const {
-        repoRoot,
-        statSyncFn = fs.statSync,
-        existsSyncFn = fs.existsSync,
-        targets = INTEGRITY_TARGETS,
-    } = options;
+  const {
+    repoRoot,
+    statSyncFn = fs.statSync,
+    existsSyncFn = fs.existsSync,
+    targets = INTEGRITY_TARGETS
+  } = options;
 
-    if (typeof repoRoot !== "string" || repoRoot.length === 0) {
-        throw new TypeError("probeIntegrity requires options.repoRoot (string)");
+  if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+    throw new TypeError("probeIntegrity requires options.repoRoot (string)");
+  }
+
+  const missing = [];
+
+  for (const target of targets) {
+    for (const file of target.files) {
+      const abs = joinRepoPath(repoRoot, file.relPath);
+
+      // We deliberately call existsSync before stat. On Windows, stat
+      // on a phantom drive letter can throw EPERM rather than ENOENT;
+      // the existsSync gate normalizes that to a clean "missing"
+      // verdict, and a defensive try/catch around stat catches any
+      // remaining edge case (e.g. EACCES on a partially-restored
+      // file).
+      if (!existsSyncFn(abs)) {
+        missing.push({ tool: target.tool, relPath: file.relPath, reason: "missing" });
+        continue;
+      }
+
+      let stats;
+      try {
+        stats = statSyncFn(abs);
+      } catch (error) {
+        const code = error && error.code ? error.code : "stat-error";
+        missing.push({
+          tool: target.tool,
+          relPath: file.relPath,
+          reason: code === "ENOENT" ? "missing" : "empty"
+        });
+        continue;
+      }
+
+      const minBytes = typeof file.minBytes === "number" && file.minBytes > 0 ? file.minBytes : 1;
+      if (!stats || typeof stats.size !== "number" || stats.size < minBytes) {
+        missing.push({ tool: target.tool, relPath: file.relPath, reason: "empty" });
+      }
     }
+  }
 
-    const missing = [];
-
-    for (const target of targets) {
-        for (const file of target.files) {
-            const abs = joinRepoPath(repoRoot, file.relPath);
-
-            // We deliberately call existsSync before stat. On Windows, stat
-            // on a phantom drive letter can throw EPERM rather than ENOENT;
-            // the existsSync gate normalizes that to a clean "missing"
-            // verdict, and a defensive try/catch around stat catches any
-            // remaining edge case (e.g. EACCES on a partially-restored
-            // file).
-            if (!existsSyncFn(abs)) {
-                missing.push({ tool: target.tool, relPath: file.relPath, reason: "missing" });
-                continue;
-            }
-
-            let stats;
-            try {
-                stats = statSyncFn(abs);
-            } catch (error) {
-                const code = error && error.code ? error.code : "stat-error";
-                missing.push({
-                    tool: target.tool,
-                    relPath: file.relPath,
-                    reason: code === "ENOENT" ? "missing" : "empty",
-                });
-                continue;
-            }
-
-            const minBytes = typeof file.minBytes === "number" && file.minBytes > 0 ? file.minBytes : 1;
-            if (!stats || typeof stats.size !== "number" || stats.size < minBytes) {
-                missing.push({ tool: target.tool, relPath: file.relPath, reason: "empty" });
-            }
-        }
-    }
-
-    return { ok: missing.length === 0, missing };
+  return { ok: missing.length === 0, missing };
 }
 
 /**
@@ -187,117 +183,113 @@ function probeIntegrity(options = {}) {
  *   with a synthetic entry describing the spawn error.
  */
 function probeIntegrityInSubprocess(options = {}) {
-    const {
-        repoRoot,
-        execPath = process.execPath,
-        spawnSyncFn = childProcess.spawnSync,
-    } = options;
+  const { repoRoot, execPath = process.execPath, spawnSyncFn = childProcess.spawnSync } = options;
 
-    if (typeof repoRoot !== "string" || repoRoot.length === 0) {
-        throw new TypeError("probeIntegrityInSubprocess requires options.repoRoot (string)");
-    }
+  if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+    throw new TypeError("probeIntegrityInSubprocess requires options.repoRoot (string)");
+  }
 
-    // The inline script is intentionally minimal: it requires this exact
-    // module, calls probeIntegrity({ repoRoot }), and prints the JSON
-    // result. We JSON.stringify both the module path and repoRoot so
-    // backslashes (on Windows) and any embedded quotes are escape-safe.
-    //
-    // It additionally calls findZeroByteNativeBinaries on Windows so the
-    // post-`npm ci` re-probe surfaces the AV-truncation failure mode the
-    // first-pass in-process gate already covers. The result is reported
-    // under a separate `zeroByteNativeBinaries` field; the parent merges
-    // it into missing[] using the same shape as the in-process gate.
-    const integrityModulePath = __filename;
-    const inlineScript =
-        '"use strict";\n' +
-        "const integrity = require(" +
-        JSON.stringify(integrityModulePath) +
-        "); " +
-        "const repoRoot = " +
-        JSON.stringify(repoRoot) +
-        "; " +
-        "const result = integrity.probeIntegrity({ repoRoot }); " +
-        'const zeroByteNativeBinaries = process.platform === "win32" ' +
-        "? integrity.findZeroByteNativeBinaries({ repoRoot }) " +
-        ": []; " +
-        "process.stdout.write(JSON.stringify(Object.assign({}, result, { zeroByteNativeBinaries })));";
+  // The inline script is intentionally minimal: it requires this exact
+  // module, calls probeIntegrity({ repoRoot }), and prints the JSON
+  // result. We JSON.stringify both the module path and repoRoot so
+  // backslashes (on Windows) and any embedded quotes are escape-safe.
+  //
+  // It additionally calls findZeroByteNativeBinaries on Windows so the
+  // post-`npm ci` re-probe surfaces the AV-truncation failure mode the
+  // first-pass in-process gate already covers. The result is reported
+  // under a separate `zeroByteNativeBinaries` field; the parent merges
+  // it into missing[] using the same shape as the in-process gate.
+  const integrityModulePath = __filename;
+  const inlineScript =
+    '"use strict";\n' +
+    "const integrity = require(" +
+    JSON.stringify(integrityModulePath) +
+    "); " +
+    "const repoRoot = " +
+    JSON.stringify(repoRoot) +
+    "; " +
+    "const result = integrity.probeIntegrity({ repoRoot }); " +
+    'const zeroByteNativeBinaries = process.platform === "win32" ' +
+    "? integrity.findZeroByteNativeBinaries({ repoRoot }) " +
+    ": []; " +
+    "process.stdout.write(JSON.stringify(Object.assign({}, result, { zeroByteNativeBinaries })));";
 
-    const spawnResult = spawnSyncFn(execPath, ["-e", inlineScript], {
-        cwd: repoRoot,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-    });
+  const spawnResult = spawnSyncFn(execPath, ["-e", inlineScript], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
 
-    if (!spawnResult || spawnResult.error) {
-        const errorMessage =
-            spawnResult && spawnResult.error && spawnResult.error.message
-                ? spawnResult.error.message
-                : "spawn returned null";
-        return {
-            ok: false,
-            missing: [
-                {
-                    tool: "(subprocess)",
-                    relPath: "(node -e probeIntegrity)",
-                    reason: `spawn failed: ${errorMessage}`,
-                },
-            ],
-        };
-    }
-
-    if (spawnResult.status !== 0) {
-        const stderrText = typeof spawnResult.stderr === "string" ? spawnResult.stderr : "";
-        return {
-            ok: false,
-            missing: [
-                {
-                    tool: "(subprocess)",
-                    relPath: "(node -e probeIntegrity)",
-                    reason: `exit=${spawnResult.status}; stderr=${stderrText.trim().slice(0, 200)}`,
-                },
-            ],
-        };
-    }
-
-    const stdoutText = typeof spawnResult.stdout === "string" ? spawnResult.stdout : "";
-    try {
-        const parsed = JSON.parse(stdoutText);
-        if (!parsed || typeof parsed.ok !== "boolean" || !Array.isArray(parsed.missing)) {
-            throw new Error("subprocess returned malformed shape");
+  if (!spawnResult || spawnResult.error) {
+    const errorMessage =
+      spawnResult && spawnResult.error && spawnResult.error.message
+        ? spawnResult.error.message
+        : "spawn returned null";
+    return {
+      ok: false,
+      missing: [
+        {
+          tool: "(subprocess)",
+          relPath: "(node -e probeIntegrity)",
+          reason: `spawn failed: ${errorMessage}`
         }
-        // Merge zero-byte native bindings into the missing[] list using the
-        // same shape the in-process integrity gate uses, so the downstream
-        // banner formatter and recovery flow see one uniform offender list.
-        // The `zeroByteNativeBinaries` field is optional for backward
-        // compatibility with subprocess scripts that don't emit it.
-        const zeroByteNative = Array.isArray(parsed.zeroByteNativeBinaries)
-            ? parsed.zeroByteNativeBinaries
-            : [];
-        if (zeroByteNative.length === 0) {
-            return { ok: parsed.ok, missing: parsed.missing };
+      ]
+    };
+  }
+
+  if (spawnResult.status !== 0) {
+    const stderrText = typeof spawnResult.stderr === "string" ? spawnResult.stderr : "";
+    return {
+      ok: false,
+      missing: [
+        {
+          tool: "(subprocess)",
+          relPath: "(node -e probeIntegrity)",
+          reason: `exit=${spawnResult.status}; stderr=${stderrText.trim().slice(0, 200)}`
         }
-        const augmentedMissing = parsed.missing.slice();
-        for (const relPath of zeroByteNative) {
-            augmentedMissing.push({
-                tool: "<native-binding>",
-                relPath,
-                reason: "zero-byte",
-            });
-        }
-        return { ok: false, missing: augmentedMissing };
-    } catch (parseError) {
-        const detail = parseError && parseError.message ? parseError.message : String(parseError);
-        return {
-            ok: false,
-            missing: [
-                {
-                    tool: "(subprocess)",
-                    relPath: "(node -e probeIntegrity)",
-                    reason: `JSON parse failed: ${detail}`,
-                },
-            ],
-        };
+      ]
+    };
+  }
+
+  const stdoutText = typeof spawnResult.stdout === "string" ? spawnResult.stdout : "";
+  try {
+    const parsed = JSON.parse(stdoutText);
+    if (!parsed || typeof parsed.ok !== "boolean" || !Array.isArray(parsed.missing)) {
+      throw new Error("subprocess returned malformed shape");
     }
+    // Merge zero-byte native bindings into the missing[] list using the
+    // same shape the in-process integrity gate uses, so the downstream
+    // banner formatter and recovery flow see one uniform offender list.
+    // The `zeroByteNativeBinaries` field is optional for backward
+    // compatibility with subprocess scripts that don't emit it.
+    const zeroByteNative = Array.isArray(parsed.zeroByteNativeBinaries)
+      ? parsed.zeroByteNativeBinaries
+      : [];
+    if (zeroByteNative.length === 0) {
+      return { ok: parsed.ok, missing: parsed.missing };
+    }
+    const augmentedMissing = parsed.missing.slice();
+    for (const relPath of zeroByteNative) {
+      augmentedMissing.push({
+        tool: "<native-binding>",
+        relPath,
+        reason: "zero-byte"
+      });
+    }
+    return { ok: false, missing: augmentedMissing };
+  } catch (parseError) {
+    const detail = parseError && parseError.message ? parseError.message : String(parseError);
+    return {
+      ok: false,
+      missing: [
+        {
+          tool: "(subprocess)",
+          relPath: "(node -e probeIntegrity)",
+          reason: `JSON parse failed: ${detail}`
+        }
+      ]
+    };
+  }
 }
 
 /**
@@ -322,57 +314,57 @@ function probeIntegrityInSubprocess(options = {}) {
  * @returns {string[]} Repo-relative POSIX-style paths of zero-byte *.node files.
  */
 function findZeroByteNativeBinaries(options = {}) {
-    const {
-        repoRoot,
-        readdirSyncFn = fs.readdirSync,
-        statSyncFn = fs.statSync,
-        skip = false,
-        platform = process.platform,
-        maxDepth = 5,
-    } = options;
+  const {
+    repoRoot,
+    readdirSyncFn = fs.readdirSync,
+    statSyncFn = fs.statSync,
+    skip = false,
+    platform = process.platform,
+    maxDepth = 5
+  } = options;
 
-    if (skip || platform !== "win32") {
-        return [];
+  if (skip || platform !== "win32") {
+    return [];
+  }
+  if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+    return [];
+  }
+
+  const nodeModulesRoot = path.join(repoRoot, "node_modules");
+  const offenders = [];
+
+  function walk(dirAbsPath, depth) {
+    if (depth > maxDepth) {
+      return;
     }
-    if (typeof repoRoot !== "string" || repoRoot.length === 0) {
-        return [];
+    let entries;
+    try {
+      entries = readdirSyncFn(dirAbsPath, { withFileTypes: true });
+    } catch {
+      return;
     }
-
-    const nodeModulesRoot = path.join(repoRoot, "node_modules");
-    const offenders = [];
-
-    function walk(dirAbsPath, depth) {
-        if (depth > maxDepth) {
-            return;
-        }
-        let entries;
+    for (const entry of entries) {
+      const childAbs = path.join(dirAbsPath, entry.name);
+      if (entry.isDirectory()) {
+        walk(childAbs, depth + 1);
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".node")) {
         try {
-            entries = readdirSyncFn(dirAbsPath, { withFileTypes: true });
+          const stats = statSyncFn(childAbs);
+          if (stats && typeof stats.size === "number" && stats.size === 0) {
+            const rel = path.relative(repoRoot, childAbs).split(path.sep).join("/");
+            offenders.push(rel);
+          }
         } catch {
-            return;
+          // ignore: a file we can't stat is not actionable here.
         }
-        for (const entry of entries) {
-            const childAbs = path.join(dirAbsPath, entry.name);
-            if (entry.isDirectory()) {
-                walk(childAbs, depth + 1);
-                continue;
-            }
-            if (entry.isFile() && entry.name.endsWith(".node")) {
-                try {
-                    const stats = statSyncFn(childAbs);
-                    if (stats && typeof stats.size === "number" && stats.size === 0) {
-                        const rel = path.relative(repoRoot, childAbs).split(path.sep).join("/");
-                        offenders.push(rel);
-                    }
-                } catch {
-                    // ignore: a file we can't stat is not actionable here.
-                }
-            }
-        }
+      }
     }
+  }
 
-    walk(nodeModulesRoot, 0);
-    return offenders;
+  walk(nodeModulesRoot, 0);
+  return offenders;
 }
 
 /**
@@ -386,16 +378,15 @@ function findZeroByteNativeBinaries(options = {}) {
  * @returns {string}
  */
 function formatIntegrityFailure(result) {
-    if (!result || !Array.isArray(result.missing) || result.missing.length === 0) {
-        return "Integrity probe failed: no detail available.";
-    }
-    const first = result.missing[0];
-    const remaining = result.missing.length - 1;
-    const tail = remaining > 0 ? `; ${remaining} more` : "";
-    const relPathPosix = typeof first.relPath === "string"
-        ? first.relPath.replace(/\\/g, "/")
-        : first.relPath;
-    return `Integrity probe failed: missing ${relPathPosix} (${first.reason}) for ${first.tool}${tail}`;
+  if (!result || !Array.isArray(result.missing) || result.missing.length === 0) {
+    return "Integrity probe failed: no detail available.";
+  }
+  const first = result.missing[0];
+  const remaining = result.missing.length - 1;
+  const tail = remaining > 0 ? `; ${remaining} more` : "";
+  const relPathPosix =
+    typeof first.relPath === "string" ? first.relPath.replace(/\\/g, "/") : first.relPath;
+  return `Integrity probe failed: missing ${relPathPosix} (${first.reason}) for ${first.tool}${tail}`;
 }
 
 /**
@@ -471,176 +462,183 @@ const DEFAULT_RESOLVER_SPECIFIERS = Object.freeze(["jest-circus/runner"]);
  *   real resolver failures.
  */
 function probeResolverHealth(options = {}) {
-    const {
-        repoRoot,
-        execPath = process.execPath,
-        spawnSyncFn = childProcess.spawnSync,
-        specifiers = DEFAULT_RESOLVER_SPECIFIERS,
-    } = options;
+  const {
+    repoRoot,
+    execPath = process.execPath,
+    spawnSyncFn = childProcess.spawnSync,
+    specifiers = DEFAULT_RESOLVER_SPECIFIERS
+  } = options;
 
-    if (typeof repoRoot !== "string" || repoRoot.length === 0) {
-        throw new TypeError("probeResolverHealth requires options.repoRoot (string)");
-    }
+  if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+    throw new TypeError("probeResolverHealth requires options.repoRoot (string)");
+  }
 
-    // Hand-rolled inline script. The parent fully controls every byte; all
-    // dynamic values are routed through JSON.stringify so a malicious
-    // repoRoot or specifier cannot inject code.
-    //
-    // Layered probe (see function JSDoc for the rationale):
-    //   1. require("unrs-resolver") to trigger napi-postinstall's native
-    //      binding load. Falls back to require("jest-resolve") if
-    //      unrs-resolver is not directly reachable from the repo tree.
-    //   2. Instantiate ResolverFactory and call .sync() to exercise the
-    //      native binding's actual entry points (a half-loaded binding can
-    //      survive require but throw here).
-    //   3. Node's createRequire(...).resolve(spec) as the legacy fallback.
-    //
-    // The literal "unrs-resolver" token in this script body is asserted by
-    // the policy test in node-modules-integrity.test.js so a refactor cannot
-    // silently regress this probe to Node-only resolution.
-    const inlineScript =
-        '"use strict";\n' +
-        "const Module = require('module');\n" +
-        "const path = require('path');\n" +
-        "const repoRoot = " + JSON.stringify(repoRoot) + ";\n" +
-        "const repoRequire = Module.createRequire(path.join(repoRoot, 'package.json'));\n" +
-        "const specifiers = " + JSON.stringify(specifiers) + ";\n" +
-        "const failures = [];\n" +
-        "function describeError(e) {\n" +
-        "  if (!e) return 'unknown';\n" +
-        "  const code = e.code ? e.code + ': ' : '';\n" +
-        "  return code + (e.message || String(e));\n" +
-        "}\n" +
-        "// LAYER 1: force-load unrs-resolver. On Windows with a broken\n" +
-        "// @unrs/resolver-binding-* native binding, this throws at module\n" +
-        "// load time (napi-postinstall's loader surfaces the underlying\n" +
-        "// MODULE_NOT_FOUND or load error here).\n" +
-        "//\n" +
-        "// If unrs-resolver itself cannot be located (MODULE_NOT_FOUND for the\n" +
-        "// JS file, not for the native binding), we additionally try to load\n" +
-        "// jest-resolve, which transitively requires unrs-resolver. That path\n" +
-        "// catches the failure surface even in a repo whose direct dependency\n" +
-        "// tree does not list unrs-resolver. In either case, a failure to load\n" +
-        "// IS a probe failure and is always recorded.\n" +
-        "let unrsModule = null;\n" +
-        "let unrsLoadVia = 'unrs-resolver';\n" +
-        "let unrsLoadOk = false;\n" +
-        "try {\n" +
-        "  unrsModule = repoRequire('unrs-resolver');\n" +
-        "  unrsLoadOk = true;\n" +
-        "} catch (primaryErr) {\n" +
-        "  failures.push({ specifier: 'unrs-resolver', error: describeError(primaryErr) });\n" +
-        "  // Probe via jest-resolve as a secondary signal: if it ALSO\n" +
-        "  // throws, we learn the failure is reproducible through the\n" +
-        "  // jest-resolve load chain too; if it succeeds, the failure is\n" +
-        "  // confined to the direct unrs-resolver entrypoint.\n" +
-        "  try {\n" +
-        "    repoRequire('jest-resolve');\n" +
-        "    unrsLoadVia = 'jest-resolve (transitive unrs-resolver)';\n" +
-        "  } catch (fallbackErr) {\n" +
-        "    failures.push({ specifier: 'jest-resolve', error: describeError(fallbackErr) });\n" +
-        "  }\n" +
-        "}\n" +
-        "// LAYER 2: actually instantiate ResolverFactory and exercise sync().\n" +
-        "if (unrsModule && typeof unrsModule.ResolverFactory === 'function') {\n" +
-        "  let factory = null;\n" +
-        "  try {\n" +
-        "    factory = new unrsModule.ResolverFactory({});\n" +
-        "  } catch (factoryErr) {\n" +
-        "    failures.push({\n" +
-        "      specifier: 'unrs-resolver(' + unrsLoadVia + ')',\n" +
-        "      error: 'ResolverFactory ctor failed: ' + describeError(factoryErr)\n" +
-        "    });\n" +
-        "  }\n" +
-        "  if (factory) {\n" +
-        "    for (const spec of specifiers) {\n" +
-        "      try { factory.sync(repoRoot, spec); }\n" +
-        "      catch (resolveErr) {\n" +
-        "        failures.push({ specifier: 'unrs-resolver:' + spec, error: describeError(resolveErr) });\n" +
-        "      }\n" +
-        "    }\n" +
-        "  }\n" +
-        "}\n" +
-        "// LAYER 3: legacy Node-resolver probe (different failure modes).\n" +
-        "for (const spec of specifiers) {\n" +
-        "  try { repoRequire.resolve(spec); }\n" +
-        "  catch (e) { failures.push({ specifier: spec, error: describeError(e) }); }\n" +
-        "}\n" +
-        "process.stdout.write(JSON.stringify({ ok: failures.length === 0, failures }));\n";
+  // Hand-rolled inline script. The parent fully controls every byte; all
+  // dynamic values are routed through JSON.stringify so a malicious
+  // repoRoot or specifier cannot inject code.
+  //
+  // Layered probe (see function JSDoc for the rationale):
+  //   1. require("unrs-resolver") to trigger napi-postinstall's native
+  //      binding load. Falls back to require("jest-resolve") if
+  //      unrs-resolver is not directly reachable from the repo tree.
+  //   2. Instantiate ResolverFactory and call .sync() to exercise the
+  //      native binding's actual entry points (a half-loaded binding can
+  //      survive require but throw here).
+  //   3. Node's createRequire(...).resolve(spec) as the legacy fallback.
+  //
+  // The literal "unrs-resolver" token in this script body is asserted by
+  // the policy test in node-modules-integrity.test.js so a refactor cannot
+  // silently regress this probe to Node-only resolution.
+  const inlineScript =
+    '"use strict";\n' +
+    "const Module = require('module');\n" +
+    "const path = require('path');\n" +
+    "const repoRoot = " +
+    JSON.stringify(repoRoot) +
+    ";\n" +
+    "const repoRequire = Module.createRequire(path.join(repoRoot, 'package.json'));\n" +
+    "const specifiers = " +
+    JSON.stringify(specifiers) +
+    ";\n" +
+    "const failures = [];\n" +
+    "function describeError(e) {\n" +
+    "  if (!e) return 'unknown';\n" +
+    "  const code = e.code ? e.code + ': ' : '';\n" +
+    "  return code + (e.message || String(e));\n" +
+    "}\n" +
+    "// LAYER 1: force-load unrs-resolver. On Windows with a broken\n" +
+    "// @unrs/resolver-binding-* native binding, this throws at module\n" +
+    "// load time (napi-postinstall's loader surfaces the underlying\n" +
+    "// MODULE_NOT_FOUND or load error here).\n" +
+    "//\n" +
+    "// If unrs-resolver itself cannot be located (MODULE_NOT_FOUND for the\n" +
+    "// JS file, not for the native binding), we additionally try to load\n" +
+    "// jest-resolve, which transitively requires unrs-resolver. That path\n" +
+    "// catches the failure surface even in a repo whose direct dependency\n" +
+    "// tree does not list unrs-resolver. In either case, a failure to load\n" +
+    "// IS a probe failure and is always recorded.\n" +
+    "let unrsModule = null;\n" +
+    "let unrsLoadVia = 'unrs-resolver';\n" +
+    "let unrsLoadOk = false;\n" +
+    "try {\n" +
+    "  unrsModule = repoRequire('unrs-resolver');\n" +
+    "  unrsLoadOk = true;\n" +
+    "} catch (primaryErr) {\n" +
+    "  failures.push({ specifier: 'unrs-resolver', error: describeError(primaryErr) });\n" +
+    "  // Probe via jest-resolve as a secondary signal: if it ALSO\n" +
+    "  // throws, we learn the failure is reproducible through the\n" +
+    "  // jest-resolve load chain too; if it succeeds, the failure is\n" +
+    "  // confined to the direct unrs-resolver entrypoint.\n" +
+    "  try {\n" +
+    "    repoRequire('jest-resolve');\n" +
+    "    unrsLoadVia = 'jest-resolve (transitive unrs-resolver)';\n" +
+    "  } catch (fallbackErr) {\n" +
+    "    failures.push({ specifier: 'jest-resolve', error: describeError(fallbackErr) });\n" +
+    "  }\n" +
+    "}\n" +
+    "// LAYER 2: actually instantiate ResolverFactory and exercise sync().\n" +
+    "if (unrsModule && typeof unrsModule.ResolverFactory === 'function') {\n" +
+    "  let factory = null;\n" +
+    "  try {\n" +
+    "    factory = new unrsModule.ResolverFactory({});\n" +
+    "  } catch (factoryErr) {\n" +
+    "    failures.push({\n" +
+    "      specifier: 'unrs-resolver(' + unrsLoadVia + ')',\n" +
+    "      error: 'ResolverFactory ctor failed: ' + describeError(factoryErr)\n" +
+    "    });\n" +
+    "  }\n" +
+    "  if (factory) {\n" +
+    "    for (const spec of specifiers) {\n" +
+    "      try { factory.sync(repoRoot, spec); }\n" +
+    "      catch (resolveErr) {\n" +
+    "        failures.push({ specifier: 'unrs-resolver:' + spec, error: describeError(resolveErr) });\n" +
+    "      }\n" +
+    "    }\n" +
+    "  }\n" +
+    "}\n" +
+    "// LAYER 3: legacy Node-resolver probe (different failure modes).\n" +
+    "for (const spec of specifiers) {\n" +
+    "  try { repoRequire.resolve(spec); }\n" +
+    "  catch (e) { failures.push({ specifier: spec, error: describeError(e) }); }\n" +
+    "}\n" +
+    "process.stdout.write(JSON.stringify({ ok: failures.length === 0, failures }));\n";
 
-    let spawnResult;
-    try {
-        spawnResult = spawnSyncFn(execPath, ["-e", inlineScript], {
-            cwd: repoRoot,
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-        });
-    } catch (spawnError) {
-        const detail = spawnError && spawnError.message ? spawnError.message : String(spawnError);
-        return {
-            ok: false,
-            failures: [{ specifier: "<subprocess>", error: "spawn threw: " + detail }],
-        };
-    }
+  let spawnResult;
+  try {
+    spawnResult = spawnSyncFn(execPath, ["-e", inlineScript], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  } catch (spawnError) {
+    const detail = spawnError && spawnError.message ? spawnError.message : String(spawnError);
+    return {
+      ok: false,
+      failures: [{ specifier: "<subprocess>", error: "spawn threw: " + detail }]
+    };
+  }
 
-    if (!spawnResult) {
-        return {
-            ok: false,
-            failures: [{ specifier: "<subprocess>", error: "spawn returned null" }],
-        };
-    }
-    if (spawnResult.error) {
-        const detail = spawnResult.error.message || String(spawnResult.error);
-        return {
-            ok: false,
-            failures: [{ specifier: "<subprocess>", error: "spawn errored: " + detail }],
-        };
-    }
-    if (spawnResult.status !== 0) {
-        const stderrText = typeof spawnResult.stderr === "string"
-            ? spawnResult.stderr.trim().slice(0, 200)
-            : "";
-        return {
-            ok: false,
-            failures: [{
-                specifier: "<subprocess>",
-                error: "exit=" + spawnResult.status + (stderrText ? "; stderr=" + stderrText : ""),
-            }],
-        };
-    }
-
-    const stdoutText = typeof spawnResult.stdout === "string" ? spawnResult.stdout : "";
-    if (stdoutText.length === 0) {
-        return {
-            ok: false,
-            failures: [{ specifier: "<subprocess>", error: "empty stdout from probe" }],
-        };
-    }
-
-    try {
-        const parsed = JSON.parse(stdoutText);
-        if (!parsed || typeof parsed.ok !== "boolean" || !Array.isArray(parsed.failures)) {
-            throw new Error("subprocess returned malformed shape");
+  if (!spawnResult) {
+    return {
+      ok: false,
+      failures: [{ specifier: "<subprocess>", error: "spawn returned null" }]
+    };
+  }
+  if (spawnResult.error) {
+    const detail = spawnResult.error.message || String(spawnResult.error);
+    return {
+      ok: false,
+      failures: [{ specifier: "<subprocess>", error: "spawn errored: " + detail }]
+    };
+  }
+  if (spawnResult.status !== 0) {
+    const stderrText =
+      typeof spawnResult.stderr === "string" ? spawnResult.stderr.trim().slice(0, 200) : "";
+    return {
+      ok: false,
+      failures: [
+        {
+          specifier: "<subprocess>",
+          error: "exit=" + spawnResult.status + (stderrText ? "; stderr=" + stderrText : "")
         }
-        return { ok: parsed.ok, failures: parsed.failures };
-    } catch (parseError) {
-        const detail = parseError && parseError.message ? parseError.message : String(parseError);
-        return {
-            ok: false,
-            failures: [{
-                specifier: "<subprocess>",
-                error: "malformed probe output: " + detail,
-            }],
-        };
+      ]
+    };
+  }
+
+  const stdoutText = typeof spawnResult.stdout === "string" ? spawnResult.stdout : "";
+  if (stdoutText.length === 0) {
+    return {
+      ok: false,
+      failures: [{ specifier: "<subprocess>", error: "empty stdout from probe" }]
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(stdoutText);
+    if (!parsed || typeof parsed.ok !== "boolean" || !Array.isArray(parsed.failures)) {
+      throw new Error("subprocess returned malformed shape");
     }
+    return { ok: parsed.ok, failures: parsed.failures };
+  } catch (parseError) {
+    const detail = parseError && parseError.message ? parseError.message : String(parseError);
+    return {
+      ok: false,
+      failures: [
+        {
+          specifier: "<subprocess>",
+          error: "malformed probe output: " + detail
+        }
+      ]
+    };
+  }
 }
 
 module.exports = {
-    INTEGRITY_TARGETS,
-    DEFAULT_RESOLVER_SPECIFIERS,
-    probeIntegrity,
-    probeIntegrityInSubprocess,
-    findZeroByteNativeBinaries,
-    formatIntegrityFailure,
-    probeResolverHealth,
+  INTEGRITY_TARGETS,
+  DEFAULT_RESOLVER_SPECIFIERS,
+  probeIntegrity,
+  probeIntegrityInSubprocess,
+  findZeroByteNativeBinaries,
+  formatIntegrityFailure,
+  probeResolverHealth
 };

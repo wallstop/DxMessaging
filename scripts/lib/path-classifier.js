@@ -39,13 +39,15 @@ const PATH_CLASS_UNKNOWN = "unknown";
  * @returns {string} Normalized absolute path.
  */
 function normalizeForPathComparison(targetPath) {
-    let resolved = path.resolve(targetPath);
-    try {
-        resolved = fs.realpathSync.native ? fs.realpathSync.native(resolved) : fs.realpathSync(resolved);
-    } catch {
-        // Keep resolved path when target is unavailable; callers handle existence separately.
-    }
-    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+  let resolved = path.resolve(targetPath);
+  try {
+    resolved = fs.realpathSync.native
+      ? fs.realpathSync.native(resolved)
+      : fs.realpathSync(resolved);
+  } catch {
+    // Keep resolved path when target is unavailable; callers handle existence separately.
+  }
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 /**
@@ -58,13 +60,10 @@ function normalizeForPathComparison(targetPath) {
  * @returns {boolean}
  */
 function isPathInsideDirectory(filePath, directoryPath) {
-    const normalizedFilePath = normalizeForPathComparison(filePath);
-    const normalizedDirectoryPath = normalizeForPathComparison(directoryPath);
-    const relativePath = path.relative(normalizedDirectoryPath, normalizedFilePath);
-    return (
-        relativePath === "" ||
-        (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-    );
+  const normalizedFilePath = normalizeForPathComparison(filePath);
+  const normalizedDirectoryPath = normalizeForPathComparison(directoryPath);
+  const relativePath = path.relative(normalizedDirectoryPath, normalizedFilePath);
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
 /**
@@ -89,20 +88,20 @@ function isPathInsideDirectory(filePath, directoryPath) {
  * @returns {"repo"|"isolated"|"unknown"}
  */
 function classifyCapturedPath(capturedPath, { repoNodeModules, isolatedCacheRoot } = {}) {
-    if (typeof capturedPath !== "string" || capturedPath.length === 0) {
-        return PATH_CLASS_UNKNOWN;
-    }
-    if (typeof repoNodeModules === "string" && repoNodeModules.length > 0) {
-        if (isPathInsideDirectory(capturedPath, repoNodeModules)) {
-            return PATH_CLASS_REPO;
-        }
-    }
-    if (typeof isolatedCacheRoot === "string" && isolatedCacheRoot.length > 0) {
-        if (isPathInsideDirectory(capturedPath, isolatedCacheRoot)) {
-            return PATH_CLASS_ISOLATED;
-        }
-    }
+  if (typeof capturedPath !== "string" || capturedPath.length === 0) {
     return PATH_CLASS_UNKNOWN;
+  }
+  if (typeof repoNodeModules === "string" && repoNodeModules.length > 0) {
+    if (isPathInsideDirectory(capturedPath, repoNodeModules)) {
+      return PATH_CLASS_REPO;
+    }
+  }
+  if (typeof isolatedCacheRoot === "string" && isolatedCacheRoot.length > 0) {
+    if (isPathInsideDirectory(capturedPath, isolatedCacheRoot)) {
+      return PATH_CLASS_ISOLATED;
+    }
+  }
+  return PATH_CLASS_UNKNOWN;
 }
 
 /**
@@ -124,13 +123,13 @@ function classifyCapturedPath(capturedPath, { repoNodeModules, isolatedCacheRoot
  *   stringified-and-swapped form for other non-string inputs.
  */
 function toPosixPath(value) {
-    if (value === null || value === undefined) {
-        return "";
-    }
-    if (typeof value !== "string") {
-        return String(value).replace(/\\/g, "/");
-    }
-    return value.replace(/\\/g, "/");
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value !== "string") {
+    return String(value).replace(/\\/g, "/");
+  }
+  return value.replace(/\\/g, "/");
 }
 
 /**
@@ -152,23 +151,23 @@ function toPosixPath(value) {
  *   otherwise; original value when either input is not a string.
  */
 function toRepoPosixRelative(absPath, repoRoot) {
-    if (typeof absPath !== "string" || typeof repoRoot !== "string") {
-        return absPath;
-    }
-    const rel = path.relative(repoRoot, absPath);
-    if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
-        return toPosixPath(absPath);
-    }
-    return toPosixPath(rel);
+  if (typeof absPath !== "string" || typeof repoRoot !== "string") {
+    return absPath;
+  }
+  const rel = path.relative(repoRoot, absPath);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    return toPosixPath(absPath);
+  }
+  return toPosixPath(rel);
 }
 
 module.exports = {
-    PATH_CLASS_REPO,
-    PATH_CLASS_ISOLATED,
-    PATH_CLASS_UNKNOWN,
-    normalizeForPathComparison,
-    isPathInsideDirectory,
-    classifyCapturedPath,
-    toPosixPath,
-    toRepoPosixRelative,
+  PATH_CLASS_REPO,
+  PATH_CLASS_ISOLATED,
+  PATH_CLASS_UNKNOWN,
+  normalizeForPathComparison,
+  isPathInsideDirectory,
+  classifyCapturedPath,
+  toPosixPath,
+  toRepoPosixRelative
 };

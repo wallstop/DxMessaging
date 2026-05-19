@@ -149,7 +149,9 @@ describe("validate-node-tooling", () => {
     });
 
     expect(violations).toEqual([
-      expect.stringContaining("managed-npx-policy: scripts/bad-npx.js uses direct npx process spawning")
+      expect.stringContaining(
+        "managed-npx-policy: scripts/bad-npx.js uses direct npx process spawning"
+      )
     ]);
   });
 
@@ -161,7 +163,7 @@ describe("validate-node-tooling", () => {
           content: [
             'const childProcess = require("child_process");',
             'const npxCommand = "npx";',
-            "childProcess.spawnSync(npxCommand, [\"--yes\", \"prettier\", \"--check\", \"README.md\"]);"
+            'childProcess.spawnSync(npxCommand, ["--yes", "prettier", "--check", "README.md"]);'
           ].join("\n")
         }
       ]
@@ -183,7 +185,7 @@ describe("validate-node-tooling", () => {
             'const childProcess = require("child_process");',
             "const { spawnSync: invoke } = childProcess;",
             'const cmd = "npx.cmd";',
-            "invoke(cmd, [\"--yes\", \"prettier\", \"--check\", \"README.md\"]);"
+            'invoke(cmd, ["--yes", "prettier", "--check", "README.md"]);'
           ].join("\n")
         }
       ]

@@ -44,7 +44,7 @@ const {
   extractJobMatrixMaxParallel,
   extractJobNeeds,
   parseInlineLabelArray,
-  extractJobs,
+  extractJobs
 } = require("../validate-workflows.js");
 
 const REPO_ROOT_FOR_FILES = path.resolve(__dirname, "..", "..");
@@ -309,7 +309,7 @@ jobs:
     expect(extractJobMatrixMaxParallel(lines, job)).toBe(4);
   });
 
-  test("returns the integer for a double-quoted scalar `max-parallel: \"1\"`", () => {
+  test('returns the integer for a double-quoted scalar `max-parallel: "1"`', () => {
     const { lines, job } = jobOf(`
 jobs:
   unity:
@@ -549,10 +549,10 @@ jobs:
 describe("extractEmittedLabelSetsFromBash", () => {
   test("parses single-quoted labels= JSON arrays from echo statements", () => {
     const runText = [
-      "if [[ \"x\" == \"pull_request\" ]]; then",
-      "  echo 'labels=[\"self-hosted\",\"Windows\",\"RAM-64GB\",\"fast\"]' >> \"$GITHUB_OUTPUT\"",
+      'if [[ "x" == "pull_request" ]]; then',
+      '  echo \'labels=["self-hosted","Windows","RAM-64GB","fast"]\' >> "$GITHUB_OUTPUT"',
       "else",
-      "  echo 'labels=[\"self-hosted\",\"Windows\",\"RAM-64GB\"]' >> \"$GITHUB_OUTPUT\"",
+      '  echo \'labels=["self-hosted","Windows","RAM-64GB"]\' >> "$GITHUB_OUTPUT"',
       "fi"
     ].join("\n");
     expect(extractEmittedLabelSetsFromBash(runText)).toEqual([
@@ -562,7 +562,7 @@ describe("extractEmittedLabelSetsFromBash", () => {
   });
 
   test("parses a bare labels=... assignment without surrounding bash quotes", () => {
-    const runText = "labels=[\"self-hosted\",\"Windows\",\"RAM-64GB\"]";
+    const runText = 'labels=["self-hosted","Windows","RAM-64GB"]';
     expect(extractEmittedLabelSetsFromBash(runText)).toEqual([
       ["self-hosted", "Windows", "RAM-64GB"]
     ]);
@@ -609,7 +609,7 @@ describe("scalar shorthand concurrency form (extractJobConcurrencyGroup)", () =>
     expect(result.cancelInProgress).toBeUndefined();
   });
 
-  test("recognizes double-quoted scalar concurrency: \"wallstop-organization-builds\"", () => {
+  test('recognizes double-quoted scalar concurrency: "wallstop-organization-builds"', () => {
     const lines = singleJobLines('concurrency: "wallstop-organization-builds"');
     const jobs = extractJobs(lines);
     const result = extractJobConcurrencyGroup(lines, jobs[0]);
@@ -817,7 +817,7 @@ jobs:
     expect(violations[0].message).toContain("not in the documented allowlist");
   });
 
-  test("flags `runs-on: \"self-hosted\"` scalar double-quoted form for missing modifiers", () => {
+  test('flags `runs-on: "self-hosted"` scalar double-quoted form for missing modifiers', () => {
     const lines = asLines(`
 jobs:
   unity:
@@ -927,13 +927,18 @@ jobs:
     steps:
       - run: echo
 `);
-    expect(extractJobNeeds(lines, jobsFrom(`
+    expect(
+      extractJobNeeds(
+        lines,
+        jobsFrom(`
 jobs:
   a:
     runs-on: ubuntu-latest
     steps:
       - run: echo
-`)[0])).toEqual([]);
+`)[0]
+      )
+    ).toEqual([]);
   });
 
   test("parses scalar form needs: matrix-config", () => {
@@ -1142,7 +1147,7 @@ describe("unstick-run.yml workflow contract", () => {
   test("declares exact permissions: { actions: write, contents: read }", () => {
     expect(doc.permissions).toEqual({
       actions: "write",
-      contents: "read",
+      contents: "read"
     });
   });
 
