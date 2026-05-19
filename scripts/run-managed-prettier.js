@@ -18,6 +18,7 @@ const jestErrorDecoderModule = require("./lib/jest-error-decoder");
 const { isTruthyEnv } = jestErrorDecoderModule;
 const {
     probeIntegrity,
+    probeResolverHealth,
     probeIntegrityInSubprocess,
 } = require("./lib/node-modules-integrity");
 const {
@@ -95,6 +96,7 @@ function runManagedPrettier(args, options = {}) {
         runIntegrityGateWithRecoveryFn = runIntegrityGateWithRecovery,
         probeIntegrityFn = probeIntegrity,
         probeIntegrityInSubprocessFn = probeIntegrityInSubprocess,
+        probeResolverHealthFn = probeResolverHealth,
         attemptNpmCiRecoveryFn = attemptNpmCiRecovery,
         getNpmMajorVersionFn = getNpmMajorVersion,
         printActionableRepairBannerFn = printActionableRepairBanner,
@@ -118,11 +120,13 @@ function runManagedPrettier(args, options = {}) {
             repoRoot: REPO_ROOT,
             probeIntegrityFn,
             probeIntegrityInSubprocessFn,
+            probeResolverHealthFn,
             attemptNpmCiRecoveryFn,
             isAutoRepairAllowedFn: resolvedIsAutoRepairAllowed,
             printActionableRepairBannerFn,
             decoder: jestErrorDecoderModule,
             warnFn,
+            env,
         });
 
         if (!gateResult || !gateResult.ok) {

@@ -19,7 +19,9 @@ const {
     probeIntegrityInSubprocess,
     findZeroByteNativeBinaries,
     formatIntegrityFailure,
+    probeResolverHealth,
 } = require("../lib/node-modules-integrity");
+const { toPosixPath } = require("../lib/path-classifier");
 
 describe("INTEGRITY_TARGETS", () => {
     test("is frozen and immutable end-to-end", () => {
@@ -111,7 +113,9 @@ describe("probeIntegrity", () => {
     test("flags a missing file via existsSync=false", () => {
         const result = probeIntegrity({
             repoRoot: "/repo",
-            existsSyncFn: (abs) => !abs.endsWith("alpha.js"),
+            // POSIX-normalize before substring check so the fixture is
+            // platform-agnostic (on Windows, path.join uses "\").
+            existsSyncFn: (abs) => !toPosixPath(abs).endsWith("alpha.js"),
             statSyncFn: () => ({ size: 100 }),
             targets: fakeTargets,
         });
@@ -127,7 +131,7 @@ describe("probeIntegrity", () => {
             repoRoot: "/repo",
             existsSyncFn: () => true,
             statSyncFn: (abs) => {
-                if (abs.endsWith("bin.mjs")) {
+                if (toPosixPath(abs).endsWith("bin.mjs")) {
                     const err = new Error("ENOENT: file gone");
                     err.code = "ENOENT";
                     throw err;
@@ -149,7 +153,7 @@ describe("probeIntegrity", () => {
         const result = probeIntegrity({
             repoRoot: "/repo",
             existsSyncFn: () => true,
-            statSyncFn: (abs) => (abs.endsWith("index.js") ? { size: 0 } : { size: 100 }),
+            statSyncFn: (abs) => (toPosixPath(abs).endsWith("index.js") ? { size: 0 } : { size: 100 }),
             targets: fakeTargets,
         });
 
@@ -468,6 +472,11 @@ describe("findZeroByteNativeBinaries", () => {
     test("returns offenders on Windows when *.node files have size 0", () => {
         // Fake one-level fs: node_modules has a child "native" with a 0-byte
         // index.node and a healthy 100-byte sibling.node.
+        //
+        // The fixture is keyed in POSIX form so the test runs identically on
+        // Linux and Windows. The injected readdirSyncFn / statSyncFn
+        // normalize the (platform-native) absolute path the production code
+        // hands them before fixture lookup.
         const tree = {
             "/repo/node_modules": [
                 { name: "native", isDirectory: () => true, isFile: () => false },
@@ -484,8 +493,11 @@ describe("findZeroByteNativeBinaries", () => {
         const result = findZeroByteNativeBinaries({
             repoRoot: "/repo",
             platform: "win32",
-            readdirSyncFn: (dir) => tree[dir] || [],
-            statSyncFn: (abs) => ({ size: sizes[abs] !== undefined ? sizes[abs] : 100 }),
+            readdirSyncFn: (dir) => tree[toPosixPath(dir)] || [],
+            statSyncFn: (abs) => {
+                const key = toPosixPath(abs);
+                return { size: sizes[key] !== undefined ? sizes[key] : 100 };
+            },
         });
 
         expect(result).toEqual(["node_modules/native/index.node"]);
@@ -542,5 +554,254 @@ describe("formatIntegrityFailure", () => {
         expect(formatIntegrityFailure(null)).toContain("no detail available");
         expect(formatIntegrityFailure({})).toContain("no detail available");
         expect(formatIntegrityFailure({ ok: true, missing: [] })).toContain("no detail available");
+    });
+
+    test("POSIX-normalizes Windows-flavored relPath in the output", () => {
+        const formatted = formatIntegrityFailure({
+            ok: false,
+            missing: [
+                {
+                    tool: "jest-circus",
+                    relPath: "node_modules\\jest-circus\\build\\runner.js",
+                    reason: "missing",
+                },
+            ],
+        });
+        expect(formatted).toContain("node_modules/jest-circus/build/runner.js");
+        expect(formatted).not.toContain("\\");
+    });
+});
+
+describe("probeResolverHealth", () => {
+    test("returns ok when all specifiers resolve (subprocess emits ok:true)", () => {
+        const spawnSyncFn = jest.fn(() => ({
+            status: 0,
+            stdout: JSON.stringify({ ok: true, failures: [] }),
+            stderr: "",
+        }));
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+            specifiers: ["jest-circus/runner"],
+        });
+        expect(result).toEqual({ ok: true, failures: [] });
+        expect(spawnSyncFn).toHaveBeenCalledTimes(1);
+        const [, args, opts] = spawnSyncFn.mock.calls[0];
+        expect(args[0]).toBe("-e");
+        // Verify the inline script encodes both repoRoot and specifiers
+        // via JSON.stringify (defense against injection).
+        expect(args[1]).toContain('JSON.stringify');
+        expect(args[1]).toContain('"/repo"');
+        expect(args[1]).toContain('"jest-circus/runner"');
+        expect(opts.cwd).toBe("/repo");
+    });
+
+    test("surfaces failures emitted by the subprocess JSON payload", () => {
+        const spawnSyncFn = jest.fn(() => ({
+            status: 0,
+            stdout: JSON.stringify({
+                ok: false,
+                failures: [
+                    {
+                        specifier: "jest-circus/runner",
+                        error: "Failed to load native binding: @unrs/resolver-binding-win32-x64-msvc",
+                    },
+                ],
+            }),
+            stderr: "",
+        }));
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures).toHaveLength(1);
+        expect(result.failures[0].specifier).toBe("jest-circus/runner");
+        expect(result.failures[0].error).toContain("native binding");
+    });
+
+    test("returns synthetic failure when subprocess exits non-zero", () => {
+        const spawnSyncFn = jest.fn(() => ({
+            status: 1,
+            stdout: "",
+            stderr: "node: boom",
+        }));
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures).toHaveLength(1);
+        expect(result.failures[0].specifier).toBe("<subprocess>");
+        expect(result.failures[0].error).toContain("exit=1");
+        expect(result.failures[0].error).toContain("boom");
+    });
+
+    test("returns synthetic failure when subprocess emits malformed JSON", () => {
+        const spawnSyncFn = jest.fn(() => ({
+            status: 0,
+            stdout: "not-json",
+            stderr: "",
+        }));
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures).toHaveLength(1);
+        expect(result.failures[0].specifier).toBe("<subprocess>");
+        expect(result.failures[0].error).toContain("malformed probe output");
+    });
+
+    test("returns synthetic failure when subprocess returns null result", () => {
+        const spawnSyncFn = jest.fn(() => null);
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures[0].error).toContain("spawn returned null");
+    });
+
+    test("returns synthetic failure when spawn itself throws", () => {
+        const spawnSyncFn = jest.fn(() => {
+            throw new Error("ENOENT: node not found");
+        });
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures[0].error).toContain("spawn threw");
+        expect(result.failures[0].error).toContain("ENOENT");
+    });
+
+    test("returns synthetic failure when stdout is empty (ok exit)", () => {
+        const spawnSyncFn = jest.fn(() => ({ status: 0, stdout: "", stderr: "" }));
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures[0].error).toContain("empty stdout");
+    });
+
+    test("throws when repoRoot is missing", () => {
+        expect(() => probeResolverHealth({})).toThrow(/repoRoot/);
+        expect(() => probeResolverHealth({ repoRoot: "" })).toThrow();
+    });
+
+    test("end-to-end: probes the real repo successfully", () => {
+        // Spawns a real Node subprocess against this repo's actual root.
+        // If the real jest-circus install is healthy (it must be, since the
+        // test runner is jest-circus), this returns ok:true.
+        const result = probeResolverHealth({
+            repoRoot: path.resolve(__dirname, "../.."),
+        });
+        expect(result.ok).toBe(true);
+        expect(result.failures).toEqual([]);
+    });
+
+    test("surfaces unrs-resolver load failures emitted by the subprocess (C1 regression)", () => {
+        // The Windows failure mode: the subprocess reports that
+        // require("unrs-resolver") threw because the native binding is
+        // missing or corrupt. The parent must propagate that failure with
+        // ok=false and the unrs-resolver specifier preserved.
+        const spawnSyncFn = jest.fn(() => ({
+            status: 0,
+            stdout: JSON.stringify({
+                ok: false,
+                failures: [
+                    {
+                        specifier: "unrs-resolver",
+                        error: "Cannot find native binding. (@unrs/resolver-binding-win32-x64-msvc)",
+                    },
+                ],
+            }),
+            stderr: "",
+        }));
+        const result = probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn,
+        });
+        expect(result.ok).toBe(false);
+        expect(result.failures).toHaveLength(1);
+        expect(result.failures[0].specifier).toBe("unrs-resolver");
+        expect(result.failures[0].error).toContain("native binding");
+    });
+
+    test("contract: inline script source MUST mention unrs-resolver (load-bearing invariant)", () => {
+        // The whole point of the resolver probe is to exercise unrs-resolver
+        // (and via fallback, jest-resolve) — Node's own require.resolve will
+        // happily succeed on a Windows install with a broken native binding
+        // because the JS files are present on disk. This test pins the
+        // contract by inspecting the inline script source the parent hands
+        // to spawnSync, so a future refactor that accidentally strips the
+        // unrs-resolver load chain will fail loudly here instead of silently
+        // shipping a no-op probe to the Windows developer.
+        let capturedArgs;
+        probeResolverHealth({
+            repoRoot: "/repo",
+            spawnSyncFn: (_command, args) => {
+                capturedArgs = args;
+                return {
+                    status: 0,
+                    stdout: JSON.stringify({ ok: true, failures: [] }),
+                    stderr: "",
+                };
+            },
+        });
+        expect(capturedArgs).toBeTruthy();
+        expect(capturedArgs[0]).toBe("-e");
+        const script = capturedArgs[1];
+        expect(typeof script).toBe("string");
+        // The literal "unrs-resolver" token MUST appear; this is the
+        // load-bearing invariant the user reviewer flagged.
+        expect(script).toContain("unrs-resolver");
+        // ResolverFactory + sync must also appear: the probe must
+        // INSTANTIATE the factory and CALL sync(), not just require the
+        // module (a half-loaded binding can survive require but throw at
+        // sync time).
+        expect(script).toContain("ResolverFactory");
+        expect(script).toContain("sync");
+        // jest-resolve fallback is wired in so a repo whose tree does not
+        // directly list unrs-resolver still exercises the failure surface.
+        expect(script).toContain("jest-resolve");
+    });
+
+    test("end-to-end: simulated broken native binding via SKIP_UNRS_RESOLVER_FALLBACK is surfaced", () => {
+        // The real Windows failure happens BEFORE napi-postinstall's
+        // auto-fallback (which itself is a partial mitigation on the
+        // Windows machines that hit this class of bug). We can simulate
+        // the post-fallback failure deterministically on Linux by setting
+        // SKIP_UNRS_RESOLVER_FALLBACK=1 and removing the native binding
+        // from node_modules/@unrs/. The simpler integration approach:
+        // construct a synthetic repoRoot where unrs-resolver MUST throw on
+        // load. We approximate by pointing repoRoot at a directory whose
+        // package.json does not resolve unrs-resolver -- the probe should
+        // then push a 'unrs-resolver' failure with MODULE_NOT_FOUND.
+        const os = require("os");
+        const fs = require("fs");
+        const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "resolver-probe-fixture-"));
+        try {
+            // Bare repo: package.json + empty node_modules. No unrs-resolver
+            // installed -> the probe's repoRequire('unrs-resolver') throws
+            // MODULE_NOT_FOUND, which the probe surfaces as a failure with
+            // specifier 'unrs-resolver'.
+            fs.writeFileSync(
+                path.join(tmpRepo, "package.json"),
+                JSON.stringify({ name: "fixture", version: "0.0.0" })
+            );
+            fs.mkdirSync(path.join(tmpRepo, "node_modules"));
+            const result = probeResolverHealth({ repoRoot: tmpRepo });
+            expect(result.ok).toBe(false);
+            const unrsFailure = result.failures.find(
+                (f) => f.specifier === "unrs-resolver"
+            );
+            expect(unrsFailure).toBeTruthy();
+            expect(unrsFailure.error).toMatch(/MODULE_NOT_FOUND|Cannot find module/);
+        } finally {
+            fs.rmSync(tmpRepo, { recursive: true, force: true });
+        }
     });
 });

@@ -392,10 +392,18 @@ describe("generate-skills-index", () => {
             });
 
             expect(result).toBe("formatted in-process");
+            // Use stringMatching with a regex that accepts both POSIX and
+            // Windows separators so the test runs identically on every
+            // platform. The production code uses platform-native path.join,
+            // which emits "\" on Windows and "/" on POSIX.
             expect(loadLocalPrettierFn).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    localPrettierModulePath: expect.stringContaining("node_modules/prettier/index.cjs"),
-                    localPrettierBinPath: expect.stringContaining("node_modules/prettier/bin/prettier.cjs"),
+                    localPrettierModulePath: expect.stringMatching(
+                        /node_modules[\\/]prettier[\\/]index\.cjs$/
+                    ),
+                    localPrettierBinPath: expect.stringMatching(
+                        /node_modules[\\/]prettier[\\/]bin[\\/]prettier\.cjs$/
+                    ),
                 })
             );
             expect(localPrettier.resolveConfig).toHaveBeenCalledWith(

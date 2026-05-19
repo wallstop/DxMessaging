@@ -21,6 +21,18 @@ const {
 } = require("../run-managed-cspell");
 
 describe("run-managed-cspell", () => {
+    // The integrity gate caches its "ok" verdict per-repoRoot to amortize
+    // the resolver-probe subprocess spawn across the managed wrappers in a
+    // single hook. Multiple tests below share the same REPO_ROOT; without
+    // a per-test reset, a previous test's success verdict would
+    // short-circuit later tests' gate-failure assertions.
+    const {
+        __clearIntegrityGateCacheForTests,
+    } = require("../lib/integrity-gate-with-recovery");
+    beforeEach(() => {
+        __clearIntegrityGateCacheForTests();
+    });
+
     test("normalizeVersion strips ^/~ prefixes", () => {
         expect(normalizeVersion("10.0.0")).toBe("10.0.0");
         expect(normalizeVersion("^10.0.0")).toBe("10.0.0");

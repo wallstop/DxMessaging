@@ -105,6 +105,63 @@ function classifyCapturedPath(capturedPath, { repoNodeModules, isolatedCacheRoot
     return PATH_CLASS_UNKNOWN;
 }
 
+/**
+ * Convert any path-like string to POSIX (forward-slash) separators.
+ *
+ * Idempotent on POSIX input. Does NOT resolve or normalize; pure separator
+ * swap. Use for user-facing display strings and for cross-platform string
+ * assertions where the comparison value is known in POSIX form.
+ *
+ * Null / undefined map to the empty string (`""`) so callers can use this
+ * helper inside template literals without paying for runtime type narrowing
+ * AND without leaking the strings `"null"` / `"undefined"` into log output
+ * when the upstream value was unset. Non-null primitives (number, boolean)
+ * are coerced via `String(value)` and then separator-swapped; this keeps
+ * the helper resilient when a caller accidentally hands it a non-string.
+ *
+ * @param {*} value Path-like value (typically a string).
+ * @returns {string} POSIX-separator form; `""` for null / undefined; the
+ *   stringified-and-swapped form for other non-string inputs.
+ */
+function toPosixPath(value) {
+    if (value === null || value === undefined) {
+        return "";
+    }
+    if (typeof value !== "string") {
+        return String(value).replace(/\\/g, "/");
+    }
+    return value.replace(/\\/g, "/");
+}
+
+/**
+ * Repo-relative POSIX form of `absPath`.
+ *
+ * Falls back to the POSIX absolute form (via {@link toPosixPath}) when the
+ * path lives outside `repoRoot` (i.e. `path.relative` returns a parent-
+ * traversal or an absolute path on Windows for cross-drive inputs). Non-
+ * string inputs are returned unchanged.
+ *
+ * Use this helper anywhere a user-facing log line names a path that is
+ * "usually" inside the repo: the relative form is shorter and platform-
+ * agnostic; the absolute fallback is still POSIX-normalized so log scrapers
+ * never see backslashes.
+ *
+ * @param {*} absPath Absolute path-like value (typically a string).
+ * @param {*} repoRoot Absolute repository root path.
+ * @returns {*} POSIX-relative path when inside repo, POSIX-absolute fallback
+ *   otherwise; original value when either input is not a string.
+ */
+function toRepoPosixRelative(absPath, repoRoot) {
+    if (typeof absPath !== "string" || typeof repoRoot !== "string") {
+        return absPath;
+    }
+    const rel = path.relative(repoRoot, absPath);
+    if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+        return toPosixPath(absPath);
+    }
+    return toPosixPath(rel);
+}
+
 module.exports = {
     PATH_CLASS_REPO,
     PATH_CLASS_ISOLATED,
@@ -112,4 +169,6 @@ module.exports = {
     normalizeForPathComparison,
     isPathInsideDirectory,
     classifyCapturedPath,
+    toPosixPath,
+    toRepoPosixRelative,
 };

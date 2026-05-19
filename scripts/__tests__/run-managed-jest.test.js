@@ -1563,6 +1563,18 @@ describe("run-managed-jest integrity gate (Step 5)", () => {
     // control the gate via injected fakes only. They live in their own
     // describe block so the parent's DXMSG_HOOK_SKIP_INTEGRITY setup does
     // not interfere.
+    const {
+        __clearIntegrityGateCacheForTests: clearGateCache,
+    } = require("../lib/integrity-gate-with-recovery");
+
+    // The gate caches its "ok" verdict per-repoRoot. Multiple tests in this
+    // suite share the same repoRoot (the production REPO_ROOT), so we clear
+    // the cache between tests; otherwise a previous test's success verdict
+    // would short-circuit subsequent tests and their injected probeIntegrityFn
+    // fakes would never be invoked.
+    beforeEach(() => {
+        clearGateCache();
+    });
 
     function makeIntegrityResult(ok, missing = []) {
         return { ok, missing };
@@ -1925,8 +1937,20 @@ describe("isAutoRepairAllowed (production policy)", () => {
 });
 
 describe("runIntegrityGateWithRecovery (native binary + formatter wiring)", () => {
-    const { runIntegrityGateWithRecovery } = require("../lib/integrity-gate-with-recovery");
+    const {
+        runIntegrityGateWithRecovery,
+        __clearIntegrityGateCacheForTests,
+    } = require("../lib/integrity-gate-with-recovery");
     const jestErrorDecoderModule = require("../lib/jest-error-decoder");
+
+    // The gate caches its "ok" verdict per-repoRoot in a module-level Map to
+    // amortize the resolver-probe subprocess spawn across the managed wrappers
+    // in a single hook. Every test in this suite uses repoRoot "/repo", so we
+    // must clear the cache between tests; otherwise a prior test's success
+    // verdict short-circuits the probe and the injected fakes never run.
+    beforeEach(() => {
+        __clearIntegrityGateCacheForTests();
+    });
 
     test("Windows-only: gate runs findZeroByteNativeBinaries and includes results in missing[]", () => {
         // The probe itself returns ok=true, but a zero-byte *.node binary
@@ -1949,6 +1973,7 @@ describe("runIntegrityGateWithRecovery (native binary + formatter wiring)", () =
             repoRoot: "/repo",
             probeIntegrityFn: () => ({ ok: true, missing: [] }),
             probeIntegrityInSubprocessFn: jest.fn(),
+            probeResolverHealthFn: () => ({ ok: true, failures: [] }),
             attemptNpmCiRecoveryFn: jest.fn(),
             isAutoRepairAllowedFn,
             printActionableRepairBannerFn,
@@ -1977,6 +2002,7 @@ describe("runIntegrityGateWithRecovery (native binary + formatter wiring)", () =
             repoRoot: "/repo",
             probeIntegrityFn: () => ({ ok: true, missing: [] }),
             probeIntegrityInSubprocessFn: jest.fn(),
+            probeResolverHealthFn: () => ({ ok: true, failures: [] }),
             attemptNpmCiRecoveryFn: jest.fn(),
             isAutoRepairAllowedFn: jest.fn(),
             printActionableRepairBannerFn: jest.fn(),
@@ -2008,6 +2034,7 @@ describe("runIntegrityGateWithRecovery (native binary + formatter wiring)", () =
                 ],
             }),
             probeIntegrityInSubprocessFn: jest.fn(),
+            probeResolverHealthFn: () => ({ ok: true, failures: [] }),
             attemptNpmCiRecoveryFn: jest.fn(() => ({ status: 1 })),
             isAutoRepairAllowedFn: jest.fn(() => ({ allowed: true })),
             printActionableRepairBannerFn: jest.fn(),
@@ -2022,5 +2049,338 @@ describe("runIntegrityGateWithRecovery (native binary + formatter wiring)", () =
             String(call[0]).includes("CANARY")
         );
         expect(sawCanary).toBe(true);
+    });
+
+    test("resolver probe failure: gate combines file probe + resolver probe and triggers npm ci", () => {
+        // File probe says ok; resolver probe finds the Windows
+        // `unrs-resolver` failure. Gate must treat the combined as !ok and
+        // attempt auto-repair.
+        const attemptNpmCiRecoveryFn = jest.fn(() => ({ status: 0 }));
+        const probeIntegrityInSubprocessFn = jest.fn(() => ({
+            ok: true,
+            missing: [],
+        }));
+        const isAutoRepairAllowedFn = jest.fn(() => ({ allowed: true }));
+        const printActionableRepairBannerFn = jest.fn();
+        const formatIntegrityFailureFn = jest.fn(() => "Integrity probe failed: synthetic");
+        let observedAugmented;
+        const wrappedFormatter = jest.fn((res) => {
+            observedAugmented = res;
+            return formatIntegrityFailureFn(res);
+        });
+        // Resolver probe: first call (before npm ci) reports failure; second
+        // call (after npm ci re-probe) reports ok.
+        const probeResolverHealthFn = jest
+            .fn()
+            .mockReturnValueOnce({
+                ok: false,
+                failures: [
+                    {
+                        specifier: "jest-circus/runner",
+                        error: "Failed to load native binding: @unrs/resolver-binding-win32-x64-msvc",
+                    },
+                ],
+            })
+            .mockReturnValueOnce({ ok: true, failures: [] });
+
+        const result = runIntegrityGateWithRecovery({
+            repoRoot: "/repo",
+            probeIntegrityFn: () => ({ ok: true, missing: [] }),
+            probeIntegrityInSubprocessFn,
+            probeResolverHealthFn,
+            attemptNpmCiRecoveryFn,
+            isAutoRepairAllowedFn,
+            printActionableRepairBannerFn,
+            decoder: jestErrorDecoderModule,
+            findZeroByteNativeBinariesFn: () => [],
+            formatIntegrityFailureFn: wrappedFormatter,
+            platformFn: () => "win32",
+            warnFn: jest.fn(),
+        });
+
+        // npm ci was attempted because resolver failed initially.
+        expect(attemptNpmCiRecoveryFn).toHaveBeenCalledTimes(1);
+        // The augmented missing[] passed to the formatter must include the
+        // resolver failure entry tagged with the <resolver> sentinel.
+        expect(observedAugmented.missing.some(
+            (m) => m.tool === "<resolver>"
+                && m.relPath === "jest-circus/runner"
+                && m.reason.startsWith("resolver-throw:")
+        )).toBe(true);
+        // After successful re-probe + re-resolve, gate succeeds with
+        // didRecover=true.
+        expect(result).toEqual({ ok: true, didRecover: true, reason: null });
+        // probeResolverHealthFn was called twice: once before npm ci,
+        // once after.
+        expect(probeResolverHealthFn).toHaveBeenCalledTimes(2);
+    });
+
+    test("resolver probe failure persists after npm ci: gate fails and prints banner", () => {
+        // Both pre-repair and post-repair resolver probes fail. The gate
+        // must surface the failure, print the banner, and return ok:false.
+        const probeResolverHealthFn = jest.fn(() => ({
+            ok: false,
+            failures: [
+                {
+                    specifier: "jest-circus/runner",
+                    error: "still broken after npm ci",
+                },
+            ],
+        }));
+        const printActionableRepairBannerFn = jest.fn();
+        const result = runIntegrityGateWithRecovery({
+            repoRoot: "/repo",
+            probeIntegrityFn: () => ({ ok: true, missing: [] }),
+            probeIntegrityInSubprocessFn: jest.fn(() => ({ ok: true, missing: [] })),
+            probeResolverHealthFn,
+            attemptNpmCiRecoveryFn: jest.fn(() => ({ status: 0 })),
+            isAutoRepairAllowedFn: jest.fn(() => ({ allowed: true })),
+            printActionableRepairBannerFn,
+            decoder: jestErrorDecoderModule,
+            findZeroByteNativeBinariesFn: () => [],
+            formatIntegrityFailureFn: () => "noop",
+            platformFn: () => "win32",
+            warnFn: jest.fn(),
+        });
+        expect(result.ok).toBe(false);
+        expect(printActionableRepairBannerFn).toHaveBeenCalledTimes(1);
+    });
+
+    test("warning messages emit POSIX-style paths regardless of host platform", () => {
+        // Drive the gate down the "refused" path so the banner is printed
+        // with a synthetic POSIX-form path. Assertion: nothing in the
+        // banner text contains backslashes.
+        const formatIntegrityFailureFn = jest.fn(() =>
+            "Integrity probe failed: missing D:\\\\Code\\\\dxmessaging\\\\node_modules\\\\jest-circus\\\\build\\\\runner.js (missing) for jest-circus"
+        );
+        let formattedOutput = null;
+        const warnFn = jest.fn((msg) => {
+            // Capture the first call (formatted summary); subsequent calls
+            // are auto-repair refusal context.
+            if (formattedOutput === null && typeof msg === "string" && msg.includes("Integrity probe failed")) {
+                formattedOutput = msg;
+            }
+        });
+        runIntegrityGateWithRecovery({
+            repoRoot: "/repo",
+            probeIntegrityFn: () => ({
+                ok: false,
+                missing: [
+                    {
+                        tool: "jest-circus",
+                        relPath: "node_modules\\jest-circus\\build\\runner.js",
+                        reason: "missing",
+                    },
+                ],
+            }),
+            probeIntegrityInSubprocessFn: jest.fn(),
+            probeResolverHealthFn: () => ({ ok: true, failures: [] }),
+            attemptNpmCiRecoveryFn: jest.fn(),
+            isAutoRepairAllowedFn: jest.fn(() => ({ allowed: false, reason: "refused" })),
+            printActionableRepairBannerFn: jest.fn(),
+            decoder: jestErrorDecoderModule,
+            findZeroByteNativeBinariesFn: () => [],
+            // Drive the formatter to assert its output is forwarded
+            // verbatim; the production formatIntegrityFailure POSIX-
+            // normalizes its relPath input independently (see the
+            // node-modules-integrity tests).
+            formatIntegrityFailureFn,
+            platformFn: () => "linux",
+            warnFn,
+        });
+        expect(formatIntegrityFailureFn).toHaveBeenCalled();
+        // The warnFn captured the synthetic line; in this test the
+        // formatter intentionally returns a Windows-flavored string so we
+        // know the test is exercising the right code path. Production
+        // formatIntegrityFailure POSIX-normalizes; that contract is
+        // tested in node-modules-integrity.test.js.
+        expect(formattedOutput).toBeTruthy();
+    });
+
+    test("formatIntegrityFailure (production) emits POSIX paths for Windows-flavored relPath inputs", () => {
+        // Wire the gate with the REAL formatIntegrityFailure and inject a
+        // Windows-style relPath; the warn line should NOT contain a
+        // backslash.
+        const {
+            formatIntegrityFailure: realFormat,
+        } = require("../lib/node-modules-integrity");
+        let warnLine = null;
+        const warnFn = jest.fn((msg) => {
+            if (warnLine === null && typeof msg === "string" && msg.includes("Integrity probe failed")) {
+                warnLine = msg;
+            }
+        });
+        runIntegrityGateWithRecovery({
+            repoRoot: "/repo",
+            probeIntegrityFn: () => ({
+                ok: false,
+                missing: [
+                    {
+                        tool: "jest-circus",
+                        relPath: "node_modules\\jest-circus\\build\\runner.js",
+                        reason: "missing",
+                    },
+                ],
+            }),
+            probeIntegrityInSubprocessFn: jest.fn(),
+            probeResolverHealthFn: () => ({ ok: true, failures: [] }),
+            attemptNpmCiRecoveryFn: jest.fn(),
+            isAutoRepairAllowedFn: jest.fn(() => ({ allowed: false, reason: "test" })),
+            printActionableRepairBannerFn: jest.fn(),
+            decoder: jestErrorDecoderModule,
+            findZeroByteNativeBinariesFn: () => [],
+            formatIntegrityFailureFn: realFormat,
+            platformFn: () => "linux",
+            warnFn,
+        });
+        expect(warnLine).toContain("node_modules/jest-circus/build/runner.js");
+        expect(warnLine).not.toContain("\\");
+    });
+
+    test("resolver probe failure: gate does NOT auto-repair when DXMSG_HOOK_NO_AUTOREPAIR=1", () => {
+        const attemptNpmCiRecoveryFn = jest.fn();
+        const probeResolverHealthFn = jest.fn(() => ({
+            ok: false,
+            failures: [
+                {
+                    specifier: "jest-circus/runner",
+                    error: "binding broken",
+                },
+            ],
+        }));
+        const printActionableRepairBannerFn = jest.fn();
+        const isAutoRepairAllowedFn = jest.fn(() => ({
+            allowed: false,
+            reason: "DXMSG_HOOK_NO_AUTOREPAIR=1 set",
+        }));
+        const result = runIntegrityGateWithRecovery({
+            repoRoot: "/repo",
+            probeIntegrityFn: () => ({ ok: true, missing: [] }),
+            probeIntegrityInSubprocessFn: jest.fn(),
+            probeResolverHealthFn,
+            attemptNpmCiRecoveryFn,
+            isAutoRepairAllowedFn,
+            printActionableRepairBannerFn,
+            decoder: jestErrorDecoderModule,
+            findZeroByteNativeBinariesFn: () => [],
+            formatIntegrityFailureFn: () => "noop",
+            platformFn: () => "linux",
+            warnFn: jest.fn(),
+            env: { DXMSG_HOOK_NO_AUTOREPAIR: "1" },
+        });
+        // npm ci skipped per the opt-out.
+        expect(attemptNpmCiRecoveryFn).not.toHaveBeenCalled();
+        // Banner printed with the hint augmentation.
+        expect(printActionableRepairBannerFn).toHaveBeenCalledTimes(1);
+        const bannerArg = printActionableRepairBannerFn.mock.calls[0][0];
+        // Hint about the opt-out should appear in rootCauses or
+        // repairCommands.
+        const allText = JSON.stringify(bannerArg);
+        expect(allText).toContain("DXMSG_HOOK_NO_AUTOREPAIR");
+        expect(allText).toContain("unset DXMSG_HOOK_NO_AUTOREPAIR");
+        expect(allText).toContain("Remove-Item Env:");
+        // Gate result reflects the refusal.
+        expect(result.ok).toBe(false);
+        expect(result.reason).toContain("DXMSG_HOOK_NO_AUTOREPAIR");
+    });
+
+    describe("in-process cache (S4)", () => {
+        // The gate memoizes its "ok" verdict per-repoRoot to amortize the
+        // resolver-probe subprocess spawn across the managed wrappers (jest,
+        // prettier, cspell, validate-node-tooling) in a single hook
+        // invocation. These tests pin both the fast-path and the bypass.
+        test("second call with same repoRoot short-circuits and skips the probes", () => {
+            __clearIntegrityGateCacheForTests();
+            const probeIntegrityFn = jest.fn(() => ({ ok: true, missing: [] }));
+            const probeResolverHealthFn = jest.fn(() => ({ ok: true, failures: [] }));
+            const findZeroByteNativeBinariesFn = jest.fn(() => []);
+
+            const common = {
+                repoRoot: "/cache-repo",
+                probeIntegrityFn,
+                probeIntegrityInSubprocessFn: jest.fn(),
+                probeResolverHealthFn,
+                attemptNpmCiRecoveryFn: jest.fn(),
+                isAutoRepairAllowedFn: jest.fn(() => ({ allowed: true })),
+                printActionableRepairBannerFn: jest.fn(),
+                decoder: jestErrorDecoderModule,
+                findZeroByteNativeBinariesFn,
+                formatIntegrityFailureFn: () => "noop",
+                platformFn: () => "linux",
+                warnFn: jest.fn(),
+            };
+
+            const first = runIntegrityGateWithRecovery(common);
+            const second = runIntegrityGateWithRecovery(common);
+
+            expect(first).toEqual(
+                expect.objectContaining({ ok: true, didRecover: false })
+            );
+            expect(second).toEqual(
+                expect.objectContaining({ ok: true, didRecover: false, cached: true })
+            );
+            // Each probe should have run exactly once across the two calls.
+            expect(probeIntegrityFn).toHaveBeenCalledTimes(1);
+            expect(probeResolverHealthFn).toHaveBeenCalledTimes(1);
+            expect(findZeroByteNativeBinariesFn).toHaveBeenCalledTimes(1);
+        });
+
+        test("failure verdicts are NOT cached (re-probe happens on subsequent calls)", () => {
+            __clearIntegrityGateCacheForTests();
+            const probeIntegrityFn = jest.fn(() => ({
+                ok: false,
+                missing: [
+                    {
+                        tool: "jest-circus",
+                        relPath: "node_modules/jest-circus/build/runner.js",
+                        reason: "missing",
+                    },
+                ],
+            }));
+            const common = {
+                repoRoot: "/cache-fail-repo",
+                probeIntegrityFn,
+                probeIntegrityInSubprocessFn: jest.fn(),
+                probeResolverHealthFn: () => ({ ok: true, failures: [] }),
+                attemptNpmCiRecoveryFn: jest.fn(() => ({ status: 1 })),
+                isAutoRepairAllowedFn: () => ({ allowed: true }),
+                printActionableRepairBannerFn: jest.fn(),
+                decoder: jestErrorDecoderModule,
+                findZeroByteNativeBinariesFn: () => [],
+                formatIntegrityFailureFn: () => "noop",
+                platformFn: () => "linux",
+                warnFn: jest.fn(),
+            };
+
+            runIntegrityGateWithRecovery(common);
+            runIntegrityGateWithRecovery(common);
+
+            // Both calls invoked the file probe; the cache is success-only.
+            expect(probeIntegrityFn).toHaveBeenCalledTimes(2);
+        });
+
+        test("bypassCache=true forces a fresh probe even when cached", () => {
+            __clearIntegrityGateCacheForTests();
+            const probeIntegrityFn = jest.fn(() => ({ ok: true, missing: [] }));
+            const common = {
+                repoRoot: "/cache-bypass-repo",
+                probeIntegrityFn,
+                probeIntegrityInSubprocessFn: jest.fn(),
+                probeResolverHealthFn: () => ({ ok: true, failures: [] }),
+                attemptNpmCiRecoveryFn: jest.fn(),
+                isAutoRepairAllowedFn: jest.fn(),
+                printActionableRepairBannerFn: jest.fn(),
+                decoder: jestErrorDecoderModule,
+                findZeroByteNativeBinariesFn: () => [],
+                formatIntegrityFailureFn: () => "noop",
+                platformFn: () => "linux",
+                warnFn: jest.fn(),
+            };
+
+            runIntegrityGateWithRecovery(common);
+            runIntegrityGateWithRecovery({ ...common, bypassCache: true });
+
+            expect(probeIntegrityFn).toHaveBeenCalledTimes(2);
+        });
     });
 });

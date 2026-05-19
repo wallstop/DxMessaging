@@ -2,9 +2,9 @@
 title: "Integrity Gate Robustness"
 id: "integrity-gate-robustness"
 category: "scripting"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-05-18"
-updated: "2026-05-18"
+updated: "2026-05-19"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -121,34 +121,16 @@ the on-disk critical-file list BEFORE Jest is invoked and calling
 ## State diagram
 
 ```text
-   start
-     |
-     v
-+---------+         ok=true
-| probe   | ---------------------> proceed to tier dispatch
-| integ.  |
-+---------+
-     | ok=false
-     v
-+--------------+    refused
-| auto-repair  | ---------------> print banner; status=1
-| allowed?     |   (or degraded
-+--------------+    if NO_AUTOREPAIR=1)
-     | allowed
-     v
-+-------------+    fail
-| npm ci      | ----------------> print banner; status=1
-| recovery    |
-+-------------+
-     | status=0
-     v
-+--------------+    ok=true
-| subprocess   | ----------------> proceed to tier dispatch
-| re-probe     |
-+--------------+
-     | ok=false
-     v
-   print banner; status=1
+probe --(ok)----------------------> tier dispatch
+  |
+  (fail) -> auto-repair-allowed?
+              |
+              (refused / NO_AUTOREPAIR=1) -> banner + status=1 (or degraded)
+              |
+              (allowed) -> npm ci -> subprocess re-probe
+                                       |
+                                       (ok)   -> tier dispatch
+                                       (fail) -> banner + status=1
 ```
 
 After the gate succeeds (initial probe or recovery), the wrapper
@@ -211,6 +193,96 @@ native module crashing the parent process. The gate concatenates any
 offenders to `missing[]` with `tool: "<native-binding>"`,
 `reason: "zero-byte"` so the same downstream banner flow applies.
 
+## Resolver probe
+
+The file-only integrity probe is blind to the failure mode where
+`node_modules/jest-circus/build/runner.js` is present on disk (probe OK)
+but `require.resolve('jest-circus/runner')` THROWS at runtime. The
+canonical Windows trigger is a missing or broken
+`@unrs/resolver-binding-win32-x64-msvc` native binding: the JS file is
+fine but the resolver chain cannot find it because the native binding
+that backs `unrs-resolver` failed to load.
+
+`probeResolverHealth({ repoRoot })` (in
+`scripts/lib/node-modules-integrity.js`) closes that gap. It spawns a
+fresh Node subprocess and runs a layered probe:
+
+1. `require("unrs-resolver")` from the repo (falls back to
+   `require("jest-resolve")` which transitively pulls it in). Throws at
+   module load when the native binding is broken.
+1. `new ResolverFactory({}).sync(repoRoot, spec)` for each
+   `DEFAULT_RESOLVER_SPECIFIERS` entry (currently
+   `["jest-circus/runner"]`). A half-loaded binding can survive
+   `require()` but throw here.
+1. `Module.createRequire(repoRoot/package.json).resolve(spec)` -- legacy
+   belt-and-suspenders that catches missing peer deps and broken
+   `exports` maps the unrs-resolver layers do not surface as cleanly.
+
+Throws are reported as `{ specifier, error }` and merged into
+`missing[]` with `tool: "<resolver>"`; the same `npm ci` recovery
+path applies. After `npm ci`, the gate re-runs `probeResolverHealth`
+(subprocess freshness is owned by that function). A contract test in
+`scripts/__tests__/node-modules-integrity.test.js` pins the literal
+`unrs-resolver` token in the inline script source so a future refactor
+cannot regress this probe to Node-only resolution.
+
+## Gate caching
+
+`runIntegrityGateWithRecovery` memoizes its success verdict
+per-repoRoot in a module-level `Map` for the lifetime of the parent
+Node process. This amortizes the resolver-probe subprocess spawn
+across the managed wrappers (`run-managed-jest`,
+`run-managed-prettier`, `run-managed-cspell`) in a single hook: only
+the first wrapper pays the spawn cost. Failure verdicts are NOT cached
+because they carry side effects the next caller must observe fresh.
+Tests use `__clearIntegrityGateCacheForTests()` to reset between cases.
+
+## Cross-platform path-separator policy
+
+User-facing log lines (`warnFn`, `console.warn`, `console.error`) in
+the integrity-gate / managed-Jest code must emit POSIX-separator paths
+even on Windows. The helpers live in
+`scripts/lib/path-classifier.js`:
+
+- `toPosixPath(value)` -- pure separator swap (`\` -> `/`). Idempotent
+  on POSIX input. Maps `null` / `undefined` to `""` (no `"undefined"`
+  leak in log lines); coerces other non-string primitives via
+  `String(value)` and then swaps separators. Safe to use inside
+  template literals without runtime type narrowing.
+- `toRepoPosixRelative(absPath, repoRoot)` -- POSIX-relative when
+  `absPath` lives under `repoRoot`; POSIX-absolute (via `toPosixPath`)
+  fallback otherwise.
+
+The contract is enforced by
+`scripts/__tests__/cross-platform-path-handling.test.js`, which walks
+the integrity-gate / managed-Jest source files and fails if any
+`warnFn`/`console.warn`/`console.error` interpolation of a path-like
+identifier (`*Path`, `*Dir`, `*Root`) is not wrapped in `toPosixPath` or
+`toRepoPosixRelative`. The scope is scoped to the call sites that
+participate in pre-push integrity recovery; widening the scope is a
+deliberate addition to `SCAN_FILES` in that test.
+
+`formatIntegrityFailure` (in `scripts/lib/node-modules-integrity.js`)
+POSIX-normalizes its `relPath` input before formatting, so any caller
+that records a backslash-flavored relPath in `missing[]` still produces
+a uniform single-line summary across platforms.
+
+## DXMSG_HOOK_NO_AUTOREPAIR interaction
+
+When `DXMSG_HOOK_NO_AUTOREPAIR=1` is set, the gate still probes
+(file + resolver health). On failure, it short-circuits BEFORE `npm ci`
+and prints the repair banner with an extra root cause
+("auto-repair disabled by DXMSG_HOOK_NO_AUTOREPAIR=1 (operator
+override)") plus two `Either:`-prefixed unset alternatives:
+
+- POSIX: `unset DXMSG_HOOK_NO_AUTOREPAIR`
+- PowerShell: `Remove-Item Env:\DXMSG_HOOK_NO_AUTOREPAIR`
+
+The `Either:` prefix distinguishes the POSIX-or-PowerShell alternatives
+from the numbered sequential repair steps that precede them. Tier
+dispatch then proceeds in degraded mode so the underlying tool surfaces
+its own final error.
+
 ## See Also
 
 - [Jest Hook Robustness](./jest-hook-robustness.md) -- the
@@ -220,6 +292,7 @@ offenders to `missing[]` with `tool: "<native-binding>"`,
 
 ## Changelog
 
-| Version | Date       | Changes                                                                                  |
-| ------- | ---------- | ---------------------------------------------------------------------------------------- |
-| 1.0.0   | 2026-05-18 | Initial split-off from `jest-hook-robustness.md`; documents the gate and auto-repair UX. |
+| Version | Date       | Changes                                                                                                                                       |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0.0   | 2026-05-18 | Initial split-off from `jest-hook-robustness.md`; documents the gate and auto-repair UX.                                                      |
+| 1.1.0   | 2026-05-19 | Add resolver probe, cross-platform path-separator policy + contract test, and DXMSG_HOOK_NO_AUTOREPAIR banner hint with shell-specific unset. |

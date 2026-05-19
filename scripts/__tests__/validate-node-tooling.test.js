@@ -8,6 +8,7 @@ const {
   validateManagedNpxPolicy,
   validateTooling
 } = require("../validate-node-tooling");
+const { toPosixPath } = require("../lib/path-classifier");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 
@@ -252,7 +253,10 @@ describe("validate-node-tooling", () => {
     // failure mode (`testRunner option was not found`) - bin/jest.js present
     // but build/runner.js missing - as a violation.
     const violations = await validateTooling({
-      existsSyncFn: (abs) => !abs.endsWith("runner.js"),
+      // POSIX-normalize the absolute path before substring comparison so the
+      // fixture behaves identically on Windows (where path.join uses "\")
+      // and on POSIX.
+      existsSyncFn: (abs) => !toPosixPath(abs).endsWith("runner.js"),
       statSyncFn: () => ({ size: 100 }),
       requireFn: () => ({}),
       importFn: async () => ({}),
@@ -272,7 +276,9 @@ describe("validate-node-tooling", () => {
     const violations = await validateTooling({
       existsSyncFn: () => true,
       statSyncFn: (abs) =>
-        abs.endsWith("prettier/index.cjs") ? { size: 0 } : { size: 100 },
+        // POSIX-normalize the absolute path before substring comparison so
+        // the fixture is platform-agnostic.
+        toPosixPath(abs).endsWith("prettier/index.cjs") ? { size: 0 } : { size: 100 },
       requireFn: () => ({}),
       importFn: async () => ({}),
       resolveModuleFn: () => "/repo/node_modules/jest-circus/build/runner.js",

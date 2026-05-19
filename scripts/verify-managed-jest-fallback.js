@@ -4,6 +4,8 @@
 const fs = require("fs");
 const path = require("path");
 
+const { toPosixPath } = require("./lib/path-classifier");
+
 const FORCE_DELETE_FLAG = "--force-delete-managed-runner";
 
 function resolveManagedRunnerPath(moduleResolver = require.resolve) {
@@ -33,7 +35,7 @@ function isManagedRunnerPathSafe(runnerPath, { pathModule = path } = {}) {
 function assertManagedRunnerPathSafe(runnerPath, { pathModule = path } = {}) {
     if (!isManagedRunnerPathSafe(runnerPath, { pathModule })) {
         throw new Error(
-            `Refusing to delete unexpected runner path outside managed jest-circus target: ${runnerPath}`
+            `Refusing to delete unexpected runner path outside managed jest-circus target: ${toPosixPath(runnerPath)}`
         );
     }
 }
@@ -53,7 +55,7 @@ function removeManagedRunner(
 ) {
     assertManagedRunnerPathSafe(runnerPath, { pathModule });
 
-    logFn(`Deleting managed Jest runner: ${runnerPath}`);
+    logFn(`Deleting managed Jest runner: ${toPosixPath(runnerPath)}`);
 
     if (!existsSyncFn(runnerPath)) {
         throw new Error("Runner path does not exist before deletion.");

@@ -19,6 +19,18 @@ const {
 } = require("../run-managed-prettier");
 
 describe("run-managed-prettier", () => {
+    // The integrity gate caches its "ok" verdict per-repoRoot to amortize
+    // the resolver-probe subprocess spawn across the managed wrappers in a
+    // single hook. Tests below that exercise the gate share the same
+    // REPO_ROOT; without a per-test reset, a previous test's success
+    // verdict would short-circuit later tests' gate-failure assertions.
+    const {
+        __clearIntegrityGateCacheForTests,
+    } = require("../lib/integrity-gate-with-recovery");
+    beforeEach(() => {
+        __clearIntegrityGateCacheForTests();
+    });
+
     afterEach(() => {
         jest.restoreAllMocks();
     });

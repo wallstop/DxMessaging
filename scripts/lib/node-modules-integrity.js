@@ -378,6 +378,10 @@ function findZeroByteNativeBinaries(options = {}) {
 /**
  * Render a single-line summary of an integrity probe failure.
  *
+ * All `relPath` values are emitted with POSIX separators so log output is
+ * identical across Windows, macOS, and Linux. Cross-platform string
+ * assertions in tests can therefore match a single, platform-agnostic form.
+ *
  * @param {{ok: boolean, missing: Array<{tool: string, relPath: string, reason: string}>}} result
  * @returns {string}
  */
@@ -388,13 +392,255 @@ function formatIntegrityFailure(result) {
     const first = result.missing[0];
     const remaining = result.missing.length - 1;
     const tail = remaining > 0 ? `; ${remaining} more` : "";
-    return `Integrity probe failed: missing ${first.relPath} (${first.reason}) for ${first.tool}${tail}`;
+    const relPathPosix = typeof first.relPath === "string"
+        ? first.relPath.replace(/\\/g, "/")
+        : first.relPath;
+    return `Integrity probe failed: missing ${relPathPosix} (${first.reason}) for ${first.tool}${tail}`;
+}
+
+/**
+ * Critical resolver entries that MUST resolve via require.resolve from the
+ * repository root. The file-based integrity probe checks that these files
+ * are present on disk; this list is what the resolver-health probe asks
+ * Node's actual resolver to find at runtime.
+ *
+ * Why a separate list from INTEGRITY_TARGETS:
+ *   - INTEGRITY_TARGETS pins exact relative file paths under node_modules.
+ *   - The resolver chain depends on additional metadata (package.json
+ *     "exports", platform-specific native bindings) that the file probe
+ *     cannot evaluate. The Windows failure mode that motivated this probe
+ *     is: jest-circus/build/runner.js IS present on disk (file probe OK),
+ *     but `require.resolve('jest-circus/runner')` THROWS because the
+ *     `@unrs/resolver-binding-win32-x64-msvc` native binding is missing
+ *     or broken.
+ *   - jest-circus/runner is the canonical specifier because it is the
+ *     deepest, most-load-bearing entry; if it resolves cleanly, every
+ *     intermediate package resolves too.
+ */
+const DEFAULT_RESOLVER_SPECIFIERS = Object.freeze(["jest-circus/runner"]);
+
+/**
+ * Spawn a fresh Node subprocess that EXERCISES the unrs-resolver native
+ * binding the same way jest-resolve will at test-runner startup, then
+ * additionally runs Node's own `require.resolve` for each critical specifier.
+ * Returns `{ ok, failures: [{ specifier, error }] }`.
+ *
+ * The probe is layered intentionally so a healthy file tree but a broken
+ * native binding still fails the gate:
+ *
+ *   - LAYER 1: `require("unrs-resolver")` from the repo. On Windows when
+ *     `@unrs/resolver-binding-win32-x64-msvc` is missing or partially
+ *     extracted, napi-postinstall's loader throws at module load. If
+ *     unrs-resolver is unreachable from this repo's tree, the script falls
+ *     back to `require("jest-resolve")`, which transitively requires
+ *     unrs-resolver and triggers the same failure surface.
+ *   - LAYER 2: `new ResolverFactory({}).sync(repoRoot, "jest-circus/runner")`.
+ *     Verified against `node_modules/unrs-resolver/index.d.ts`: the exported
+ *     class is `ResolverFactory` with a `sync(directory, request)` method.
+ *     `jest-resolve/build/index.js` uses the same shape (see lines 114, 172).
+ *     A half-loaded native binding sometimes survives `require()` but throws
+ *     here when the JS side instantiates the factory or calls into native.
+ *   - LAYER 3: existing Node-resolver `require.resolve(spec)` checks. Kept
+ *     belt-and-suspenders because they catch a different failure mode
+ *     (missing peer dep, broken `exports` map) that the unrs-resolver layers
+ *     do not surface as cleanly.
+ *
+ * Why a subprocess: like {@link probeIntegrityInSubprocess}, a fresh Node
+ * process starts with a clean module + native-binding cache. Probing from
+ * the parent risks false positives (loaded cached binding) and false
+ * negatives (parent already crashed loading the same binding).
+ *
+ * The subprocess writes a single JSON document to stdout. The parent never
+ * runs the user's code via `eval` — it only spawns a strict-mode Node
+ * runtime with a hand-rolled inline script whose body is fully under our
+ * control. Inputs (`repoRoot`, `specifiers`) flow through `JSON.stringify`
+ * so backslashes and embedded quotes are escape-safe on Windows.
+ *
+ * @param {object} [options]
+ * @param {string} options.repoRoot Absolute path to the repository root.
+ * @param {string} [options.execPath] Node executable to spawn. Defaults to
+ *   process.execPath.
+ * @param {Function} [options.spawnSyncFn] Override child_process.spawnSync
+ *   (for tests).
+ * @param {string[]} [options.specifiers] Resolver specifiers to probe.
+ *   Defaults to {@link DEFAULT_RESOLVER_SPECIFIERS}.
+ * @returns {{ok: boolean, failures: Array<{specifier: string, error: string}>}}
+ *   On any subprocess malfunction (non-zero exit, malformed stdout,
+ *   missing stdout), returns `{ ok: false, failures: [{ specifier:
+ *   "<subprocess>", error: ... }] }` so callers can treat it uniformly with
+ *   real resolver failures.
+ */
+function probeResolverHealth(options = {}) {
+    const {
+        repoRoot,
+        execPath = process.execPath,
+        spawnSyncFn = childProcess.spawnSync,
+        specifiers = DEFAULT_RESOLVER_SPECIFIERS,
+    } = options;
+
+    if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+        throw new TypeError("probeResolverHealth requires options.repoRoot (string)");
+    }
+
+    // Hand-rolled inline script. The parent fully controls every byte; all
+    // dynamic values are routed through JSON.stringify so a malicious
+    // repoRoot or specifier cannot inject code.
+    //
+    // Layered probe (see function JSDoc for the rationale):
+    //   1. require("unrs-resolver") to trigger napi-postinstall's native
+    //      binding load. Falls back to require("jest-resolve") if
+    //      unrs-resolver is not directly reachable from the repo tree.
+    //   2. Instantiate ResolverFactory and call .sync() to exercise the
+    //      native binding's actual entry points (a half-loaded binding can
+    //      survive require but throw here).
+    //   3. Node's createRequire(...).resolve(spec) as the legacy fallback.
+    //
+    // The literal "unrs-resolver" token in this script body is asserted by
+    // the policy test in node-modules-integrity.test.js so a refactor cannot
+    // silently regress this probe to Node-only resolution.
+    const inlineScript =
+        '"use strict";\n' +
+        "const Module = require('module');\n" +
+        "const path = require('path');\n" +
+        "const repoRoot = " + JSON.stringify(repoRoot) + ";\n" +
+        "const repoRequire = Module.createRequire(path.join(repoRoot, 'package.json'));\n" +
+        "const specifiers = " + JSON.stringify(specifiers) + ";\n" +
+        "const failures = [];\n" +
+        "function describeError(e) {\n" +
+        "  if (!e) return 'unknown';\n" +
+        "  const code = e.code ? e.code + ': ' : '';\n" +
+        "  return code + (e.message || String(e));\n" +
+        "}\n" +
+        "// LAYER 1: force-load unrs-resolver. On Windows with a broken\n" +
+        "// @unrs/resolver-binding-* native binding, this throws at module\n" +
+        "// load time (napi-postinstall's loader surfaces the underlying\n" +
+        "// MODULE_NOT_FOUND or load error here).\n" +
+        "//\n" +
+        "// If unrs-resolver itself cannot be located (MODULE_NOT_FOUND for the\n" +
+        "// JS file, not for the native binding), we additionally try to load\n" +
+        "// jest-resolve, which transitively requires unrs-resolver. That path\n" +
+        "// catches the failure surface even in a repo whose direct dependency\n" +
+        "// tree does not list unrs-resolver. In either case, a failure to load\n" +
+        "// IS a probe failure and is always recorded.\n" +
+        "let unrsModule = null;\n" +
+        "let unrsLoadVia = 'unrs-resolver';\n" +
+        "let unrsLoadOk = false;\n" +
+        "try {\n" +
+        "  unrsModule = repoRequire('unrs-resolver');\n" +
+        "  unrsLoadOk = true;\n" +
+        "} catch (primaryErr) {\n" +
+        "  failures.push({ specifier: 'unrs-resolver', error: describeError(primaryErr) });\n" +
+        "  // Probe via jest-resolve as a secondary signal: if it ALSO\n" +
+        "  // throws, we learn the failure is reproducible through the\n" +
+        "  // jest-resolve load chain too; if it succeeds, the failure is\n" +
+        "  // confined to the direct unrs-resolver entrypoint.\n" +
+        "  try {\n" +
+        "    repoRequire('jest-resolve');\n" +
+        "    unrsLoadVia = 'jest-resolve (transitive unrs-resolver)';\n" +
+        "  } catch (fallbackErr) {\n" +
+        "    failures.push({ specifier: 'jest-resolve', error: describeError(fallbackErr) });\n" +
+        "  }\n" +
+        "}\n" +
+        "// LAYER 2: actually instantiate ResolverFactory and exercise sync().\n" +
+        "if (unrsModule && typeof unrsModule.ResolverFactory === 'function') {\n" +
+        "  let factory = null;\n" +
+        "  try {\n" +
+        "    factory = new unrsModule.ResolverFactory({});\n" +
+        "  } catch (factoryErr) {\n" +
+        "    failures.push({\n" +
+        "      specifier: 'unrs-resolver(' + unrsLoadVia + ')',\n" +
+        "      error: 'ResolverFactory ctor failed: ' + describeError(factoryErr)\n" +
+        "    });\n" +
+        "  }\n" +
+        "  if (factory) {\n" +
+        "    for (const spec of specifiers) {\n" +
+        "      try { factory.sync(repoRoot, spec); }\n" +
+        "      catch (resolveErr) {\n" +
+        "        failures.push({ specifier: 'unrs-resolver:' + spec, error: describeError(resolveErr) });\n" +
+        "      }\n" +
+        "    }\n" +
+        "  }\n" +
+        "}\n" +
+        "// LAYER 3: legacy Node-resolver probe (different failure modes).\n" +
+        "for (const spec of specifiers) {\n" +
+        "  try { repoRequire.resolve(spec); }\n" +
+        "  catch (e) { failures.push({ specifier: spec, error: describeError(e) }); }\n" +
+        "}\n" +
+        "process.stdout.write(JSON.stringify({ ok: failures.length === 0, failures }));\n";
+
+    let spawnResult;
+    try {
+        spawnResult = spawnSyncFn(execPath, ["-e", inlineScript], {
+            cwd: repoRoot,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+    } catch (spawnError) {
+        const detail = spawnError && spawnError.message ? spawnError.message : String(spawnError);
+        return {
+            ok: false,
+            failures: [{ specifier: "<subprocess>", error: "spawn threw: " + detail }],
+        };
+    }
+
+    if (!spawnResult) {
+        return {
+            ok: false,
+            failures: [{ specifier: "<subprocess>", error: "spawn returned null" }],
+        };
+    }
+    if (spawnResult.error) {
+        const detail = spawnResult.error.message || String(spawnResult.error);
+        return {
+            ok: false,
+            failures: [{ specifier: "<subprocess>", error: "spawn errored: " + detail }],
+        };
+    }
+    if (spawnResult.status !== 0) {
+        const stderrText = typeof spawnResult.stderr === "string"
+            ? spawnResult.stderr.trim().slice(0, 200)
+            : "";
+        return {
+            ok: false,
+            failures: [{
+                specifier: "<subprocess>",
+                error: "exit=" + spawnResult.status + (stderrText ? "; stderr=" + stderrText : ""),
+            }],
+        };
+    }
+
+    const stdoutText = typeof spawnResult.stdout === "string" ? spawnResult.stdout : "";
+    if (stdoutText.length === 0) {
+        return {
+            ok: false,
+            failures: [{ specifier: "<subprocess>", error: "empty stdout from probe" }],
+        };
+    }
+
+    try {
+        const parsed = JSON.parse(stdoutText);
+        if (!parsed || typeof parsed.ok !== "boolean" || !Array.isArray(parsed.failures)) {
+            throw new Error("subprocess returned malformed shape");
+        }
+        return { ok: parsed.ok, failures: parsed.failures };
+    } catch (parseError) {
+        const detail = parseError && parseError.message ? parseError.message : String(parseError);
+        return {
+            ok: false,
+            failures: [{
+                specifier: "<subprocess>",
+                error: "malformed probe output: " + detail,
+            }],
+        };
+    }
 }
 
 module.exports = {
     INTEGRITY_TARGETS,
+    DEFAULT_RESOLVER_SPECIFIERS,
     probeIntegrity,
     probeIntegrityInSubprocess,
     findZeroByteNativeBinaries,
     formatIntegrityFailure,
+    probeResolverHealth,
 };

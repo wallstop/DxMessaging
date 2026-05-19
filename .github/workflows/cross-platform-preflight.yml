@@ -1,0 +1,103 @@
+name: Cross-platform preflight
+
+# Catches Windows-only regressions in the managed-Jest / integrity-gate /
+# resolver-probe code paths that motivated the path-separator and resolver-
+# health hardening. Runs the same preflight the developer runs locally
+# (npm run preflight:pre-push) on every supported OS so a path-separator
+# regression in a test or a resolver-binding failure cannot reach master
+# unobserved. See .llm/skills/scripting/integrity-gate-robustness.md for the
+# class-of-failure context.
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - ".pre-commit-config.yaml"
+      - "scripts/**"
+      - ".llm/**"
+      - ".github/workflows/cross-platform-preflight.yml"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "package.json"
+      - ".pre-commit-config.yaml"
+      - "scripts/**"
+      - ".llm/**"
+      - ".github/workflows/cross-platform-preflight.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cross-platform-preflight-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Preflight (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.18.0"
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Node dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm i --no-audit --no-fund
+          fi
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      - name: Install pre-commit hooks
+        run: pre-commit install --install-hooks
+
+      - name: Run path-separator + resolver-health regression suite
+        # Targeted Jest run: these are the tests that regression-proof the
+        # class of failures fixed in this branch. Keeping them as a first,
+        # dedicated step makes a CI failure immediately point at the right
+        # skill (integrity-gate-robustness) without hunting through a long
+        # combined log.
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/run-managed-jest.js --runTestsByPath \
+            scripts/__tests__/path-classifier.test.js \
+            scripts/__tests__/cross-platform-path-handling.test.js \
+            scripts/__tests__/node-modules-integrity.test.js \
+            scripts/__tests__/run-managed-jest.test.js
+
+      - name: Run pre-push preflight
+        shell: bash
+        run: npm run preflight:pre-push

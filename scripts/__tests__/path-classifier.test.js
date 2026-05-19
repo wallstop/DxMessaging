@@ -21,6 +21,8 @@ const {
     normalizeForPathComparison,
     isPathInsideDirectory,
     classifyCapturedPath,
+    toPosixPath,
+    toRepoPosixRelative,
 } = require("../lib/path-classifier");
 
 describe("normalizeForPathComparison", () => {
@@ -168,5 +170,85 @@ describe("re-export through run-managed-jest", () => {
             normalizeForPathComparison(__dirname)
         );
         expect(wrapper.isPathInsideDirectory(__filename, __dirname)).toBe(true);
+    });
+
+    test("scripts/run-managed-jest.js re-exports toPosixPath and toRepoPosixRelative", () => {
+        const wrapper = require("../run-managed-jest");
+        expect(typeof wrapper.toPosixPath).toBe("function");
+        expect(typeof wrapper.toRepoPosixRelative).toBe("function");
+        expect(wrapper.toPosixPath("a\\b\\c")).toBe("a/b/c");
+    });
+});
+
+describe("toPosixPath", () => {
+    test("converts Windows-style backslashes to forward slashes", () => {
+        expect(toPosixPath("D:\\Code\\foo\\bar.js")).toBe("D:/Code/foo/bar.js");
+    });
+
+    test("is idempotent on POSIX input", () => {
+        expect(toPosixPath("/usr/local/bin")).toBe("/usr/local/bin");
+        expect(toPosixPath("a/b/c")).toBe("a/b/c");
+        expect(toPosixPath(toPosixPath("a\\b\\c"))).toBe("a/b/c");
+    });
+
+    test("returns empty string for null / undefined (no 'undefined' leak)", () => {
+        // Regression: when this helper was inlined into warnFn/console.warn
+        // template literals, returning the original undefined produced the
+        // literal string "undefined" in log output. Mapping to "" keeps the
+        // interpolation safe even when the upstream value was unset.
+        expect(toPosixPath(null)).toBe("");
+        expect(toPosixPath(undefined)).toBe("");
+        expect(`runner ${toPosixPath(undefined)}`).toBe("runner ");
+        expect(`runner ${toPosixPath(null)}`).toBe("runner ");
+    });
+
+    test("coerces non-null primitives via String() with separator swap", () => {
+        expect(toPosixPath(42)).toBe("42");
+        expect(toPosixPath(true)).toBe("true");
+        // Object coercion goes through Object#toString -> "[object Object]";
+        // no backslashes there, so the result is the coerced string verbatim.
+        expect(toPosixPath({ a: 1 })).toBe("[object Object]");
+    });
+
+    test("handles mixed-separator input", () => {
+        expect(toPosixPath("a\\b/c\\d")).toBe("a/b/c/d");
+    });
+
+    test("returns empty string unchanged (no separators present)", () => {
+        expect(toPosixPath("")).toBe("");
+    });
+});
+
+describe("toRepoPosixRelative", () => {
+    test("produces POSIX-relative path for an input inside repoRoot", () => {
+        const repo = path.resolve("/repo");
+        const inside = path.join(repo, "node_modules", "foo", "bar.js");
+        expect(toRepoPosixRelative(inside, repo)).toBe(
+            "node_modules/foo/bar.js"
+        );
+    });
+
+    test("produces POSIX-absolute path for an input outside repoRoot", () => {
+        const repo = path.resolve("/repo");
+        const outside = path.resolve("/elsewhere/foo.js");
+        const result = toRepoPosixRelative(outside, repo);
+        // Outside-of-repo paths fall back to POSIX-absolute form: any
+        // backslashes are converted, and the input is preserved as-is.
+        expect(result).toBe(toPosixPath(outside));
+        expect(result.includes("\\")).toBe(false);
+    });
+
+    test("returns non-string inputs unchanged", () => {
+        expect(toRepoPosixRelative(null, "/repo")).toBe(null);
+        expect(toRepoPosixRelative("/repo/foo.js", null)).toBe("/repo/foo.js");
+        expect(toRepoPosixRelative(42, "/repo")).toBe(42);
+    });
+
+    test("repoRoot itself maps to a POSIX-absolute fallback (empty relative)", () => {
+        const repo = path.resolve("/repo");
+        // path.relative(repo, repo) === ""; toRepoPosixRelative treats that
+        // as "outside" (no useful relative form) and emits the POSIX
+        // fallback, which is the repo root itself.
+        expect(toRepoPosixRelative(repo, repo)).toBe(toPosixPath(repo));
     });
 });

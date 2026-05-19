@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-18. Do not edit manually.
+> **Auto-generated** on 2026-05-19. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -135,7 +135,7 @@
 | Skill                                                                                                    | Lines       | Complexity     | Status   | Performance  | Tags                             |
 | -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ------------ | -------------------------------- |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [ok] 227    | [intermediate] | [stable] | [risk: none] | cross-platform, case-sensitivity |
-| [Integrity Gate Robustness](./scripting/integrity-gate-robustness.md)                                    | [ok] 226    | [intermediate] | [stable] | [risk: low]  | integrity, auto-repair           |
+| [Integrity Gate Robustness](./scripting/integrity-gate-robustness.md)                                    | [warn] 299  | [intermediate] | [stable] | [risk: low]  | integrity, auto-repair           |
 | [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                              | [ok] 159    | [intermediate] | [stable] | [risk: none] | javascript, code-quality         |
 | [JavaScript Code Quality Practices Part 1](./scripting/javascript-code-quality-part-1.md)                | [ok] 178    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]  | migration, split                 |

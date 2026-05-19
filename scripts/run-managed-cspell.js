@@ -29,6 +29,7 @@ const { isTruthyEnv } = jestErrorDecoderModule;
 const {
     probeIntegrity,
     probeIntegrityInSubprocess,
+    probeResolverHealth,
 } = require("./lib/node-modules-integrity");
 const {
     isAutoRepairAllowed: defaultIsAutoRepairAllowed,
@@ -123,6 +124,7 @@ function runManagedCspell(args, options = {}) {
         runIntegrityGateWithRecoveryFn = runIntegrityGateWithRecovery,
         probeIntegrityFn = probeIntegrity,
         probeIntegrityInSubprocessFn = probeIntegrityInSubprocess,
+        probeResolverHealthFn = probeResolverHealth,
         attemptNpmCiRecoveryFn = attemptNpmCiRecovery,
         getNpmMajorVersionFn = getNpmMajorVersion,
         printActionableRepairBannerFn = printActionableRepairBanner,
@@ -145,11 +147,13 @@ function runManagedCspell(args, options = {}) {
             repoRoot: REPO_ROOT,
             probeIntegrityFn,
             probeIntegrityInSubprocessFn,
+            probeResolverHealthFn,
             attemptNpmCiRecoveryFn,
             isAutoRepairAllowedFn: resolvedIsAutoRepairAllowed,
             printActionableRepairBannerFn,
             decoder: jestErrorDecoderModule,
             warnFn,
+            env,
         });
 
         if (!gateResult || !gateResult.ok) {

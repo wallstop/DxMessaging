@@ -38,11 +38,14 @@ const {
     PATH_CLASS_REPO,
     PATH_CLASS_ISOLATED,
     PATH_CLASS_UNKNOWN,
+    toPosixPath,
+    toRepoPosixRelative,
 } = require("./lib/path-classifier");
 const {
     INTEGRITY_TARGETS,
     probeIntegrity,
     probeIntegrityInSubprocess,
+    probeResolverHealth,
 } = require("./lib/node-modules-integrity");
 const {
     isAutoRepairAllowed: defaultIsAutoRepairAllowed,
@@ -224,7 +227,7 @@ function attemptIsolatedCacheReset(
         path.isAbsolute(relativePath)
     ) {
         warnFn(
-            `WARNING: Refusing to reset isolated managed-Jest cache; resolved path is not a descendant of ${cacheRoot}: ${resolvedInstallDir}`
+            `WARNING: Refusing to reset isolated managed-Jest cache; resolved path is not a descendant of ${toPosixPath(cacheRoot)}: ${toPosixPath(resolvedInstallDir)}`
         );
         return false;
     }
@@ -234,7 +237,7 @@ function attemptIsolatedCacheReset(
         return true;
     } catch (error) {
         const detail = error && error.message ? error.message : String(error);
-        warnFn(`WARNING: Failed to reset isolated managed-Jest cache at ${resolvedInstallDir}: ${detail}`);
+        warnFn(`WARNING: Failed to reset isolated managed-Jest cache at ${toPosixPath(resolvedInstallDir)}: ${detail}`);
         return false;
     }
 }
@@ -259,7 +262,7 @@ function attemptNpmCiRecovery({
     if (aggressive) {
         const nodeModulesPath = path.join(REPO_ROOT, "node_modules");
         warnFn(
-            `WARNING: DXMSG_HOOK_AGGRESSIVE_RECOVERY=1 -> removing ${nodeModulesPath} before npm ci.`
+            `WARNING: DXMSG_HOOK_AGGRESSIVE_RECOVERY=1 -> removing ${toPosixPath(nodeModulesPath)} before npm ci.`
         );
         try {
             rmSyncFn(nodeModulesPath, { recursive: true, force: true });
@@ -566,7 +569,7 @@ function prepareIsolatedFallbackJest(
     }
 
     if (hasCachedJestBin && !hasCachedJestRunner) {
-        warnFn(`⚠️ Isolated fallback cache is missing Jest runner; reinstalling fallback: ${defaultJestRunnerPath}`);
+        warnFn(`⚠️ Isolated fallback cache is missing Jest runner; reinstalling fallback: ${toPosixPath(defaultJestRunnerPath)}`);
     }
 
     // Idempotency fix (Step 3): when the install dir already exists but the
@@ -597,7 +600,7 @@ function prepareIsolatedFallbackJest(
 
         if (!isStrictDescendant) {
             warnFn(
-                `WARNING: Refusing to rm partial isolated fallback install dir; resolved path is not a descendant of ${cacheRoot}: ${resolvedInstallDir}`
+                `WARNING: Refusing to rm partial isolated fallback install dir; resolved path is not a descendant of ${toPosixPath(cacheRoot)}: ${toPosixPath(resolvedInstallDir)}`
             );
         } else {
             try {
@@ -605,7 +608,7 @@ function prepareIsolatedFallbackJest(
             } catch (error) {
                 const detail = error && error.message ? error.message : String(error);
                 warnFn(
-                    `WARNING: Failed to rm partial isolated fallback install dir at ${resolvedInstallDir}: ${detail}`
+                    `WARNING: Failed to rm partial isolated fallback install dir at ${toPosixPath(resolvedInstallDir)}: ${detail}`
                 );
             }
         }
@@ -646,7 +649,7 @@ function prepareIsolatedFallbackJest(
     }
 
     if (!existsSyncFn(jestBinPath)) {
-        warnFn(`⚠️ Isolated fallback Jest binary missing after install: ${jestBinPath}`);
+        warnFn(`⚠️ Isolated fallback Jest binary missing after install: ${toPosixPath(jestBinPath)}`);
         return {
             jestBinPath: null,
             jestRunnerPath: null,
@@ -659,7 +662,7 @@ function prepareIsolatedFallbackJest(
     });
 
     if (!installedJestRunnerPath) {
-        warnFn(`⚠️ Isolated fallback Jest runner missing after install (legacy fallback path: ${defaultJestRunnerPath}).`);
+        warnFn(`⚠️ Isolated fallback Jest runner missing after install (legacy fallback path: ${toPosixPath(defaultJestRunnerPath)}).`);
         return {
             jestBinPath: null,
             jestRunnerPath: null,
@@ -683,14 +686,14 @@ function printIsolatedFallbackSelection(
     } = {}
 ) {
     const cacheLabel = cacheHit ? "cache hit" : "fresh install";
-    console.warn(`⚠️ Using isolated fallback Jest (${cacheLabel}): ${jestBinPath}`);
+    console.warn(`⚠️ Using isolated fallback Jest (${cacheLabel}): ${toPosixPath(jestBinPath)}`);
 
     if (callerProvidedTestRunner) {
         console.warn("⚠️ Caller provided --testRunner; managed runner did not override it.");
     }
 
     if (nodePathOverride) {
-        console.warn(`⚠️ Injected NODE_PATH for isolated fallback: ${nodePathOverride}`);
+        console.warn(`⚠️ Injected NODE_PATH for isolated fallback: ${toPosixPath(nodePathOverride)}`);
     }
 }
 
@@ -724,7 +727,7 @@ function runIsolatedFallbackJest(
 
     if (!callerProvidedTestRunner) {
         if (!prepared.jestRunnerPath || !existsSyncFn(prepared.jestRunnerPath)) {
-            warnFn(`⚠️ Isolated fallback Jest runner unavailable at expected path: ${prepared.jestRunnerPath}`);
+            warnFn(`⚠️ Isolated fallback Jest runner unavailable at expected path: ${toPosixPath(prepared.jestRunnerPath)}`);
             return null;
         }
     }
@@ -820,6 +823,7 @@ function runManagedJest(args, options = {}) {
         runIntegrityGateWithRecoveryFn = runIntegrityGateWithRecovery,
         probeIntegrityFn = probeIntegrity,
         probeIntegrityInSubprocessFn = probeIntegrityInSubprocess,
+        probeResolverHealthFn = probeResolverHealth,
         isAutoRepairAllowedFn = null,
         // Used by the isolated-tier post-Jest MISSING_TEST_RUNNER routing.
         // Injected for testability; defaults to the production classifier.
@@ -853,11 +857,13 @@ function runManagedJest(args, options = {}) {
             repoRoot: REPO_ROOT,
             probeIntegrityFn,
             probeIntegrityInSubprocessFn,
+            probeResolverHealthFn,
             attemptNpmCiRecoveryFn,
             isAutoRepairAllowedFn: resolvedIsAutoRepairAllowed,
             printActionableRepairBannerFn,
             decoder: jestErrorDecoderModule,
             warnFn,
+            env,
         });
 
         if (!gateResult || !gateResult.ok) {
@@ -1058,7 +1064,7 @@ function runManagedJest(args, options = {}) {
                     } else if (capturedPath === "") {
                         pathLabel = "(empty)";
                     } else {
-                        pathLabel = capturedPath;
+                        pathLabel = toPosixPath(capturedPath);
                     }
                     warnFn(
                         `WARNING: post-Jest MISSING_TEST_RUNNER captured path ${pathLabel} is outside both the repo and isolated trees; refusing to auto-repair.`
@@ -1157,6 +1163,8 @@ module.exports = {
     PATH_CLASS_REPO,
     PATH_CLASS_ISOLATED,
     PATH_CLASS_UNKNOWN,
+    toPosixPath,
+    toRepoPosixRelative,
     resolveLocalModule,
     tryLoadModule,
     hasHealthyLocalJestInstall,
@@ -1194,6 +1202,7 @@ module.exports = {
     INTEGRITY_TARGETS,
     probeIntegrity,
     probeIntegrityInSubprocess,
+    probeResolverHealth,
     runIntegrityGateWithRecovery,
     isAutoRepairAllowed: defaultIsAutoRepairAllowed,
 };

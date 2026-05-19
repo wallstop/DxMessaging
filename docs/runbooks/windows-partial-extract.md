@@ -131,6 +131,87 @@ The default Windows NTFS path limit is 260 characters. Nested
    `D:\Code\dxmessaging` rarely hits the limit; one at
    `C:\Users\<name>\Documents\GitHub\organization\sub\dxmessaging` may.
 
+## Missing or broken `unrs-resolver` native binding
+
+Newer versions of the dev-tool resolver chain (`unrs-resolver`) ship a
+platform-specific native binding -- on Windows it is
+`@unrs/resolver-binding-win32-x64-msvc`. When the binding is missing or
+truncated (commonly during a partial install or after an AV scan), the
+JS file `node_modules/jest-circus/build/runner.js` is present on disk
+but `require.resolve('jest-circus/runner')` throws at runtime with
+`Failed to load native binding`. The file-based integrity probe is
+blind to this; the resolver probe added in
+`scripts/lib/node-modules-integrity.js` catches it.
+
+Symptoms:
+
+- `Failed to load native binding: @unrs/resolver-binding-win32-x64-msvc`
+  in the pre-push log even though `node_modules/jest-circus/build/runner.js`
+  exists and is non-zero.
+- `Cannot find module 'unrs-resolver/resolver.win32-x64-msvc.node'`.
+
+Manual recovery:
+
+```powershell
+# PowerShell
+npm rebuild @unrs/resolver-binding-win32-x64-msvc
+# If rebuild doesn't fix it, blow away node_modules entirely
+Remove-Item -Recurse -Force node_modules
+npm install
+```
+
+```bash
+# Git Bash / WSL
+npm rebuild @unrs/resolver-binding-win32-x64-msvc
+# Or, aggressive:
+rm -rf node_modules && npm install
+```
+
+## `DXMSG_HOOK_NO_AUTOREPAIR=1` shell carry-over
+
+If you set `DXMSG_HOOK_NO_AUTOREPAIR=1` in a previous session and forgot
+to unset it, the integrity gate will detect the partial extract but
+SKIP `npm ci` even when the repair is safe. The gate banner now
+explicitly tells you when this is the cause; to re-enable auto-repair:
+
+```bash
+# POSIX (bash, zsh)
+unset DXMSG_HOOK_NO_AUTOREPAIR
+```
+
+```powershell
+# PowerShell
+Remove-Item Env:\DXMSG_HOOK_NO_AUTOREPAIR
+```
+
+To verify it is unset:
+
+```bash
+echo "${DXMSG_HOOK_NO_AUTOREPAIR:-<unset>}"   # POSIX
+```
+
+```powershell
+"$env:DXMSG_HOOK_NO_AUTOREPAIR"               # PowerShell
+```
+
+If the variable is set globally (Windows -> Environment Variables panel,
+or `~/.bashrc`, `~/.zshrc`, PowerShell `$PROFILE`), edit the source and
+re-open your shell.
+
+## Doubled paths and junctions on Windows
+
+Windows junctions or accidental path doubling (for example
+`C:\foo\Packages\Packages\com.wallstop-studios.dxmessaging`) can confuse
+Jest's resolver and the `unrs-resolver` cache. If the integrity probe
+keeps reporting the same file as missing after a successful `npm ci`,
+re-clone into a flat path:
+
+```powershell
+git clone https://github.com/Ambiguous-Interactive/DxMessaging C:\dev\dxmessaging
+cd C:\dev\dxmessaging
+npm ci
+```
+
 ## Antivirus exclusions
 
 Windows Defender, Symantec, and Sophos have all been observed
