@@ -1,59 +1,80 @@
-#!/bin/bash
-#
-# Git pre-commit hook for DxMessaging
-#
-# This hook:
-# 1. Syncs the banner version from package.json to the SVG banner
-# 2. Regenerates the skills index.md when skill files are modified
-#
-# Installation:
-#   cp scripts/hooks/pre-commit .git/hooks/pre-commit
-#   chmod +x .git/hooks/pre-commit
-#
+#!/usr/bin/env node
+"use strict";
 
-set -e
+const path = require("path");
+const childProcess = require("child_process");
 
-# 0) Sync banner version from package.json (runs before each commit is created)
-# This ensures the SVG banner always displays the correct version.
-#
-# NOTE: PowerShell is optional here. If not found, we skip silently because:
-#   - The banner version is purely cosmetic (README appearance)
-#   - Contributors without PowerShell should not be blocked from committing
-#   - CI/CD can enforce version sync separately if needed
-echo "🏷️  Syncing banner version..."
-if command -v pwsh &> /dev/null; then
-    pwsh -NoProfile -File scripts/sync-banner-version.ps1 || echo "⚠️  Banner version sync failed (cosmetic only, continuing)"
-elif command -v powershell &> /dev/null; then
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-banner-version.ps1 || echo "⚠️  Banner version sync failed (cosmetic only, continuing)"
-else
-    echo "⚠️  PowerShell not found. Skipping banner version sync (cosmetic only)."
-fi
+function resolveRepoRoot() {
+  const result = childProcess.spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  if (!result.error && result.status === 0 && result.stdout.trim().length > 0) {
+    return result.stdout.trim();
+  }
+  return path.resolve(__dirname, "..", "..");
+}
 
-SKILLS_DIR=".llm/skills"
-INDEX_FILE="$SKILLS_DIR/index.md"
+const REPO_ROOT = resolveRepoRoot();
 
-# Check if any skill files are staged (excluding index.md and specification.md)
-STAGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACMR | grep -F "$SKILLS_DIR/" | grep -v "index.md" | grep -v "specification.md" | grep -v "templates/" || true)
+function run(command, args) {
+  return childProcess.spawnSync(command, args, {
+    cwd: REPO_ROOT,
+    stdio: "inherit"
+  });
+}
 
-if [ -n "$STAGED_SKILLS" ]; then
-    echo "📚 Skill files modified, regenerating index..."
+function runOptional(command, args) {
+  const result = run(command, args);
+  if (result.error && result.error.code === "ENOENT") {
+    return 127;
+  }
+  return typeof result.status === "number" ? result.status : 1;
+}
 
-    # Prefer node, fall back to pwsh (which delegates to the JS script)
-    if command -v node &> /dev/null; then
-        node scripts/generate-skills-index.js
-    elif command -v pwsh &> /dev/null; then
-        pwsh scripts/generate-skills-index.ps1
-    else
-        echo "⚠️  Neither 'node' nor 'pwsh' found. Skipping index generation."
-        echo "   Please run scripts/generate-skills-index.js or .ps1 manually."
-        exit 0
-    fi
+function main() {
+  process.stdout.write("Syncing banner version...\n");
+  const bannerStatus = runOptional(process.execPath, ["scripts/sync-banner-version-hook.js"]);
+  if (bannerStatus !== 0) {
+    process.stdout.write("Banner version sync failed (cosmetic only, continuing).\n");
+  }
 
-    # Add the regenerated index to the commit
-    if [ -f "$INDEX_FILE" ]; then
-        git add "$INDEX_FILE"
-        echo "✅ index.md regenerated and staged"
-    fi
-fi
+  const staged = childProcess.spawnSync(
+    "git",
+    ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8"
+    }
+  );
+  if (staged.error || staged.status !== 0) {
+    return 0;
+  }
 
-exit 0
+  const skillChanged = String(staged.stdout || "")
+    .split(/\r?\n/)
+    .some(
+      (file) =>
+        file.startsWith(".llm/skills/") &&
+        file !== ".llm/skills/index.md" &&
+        file !== ".llm/skills/specification.md" &&
+        !file.includes("/templates/")
+    );
+
+  if (!skillChanged) {
+    return 0;
+  }
+
+  process.stdout.write("Skill files modified, regenerating index...\n");
+  const indexStatus = runOptional(process.execPath, ["scripts/generate-skills-index.js"]);
+  if (indexStatus !== 0) {
+    return indexStatus;
+  }
+
+  return runOptional("git", ["add", ".llm/skills/index.md"]);
+}
+
+if (require.main === module) {
+  process.exit(main());
+}

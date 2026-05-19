@@ -384,6 +384,10 @@ describe(".github/workflows/release.yml", () => {
   test("validates, runs Unity checks, packs, attests, releases, and publishes with provenance", () => {
     expect(Object.keys(parsed.jobs).sort()).toEqual([
       "publish",
+      // Added for Bug 3: runner-preflight is an ubuntu-latest job that
+      // probes self-hosted runner availability before the unity-checks
+      // self-hosted job queues. See docs/runbooks/unity-runners-after-transfer.md.
+      "runner-preflight",
       "unity-checks",
       "validate",
       "verify-tag"

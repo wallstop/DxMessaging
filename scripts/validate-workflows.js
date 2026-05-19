@@ -1052,15 +1052,59 @@ function findWindowsBashPortabilityViolations(relativePath, lines) {
     return violations;
 }
 
+/**
+ * Allowlist of npm scripts whose execution requires git history (origin/<base>
+ * refs etc.). The list MUST stay in sync with package.json's `scripts`
+ * section. Any npm script that itself transitively invokes
+ * `validate:changelog:coverage`, `git diff origin/*`, `git merge-base`, or
+ * other ref-dependent commands must be added here so workflows can be checked
+ * for a matching full-history checkout.
+ *
+ * `preflight:pre-push` is included because it chains through
+ * `preflight:pre-commit` -> `validate:changelog:coverage`. This is the gap
+ * that allowed cross-platform-preflight.yml to slip through the validator.
+ *
+ * `validate:changelog` (bare) is NOT in this list: it runs
+ * scripts/validate-changelog.js without `--check-coverage`, which does not
+ * touch origin/<base>. Only `validate:changelog:coverage` does.
+ *
+ * `validate:all` IS in this list because it chains through
+ * `validate:changelog:coverage`.
+ */
+const NPM_SCRIPTS_REQUIRING_GIT_HISTORY = Object.freeze([
+    "validate:changelog:coverage",
+    "preflight:pre-commit",
+    "preflight:pre-push",
+    "validate:all",
+]);
+
+function buildNpmRunRegexAlternation(scriptNames) {
+    // Escape regex metacharacters present in script names (e.g. ":").
+    const escaped = scriptNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    // No current prefix collision exists across the script names above
+    // (the entries are not prefixes of each other under the regex `\b`
+    // word-boundary terminator). The trailing `\b` in the consumer regex
+    // ensures e.g. "preflight:pre-commit" would not be matched by a
+    // hypothetical "preflight:pre" entry.
+    return escaped.join("|");
+}
+
 function runTextInvokesChangelogCoverage(runText) {
     if (typeof runText !== "string" || runText.trim().length === 0) {
         return false;
     }
 
+    const npmAlternation = buildNpmRunRegexAlternation(NPM_SCRIPTS_REQUIRING_GIT_HISTORY);
+    const npmRunRegex = new RegExp(`npm\\s+run\\s+(?:${npmAlternation})\\b`);
+
     return (
         /validate-changelog\.js\b[\s\S]*--check-coverage/.test(runText)
         || /pre-commit\s+run\b[\s\S]*\bvalidate-changelog-policy\b/.test(runText)
-        || /npm\s+run\s+(?:validate:changelog:coverage|preflight:pre-commit|validate:all)\b/.test(runText)
+        || npmRunRegex.test(runText)
+        // Bare `git diff origin/...` / `git merge-base origin/...` / `git log
+        // origin/...` style commands require origin/<base>; flag them too.
+        || /\bgit\s+diff\s+[^|]*origin\//.test(runText)
+        || /\bgit\s+merge-base\s+[^|]*origin\//.test(runText)
     );
 }
 
@@ -2230,11 +2274,165 @@ function findChangelogCoverageCheckoutViolations(relativePath, lines) {
                     relativePath,
                     step.run.line,
                     step.run.text,
-                    `Workflow job '${job.id}' runs changelog coverage without a preceding full-history checkout. Set actions/checkout fetch-depth: 0 so origin/<base> refs are available for changed-file discovery.`,
+                    `Workflow job '${job.id}' runs a git-history-aware step without a preceding full-history checkout. Set actions/checkout fetch-depth: 0 so origin/<base> refs are available for changelog coverage / git diff origin commands. Allowlist of git-history-requiring npm scripts: ${NPM_SCRIPTS_REQUIRING_GIT_HISTORY.join(", ")}.`,
                     "error"
                 )
             );
         }
+    }
+
+    return violations;
+}
+
+/**
+ * Returns the deduplicated list of labels referenced by a job's `runs-on:`
+ * value, including inline-array, block-list, and scalar forms. Returns
+ * `null` when the form is dynamic (`${{ fromJSON(...) }}` etc.) and the
+ * caller cannot statically resolve the labels.
+ */
+function extractStaticJobLabels(lines, job) {
+    const runsOn = extractJobRunsOn(lines, job);
+    if (!runsOn) {
+        return null;
+    }
+    const raw = runsOn.raw;
+
+    if (raw.startsWith("[")) {
+        try {
+            return parseInlineLabelArray(raw);
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    if (raw === "" && Array.isArray(runsOn.blockList) && runsOn.blockList.length > 0) {
+        return runsOn.blockList.slice();
+    }
+
+    if (raw.length === 0) {
+        return null;
+    }
+
+    if (raw.startsWith("${{")) {
+        return null;
+    }
+
+    return [raw.replace(/^(["'])(.*)\1$/, "$2").trim()];
+}
+
+/**
+ * Detects whether a job's steps include a self-hosted runner access
+ * preflight probe. Identified by the STRUCTURAL signature only -- the
+ * job name is not consulted (callers may name the job `runner-preflight`,
+ * `runner-access-preflight`, `preflight`, or anything else):
+ *
+ *   1. The job runs on a hosted runner (ubuntu-latest, ubuntu-22.04, etc.)
+ *      and is NOT itself self-hosted -- a self-hosted job cannot gate
+ *      self-hosted access.
+ *   2. At least one of the job's steps' `run:` text references
+ *      `actions/runners` (the GitHub REST endpoint, in either org or repo
+ *      scope) which is the canonical marker for a runner-inventory probe.
+ *
+ * The probe lives in `.github/workflows/unity-tests.yml`,
+ * `.github/workflows/unity-il2cpp.yml`, `.github/workflows/unity-benchmarks.yml`,
+ * and the `runner-preflight` job in `.github/workflows/release.yml`.
+ */
+function jobIsRunnerAccessPreflight(lines, job) {
+    // (1) Must not itself be self-hosted (cannot gate self-hosted access).
+    const labels = extractStaticJobLabels(lines, job);
+    if (Array.isArray(labels) && labels.some((label) => label === "self-hosted")) {
+        return false;
+    }
+    // The runs-on value must be statically resolvable AND look like a
+    // hosted runner (ubuntu-*, windows-*, macos-*) for us to accept the
+    // job as a preflight. A dynamic runs-on (matrix expression) cannot be
+    // proved to run on a hosted runner.
+    if (!Array.isArray(labels) || labels.length === 0) {
+        return false;
+    }
+    const hostedRunnerPattern = /^(ubuntu|windows|macos)(?:-[A-Za-z0-9.+_-]+)?$/;
+    const hasHostedLabel = labels.some((label) => hostedRunnerPattern.test(label));
+    if (!hasHostedLabel) {
+        return false;
+    }
+    // (2) At least one step must reference the runners endpoint marker.
+    const steps = extractJobSteps(lines, job);
+    for (const step of steps) {
+        if (!step.run) {
+            continue;
+        }
+        if (/actions\/runners\b/.test(step.run.text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Self-hosted runner contract: any job whose `runs-on:` declares
+ * `self-hosted` (plus any other labels) MUST either be the preflight job
+ * itself OR declare `needs:` on a preflight job that lives in the same
+ * workflow file. This converts the "queued forever after a transfer"
+ * symptom (see docs/runbooks/unity-runners-after-transfer.md) into a
+ * fast, clearly-explained failure: the cheap `ubuntu-latest` preflight
+ * surfaces the missing runner-group ACL before any self-hosted matrix
+ * entry attempts to queue.
+ *
+ * The validator is intentionally conservative:
+ *   - Only flags jobs whose labels statically include `self-hosted`.
+ *   - Accepts the job itself when it is the preflight job (so the
+ *     preflight job is not required to gate itself).
+ *   - Accepts `needs:` targets whose own job satisfies the same predicate
+ *     (`jobIsRunnerAccessPreflight`). The needs target must live in the
+ *     same workflow file - cross-workflow `needs:` is not supported by
+ *     GitHub Actions.
+ */
+function findSelfHostedRunnerPreflightViolations(relativePath, lines) {
+    const violations = [];
+    const jobs = extractJobs(lines);
+    const jobsById = new Map();
+    for (const job of jobs) {
+        jobsById.set(job.id, job);
+    }
+
+    for (const job of jobs) {
+        const labels = extractStaticJobLabels(lines, job);
+        if (!labels) {
+            continue;
+        }
+        if (!labels.some((label) => label === "self-hosted")) {
+            continue;
+        }
+        if (jobIsRunnerAccessPreflight(lines, job)) {
+            continue;
+        }
+
+        const needs = extractJobNeeds(lines, job) || [];
+        let needsCoveredByPreflight = false;
+        for (const needsTarget of needs) {
+            const target = jobsById.get(needsTarget);
+            if (!target) {
+                continue;
+            }
+            if (jobIsRunnerAccessPreflight(lines, target)) {
+                needsCoveredByPreflight = true;
+                break;
+            }
+        }
+        if (needsCoveredByPreflight) {
+            continue;
+        }
+
+        const runsOn = extractJobRunsOn(lines, job);
+        violations.push(
+            new Violation(
+                relativePath,
+                runsOn ? runsOn.line : job.startLine,
+                runsOn ? `runs-on: ${runsOn.raw || labels.join(", ")}` : `job: ${job.id}`,
+                `Job '${job.id}' targets self-hosted labels [${labels.join(", ")}] without depending on a preflight job that probes runner availability via gh api orgs/<owner>/actions/runners (or repos/<repo>/actions/runners as fallback). Without the preflight, a missing runner-group ACL or offline runner causes the job to queue forever with no error. Add a preflight job running on a hosted runner (e.g. ubuntu-latest) whose step text references actions/runners, then reference it via 'needs:'. See docs/runbooks/unity-runners-after-transfer.md for the runbook the preflight points operators to.`,
+                "error"
+            )
+        );
     }
 
     return violations;
@@ -2353,6 +2551,10 @@ function validateWorkflow(filePath, options = {}) {
 
         violations.push(
             ...findChangelogCoverageCheckoutViolations(relativePath, lines)
+        );
+
+        violations.push(
+            ...findSelfHostedRunnerPreflightViolations(relativePath, lines)
         );
     } catch (error) {
         violations.push(
@@ -2478,6 +2680,10 @@ if (typeof module !== 'undefined' && module.exports) {
         runTextInvokesChangelogCoverage,
         stepHasFullHistoryCheckout,
         findChangelogCoverageCheckoutViolations,
+        NPM_SCRIPTS_REQUIRING_GIT_HISTORY,
+        extractStaticJobLabels,
+        jobIsRunnerAccessPreflight,
+        findSelfHostedRunnerPreflightViolations,
         resolveWorkflowLineLengthPolicy,
         resolveWorkflowLineLengthMax,
         findWorkflowLineLengthViolations,

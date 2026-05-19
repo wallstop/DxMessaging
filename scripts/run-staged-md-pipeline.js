@@ -457,17 +457,6 @@ async function runStagedMdPipeline(filePaths, options = {}) {
         throw error;
       }
     }
-
-    // Stage 5 (validators) reads the post-fix content. Markdownlint runs
-    // outside this loop so it can batch all files into a single call.
-    // Re-read from disk to pick up any changes prettier wrote, then
-    // hand the content to the validators.
-    const postFix = readFileSafe(absPath) ?? working;
-    const v = runValidators(absPath, postFix);
-    aggregated.ascii.violations.push(...v.violations.ascii);
-    aggregated.ascii.warnings.push(...v.warnings.ascii);
-    aggregated.codePatterns.violations.push(...v.violations.codePatterns);
-    aggregated.prose.violations.push(...v.violations.prose);
   }
 
   // Stage 4: markdownlint --fix across all present files at once.
@@ -476,6 +465,19 @@ async function runStagedMdPipeline(filePaths, options = {}) {
   if (!skipMarkdownlint && present.length > 0) {
     const lintResult = await runMarkdownlintInProcess(present, modifiedSet);
     markdownlintErrors = lintResult.errors || 0;
+  }
+
+  // Stage 5: validators read the final post-fixer, post-prettier,
+  // post-markdownlint content. This keeps hook results aligned with the
+  // actual file snapshot pre-commit will ask the user to re-stage.
+  for (const absPath of present) {
+    const finalContent = readFileSafe(absPath);
+    if (finalContent === null) continue;
+    const v = runValidators(absPath, finalContent);
+    aggregated.ascii.violations.push(...v.violations.ascii);
+    aggregated.ascii.warnings.push(...v.warnings.ascii);
+    aggregated.codePatterns.violations.push(...v.violations.codePatterns);
+    aggregated.prose.violations.push(...v.violations.prose);
   }
 
   return {

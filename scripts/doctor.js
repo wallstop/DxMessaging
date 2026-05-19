@@ -23,6 +23,9 @@
  *      validate-untracked-policy preflight step) plus a soft warning for
  *      modified-but-unstaged files. Untracked paths fail; unstaged
  *      modifications warn.
+ *   8. Changed documentation validator parity: changed Markdown and C# files
+ *      are scanned with the same ASCII/code-pattern/prose validators used by
+ *      the pre-commit markdown and staged-doc hooks.
  *
  * The module is read-only by design: every probe is a query, never a fix.
  * Each section is a separately exported function that takes a
@@ -51,10 +54,8 @@ const precommitPerfScore = require("./lib/precommit-perf-score");
 const shellCommand = require("./lib/shell-command");
 const { isTruthyEnv } = require("./lib/jest-error-decoder");
 const { ISOLATED_JEST_CACHE_ROOT } = require("./run-managed-jest");
-const {
-    INTEGRITY_TARGETS,
-    probeIntegrity,
-} = require("./lib/node-modules-integrity");
+const { INTEGRITY_TARGETS, probeIntegrity } = require("./lib/node-modules-integrity");
+const { runChangedDocValidators } = require("./validate-changed-docs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
@@ -73,9 +74,9 @@ const ANSI_BOLD = "\x1b[1m";
 const KNOWN_STATUSES = Object.freeze(["ok", "warn", "fail"]);
 
 function statusRank(status) {
-    if (status === "fail") return 2;
-    if (status === "warn") return 1;
-    return 0;
+  if (status === "fail") return 2;
+  if (status === "warn") return 1;
+  return 0;
 }
 
 /**
@@ -89,24 +90,26 @@ function statusRank(status) {
  * @returns {string}
  */
 function aggregateStatus(sections, options = {}) {
-    const warn = options.warn || ((message) => process.stderr.write(`${message}\n`));
-    let worst = "ok";
-    for (const section of sections) {
-        let effectiveStatus = section.status;
-        if (!KNOWN_STATUSES.includes(effectiveStatus)) {
-            const name = section && section.name ? section.name : "(unnamed)";
-            warn(`doctor: section '${name}' returned unrecognized status '${effectiveStatus}'; treating as 'fail'.`);
-            effectiveStatus = "fail";
-        }
-        if (statusRank(effectiveStatus) > statusRank(worst)) {
-            worst = effectiveStatus;
-        }
+  const warn = options.warn || ((message) => process.stderr.write(`${message}\n`));
+  let worst = "ok";
+  for (const section of sections) {
+    let effectiveStatus = section.status;
+    if (!KNOWN_STATUSES.includes(effectiveStatus)) {
+      const name = section && section.name ? section.name : "(unnamed)";
+      warn(
+        `doctor: section '${name}' returned unrecognized status '${effectiveStatus}'; treating as 'fail'.`
+      );
+      effectiveStatus = "fail";
     }
-    return worst;
+    if (statusRank(effectiveStatus) > statusRank(worst)) {
+      worst = effectiveStatus;
+    }
+  }
+  return worst;
 }
 
 function statusToExitCode(status) {
-    return status === "fail" ? 1 : 0;
+  return status === "fail" ? 1 : 0;
 }
 
 /**
@@ -114,153 +117,157 @@ function statusToExitCode(status) {
  *    TOOL_SPECS, report a resolve + exists + load triple.
  */
 function checkNodeModulesFreshness(options = {}) {
-    const {
-        requireResolveFn = (specifier) => REPO_REQUIRE.resolve(specifier),
-        existsSyncFn = fs.existsSync,
-        statSyncFn = fs.statSync,
-        requireFn = (absPath) => REPO_REQUIRE(absPath),
-        toolSpecs = TOOL_SPECS,
-        integrityTargets = INTEGRITY_TARGETS,
-        probeIntegrityFn = probeIntegrity,
-        repoRoot = REPO_ROOT,
-    } = options;
+  const {
+    requireResolveFn = (specifier) => REPO_REQUIRE.resolve(specifier),
+    existsSyncFn = fs.existsSync,
+    statSyncFn = fs.statSync,
+    requireFn = (absPath) => REPO_REQUIRE(absPath),
+    toolSpecs = TOOL_SPECS,
+    integrityTargets = INTEGRITY_TARGETS,
+    probeIntegrityFn = probeIntegrity,
+    repoRoot = REPO_ROOT
+  } = options;
 
-    // Step 10: file-existence (and zero-byte) audits delegate to
-    // probeIntegrity from scripts/lib/node-modules-integrity.js. The doctor
-    // remains read-only; we only present the structured probe results in
-    // the existing per-tool layout.
-    const integrityResult = probeIntegrityFn({
-        repoRoot,
-        existsSyncFn,
-        statSyncFn,
-        targets: integrityTargets,
-    });
-    const integrityMissingByTool = new Map();
-    if (integrityResult && Array.isArray(integrityResult.missing)) {
-        for (const entry of integrityResult.missing) {
-            if (!integrityMissingByTool.has(entry.tool)) {
-                integrityMissingByTool.set(entry.tool, []);
-            }
-            integrityMissingByTool.get(entry.tool).push(entry);
-        }
+  // Step 10: file-existence (and zero-byte) audits delegate to
+  // probeIntegrity from scripts/lib/node-modules-integrity.js. The doctor
+  // remains read-only; we only present the structured probe results in
+  // the existing per-tool layout.
+  const integrityResult = probeIntegrityFn({
+    repoRoot,
+    existsSyncFn,
+    statSyncFn,
+    targets: integrityTargets
+  });
+  const integrityMissingByTool = new Map();
+  if (integrityResult && Array.isArray(integrityResult.missing)) {
+    for (const entry of integrityResult.missing) {
+      if (!integrityMissingByTool.has(entry.tool)) {
+        integrityMissingByTool.set(entry.tool, []);
+      }
+      integrityMissingByTool.get(entry.tool).push(entry);
+    }
+  }
+
+  const lines = [];
+  let failed = 0;
+
+  for (const tool of toolSpecs) {
+    const issues = [];
+    const checks = [];
+
+    // Surface integrity probe entries scoped to this tool first.
+    const integrityEntries = integrityMissingByTool.get(tool.name) || [];
+    for (const entry of integrityEntries) {
+      if (entry.reason === "missing") {
+        issues.push(`missing required file ${entry.relPath}`);
+      } else if (entry.reason === "empty") {
+        issues.push(`${entry.relPath} is empty (size 0)`);
+      } else {
+        issues.push(`${entry.relPath} integrity probe: ${entry.reason}`);
+      }
     }
 
-    const lines = [];
-    let failed = 0;
+    for (const requiredFile of tool.requiredFiles || []) {
+      const absPath = path.join(repoRoot, ...requiredFile.split("/"));
+      // Skip the existsSync check when integrity has already flagged
+      // this same path; avoids duplicate lines in the report.
+      const alreadyFlagged = integrityEntries.some((e) => e.relPath === requiredFile);
+      if (alreadyFlagged) {
+        continue;
+      }
+      if (!existsSyncFn(absPath)) {
+        issues.push(`missing required file ${requiredFile}`);
+      } else {
+        checks.push(`exists: ${requiredFile}`);
+      }
+    }
 
-    for (const tool of toolSpecs) {
-        const issues = [];
-        const checks = [];
+    if (tool.entry) {
+      const loadMode = tool.load || "exists";
 
-        // Surface integrity probe entries scoped to this tool first.
-        const integrityEntries = integrityMissingByTool.get(tool.name) || [];
-        for (const entry of integrityEntries) {
-            if (entry.reason === "missing") {
-                issues.push(`missing required file ${entry.relPath}`);
-            } else if (entry.reason === "empty") {
-                issues.push(`${entry.relPath} is empty (size 0)`);
-            } else {
-                issues.push(`${entry.relPath} integrity probe: ${entry.reason}`);
+      if (loadMode === "resolve") {
+        // "resolve" entries are module specifiers (e.g. "jest-circus/runner"),
+        // resolved against the repo's package.json. This mirrors
+        // validate-node-tooling.js TOOL_SPECS semantics.
+        try {
+          const resolved = requireResolveFn(tool.entry);
+          if (!resolved) {
+            issues.push(`failed to resolve ${tool.entry}`);
+          } else if (!existsSyncFn(resolved)) {
+            issues.push(`resolved ${tool.entry} to missing path ${resolved}`);
+          } else {
+            checks.push(
+              `resolved: ${tool.entry} -> ${path.relative(repoRoot, resolved) || resolved}`
+            );
+            try {
+              requireFn(resolved);
+              checks.push(`loaded: ${tool.entry}`);
+            } catch (error) {
+              const detail = error && error.message ? error.message : String(error);
+              issues.push(`could not load ${tool.entry}: ${detail}`);
             }
+          }
+        } catch (error) {
+          const detail = error && error.message ? error.message : String(error);
+          issues.push(`could not resolve ${tool.entry}: ${detail}`);
         }
-
-        for (const requiredFile of tool.requiredFiles || []) {
-            const absPath = path.join(repoRoot, ...requiredFile.split("/"));
-            // Skip the existsSync check when integrity has already flagged
-            // this same path; avoids duplicate lines in the report.
-            const alreadyFlagged = integrityEntries.some((e) => e.relPath === requiredFile);
-            if (alreadyFlagged) {
-                continue;
-            }
-            if (!existsSyncFn(absPath)) {
-                issues.push(`missing required file ${requiredFile}`);
-            } else {
-                checks.push(`exists: ${requiredFile}`);
-            }
-        }
-
-        if (tool.entry) {
-            const loadMode = tool.load || "exists";
-
-            if (loadMode === "resolve") {
-                // "resolve" entries are module specifiers (e.g. "jest-circus/runner"),
-                // resolved against the repo's package.json. This mirrors
-                // validate-node-tooling.js TOOL_SPECS semantics.
-                try {
-                    const resolved = requireResolveFn(tool.entry);
-                    if (!resolved) {
-                        issues.push(`failed to resolve ${tool.entry}`);
-                    } else if (!existsSyncFn(resolved)) {
-                        issues.push(`resolved ${tool.entry} to missing path ${resolved}`);
-                    } else {
-                        checks.push(`resolved: ${tool.entry} -> ${path.relative(repoRoot, resolved) || resolved}`);
-                        try {
-                            requireFn(resolved);
-                            checks.push(`loaded: ${tool.entry}`);
-                        } catch (error) {
-                            const detail = error && error.message ? error.message : String(error);
-                            issues.push(`could not load ${tool.entry}: ${detail}`);
-                        }
-                    }
-                } catch (error) {
-                    const detail = error && error.message ? error.message : String(error);
-                    issues.push(`could not resolve ${tool.entry}: ${detail}`);
-                }
-            } else if (loadMode === "require") {
-                // "require" entries are repo-relative paths (e.g.
-                // "node_modules/prettier/index.cjs") that must be made
-                // absolute before require()-ing.
-                const absEntry = path.join(repoRoot, ...tool.entry.split("/"));
-                if (!existsSyncFn(absEntry)) {
-                    issues.push(`require entry missing on disk: ${tool.entry}`);
-                } else {
-                    try {
-                        requireFn(absEntry);
-                        checks.push(`required: ${tool.entry}`);
-                    } catch (error) {
-                        const detail = error && error.message ? error.message : String(error);
-                        issues.push(`could not load ${tool.entry}: ${detail}`);
-                    }
-                }
-            } else if (loadMode === "import") {
-                // ESM entries cannot be loaded synchronously here. The doctor
-                // is a synchronous report by design (see file header); we
-                // accept resolve+exists as the freshness signal for ESM
-                // entries and rely on validate-node-tooling.js to do the
-                // async import at preflight time.
-                const absEntry = path.join(repoRoot, ...tool.entry.split("/"));
-                if (!existsSyncFn(absEntry)) {
-                    issues.push(`import entry missing on disk: ${tool.entry}`);
-                } else {
-                    checks.push(`import entry exists (async import deferred to preflight): ${tool.entry}`);
-                }
-            }
-        }
-
-        if (issues.length === 0) {
-            lines.push(`  ok    ${tool.name}`);
-            for (const check of checks) {
-                lines.push(`          ${check}`);
-            }
+      } else if (loadMode === "require") {
+        // "require" entries are repo-relative paths (e.g.
+        // "node_modules/prettier/index.cjs") that must be made
+        // absolute before require()-ing.
+        const absEntry = path.join(repoRoot, ...tool.entry.split("/"));
+        if (!existsSyncFn(absEntry)) {
+          issues.push(`require entry missing on disk: ${tool.entry}`);
         } else {
-            failed += 1;
-            lines.push(`  FAIL  ${tool.name}`);
-            for (const issue of issues) {
-                lines.push(`          - ${issue}`);
-            }
+          try {
+            requireFn(absEntry);
+            checks.push(`required: ${tool.entry}`);
+          } catch (error) {
+            const detail = error && error.message ? error.message : String(error);
+            issues.push(`could not load ${tool.entry}: ${detail}`);
+          }
         }
+      } else if (loadMode === "import") {
+        // ESM entries cannot be loaded synchronously here. The doctor
+        // is a synchronous report by design (see file header); we
+        // accept resolve+exists as the freshness signal for ESM
+        // entries and rely on validate-node-tooling.js to do the
+        // async import at preflight time.
+        const absEntry = path.join(repoRoot, ...tool.entry.split("/"));
+        if (!existsSyncFn(absEntry)) {
+          issues.push(`import entry missing on disk: ${tool.entry}`);
+        } else {
+          checks.push(`import entry exists (async import deferred to preflight): ${tool.entry}`);
+        }
+      }
     }
 
-    if (failed > 0) {
-        lines.push("");
-        lines.push("  Remediation: run `npm ci` to restore node_modules, then re-run `npm run doctor`.");
+    if (issues.length === 0) {
+      lines.push(`  ok    ${tool.name}`);
+      for (const check of checks) {
+        lines.push(`          ${check}`);
+      }
+    } else {
+      failed += 1;
+      lines.push(`  FAIL  ${tool.name}`);
+      for (const issue of issues) {
+        lines.push(`          - ${issue}`);
+      }
     }
+  }
 
-    return {
-        name: "node_modules freshness",
-        status: failed === 0 ? "ok" : "fail",
-        lines,
-    };
+  if (failed > 0) {
+    lines.push("");
+    lines.push(
+      "  Remediation: run `npm ci` to restore node_modules, then re-run `npm run doctor`."
+    );
+  }
+
+  return {
+    name: "node_modules freshness",
+    status: failed === 0 ? "ok" : "fail",
+    lines
+  };
 }
 
 /**
@@ -271,139 +278,139 @@ function checkNodeModulesFreshness(options = {}) {
  *    - Always prints the manual-reset command, even on a clean cache.
  */
 function checkIsolatedJestCache(options = {}) {
-    const {
-        readdirSyncFn = fs.readdirSync,
-        statSyncFn = fs.statSync,
-        existsSyncFn = fs.existsSync,
-        createRequireFn = createRequire,
-        cacheRoot = ISOLATED_JEST_CACHE_ROOT,
-        nowMs = Date.now(),
-        staleMs = STALE_CACHE_MS,
-    } = options;
+  const {
+    readdirSyncFn = fs.readdirSync,
+    statSyncFn = fs.statSync,
+    existsSyncFn = fs.existsSync,
+    createRequireFn = createRequire,
+    cacheRoot = ISOLATED_JEST_CACHE_ROOT,
+    nowMs = Date.now(),
+    staleMs = STALE_CACHE_MS
+  } = options;
 
-    const lines = [];
-    const resetCommand =
-        "node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })\"";
+  const lines = [];
+  const resetCommand =
+    "node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })\"";
 
-    if (!existsSyncFn(cacheRoot)) {
-        lines.push(`  ok    No isolated managed-Jest cache yet (${cacheRoot} does not exist).`);
-        lines.push(`        Manual reset (safe even when absent): ${resetCommand}`);
-        return {
-            name: "isolated managed-Jest cache",
-            status: "ok",
-            lines,
-        };
-    }
-
-    let entries;
-    try {
-        entries = readdirSyncFn(cacheRoot, { withFileTypes: true });
-    } catch (error) {
-        const detail = error && error.message ? error.message : String(error);
-        lines.push(`  FAIL  Could not read cache root ${cacheRoot}: ${detail}`);
-        lines.push(`        Manual reset: ${resetCommand}`);
-        return {
-            name: "isolated managed-Jest cache",
-            status: "fail",
-            lines,
-        };
-    }
-
-    const installDirs = entries.filter((entry) => entry.isDirectory());
-
-    if (installDirs.length === 0) {
-        lines.push(`  ok    Cache root exists but contains no install dirs (${cacheRoot}).`);
-        lines.push(`        Manual reset: ${resetCommand}`);
-        return {
-            name: "isolated managed-Jest cache",
-            status: "ok",
-            lines,
-        };
-    }
-
-    let staleCount = 0;
-    let runnerFailures = 0;
-
-    for (const entry of installDirs) {
-        const installDir = path.join(cacheRoot, entry.name);
-        const packageJsonPath = path.join(installDir, "package.json");
-
-        let mtimeMs = null;
-        let ageDays = null;
-        let stale = false;
-        try {
-            const stats = statSyncFn(installDir);
-            mtimeMs = stats.mtimeMs;
-            ageDays = Math.floor((nowMs - mtimeMs) / (24 * 60 * 60 * 1000));
-            stale = nowMs - mtimeMs > staleMs;
-        } catch (error) {
-            const detail = error && error.message ? error.message : String(error);
-            lines.push(`  FAIL  ${entry.name}: stat failed (${detail})`);
-            runnerFailures += 1;
-            continue;
-        }
-
-        let runnerStatus = "ok";
-        let runnerDetail = "";
-        if (existsSyncFn(packageJsonPath)) {
-            try {
-                const isolatedRequire = createRequireFn(packageJsonPath);
-                const resolved = isolatedRequire.resolve("jest-circus/runner");
-                if (!resolved || !existsSyncFn(resolved)) {
-                    runnerStatus = "fail";
-                    runnerDetail = `jest-circus/runner resolved to missing path ${resolved || "(null)"}`;
-                    runnerFailures += 1;
-                } else {
-                    runnerDetail = `jest-circus/runner -> ${resolved}`;
-                }
-            } catch (error) {
-                runnerStatus = "fail";
-                const message = error && error.message ? error.message : String(error);
-                runnerDetail = `jest-circus/runner resolve threw: ${message}`;
-                runnerFailures += 1;
-            }
-        } else {
-            runnerStatus = "fail";
-            runnerDetail = `package.json missing at ${packageJsonPath}`;
-            runnerFailures += 1;
-        }
-
-        const ageLabel = ageDays === null ? "age=?" : `age=${ageDays}d`;
-        const staleLabel = stale ? " STALE" : "";
-        const tag = runnerStatus === "fail" ? "FAIL" : stale ? "warn" : "ok  ";
-        lines.push(`  ${tag}  ${entry.name} (${ageLabel}${staleLabel})`);
-        lines.push(`          ${runnerDetail}`);
-
-        if (stale) {
-            staleCount += 1;
-        }
-    }
-
-    lines.push("");
-    lines.push(`  Manual reset (clears every install dir under the cache root):`);
-    lines.push(`    ${resetCommand}`);
-
-    if (runnerFailures > 0) {
-        return {
-            name: "isolated managed-Jest cache",
-            status: "fail",
-            lines,
-        };
-    }
-
-    if (staleCount > 0) {
-        return {
-            name: "isolated managed-Jest cache",
-            status: "warn",
-            lines,
-        };
-    }
-
+  if (!existsSyncFn(cacheRoot)) {
+    lines.push(`  ok    No isolated managed-Jest cache yet (${cacheRoot} does not exist).`);
+    lines.push(`        Manual reset (safe even when absent): ${resetCommand}`);
     return {
-        name: "isolated managed-Jest cache",
-        status: "ok",
-        lines,
+      name: "isolated managed-Jest cache",
+      status: "ok",
+      lines
     };
+  }
+
+  let entries;
+  try {
+    entries = readdirSyncFn(cacheRoot, { withFileTypes: true });
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
+    lines.push(`  FAIL  Could not read cache root ${cacheRoot}: ${detail}`);
+    lines.push(`        Manual reset: ${resetCommand}`);
+    return {
+      name: "isolated managed-Jest cache",
+      status: "fail",
+      lines
+    };
+  }
+
+  const installDirs = entries.filter((entry) => entry.isDirectory());
+
+  if (installDirs.length === 0) {
+    lines.push(`  ok    Cache root exists but contains no install dirs (${cacheRoot}).`);
+    lines.push(`        Manual reset: ${resetCommand}`);
+    return {
+      name: "isolated managed-Jest cache",
+      status: "ok",
+      lines
+    };
+  }
+
+  let staleCount = 0;
+  let runnerFailures = 0;
+
+  for (const entry of installDirs) {
+    const installDir = path.join(cacheRoot, entry.name);
+    const packageJsonPath = path.join(installDir, "package.json");
+
+    let mtimeMs = null;
+    let ageDays = null;
+    let stale = false;
+    try {
+      const stats = statSyncFn(installDir);
+      mtimeMs = stats.mtimeMs;
+      ageDays = Math.floor((nowMs - mtimeMs) / (24 * 60 * 60 * 1000));
+      stale = nowMs - mtimeMs > staleMs;
+    } catch (error) {
+      const detail = error && error.message ? error.message : String(error);
+      lines.push(`  FAIL  ${entry.name}: stat failed (${detail})`);
+      runnerFailures += 1;
+      continue;
+    }
+
+    let runnerStatus = "ok";
+    let runnerDetail = "";
+    if (existsSyncFn(packageJsonPath)) {
+      try {
+        const isolatedRequire = createRequireFn(packageJsonPath);
+        const resolved = isolatedRequire.resolve("jest-circus/runner");
+        if (!resolved || !existsSyncFn(resolved)) {
+          runnerStatus = "fail";
+          runnerDetail = `jest-circus/runner resolved to missing path ${resolved || "(null)"}`;
+          runnerFailures += 1;
+        } else {
+          runnerDetail = `jest-circus/runner -> ${resolved}`;
+        }
+      } catch (error) {
+        runnerStatus = "fail";
+        const message = error && error.message ? error.message : String(error);
+        runnerDetail = `jest-circus/runner resolve threw: ${message}`;
+        runnerFailures += 1;
+      }
+    } else {
+      runnerStatus = "fail";
+      runnerDetail = `package.json missing at ${packageJsonPath}`;
+      runnerFailures += 1;
+    }
+
+    const ageLabel = ageDays === null ? "age=?" : `age=${ageDays}d`;
+    const staleLabel = stale ? " STALE" : "";
+    const tag = runnerStatus === "fail" ? "FAIL" : stale ? "warn" : "ok  ";
+    lines.push(`  ${tag}  ${entry.name} (${ageLabel}${staleLabel})`);
+    lines.push(`          ${runnerDetail}`);
+
+    if (stale) {
+      staleCount += 1;
+    }
+  }
+
+  lines.push("");
+  lines.push(`  Manual reset (clears every install dir under the cache root):`);
+  lines.push(`    ${resetCommand}`);
+
+  if (runnerFailures > 0) {
+    return {
+      name: "isolated managed-Jest cache",
+      status: "fail",
+      lines
+    };
+  }
+
+  if (staleCount > 0) {
+    return {
+      name: "isolated managed-Jest cache",
+      status: "warn",
+      lines
+    };
+  }
+
+  return {
+    name: "isolated managed-Jest cache",
+    status: "ok",
+    lines
+  };
 }
 
 /**
@@ -412,40 +419,40 @@ function checkIsolatedJestCache(options = {}) {
  *    section and the live policy surfaces immediately.
  */
 function checkEolPolicy(options = {}) {
-    const {
-        // readFileSyncFn is accepted for parity with the other section
-        // signatures and so the test can prove the section does not read any
-        // file (the policy is a static constants module).
-        // eslint-disable-next-line no-unused-vars
-        readFileSyncFn = fs.readFileSync,
-        policy = eolPolicy,
-    } = options;
+  const {
+    // readFileSyncFn is accepted for parity with the other section
+    // signatures and so the test can prove the section does not read any
+    // file (the policy is a static constants module).
+    // eslint-disable-next-line no-unused-vars
+    readFileSyncFn = fs.readFileSync,
+    policy = eolPolicy
+  } = options;
 
-    const lines = [];
-    const crlfExts = [...policy.crlfExts].sort();
-    const lfExts = [...policy.lfExts].sort();
-    const total = crlfExts.length + lfExts.length;
+  const lines = [];
+  const crlfExts = [...policy.crlfExts].sort();
+  const lfExts = [...policy.lfExts].sort();
+  const total = crlfExts.length + lfExts.length;
 
-    lines.push(`  ok    EOL policy loaded from scripts/lib/eol-policy.js`);
-    lines.push(`          CRLF extensions (${crlfExts.length}): ${crlfExts.join(", ")}`);
-    lines.push(`          LF   extensions (${lfExts.length}): ${lfExts.join(", ")}`);
-    lines.push(`          total tracked extensions: ${total}`);
+  lines.push(`  ok    EOL policy loaded from scripts/lib/eol-policy.js`);
+  lines.push(`          CRLF extensions (${crlfExts.length}): ${crlfExts.join(", ")}`);
+  lines.push(`          LF   extensions (${lfExts.length}): ${lfExts.join(", ")}`);
+  lines.push(`          total tracked extensions: ${total}`);
 
-    const overlapping = crlfExts.filter((ext) => policy.lfExts.has(ext));
-    if (overlapping.length > 0) {
-        lines.push(`  FAIL  Extensions appear in BOTH crlfExts and lfExts: ${overlapping.join(", ")}`);
-        return {
-            name: "EOL policy",
-            status: "fail",
-            lines,
-        };
-    }
-
+  const overlapping = crlfExts.filter((ext) => policy.lfExts.has(ext));
+  if (overlapping.length > 0) {
+    lines.push(`  FAIL  Extensions appear in BOTH crlfExts and lfExts: ${overlapping.join(", ")}`);
     return {
-        name: "EOL policy",
-        status: "ok",
-        lines,
+      name: "EOL policy",
+      status: "fail",
+      lines
     };
+  }
+
+  return {
+    name: "EOL policy",
+    status: "ok",
+    lines
+  };
 }
 
 /**
@@ -454,110 +461,126 @@ function checkEolPolicy(options = {}) {
  *    `pre-commit --version` when the binary is on PATH.
  */
 function checkPreCommitConfig(options = {}) {
-    const {
-        readFileSyncFn = fs.readFileSync,
-        parsePrecommitYaml = precommitYaml,
-        runCommandFn = defaultRunCommand,
-        configPath = PRECOMMIT_CONFIG_PATH,
-        packageJsonPath = PACKAGE_JSON_PATH,
-        // Pre-resolved pre-commit --version output. When provided, the section
-        // does not spawn a child process; this lets runDoctor consolidate the
-        // version probes into a single shared spawn (see runDoctor + M1).
-        preCommitVersionResult = null,
-    } = options;
+  const {
+    readFileSyncFn = fs.readFileSync,
+    parsePrecommitYaml = precommitYaml,
+    runCommandFn = defaultRunCommand,
+    configPath = PRECOMMIT_CONFIG_PATH,
+    packageJsonPath = PACKAGE_JSON_PATH,
+    // Pre-resolved pre-commit --version output. When provided, the section
+    // does not spawn a child process; this lets runDoctor consolidate the
+    // version probes into a single shared spawn (see runDoctor + M1).
+    preCommitVersionResult = null
+  } = options;
 
-    const lines = [];
-    let failed = false;
+  const lines = [];
+  let failed = false;
 
-    let configContent;
-    try {
-        configContent = readFileSyncFn(configPath, "utf8");
-    } catch (error) {
-        const detail = error && error.message ? error.message : String(error);
-        return {
-            name: "pre-commit config",
-            status: "fail",
-            lines: [`  FAIL  Could not read ${configPath}: ${detail}`],
-        };
-    }
-
-    const configLines = configContent.replace(/\r\n/g, "\n").split("\n");
-    const blocks = parsePrecommitYaml.findAllHookBlocks(configLines);
-
-    const prePushHookIds = [];
-    for (const block of blocks) {
-        const stages = parsePrecommitYaml.extractStagesFromHookBlock(block);
-        const effective = stages.length === 0 ? ["pre-commit"] : stages;
-        if (effective.includes("pre-push")) {
-            prePushHookIds.push(block.id);
-        }
-    }
-
-    lines.push(`  ok    Parsed ${blocks.length} hook block(s) from ${path.relative(REPO_ROOT, configPath) || configPath}`);
-    lines.push(`          pre-push hooks (${prePushHookIds.length}): ${prePushHookIds.join(", ") || "(none)"}`);
-
-    const versionResult = preCommitVersionResult !== null
-        ? preCommitVersionResult
-        : runCommandFn("pre-commit", ["--version"]);
-    if (versionResult && versionResult.status === 0 && typeof versionResult.stdout === "string") {
-        lines.push(`          pre-commit --version: ${versionResult.stdout.trim()}`);
-    } else if (versionResult && versionResult.error && versionResult.error.code === "ENOENT") {
-        // Without pre-commit on PATH, `npm run preflight:pre-push` cannot run
-        // its final `pre-commit run --hook-stage pre-push --all-files` step.
-        // The doctor's purpose is to predict whether a push will succeed; a
-        // missing pre-commit binary makes that impossible, so this is FAIL.
-        lines.push("  FAIL  pre-commit --version: not on PATH (ENOENT). preflight:pre-push cannot run without it.");
-        lines.push("          Install pre-commit via pip (e.g. `pip install pre-commit`) then re-run `npm run doctor`.");
-        failed = true;
-    } else {
-        const detail = versionResult && versionResult.error && versionResult.error.message
-            ? versionResult.error.message
-            : `status=${versionResult ? versionResult.status : "null"}`;
-        lines.push(`  FAIL  pre-commit --version: not available (${detail}). preflight:pre-push cannot run without it.`);
-        failed = true;
-    }
-
-    let packageJsonContent;
-    try {
-        packageJsonContent = readFileSyncFn(packageJsonPath, "utf8");
-    } catch (error) {
-        const detail = error && error.message ? error.message : String(error);
-        lines.push(`  FAIL  Could not read ${packageJsonPath}: ${detail}`);
-        failed = true;
-        packageJsonContent = "";
-    }
-
-    let parsedPackageJson = null;
-    if (packageJsonContent) {
-        try {
-            parsedPackageJson = JSON.parse(packageJsonContent);
-        } catch (error) {
-            const detail = error && error.message ? error.message : String(error);
-            lines.push(`  FAIL  package.json is not valid JSON: ${detail}`);
-            failed = true;
-        }
-    }
-
-    const scripts = (parsedPackageJson && parsedPackageJson.scripts) || {};
-    const preflightPrePush = scripts["preflight:pre-push"];
-    if (typeof preflightPrePush === "string" && preflightPrePush.length > 0) {
-        lines.push(`          preflight:pre-push script present`);
-        if (!/pre-commit\s+run\s+--hook-stage\s+pre-push\s+--all-files/.test(preflightPrePush)) {
-            lines.push(`  FAIL  preflight:pre-push does not invoke 'pre-commit run --hook-stage pre-push --all-files'`);
-            failed = true;
-        } else {
-            lines.push(`          coverage: invokes 'pre-commit run --hook-stage pre-push --all-files' (covers all ${prePushHookIds.length} pre-push hooks)`);
-        }
-    } else {
-        lines.push(`  FAIL  package.json scripts.preflight:pre-push is missing or empty`);
-        failed = true;
-    }
-
+  let configContent;
+  try {
+    configContent = readFileSyncFn(configPath, "utf8");
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
     return {
-        name: "pre-commit config",
-        status: failed ? "fail" : "ok",
-        lines,
+      name: "pre-commit config",
+      status: "fail",
+      lines: [`  FAIL  Could not read ${configPath}: ${detail}`]
     };
+  }
+
+  const configLines = configContent.replace(/\r\n/g, "\n").split("\n");
+  const blocks = parsePrecommitYaml.findAllHookBlocks(configLines);
+
+  const prePushHookIds = [];
+  for (const block of blocks) {
+    const stages = parsePrecommitYaml.extractStagesFromHookBlock(block);
+    const effective = stages.length === 0 ? ["pre-commit"] : stages;
+    if (effective.includes("pre-push")) {
+      prePushHookIds.push(block.id);
+    }
+  }
+
+  lines.push(
+    `  ok    Parsed ${blocks.length} hook block(s) from ${path.relative(REPO_ROOT, configPath) || configPath}`
+  );
+  lines.push(
+    `          pre-push hooks (${prePushHookIds.length}): ${prePushHookIds.join(", ") || "(none)"}`
+  );
+
+  const versionResult =
+    preCommitVersionResult !== null
+      ? preCommitVersionResult
+      : runCommandFn("pre-commit", ["--version"]);
+  if (versionResult && versionResult.status === 0 && typeof versionResult.stdout === "string") {
+    lines.push(`          pre-commit --version: ${versionResult.stdout.trim()}`);
+  } else if (versionResult && versionResult.error && versionResult.error.code === "ENOENT") {
+    // Without pre-commit on PATH, `npm run preflight:pre-push` cannot run
+    // its final `pre-commit run --hook-stage pre-push --all-files` step.
+    // The doctor's purpose is to predict whether a push will succeed; a
+    // missing pre-commit binary makes that impossible, so this is FAIL.
+    lines.push(
+      "  FAIL  pre-commit --version: not on PATH (ENOENT). preflight:pre-push cannot run without it."
+    );
+    lines.push(
+      "          Install pre-commit via pip (e.g. `pip install pre-commit`) then re-run `npm run doctor`."
+    );
+    failed = true;
+  } else {
+    const detail =
+      versionResult && versionResult.error && versionResult.error.message
+        ? versionResult.error.message
+        : `status=${versionResult ? versionResult.status : "null"}`;
+    lines.push(
+      `  FAIL  pre-commit --version: not available (${detail}). preflight:pre-push cannot run without it.`
+    );
+    failed = true;
+  }
+
+  let packageJsonContent;
+  try {
+    packageJsonContent = readFileSyncFn(packageJsonPath, "utf8");
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
+    lines.push(`  FAIL  Could not read ${packageJsonPath}: ${detail}`);
+    failed = true;
+    packageJsonContent = "";
+  }
+
+  let parsedPackageJson = null;
+  if (packageJsonContent) {
+    try {
+      parsedPackageJson = JSON.parse(packageJsonContent);
+    } catch (error) {
+      const detail = error && error.message ? error.message : String(error);
+      lines.push(`  FAIL  package.json is not valid JSON: ${detail}`);
+      failed = true;
+    }
+  }
+
+  const scripts = (parsedPackageJson && parsedPackageJson.scripts) || {};
+  const preflightPrePush = scripts["preflight:pre-push"];
+  if (typeof preflightPrePush === "string" && preflightPrePush.length > 0) {
+    lines.push(`          preflight:pre-push script present`);
+    if (!/pre-commit\s+run\s+--hook-stage\s+pre-push\s+--all-files/.test(preflightPrePush)) {
+      lines.push(
+        `  FAIL  preflight:pre-push does not invoke 'pre-commit run --hook-stage pre-push --all-files'`
+      );
+      failed = true;
+    } else {
+      lines.push(
+        `          coverage: invokes 'pre-commit run --hook-stage pre-push --all-files' (covers all ${prePushHookIds.length} pre-push hooks)`
+      );
+    }
+  } else {
+    lines.push(`  FAIL  package.json scripts.preflight:pre-push is missing or empty`);
+    failed = true;
+  }
+
+  return {
+    name: "pre-commit config",
+    status: failed ? "fail" : "ok",
+    lines
+  };
 }
 
 /**
@@ -565,63 +588,69 @@ function checkPreCommitConfig(options = {}) {
  *    precommit-perf-score.js. No reimplementation; we just summarize.
  */
 function checkHookPerfBudget(options = {}) {
-    const {
-        readFileSyncFn = fs.readFileSync,
-        scoreConfigFn = precommitPerfScore.scoreConfig,
-        budget = precommitPerfScore.PERF_BUDGET,
-        perHookCeiling = precommitPerfScore.PER_HOOK_CEILING,
-        configPath = PRECOMMIT_CONFIG_PATH,
-    } = options;
+  const {
+    readFileSyncFn = fs.readFileSync,
+    scoreConfigFn = precommitPerfScore.scoreConfig,
+    budget = precommitPerfScore.PERF_BUDGET,
+    perHookCeiling = precommitPerfScore.PER_HOOK_CEILING,
+    configPath = PRECOMMIT_CONFIG_PATH
+  } = options;
 
-    const lines = [];
+  const lines = [];
 
-    let content;
-    try {
-        content = readFileSyncFn(configPath, "utf8");
-    } catch (error) {
-        const detail = error && error.message ? error.message : String(error);
-        return {
-            name: "hook-perf budget",
-            status: "fail",
-            lines: [`  FAIL  Could not read ${configPath}: ${detail}`],
-        };
-    }
-
-    const result = scoreConfigFn(content);
-    const total = result.totalScore || 0;
-
-    let status = "ok";
-    const indicator = total > budget ? "FAIL" : "ok  ";
-    lines.push(`  ${indicator}  pre-commit perf score: ${total} (budget=${budget}, per-hook ceiling=${perHookCeiling})`);
-
-    if (total > budget) {
-        status = "fail";
-        lines.push(`          score exceeds whole-pipeline budget`);
-    }
-
-    if (result.perHookViolations && result.perHookViolations.length > 0) {
-        status = "fail";
-        for (const violation of result.perHookViolations) {
-            lines.push(`  FAIL  per-hook ceiling violation: ${violation.id} scored ${violation.score} > ${violation.ceiling}`);
-        }
-    }
-
-    if (result.rejections && result.rejections.length > 0) {
-        status = "fail";
-        for (const rejection of result.rejections) {
-            lines.push(`  FAIL  rejected perf-allow directive on ${rejection.id} (line ${rejection.startLine}): ${rejection.error}`);
-        }
-    }
-
-    if (result.allowList && result.allowList.length > 0) {
-        lines.push(`          waivers in effect: ${result.allowList.length}`);
-    }
-
+  let content;
+  try {
+    content = readFileSyncFn(configPath, "utf8");
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
     return {
-        name: "hook-perf budget",
-        status,
-        lines,
+      name: "hook-perf budget",
+      status: "fail",
+      lines: [`  FAIL  Could not read ${configPath}: ${detail}`]
     };
+  }
+
+  const result = scoreConfigFn(content);
+  const total = result.totalScore || 0;
+
+  let status = "ok";
+  const indicator = total > budget ? "FAIL" : "ok  ";
+  lines.push(
+    `  ${indicator}  pre-commit perf score: ${total} (budget=${budget}, per-hook ceiling=${perHookCeiling})`
+  );
+
+  if (total > budget) {
+    status = "fail";
+    lines.push(`          score exceeds whole-pipeline budget`);
+  }
+
+  if (result.perHookViolations && result.perHookViolations.length > 0) {
+    status = "fail";
+    for (const violation of result.perHookViolations) {
+      lines.push(
+        `  FAIL  per-hook ceiling violation: ${violation.id} scored ${violation.score} > ${violation.ceiling}`
+      );
+    }
+  }
+
+  if (result.rejections && result.rejections.length > 0) {
+    status = "fail";
+    for (const rejection of result.rejections) {
+      lines.push(
+        `  FAIL  rejected perf-allow directive on ${rejection.id} (line ${rejection.startLine}): ${rejection.error}`
+      );
+    }
+  }
+
+  if (result.allowList && result.allowList.length > 0) {
+    lines.push(`          waivers in effect: ${result.allowList.length}`);
+  }
+
+  return {
+    name: "hook-perf budget",
+    status,
+    lines
+  };
 }
 
 /**
@@ -632,90 +661,92 @@ function checkHookPerfBudget(options = {}) {
  *    package.json line-ending check is a hard failure.
  */
 function checkCrossPlatformSanity(options = {}) {
-    const {
-        platformFn = () => process.platform,
-        runCommandFn = defaultRunCommand,
-        readFileSyncFn = fs.readFileSync,
-        packageJsonPath = PACKAGE_JSON_PATH,
-        shellEnv = process.env.SHELL || "",
-        // Pre-resolved version probe results. When provided, the section
-        // does not spawn child processes for these probes; runDoctor shares
-        // the spawn output across header and section via this surface (M1).
-        pwshVersionResult = null,
-        bashVersionResult = null,
-    } = options;
+  const {
+    platformFn = () => process.platform,
+    runCommandFn = defaultRunCommand,
+    readFileSyncFn = fs.readFileSync,
+    packageJsonPath = PACKAGE_JSON_PATH,
+    shellEnv = process.env.SHELL || "",
+    // Pre-resolved version probe results. When provided, the section
+    // does not spawn child processes for these probes; runDoctor shares
+    // the spawn output across header and section via this surface (M1).
+    pwshVersionResult = null,
+    bashVersionResult = null
+  } = options;
 
-    const lines = [];
-    let failed = false;
-    let warned = false;
+  const lines = [];
+  let failed = false;
+  let warned = false;
 
-    const platform = platformFn();
-    lines.push(`  ok    process.platform: ${platform}`);
-    lines.push(`          SHELL env: ${shellEnv || "(unset)"}`);
+  const platform = platformFn();
+  lines.push(`  ok    process.platform: ${platform}`);
+  lines.push(`          SHELL env: ${shellEnv || "(unset)"}`);
 
-    const pwshResult = pwshVersionResult !== null
-        ? pwshVersionResult
-        : runCommandFn("pwsh", ["--version"]);
-    if (pwshResult && pwshResult.status === 0 && typeof pwshResult.stdout === "string") {
-        lines.push(`          pwsh:    ${pwshResult.stdout.trim().split("\n")[0]}`);
-    } else if (pwshResult && pwshResult.error && pwshResult.error.code === "ENOENT") {
-        lines.push(`          pwsh:    not installed (ENOENT) - acceptable on Linux/macOS`);
-        if (platform === "win32") {
-            warned = true;
-        }
-    } else {
-        const detail = pwshResult && pwshResult.error && pwshResult.error.message
-            ? pwshResult.error.message
-            : `status=${pwshResult ? pwshResult.status : "null"}`;
-        lines.push(`          pwsh:    not available (${detail})`);
-        if (platform === "win32") {
-            warned = true;
-        }
+  const pwshResult =
+    pwshVersionResult !== null ? pwshVersionResult : runCommandFn("pwsh", ["--version"]);
+  if (pwshResult && pwshResult.status === 0 && typeof pwshResult.stdout === "string") {
+    lines.push(`          pwsh:    ${pwshResult.stdout.trim().split("\n")[0]}`);
+  } else if (pwshResult && pwshResult.error && pwshResult.error.code === "ENOENT") {
+    lines.push(`          pwsh:    not installed (ENOENT) - acceptable on Linux/macOS`);
+    if (platform === "win32") {
+      warned = true;
     }
-
-    const bashResult = bashVersionResult !== null
-        ? bashVersionResult
-        : runCommandFn("bash", ["--version"]);
-    if (bashResult && bashResult.status === 0 && typeof bashResult.stdout === "string") {
-        lines.push(`          bash:    ${bashResult.stdout.trim().split("\n")[0]}`);
-    } else if (bashResult && bashResult.error && bashResult.error.code === "ENOENT") {
-        lines.push(`          bash:    not installed (ENOENT)`);
-        // On Linux/macOS bash absence is unusual but not a hard fail for the
-        // doctor; pre-commit can still run hooks via system shells.
-        warned = true;
-    } else {
-        const detail = bashResult && bashResult.error && bashResult.error.message
-            ? bashResult.error.message
-            : `status=${bashResult ? bashResult.status : "null"}`;
-        lines.push(`          bash:    not available (${detail})`);
-        warned = true;
+  } else {
+    const detail =
+      pwshResult && pwshResult.error && pwshResult.error.message
+        ? pwshResult.error.message
+        : `status=${pwshResult ? pwshResult.status : "null"}`;
+    lines.push(`          pwsh:    not available (${detail})`);
+    if (platform === "win32") {
+      warned = true;
     }
+  }
 
-    let packageContent;
-    try {
-        packageContent = readFileSyncFn(packageJsonPath, "utf8");
-    } catch (error) {
-        const detail = error && error.message ? error.message : String(error);
-        lines.push(`  FAIL  Could not read ${packageJsonPath} to check EOL: ${detail}`);
-        return {
-            name: "cross-platform sanity",
-            status: "fail",
-            lines,
-        };
-    }
+  const bashResult =
+    bashVersionResult !== null ? bashVersionResult : runCommandFn("bash", ["--version"]);
+  if (bashResult && bashResult.status === 0 && typeof bashResult.stdout === "string") {
+    lines.push(`          bash:    ${bashResult.stdout.trim().split("\n")[0]}`);
+  } else if (bashResult && bashResult.error && bashResult.error.code === "ENOENT") {
+    lines.push(`          bash:    not installed (ENOENT)`);
+    // On Linux/macOS bash absence is unusual but not a hard fail for the
+    // doctor; pre-commit can still run hooks via system shells.
+    warned = true;
+  } else {
+    const detail =
+      bashResult && bashResult.error && bashResult.error.message
+        ? bashResult.error.message
+        : `status=${bashResult ? bashResult.status : "null"}`;
+    lines.push(`          bash:    not available (${detail})`);
+    warned = true;
+  }
 
-    if (packageContent.includes("\r\n")) {
-        lines.push(`  FAIL  package.json contains CRLF line endings; policy requires LF (.json is in lfExts).`);
-        failed = true;
-    } else {
-        lines.push(`  ok    package.json line endings: LF`);
-    }
-
+  let packageContent;
+  try {
+    packageContent = readFileSyncFn(packageJsonPath, "utf8");
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
+    lines.push(`  FAIL  Could not read ${packageJsonPath} to check EOL: ${detail}`);
     return {
-        name: "cross-platform sanity",
-        status: failed ? "fail" : warned ? "warn" : "ok",
-        lines,
+      name: "cross-platform sanity",
+      status: "fail",
+      lines
     };
+  }
+
+  if (packageContent.includes("\r\n")) {
+    lines.push(
+      `  FAIL  package.json contains CRLF line endings; policy requires LF (.json is in lfExts).`
+    );
+    failed = true;
+  } else {
+    lines.push(`  ok    package.json line endings: LF`);
+  }
+
+  return {
+    name: "cross-platform sanity",
+    status: failed ? "fail" : warned ? "warn" : "ok",
+    lines
+  };
 }
 
 /**
@@ -744,169 +775,232 @@ function checkCrossPlatformSanity(options = {}) {
  *    --exclude-standard` does not list intent-to-add files.
  */
 function checkWorkingTreeState(options = {}) {
-    const {
-        runCommandFn = defaultRunCommand,
-        cwd = REPO_ROOT,
-    } = options;
+  const { runCommandFn = defaultRunCommand, cwd = REPO_ROOT } = options;
 
-    const lines = [];
+  const lines = [];
 
-    const result = runCommandFn(
-        "git",
-        ["-c", "core.quotepath=false", "status", "--porcelain"],
-        { cwd }
+  const result = runCommandFn("git", ["-c", "core.quotepath=false", "status", "--porcelain"], {
+    cwd
+  });
+
+  if (result && result.error) {
+    if (result.error.code === "ENOENT") {
+      lines.push("  FAIL  git not found on PATH; cannot inspect working tree.");
+      return {
+        name: "working-tree state",
+        status: "fail",
+        lines
+      };
+    }
+    const detail = result.error.message ? result.error.message : String(result.error);
+    lines.push(`  FAIL  git status failed: ${detail}`);
+    return {
+      name: "working-tree state",
+      status: "fail",
+      lines
+    };
+  }
+
+  if (!result || typeof result.status !== "number" || result.status !== 0) {
+    const stderr = result && result.stderr ? String(result.stderr).trim() : "";
+    const statusVal = result && typeof result.status === "number" ? result.status : "null";
+    lines.push(`  FAIL  git status exited with status ${statusVal}: ${stderr || "no stderr"}`);
+    return {
+      name: "working-tree state",
+      status: "fail",
+      lines
+    };
+  }
+
+  const stdoutText =
+    typeof result.stdout === "string"
+      ? result.stdout
+      : result.stdout
+        ? result.stdout.toString("utf8")
+        : "";
+
+  if (stdoutText.length === 0) {
+    lines.push("  ok    Working tree is clean (no untracked, modified, or staged paths).");
+    return {
+      name: "working-tree state",
+      status: "ok",
+      lines
+    };
+  }
+
+  // Each porcelain line: "XY path". Untracked is "?? path"; the first two
+  // characters are the index (X) and worktree (Y) statuses respectively.
+  // We split on \n (not \0) because we did not pass -z; weird filenames
+  // would be quoted, but we already set core.quotepath=false to keep them
+  // raw within their octet ranges. This matches validate-untracked-policy's
+  // semantics for the relevant case (untracked paths from porcelain "??").
+  const untracked = [];
+  const modifiedUnstaged = [];
+  const staged = [];
+
+  const porcelainLines = stdoutText.replace(/\r\n/g, "\n").split("\n");
+  for (const rawLine of porcelainLines) {
+    if (rawLine.length === 0) {
+      continue;
+    }
+    // Porcelain v1: positions 0 and 1 are the X (index) and Y (worktree)
+    // codes; position 2 is a single space; positions 3+ are the path.
+    const x = rawLine.charAt(0);
+    const y = rawLine.charAt(1);
+    const pathPart = rawLine.slice(3);
+
+    if (x === "?" && y === "?") {
+      untracked.push(pathPart);
+      continue;
+    }
+
+    // X is a space means "no index entry" but the worktree differs from
+    // HEAD, i.e. unstaged modification/deletion/etc. Y non-space and
+    // non-"?" means worktree differs from index after the staged change.
+    const hasStagedChange = x !== " " && x !== "?";
+    const hasUnstagedChange = y !== " " && y !== "?";
+
+    if (hasStagedChange) {
+      staged.push(`${x}${y} ${pathPart}`);
+    }
+    if (hasUnstagedChange) {
+      modifiedUnstaged.push(`${x}${y} ${pathPart}`);
+    }
+  }
+
+  if (untracked.length > 0) {
+    lines.push(
+      `  FAIL  ${untracked.length} untracked-and-unignored path(s) (validate-untracked-policy will reject these):`
+    );
+    for (const entry of untracked) {
+      lines.push(`          ?? ${entry}`);
+    }
+    lines.push("");
+    lines.push(
+      "  Remediation: commit each path, add it to .gitignore (and .npmignore if it should not ship)"
+    );
+    lines.push(
+      "              with a one-line rationale, OR run `git add -N <path>` to mark intent-to-add"
+    );
+    lines.push(
+      "              (intent-to-add files are NOT listed by `git ls-files --others --exclude-standard`)."
     );
 
-    if (result && result.error) {
-        if (result.error.code === "ENOENT") {
-            lines.push("  FAIL  git not found on PATH; cannot inspect working tree.");
-            return {
-                name: "working-tree state",
-                status: "fail",
-                lines,
-            };
-        }
-        const detail = result.error.message ? result.error.message : String(result.error);
-        lines.push(`  FAIL  git status failed: ${detail}`);
-        return {
-            name: "working-tree state",
-            status: "fail",
-            lines,
-        };
-    }
-
-    if (!result || typeof result.status !== "number" || result.status !== 0) {
-        const stderr = result && result.stderr ? String(result.stderr).trim() : "";
-        const statusVal = result && typeof result.status === "number" ? result.status : "null";
-        lines.push(`  FAIL  git status exited with status ${statusVal}: ${stderr || "no stderr"}`);
-        return {
-            name: "working-tree state",
-            status: "fail",
-            lines,
-        };
-    }
-
-    const stdoutText = typeof result.stdout === "string"
-        ? result.stdout
-        : (result.stdout ? result.stdout.toString("utf8") : "");
-
-    if (stdoutText.length === 0) {
-        lines.push("  ok    Working tree is clean (no untracked, modified, or staged paths).");
-        return {
-            name: "working-tree state",
-            status: "ok",
-            lines,
-        };
-    }
-
-    // Each porcelain line: "XY path". Untracked is "?? path"; the first two
-    // characters are the index (X) and worktree (Y) statuses respectively.
-    // We split on \n (not \0) because we did not pass -z; weird filenames
-    // would be quoted, but we already set core.quotepath=false to keep them
-    // raw within their octet ranges. This matches validate-untracked-policy's
-    // semantics for the relevant case (untracked paths from porcelain "??").
-    const untracked = [];
-    const modifiedUnstaged = [];
-    const staged = [];
-
-    const porcelainLines = stdoutText.replace(/\r\n/g, "\n").split("\n");
-    for (const rawLine of porcelainLines) {
-        if (rawLine.length === 0) {
-            continue;
-        }
-        // Porcelain v1: positions 0 and 1 are the X (index) and Y (worktree)
-        // codes; position 2 is a single space; positions 3+ are the path.
-        const x = rawLine.charAt(0);
-        const y = rawLine.charAt(1);
-        const pathPart = rawLine.slice(3);
-
-        if (x === "?" && y === "?") {
-            untracked.push(pathPart);
-            continue;
-        }
-
-        // X is a space means "no index entry" but the worktree differs from
-        // HEAD, i.e. unstaged modification/deletion/etc. Y non-space and
-        // non-"?" means worktree differs from index after the staged change.
-        const hasStagedChange = x !== " " && x !== "?";
-        const hasUnstagedChange = y !== " " && y !== "?";
-
-        if (hasStagedChange) {
-            staged.push(`${x}${y} ${pathPart}`);
-        }
-        if (hasUnstagedChange) {
-            modifiedUnstaged.push(`${x}${y} ${pathPart}`);
-        }
-    }
-
-    if (untracked.length > 0) {
-        lines.push(`  FAIL  ${untracked.length} untracked-and-unignored path(s) (validate-untracked-policy will reject these):`);
-        for (const entry of untracked) {
-            lines.push(`          ?? ${entry}`);
-        }
-        lines.push("");
-        lines.push("  Remediation: commit each path, add it to .gitignore (and .npmignore if it should not ship)");
-        lines.push("              with a one-line rationale, OR run `git add -N <path>` to mark intent-to-add");
-        lines.push("              (intent-to-add files are NOT listed by `git ls-files --others --exclude-standard`).");
-
-        // Also include staged + modified-unstaged for situational awareness,
-        // but only as informational lines below the FAIL diagnostic.
-        if (staged.length > 0) {
-            lines.push("");
-            lines.push(`  info  ${staged.length} staged path(s) (will be included in the next commit):`);
-            for (const entry of staged) {
-                lines.push(`          ${entry}`);
-            }
-        }
-        if (modifiedUnstaged.length > 0) {
-            lines.push("");
-            lines.push(`  info  ${modifiedUnstaged.length} modified-but-unstaged path(s):`);
-            for (const entry of modifiedUnstaged) {
-                lines.push(`          ${entry}`);
-            }
-        }
-
-        return {
-            name: "working-tree state",
-            status: "fail",
-            lines,
-        };
-    }
-
-    if (modifiedUnstaged.length > 0) {
-        lines.push(`  warn  ${modifiedUnstaged.length} modified-but-unstaged path(s) (preflight does NOT fail on these, but the push will not carry them):`);
-        for (const entry of modifiedUnstaged) {
-            lines.push(`          ${entry}`);
-        }
-        if (staged.length > 0) {
-            lines.push("");
-            lines.push(`  info  ${staged.length} staged path(s) (will be included in the next commit):`);
-            for (const entry of staged) {
-                lines.push(`          ${entry}`);
-            }
-        }
-        return {
-            name: "working-tree state",
-            status: "warn",
-            lines,
-        };
-    }
-
-    // Only staged or otherwise-clean content -> OK.
+    // Also include staged + modified-unstaged for situational awareness,
+    // but only as informational lines below the FAIL diagnostic.
     if (staged.length > 0) {
-        lines.push(`  ok    ${staged.length} staged path(s), no untracked or unstaged-modification entries:`);
-        for (const entry of staged) {
-            lines.push(`          ${entry}`);
-        }
-    } else {
-        lines.push("  ok    Working tree is clean (porcelain returned non-empty but nothing actionable).");
+      lines.push("");
+      lines.push(`  info  ${staged.length} staged path(s) (will be included in the next commit):`);
+      for (const entry of staged) {
+        lines.push(`          ${entry}`);
+      }
+    }
+    if (modifiedUnstaged.length > 0) {
+      lines.push("");
+      lines.push(`  info  ${modifiedUnstaged.length} modified-but-unstaged path(s):`);
+      for (const entry of modifiedUnstaged) {
+        lines.push(`          ${entry}`);
+      }
     }
 
     return {
-        name: "working-tree state",
-        status: "ok",
-        lines,
+      name: "working-tree state",
+      status: "fail",
+      lines
     };
+  }
+
+  if (modifiedUnstaged.length > 0) {
+    lines.push(
+      `  warn  ${modifiedUnstaged.length} modified-but-unstaged path(s) (preflight does NOT fail on these, but the push will not carry them):`
+    );
+    for (const entry of modifiedUnstaged) {
+      lines.push(`          ${entry}`);
+    }
+    if (staged.length > 0) {
+      lines.push("");
+      lines.push(`  info  ${staged.length} staged path(s) (will be included in the next commit):`);
+      for (const entry of staged) {
+        lines.push(`          ${entry}`);
+      }
+    }
+    return {
+      name: "working-tree state",
+      status: "warn",
+      lines
+    };
+  }
+
+  // Only staged or otherwise-clean content -> OK.
+  if (staged.length > 0) {
+    lines.push(
+      `  ok    ${staged.length} staged path(s), no untracked or unstaged-modification entries:`
+    );
+    for (const entry of staged) {
+      lines.push(`          ${entry}`);
+    }
+  } else {
+    lines.push(
+      "  ok    Working tree is clean (porcelain returned non-empty but nothing actionable)."
+    );
+  }
+
+  return {
+    name: "working-tree state",
+    status: "ok",
+    lines
+  };
+}
+
+function checkChangedDocumentation(options = {}) {
+  const { runChangedDocValidatorsFn = runChangedDocValidators } = options;
+
+  const lines = [];
+  let result;
+  try {
+    result = runChangedDocValidatorsFn({ silent: true });
+  } catch (error) {
+    lines.push(`  FAIL  changed documentation validators failed to run: ${error.message}`);
+    return {
+      name: "changed documentation validators",
+      status: "fail",
+      lines
+    };
+  }
+
+  const fileCount = result.files ? result.files.length : 0;
+  const totalViolations = result.totalViolations || 0;
+  if (fileCount === 0) {
+    lines.push("  ok    No changed markdown or C# files to inspect.");
+    return {
+      name: "changed documentation validators",
+      status: "ok",
+      lines
+    };
+  }
+
+  if (totalViolations === 0) {
+    lines.push(
+      `  ok    ${fileCount} changed documentation file(s) passed ASCII/code/prose validators.`
+    );
+    return {
+      name: "changed documentation validators",
+      status: "ok",
+      lines
+    };
+  }
+
+  lines.push(
+    `  FAIL  ${totalViolations} documentation validator violation(s) across ${fileCount} changed file(s).`
+  );
+  lines.push(
+    "  Remediation: run `npm run validate:changed-docs`, fix the reported files, then re-run `npm run doctor`."
+  );
+  return {
+    name: "changed documentation validators",
+    status: "fail",
+    lines
+  };
 }
 
 /**
@@ -916,34 +1010,44 @@ function checkWorkingTreeState(options = {}) {
  * stdout/stderr keys regardless of whether the underlying spawn succeeded.
  */
 function defaultRunCommand(command, args, options = {}) {
-    const spawnOptions = {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-        ...options,
-    };
+  const spawnOptions = {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    ...options
+  };
 
-    let result;
-    try {
-        result = shellCommand.spawnPlatformCommandSync(
-            command,
-            args,
-            spawnOptions,
-            childProcess.spawnSync
-        );
-    } catch (error) {
-        return { status: null, error, stdout: "", stderr: "" };
-    }
+  let result;
+  try {
+    result = shellCommand.spawnPlatformCommandSync(
+      command,
+      args,
+      spawnOptions,
+      childProcess.spawnSync
+    );
+  } catch (error) {
+    return { status: null, error, stdout: "", stderr: "" };
+  }
 
-    if (!result) {
-        return { status: null, error: new Error("spawnSync returned null"), stdout: "", stderr: "" };
-    }
+  if (!result) {
+    return { status: null, error: new Error("spawnSync returned null"), stdout: "", stderr: "" };
+  }
 
-    return {
-        status: typeof result.status === "number" ? result.status : null,
-        error: result.error || null,
-        stdout: typeof result.stdout === "string" ? result.stdout : (result.stdout ? result.stdout.toString("utf8") : ""),
-        stderr: typeof result.stderr === "string" ? result.stderr : (result.stderr ? result.stderr.toString("utf8") : ""),
-    };
+  return {
+    status: typeof result.status === "number" ? result.status : null,
+    error: result.error || null,
+    stdout:
+      typeof result.stdout === "string"
+        ? result.stdout
+        : result.stdout
+          ? result.stdout.toString("utf8")
+          : "",
+    stderr:
+      typeof result.stderr === "string"
+        ? result.stderr
+        : result.stderr
+          ? result.stderr.toString("utf8")
+          : ""
+  };
 }
 
 /**
@@ -956,13 +1060,13 @@ function defaultRunCommand(command, args, options = {}) {
  * @returns {{npm: object, preCommit: object, pwsh: object, bash: object}}
  */
 function probeToolVersions(options = {}) {
-    const runCommandFn = options.runCommandFn || defaultRunCommand;
-    return {
-        npm: runCommandFn("npm", ["--version"]),
-        preCommit: runCommandFn("pre-commit", ["--version"]),
-        pwsh: runCommandFn("pwsh", ["--version"]),
-        bash: runCommandFn("bash", ["--version"]),
-    };
+  const runCommandFn = options.runCommandFn || defaultRunCommand;
+  return {
+    npm: runCommandFn("npm", ["--version"]),
+    preCommit: runCommandFn("pre-commit", ["--version"]),
+    pwsh: runCommandFn("pwsh", ["--version"]),
+    bash: runCommandFn("bash", ["--version"])
+  };
 }
 
 /**
@@ -978,198 +1082,240 @@ function probeToolVersions(options = {}) {
  *   probes; tests can supply deterministic fakes here.
  */
 function runDoctor({ overrides = {}, versionProbes = null } = {}) {
-    const preCommitOverrides = { ...(overrides.checkPreCommitConfig || {}) };
-    const crossPlatformOverrides = { ...(overrides.checkCrossPlatformSanity || {}) };
+  const preCommitOverrides = { ...(overrides.checkPreCommitConfig || {}) };
+  const crossPlatformOverrides = { ...(overrides.checkCrossPlatformSanity || {}) };
 
-    if (versionProbes) {
-        if (preCommitOverrides.preCommitVersionResult === undefined) {
-            preCommitOverrides.preCommitVersionResult = versionProbes.preCommit;
-        }
-        if (crossPlatformOverrides.pwshVersionResult === undefined) {
-            crossPlatformOverrides.pwshVersionResult = versionProbes.pwsh;
-        }
-        if (crossPlatformOverrides.bashVersionResult === undefined) {
-            crossPlatformOverrides.bashVersionResult = versionProbes.bash;
-        }
+  if (versionProbes) {
+    if (preCommitOverrides.preCommitVersionResult === undefined) {
+      preCommitOverrides.preCommitVersionResult = versionProbes.preCommit;
     }
+    if (crossPlatformOverrides.pwshVersionResult === undefined) {
+      crossPlatformOverrides.pwshVersionResult = versionProbes.pwsh;
+    }
+    if (crossPlatformOverrides.bashVersionResult === undefined) {
+      crossPlatformOverrides.bashVersionResult = versionProbes.bash;
+    }
+  }
 
-    const sections = [
-        checkNodeModulesFreshness(overrides.checkNodeModulesFreshness || {}),
-        checkIsolatedJestCache(overrides.checkIsolatedJestCache || {}),
-        checkEolPolicy(overrides.checkEolPolicy || {}),
-        checkPreCommitConfig(preCommitOverrides),
-        checkHookPerfBudget(overrides.checkHookPerfBudget || {}),
-        checkCrossPlatformSanity(crossPlatformOverrides),
-        checkWorkingTreeState(overrides.checkWorkingTreeState || {}),
-    ];
+  const sections = [
+    checkNodeModulesFreshness(overrides.checkNodeModulesFreshness || {}),
+    checkIsolatedJestCache(overrides.checkIsolatedJestCache || {}),
+    checkEolPolicy(overrides.checkEolPolicy || {}),
+    checkPreCommitConfig(preCommitOverrides),
+    checkHookPerfBudget(overrides.checkHookPerfBudget || {}),
+    checkCrossPlatformSanity(crossPlatformOverrides),
+    checkWorkingTreeState(overrides.checkWorkingTreeState || {}),
+    checkChangedDocumentation(overrides.checkChangedDocumentation || {})
+  ];
 
-    const overall = aggregateStatus(sections);
-    return {
-        status: statusToExitCode(overall),
-        overall,
-        sections,
-    };
+  const overall = aggregateStatus(sections);
+  return {
+    status: statusToExitCode(overall),
+    overall,
+    sections
+  };
 }
 
 function decorateStatusLabel(status, useColor) {
-    const label =
-        status === "fail" ? "[FAIL]" : status === "warn" ? "[WARN]" : "[ OK ]";
-    if (!useColor) {
-        return label;
-    }
-    if (status === "fail") return `${ANSI_RED}${label}${ANSI_RESET}`;
-    if (status === "warn") return `${ANSI_YELLOW}${label}${ANSI_RESET}`;
-    return `${ANSI_GREEN}${label}${ANSI_RESET}`;
+  const label = status === "fail" ? "[FAIL]" : status === "warn" ? "[WARN]" : "[ OK ]";
+  if (!useColor) {
+    return label;
+  }
+  if (status === "fail") return `${ANSI_RED}${label}${ANSI_RESET}`;
+  if (status === "warn") return `${ANSI_YELLOW}${label}${ANSI_RESET}`;
+  return `${ANSI_GREEN}${label}${ANSI_RESET}`;
 }
 
 /**
  * Decide whether to emit ANSI color escapes. Precedence (highest first):
  *
- *   1. NO_COLOR truthy -> never color. This honors the conventional
- *      NO_COLOR opt-out (https://no-color.org/) even on a TTY.
- *   2. FORCE_COLOR truthy -> always color, even when stdout is not a TTY.
- *      Useful when piping through `tee` while preserving the visual
- *      diagnostic.
- *   3. CI truthy -> never color (legacy behavior; many CI viewers strip
- *      escapes anyway).
+ *   1. NO_COLOR present and non-empty -> never color. Per the official
+ *      NO_COLOR spec (https://no-color.org/): "when present, regardless
+ *      of its value, prevents the addition of ANSI color." That means
+ *      NO_COLOR="0", NO_COLOR="false", NO_COLOR="off" all suppress color
+ *      because they are non-empty strings. Only NO_COLOR unset or set to
+ *      an empty string falls through.
+ *   2. FORCE_COLOR -> follows Node.js convention. FORCE_COLOR="0" means
+ *      "explicitly disable" (falls through to lower precedence rules);
+ *      any other non-empty value means "force enable" (overrides CI and
+ *      isTTY). This matches `chalk`'s and Node's documented behavior.
+ *   3. CI truthy (per isTruthyEnv) -> never color. Many CI viewers strip
+ *      escapes; `CI=""`, `CI="0"`, `CI="false"`, `CI="no"`, `CI="off"`
+ *      are treated as "not in CI".
  *   4. Otherwise: color iff stdout is a TTY.
+ *
+ * Defaults pull from `process.env` for convenience at the CLI entry
+ * point. Tests SHOULD supply all four parameters explicitly so a leaked
+ * CI=true (or any other env var) cannot influence the outcome; in
+ * practice the function still works when called with a subset because
+ * the destructuring defaults read `process.env` directly. See
+ * doctor.test.js for the data-driven truth table that covers both
+ * fully-explicit and env-defaulted call shapes.
+ *
+ * `isForceColorOn` whitespace handling: a single space, a leading tab,
+ * and `" 0 "` are all currently treated as ENABLED -- the function
+ * trims and compares against the literal string "0", so anything that
+ * does not trim to exactly "0" turns color on. Locked by truth-table
+ * rows in doctor.test.js.
  */
+function isNoColorPresent(value) {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isForceColorOn(value) {
+  if (value == null) {
+    return false;
+  }
+  const stringValue = String(value);
+  if (stringValue.length === 0) {
+    return false;
+  }
+  // Node convention: FORCE_COLOR="0" disables. Other non-empty values enable.
+  // Whitespace handling: trim before the "0" comparison so " 0 " also
+  // disables; pure-whitespace strings like " " and "\t" are non-empty
+  // but do not equal "0" after trim, so they ENABLE color. See the
+  // truth-table rows in doctor.test.js (M2).
+  return stringValue.trim() !== "0";
+}
+
 function shouldUseColor({
-    envCi = process.env.CI,
-    envNoColor = process.env.NO_COLOR,
-    envForceColor = process.env.FORCE_COLOR,
-    isTTY = Boolean(process.stdout && process.stdout.isTTY),
+  envCi = process.env.CI,
+  envNoColor = process.env.NO_COLOR,
+  envForceColor = process.env.FORCE_COLOR,
+  isTTY = Boolean(process.stdout && process.stdout.isTTY)
 } = {}) {
-    if (isTruthyEnv(envNoColor)) {
-        return false;
-    }
-    if (isTruthyEnv(envForceColor)) {
-        return true;
-    }
-    if (isTruthyEnv(envCi)) {
-        return false;
-    }
-    return isTTY;
+  if (isNoColorPresent(envNoColor)) {
+    return false;
+  }
+  if (isForceColorOn(envForceColor)) {
+    return true;
+  }
+  if (isTruthyEnv(envCi)) {
+    return false;
+  }
+  return isTTY;
 }
 
 function formatHeaderBanner({
-    repoRoot = REPO_ROOT,
-    nodeVersion = process.version,
-    platform = process.platform,
-    arch = process.arch,
-    shellEnv = process.env.SHELL || "",
-    npmVersion = null,
-    // Pre-resolved npm --version probe result (see probeToolVersions). When
-    // provided, the banner does not spawn its own child process.
-    npmVersionResult = null,
-    runCommandFn = defaultRunCommand,
+  repoRoot = REPO_ROOT,
+  nodeVersion = process.version,
+  platform = process.platform,
+  arch = process.arch,
+  shellEnv = process.env.SHELL || "",
+  npmVersion = null,
+  // Pre-resolved npm --version probe result (see probeToolVersions). When
+  // provided, the banner does not spawn its own child process.
+  npmVersionResult = null,
+  runCommandFn = defaultRunCommand
 } = {}) {
-    let resolvedNpmVersion = npmVersion;
-    if (resolvedNpmVersion === null) {
-        const result = npmVersionResult !== null
-            ? npmVersionResult
-            : runCommandFn("npm", ["--version"]);
-        if (result && result.status === 0 && typeof result.stdout === "string") {
-            resolvedNpmVersion = result.stdout.trim();
-        } else {
-            resolvedNpmVersion = "(unknown)";
-        }
+  let resolvedNpmVersion = npmVersion;
+  if (resolvedNpmVersion === null) {
+    const result =
+      npmVersionResult !== null ? npmVersionResult : runCommandFn("npm", ["--version"]);
+    if (result && result.status === 0 && typeof result.stdout === "string") {
+      resolvedNpmVersion = result.stdout.trim();
+    } else {
+      resolvedNpmVersion = "(unknown)";
     }
+  }
 
-    const horizontal = "=".repeat(72);
-    return [
-        horizontal,
-        "DxMessaging doctor: read-only preflight diagnostic",
-        horizontal,
-        `Repo:    ${repoRoot}`,
-        `Node:    ${nodeVersion}`,
-        `npm:     ${resolvedNpmVersion}`,
-        `OS:      ${platform}/${arch}`,
-        `Shell:   ${shellEnv || "(unset)"}`,
-        horizontal,
-    ].join("\n");
+  const horizontal = "=".repeat(72);
+  return [
+    horizontal,
+    "DxMessaging doctor: read-only preflight diagnostic",
+    horizontal,
+    `Repo:    ${repoRoot}`,
+    `Node:    ${nodeVersion}`,
+    `npm:     ${resolvedNpmVersion}`,
+    `OS:      ${platform}/${arch}`,
+    `Shell:   ${shellEnv || "(unset)"}`,
+    horizontal
+  ].join("\n");
 }
 
 function formatSection(section, useColor) {
-    const horizontal = "-".repeat(72);
-    const label = decorateStatusLabel(section.status, useColor);
-    const titleLine = `${label} ${section.name}`;
-    const decoratedTitle = useColor ? `${ANSI_BOLD}${titleLine}${ANSI_RESET}` : titleLine;
-    const out = [horizontal, decoratedTitle];
-    for (const line of section.lines) {
-        out.push(line);
-    }
-    return out.join("\n");
+  const horizontal = "-".repeat(72);
+  const label = decorateStatusLabel(section.status, useColor);
+  const titleLine = `${label} ${section.name}`;
+  const decoratedTitle = useColor ? `${ANSI_BOLD}${titleLine}${ANSI_RESET}` : titleLine;
+  const out = [horizontal, decoratedTitle];
+  for (const line of section.lines) {
+    out.push(line);
+  }
+  return out.join("\n");
 }
 
 function formatFooter(sections, overall, useColor) {
-    const horizontal = "=".repeat(72);
-    const lines = [horizontal, "Summary:"];
-    for (const section of sections) {
-        const label = decorateStatusLabel(section.status, useColor);
-        lines.push(`  ${label} ${section.name}`);
-    }
-    const overallLabel = decorateStatusLabel(overall, useColor);
-    lines.push(horizontal);
-    lines.push(`Overall: ${overallLabel}`);
-    lines.push(horizontal);
-    return lines.join("\n");
+  const horizontal = "=".repeat(72);
+  const lines = [horizontal, "Summary:"];
+  for (const section of sections) {
+    const label = decorateStatusLabel(section.status, useColor);
+    lines.push(`  ${label} ${section.name}`);
+  }
+  const overallLabel = decorateStatusLabel(overall, useColor);
+  lines.push(horizontal);
+  lines.push(`Overall: ${overallLabel}`);
+  lines.push(horizontal);
+  return lines.join("\n");
 }
 
 function main({
-    writeFn = (text) => process.stdout.write(text),
-    envCi = process.env.CI,
-    envNoColor = process.env.NO_COLOR,
-    envForceColor = process.env.FORCE_COLOR,
-    isTTY = Boolean(process.stdout && process.stdout.isTTY),
-    runDoctorFn = runDoctor,
-    runCommandFn = defaultRunCommand,
-    probeToolVersionsFn = probeToolVersions,
+  writeFn = (text) => process.stdout.write(text),
+  envCi = process.env.CI,
+  envNoColor = process.env.NO_COLOR,
+  envForceColor = process.env.FORCE_COLOR,
+  isTTY = Boolean(process.stdout && process.stdout.isTTY),
+  runDoctorFn = runDoctor,
+  runCommandFn = defaultRunCommand,
+  probeToolVersionsFn = probeToolVersions
 } = {}) {
-    const useColor = shouldUseColor({ envCi, envNoColor, envForceColor, isTTY });
+  const useColor = shouldUseColor({ envCi, envNoColor, envForceColor, isTTY });
 
-    // M1: spawn npm/pre-commit/pwsh/bash --version exactly once per doctor
-    // run and thread the results into the header banner and the relevant
-    // sections, instead of forking these subprocesses repeatedly.
-    const versionProbes = probeToolVersionsFn({ runCommandFn });
+  // M1: spawn npm/pre-commit/pwsh/bash --version exactly once per doctor
+  // run and thread the results into the header banner and the relevant
+  // sections, instead of forking these subprocesses repeatedly.
+  const versionProbes = probeToolVersionsFn({ runCommandFn });
 
-    writeFn(`${formatHeaderBanner({ runCommandFn, npmVersionResult: versionProbes.npm })}\n`);
+  writeFn(`${formatHeaderBanner({ runCommandFn, npmVersionResult: versionProbes.npm })}\n`);
 
-    const report = runDoctorFn({ versionProbes });
-    for (const section of report.sections) {
-        writeFn(`${formatSection(section, useColor)}\n`);
-    }
-    writeFn(`${formatFooter(report.sections, report.overall, useColor)}\n`);
+  const report = runDoctorFn({ versionProbes });
+  for (const section of report.sections) {
+    writeFn(`${formatSection(section, useColor)}\n`);
+  }
+  writeFn(`${formatFooter(report.sections, report.overall, useColor)}\n`);
 
-    return report.status;
+  return report.status;
 }
 
 module.exports = {
-    STALE_CACHE_DAYS,
-    STALE_CACHE_MS,
-    KNOWN_STATUSES,
-    aggregateStatus,
-    statusRank,
-    statusToExitCode,
-    checkNodeModulesFreshness,
-    checkIsolatedJestCache,
-    checkEolPolicy,
-    checkPreCommitConfig,
-    checkHookPerfBudget,
-    checkCrossPlatformSanity,
-    checkWorkingTreeState,
-    defaultRunCommand,
-    probeToolVersions,
-    runDoctor,
-    shouldUseColor,
-    decorateStatusLabel,
-    formatHeaderBanner,
-    formatSection,
-    formatFooter,
-    main,
+  STALE_CACHE_DAYS,
+  STALE_CACHE_MS,
+  KNOWN_STATUSES,
+  aggregateStatus,
+  statusRank,
+  statusToExitCode,
+  checkNodeModulesFreshness,
+  checkIsolatedJestCache,
+  checkEolPolicy,
+  checkPreCommitConfig,
+  checkHookPerfBudget,
+  checkCrossPlatformSanity,
+  checkWorkingTreeState,
+  checkChangedDocumentation,
+  defaultRunCommand,
+  probeToolVersions,
+  runDoctor,
+  shouldUseColor,
+  isNoColorPresent,
+  isForceColorOn,
+  decorateStatusLabel,
+  formatHeaderBanner,
+  formatSection,
+  formatFooter,
+  main
 };
 
 if (require.main === module) {
-    const exitCode = main();
-    process.exit(exitCode);
+  const exitCode = main();
+  process.exit(exitCode);
 }

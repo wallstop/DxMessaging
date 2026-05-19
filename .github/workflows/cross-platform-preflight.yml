@@ -53,6 +53,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # fetch-depth: 0 is REQUIRED because `npm run preflight:pre-push`
+          # transitively invokes `validate:changelog:coverage`, which runs
+          # `git diff origin/<base>...HEAD`. A shallow clone has no
+          # origin/<base> ref, the diff fails, and validate-changelog.js
+          # raises E006. See script-tests.yml and pre-commit-tooling-check.yml
+          # which already set this. The same requirement is enforced by
+          # findChangelogCoverageCheckoutViolations() in validate-workflows.js.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js

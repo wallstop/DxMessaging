@@ -42,6 +42,10 @@ function parseBashArray(content, arrayName) {
     .map((line) => line.replace(/^["']|["']$/g, ""));
 }
 
+function devcontainerTargetForContractTarget(target) {
+  return target.replace("${CACHE_WORKSPACE_ROOT}", "${containerWorkspaceFolder}");
+}
+
 describe(".devcontainer cache mount contract", () => {
   const cacheContractPath = path.join(DEVCONTAINER_DIR, "cache-contract.sh");
   const devcontainerJsonPath = path.join(DEVCONTAINER_DIR, "devcontainer.json");
@@ -86,8 +90,20 @@ describe(".devcontainer cache mount contract", () => {
 
   test("each target path appears verbatim in devcontainer.json `mounts`", () => {
     for (const target of targets) {
-      expect(devcontainerJson).toContain(`target=${target}`);
+      expect(devcontainerJson).toContain(`target=${devcontainerTargetForContractTarget(target)}`);
     }
+  });
+
+  test("devcontainer keeps Linux node_modules in a named volume", () => {
+    const nodeModulesSource = "dxm-node-modules";
+    const contractNodeModulesTarget = "${CACHE_WORKSPACE_ROOT}/node_modules";
+    const devcontainerNodeModulesTarget = "${containerWorkspaceFolder}/node_modules";
+
+    expect(sources).toContain(nodeModulesSource);
+    expect(targets).toContain(contractNodeModulesTarget);
+    expect(devcontainerJson).toContain(
+      `source=${nodeModulesSource},target=${devcontainerNodeModulesTarget},type=volume`
+    );
   });
 
   test("devcontainer cache contract does not include Unity Library", () => {
@@ -99,10 +115,16 @@ describe(".devcontainer cache mount contract", () => {
   });
 
   test("Dockerfile pre-creates every cache target that lives under the workspace", () => {
-    const workspaceTargets = targets.filter((target) => target.startsWith("/workspaces/"));
+    const workspaceTargets = targets.filter(
+      (target) => target.startsWith("/workspaces/") || target.startsWith("${CACHE_WORKSPACE_ROOT}/")
+    );
 
     for (const target of workspaceTargets) {
-      expect(dockerfile).toContain(target);
+      if (target.startsWith("${CACHE_WORKSPACE_ROOT}/")) {
+        expect(dockerfile).toContain("/workspaces");
+      } else {
+        expect(dockerfile).toContain(target);
+      }
     }
   });
 

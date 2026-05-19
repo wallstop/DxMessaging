@@ -9,6 +9,7 @@
 #   2. dxm-dotnet-tools         -> Global dotnet tools (csharpier, etc.)
 #   3. dxm-powershell-modules   -> PowerShell module cache
 #   4. dxm-python-cache         -> pip wheel/download cache
+#   5. dxm-node-modules         -> Linux devcontainer node_modules tree
 #
 # Unity Library caches are owned by scripts/unity/run-tests.sh and
 # scripts/unity/run-tests.ps1 because they must be keyed by Unity image tag and
@@ -21,11 +22,14 @@
 [[ "${_DXM_CACHE_CONTRACT_LOADED:-}" == "1" ]] && return 0
 _DXM_CACHE_CONTRACT_LOADED=1
 
+readonly CACHE_WORKSPACE_ROOT="${WORKSPACE_FOLDER:-/workspaces/com.wallstop-studios.dxmessaging}"
+
 readonly CACHE_MOUNT_SOURCES=(
     "dxm-nuget-cache"
     "dxm-dotnet-tools"
     "dxm-powershell-modules"
     "dxm-python-cache"
+    "dxm-node-modules"
 )
 
 readonly CACHE_MOUNT_TARGETS=(
@@ -33,6 +37,7 @@ readonly CACHE_MOUNT_TARGETS=(
     "/home/vscode/.dotnet/tools"
     "/home/vscode/.local/share/powershell"
     "/home/vscode/.cache/pip"
+    "${CACHE_WORKSPACE_ROOT}/node_modules"
 )
 
 cache_contract_validate_shape() {

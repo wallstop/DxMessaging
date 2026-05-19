@@ -11,10 +11,12 @@ const path = require("path");
 const {
   parseHookEntries,
   parseHookIds,
+  parseHookConfigs,
   hasRequiredParserPrecheckCommand,
   hasRequiredPackageJsonFormatCommand,
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
+  hasRequiredChangedDocsCommand,
   hasRequiredLlmMarkdownCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
@@ -27,6 +29,10 @@ const {
   hasInlinedPrettierEntry,
   hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
+  hasPortableHookInvocation,
+  usesManagedNodeRepair,
+  hasRequiredSerialManagedRepairHook,
+  validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
   validatePreflightScriptPolicy,
@@ -34,6 +40,7 @@ const {
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
+  REQUIRED_CHANGED_DOCS_COMMAND,
   REQUIRED_LLM_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
@@ -51,6 +58,7 @@ function requiredPreflightScript({ remove = [] } = {}) {
   const requiredCommands = [
     REQUIRED_NODE_TOOLING_COMMAND,
     REQUIRED_HOOK_MARKDOWN_COMMAND,
+    REQUIRED_CHANGED_DOCS_COMMAND,
     REQUIRED_LLM_MARKDOWN_COMMAND,
     REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
     "npm run validate:pre-commit-tooling",
@@ -63,9 +71,7 @@ function requiredPreflightScript({ remove = [] } = {}) {
   ];
 
   const removedCommands = new Set(remove);
-  return requiredCommands
-    .filter((command) => !removedCommands.has(command))
-    .join(" && ");
+  return requiredCommands.filter((command) => !removedCommands.has(command)).join(" && ");
 }
 
 describe("validate-pre-commit-tooling", () => {
@@ -153,6 +159,31 @@ describe("validate-pre-commit-tooling", () => {
         expect.objectContaining({ id: "alpha" })
       ])
     );
+  });
+
+  test("parseHookConfigs captures scalar hook properties", () => {
+    const content = [
+      "repos:",
+      "  - repo: local",
+      "    hooks:",
+      "      - id: prettier",
+      "        entry: node scripts/run-managed-prettier.js --write",
+      "        language: system",
+      "        require_serial: true",
+      "        stages:",
+      "          - pre-commit"
+    ].join("\n");
+
+    expect(parseHookConfigs(content)).toEqual([
+      expect.objectContaining({
+        id: "prettier",
+        properties: expect.objectContaining({
+          entry: "node scripts/run-managed-prettier.js --write",
+          language: "system",
+          require_serial: "true"
+        })
+      })
+    ]);
   });
 
   test("hasNpxInstallPolicy rejects npx without explicit policy", () => {
@@ -249,6 +280,25 @@ describe("validate-pre-commit-tooling", () => {
     const script = "npm run validate:pre-commit-tooling && echo npm run validate:llm-markdown";
 
     expect(hasRequiredLlmMarkdownCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredChangedDocsCommand detects changed docs precheck step", () => {
+    const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_HOOK_MARKDOWN_COMMAND,
+      REQUIRED_CHANGED_DOCS_COMMAND,
+      REQUIRED_LLM_MARKDOWN_COMMAND,
+      REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+      REQUIRED_PRECHECK_PARSER_COMMAND
+    ].join(" && ");
+
+    expect(hasRequiredChangedDocsCommand(script)).toBe(true);
+  });
+
+  test("hasRequiredChangedDocsCommand rejects substring-only matches", () => {
+    const script = "npm run validate:pre-commit-tooling && echo npm run validate:changed-docs";
+
+    expect(hasRequiredChangedDocsCommand(script)).toBe(false);
   });
 
   test("hasRequiredScriptsCspellCommand detects script cspell command as chained step", () => {
@@ -412,11 +462,45 @@ describe("validate-pre-commit-tooling", () => {
     // Both forms must be accepted; the managed-runner form performs the
     // same local-vs-npx dispatch internally AND gates on node_modules
     // integrity ahead of either branch.
-    expect(
-      hasInlinedPrettierEntry("node scripts/run-managed-prettier.js --write")
-    ).toBe(true);
+    expect(hasInlinedPrettierEntry("node scripts/run-managed-prettier.js --write")).toBe(true);
     // Wrong invocation - missing the `node` token - is not accepted.
     expect(hasInlinedPrettierEntry("scripts/run-managed-prettier.js --write")).toBe(false);
+  });
+
+  test("managed node-repair hooks require require_serial true", () => {
+    const managedHook = {
+      entry: "node scripts/run-managed-prettier.js --write",
+      requireSerial: "true"
+    };
+    const partitionedHook = {
+      entry: "node scripts/run-managed-cspell.js --no-progress --no-summary",
+      requireSerial: undefined
+    };
+
+    expect(usesManagedNodeRepair(managedHook.entry)).toBe(true);
+    expect(hasRequiredSerialManagedRepairHook(managedHook)).toBe(true);
+    expect(hasRequiredSerialManagedRepairHook(partitionedHook)).toBe(false);
+    expect(hasRequiredSerialManagedRepairHook({ entry: "node scripts/check-eol.js" })).toBe(true);
+  });
+
+  test("validateHookEntries rejects managed Prettier without require_serial", () => {
+    const content = [
+      "repos:",
+      "  - repo: local",
+      "    hooks:",
+      "      - id: prettier",
+      "        entry: node scripts/run-managed-prettier.js --write",
+      "        language: system"
+    ].join("\n");
+
+    const violations = validateHookEntries(parseHookEntries(content), parseHookConfigs(content));
+
+    expect(violations).toEqual([
+      expect.objectContaining({
+        hookId: "prettier",
+        message: expect.stringContaining("require_serial: true")
+      })
+    ]);
   });
 
   test("hasInlinedPrettierInvocation only enforces inlining for the prettier hook id", () => {
@@ -445,31 +529,38 @@ describe("validate-pre-commit-tooling", () => {
   // `<package>@<version>` literals in the hook entries are validated
   // against package.json directly.
 
-  test("hasGuardedFixerRestagePattern requires diff-guarded git add for C# fixer hook", () => {
+  test("hasGuardedFixerRestagePattern requires shell-neutral restage wrapper for C# fixer hook", () => {
     expect(
       hasGuardedFixerRestagePattern(
         "fix-csharp-underscore-methods",
-        'bash -c \'node scripts/fix-csharp-underscore-methods.js "$@" && git add "$@"\' --'
+        "node scripts/fix-csharp-underscore-methods.js"
       )
     ).toBe(false);
 
     expect(
       hasGuardedFixerRestagePattern(
         "fix-csharp-underscore-methods",
-        'bash -c \'node scripts/fix-csharp-underscore-methods.js "$@" && { git diff --quiet -- "$@" || git add "$@"; }\' --'
+        "node scripts/run-and-restage.js node scripts/fix-csharp-underscore-methods.js --"
       )
     ).toBe(true);
 
     expect(hasGuardedFixerRestagePattern("another-hook", 'git add "$@"')).toBe(true);
   });
 
-  test("hasGuardedFixerRestagePattern rejects single-quoted $@ variants", () => {
+  test("hasGuardedFixerRestagePattern rejects shell restage variants", () => {
     expect(
       hasGuardedFixerRestagePattern(
         "fix-csharp-underscore-methods",
         "bash -c 'node scripts/fix-csharp-underscore-methods.js \"$@\" && { git diff --quiet -- '\''$@'\'' || git add '\''$@'\''; }' --"
       )
     ).toBe(false);
+  });
+
+  test("hasPortableHookInvocation rejects direct shell dependencies", () => {
+    expect(hasPortableHookInvocation("node scripts/check-conflict-markers.js")).toBe(true);
+    expect(hasPortableHookInvocation("dotnet tool restore")).toBe(true);
+    expect(hasPortableHookInvocation("bash -c 'echo hi'")).toBe(false);
+    expect(hasPortableHookInvocation("pwsh -NoProfile -File script.ps1")).toBe(false);
   });
 
   test("validateConfigContent reports missing npx policy and unmanaged jest", () => {
@@ -505,7 +596,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -730,7 +821,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -761,6 +852,7 @@ describe("validate-pre-commit-tooling", () => {
     );
     expect(preflightScript).toContain(REQUIRED_NODE_TOOLING_COMMAND);
     expect(preflightScript).toContain("npm run validate:hook-markdown");
+    expect(preflightScript).toContain(REQUIRED_CHANGED_DOCS_COMMAND);
     expect(preflightScript).toContain(REQUIRED_LLM_MARKDOWN_COMMAND);
     expect(preflightScript).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
     expect(preflightScript).toContain("npm run check:prettier:hooks");
@@ -769,9 +861,7 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain(REQUIRED_WORKFLOW_VALIDATION_COMMAND);
     expect(preflightScript).toContain(REQUIRED_BANNER_SYNC_COMMAND);
     expect(preflightScript).toContain(REQUIRED_CHANGELOG_VALIDATION_COMMAND);
-    expect(packageJson.scripts["check:workflow-cspell"]).toContain(
-      "cspell@10.0.0"
-    );
+    expect(packageJson.scripts["check:workflow-cspell"]).toContain("cspell@10.0.0");
     expect(packageJson.scripts["check:banner-sync"]).toBe("node scripts/validate-banner.js");
     expect(packageJson.scripts["check:yaml"]).toContain("pre-commit run yamllint --all-files");
     expect(preflightScript).toContain("npm run check:yaml");
@@ -797,7 +887,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -833,7 +923,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -869,7 +959,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -905,7 +995,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -941,7 +1031,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -957,6 +1047,42 @@ describe("validate-pre-commit-tooling", () => {
     expect(violations).toHaveLength(1);
     expect(violations[0].hookId).toBe("preflight-script");
     expect(violations[0].message).toContain(REQUIRED_LLM_MARKDOWN_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports missing changed docs precheck command", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": requiredPreflightScript({
+              remove: [REQUIRED_CHANGED_DOCS_COMMAND]
+            })
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_CHANGED_DOCS_COMMAND);
   });
 
   test("validatePreflightScriptPolicy reports missing scripts cspell precheck command", () => {
@@ -977,7 +1103,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -1013,7 +1139,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -1049,7 +1175,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -1085,7 +1211,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 
@@ -1121,7 +1247,7 @@ describe("validate-pre-commit-tooling", () => {
           "  - repo: local",
           "    hooks:",
           `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
-          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
         ].join("\n");
       }
 

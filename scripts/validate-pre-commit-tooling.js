@@ -27,6 +27,7 @@ const REQUIRED_PRECHECK_PARSER_COMMAND =
   "pre-commit run --hook-stage pre-push script-parser-tests --all-files";
 const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
 const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
+const REQUIRED_CHANGED_DOCS_COMMAND = "npm run validate:changed-docs";
 const REQUIRED_LLM_MARKDOWN_COMMAND = "npm run validate:llm-markdown";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
@@ -37,6 +38,8 @@ const REQUIRED_CHANGELOG_VALIDATION_COMMAND = "npm run validate:changelog:covera
 const REQUIRED_PARSER_SUITE_HOOK_ID = "script-parser-tests";
 const REQUIRED_PARSER_SUITE_TEST_PATHS = [
   "scripts/__tests__/fix-csharp-underscore-methods.test.js",
+  "scripts/__tests__/check-conflict-markers.test.js",
+  "scripts/__tests__/validate-changed-docs.test.js",
   "scripts/__tests__/validate-changelog.test.js",
   "scripts/__tests__/pre-commit-hook-stage-policy.test.js"
 ];
@@ -131,6 +134,43 @@ function parseHookIds(content) {
   return ids;
 }
 
+function parseHookConfigs(content) {
+  const lines = normalizeToLf(content).split("\n");
+  const hooks = [];
+  let current = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const idMatch = /^(\s*)-\s+id:\s*([^\s#]+)\s*$/.exec(lines[i]);
+    if (idMatch) {
+      current = {
+        id: idMatch[2].trim(),
+        line: i + 1,
+        indent: idMatch[1].length,
+        properties: {}
+      };
+      hooks.push(current);
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    const lineIndent = getIndent(lines[i]);
+    if (lines[i].trim().length > 0 && lineIndent <= current.indent) {
+      current = null;
+      continue;
+    }
+
+    const propertyMatch = /^\s*([A-Za-z_][A-Za-z0-9_-]*):\s*(.*?)\s*(?:#.*)?$/.exec(lines[i]);
+    if (propertyMatch) {
+      current.properties[propertyMatch[1]] = propertyMatch[2].trim();
+    }
+  }
+
+  return hooks;
+}
+
 function tokenizeCommand(entry) {
   const tokens = entry.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+/g) || [];
   return tokens.map((token) => token.replace(/^['"]|['"]$/g, ""));
@@ -168,6 +208,10 @@ function hasRequiredNodeToolingCommand(preflightScript) {
 
 function hasRequiredHookMarkdownCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_HOOK_MARKDOWN_COMMAND);
+}
+
+function hasRequiredChangedDocsCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_CHANGED_DOCS_COMMAND);
 }
 
 function hasRequiredLlmMarkdownCommand(preflightScript) {
@@ -322,17 +366,40 @@ function hasGuardedFixerRestagePattern(hookId, entry) {
     return true;
   }
 
-  if (!/\bgit add\b/.test(entry)) {
-    return false;
-  }
-
-  return /git diff --quiet -- "\$@"\s*\|\|\s*git add "\$@"/.test(entry);
+  return (
+    /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
+    /\bnode\b\s+scripts\/fix-csharp-underscore-methods\.js\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
 }
 
-function validateHookEntries(entries) {
+function hasPortableHookInvocation(entry) {
+  return !/^\s*(?:bash|sh|pwsh|powershell)(?:\s|$)/.test(entry);
+}
+
+function usesManagedNodeRepair(entry) {
+  return /\bnode\b\s+scripts\/run-managed-(?:prettier|cspell)\.js\b/.test(entry);
+}
+
+function hasRequiredSerialManagedRepairHook(hook) {
+  if (!usesManagedNodeRepair(hook.entry)) {
+    return true;
+  }
+
+  return hook.requireSerial === "true";
+}
+
+function validateHookEntries(entries, hookConfigs = []) {
   const violations = [];
+  const configById = new Map(hookConfigs.map((hook) => [hook.id, hook]));
 
   for (const hook of entries) {
+    const hookConfig = configById.get(hook.id);
+    const enrichedHook = {
+      ...hook,
+      requireSerial: hookConfig && hookConfig.properties.require_serial
+    };
+
     if (/\bnpx\b/.test(hook.entry) && !hasNpxInstallPolicy(hook.entry)) {
       violations.push(
         new Violation(
@@ -371,7 +438,29 @@ function validateHookEntries(entries) {
         new Violation(
           hook.id,
           hook.line,
-          'fix-csharp-underscore-methods must guard restaging with \'git diff --quiet -- "$@" || git add "$@"\' to avoid unnecessary git index locking.',
+          "fix-csharp-underscore-methods must use node scripts/run-and-restage.js so restaging is shell-neutral and diff-guarded.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasPortableHookInvocation(hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "Hook entries must use shell-neutral Node or tool executables; do not require bash, sh, pwsh, or powershell directly.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasRequiredSerialManagedRepairHook(enrichedHook)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "Managed Prettier/cspell hooks must set require_serial: true so npm ci self-heal is single-writer across pre-commit filename partitions.",
           hook.entry
         )
       );
@@ -516,6 +605,17 @@ function validatePreflightScriptPolicy(
         "preflight-script",
         1,
         `preflight:pre-commit must include '${REQUIRED_HOOK_MARKDOWN_COMMAND}' so the pre-commit markdown hook path is smoke-tested before commit.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (!hasRequiredChangedDocsCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_CHANGED_DOCS_COMMAND}' so changed documentation validator failures are caught before hook-time.`,
         preflightScript
       )
     );
@@ -692,9 +792,10 @@ function validateConfigContent(
   } = {}
 ) {
   const hooks = parseHookEntries(content);
+  const hookConfigs = parseHookConfigs(content);
   return [
     ...validatePreflightScriptPolicy(readFileSyncImpl, packageJsonPath, preCommitConfigPath),
-    ...validateHookEntries(hooks),
+    ...validateHookEntries(hooks, hookConfigs),
     ...validateYamllintPolicy(content),
     ...validatePrettierVersionResolution(getConfiguredPrettierSpecFn, getPinnedPrettierSpecFn),
     ...validatePerfBudget(content)
@@ -741,6 +842,7 @@ module.exports = {
   getIndent,
   parseHookEntries,
   parseHookIds,
+  parseHookConfigs,
   tokenizeCommand,
   escapeRegexLiteral,
   hasRequiredPreflightCommand,
@@ -748,6 +850,7 @@ module.exports = {
   hasRequiredPackageJsonFormatCommand,
   hasRequiredNodeToolingCommand,
   hasRequiredHookMarkdownCommand,
+  hasRequiredChangedDocsCommand,
   hasRequiredLlmMarkdownCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
@@ -761,6 +864,9 @@ module.exports = {
   hasInlinedPrettierEntry,
   hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
+  hasPortableHookInvocation,
+  usesManagedNodeRepair,
+  hasRequiredSerialManagedRepairHook,
   validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
@@ -770,6 +876,7 @@ module.exports = {
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
+  REQUIRED_CHANGED_DOCS_COMMAND,
   REQUIRED_LLM_MARKDOWN_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,

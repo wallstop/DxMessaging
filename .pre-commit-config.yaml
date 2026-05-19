@@ -23,8 +23,7 @@ repos:
         description: Install the .NET tools listed at .config/dotnet-tools.json.
       - id: fix-csharp-underscore-methods
         name: Auto-fix C# method names (remove underscores)
-        entry: >-
-          bash -c 'node scripts/fix-csharp-underscore-methods.js "$@" && { git diff --quiet -- "$@" || git add "$@"; }' --
+        entry: node scripts/run-and-restage.js node scripts/fix-csharp-underscore-methods.js --
         language: system
         types:
           - c#
@@ -45,9 +44,9 @@ repos:
       # perf-allow[scans-the-world-with-files]: gated to package metadata plus test-marker source files; the sync script scans test files by design to keep the banner badge count in sync
       - id: sync-banner-version
         name: Sync banner version from package.json
-        entry: bash scripts/sync-banner-version.sh
+        entry: node scripts/sync-banner-version-hook.js
         language: system
-        files: '^(package\.json|Tests/.*Tests?\.cs|SourceGenerators/.*Tests?\.cs|scripts/(sync-banner-version\.(ps1|js|sh)|.*\.(test|spec)\.js))$'
+        files: '^(package\.json|Tests/.*Tests?\.cs|SourceGenerators/.*Tests?\.cs|scripts/(sync-banner-version\.(ps1|js|sh)|sync-banner-version-hook\.js|.*\.(test|spec)\.js))$'
         pass_filenames: false
         stages:
           - pre-commit
@@ -57,7 +56,7 @@ repos:
         name: Validate banner SVG (encapsulation, sync, accessibility)
         entry: node scripts/validate-banner.js
         language: system
-        files: '^(docs/images/DxMessaging-banner\.svg|package\.json|Tests/.*Tests?\.cs|SourceGenerators/.*Tests?\.cs|scripts/(sync-banner-version\.(ps1|js|sh)|validate-banner\.js|.*\.(test|spec)\.js))$'
+        files: '^(docs/images/DxMessaging-banner\.svg|package\.json|Tests/.*Tests?\.cs|SourceGenerators/.*Tests?\.cs|scripts/(sync-banner-version\.(ps1|js|sh)|sync-banner-version-hook\.js|validate-banner\.js|.*\.(test|spec)\.js))$'
         pass_filenames: false
         stages:
           - pre-commit
@@ -70,6 +69,7 @@ repos:
         entry: node scripts/run-managed-prettier.js --write
         language: system
         files: '(?i)\.(json|asmdef|asmref|ya?ml)$'
+        require_serial: true
         stages:
           - pre-commit
         # Pinned npx fallback is `prettier@3.8.3` (kept in sync by the
@@ -78,7 +78,9 @@ repos:
         # scripts/run-managed-prettier.js prefers the local devDependency
         # (node_modules/prettier/bin/prettier.cjs) and falls back to the
         # pinned npx install only on cold caches, with an integrity gate
-        # ahead of either branch.
+        # ahead of either branch. Serialized because the integrity gate can
+        # self-heal with npm ci, which must be single-writer when pre-commit
+        # partitions filename batches.
         description: >-
           Format staged JSON/YAML files via scripts/run-managed-prettier.js,
           which gates on node_modules integrity, prefers local Prettier
@@ -173,7 +175,7 @@ repos:
     hooks:
       - id: conflict-markers
         name: Fail on merge conflict markers
-        entry: bash -c 'for f in "$@"; do if grep -nE "^(<<<<<<<|=======|>>>>>>>)" "$f"; then echo "Conflict markers found in $f. Resolve merges before committing." >&2; exit 1; fi; done' --
+        entry: node scripts/check-conflict-markers.js
         language: system
         pass_filenames: true
         stages:
@@ -195,7 +197,7 @@ repos:
       # perf-allow[scans-the-world-with-files]: index regeneration must read every skill file to produce a stable sorted index.md; staged argv would only patch a subset
       - id: skills-index-regen
         name: Regenerate skills index.md
-        entry: bash -c 'node scripts/generate-skills-index.js && { git add .llm/skills/index.md 2>/dev/null || true; }'
+        entry: node scripts/run-and-stage.js node scripts/generate-skills-index.js -- .llm/skills/index.md
         language: system
         pass_filenames: false
         files: '^\.llm/.*\.md$'
@@ -214,7 +216,7 @@ repos:
       # perf-allow[scans-the-world-with-files]: regenerator must read package.json and the entire .llm/skills tree to compute per-category counts emitted into llms.txt; whole-tree by design
       - id: update-llms-txt
         name: Update llms.txt
-        entry: bash -c 'node scripts/update-llms-txt.js && { git add llms.txt 2>/dev/null || true; }'
+        entry: node scripts/run-and-stage.js node scripts/update-llms-txt.js -- llms.txt
         language: system
         pass_filenames: false
         files: '^(package\.json|llms\.txt|scripts/update-llms-txt\.js|\.llm/skills/.*)$'
@@ -324,7 +326,7 @@ repos:
         entry: node scripts/validate-pre-commit-tooling.js
         language: system
         pass_filenames: false
-        files: '^((\.pre-commit-config\.yaml)|(package\.json)|(scripts/validate-pre-commit-tooling\.js)|(scripts/run-managed-jest\.js)|(scripts/__tests__/validate-pre-commit-tooling\.test\.js)|(scripts/__tests__/run-managed-jest\.test\.js))$'
+        files: '^((\.pre-commit-config\.yaml)|(package\.json)|(scripts/validate-pre-commit-tooling\.js)|(scripts/run-managed-(jest|prettier|cspell)\.js)|(scripts/lib/integrity-gate-with-recovery\.js)|(scripts/__tests__/validate-pre-commit-tooling\.test\.js)|(scripts/__tests__/run-managed-(jest|prettier|cspell)\.test\.js))$'
         stages:
           - pre-commit
           - pre-push
@@ -353,6 +355,7 @@ repos:
           scripts/__tests__/validate-workflows.test.js
           scripts/__tests__/validate-workflows-concurrency-and-labels.test.js
           scripts/__tests__/check-eol.test.js
+          scripts/__tests__/check-conflict-markers.test.js
           scripts/__tests__/quote-parser.test.js
           scripts/__tests__/shell-command.test.js
           scripts/__tests__/validate-skills-llm-policy.test.js
@@ -360,6 +363,7 @@ repos:
           scripts/__tests__/fix-md029-md051.test.js
           scripts/__tests__/fix-csharp-underscore-methods.test.js
           scripts/__tests__/validate-changelog.test.js
+          scripts/__tests__/validate-changed-docs.test.js
           scripts/__tests__/validate-vscode-settings.test.js
           scripts/__tests__/validate-pre-commit-tooling.test.js
           scripts/__tests__/validate-npm-meta.test.js
@@ -386,7 +390,7 @@ repos:
           scripts/__tests__/jest-error-decoder.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|validate-changelog|run-managed-jest|run-managed-prettier|run-managed-cspell|run-staged-validators|run-staged-md-pipeline|verify-managed-jest-fallback|doctor)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version|precommit-yaml|precommit-perf-score|staged-doc-formatters|source-stripping|jest-error-decoder|path-classifier|node-modules-integrity|integrity-gate-with-recovery|managed-prettier)\.js|scripts/__tests__/(check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version-parity|prettier-version|run-managed-prettier|cspell-version-parity|validate-workflows-concurrency-and-labels|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback|run-staged-validators|run-staged-md-pipeline|hook-perf-budget|precommit-perf-score|precommit-yaml|run-managed-jest-no-injected-test-runner|no-testrunner-injection-policy|doctor|llm-skills-jest-robustness-coverage|preflight-pre-push-coverage|path-classifier|node-modules-integrity|run-managed-cspell|managed-prettier|jest-error-decoder)\.test\.js|scripts/lib/__tests__/source-stripping\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.github/workflows/(llm-policy-check|pre-commit-tooling-check)\.yml|scripts/check-eol\.ps1|scripts/(check-conflict-markers|check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-changed-docs|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|validate-changelog|run-actionlint-if-available|run-and-restage|run-and-stage|run-managed-jest|run-managed-prettier|run-managed-cspell|run-staged-validators|run-staged-md-pipeline|sync-banner-version-hook|verify-managed-jest-fallback|doctor)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version|precommit-yaml|precommit-perf-score|staged-doc-formatters|source-stripping|jest-error-decoder|path-classifier|node-modules-integrity|integrity-gate-with-recovery|managed-prettier)\.js|scripts/__tests__/(check-conflict-markers|check-eol|fix-md029-md051|fix-csharp-underscore-methods|validate-changed-docs|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version-parity|prettier-version|run-managed-prettier|cspell-version-parity|validate-workflows-concurrency-and-labels|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|detect-shell-redirection-antipattern|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback|run-staged-validators|run-staged-md-pipeline|hook-perf-budget|precommit-perf-score|precommit-yaml|run-managed-jest-no-injected-test-runner|no-testrunner-injection-policy|doctor|llm-skills-jest-robustness-coverage|preflight-pre-push-coverage|path-classifier|node-modules-integrity|run-managed-cspell|managed-prettier|jest-error-decoder)\.test\.js|scripts/lib/__tests__/source-stripping\.test\.js)$'
         stages:
           - pre-push
         description: Fail fast on parser, npm-meta, and shell-safety regressions before push. Pre-push only; see .llm/skills/performance/git-hook-performance.md.
@@ -395,7 +399,7 @@ repos:
     hooks:
       - id: actionlint
         name: Lint GitHub Actions workflows
-        entry: bash -c 'if command -v actionlint >/dev/null 2>&1; then actionlint; else echo "actionlint not installed; skipping"; fi'
+        entry: node scripts/run-actionlint-if-available.js
         language: system
         files: '^\.github/workflows/.*\.ya?ml$'
         pass_filenames: false
@@ -420,6 +424,7 @@ repos:
         language: system
         files: '(?i)\.(md|markdown|cs|json|ya?ml|ps1|js)$'
         pass_filenames: true
+        require_serial: true
         stages:
           - pre-push
         # Pinned npx fallback is `cspell@10.0.0` (kept in sync by the
@@ -427,7 +432,8 @@ repos:
         # The managed wrapper at scripts/run-managed-cspell.js prefers the
         # local devDependency (node_modules/cspell/bin.mjs) and falls back
         # to the pinned npx install only on cold caches, with an integrity
-        # gate ahead of either branch.
+        # gate ahead of either branch. Serialized because the integrity gate
+        # can self-heal with npm ci, which must be single-writer.
         description: >-
           Check spelling in changed files via scripts/run-managed-cspell.js,
           which gates on node_modules integrity, prefers local cspell

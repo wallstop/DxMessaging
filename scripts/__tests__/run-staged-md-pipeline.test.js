@@ -157,6 +157,29 @@ describe("run-staged-md-pipeline", () => {
       }
     });
 
+    test("pipeline surfaces ASCII validator violations for non-ASCII punctuation", async () => {
+      const emDash = String.fromCodePoint(0x2014);
+      const fixture = `# Title\n\nBad${emDash}dash.\n`;
+      const { dir, target } = makeTempFile("ascii-violation.md", fixture);
+      try {
+        const writeSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+        const stdoutSpy = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+        try {
+          const result = await runStagedMdPipeline([target], {
+            skipMarkdownlint: true,
+            skipPrettier: true
+          });
+          expect(result.violations.ascii.violations).toHaveLength(1);
+          expect(result.violations.ascii.violations[0].codepoint).toBe(0x2014);
+        } finally {
+          writeSpy.mockRestore();
+          stdoutSpy.mockRestore();
+        }
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     test("subprocess invocation surfaces violations and exits 1 (covers prettier in-process path)", () => {
       // The full main() path in-process would exercise the prettier
       // ESM dynamic-import surface, which Jest cannot do without
@@ -252,16 +275,12 @@ describe("run-staged-md-pipeline", () => {
 
     test("toImportFileUrl normalizes Windows UNC absolute paths to file URLs", () => {
       const uncPath = String.raw`\\fileserver\engineering\markdownlint-cli2.mjs`;
-      expect(toImportFileUrl(uncPath)).toBe(
-        "file://fileserver/engineering/markdownlint-cli2.mjs"
-      );
+      expect(toImportFileUrl(uncPath)).toBe("file://fileserver/engineering/markdownlint-cli2.mjs");
     });
 
     test("toImportFileUrl preserves forward-slash UNC absolute paths", () => {
       const uncPath = "//fileserver/engineering/markdownlint-cli2.mjs";
-      expect(toImportFileUrl(uncPath)).toBe(
-        "file://fileserver/engineering/markdownlint-cli2.mjs"
-      );
+      expect(toImportFileUrl(uncPath)).toBe("file://fileserver/engineering/markdownlint-cli2.mjs");
     });
 
     test("markdownlint argv uses POSIX repo-relative paths", () => {

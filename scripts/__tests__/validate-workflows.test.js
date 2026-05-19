@@ -23,6 +23,11 @@ const {
   findWindowsBashPortabilityViolations,
   findForbiddenRunsOnGroupViolations,
   findChangelogCoverageCheckoutViolations,
+  runTextInvokesChangelogCoverage,
+  NPM_SCRIPTS_REQUIRING_GIT_HISTORY,
+  extractStaticJobLabels,
+  jobIsRunnerAccessPreflight,
+  findSelfHostedRunnerPreflightViolations,
   resolveWorkflowLineLengthPolicy,
   resolveWorkflowLineLengthMax,
   findWorkflowLineLengthViolations,
@@ -953,8 +958,16 @@ describe("findChangelogCoverageCheckoutViolations", () => {
     ["direct changelog validator", "node scripts/validate-changelog.js --check-coverage"],
     ["pre-commit changelog policy hook", "pre-commit run validate-changelog-policy --all-files"],
     ["npm coverage script", "npm run validate:changelog:coverage"],
-    ["npm preflight script", "npm run preflight:pre-commit"],
-    ["npm full validation script", "npm run validate:all"]
+    ["npm preflight pre-commit", "npm run preflight:pre-commit"],
+    // Bug 2 regression guard: cross-platform-preflight.yml invoked
+    // `npm run preflight:pre-push` (which chains preflight:pre-commit ->
+    // validate:changelog:coverage) without fetch-depth: 0. The previous
+    // pattern only matched preflight:pre-commit and validate:all, so this
+    // workflow slipped through the validator.
+    ["npm preflight pre-push (Bug 2 regression)", "npm run preflight:pre-push"],
+    ["npm full validation script", "npm run validate:all"],
+    ["bare git diff origin/master", "git diff origin/master...HEAD"],
+    ["bare git merge-base origin/main", "git merge-base origin/main HEAD"]
   ])("requires full-history checkout for %s", (_name, coverageCommand) => {
     const lines = [
       "jobs:",
@@ -1120,6 +1133,426 @@ describe("findChangelogCoverageCheckoutViolations", () => {
     const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
 
     expect(violations).toHaveLength(1);
+  });
+});
+
+describe("runTextInvokesChangelogCoverage + NPM_SCRIPTS_REQUIRING_GIT_HISTORY (Bug 2)", () => {
+  test("NPM_SCRIPTS_REQUIRING_GIT_HISTORY allowlist contains the scripts that transitively need origin/<base>", () => {
+    // Contract: any npm script that itself, or via chain, runs
+    // validate:changelog:coverage or `git diff origin/*` MUST appear here.
+    // This list is what runTextInvokesChangelogCoverage matches against.
+    // `validate:changelog` (without `--check-coverage`) is deliberately
+    // NOT in this list -- the bare validator does not touch origin/<base>.
+    expect(NPM_SCRIPTS_REQUIRING_GIT_HISTORY).toEqual(
+      expect.arrayContaining([
+        "validate:changelog:coverage",
+        "preflight:pre-commit",
+        // The script that the failing run (cross-platform-preflight.yml)
+        // actually invoked. Adding it here is the documented fix for Bug 2.
+        "preflight:pre-push",
+        "validate:all"
+      ])
+    );
+    expect(NPM_SCRIPTS_REQUIRING_GIT_HISTORY).not.toContain("validate:changelog");
+  });
+
+  test.each([
+    // [name, runText, expected]
+    [
+      "preflight:pre-push (Bug 2 root cause)",
+      "npm run preflight:pre-push",
+      true
+    ],
+    [
+      "preflight:pre-commit",
+      "npm run preflight:pre-commit",
+      true
+    ],
+    [
+      "validate:changelog:coverage",
+      "npm run validate:changelog:coverage",
+      true
+    ],
+    [
+      "validate:all",
+      "npm run validate:all",
+      true
+    ],
+    [
+      "validate:changelog (no coverage flag) -- does NOT need git history",
+      "npm run validate:changelog",
+      false
+    ],
+    [
+      "direct validator with --check-coverage",
+      "node scripts/validate-changelog.js --check-coverage",
+      true
+    ],
+    [
+      "pre-commit hook",
+      "pre-commit run validate-changelog-policy --all-files",
+      true
+    ],
+    [
+      "git diff against origin",
+      "git diff origin/master...HEAD",
+      true
+    ],
+    [
+      "git merge-base against origin",
+      "git merge-base origin/main HEAD",
+      true
+    ],
+    // Negative cases.
+    [
+      "unrelated npm script",
+      "npm run test",
+      false
+    ],
+    [
+      "git diff against HEAD (no origin ref needed)",
+      "git diff HEAD~1 HEAD",
+      false
+    ],
+    [
+      "empty run text",
+      "",
+      false
+    ],
+    [
+      "git log (not in allowlist of git-history-aware probes)",
+      "git log --oneline -5",
+      false
+    ]
+  ])("matches %s -> %s", (_name, runText, expected) => {
+    expect(runTextInvokesChangelogCoverage(runText)).toBe(expected);
+  });
+
+  test.each([
+    // [name, runStep, hasFetchDepth0, expectedViolations]
+    ["preflight:pre-push without fetch-depth: 0 fails", "npm run preflight:pre-push", false, 1],
+    ["preflight:pre-push with fetch-depth: 0 passes", "npm run preflight:pre-push", true, 0],
+    ["preflight:pre-commit without fetch-depth: 0 fails", "npm run preflight:pre-commit", false, 1],
+    ["preflight:pre-commit with fetch-depth: 0 passes", "npm run preflight:pre-commit", true, 0],
+    ["unrelated npm script without fetch-depth: 0 passes", "npm run test", false, 0],
+    ["unrelated npm script with fetch-depth: 0 passes", "npm run test", true, 0],
+    ["bare git diff origin without fetch-depth: 0 fails", "git diff origin/master...HEAD", false, 1],
+    ["bare git diff origin with fetch-depth: 0 passes", "git diff origin/master...HEAD", true, 0]
+  ])("data-driven workflow check: %s", (_name, runCommand, hasFetchDepth0, expectedViolations) => {
+    const checkoutBlock = hasFetchDepth0
+      ? [
+          "      - name: Checkout",
+          "        uses: actions/checkout@v6",
+          "        with:",
+          "          fetch-depth: 0"
+        ]
+      : [
+          "      - name: Checkout",
+          "        uses: actions/checkout@v6"
+        ];
+
+    const lines = [
+      "jobs:",
+      "  preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      ...checkoutBlock,
+      "      - name: Run preflight",
+      `        run: ${runCommand}`
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(expectedViolations);
+    if (expectedViolations > 0) {
+      // Confirm the diagnostic names fetch-depth: 0 explicitly.
+      expect(violations[0].message).toContain("fetch-depth: 0");
+    }
+  });
+
+  test("regression guard: cross-platform-preflight.yml shape is now caught", () => {
+    // Reproduce the exact YAML that failed in logs_69627069942.
+    const lines = [
+      "jobs:",
+      "  preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - name: Checkout repository",
+      "        uses: actions/checkout@v6",
+      "        with:",
+      "          ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+      "          persist-credentials: false",
+      "      - name: Run pre-push preflight",
+      "        shell: bash",
+      "        run: npm run preflight:pre-push"
+    ];
+
+    const violations = findChangelogCoverageCheckoutViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("fetch-depth: 0");
+  });
+});
+
+describe("findSelfHostedRunnerPreflightViolations (Bug 3)", () => {
+  const runnerPreflightStep = [
+    "      - name: Probe self-hosted runner availability",
+    "        env:",
+    "          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+    "          REQUIRED_LABELS: \"self-hosted,Windows,RAM-64GB\"",
+    "        run: |",
+    "          gh api repos/${GITHUB_REPOSITORY}/actions/runners"
+  ];
+
+  test("flags self-hosted job that has no preflight dependency", () => {
+    const lines = [
+      "jobs:",
+      "  unity-tests:",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - name: Test",
+      "        run: echo test"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("preflight");
+    expect(violations[0].message).toContain("unity-runners-after-transfer.md");
+  });
+
+  test("accepts self-hosted job that needs a preflight job in the same workflow", () => {
+    const lines = [
+      "jobs:",
+      "  runner-preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      ...runnerPreflightStep,
+      "  unity-tests:",
+      "    needs: runner-preflight",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - name: Test",
+      "        run: echo test"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(0);
+  });
+
+  test("accepts self-hosted job that needs a preflight via block-list needs", () => {
+    const lines = [
+      "jobs:",
+      "  matrix-config:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: echo matrix",
+      "  runner-preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      ...runnerPreflightStep,
+      "  unity-tests:",
+      "    needs:",
+      "      - matrix-config",
+      "      - runner-preflight",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - name: Test",
+      "        run: echo test"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(0);
+  });
+
+  test("ignores jobs that target ubuntu-latest (not self-hosted)", () => {
+    const lines = [
+      "jobs:",
+      "  ubuntu-job:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: echo hi"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(0);
+  });
+
+  test("does not require the preflight job to gate itself", () => {
+    const lines = [
+      "jobs:",
+      "  runner-preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      ...runnerPreflightStep
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(0);
+  });
+
+  test("flags self-hosted job whose needs target lacks the runner-probe marker", () => {
+    // The preflight job MUST contain the actions/runners marker for
+    // jobIsRunnerAccessPreflight to accept it. After the H1 rewrite the
+    // job name is no longer consulted, but the marker is still required.
+    const lines = [
+      "jobs:",
+      "  preflight-thing:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: echo not the right probe",
+      "  unity-tests:",
+      "    needs: preflight-thing",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - run: echo test"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(1);
+  });
+
+  test("flags self-hosted job whose needs target is missing from the workflow", () => {
+    const lines = [
+      "jobs:",
+      "  unity-tests:",
+      "    needs: phantom-job",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - run: echo test"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("workflow.yml", lines);
+    expect(violations).toHaveLength(1);
+  });
+
+  test.each([
+    // [name, runsOn, expectedHasSelfHosted]
+    ["inline array with self-hosted", "[self-hosted, Windows, RAM-64GB]", true],
+    ["inline array without self-hosted", "[ubuntu-latest]", false],
+    ["scalar ubuntu-latest", "ubuntu-latest", false],
+    ["scalar self-hosted", "self-hosted", true]
+  ])(
+    "extractStaticJobLabels: %s",
+    (_name, runsOnText, expectedHasSelfHosted) => {
+      const lines = [
+        "jobs:",
+        "  job1:",
+        `    runs-on: ${runsOnText}`,
+        "    steps:",
+        "      - run: echo hi"
+      ];
+      const { extractJobs } = require("../validate-workflows.js");
+      const jobs = extractJobs(lines);
+      expect(jobs).toHaveLength(1);
+      const labels = extractStaticJobLabels(lines, jobs[0]);
+      if (expectedHasSelfHosted) {
+        expect(labels).toContain("self-hosted");
+      } else {
+        expect(labels || []).not.toContain("self-hosted");
+      }
+    }
+  );
+
+  test("jobIsRunnerAccessPreflight uses the structural signature only (H1)", () => {
+    const { extractJobs } = require("../validate-workflows.js");
+
+    // (1) Canonical positive: hosted runner + actions/runners marker.
+    const matching = [
+      "jobs:",
+      "  runner-preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: gh api repos/${GITHUB_REPOSITORY}/actions/runners"
+    ];
+    let jobs = extractJobs(matching);
+    expect(jobIsRunnerAccessPreflight(matching, jobs[0])).toBe(true);
+
+    // (2) No marker -> not a preflight (name alone is insufficient).
+    const nameOnly = [
+      "jobs:",
+      "  runner-preflight:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: echo unrelated"
+    ];
+    jobs = extractJobs(nameOnly);
+    expect(jobIsRunnerAccessPreflight(nameOnly, jobs[0])).toBe(false);
+
+    // (3) Marker on a hosted-runner job with a DIFFERENT name still
+    // qualifies under the structural-only rule (H1). The previous
+    // implementation gated on /preflight/i which overfit the name; this
+    // assertion locks in that the name is no longer consulted.
+    const markerNoPreflightName = [
+      "jobs:",
+      "  setup:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: gh api repos/${GITHUB_REPOSITORY}/actions/runners"
+    ];
+    jobs = extractJobs(markerNoPreflightName);
+    expect(jobIsRunnerAccessPreflight(markerNoPreflightName, jobs[0])).toBe(true);
+
+    // (4) Marker on a SELF-HOSTED job does NOT qualify -- a self-hosted
+    // job cannot gate self-hosted access. The whole point of the
+    // preflight is to surface a failure BEFORE the self-hosted dispatch.
+    const markerOnSelfHosted = [
+      "jobs:",
+      "  bad:",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - run: gh api repos/${GITHUB_REPOSITORY}/actions/runners"
+    ];
+    jobs = extractJobs(markerOnSelfHosted);
+    expect(jobIsRunnerAccessPreflight(markerOnSelfHosted, jobs[0])).toBe(false);
+
+    // (5) Marker on a hosted runner with a non-canonical name +
+    // org-scoped endpoint also qualifies. This is the actual shape
+    // after the runner-preflight rewrite (org-first, repo-fallback).
+    const orgScopedEndpoint = [
+      "jobs:",
+      "  runner-access-probe:",
+      "    runs-on: ubuntu-22.04",
+      "    steps:",
+      "      - run: gh api orgs/${GITHUB_REPOSITORY_OWNER}/actions/runners"
+    ];
+    jobs = extractJobs(orgScopedEndpoint);
+    expect(jobIsRunnerAccessPreflight(orgScopedEndpoint, jobs[0])).toBe(true);
+
+    // (6) Other hosted-runner label families also qualify (windows-latest, macos-latest).
+    const onWindows = [
+      "jobs:",
+      "  probe:",
+      "    runs-on: windows-latest",
+      "    steps:",
+      "      - run: gh api orgs/foo/actions/runners"
+    ];
+    jobs = extractJobs(onWindows);
+    expect(jobIsRunnerAccessPreflight(onWindows, jobs[0])).toBe(true);
+  });
+
+  test("integration: real unity-tests.yml shape passes", () => {
+    // Mirror the actual unity-tests.yml structure: matrix-config +
+    // runner-preflight + unity-tests with needs on both.
+    const lines = [
+      "jobs:",
+      "  matrix-config:",
+      "    runs-on: ubuntu-latest",
+      "    steps:",
+      "      - run: echo matrix",
+      "  runner-preflight:",
+      "    runs-on: ubuntu-latest",
+      "    timeout-minutes: 3",
+      "    steps:",
+      ...runnerPreflightStep,
+      "  unity-tests:",
+      "    needs:",
+      "      - matrix-config",
+      "      - runner-preflight",
+      "    runs-on: [self-hosted, Windows, RAM-64GB]",
+      "    steps:",
+      "      - run: echo test"
+    ];
+
+    const violations = findSelfHostedRunnerPreflightViolations("unity-tests.yml", lines);
+    expect(violations).toHaveLength(0);
   });
 });
 

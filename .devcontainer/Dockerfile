@@ -417,16 +417,18 @@ RUN git config --system core.longpaths true \
 # correct ownership ensures the vscode user owns them on first run; rebuilds
 # of an existing volume are repaired by post-create.sh / post-start.sh.
 #
-# Targets here MUST stay aligned with cache-contract.sh (4 entries).
+# Targets here MUST stay aligned with cache-contract.sh (5 entries).
 # ------------------------------------------------------------------------------
 RUN mkdir -p /home/vscode/.nuget \
     && mkdir -p /home/vscode/.dotnet/tools \
     && mkdir -p /home/vscode/.local/share/powershell \
     && mkdir -p /home/vscode/.cache/pip \
+    && mkdir -p /workspaces/com.wallstop-studios.dxmessaging/node_modules \
     && chown -R vscode:vscode /home/vscode/.nuget \
     && chown -R vscode:vscode /home/vscode/.dotnet \
     && chown -R vscode:vscode /home/vscode/.local \
-    && chown -R vscode:vscode /home/vscode/.cache
+    && chown -R vscode:vscode /home/vscode/.cache \
+    && chown -R vscode:vscode /workspaces
 
 # ------------------------------------------------------------------------------
 # Configure shell aliases for bash
