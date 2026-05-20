@@ -2210,7 +2210,7 @@ describe("forbidPlainShellBashOnSelfHostedWindows", () => {
 
   test("real Unity workflow files pass the rule (regression guard)", () => {
     const workflowDir = path.resolve(__dirname, "..", "..", ".github", "workflows");
-    const targets = ["unity-tests.yml", "unity-il2cpp.yml", "unity-benchmarks.yml", "release.yml"];
+    const targets = ["unity-tests.yml", "unity-benchmarks.yml", "release.yml"];
     for (const file of targets) {
       const filePath = path.join(workflowDir, file);
       if (!fs.existsSync(filePath)) {

@@ -2366,7 +2366,7 @@ function extractStaticJobLabels(lines, job) {
  *      scope) which is the canonical marker for a runner-inventory probe.
  *
  * The probe lives in `.github/workflows/unity-tests.yml`,
- * `.github/workflows/unity-il2cpp.yml`, `.github/workflows/unity-benchmarks.yml`,
+ * `.github/workflows/unity-benchmarks.yml`,
  * and the `runner-preflight` job in `.github/workflows/release.yml`.
  */
 function jobIsRunnerAccessPreflight(lines, job) {

@@ -228,19 +228,27 @@ build_assembly_list() {
     local include_perf="$1"
     local include_integrations="$2"
     local include_comparisons="$3"
+    local runtime_only="$4"
     local node_script
 
     # Pass the include options through to defaultIncludeAssemblies so the
     # opt-in semantics defined in scripts/unity/lib/asmdef-discovery.js are
-    # the single source of truth.
-    local opts="{ includePerf: ${include_perf}, includeIntegrations: ${include_integrations}, includeComparisons: ${include_comparisons} }"
+    # the single source of truth. runtimeOnly drops editor-only asmdefs for the
+    # standalone player flow (EditMode tests cannot run in a built player).
+    local opts="{ includePerf: ${include_perf}, includeIntegrations: ${include_integrations}, includeComparisons: ${include_comparisons}, runtimeOnly: ${runtime_only} }"
     node_script="const m=require('./scripts/unity/lib/asmdef-discovery.js');"
     node_script+="console.log(m.defaultIncludeAssemblies(process.cwd(), ${opts}).join(';'));"
 
     (cd "${REPO_ROOT}" && node -e "${node_script}")
 }
 
-ASSEMBLIES="$(build_assembly_list "${INCLUDE_PERF}" "${INCLUDE_INTEGRATIONS}" "${INCLUDE_COMPARISONS}")"
+# standalone runs the IL2CPP player, so it must use runtime-only assemblies.
+RUNTIME_ONLY="false"
+if [[ "${PLATFORM}" == "standalone" ]]; then
+    RUNTIME_ONLY="true"
+fi
+
+ASSEMBLIES="$(build_assembly_list "${INCLUDE_PERF}" "${INCLUDE_INTEGRATIONS}" "${INCLUDE_COMPARISONS}" "${RUNTIME_ONLY}")"
 if [[ -z "${ASSEMBLIES}" ]]; then
     printf '%sError: assembly include list is empty (asmdef discovery failed).%s\n' \
         "${C_RED}" "${C_NC}" >&2
@@ -402,23 +410,28 @@ USER_UID_VAL="$(id -u)"
 USER_GID_VAL="$(id -g)"
 
 # ---------------------------------------------------------------------------
-# Build inner Unity commands (editmode/playmode share one; standalone needs
-# two passes — build, then launch).
+# Build inner Unity command. editmode, playmode, AND standalone all run through
+# a single editor invocation: `Unity -runTests -testPlatform <platform>`.
+# standalone maps to StandaloneLinux64, which builds AND runs the IL2CPP player
+# natively in one pass (IL2CPP backend from ProjectSettings).
 # ---------------------------------------------------------------------------
 
-# Container-side path (relative to .unity-test-project/) for the IL2CPP
-# binary. Kept in sync with TestRunnerBuilder.cs DefaultBuildPathRelative.
-STANDALONE_BUILD_REL="Builds/IL2CPPTests/Tests.x86_64"
-STANDALONE_BUILD_HOST="${REPO_ROOT}/.unity-test-project/${STANDALONE_BUILD_REL}"
-STANDALONE_BUILD_CONTAINER="/workspace/.unity-test-project/${STANDALONE_BUILD_REL}"
-
 build_editor_cmd_inner() {
-    # Editor-driven editmode/playmode invocation.
+    # Single inner command shared by editmode/playmode AND standalone. The only
+    # difference is the -testPlatform value: editmode/playmode are passed
+    # literally; standalone maps to StandaloneLinux64 so a single editor
+    # invocation builds AND runs the IL2CPP player (IL2CPP backend now comes from
+    # ProjectSettings; no executeMethod, no separate build pass).
     local cmd
-    local project_path_q results_q assemblies_q filter_q
+    local project_path_q results_q assemblies_q filter_q test_platform
     project_path_q="$(printf '%q' "/workspace/.unity-test-project")"
     results_q="$(printf '%q' "${RESULTS_CONTAINER}")"
     assemblies_q="$(printf '%q' "${ASSEMBLIES}")"
+    if [[ "${PLATFORM}" == "standalone" ]]; then
+        test_platform="StandaloneLinux64"
+    else
+        test_platform="${PLATFORM}"
+    fi
     cmd=$'set -euo pipefail\n'
     cmd+=$'cleanup_ownership() {\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
@@ -450,7 +463,7 @@ build_editor_cmd_inner() {
 "
     cmd+="  -projectPath ${project_path_q} \\
 "
-    cmd+="  -runTests -testPlatform ${PLATFORM} \\
+    cmd+="  -runTests -testPlatform ${test_platform} \\
 "
     cmd+="  -testResults ${results_q} \\
 "
@@ -463,116 +476,6 @@ build_editor_cmd_inner() {
     fi
     if [[ "${LICENSE_MODE}" == "serial" ]]; then
         cmd+="  -username \"\${UNITY_EMAIL}\" -password \"\${UNITY_PASSWORD}\" -serial \"\${UNITY_SERIAL}\" \\
-"
-    fi
-    cmd+="  -logFile - 2>&1 | tee /workspace/.artifacts/unity/log.txt
-"
-    printf '%s' "${cmd}"
-}
-
-build_standalone_build_cmd_inner() {
-    # Pass 1 of standalone: invoke the editor to build the IL2CPP test player.
-    # B1: export DXM_IL2CPP_BUILD_PATH so TestRunnerBuilder.BuildIL2CPPTestPlayer
-    # writes to the same path we read from below. Local + CI use the same
-    # env-var contract; the value differs but the mechanism is identical.
-    local cmd
-    local project_path_q build_path_q
-    project_path_q="$(printf '%q' "/workspace/.unity-test-project")"
-    build_path_q="$(printf '%q' "${STANDALONE_BUILD_CONTAINER}")"
-    cmd=$'set -euo pipefail\n'
-    cmd+=$'cleanup_ownership() {\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
-    cmd+=$'    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then\n'
-    cmd+=$'        baseline_path="${DX_PERF_BASELINE}"\n'
-    cmd+=$'        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"\n'
-    cmd+=$'        if [[ "${baseline_path}" == /workspace/* ]]; then\n'
-    cmd+=$'            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true\n'
-    cmd+=$'            baseline_dir="$(dirname "${baseline_path}")"\n'
-    cmd+=$'            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true\n'
-    cmd+=$'        fi\n'
-    cmd+=$'    fi\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Builds || true\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true\n'
-    cmd+=$'}\n'
-    cmd+=$'trap cleanup_ownership EXIT\n'
-    cmd+=$'mkdir -p /root/.cache/unity3d\n'
-    if [[ "${LICENSE_MODE}" == "ulf" ]] || [[ "${LICENSE_MODE}" == "ulf-b64" ]]; then
-        cmd+=$'mkdir -p /root/.local/share/unity3d/Unity\n'
-        if [[ "${LICENSE_MODE}" == "ulf-b64" ]]; then
-            cmd+=$'printf "%s" "${UNITY_LICENSE_B64}" | base64 -d > /root/.local/share/unity3d/Unity/Unity_lic.ulf\n'
-        else
-            cmd+=$'printf "%s" "${UNITY_LICENSE}" > /root/.local/share/unity3d/Unity/Unity_lic.ulf\n'
-        fi
-        cmd+=$'chmod 644 /root/.local/share/unity3d/Unity/Unity_lic.ulf\n'
-    fi
-    cmd+=$'mkdir -p /workspace/.unity-test-project/Builds/IL2CPPTests\n'
-    cmd+="export DXM_IL2CPP_BUILD_PATH=${build_path_q}
-"
-    cmd+="/opt/unity/Editor/Unity \\
-"
-    cmd+="  -batchmode -nographics \\
-"
-    cmd+="  -projectPath ${project_path_q} \\
-"
-    cmd+="  -buildTarget StandaloneLinux64 \\
-"
-    cmd+="  -executeMethod WallstopStudios.DxMessaging.TestHarness.Editor.TestRunnerBuilder.BuildIL2CPPTestPlayer \\
-"
-    if [[ "${LICENSE_MODE}" == "serial" ]]; then
-        cmd+="  -username \"\${UNITY_EMAIL}\" -password \"\${UNITY_PASSWORD}\" -serial \"\${UNITY_SERIAL}\" \\
-"
-    fi
-    cmd+="  -logFile - 2>&1 | tee /workspace/.artifacts/unity/build-log.txt
-"
-    printf '%s' "${cmd}"
-}
-
-build_standalone_run_cmd_inner() {
-    # Pass 2 of standalone: launch the IL2CPP binary that was just built.
-    # The Unity Test Framework embeds a command-line runner in the player
-    # when built with BuildOptions.Development | IncludeTestAssemblies; the
-    # binary writes results.xml itself and exits with non-zero on failure.
-    local cmd
-    local build_path_q results_q assemblies_q filter_q
-    build_path_q="$(printf '%q' "${STANDALONE_BUILD_CONTAINER}")"
-    results_q="$(printf '%q' "${RESULTS_CONTAINER}")"
-    assemblies_q="$(printf '%q' "${ASSEMBLIES}")"
-    cmd=$'set -euo pipefail\n'
-    cmd+=$'cleanup_ownership() {\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
-    cmd+=$'    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then\n'
-    cmd+=$'        baseline_path="${DX_PERF_BASELINE}"\n'
-    cmd+=$'        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"\n'
-    cmd+=$'        if [[ "${baseline_path}" == /workspace/* ]]; then\n'
-    cmd+=$'            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true\n'
-    cmd+=$'            baseline_dir="$(dirname "${baseline_path}")"\n'
-    cmd+=$'            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true\n'
-    cmd+=$'        fi\n'
-    cmd+=$'    fi\n'
-    cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true\n'
-    cmd+=$'}\n'
-    cmd+=$'trap cleanup_ownership EXIT\n'
-    cmd+="if [[ ! -x ${build_path_q} ]]; then
-"
-    cmd+="    echo \"[run-tests] ERROR: built test player not found at ${STANDALONE_BUILD_CONTAINER}\" >&2
-"
-    cmd+="    exit 1
-"
-    cmd+="fi
-"
-    cmd+="${build_path_q} \\
-"
-    cmd+="  -batchmode -nographics \\
-"
-    cmd+="  -runTests \\
-"
-    cmd+="  -testResults ${results_q} \\
-"
-    cmd+="  -assemblyNames ${assemblies_q} \\
-"
-    if [[ -n "${TEST_FILTER}" ]]; then
-        filter_q="$(printf '%q' "${TEST_FILTER}")"
-        cmd+="  -testFilter ${filter_q} \\
 "
     fi
     cmd+="  -logFile - 2>&1 | tee /workspace/.artifacts/unity/log.txt
@@ -595,7 +498,7 @@ printf '  perf=%s comparisons=%s integrations=%s filter=%s\n' \
 printf '  host_repo_root=%s\n' "${HOST_REPO_ROOT}"
 printf '  library_cache=%s\n' "${UNITY_LIBRARY_CACHE_SOURCE}"
 
-# Standard docker args reused across passes.
+# Standard docker args reused across all platforms.
 DOCKER_BASE_ARGS=(
     run --rm
     -v "${HOST_REPO_ROOT}:/workspace:rw"
@@ -614,40 +517,20 @@ DOCKER_BASE_ARGS=(
 
 EXIT_CODE=0
 if [[ "${PLATFORM}" == "standalone" ]]; then
-    BUILD_CMD_INNER="$(build_standalone_build_cmd_inner)"
-    printf '%sStep 1/2: building IL2CPP test player...%s\n' "${C_BLUE}" "${C_NC}"
-    BUILD_EXIT=0
-    docker "${DOCKER_BASE_ARGS[@]}" "${IMAGE_REF}" \
-        bash -c "${BUILD_CMD_INNER}" \
-        || BUILD_EXIT=$?
-
-    if [[ "${BUILD_EXIT}" -ne 0 ]]; then
-        printf '%sIL2CPP build failed (exit %s).%s\n' \
-            "${C_RED}" "${BUILD_EXIT}" "${C_NC}" >&2
-        exit "${BUILD_EXIT}"
-    fi
-
-    if [[ ! -x "${STANDALONE_BUILD_HOST}" ]]; then
-        printf '%sIL2CPP build reported success but binary missing at %s.%s\n' \
-            "${C_RED}" "${STANDALONE_BUILD_HOST}" "${C_NC}" >&2
-        exit 1
-    fi
-
-    RUN_CMD_INNER="$(build_standalone_run_cmd_inner)"
-    printf '%sStep 2/2: running IL2CPP test player...%s\n' "${C_BLUE}" "${C_NC}"
-    docker "${DOCKER_BASE_ARGS[@]}" "${IMAGE_REF}" \
-        bash -c "${RUN_CMD_INNER}" \
-        || EXIT_CODE=$?
-else
-    UNITY_CMD_INNER="$(build_editor_cmd_inner)"
-    docker "${DOCKER_BASE_ARGS[@]}" "${IMAGE_REF}" \
-        bash -c "${UNITY_CMD_INNER}" \
-        || EXIT_CODE=$?
+    printf '%sRunning IL2CPP standalone player (native single pass)...%s\n' \
+        "${C_BLUE}" "${C_NC}"
 fi
+# editmode, playmode, and standalone all use the same single editor invocation.
+# standalone maps -testPlatform to StandaloneLinux64, which builds AND runs the
+# IL2CPP player in one pass (no separate build-log.txt, no executeMethod).
+UNITY_CMD_INNER="$(build_editor_cmd_inner)"
+docker "${DOCKER_BASE_ARGS[@]}" "${IMAGE_REF}" \
+    bash -c "${UNITY_CMD_INNER}" \
+    || EXIT_CODE=$?
 
 # ---------------------------------------------------------------------------
 # Summary tail (B2: delegate parsing to scripts/unity/lib/parse-test-results.py
-# so this script, the IL2CPP workflow, and run-tests.ps1 all share one parser
+# so this script and run-tests.ps1 share one parser
 # implementation. The helper emits "OK total=.. passed=.. failed=.. skipped=.."
 # on success and "PARSE_ERROR:<reason>" on failure with exit code 2.)
 # ---------------------------------------------------------------------------

@@ -18,10 +18,12 @@
     ".gitattributes",
     ".vale/styles/Vocab/**/reject.txt",
     "*.meta",
+    "**/*.asset",
     "Samples~/**",
     "package-lock.json",
     "**/packages-lock.json",
     "Library/**",
+    "**/Library/**",
     "Temp/**",
     "Logs/**",
     "obj/**",
@@ -283,7 +285,9 @@
     "kubepods",
     "unanalyzable",
     "rprivate",
-    "unblanked"
+    "unblanked",
+    "GHAEXPR",
+    "pscustomobject"
   ],
   "ignoreRegExpList": [
     "/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g",

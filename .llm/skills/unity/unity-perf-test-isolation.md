@@ -163,23 +163,21 @@ If the asmdef ends up in the `core` bucket instead, the most common cause is the
 
 ## Where Perf Actually Runs
 
-| Workflow               | Triggers                                        | Includes Perf? |
-| ---------------------- | ----------------------------------------------- | -------------- |
-| `unity-tests.yml`      | PR / push / schedule / dispatch                 | NO             |
-| `unity-il2cpp.yml`     | PR / push / schedule / dispatch (job gated off) | NO             |
-| `unity-benchmarks.yml` | schedule / dispatch                             | YES            |
+| Workflow               | Triggers                        | Includes Perf? |
+| ---------------------- | ------------------------------- | -------------- |
+| `unity-tests.yml`      | PR / push / schedule / dispatch | NO             |
+| `unity-benchmarks.yml` | schedule / dispatch             | YES            |
 
 The active `.github/workflows/unity-*.yml` workflows run Unity via game-ci on
 self-hosted Windows runners (benchmarks included). The `.github/workflows-disabled/*`
 files are the ubuntu reference mirrors kept for parity, not the live templates.
-Note: the `il2cpp-tests` job in `unity-il2cpp.yml` is currently gated off
-(`if: ${{ false }}`) pending two documented blockers (Linux-hardcoded build
-target in `TestRunnerBuilder.cs` and missing VS Build Tools in stock game-ci
-Windows images). Verify the active workflows still exist any time you edit them:
+Note: IL2CPP is now the `standalone` entry in the `unity-tests.yml` `test-mode`
+matrix (native game-ci `testMode: standalone`, IL2CPP via ProjectSettings,
+runtime-only assemblies) -- there is no separate il2cpp workflow. Verify the
+active workflows still exist any time you edit them:
 
 ```bash
 test -e .github/workflows/unity-tests.yml
-test -e .github/workflows/unity-il2cpp.yml
 test -e .github/workflows/unity-benchmarks.yml
 ```
 
@@ -199,7 +197,7 @@ The runner should print `comparisons=true` and include the comparison asmdef in 
 
 - Every asmdef matching the perf regex is classified as `perf`.
 - Every asmdef NOT matching the perf or integration regex is classified as `core` and appears in `defaultIncludeAssemblies(repo)`.
-- Disabled `unity-tests.yml` and `unity-il2cpp.yml` templates resolve their assembly lists via `defaultIncludeAssemblies` rather than hand-rolled YAML.
+- The disabled `unity-tests.yml` template resolves its assembly list via `defaultIncludeAssemblies` rather than hand-rolled YAML.
 - Disabled `unity-benchmarks.yml` template opts into perf via `{ includePerf: true }`.
 
 The test catches the silent regression "I added a new perf asmdef and forgot to update the exclusion list" because the exclusion list is computed, not hand-maintained.

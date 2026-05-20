@@ -109,10 +109,26 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).toContain("-e DX_PERF_BASELINE_MODE");
   });
 
-  test("standalone player run forwards the same assembly and filter controls", () => {
-    const standaloneRun = content.slice(content.indexOf("build_standalone_run_cmd_inner"));
-    expect(standaloneRun).toContain("-assemblyNames");
-    expect(standaloneRun).toContain("-testFilter");
+  test("standalone runs natively via the single editor command path (no two-pass)", () => {
+    // standalone now shares the same single inner command as editmode/playmode,
+    // mapping -testPlatform to StandaloneLinux64 (Unity builds AND runs the
+    // IL2CPP player in one pass; IL2CPP backend from ProjectSettings).
+    expect(content).toContain('test_platform="StandaloneLinux64"');
+    expect(content).toContain("-runTests -testPlatform ${test_platform}");
+    expect(content).toContain("-assemblyNames");
+    expect(content).toContain("-testFilter");
+    // The runtime-only assembly list is threaded in for standalone.
+    expect(content).toContain("runtimeOnly: ${runtime_only}");
+    expect(content).toContain('RUNTIME_ONLY="true"');
+  });
+
+  test("does NOT contain the deleted two-pass standalone build/run symbols", () => {
+    expect(content).not.toContain("build_standalone_build_cmd_inner");
+    expect(content).not.toContain("build_standalone_run_cmd_inner");
+    expect(content).not.toContain("DXM_IL2CPP_BUILD_PATH");
+    expect(content).not.toContain("BuildIL2CPPTestPlayer");
+    expect(content).not.toContain("-buildTarget StandaloneLinux64");
+    expect(content).not.toContain("-executeMethod");
   });
 
   test("normalizes relative --results paths under the repo before validation", () => {
@@ -250,10 +266,25 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("'-e', 'DX_PERF_BASELINE_MODE'");
   });
 
-  test("standalone player run forwards the same assembly and filter controls", () => {
-    const standaloneRun = content.slice(content.indexOf("Get-StandaloneRunCommandInner"));
-    expect(standaloneRun).toContain("-assemblyNames");
-    expect(standaloneRun).toContain("-testFilter");
+  test("standalone runs natively via the single editor command path (no two-pass)", () => {
+    // Parity with run-tests.sh: standalone shares Get-EditorCommandInner and
+    // maps -testPlatform to StandaloneLinux64 (single build+run pass; IL2CPP
+    // backend from ProjectSettings).
+    expect(content).toContain("StandaloneLinux64");
+    expect(content).toContain("-assemblyNames");
+    expect(content).toContain("-testFilter");
+    // The runtime-only assembly list is threaded in for standalone.
+    expect(content).toContain("runtimeOnly: $runtimeOnlyBool");
+    expect(content).toContain("-RuntimeOnlyFlag:($Platform -eq 'standalone')");
+  });
+
+  test("does NOT contain the deleted two-pass standalone build/run symbols", () => {
+    expect(content).not.toContain("Get-StandaloneBuildCommandInner");
+    expect(content).not.toContain("Get-StandaloneRunCommandInner");
+    expect(content).not.toContain("DXM_IL2CPP_BUILD_PATH");
+    expect(content).not.toContain("BuildIL2CPPTestPlayer");
+    expect(content).not.toContain("-buildTarget StandaloneLinux64");
+    expect(content).not.toContain("-executeMethod");
   });
 
   test("uses boundary-aware Results path validation", () => {

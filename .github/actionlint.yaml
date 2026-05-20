@@ -6,7 +6,7 @@ self-hosted-runner:
   labels:
     # Marker label applied to self-hosted Windows runners with 64GB+ RAM,
     # used by Unity workflows (release.yml, unity-benchmarks.yml,
-    # unity-il2cpp.yml, unity-tests.yml). Add additional custom labels here
+    # unity-tests.yml). Add additional custom labels here
     # as new runner pools are introduced.
     - RAM-64GB
     # Speed marker reserved on ELI-MACHINE for future opt-in (e.g.,

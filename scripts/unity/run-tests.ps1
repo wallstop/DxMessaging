@@ -176,15 +176,19 @@ function Get-AssemblyList {
     param(
         [bool]$IncludePerfFlag,
         [bool]$IncludeIntegrationsFlag,
-        [bool]$IncludeComparisonsFlag
+        [bool]$IncludeComparisonsFlag,
+        [bool]$RuntimeOnlyFlag
     )
 
     # Single source of truth: defaultIncludeAssemblies in
-    # scripts/unity/lib/asmdef-discovery.js. Pass both opt-in flags through.
+    # scripts/unity/lib/asmdef-discovery.js. Pass the opt-in flags through.
+    # runtimeOnly drops editor-only asmdefs for the standalone player flow
+    # (EditMode tests cannot run in a built player).
     $perfBool = if ($IncludePerfFlag) { 'true' } else { 'false' }
     $integBool = if ($IncludeIntegrationsFlag) { 'true' } else { 'false' }
     $comparisonsBool = if ($IncludeComparisonsFlag) { 'true' } else { 'false' }
-    $opts = "{ includePerf: $perfBool, includeIntegrations: $integBool, includeComparisons: $comparisonsBool }"
+    $runtimeOnlyBool = if ($RuntimeOnlyFlag) { 'true' } else { 'false' }
+    $opts = "{ includePerf: $perfBool, includeIntegrations: $integBool, includeComparisons: $comparisonsBool, runtimeOnly: $runtimeOnlyBool }"
     $nodeScript = "const m=require('./scripts/unity/lib/asmdef-discovery.js');console.log(m.defaultIncludeAssemblies(process.cwd(), $opts).join(';'));"
 
     Push-Location $RepoRoot
@@ -203,7 +207,8 @@ function Get-AssemblyList {
 $Assemblies = Get-AssemblyList `
     -IncludePerfFlag:$IncludePerf.IsPresent `
     -IncludeIntegrationsFlag:$IncludeIntegrations.IsPresent `
-    -IncludeComparisonsFlag:$IncludeComparisons.IsPresent
+    -IncludeComparisonsFlag:$IncludeComparisons.IsPresent `
+    -RuntimeOnlyFlag:($Platform -eq 'standalone')
 if ([string]::IsNullOrWhiteSpace($Assemblies)) {
     Write-Error 'Assembly include list is empty (asmdef discovery failed).'
     exit 1
@@ -211,7 +216,7 @@ if ([string]::IsNullOrWhiteSpace($Assemblies)) {
 
 # ---------------------------------------------------------------------------
 # Summary tail (B2: delegate parsing to scripts/unity/lib/parse-test-results.py
-# so this script, the IL2CPP workflow, and run-tests.sh all share one parser
+# so this script and run-tests.sh share one parser
 # implementation. The helper emits "OK total=.. passed=.. failed=.. skipped=.."
 # on success and "PARSE_ERROR:<reason>" on failure with exit code 2.)
 #
@@ -603,16 +608,11 @@ if ($IsWindows) {
 }
 
 # ---------------------------------------------------------------------------
-# Build inner Unity commands (editmode/playmode share one; standalone needs
-# two passes — build, then launch).
+# Build inner Unity command. editmode, playmode, AND standalone all run through
+# a single editor invocation: `Unity -runTests -testPlatform <platform>`.
+# standalone maps to StandaloneLinux64, which builds AND runs the IL2CPP player
+# natively in one pass (IL2CPP backend from ProjectSettings).
 # ---------------------------------------------------------------------------
-
-# Container-side path (relative to .unity-test-project/) for the IL2CPP
-# binary. Kept in sync with TestRunnerBuilder.cs DefaultBuildPathRelative
-# and run-tests.sh.
-$StandaloneBuildRel       = 'Builds/IL2CPPTests/Tests.x86_64'
-$StandaloneBuildHost      = Join-Path $RepoRoot ".unity-test-project/$StandaloneBuildRel"
-$StandaloneBuildContainer = "/workspace/.unity-test-project/$StandaloneBuildRel"
 
 function ConvertTo-BashSingleQuotedString {
     param([string]$Value)
@@ -625,10 +625,15 @@ function ConvertTo-BashScriptText {
 }
 
 function Get-EditorCommandInner {
+    # Single inner command shared by editmode/playmode AND standalone. standalone
+    # maps -testPlatform to StandaloneLinux64 so a single editor invocation builds
+    # AND runs the IL2CPP player (IL2CPP backend from ProjectSettings; no
+    # executeMethod, no separate build pass).
     $sb = [System.Text.StringBuilder]::new()
     $projectPathQ = ConvertTo-BashSingleQuotedString '/workspace/.unity-test-project'
     $resultsQ = ConvertTo-BashSingleQuotedString $ResultsContainer
     $assembliesQ = ConvertTo-BashSingleQuotedString $Assemblies
+    $testPlatform = if ($Platform -eq 'standalone') { 'StandaloneLinux64' } else { $Platform }
     [void]$sb.AppendLine('set -euo pipefail')
     [void]$sb.AppendLine('cleanup_ownership() {')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
@@ -657,7 +662,7 @@ function Get-EditorCommandInner {
     [void]$sb.AppendLine('/opt/unity/Editor/Unity \')
     [void]$sb.AppendLine('  -batchmode -nographics \')
     [void]$sb.AppendLine("  -projectPath $projectPathQ \")
-    [void]$sb.AppendLine("  -runTests -testPlatform $Platform \")
+    [void]$sb.AppendLine("  -runTests -testPlatform $testPlatform \")
     [void]$sb.AppendLine("  -testResults $resultsQ \")
     [void]$sb.AppendLine("  -assemblyNames $assembliesQ \")
     if (-not [string]::IsNullOrWhiteSpace($Filter)) {
@@ -666,90 +671,6 @@ function Get-EditorCommandInner {
     }
     if ($LicenseMode -eq 'serial') {
         [void]$sb.AppendLine('  -username "${UNITY_EMAIL}" -password "${UNITY_PASSWORD}" -serial "${UNITY_SERIAL}" \')
-    }
-    [void]$sb.AppendLine('  -logFile - 2>&1 | tee /workspace/.artifacts/unity/log.txt')
-    return ConvertTo-BashScriptText $sb.ToString()
-}
-
-function Get-StandaloneBuildCommandInner {
-    # B1: export DXM_IL2CPP_BUILD_PATH so TestRunnerBuilder.BuildIL2CPPTestPlayer
-    # writes to the same path we read from below. Local + CI use the same
-    # env-var contract; the value differs but the mechanism is identical.
-    $sb = [System.Text.StringBuilder]::new()
-    $projectPathQ = ConvertTo-BashSingleQuotedString '/workspace/.unity-test-project'
-    $buildPathQ = ConvertTo-BashSingleQuotedString $StandaloneBuildContainer
-    [void]$sb.AppendLine('set -euo pipefail')
-    [void]$sb.AppendLine('cleanup_ownership() {')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
-    [void]$sb.AppendLine('    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then')
-    [void]$sb.AppendLine('        baseline_path="${DX_PERF_BASELINE}"')
-    [void]$sb.AppendLine('        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"')
-    [void]$sb.AppendLine('        if [[ "${baseline_path}" == /workspace/* ]]; then')
-    [void]$sb.AppendLine('            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true')
-    [void]$sb.AppendLine('            baseline_dir="$(dirname "${baseline_path}")"')
-    [void]$sb.AppendLine('            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true')
-    [void]$sb.AppendLine('        fi')
-    [void]$sb.AppendLine('    fi')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Builds || true')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true')
-    [void]$sb.AppendLine('}')
-    [void]$sb.AppendLine('trap cleanup_ownership EXIT')
-    [void]$sb.AppendLine('mkdir -p /root/.cache/unity3d')
-    if ($LicenseMode -eq 'ulf' -or $LicenseMode -eq 'ulf-b64') {
-        [void]$sb.AppendLine('mkdir -p /root/.local/share/unity3d/Unity')
-        if ($LicenseMode -eq 'ulf-b64') {
-            [void]$sb.AppendLine('printf "%s" "${UNITY_LICENSE_B64}" | base64 -d > /root/.local/share/unity3d/Unity/Unity_lic.ulf')
-        } else {
-            [void]$sb.AppendLine('printf "%s" "${UNITY_LICENSE}" > /root/.local/share/unity3d/Unity/Unity_lic.ulf')
-        }
-        [void]$sb.AppendLine('chmod 644 /root/.local/share/unity3d/Unity/Unity_lic.ulf')
-    }
-    [void]$sb.AppendLine('mkdir -p /workspace/.unity-test-project/Builds/IL2CPPTests')
-    [void]$sb.AppendLine("export DXM_IL2CPP_BUILD_PATH=$buildPathQ")
-    [void]$sb.AppendLine('/opt/unity/Editor/Unity \')
-    [void]$sb.AppendLine('  -batchmode -nographics \')
-    [void]$sb.AppendLine("  -projectPath $projectPathQ \")
-    [void]$sb.AppendLine('  -buildTarget StandaloneLinux64 \')
-    [void]$sb.AppendLine('  -executeMethod WallstopStudios.DxMessaging.TestHarness.Editor.TestRunnerBuilder.BuildIL2CPPTestPlayer \')
-    if ($LicenseMode -eq 'serial') {
-        [void]$sb.AppendLine('  -username "${UNITY_EMAIL}" -password "${UNITY_PASSWORD}" -serial "${UNITY_SERIAL}" \')
-    }
-    [void]$sb.AppendLine('  -logFile - 2>&1 | tee /workspace/.artifacts/unity/build-log.txt')
-    return ConvertTo-BashScriptText $sb.ToString()
-}
-
-function Get-StandaloneRunCommandInner {
-    $sb = [System.Text.StringBuilder]::new()
-    $buildPathQ = ConvertTo-BashSingleQuotedString $StandaloneBuildContainer
-    $resultsQ = ConvertTo-BashSingleQuotedString $ResultsContainer
-    $assembliesQ = ConvertTo-BashSingleQuotedString $Assemblies
-    [void]$sb.AppendLine('set -euo pipefail')
-    [void]$sb.AppendLine('cleanup_ownership() {')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
-    [void]$sb.AppendLine('    if [[ -n "${DX_PERF_BASELINE:-}" ]]; then')
-    [void]$sb.AppendLine('        baseline_path="${DX_PERF_BASELINE}"')
-    [void]$sb.AppendLine('        [[ "${baseline_path}" = /* ]] || baseline_path="/workspace/${baseline_path}"')
-    [void]$sb.AppendLine('        if [[ "${baseline_path}" == /workspace/* ]]; then')
-    [void]$sb.AppendLine('            chown "${USER_UID}:${USER_GID}" "${baseline_path}" 2>/dev/null || true')
-    [void]$sb.AppendLine('            baseline_dir="$(dirname "${baseline_path}")"')
-    [void]$sb.AppendLine('            [[ "${baseline_dir}" == "/workspace" ]] || chown -R "${USER_UID}:${USER_GID}" "${baseline_dir}" 2>/dev/null || true')
-    [void]$sb.AppendLine('        fi')
-    [void]$sb.AppendLine('    fi')
-    [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true')
-    [void]$sb.AppendLine('}')
-    [void]$sb.AppendLine('trap cleanup_ownership EXIT')
-    [void]$sb.AppendLine("if [[ ! -x $buildPathQ ]]; then")
-    [void]$sb.AppendLine("    echo `"[run-tests] ERROR: built test player not found at $StandaloneBuildContainer`" >&2")
-    [void]$sb.AppendLine('    exit 1')
-    [void]$sb.AppendLine('fi')
-    [void]$sb.AppendLine("$buildPathQ \")
-    [void]$sb.AppendLine('  -batchmode -nographics \')
-    [void]$sb.AppendLine('  -runTests \')
-    [void]$sb.AppendLine("  -testResults $resultsQ \")
-    [void]$sb.AppendLine("  -assemblyNames $assembliesQ \")
-    if (-not [string]::IsNullOrWhiteSpace($Filter)) {
-        $filterQ = ConvertTo-BashSingleQuotedString $Filter
-        [void]$sb.AppendLine("  -testFilter $filterQ \")
     }
     [void]$sb.AppendLine('  -logFile - 2>&1 | tee /workspace/.artifacts/unity/log.txt')
     return ConvertTo-BashScriptText $sb.ToString()
@@ -782,28 +703,14 @@ $dockerBaseArgs = @(
 )
 
 if ($Platform -eq 'standalone') {
-    Write-Host 'Step 1/2: building IL2CPP test player...' -ForegroundColor Cyan
-    $buildInner = Get-StandaloneBuildCommandInner
-    & $DockerCommand @dockerBaseArgs $ImageRef bash -c $buildInner
-    $BuildExit = $LASTEXITCODE
-    if ($BuildExit -ne 0) {
-        Write-Host "IL2CPP build failed (exit $BuildExit)." -ForegroundColor Red
-        exit $BuildExit
-    }
-    if (-not (Test-Path $StandaloneBuildHost)) {
-        Write-Host "IL2CPP build reported success but binary missing at $StandaloneBuildHost." -ForegroundColor Red
-        exit 1
-    }
-
-    Write-Host 'Step 2/2: running IL2CPP test player...' -ForegroundColor Cyan
-    $runInner = Get-StandaloneRunCommandInner
-    & $DockerCommand @dockerBaseArgs $ImageRef bash -c $runInner
-    $ExitCode = $LASTEXITCODE
-} else {
-    $UnityCmdInner = Get-EditorCommandInner
-    & $DockerCommand @dockerBaseArgs $ImageRef bash -c $UnityCmdInner
-    $ExitCode = $LASTEXITCODE
+    Write-Host 'Running IL2CPP standalone player (native single pass)...' -ForegroundColor Cyan
 }
+# editmode, playmode, and standalone all use the same single editor invocation.
+# standalone maps -testPlatform to StandaloneLinux64, which builds AND runs the
+# IL2CPP player in one pass (no separate build-log.txt, no executeMethod).
+$UnityCmdInner = Get-EditorCommandInner
+& $DockerCommand @dockerBaseArgs $ImageRef bash -c $UnityCmdInner
+$ExitCode = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
 # Summary tail: route the docker results through the shared Write-ResultsSummary

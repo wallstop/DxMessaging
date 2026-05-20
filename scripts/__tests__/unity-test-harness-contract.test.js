@@ -4,10 +4,9 @@
  * Phase 1 of the Unity headless workflow lays down a Unity project under
  * .unity-test-project/ that pulls the package via `file:../..` and exposes
  * the package's Tests/ asmdefs through `testables`. Several downstream
- * artifacts (run-tests.sh, the GitHub Actions workflow's cache key,
- * TestRunnerBuilder.cs) hard-code paths/values from these files, so the
- * goal of this suite is to make any silent rename or shape drift fail
- * loudly at the JS-test layer.
+ * artifacts (run-tests.sh, the GitHub Actions workflow's cache key)
+ * hard-code paths/values from these files, so the goal of this suite is to
+ * make any silent rename or shape drift fail loudly at the JS-test layer.
  */
 
 "use strict";
@@ -100,46 +99,6 @@ describe("unity test harness contract (.unity-test-project/)", () => {
       const matrixVersions = new Set(workflowText.match(versionRegex) || []);
       expect(matrixVersions.size).toBeGreaterThan(0);
       expect(matrixVersions).toContain(projectVersion);
-    });
-  });
-
-  describe("Assets/Editor/TestRunnerBuilder.cs", () => {
-    const builderPath = path.join(TEST_PROJECT, "Assets", "Editor", "TestRunnerBuilder.cs");
-
-    test("TestRunnerBuilder.cs exists", () => {
-      expect(fs.existsSync(builderPath)).toBe(true);
-    });
-
-    test("exposes BuildIL2CPPTestPlayer entry point", () => {
-      const content = fs.readFileSync(builderPath, "utf8");
-      expect(content).toMatch(/BuildIL2CPPTestPlayer/);
-    });
-
-    test("respects the DXM_IL2CPP_BUILD_PATH env var override", () => {
-      const content = fs.readFileSync(builderPath, "utf8");
-      expect(content).toMatch(/DXM_IL2CPP_BUILD_PATH/);
-      // The env var should be read via Environment.GetEnvironmentVariable
-      // (so CI / local docker can both override the build output path
-      // without source edits).
-      expect(content).toMatch(/Environment\.GetEnvironmentVariable/);
-    });
-  });
-
-  describe("Assets/Editor/...TestHarness.Editor.asmdef", () => {
-    const asmdefPath = path.join(
-      TEST_PROJECT,
-      "Assets",
-      "Editor",
-      "WallstopStudios.DxMessaging.TestHarness.Editor.asmdef"
-    );
-
-    test("test harness asmdef exists", () => {
-      expect(fs.existsSync(asmdefPath)).toBe(true);
-    });
-
-    test("asmdef parses as JSON and declares the canonical name", () => {
-      const parsed = JSON.parse(fs.readFileSync(asmdefPath, "utf8"));
-      expect(parsed.name).toBe("WallstopStudios.DxMessaging.TestHarness.Editor");
     });
   });
 

@@ -22,6 +22,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const yaml = require("js-yaml");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -33,7 +34,7 @@ const DIAGNOSTICS_ACTION = path.join(
   "print-self-hosted-runner-diagnostics",
   "action.yml"
 );
-const UNITY_WORKFLOWS = ["unity-tests.yml", "unity-il2cpp.yml", "unity-benchmarks.yml"];
+const UNITY_WORKFLOWS = ["unity-tests.yml", "unity-benchmarks.yml"];
 const UNITY_VERSIONS = ["2021.3.45f1", "2022.3.45f1", "6000.0.32f1"];
 
 function readWorkflow(name) {
@@ -91,14 +92,14 @@ function expectUnityRunnerContract(job, expectation) {
   // Unity Pro is a single-seat license, so every Unity-credential-using
   // job shares the `unity-pro-license` concurrency group with
   // `cancel-in-progress: false`. This serializes Unity work across all
-  // four workflows so two licensed jobs cannot run simultaneously on
+  // Unity workflows so two licensed jobs cannot run simultaneously on
   // ELI-MACHINE and DAD-MACHINE and fight for the license.
   expect(job.concurrency).toEqual({
     group: "unity-pro-license",
     "cancel-in-progress": false
   });
 
-  // All four Unity-credential-using jobs request the same static label set
+  // All Unity-credential-using jobs request the same static label set
   // so either Windows machine can pick up any job. Within-workflow matrix
   // serialization is provided by `strategy.max-parallel: 1` (asserted
   // separately); cross-workflow serialization comes from the shared
@@ -147,7 +148,7 @@ describe("Unity workflows are active GitHub workflows", () => {
   });
 });
 
-// Data-driven contract for every Unity-credential-using job across all four
+// Data-driven contract for every Unity-credential-using job across the Unity
 // workflows. Anything that genuinely repeats (runner contract, concurrency
 // contract, license secrets, Library cache contract, upload-artifact version,
 // diagnostics step, same-repo + protected-branch guards) lives here.
@@ -159,23 +160,10 @@ const UNITY_LICENSED_JOBS = [
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
     hasMatrix: true,
-    // editmode/playmode runs use the game-ci test runner action.
+    // editmode/playmode/standalone all run via the game-ci test runner action.
+    // standalone uses testMode: standalone (native IL2CPP player build+run);
+    // IL2CPP comes from ProjectSettings, not a separate builder action.
     gameCiAction: "game-ci/unity-test-runner@v4"
-  },
-  {
-    workflow: "unity-il2cpp.yml",
-    jobId: "il2cpp-tests",
-    // GATED OFF: the il2cpp-tests job is `if: ${{ false }}` (red-by-design on
-    // Windows containers -- see the workflow comments). The protected-branch
-    // guard no longer applies because the job never runs; that is asserted
-    // separately by the "il2cpp-tests job is gated off" test below.
-    requiresProtectedBranchGuard: false,
-    requiresLibraryCache: true,
-    requiresLicenseSecrets: true,
-    hasMatrix: true,
-    // IL2CPP builds a standalone player, so it uses the game-ci BUILDER
-    // action (not the test-runner action) and then runs the produced player.
-    gameCiAction: "game-ci/unity-builder@v4"
   },
   {
     workflow: "unity-benchmarks.yml",
@@ -291,8 +279,8 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     ({ workflow, gameCiAction }) => {
       // CI now runs Unity through the maintained game-ci actions on
       // self-hosted Windows (NOT the local run-tests.ps1 docker path).
-      // editmode/playmode workflows use game-ci/unity-test-runner@v4;
-      // IL2CPP builds a player with game-ci/unity-builder@v4. The local
+      // All Unity workflows use game-ci/unity-test-runner@v4; IL2CPP is the
+      // standalone testMode of unity-tests (native build+run). The local
       // runner contract is guarded separately by
       // unity-runner-script-contract.test.js.
       const text = readWorkflow(workflow);
@@ -319,7 +307,7 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     ({ workflow, jobId }) => {
       // game-ci creates a check run via githubToken. With only contents: read
       // that POST 403s and the Unity gate silently stops failing on red tests.
-      // unity-tests / benchmarks / il2cpp grant checks: write at workflow
+      // unity-tests / benchmarks grant checks: write at workflow
       // scope; release.yml is contents: read at workflow scope and MUST grant
       // checks: write on the unity-checks job (Fix 1). Pin both forms so the
       // permission cannot regress.
@@ -347,11 +335,10 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     }
   );
 
-  // The il2cpp-tests job is gated off and keeps a bespoke inline
-  // `Parse IL2CPP test results` step (different exit-code-first guard shape),
-  // so it does NOT use the shared verify composite. The verify composite is
-  // required for the workflows whose game-ci jobs still actually run.
-  test.each(UNITY_LICENSED_JOBS.filter((job) => job.workflow !== "unity-il2cpp.yml"))(
+  // Every running game-ci Unity job must use the shared verify composite so a
+  // zero-tests "silent green" is impossible -- including the standalone
+  // testMode entry in unity-tests.yml.
+  test.each(UNITY_LICENSED_JOBS)(
     "$workflow validates tests actually ran via the verify-unity-results composite",
     ({ workflow }) => {
       // CLASS GUARD: game-ci passes the job even when ZERO tests run -- the
@@ -465,65 +452,68 @@ describe(".github/workflows/unity-tests.yml", () => {
     expect(text).not.toContain("pull_request_target");
   });
 
-  test("uses the full Unity version x test mode matrix", () => {
+  test("uses the full Unity version x test mode matrix incl. standalone", () => {
     for (const unityVersion of UNITY_VERSIONS) {
       expect(text).toContain(unityVersion);
     }
-    expect(text).toContain('modes=\'["editmode","playmode"]\'');
+    expect(text).toContain('modes=\'["editmode","playmode","standalone"]\'');
+    // workflow_dispatch test-mode choice must offer standalone too.
+    expect(text).toContain("- standalone");
+  });
+
+  test("standalone is a native unity-test-runner testMode, not a separate builder", () => {
+    // IL2CPP is now exercised natively via game-ci testMode: standalone, with
+    // the scripting backend pinned in ProjectSettings. There is no custom
+    // TestRunnerBuilder build method anymore.
+    expect(text).toContain("testMode: ${{ matrix.test-mode }}");
+    expect(text).not.toContain("buildMethod");
+    expect(text).not.toContain("BuildIL2CPPTestPlayer");
+    expect(text).not.toContain("game-ci/unity-builder@v4");
+  });
+
+  test("standalone uses the runtime-only assembly list and IL2CPP Windows player", () => {
+    // EditMode tests cannot run inside a player, so standalone passes
+    // runtime-only: true to the compute-unity-assemblies composite; the
+    // game-ci step targets StandaloneWindows64 and supports a customImage for
+    // a VS-Build-Tools-equipped windows-il2cpp image.
+    expect(text).toMatch(
+      /runtime-only:\s*"\$\{\{ matrix\.test-mode == 'standalone' && 'true' \|\| 'false' \}\}"/
+    );
+    expect(text).toMatch(
+      /targetPlatform:\s*\$\{\{ matrix\.test-mode == 'standalone' && 'StandaloneWindows64' \|\| '' \}\}/
+    );
+    expect(text).toMatch(
+      /customImage:\s*\$\{\{ matrix\.test-mode == 'standalone' && vars\.UNITY_IL2CPP_WINDOWS_IMAGE \|\| '' \}\}/
+    );
   });
 });
 
-describe(".github/workflows/unity-il2cpp.yml", () => {
-  let text;
-  let parsed;
+describe(".unity-test-project/ProjectSettings/ProjectSettings.asset", () => {
+  const relPath = path.join(
+    ".unity-test-project",
+    "ProjectSettings",
+    "ProjectSettings.asset"
+  );
+  const settingsPath = path.join(REPO_ROOT, relPath);
 
-  beforeAll(() => {
-    text = readWorkflow("unity-il2cpp.yml");
-    parsed = loadWorkflowYaml("unity-il2cpp.yml");
+  test("pins the Standalone scripting backend to IL2CPP (Standalone: 1)", () => {
+    // IL2CPP coverage for the standalone testMode comes from this ProjectSettings
+    // pin (player builds only; editmode/playmode still run in-editor Mono).
+    expect(fs.existsSync(settingsPath)).toBe(true);
+    const settings = fs.readFileSync(settingsPath, "utf8");
+    expect(settings).toMatch(/scriptingBackend:\s*\n\s+Standalone:\s*1/);
   });
 
-  test("runs separately for same-repo PRs, protected branch pushes, schedules, and dispatch", () => {
-    const onBlock = getOnBlock(parsed);
-    expect(Object.keys(onBlock).sort()).toEqual([
-      "pull_request",
-      "push",
-      "schedule",
-      "workflow_dispatch"
-    ]);
-    expect(text).not.toContain("pull_request_target");
-  });
-
-  test("builds the standalone IL2CPP player via the game-ci builder for Windows", () => {
-    // IL2CPP now builds a player with game-ci/unity-builder@v4 and runs it,
-    // instead of the old local run-tests.ps1 -Platform standalone -Runner
-    // docker path. The build target MUST be StandaloneWindows64: a Windows
-    // container cannot execute a Linux ELF (Tests.exe, not Tests.x86_64).
-    expect(text).toContain("uses: game-ci/unity-builder@v4");
-    expect(text).toContain("targetPlatform: StandaloneWindows64");
-    expect(text).not.toContain("-Platform standalone");
-    expect(text).not.toContain("-Runner docker");
-  });
-
-  test("resolves its assembly list via the compute-unity-assemblies composite", () => {
-    // The inline `Compute test assembly list` pwsh step was extracted into the
-    // shared composite (no include-perf for il2cpp). The bespoke
-    // `Parse IL2CPP test results` step stays inline (different guard shape).
-    expect(text).toContain("uses: ./.github/actions/compute-unity-assemblies");
-  });
-
-  test("il2cpp-tests job is gated off (if: false) pending the two documented blockers", () => {
-    // The job is red-by-design on Windows containers: TestRunnerBuilder.cs
-    // hardcodes StandaloneLinux64 (a Windows container cannot run a Linux ELF)
-    // and Windows IL2CPP needs VS Build Tools absent from stock game-ci images.
-    // Because all Unity jobs share the single-seat unity-pro-license group, a
-    // red il2cpp job would also starve the working editmode/playmode jobs of
-    // the license slot, so it must stay gated off until both blockers clear.
-    const il2cppJob = parsed.jobs["il2cpp-tests"];
-    expect(il2cppJob).toBeDefined();
-    expect(String(il2cppJob.if).trim()).toMatch(/^(\$\{\{\s*false\s*\}\}|false)$/);
-    // Keep the migrated build/run/parse steps intact so re-enabling is a
-    // one-line `if:` flip -- guard against silent removal.
-    expect(text).toContain("uses: game-ci/unity-builder@v4");
+  test("is committed to git (a fresh CI checkout must see the IL2CPP pin)", () => {
+    // The file is normally gitignored under .unity-test-project/ProjectSettings/*;
+    // it is force-tracked via a .gitignore allowlist exception. If that exception
+    // is dropped, the working tree still has the pin but CI checks out Mono.
+    const result = childProcess.spawnSync(
+      "git",
+      ["ls-files", "--error-unmatch", relPath],
+      { cwd: REPO_ROOT }
+    );
+    expect(result.status).toBe(0);
   });
 });
 

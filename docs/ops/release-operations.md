@@ -20,15 +20,17 @@ Canonical public identifiers:
 - Unity workflow concurrency group: every Unity-credential-using job
   shares `concurrency.group: unity-pro-license` with
   `cancel-in-progress: false` (single-seat Unity Pro license; only one
-  job may hold the license at a time). The three matrix jobs
-  (`unity-tests`, `il2cpp-tests`, `benchmarks`) additionally declare
+  job may hold the license at a time). The matrix jobs
+  (`unity-tests`, `benchmarks`) additionally declare
   `strategy.max-parallel: 1` so matrix entries serialize internally and
   do not compete for the shared license slot (which would otherwise
-  evict each other under GitHub's 1-running + 1-pending limit). The
-  legacy name `wallstop-organization-builds` remains a reserved sentinel
-  that the validator hard-rejects anywhere in `.github/workflows/*.yml`.
+  evict each other under GitHub's 1-running + 1-pending limit). IL2CPP is
+  the `standalone` entry in the `unity-tests` `test-mode` matrix, not a
+  separate job. The legacy name `wallstop-organization-builds` remains a
+  reserved sentinel that the validator hard-rejects anywhere in
+  `.github/workflows/*.yml`.
 - Unity runner labels: uniform static `runs-on: [self-hosted, Windows,
-RAM-64GB]` across all four Unity-credential-using jobs, so either
+RAM-64GB]` across all Unity-credential-using jobs, so either
   ELI-MACHINE or DAD-MACHINE can pick up any Unity job. The `fast`
   marker remains on ELI-MACHINE for a future opt-in hotfix dispatch but
   no currently-active workflow requests it.

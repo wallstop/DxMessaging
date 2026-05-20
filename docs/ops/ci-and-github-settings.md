@@ -24,8 +24,8 @@ default runner group.
   - `fast`
 
 Unity Pro is a single-seat license: only one machine can be activated at
-a time. All four Unity-credential-using jobs (`unity-tests`,
-`il2cpp-tests`, `benchmarks`, and the `unity-checks` job in
+a time. All Unity-credential-using jobs (`unity-tests`,
+`benchmarks`, and the `unity-checks` job in
 `release.yml`) declare:
 
 ```yaml
@@ -41,17 +41,19 @@ workflow validator hard-rejects anywhere it appears; the new
 `unity-pro-license` group serves the same serialization purpose under a
 non-overloaded name.
 
-The three Unity matrix jobs (`unity-tests`, `il2cpp-tests`, `benchmarks`)
+The Unity matrix jobs (`unity-tests`, `benchmarks`)
 additionally declare `strategy.max-parallel: 1` so matrix entries serialize
 internally to the workflow run and do not compete for the single
 concurrency slot (the validator's `findMatrixConcurrencyEvictionViolations`
-check enforces this combination).
+check enforces this combination). IL2CPP is the `standalone` entry in the
+`unity-tests` `test-mode` matrix (native game-ci `testMode: standalone`,
+IL2CPP via ProjectSettings, runtime-only assemblies), not a separate job.
 
 Per-runner Unity-cache safety is provided by each runner agent's exclusive
 workspace - a single self-hosted agent only ever runs one job at a time, so
 `.unity-test-project/Library` directories cannot collide.
 
-Runner routing is uniform across all four Unity-credential-using jobs:
+Runner routing is uniform across all Unity-credential-using jobs:
 
 ```yaml
 runs-on: [self-hosted, Windows, RAM-64GB]
@@ -179,7 +181,6 @@ dropdown -> select branch -> enter the run id.
 Active Unity workflows:
 
 - `.github/workflows/unity-tests.yml`
-- `.github/workflows/unity-il2cpp.yml`
 - `.github/workflows/unity-benchmarks.yml`
 - `.github/workflows/release.yml` (`unity-checks` job)
 
@@ -190,8 +191,10 @@ Unity test matrix:
 - `6000.0.32f1`
 - `editmode`
 - `playmode`
+- `standalone` (native IL2CPP player via game-ci `testMode: standalone`,
+  IL2CPP from ProjectSettings, runtime-only assemblies)
 
-IL2CPP and release checks default to `2022.3.45f1`. Benchmarks run on schedule
+Release checks default to `2022.3.45f1`. Benchmarks run on schedule
 or manual dispatch only.
 
 ## Licensed Job Guardrails
@@ -275,14 +278,14 @@ multi-line mapping, inline mapping, or scalar-shorthand form).
 
 Workflow-shape contract checklist:
 
-1. Confirm each of the four Unity-credential-using jobs (`unity-tests`,
-   `il2cpp-tests`, `benchmarks`, `unity-checks`) declares the job-level
+1. Confirm each of the Unity-credential-using jobs (`unity-tests`,
+   `benchmarks`, `unity-checks`) declares the job-level
    `concurrency:` block with `group: unity-pro-license` and
    `cancel-in-progress: false`.
-1. Confirm the three Unity matrix jobs (`unity-tests`, `il2cpp-tests`,
-   `benchmarks`) declare `strategy.max-parallel: 1`. The `unity-checks`
-   release job has no matrix and therefore no `max-parallel`.
-1. Confirm each of the four jobs declares the uniform static label set
+1. Confirm the Unity matrix jobs (`unity-tests`, `benchmarks`) declare
+   `strategy.max-parallel: 1`. The `unity-checks` release job has no matrix
+   and therefore no `max-parallel`.
+1. Confirm each of those jobs declares the uniform static label set
    `runs-on: [self-hosted, Windows, RAM-64GB]` so either Windows machine
    can pick up any Unity job.
 1. Confirm `wallstop-organization-builds` does not appear anywhere under

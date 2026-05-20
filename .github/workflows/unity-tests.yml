@@ -27,6 +27,7 @@ on:
           - all
           - editmode
           - playmode
+          - standalone
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -60,7 +61,7 @@ jobs:
           if [ -n "${INPUT_TEST_MODE:-}" ] && [ "${INPUT_TEST_MODE}" != "all" ]; then
             modes="[\"${INPUT_TEST_MODE}\"]"
           else
-            modes='["editmode","playmode"]'
+            modes='["editmode","playmode","standalone"]'
           fi
           {
             echo "unity-versions=${versions}"
@@ -235,10 +236,12 @@ jobs:
 
       # Single source of truth for the assembly include list: the same
       # asmdef-discovery.js module the local run-tests scripts use. Extracted
-      # into a composite action so all four Unity workflows share one
+      # into a composite action so all three Unity workflows share one
       # implementation. shell: pwsh is enforced inside the composite.
       - name: Compute test assembly list
         uses: ./.github/actions/compute-unity-assemblies
+        with:
+          runtime-only: "${{ matrix.test-mode == 'standalone' && 'true' || 'false' }}"
 
       # Run the maintained game-ci action. It selects the Windows Unity image,
       # translates the workspace path, activates the license, and (with
@@ -256,6 +259,17 @@ jobs:
           projectPath: .unity-test-project
           unityVersion: ${{ matrix.unity-version }}
           testMode: ${{ matrix.test-mode }}
+          # standalone builds + runs a Windows IL2CPP player (IL2CPP comes from
+          # ProjectSettings scriptingBackend Standalone: 1). A Windows IL2CPP build
+          # REQUIRES VS C++ Build Tools INSIDE the game-ci container -- host-installed
+          # Build Tools do NOT reach the container. Set repo variable
+          # UNITY_IL2CPP_WINDOWS_IMAGE to a game-ci windows-il2cpp image that bundles
+          # them, and customImage will point game-ci at it. If UNITY_IL2CPP_WINDOWS_IMAGE
+          # is unset, customImage is '' so game-ci uses its stock image and the IL2CPP
+          # build FAILS LOUDLY (no Build Tools). Both inputs default to '' (unset) for
+          # editmode/playmode, which run in-editor and need neither.
+          targetPlatform: ${{ matrix.test-mode == 'standalone' && 'StandaloneWindows64' || '' }}
+          customImage: ${{ matrix.test-mode == 'standalone' && vars.UNITY_IL2CPP_WINDOWS_IMAGE || '' }}
           customParameters: -nographics -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}"
           artifactsPath: .artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}
           checkName: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}

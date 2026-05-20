@@ -23,8 +23,7 @@ PR URLs, public release URLs, and dates when public verification was completed.
 | Release workflow                        | `.github/workflows/release.yml`                                                             |
 | Documentation workflow                  | `.github/workflows/deploy-docs.yml`                                                         |
 | npm package validation workflow         | `.github/workflows/validate-npm-meta.yml`                                                   |
-| Unity test workflow                     | `.github/workflows/unity-tests.yml`                                                         |
-| Unity IL2CPP workflow                   | `.github/workflows/unity-il2cpp.yml`                                                        |
+| Unity test workflow                     | `.github/workflows/unity-tests.yml` (editmode/playmode/standalone matrix)                   |
 | Unity benchmark workflow                | `.github/workflows/unity-benchmarks.yml`                                                    |
 | Unity job concurrency group             | `unity-pro-license` (single-seat license; `wallstop-organization-builds` reserved sentinel) |
 | GitHub Pages environment                | `github-pages`                                                                              |
@@ -102,12 +101,13 @@ group (`cancel-in-progress: false`), and within-workflow serialization by
   sentinel; the workflow validator hard-rejects it anywhere it appears
   (workflow- or job-level, multi-line or scalar-shorthand form).
 
-- The three Unity matrix jobs (`unity-tests`, `il2cpp-tests`, `benchmarks`)
-  declare `strategy.max-parallel: 1` so matrix entries serialize internally
-  to the workflow run. Without `max-parallel: 1` the shared concurrency
-  group would evict matrix entries (the original incident pattern); the
-  validator enforces the combination.
-- All four jobs declare the uniform `runs-on: [self-hosted, Windows,
+- The Unity matrix jobs (`unity-tests`, `benchmarks`) declare
+  `strategy.max-parallel: 1` so matrix entries serialize internally to the
+  workflow run. Without `max-parallel: 1` the shared concurrency group would
+  evict matrix entries (the original incident pattern); the validator enforces
+  the combination. IL2CPP is the `standalone` entry in the `unity-tests`
+  `test-mode` matrix, not a separate job.
+- All Unity jobs declare the uniform `runs-on: [self-hosted, Windows,
 RAM-64GB]` so either Windows machine can pick up any Unity job. The
   `fast` label is no longer requested by any job.
 
@@ -117,14 +117,13 @@ RAM-64GB]` so either Windows machine can pick up any Unity job. The
       `self-hosted`, `Windows`, and `RAM-64GB`.
 - [ ] Confirm `ELI-MACHINE` retains its `fast` label for future opt-in use.
 - [ ] Confirm each of `.github/workflows/unity-tests.yml`,
-      `.github/workflows/unity-il2cpp.yml`,
       `.github/workflows/unity-benchmarks.yml`, and the `unity-checks`
       job in `.github/workflows/release.yml` declares
       `concurrency: { group: unity-pro-license, cancel-in-progress: false }`
       and uses the static `runs-on: [self-hosted, Windows, RAM-64GB]`.
-- [ ] Confirm the three matrix jobs (`unity-tests`, `il2cpp-tests`,
-      `benchmarks`) declare `strategy.max-parallel: 1`. `unity-checks`
-      has no matrix and therefore no `max-parallel`.
+- [ ] Confirm the matrix jobs (`unity-tests`, `benchmarks`) declare
+      `strategy.max-parallel: 1`. `unity-checks` has no matrix and therefore
+      no `max-parallel`.
 - [ ] Confirm the string `wallstop-organization-builds` does not appear
       anywhere under `.github/workflows/*.yml` (it is reserved and the
       validator hard-fails any reintroduction).

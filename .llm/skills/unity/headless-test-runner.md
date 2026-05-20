@@ -85,7 +85,7 @@ status: "stable"
 ## When to Use
 
 - Iterating on Runtime/Editor code that has Unity tests under `Tests/Editor` or `Tests/Runtime`.
-- Reproducing a Unity workflow-template failure from `unity-tests.yml` or `unity-il2cpp.yml` locally.
+- Reproducing a Unity workflow failure from `unity-tests.yml` (editmode/playmode/standalone) locally.
 - Smoke-testing a change to `scripts/unity/lib/asmdef-discovery.js` or the test harness.
 - Verifying the perf-isolation contract by running with and without `--include-perf`.
 
@@ -115,11 +115,11 @@ The defaults match `defaultIncludeAssemblies(repoRoot)` from `scripts/unity/lib/
 
 Numbers below assume the mode-specific `dxm-unity-library-<image-tag>-<mode>` volume is warm. First-ever run on a fresh image pulls roughly 6 GB into the `unityci/editor:<tag>` layer cache; that pull is one-time per Unity version.
 
-| Mode         | Cold (first pull) | Warm Library cache | Notes                                                       |
-| ------------ | ----------------- | ------------------ | ----------------------------------------------------------- |
-| `editmode`   | ~6-10 min         | ~30-90 s           | Cheapest. Runs in the Editor's edit-time NUnit harness.     |
-| `playmode`   | ~7-12 min         | ~2-5 min           | Spins up a play-mode test runner; longer domain reload.     |
-| `standalone` | ~15-25 min        | ~10+ min           | IL2CPP build pass plus runtime pass; AOT compile dominates. |
+| Mode         | Cold (first pull) | Warm Library cache | Notes                                                                        |
+| ------------ | ----------------- | ------------------ | ---------------------------------------------------------------------------- |
+| `editmode`   | ~6-10 min         | ~30-90 s           | Cheapest. Runs in the Editor's edit-time NUnit harness.                      |
+| `playmode`   | ~7-12 min         | ~2-5 min           | Spins up a play-mode test runner; longer domain reload.                      |
+| `standalone` | ~15-25 min        | ~10+ min           | Native single pass builds and runs the IL2CPP player; AOT compile dominates. |
 
 If a warm run takes more than 2x the expected time, the Library cache is likely cold or a domain reload is looping. Inspect `.artifacts/unity/log.txt`.
 
@@ -127,7 +127,7 @@ If a warm run takes more than 2x the expected time, the Library cache is likely 
 
 - `-logFile -` streams Unity's log to stdout while the container is alive. The script also `tee`s the same stream into `.artifacts/unity/log.txt`.
 - NUnit XML lands at `.artifacts/unity/results.xml` (or `--results` override). The script invokes `python3 scripts/unity/lib/parse-test-results.py` on that XML and prints a one-line `PASS` or `FAIL` summary; the script's exit code matches the test status.
-- For IL2CPP standalone runs the build pass writes `.artifacts/unity/build-log.txt` and the run pass writes `.artifacts/unity/log.txt`. Both are kept on the volume so a failure can be diffed against the prior run.
+- IL2CPP standalone runs natively in a single pass (`Unity -runTests -testPlatform StandaloneLinux64`), so it writes one `.artifacts/unity/log.txt` like editmode/playmode -- there is no separate build-log.txt. IL2CPP is selected by the `scriptingBackend: { Standalone: 1 }` pin in `.unity-test-project/ProjectSettings/ProjectSettings.asset`. Note the local player target is `StandaloneLinux64` (built in the `-linux-il2cpp` devcontainer image), whereas CI builds `StandaloneWindows64`: both exercise the same IL2CPP AOT toolchain, but on different host OS (local Linux player, CI Windows player), so local does NOT reproduce the CI standalone run byte-for-byte. Validate the headless standalone run on first use.
 
 ## License Setup
 
@@ -182,17 +182,16 @@ node scripts/unity/lib/asmdef-discovery.js
 
 Pick the matching error signature in stdout, then apply the listed remediation.
 
-| Signature                                                           | Cause                                                        | Remediation                                                                                           |
-| ------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `No Unity license configured.`                                      | ULF and serial paths are unset.                              | Configure `UNITY_LICENSE`, `UNITY_LICENSE_B64`, or `UNITY_SERIAL` plus credentials.                   |
-| `com.unity.editor.headless` / `No valid Unity Editor license found` | Email/password-only path or invalid entitlement.             | Configure a `.ulf` or paid serial path; email/password alone is unsupported for headless docker runs. |
-| `Error: docker socket is not reachable.`                            | DooD feature is missing or socket is not mounted.            | Verify `docker-outside-of-docker` in `.devcontainer/devcontainer.json`. Rebuild the container.        |
-| Hangs at `Pulling unityci/editor:...`                               | Slow registry pull or rate limit.                            | First pull is ~6 GB; let it finish. If it hangs > 20 min, retry; the volume keeps partial layers.     |
-| `ERROR: 0 tests ran. Check filter / assembly list.`                 | `--filter` matched nothing or the asmdef list excluded all.  | Re-run without `--filter`; verify discovery via `node scripts/unity/lib/asmdef-discovery.js`.         |
-| `IL2CPP build failed (exit ...).`                                   | Code-stripping, AOT, or generic-virtual-method regression.   | See [unity-ci-matrix](./unity-ci-matrix.md) for the IL2CPP-only failure catalog.                      |
-| `IL2CPP build reported success but binary missing at ...`           | TestRunnerBuilder wrote elsewhere or build silently aborted. | Check `.artifacts/unity/build-log.txt`; verify `DXM_IL2CPP_BUILD_PATH` is consistent with the runner. |
-| `Cannot determine host path for the workspace.`                     | Inside a container without an inspectable bind mount.        | Set `DXM_HOST_REPO_ROOT=/absolute/path/on/host` before invoking the script.                           |
-| `Activation rate limit` in Unity log                                | Too many license activations in a short window.              | Wait ~1 hour. See [unity-license-bootstrap](./unity-license-bootstrap.md) for the cooldown details.   |
+| Signature                                                           | Cause                                                       | Remediation                                                                                           |
+| ------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `No Unity license configured.`                                      | ULF and serial paths are unset.                             | Configure `UNITY_LICENSE`, `UNITY_LICENSE_B64`, or `UNITY_SERIAL` plus credentials.                   |
+| `com.unity.editor.headless` / `No valid Unity Editor license found` | Email/password-only path or invalid entitlement.            | Configure a `.ulf` or paid serial path; email/password alone is unsupported for headless docker runs. |
+| `Error: docker socket is not reachable.`                            | DooD feature is missing or socket is not mounted.           | Verify `docker-outside-of-docker` in `.devcontainer/devcontainer.json`. Rebuild the container.        |
+| Hangs at `Pulling unityci/editor:...`                               | Slow registry pull or rate limit.                           | First pull is ~6 GB; let it finish. If it hangs > 20 min, retry; the volume keeps partial layers.     |
+| `ERROR: 0 tests ran. Check filter / assembly list.`                 | `--filter` matched nothing or the asmdef list excluded all. | Re-run without `--filter`; verify discovery via `node scripts/unity/lib/asmdef-discovery.js`.         |
+| `Unity exited with code ...` during a standalone run                | Code-stripping, AOT, or generic-virtual-method regression.  | Check `.artifacts/unity/log.txt`; see [unity-ci-matrix](./unity-ci-matrix.md) for the IL2CPP catalog. |
+| `Cannot determine host path for the workspace.`                     | Inside a container without an inspectable bind mount.       | Set `DXM_HOST_REPO_ROOT=/absolute/path/on/host` before invoking the script.                           |
+| `Activation rate limit` in Unity log                                | Too many license activations in a short window.             | Wait ~1 hour. See [unity-license-bootstrap](./unity-license-bootstrap.md) for the cooldown details.   |
 
 ## ARM Mac (Apple Silicon) Limitation
 
@@ -205,9 +204,9 @@ Pick the matching error signature in stdout, then apply the listed remediation.
 
 ## CI vs Local
 
-CI no longer calls these scripts. The active Unity workflows run Unity through the maintained game-ci actions on self-hosted Windows runners (Docker Desktop in Windows-container mode): `game-ci/unity-test-runner@v4` for editmode/playmode (unity-tests, benchmarks, release) and `game-ci/unity-builder@v4` for the IL2CPP standalone build. Each game-ci step sets `runAsHostUser: "true"` so artifacts are owned by the runner user, and each workflow adds a results-validation step that parses the NUnit XML with native PowerShell `[xml]` and FAILS when zero tests ran -- game-ci passes even on a zero-test run, so this guard prevents the silent-green regression. The single source of truth for the assembly include list is still `scripts/unity/lib/asmdef-discovery.js` (`defaultIncludeAssemblies`), invoked from a `Compute test assembly list` step.
+CI no longer calls these scripts. The active Unity workflows run Unity through `game-ci/unity-test-runner@v4` on self-hosted Windows runners (Docker Desktop in Windows-container mode). `unity-tests.yml` is one matrix of editmode/playmode/standalone; `standalone` uses `testMode: standalone` (native IL2CPP player build+run, IL2CPP from the ProjectSettings `scriptingBackend: { Standalone: 1 }` pin, runtime-only assemblies). Each game-ci step sets `runAsHostUser: "true"` so artifacts are owned by the runner user, and each workflow adds the shared `verify-unity-results` step that parses the NUnit XML with native PowerShell `[xml]` and FAILS when zero tests ran -- game-ci passes even on a zero-test run, so this guard prevents the silent-green regression. The single source of truth for the assembly include list is still `scripts/unity/lib/asmdef-discovery.js` (`defaultIncludeAssemblies`), invoked from a `Compute test assembly list` step.
 
-The `run-tests.sh` / `run-tests.ps1` scripts are the canonical LOCAL reproduction path (devcontainer / local docker / local Windows Unity). They still validate `results.xml` via `parse-test-results.py`, FAIL the run if zero tests ran (`total=0`), and -- when `CI=true` is set -- emit GitHub Actions `::error::` annotations on failure (and a `::notice::` on pass). `CI` only adds annotations; it never skips work or changes control flow. The shape is locked by a contract test (`unity-runner-script-contract.test.js`) so help text, flag names, the assembly source-of-truth, and the never-report-success-without-results invariant cannot drift apart.
+The `run-tests.sh` / `run-tests.ps1` scripts are the canonical LOCAL reproduction path (devcontainer / local docker / local Windows Unity). For `standalone` the local devcontainer driver builds a `StandaloneLinux64` IL2CPP player while CI builds `StandaloneWindows64`; both exercise the IL2CPP AOT toolchain but on different host OS, so local approximates -- it does not byte-for-byte reproduce -- the CI standalone player. Validate the headless standalone run on first use. They still validate `results.xml` via `parse-test-results.py`, FAIL the run if zero tests ran (`total=0`), and -- when `CI=true` is set -- emit GitHub Actions `::error::` annotations on failure (and a `::notice::` on pass). `CI` only adds annotations; it never skips work or changes control flow. The shape is locked by a contract test (`unity-runner-script-contract.test.js`) so help text, flag names, the assembly source-of-truth, and the never-report-success-without-results invariant cannot drift apart.
 
 ## See Also
 

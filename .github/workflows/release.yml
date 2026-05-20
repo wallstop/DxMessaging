@@ -243,7 +243,7 @@ jobs:
 
       # Single source of truth for the assembly include list: the same
       # asmdef-discovery.js module the local run-tests scripts use. Extracted
-      # into a composite action shared by all four Unity workflows; shell: pwsh
+      # into a composite action shared by all three Unity workflows; shell: pwsh
       # is enforced inside the composite.
       - name: Compute test assembly list
         uses: ./.github/actions/compute-unity-assemblies

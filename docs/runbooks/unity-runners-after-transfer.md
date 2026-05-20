@@ -92,7 +92,7 @@ Because `administration` is not a valid `permissions:` key for the workflow-scop
 
 ### Follow-up: composite action factoring
 
-The preflight shell currently lives inline in four workflows (`unity-tests.yml`, `unity-il2cpp.yml`, `unity-benchmarks.yml`, `release.yml`). A composite action under `.github/actions/runner-access-preflight/` would deduplicate the block. Out of scope for the current change; track here so the next maintainer can find it.
+The preflight shell currently lives inline in three workflows (`unity-tests.yml`, `unity-benchmarks.yml`, `release.yml`). A composite action under `.github/actions/runner-access-preflight/` would deduplicate the block. Out of scope for the current change; track here so the next maintainer can find it.
 
 If the preflight passes but the matrix job still stays queued, the cause is more likely the dispatcher bug (see [GitHub Community Discussion #186811](https://github.com/orgs/community/discussions/186811)) than the access list. Use the recovery workflows in this repository: [unstick-run.yml](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/unstick-run.yml) for manual recovery and [stuck-job-watchdog.yml](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml) for the automated path.
 

@@ -12,8 +12,7 @@ source:
     - path: ".unity-test-project/Packages/manifest.json"
     - path: ".unity-test-project/Packages/packages-lock.json"
     - path: ".unity-test-project/ProjectSettings/ProjectVersion.txt"
-    - path: ".unity-test-project/Assets/Editor/TestRunnerBuilder.cs"
-    - path: ".unity-test-project/Assets/Editor/WallstopStudios.DxMessaging.TestHarness.Editor.asmdef"
+    - path: ".unity-test-project/ProjectSettings/ProjectSettings.asset"
   url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
@@ -25,7 +24,7 @@ tags:
 
 complexity:
   level: "basic"
-  reasoning: "Five committed files; standard UPM testables semantics."
+  reasoning: "Four committed files; standard UPM testables semantics."
 
 impact:
   performance:
@@ -85,7 +84,7 @@ status: "stable"
 ## When NOT to Use
 
 - Editing source files for the package itself. Those live at the repo root (`Runtime/`, `Editor/`, `Tests/`); this harness only references them.
-- Adding regular `Assets/` content. The harness intentionally ships exactly one `Assets/Editor` file and no scenes, sprites, or prefabs.
+- Adding regular `Assets/` content. The harness intentionally ships no application code -- no scenes, sprites, or prefabs. The former `Assets/Editor/` folder and its `.meta` were removed (IL2CPP is native via `testMode: standalone`, so there is no build harness and nothing under `Assets/` is tracked).
 
 ## Architecture
 
@@ -104,27 +103,24 @@ repo-root/
     |   +-- packages-lock.json    # committed for deterministic resolution
     +-- ProjectSettings/
     |   +-- ProjectVersion.txt    # pinned to 2022.3.45f1
-    +-- Assets/
-    |   +-- Editor/
-    |       +-- TestRunnerBuilder.cs            # IL2CPP build entry point
-    |       +-- WallstopStudios.DxMessaging.TestHarness.Editor.asmdef
+    |   +-- ProjectSettings.asset # scriptingBackend: { Standalone: 1 } pins IL2CPP for the player
+    +-- Assets/                   # gitignored; nothing tracked (IL2CPP is native, no build harness)
     +-- Library/                  # gitignored, populated on first run
     +-- Temp/                     # gitignored
     +-- Logs/                     # gitignored
-    +-- Builds/                   # gitignored, IL2CPP outputs land here
+    +-- Builds/                   # gitignored, native standalone player output lands here
 ```
 
 The shape is deliberate. UPM resolves `file:../..` to the repo root, the package surfaces its asmdefs, and the `testables` array tells Unity Test Framework to scan that package's Tests assemblies. The harness has zero application code.
 
 ## Key Files
 
-| File                                                                  | Role                                                                                 |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `Packages/manifest.json`                                              | Declares the package via `file:../..` and lists it under `testables`.                |
-| `Packages/packages-lock.json`                                         | Committed so the test environment resolves identically across machines and CI.       |
-| `ProjectSettings/ProjectVersion.txt`                                  | Pinned Editor version. CI cache keys hash this; bumping it busts the Library cache.  |
-| `Assets/Editor/TestRunnerBuilder.cs`                                  | `BuildPipeline.BuildPlayer` entry point invoked by `-executeMethod` for IL2CPP runs. |
-| `Assets/Editor/WallstopStudios.DxMessaging.TestHarness.Editor.asmdef` | Editor-only asmdef that owns the `TestRunnerBuilder` class.                          |
+| File                                    | Role                                                                                |
+| --------------------------------------- | ----------------------------------------------------------------------------------- |
+| `Packages/manifest.json`                | Declares the package via `file:../..` and lists it under `testables`.               |
+| `Packages/packages-lock.json`           | Committed so the test environment resolves identically across machines and CI.      |
+| `ProjectSettings/ProjectVersion.txt`    | Pinned Editor version. CI cache keys hash this; bumping it busts the Library cache. |
+| `ProjectSettings/ProjectSettings.asset` | `scriptingBackend: { Standalone: 1 }` pins IL2CPP for player (standalone) builds.   |
 
 The current `manifest.json` (verbatim):
 
@@ -149,8 +145,7 @@ Committed:
 - `Packages/manifest.json`
 - `Packages/packages-lock.json`
 - `ProjectSettings/ProjectVersion.txt`
-- `Assets/Editor/TestRunnerBuilder.cs` and its `.meta`
-- `Assets/Editor/WallstopStudios.DxMessaging.TestHarness.Editor.asmdef` and its `.meta`
+- `ProjectSettings/ProjectSettings.asset` (pins IL2CPP for standalone)
 
 Gitignored (the repo `.gitignore` already covers these):
 

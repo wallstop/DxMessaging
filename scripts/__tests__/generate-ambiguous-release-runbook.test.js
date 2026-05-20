@@ -184,7 +184,6 @@ describe("generate-ambiguous-release-runbook", () => {
       ".github/workflows/deploy-docs.yml",
       ".github/workflows/validate-npm-meta.yml",
       ".github/workflows/unity-tests.yml",
-      ".github/workflows/unity-il2cpp.yml",
       ".github/workflows/unity-benchmarks.yml",
       "RAM-64GB",
       "github-pages",

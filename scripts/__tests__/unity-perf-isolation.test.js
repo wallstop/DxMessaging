@@ -134,6 +134,30 @@ describe("unity perf-isolation contract", () => {
     }
   });
 
+  test("defaultIncludeAssemblies({ runtimeOnly: true }) drops editor-only asmdefs", () => {
+    // standalone runs the IL2CPP player, where EditMode/editor-only asmdefs
+    // cannot run. runtimeOnly removes every asmdef whose includePlatforms is
+    // exactly ["Editor"], leaving only the runtime suite.
+    const included = defaultIncludeAssemblies(REPO_ROOT, { runtimeOnly: true });
+    expect(included).toEqual(["WallstopStudios.DxMessaging.Tests.Runtime"]);
+  });
+
+  test("defaultIncludeAssemblies({ runtimeOnly: true, includePerf: true }) adds the runtime benchmark", () => {
+    // The runtime gate composes with the perf opt-in: only runtime asmdefs
+    // survive, so the runtime benchmark joins the runtime suite.
+    const included = defaultIncludeAssemblies(REPO_ROOT, {
+      runtimeOnly: true,
+      includePerf: true
+    });
+    expect(included).toHaveLength(2);
+    expect(included).toEqual(
+      expect.arrayContaining([
+        "WallstopStudios.DxMessaging.Tests.Runtime",
+        "WallstopStudios.DxMessaging.Tests.00.Runtime.Benchmarks"
+      ])
+    );
+  });
+
   test("disabled unity-tests.yml template shells out to defaultIncludeAssemblies (no hardcoded asmdef list)", () => {
     const workflowPath = path.join(REPO_ROOT, ".github", "workflows-disabled", "unity-tests.yml");
     const workflow = fs.readFileSync(workflowPath, "utf8");

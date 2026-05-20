@@ -10,7 +10,6 @@ source:
   repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: ".github/workflows-disabled/unity-tests.yml"
-    - path: ".github/workflows-disabled/unity-il2cpp.yml"
     - path: ".github/workflows-disabled/unity-benchmarks.yml"
   url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
@@ -73,7 +72,7 @@ status: "stable"
 
 # Unity CI Matrix
 
-> **One-line summary**: The active Unity workflows under `.github/workflows/` run game-ci on self-hosted Windows runners: `unity-tests.yml` runs editmode and playmode against three Unity versions and `unity-il2cpp.yml` builds and runs the AOT-compiled standalone player against a single version. The `.github/workflows-disabled/*` files remain the ubuntu reference mirrors.
+> **One-line summary**: The active Unity workflows under `.github/workflows/` run game-ci on self-hosted Windows runners: `unity-tests.yml` is one unified matrix of three Unity versions x {editmode, playmode, standalone} = 9 jobs, where `standalone` is the native game-ci `testMode: standalone` that builds and runs the AOT-compiled IL2CPP player (IL2CPP via ProjectSettings, runtime-only assemblies). The `.github/workflows-disabled/*` files remain the ubuntu reference mirrors.
 
 ## When to Use
 
@@ -89,22 +88,16 @@ status: "stable"
 
 ## Current Matrix
 
-`unity-tests.yml` (active; game-ci on self-hosted Windows; fast feedback):
+`unity-tests.yml` (active; game-ci on self-hosted Windows; one unified matrix):
 
 | Axis            | Values                                      |
 | --------------- | ------------------------------------------- |
 | `unity-version` | `2021.3.45f1`, `2022.3.45f1`, `6000.0.32f1` |
-| `test-mode`     | `editmode`, `playmode`                      |
+| `test-mode`     | `editmode`, `playmode`, `standalone`        |
 
-Six matrix cells. Workflow_dispatch inputs let you pin a single version or single mode for triage.
+Nine matrix cells. `editmode`/`playmode` run in-editor on Mono; `standalone` builds and runs the IL2CPP player natively via game-ci `testMode: standalone` (IL2CPP backend pinned in `.unity-test-project/ProjectSettings/ProjectSettings.asset` as `scriptingBackend: { Standalone: 1 }`, runtime-only assemblies because EditMode tests cannot run in a player). Workflow_dispatch inputs let you pin a single version or single mode for triage.
 
-`unity-il2cpp.yml` (active; game-ci builder on self-hosted Windows; slower AOT coverage):
-
-| Axis            | Values        |
-| --------------- | ------------- |
-| `unity-version` | `2022.3.45f1` |
-
-Single cell on PRs to keep the gate under ~15 minutes; weekly cron currently uses the same single version (the matrix-config job is already shaped to expand without code changes).
+**Operator note (standalone IL2CPP image):** the `standalone` cells build a Windows IL2CPP player, which REQUIRES VS C++ Build Tools INSIDE the game-ci container. Host-installed Build Tools do NOT reach the container. Set the repo variable `UNITY_IL2CPP_WINDOWS_IMAGE` to a game-ci windows-il2cpp image that bundles them; `unity-tests.yml` wires it into the game-ci step's `customImage`. If `UNITY_IL2CPP_WINDOWS_IMAGE` is unset, `customImage` is empty and game-ci uses its stock image, so the IL2CPP build will FAIL LOUDLY (no Build Tools). `editmode`/`playmode` run in-editor and need no custom image.
 
 `unity-benchmarks.yml` (active; manual/nightly, NEVER on PRs):
 
@@ -133,7 +126,7 @@ Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the
 
    Append the new tag to the JSON array. Use the `unityci/editor` tag format (e.g., `2024.3.10f1`).
 
-1. Verify the corresponding `unityci/editor:<tag>-base-3` (and `-linux-il2cpp-3` for `unity-il2cpp.yml`) image exists at `https://hub.docker.com/r/unityci/editor/tags`. game-ci publishes images shortly after Unity ships; if the tag is missing, wait or pick the nearest released patch.
+1. Verify the corresponding `unityci/editor:<tag>-base-3` image exists at `https://hub.docker.com/r/unityci/editor/tags` (the local `--platform standalone` driver uses `-linux-il2cpp-3`). game-ci publishes images shortly after Unity ships; if the tag is missing, wait or pick the nearest released patch.
 
 1. Run the runner locally to validate the new version:
 
@@ -170,12 +163,7 @@ A game-ci job log is structured. To diagnose a failure, scan in this order:
 1. **Test execution**: search for `Run tests on platform`. NUnit failures appear as `[Test Failed]` lines with stack traces.
 1. **Result emission**: search for `Test results saved at`. Missing results XML almost always means the player crashed before tests completed.
 
-For IL2CPP runs, two distinct stages emit logs:
-
-- `game-ci/unity-builder@v4` builds the player. Failures here are AOT or stripping.
-- The custom `Run IL2CPP test player` step launches the produced binary. Failures here are runtime AOT or test-logic.
-
-The IL2CPP workflow checks the player exit code BEFORE parsing the XML so a crash mid-run cannot look green.
+For `standalone` runs, game-ci's `testMode: standalone` builds the IL2CPP player and runs it in one step. Build-stage failures are AOT or stripping; run-stage failures are runtime AOT or test-logic. The shared `verify-unity-results` composite asserts `total > 0` for every mode (including standalone), so a crash mid-run that emits no results cannot look green.
 
 ## See Also
 
@@ -189,4 +177,4 @@ The IL2CPP workflow checks the player exit code BEFORE parsing the XML so a cras
 - game-ci docs: https://game.ci/docs/
 - Unity LTS roadmap: https://unity.com/releases/lts
 - Unity managed code stripping: https://docs.unity3d.com/Manual/ManagedCodeStripping.html
-- Active workflows: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-il2cpp.yml` (game-ci on self-hosted Windows); ubuntu reference mirrors: `.github/workflows-disabled/`
+- Active workflows: `.github/workflows/unity-tests.yml` (game-ci on self-hosted Windows; editmode/playmode/standalone), `.github/workflows/unity-benchmarks.yml`; ubuntu reference mirrors: `.github/workflows-disabled/`

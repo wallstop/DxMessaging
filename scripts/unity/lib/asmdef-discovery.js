@@ -6,6 +6,7 @@
  * Shared, deterministic discovery + classification of Unity test asmdef files.
  *
  * Used by:
+ *   - .github/actions/compute-unity-assemblies (primary CI consumer)
  *   - scripts/unity/run-tests.sh (default include / exclude assembly list)
  *   - scripts/unity/run-tests.ps1 (PowerShell parity)
  *   - scripts/__tests__/unity-perf-isolation.test.js (Phase 4 contract)
@@ -149,7 +150,27 @@ function classifyAsmdef(name) {
  * @property {boolean} isPerf - True when classification is "perf"
  * @property {boolean} isComparison - True when classification is "comparison"
  * @property {boolean} isInteg - True when classification is "integration"
+ * @property {boolean} isEditorOnly - True iff includePlatforms is exactly ["Editor"]
  */
+
+/**
+ * Read an asmdef's `includePlatforms` array and decide whether the assembly is
+ * editor-only. An assembly is editor-only iff `includePlatforms` is exactly
+ * `["Editor"]`. Editor-only test assemblies (EditMode suites + Editor
+ * benchmarks/integrations) cannot run inside a built player, so the standalone
+ * runtime-only flow must exclude them.
+ *
+ * @param {string} asmdefPath - Absolute path to an .asmdef file
+ * @returns {boolean} True when includePlatforms === ["Editor"]
+ */
+function readAsmdefIsEditorOnly(asmdefPath) {
+  const raw = fs.readFileSync(asmdefPath, "utf8");
+  const parsed = JSON.parse(raw);
+  const platforms = parsed.includePlatforms;
+  return (
+    Array.isArray(platforms) && platforms.length === 1 && platforms[0] === "Editor"
+  );
+}
 
 /**
  * Enumerate every asmdef under `<repoRoot>/Tests/`. Sorted by `name` for
@@ -175,7 +196,8 @@ function enumerateTestAsmdefs(repoRoot) {
       path: asmdefPath,
       isPerf: classification === "perf",
       isComparison: classification === "comparison",
-      isInteg: classification === "integration"
+      isInteg: classification === "integration",
+      isEditorOnly: readAsmdefIsEditorOnly(asmdefPath)
     };
   });
 
@@ -188,6 +210,12 @@ function enumerateTestAsmdefs(repoRoot) {
  * @property {boolean} [includePerf=false]         Include "perf" asmdefs.
  * @property {boolean} [includeComparisons=false]  Include comparison benchmark asmdefs.
  * @property {boolean} [includeIntegrations=false] Include "integration" asmdefs.
+ * @property {boolean} [runtimeOnly=false]         Drop editor-only asmdefs
+ *                     (includePlatforms === ["Editor"]). Used by the standalone
+ *                     player flow, where EditMode tests cannot run. Applied
+ *                     BEFORE the perf/comparison/integration gating so it
+ *                     composes (e.g. { runtimeOnly: true, includePerf: true } ->
+ *                     Runtime + Runtime.Benchmarks).
  */
 
 /**
@@ -209,9 +237,16 @@ function defaultIncludeAssemblies(repoRoot, options) {
   const includePerf = opts.includePerf === true;
   const includeComparisons = opts.includeComparisons === true;
   const includeIntegrations = opts.includeIntegrations === true;
+  const runtimeOnly = opts.runtimeOnly === true;
 
   return enumerateTestAsmdefs(repoRoot)
     .filter((entry) => {
+      // Runtime-only gate first so it composes with the category opt-ins:
+      // editor-only asmdefs cannot run in a built player and are dropped
+      // before any perf/comparison/integration decision.
+      if (runtimeOnly && entry.isEditorOnly) {
+        return false;
+      }
       if (entry.isPerf) {
         return includePerf;
       }
@@ -241,9 +276,15 @@ function defaultExcludeAssemblies(repoRoot, options) {
   const includePerf = opts.includePerf === true;
   const includeComparisons = opts.includeComparisons === true;
   const includeIntegrations = opts.includeIntegrations === true;
+  const runtimeOnly = opts.runtimeOnly === true;
 
   return enumerateTestAsmdefs(repoRoot)
     .filter((entry) => {
+      // Mirror of defaultIncludeAssemblies: when runtimeOnly is set, every
+      // editor-only asmdef is excluded regardless of category.
+      if (runtimeOnly && entry.isEditorOnly) {
+        return true;
+      }
       if (entry.isPerf) {
         return !includePerf;
       }
@@ -299,5 +340,15 @@ if (require.main === module) {
   );
   for (const name of exclude) {
     process.stdout.write(`  - ${name}\n`);
+  }
+
+  // Diagnostic: runtime-only include list (used by the standalone player flow,
+  // where EditMode/editor-only asmdefs cannot run).
+  const runtimeInclude = defaultIncludeAssemblies(repoRoot, { runtimeOnly: true });
+  process.stdout.write(
+    `\nruntime-only include (${runtimeInclude.length}, drops editor-only asmdefs):\n`
+  );
+  for (const name of runtimeInclude) {
+    process.stdout.write(`  * ${name}\n`);
   }
 }

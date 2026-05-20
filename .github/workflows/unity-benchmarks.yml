@@ -178,7 +178,7 @@ jobs:
       # asmdef-discovery.js module the local run-tests scripts use. For
       # benchmarks we OPT IN to the perf assemblies (Benchmarks/Allocations)
       # via include-perf -- this mirrors the old runner's include-perf flag.
-      # Extracted into a composite action shared by all four Unity workflows;
+      # Extracted into a composite action shared by all three Unity workflows;
       # shell: pwsh is enforced inside the composite.
       - name: Compute benchmark assembly list
         uses: ./.github/actions/compute-unity-assemblies
