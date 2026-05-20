@@ -12,22 +12,22 @@ PR URLs, public release URLs, and dates when public verification was completed.
 
 ## Public Identifiers
 
-| Surface                                 | Public value                                                                                |
-| --------------------------------------- | ------------------------------------------------------------------------------------------- |
-| GitHub repository                       | `Ambiguous-Interactive/DxMessaging`                                                         |
-| Canonical repository URL                | `https://github.com/Ambiguous-Interactive/DxMessaging`                                      |
-| GitHub Pages URL                        | `https://ambiguous-interactive.github.io/DxMessaging/`                                      |
-| Unity and npm package id                | `com.wallstop-studios.dxmessaging`                                                          |
-| Display name                            | `DxMessaging`                                                                               |
-| Minimum Unity version in `package.json` | `2021.3`                                                                                    |
-| Release workflow                        | `.github/workflows/release.yml`                                                             |
-| Documentation workflow                  | `.github/workflows/deploy-docs.yml`                                                         |
-| npm package validation workflow         | `.github/workflows/validate-npm-meta.yml`                                                   |
-| Unity test workflow                     | `.github/workflows/unity-tests.yml` (editmode/playmode/standalone matrix)                   |
-| Unity benchmark workflow                | `.github/workflows/unity-benchmarks.yml`                                                    |
-| Unity job concurrency group             | `unity-pro-license` (single-seat license; `wallstop-organization-builds` reserved sentinel) |
-| GitHub Pages environment                | `github-pages`                                                                              |
-| OpenUPM package page                    | `https://openupm.com/packages/com.wallstop-studios.dxmessaging/`                            |
+| Surface                                 | Public value                                                              |
+| --------------------------------------- | ------------------------------------------------------------------------- |
+| GitHub repository                       | `Ambiguous-Interactive/DxMessaging`                                       |
+| Canonical repository URL                | `https://github.com/Ambiguous-Interactive/DxMessaging`                    |
+| GitHub Pages URL                        | `https://ambiguous-interactive.github.io/DxMessaging/`                    |
+| Unity and npm package id                | `com.wallstop-studios.dxmessaging`                                        |
+| Display name                            | `DxMessaging`                                                             |
+| Minimum Unity version in `package.json` | `2021.3`                                                                  |
+| Release workflow                        | `.github/workflows/release.yml`                                           |
+| Documentation workflow                  | `.github/workflows/deploy-docs.yml`                                       |
+| npm package validation workflow         | `.github/workflows/validate-npm-meta.yml`                                 |
+| Unity test workflow                     | `.github/workflows/unity-tests.yml` (editmode/playmode/standalone matrix) |
+| Unity benchmark workflow                | `.github/workflows/unity-benchmarks.yml`                                  |
+| Unity organization lock                 | `wallstop-organization-builds` via `ambiguous-organization-build-lock`    |
+| GitHub Pages environment                | `github-pages`                                                            |
+| OpenUPM package page                    | `https://openupm.com/packages/com.wallstop-studios.dxmessaging/`          |
 
 ## Transfer Inventory
 
@@ -79,34 +79,43 @@ Reference: [GitHub repository transfer documentation](https://docs.github.com/ar
 
 Unity workflows target self-hosted Windows runners by labels only. No
 dedicated runner group is provisioned; runners may live in the organization's
-default runner group. Unity Pro is a single-seat license, so cross-workflow
-serialization is provided by a shared `unity-pro-license` concurrency
-group (`cancel-in-progress: false`), and within-workflow serialization by
-`strategy.max-parallel: 1` on every Unity matrix.
+default runner group. Unity Pro is a single-seat license, so cross-repository
+serialization is provided by the central
+`Ambiguous-Interactive/ambiguous-organization-build-lock` actions. Native
+GitHub `concurrency` is repository-scoped and must not be used as the
+organization lock.
 
 - Required runner labels on both Windows runners: `self-hosted`, `Windows`,
   `RAM-64GB`.
 - Additional speed marker applied only to `ELI-MACHINE`: `fast` (kept for
   future opt-in hotfix dispatch; no job currently requests it).
-- Every Unity-credential-using job declares the same job-level
-  `concurrency:` block:
+- Every Unity-credential-using job validates Unity license secret shape, then
+  acquires the central lock immediately before `game-ci/unity-test-runner@v4`:
 
   ```yaml
-  concurrency:
-    group: unity-pro-license
-    cancel-in-progress: false
+  - name: Validate Unity license secrets
+    uses: ./.github/actions/validate-unity-license
+
+  - name: Acquire organization Unity lock
+    uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+    with:
+      lock-name: wallstop-organization-builds
   ```
 
-  The legacy `wallstop-organization-builds` name remains a reserved
-  sentinel; the workflow validator hard-rejects it anywhere it appears
-  (workflow- or job-level, multi-line or scalar-shorthand form).
+  The matching release step uses `release-build-lock@v1` with `if:
+always()`. The workflow validator hard-rejects
+  `wallstop-organization-builds` when it appears as native GitHub
+  `concurrency.group`.
 
-- The Unity matrix jobs (`unity-tests`, `benchmarks`) declare
-  `strategy.max-parallel: 1` so matrix entries serialize internally to the
-  workflow run. Without `max-parallel: 1` the shared concurrency group would
-  evict matrix entries (the original incident pattern); the validator enforces
-  the combination. IL2CPP is the `standalone` entry in the `unity-tests`
-  `test-mode` matrix, not a separate job.
+- Each Unity-credential-using job runs
+  `./.github/actions/validate-unity-license` before acquiring the central lock
+  so missing GitHub secrets fail before blocking the shared Unity seat. IL2CPP
+  is the `standalone` entry in the `unity-tests` `test-mode` matrix, not a
+  separate job.
+- Publish `.ambiguous-organization-build-lock/` to
+  `Ambiguous-Interactive/ambiguous-organization-build-lock`, create the `v1`
+  tag, and enable private action access for this repository before the Unity
+  workflows are expected to pass.
 - All Unity jobs declare the uniform `runs-on: [self-hosted, Windows,
 RAM-64GB]` so either Windows machine can pick up any Unity job. The
   `fast` label is no longer requested by any job.
@@ -118,15 +127,11 @@ RAM-64GB]` so either Windows machine can pick up any Unity job. The
 - [ ] Confirm `ELI-MACHINE` retains its `fast` label for future opt-in use.
 - [ ] Confirm each of `.github/workflows/unity-tests.yml`,
       `.github/workflows/unity-benchmarks.yml`, and the `unity-checks`
-      job in `.github/workflows/release.yml` declares
-      `concurrency: { group: unity-pro-license, cancel-in-progress: false }`
-      and uses the static `runs-on: [self-hosted, Windows, RAM-64GB]`.
-- [ ] Confirm the matrix jobs (`unity-tests`, `benchmarks`) declare
-      `strategy.max-parallel: 1`. `unity-checks` has no matrix and therefore
-      no `max-parallel`.
-- [ ] Confirm the string `wallstop-organization-builds` does not appear
-      anywhere under `.github/workflows/*.yml` (it is reserved and the
-      validator hard-fails any reintroduction).
+      job in `.github/workflows/release.yml` acquires
+      `wallstop-organization-builds`, validates Unity license secrets, runs
+      game-ci, and releases the lock with `if: always()`.
+- [ ] Confirm the string `wallstop-organization-builds` appears only as a
+      central lock action input, not as native GitHub `concurrency.group`.
 - [ ] Confirm `.github/workflows/stuck-job-watchdog.yml` is enabled. It
       audits queued runs every 5 minutes and cancels and (where safe)
       re-dispatches those that an idle runner could service, mitigating
@@ -317,12 +322,9 @@ Run these checks after the transfer and again after the first tagged release.
 - [ ] `.github/workflows/unity-tests.yml` can dispatch to self-hosted runners
       labeled `self-hosted`, `Windows`, and `RAM-64GB` for same-repository
       pull requests or protected branch pushes. Either Windows machine can
-      pick up any Unity job; cross-workflow license serialization is
-      enforced by the shared `unity-pro-license` concurrency group
-      (`cancel-in-progress: false`), and within-workflow matrix
-      serialization by `strategy.max-parallel: 1`. The legacy
-      `wallstop-organization-builds` group must never reappear in any
-      workflow.
+      pick up any Unity job; cross-repository license serialization is
+      enforced by the central `ambiguous-organization-build-lock` actions
+      around the licensed game-ci section.
 - [ ] `.github/workflows/release.yml` succeeds for a real semver tag and does
       not require `NPM_TOKEN`.
 - [ ] npm, OpenUPM, GitHub Releases, and GitHub Pages all point to

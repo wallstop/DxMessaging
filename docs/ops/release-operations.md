@@ -17,18 +17,14 @@ Canonical public identifiers:
 - Package ID: `com.wallstop-studios.dxmessaging`
 - Documentation site: `https://ambiguous-interactive.github.io/DxMessaging/`
 - Release workflow: `.github/workflows/release.yml`
-- Unity workflow concurrency group: every Unity-credential-using job
-  shares `concurrency.group: unity-pro-license` with
-  `cancel-in-progress: false` (single-seat Unity Pro license; only one
-  job may hold the license at a time). The matrix jobs
-  (`unity-tests`, `benchmarks`) additionally declare
-  `strategy.max-parallel: 1` so matrix entries serialize internally and
-  do not compete for the shared license slot (which would otherwise
-  evict each other under GitHub's 1-running + 1-pending limit). IL2CPP is
-  the `standalone` entry in the `unity-tests` `test-mode` matrix, not a
-  separate job. The legacy name `wallstop-organization-builds` remains a
-  reserved sentinel that the validator hard-rejects anywhere in
-  `.github/workflows/*.yml`.
+- Unity workflow lock: every Unity-credential-using job acquires
+  `wallstop-organization-builds` through
+  `Ambiguous-Interactive/ambiguous-organization-build-lock` immediately
+  before the licensed `game-ci/unity-test-runner@v4` section and releases
+  it with `if: always()`. Native GitHub `concurrency` is repository-scoped,
+  so `wallstop-organization-builds` must not be used as a native
+  `concurrency.group`. IL2CPP is the `standalone` entry in the
+  `unity-tests` `test-mode` matrix, not a separate job.
 - Unity runner labels: uniform static `runs-on: [self-hosted, Windows,
 RAM-64GB]` across all Unity-credential-using jobs, so either
   ELI-MACHINE or DAD-MACHINE can pick up any Unity job. The `fast`

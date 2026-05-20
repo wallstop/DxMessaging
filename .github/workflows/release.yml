@@ -214,9 +214,6 @@ jobs:
       contents: read
       checks: write
     timeout-minutes: 120
-    concurrency:
-      group: unity-pro-license
-      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -248,6 +245,23 @@ jobs:
       - name: Compute test assembly list
         uses: ./.github/actions/compute-unity-assemblies
 
+      - name: Validate Unity license secrets
+        uses: ./.github/actions/validate-unity-license
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: release-editmode
+          timeout-minutes: "180"
+        env:
+          BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+
       # Run the maintained game-ci action. It selects the Windows Unity image,
       # translates the workspace path, activates the license, and (with
       # runAsHostUser) writes artifacts owned by the runner user. It runs on the
@@ -269,6 +283,15 @@ jobs:
           checkName: Unity release editmode
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           runAsHostUser: "true"
+
+      - name: Release organization Unity lock
+        if: always()
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: release-editmode
+        env:
+          BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
       # CLASS GUARD: game-ci passes the job even when ZERO tests run (e.g. the
       # assembly filter matched nothing) -- the exact "silent green" failure

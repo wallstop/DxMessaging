@@ -89,35 +89,23 @@ function getOnBlock(parsed) {
 }
 
 function expectUnityRunnerContract(job, expectation) {
-  // Unity Pro is a single-seat license, so every Unity-credential-using
-  // job shares the `unity-pro-license` concurrency group with
-  // `cancel-in-progress: false`. This serializes Unity work across all
-  // Unity workflows so two licensed jobs cannot run simultaneously on
-  // ELI-MACHINE and DAD-MACHINE and fight for the license.
-  expect(job.concurrency).toEqual({
-    group: "unity-pro-license",
-    "cancel-in-progress": false
-  });
+  // Unity Pro is a single-seat license shared across repositories. Native
+  // GitHub concurrency is repository-scoped and would serialize whole jobs, so
+  // the licensed section is protected by the central organization lock actions
+  // immediately around the game-ci step instead of a job-level concurrency
+  // block.
+  expect(job.concurrency).toBeUndefined();
 
-  // All Unity-credential-using jobs request the same static label set
-  // so either Windows machine can pick up any job. Within-workflow matrix
-  // serialization is provided by `strategy.max-parallel: 1` (asserted
-  // separately); cross-workflow serialization comes from the shared
-  // concurrency group above.
+  // All Unity-credential-using jobs request the same static label set so
+  // either Windows machine can pick up any job. Licensed Unity work is
+  // serialized by the central lock action after the job starts.
   expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
 
   if (expectation.hasMatrix) {
-    // The validator (findMatrixConcurrencyEvictionViolations) requires
-    // matrix + shared concurrency group to declare max-parallel: 1; here
-    // we assert the contract directly so a regression is caught even if
-    // the validator rule shifts.
     expect(job.strategy).toBeDefined();
-    expect(job.strategy["max-parallel"]).toBe(1);
-  } else {
-    // Non-matrix jobs (release.unity-checks) need no max-parallel.
-    if (job.strategy !== undefined) {
-      expect(job.strategy["max-parallel"]).toBeUndefined();
-    }
+    expect(job.strategy["max-parallel"]).toBeUndefined();
+  } else if (job.strategy !== undefined) {
+    expect(job.strategy["max-parallel"]).toBeUndefined();
   }
 }
 
@@ -187,7 +175,7 @@ const UNITY_LICENSED_JOBS = [
 
 describe("Unity-credential-using jobs share the same runner + concurrency contract", () => {
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow job '$jobId' uses static [self-hosted, Windows, RAM-64GB] runs-on and the unity-pro-license group",
+    "$workflow job '$jobId' uses static [self-hosted, Windows, RAM-64GB] runs-on and no native license concurrency",
     ({ workflow, jobId, hasMatrix }) => {
       const parsed = loadWorkflowYaml(workflow);
       expectUnityRunnerContract(parsed.jobs[jobId], { hasMatrix });
@@ -195,42 +183,19 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   );
 
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow contains exactly one literal 'group: unity-pro-license' occurrence",
+    "$workflow does not use native GitHub concurrency for the organization lock",
     ({ workflow }) => {
-      // Defense-in-depth: even if the structural assertion above ever
-      // regressed silently (e.g., due to YAML parser quirks), the raw text
-      // must still reference the canonical group name exactly so log
-      // readers can grep for the licensing serialization mechanism.
-      //
-      // We further assert exactly ONE occurrence of `group: unity-pro-license`
-      // per workflow file: introducing a second group declaration (for
-      // example, an accidentally-duplicated job or a workflow-level
-      // concurrency block reusing the license group name) would silently
-      // alter the serialization semantics and is treated as a regression.
-      // This complements the structural assertion above; both checks catch
-      // different regressions.
       const text = readWorkflow(workflow);
-      expect(text).toMatch(/group:\s*unity-pro-license/);
-      // Anchor the count to the YAML declaration form (`group: <single-space>
-      // unity-pro-license` at the start of a line, allowing leading
-      // indentation). Diagnostic `echo` lines that print the human-readable
-      // string `Concurrency group:     unity-pro-license` use multiple
-      // spaces and live mid-line, so they do not collide with this anchor.
-      const declarationOccurrences = text.match(/^\s*group: unity-pro-license\b/gm) || [];
-      expect(declarationOccurrences).toHaveLength(1);
+      expect(text).not.toMatch(/^\s*group:\s*unity-pro-license\b/gm);
+      expect(text).not.toMatch(/^\s*group:\s*wallstop-organization-builds\b/gm);
     }
   );
 
-  test("no active Unity workflow declares concurrency.group: wallstop-organization-builds", () => {
-    // The legacy sentinel must never reappear. Cross-check by raw text so
-    // even commented or otherwise-skipped references are caught.
+  test("active Unity workflows acquire the central wallstop organization build lock by action input only", () => {
     for (const { workflow } of UNITY_LICENSED_JOBS) {
       const text = readWorkflow(workflow);
-      // Covers all three YAML forms the validator catches:
-      //   - block:    `concurrency:\n  group: wallstop-organization-builds`
-      //   - flow-map: `concurrency: { group: wallstop-organization-builds, ... }`
-      //   - scalar:   `concurrency: wallstop-organization-builds`
-      expect(text).not.toMatch(/(?:concurrency|group):\s*["']?wallstop-organization-builds/);
+      expect(text).toContain("lock-name: wallstop-organization-builds");
+      expect(text).not.toMatch(/^\s*group:\s*wallstop-organization-builds\b/gm);
     }
   });
 
@@ -248,6 +213,43 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       const text = readWorkflow(workflow);
       expect(text).toMatch(/secrets\.UNITY_LICENSE/);
       expect(text).toMatch(/secrets\.UNITY_SERIAL/);
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow job '$jobId' wraps game-ci with org lock acquire/release and license preflight",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const steps = parsed.jobs[jobId].steps;
+      const acquireIndex = steps.findIndex(
+        (step) =>
+          step.uses ===
+          "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
+      );
+      const preflightIndex = steps.findIndex(
+        (step) => step.uses === "./.github/actions/validate-unity-license"
+      );
+      const gameCiIndex = steps.findIndex((step) => step.uses === "game-ci/unity-test-runner@v4");
+      const releaseIndex = steps.findIndex(
+        (step) =>
+          step.uses ===
+          "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1"
+      );
+
+      expect(acquireIndex).toBeGreaterThanOrEqual(0);
+      expect(preflightIndex).toBeGreaterThanOrEqual(0);
+      expect(acquireIndex).toBeGreaterThan(preflightIndex);
+      expect(gameCiIndex).toBeGreaterThan(acquireIndex);
+      expect(releaseIndex).toBeGreaterThan(gameCiIndex);
+
+      expect(steps[acquireIndex].with["lock-name"]).toBe("wallstop-organization-builds");
+      expect(steps[releaseIndex].with["lock-name"]).toBe("wallstop-organization-builds");
+      expect(steps[releaseIndex].with["holder-id-suffix"]).toBe(
+        steps[acquireIndex].with["holder-id-suffix"]
+      );
+      expect(steps[releaseIndex].if).toBe("always()");
+      expect(steps[acquireIndex].env.BUILD_LOCK_TOKEN).toBe("${{ secrets.ORG_BUILD_LOCK_TOKEN }}");
+      expect(steps[releaseIndex].env.BUILD_LOCK_TOKEN).toBe("${{ secrets.ORG_BUILD_LOCK_TOKEN }}");
     }
   );
 
@@ -377,6 +379,17 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     expect(text).toMatch(/shell:\s*pwsh/);
   });
 
+  test("validate-unity-license composite distinguishes serial and ulf activation", () => {
+    const actionPath = path.join(ACTIONS_DIR, "validate-unity-license", "action.yml");
+    expect(fs.existsSync(actionPath)).toBe(true);
+    const text = fs.readFileSync(actionPath, "utf8");
+    expect(text).toContain("$hasLicense -and $hasSerial");
+    expect(text).toContain("-not $hasLicense -and -not $hasSerial");
+    expect(text).toContain("$hasSerial -and (-not $hasEmail -or -not $hasPassword)");
+    expect(text).toContain("Unity license preflight passed using UNITY_LICENSE.");
+    expect(text).toMatch(/shell:\s*pwsh/);
+  });
+
   test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresProtectedBranchGuard))(
     "$workflow job '$jobId' guards same-repo + protected-branch execution",
     ({ workflow, jobId }) => {
@@ -473,15 +486,13 @@ describe(".github/workflows/unity-tests.yml", () => {
 
   test("standalone uses the runtime-only assembly list and IL2CPP Windows player", () => {
     // EditMode tests cannot run inside a player, so standalone passes
-    // runtime-only: true to the compute-unity-assemblies composite; the
-    // game-ci step targets StandaloneWindows64 and supports a customImage for
-    // a VS-Build-Tools-equipped windows-il2cpp image.
+    // runtime-only: true to the compute-unity-assemblies composite. The
+    // game-ci test-runner action does not accept targetPlatform; standalone
+    // selection comes from testMode plus the ProjectSettings IL2CPP pin.
     expect(text).toMatch(
       /runtime-only:\s*"\$\{\{ matrix\.test-mode == 'standalone' && 'true' \|\| 'false' \}\}"/
     );
-    expect(text).toMatch(
-      /targetPlatform:\s*\$\{\{ matrix\.test-mode == 'standalone' && 'StandaloneWindows64' \|\| '' \}\}/
-    );
+    expect(text).not.toMatch(/^\s*targetPlatform:/m);
     expect(text).toMatch(
       /customImage:\s*\$\{\{ matrix\.test-mode == 'standalone' && vars\.UNITY_IL2CPP_WINDOWS_IMAGE \|\| '' \}\}/
     );

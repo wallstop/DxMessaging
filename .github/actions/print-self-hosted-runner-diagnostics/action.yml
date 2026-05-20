@@ -14,9 +14,9 @@ inputs:
   concurrency-note:
     description: One-line note describing the job's concurrency contract.
     required: false
-    default: "unity-pro-license (single-seat Unity Pro license; cross-workflow serialization)"
+    default: "wallstop-organization-builds (central organization Unity lock)"
   matrix-note:
-    description: One-line note describing the matrix/within-workflow serialization.
+    description: One-line note describing matrix scheduling.
     required: false
     default: ""
   requested-labels:
@@ -67,7 +67,7 @@ runs:
         Write-Output ("Concurrency group:     " + (Default-Value $env:DXMSG_DIAG_CONCURRENCY_NOTE 'n/a'))
         $matrixNote = $env:DXMSG_DIAG_MATRIX_NOTE
         if (-not [string]::IsNullOrEmpty($matrixNote)) {
-            Write-Output ("Matrix max-parallel:   " + $matrixNote)
+            Write-Output ("Matrix scheduling:     " + $matrixNote)
         }
         Write-Output ("Requested labels:      " + $env:DXMSG_DIAG_REQUESTED_LABELS)
         Write-Output ("GitHub workflow:       " + (Default-Value $env:GITHUB_WORKFLOW))

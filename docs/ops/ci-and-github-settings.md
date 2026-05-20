@@ -24,30 +24,38 @@ default runner group.
   - `fast`
 
 Unity Pro is a single-seat license: only one machine can be activated at
-a time. All Unity-credential-using jobs (`unity-tests`,
-`benchmarks`, and the `unity-checks` job in
-`release.yml`) declare:
+a time. GitHub native `concurrency` is repository-scoped and serializes
+whole jobs, so it is not the organization-level lock. All
+Unity-credential-using jobs (`unity-tests`, `benchmarks`, and the
+`unity-checks` job in `release.yml`) validate Unity license secret shape,
+then acquire the central lock immediately before the licensed Unity section:
 
 ```yaml
-concurrency:
-  group: unity-pro-license
-  cancel-in-progress: false
+- name: Validate Unity license secrets
+  uses: ./.github/actions/validate-unity-license
+
+- name: Acquire organization Unity lock
+  uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+  with:
+    lock-name: wallstop-organization-builds
 ```
 
-so two licensed jobs cannot run simultaneously across the two Windows
-machines and fight for the license. The previous single-slot
-`wallstop-organization-builds` group is a reserved sentinel that the
-workflow validator hard-rejects anywhere it appears; the new
-`unity-pro-license` group serves the same serialization purpose under a
-non-overloaded name.
+The matching release step uses `release-build-lock@v1` with `if:
+always()`. This lets checkout, cache, Node setup, and assembly discovery
+split across eligible runners while preventing two repositories from
+using the Unity seat at the same time.
 
-The Unity matrix jobs (`unity-tests`, `benchmarks`)
-additionally declare `strategy.max-parallel: 1` so matrix entries serialize
-internally to the workflow run and do not compete for the single
-concurrency slot (the validator's `findMatrixConcurrencyEvictionViolations`
-check enforces this combination). IL2CPP is the `standalone` entry in the
-`unity-tests` `test-mode` matrix (native game-ci `testMode: standalone`,
-IL2CPP via ProjectSettings, runtime-only assemblies), not a separate job.
+Before these workflows can run, publish the scaffold in
+`.ambiguous-organization-build-lock/` to
+`Ambiguous-Interactive/ambiguous-organization-build-lock`, push a `v1` tag, and
+enable private action access for this repository if the lock repo is private.
+
+Do not declare native `concurrency.group: wallstop-organization-builds`;
+that name is reserved for the central lock action input, not GitHub's
+repository-scoped concurrency feature. IL2CPP is the `standalone` entry in
+the `unity-tests` `test-mode` matrix (native game-ci `testMode:
+standalone`, IL2CPP via ProjectSettings, runtime-only assemblies), not a
+separate job.
 
 Per-runner Unity-cache safety is provided by each runner agent's exclusive
 workspace - a single self-hosted agent only ever runs one job at a time, so
@@ -66,27 +74,14 @@ dispatch but no job requests it today.
 Lightweight matrix configuration jobs run on `ubuntu-latest` and remain
 parallelizable.
 
-### Workflow-level vs job-level concurrency interaction
+### Organization Lock Interaction
 
-The Unity workflows declare workflow-level `concurrency: { group:
-${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }`
-so rapid same-branch pushes supersede the older workflow run. The
-licensed Unity jobs inside each workflow separately declare a job-level
-`concurrency: { group: unity-pro-license, cancel-in-progress: false }`.
-The two groups operate at different scopes and do not interact directly.
-
-On rapid same-branch pushes, the workflow-level group cancels the
-_older_ workflow run; any of its jobs that have not yet started will
-never start, and any running step is sent SIGTERM. However, the
-job-level `cancel-in-progress: false` on the license group prevents the
-license-holding job itself from being preempted, so a job that has
-already entered the `unity-pro-license` slot keeps running until it
-completes; the new workflow's `unity-checks`/`unity-tests`/etc. job
-then waits on the license slot until the old job releases it. This is
-the intended behavior - it protects in-flight Unity activation and
-asset import state from being torn down mid-run - but operators should
-expect a brief gap between "newer push" and "newer Unity job actually
-starts" while the older job drains.
+The Unity workflows do not use workflow-level cancellation. Cancelling a
+run while it is in the licensed section can leave Unity activation or
+asset import state half-finished. The central lock release step still
+runs with `if: always()` for normal failures, and the
+`ambiguous-organization-build-lock` reaper clears stale holders when a
+run is no longer active or its lease expires.
 
 ## Stuck-Job Recovery
 
@@ -273,23 +268,26 @@ node scripts/validate-workflows.js
 ```
 
 The validator hard-fails if any workflow reintroduces the reserved
-`wallstop-organization-builds` group name (workflow-level or job-level, in
-multi-line mapping, inline mapping, or scalar-shorthand form).
+native `concurrency.group: wallstop-organization-builds` use
+(workflow-level or job-level, in multi-line mapping, inline mapping, or
+scalar-shorthand form).
 
 Workflow-shape contract checklist:
 
 1. Confirm each of the Unity-credential-using jobs (`unity-tests`,
-   `benchmarks`, `unity-checks`) declares the job-level
-   `concurrency:` block with `group: unity-pro-license` and
-   `cancel-in-progress: false`.
-1. Confirm the Unity matrix jobs (`unity-tests`, `benchmarks`) declare
-   `strategy.max-parallel: 1`. The `unity-checks` release job has no matrix
-   and therefore no `max-parallel`.
+   `benchmarks`, `unity-checks`) acquires
+   `wallstop-organization-builds` through
+   `Ambiguous-Interactive/ambiguous-organization-build-lock` before
+   `game-ci/unity-test-runner@v4`.
+1. Confirm each of those jobs runs `./.github/actions/validate-unity-license`
+   before game-ci.
+1. Confirm each of those jobs releases the organization lock after game-ci
+   with `if: always()`.
 1. Confirm each of those jobs declares the uniform static label set
    `runs-on: [self-hosted, Windows, RAM-64GB]` so either Windows machine
    can pick up any Unity job.
-1. Confirm `wallstop-organization-builds` does not appear anywhere under
-   `.github/workflows/*.yml` (sentinel guard).
+1. Confirm `wallstop-organization-builds` appears only as a central lock
+   action input, not as a native GitHub `concurrency.group`.
 1. Confirm `.github/workflows/stuck-job-watchdog.yml` exists and is
    enabled (queue auto-recovery for the GitHub Actions dispatcher bug).
    Once merged to the default branch, the 5-minute cron fires

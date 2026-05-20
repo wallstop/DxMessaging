@@ -7,14 +7,13 @@
  * - `git add --renormalize` commands without existence checks
  * - Bash syntax in Windows-targeting jobs without Bash-compatible shell overrides
  * - Object-form `runs-on.group:` (runner groups are not provisioned for this org)
- * - Sentinel reuse of `concurrency.group: wallstop-organization-builds`
- *   (legacy single-slot Unity lock that caused matrix-eviction cancellations;
- *   reserved so it cannot be reintroduced). Scans workflow-level AND
- *   per-job blocks; covers multi-line mapping, inline mapping, and
- *   scalar-shorthand (`concurrency: <name>`) forms.
+ * - Native reuse of `concurrency.group: wallstop-organization-builds`.
+ *   GitHub concurrency is repository-scoped and serializes whole jobs, so the
+ *   organization Unity lock must be acquired through the central
+ *   ambiguous-organization-build-lock actions instead.
  * - Jobs that declare BOTH `strategy.matrix` AND a `concurrency.group` without
- *   any `${{ matrix.* }}` expansion in the group expression (single-slot lock
- *   across a matrix that silently evicts pending entries).
+ *   any `${{ matrix.* }}` expansion, `queue: max`, or `strategy.max-parallel: 1`
+ *   mitigation.
  * - Self-hosted `runs-on` label sets that are not in the documented allowlist
  *   (catches typos like `RAM-64Gb` that produce jobs no runner can pick up).
  *   Dynamic
@@ -23,6 +22,9 @@
  * - Jobs with `runs-on: ${{ fromJSON(needs.<jobId>.outputs.<output>) }}`
  *   that omit `<jobId>` from their `needs:` declaration (runtime would
  *   fail loudly but late; the static check surfaces typos at validation).
+ * - Unity GameCI jobs that are not wrapped by the central organization lock
+ *   acquire/release actions and the local Unity license preflight action.
+ * - Unsupported inputs on `game-ci/unity-test-runner@v4`.
  * - Workflow lines that exceed the yamllint line-length ceiling (loaded from
  *   .yamllint.yaml when available; defaults to 200). This provides earlier
  *   feedback in `npm run validate:workflows` before git-hook execution.
@@ -899,6 +901,98 @@ function extractStepUses(lines, stepStartIndex, stepEndIndex) {
   return null;
 }
 
+function extractStepName(lines, stepStartIndex, stepEndIndex) {
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
+    const nameMatch = /^\s*(?:-\s+)?name:\s*["']?(.+?)["']?\s*(?:#.*)?$/i.exec(line);
+
+    if (nameMatch) {
+      return nameMatch[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function extractStepIf(lines, stepStartIndex, stepEndIndex) {
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
+    const ifMatch = /^\s*if:\s*(.+?)\s*(?:#.*)?$/i.exec(line);
+
+    if (ifMatch) {
+      return ifMatch[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function extractStepWithMap(lines, stepStartIndex, stepEndIndex) {
+  const values = new Map();
+  let withIndent = -1;
+
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
+    if (/^\s*with:\s*(?:#.*)?$/i.test(line)) {
+      withIndent = getIndent(line);
+      continue;
+    }
+
+    if (withIndent === -1) {
+      continue;
+    }
+
+    const trimmed = line.trim();
+    const indent = getIndent(line);
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (indent <= withIndent) {
+      break;
+    }
+
+    const keyMatch = /^\s*([A-Za-z0-9_-]+)\s*:\s*(.*?)\s*(?:#.*)?$/.exec(line);
+    if (keyMatch && indent === withIndent + 2) {
+      values.set(keyMatch[1], keyMatch[2].replace(/^["']|["']$/g, ""));
+    }
+  }
+
+  return values;
+}
+
+function extractStepEnvMap(lines, stepStartIndex, stepEndIndex) {
+  const values = new Map();
+  let envIndent = -1;
+
+  for (let i = stepStartIndex; i <= stepEndIndex; i++) {
+    const line = lines[i];
+    if (/^\s*env:\s*(?:#.*)?$/i.test(line)) {
+      envIndent = getIndent(line);
+      continue;
+    }
+
+    if (envIndent === -1) {
+      continue;
+    }
+
+    const trimmed = line.trim();
+    const indent = getIndent(line);
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (indent <= envIndent) {
+      break;
+    }
+
+    const keyMatch = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*?)\s*(?:#.*)?$/.exec(line);
+    if (keyMatch && indent === envIndent + 2) {
+      values.set(keyMatch[1], keyMatch[2].replace(/^["']|["']$/g, ""));
+    }
+  }
+
+  return values;
+}
+
 function extractJobSteps(lines, job) {
   const steps = [];
   const startIndex = job.startLine - 1;
@@ -966,8 +1060,12 @@ function extractJobSteps(lines, job) {
     steps.push({
       startIndex: stepStartIndex,
       endIndex: stepEndIndex,
+      name: extractStepName(lines, stepStartIndex, stepEndIndex),
+      if: extractStepIf(lines, stepStartIndex, stepEndIndex),
       shell: extractStepShell(lines, stepStartIndex, stepEndIndex),
       uses: extractStepUses(lines, stepStartIndex, stepEndIndex),
+      with: extractStepWithMap(lines, stepStartIndex, stepEndIndex),
+      env: extractStepEnvMap(lines, stepStartIndex, stepEndIndex),
       run
     });
 
@@ -1305,7 +1403,7 @@ function formatAllowlistForMessage() {
  *   wallstop-organization-builds` is detected. For shorthand the returned
  *   cancelInProgress is undefined (GitHub Actions defaults the field).
  *
- * Returns { group, line, cancelInProgress } where line is 1-indexed.
+ * Returns { group, line, cancelInProgress, queue } where line is 1-indexed.
  */
 function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containingIndent) {
   const targetIndent = containingIndent + 2;
@@ -1335,11 +1433,13 @@ function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containin
       const inner = inlineMapMatch[1];
       const groupMatch = /\bgroup\s*:\s*["']?([^,"'}]+?)["']?\s*(?:,|$)/.exec(inner);
       const cancelMatch = /\bcancel-in-progress\s*:\s*(true|false)/.exec(inner);
+      const queueMatch = /\bqueue\s*:\s*["']?([^,"'}]+?)["']?\s*(?:,|$)/.exec(inner);
       if (groupMatch) {
         return {
           group: groupMatch[1].trim(),
           line: i + 1,
-          cancelInProgress: cancelMatch ? cancelMatch[1] === "true" : undefined
+          cancelInProgress: cancelMatch ? cancelMatch[1] === "true" : undefined,
+          queue: queueMatch ? queueMatch[1].trim() : undefined
         };
       }
       return null;
@@ -1351,6 +1451,7 @@ function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containin
       let group = null;
       let groupLine = -1;
       let cancelInProgress;
+      let queue;
       for (let j = i + 1; j <= endIndex; j++) {
         const childLine = lines[j];
         const childTrimmed = childLine.trim();
@@ -1376,10 +1477,14 @@ function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containin
         if (childCancelMatch) {
           cancelInProgress = childCancelMatch[1] === "true";
         }
+        const childQueueMatch = /^\s*queue\s*:\s*["']?(.+?)["']?\s*(?:#.*)?$/.exec(childLine);
+        if (childQueueMatch) {
+          queue = childQueueMatch[1].trim();
+        }
       }
 
       if (group !== null) {
-        return { group, line: groupLine, cancelInProgress };
+        return { group, line: groupLine, cancelInProgress, queue };
       }
       return null;
     }
@@ -1409,7 +1514,8 @@ function extractConcurrencyGroupFromBlock(lines, startIndex, endIndex, containin
       return {
         group: stripped,
         line: i + 1,
-        cancelInProgress: undefined
+        cancelInProgress: undefined,
+        queue: undefined
       };
     }
   }
@@ -1927,21 +2033,17 @@ function extractEmittedLabelSetsFromBash(runText) {
 }
 
 /**
- * Checks for the legacy sentinel `concurrency.group: wallstop-organization-builds`.
- * This group historically serialized every Unity-credential-using job into a
- * single org-wide slot; combined with cancel-in-progress: false, every 3rd
- * matrix entry to queue evicted the previously-queued one. The validator
- * permanently bans this group name so the pattern cannot re-emerge.
- *
- * Scans both:
- *   - Workflow-level (top-level) `concurrency:` blocks.
- *   - Per-job `concurrency:` blocks (multi-line, inline mapping, and scalar
- *     shorthand forms).
+ * Checks for native GitHub concurrency reuse of the organization Unity lock
+ * name. GitHub native concurrency is repository-scoped and serializes whole
+ * jobs, so it cannot provide the organization-level lock while still allowing
+ * pre-Unity work to split across eligible runners. The lock name belongs in
+ * the central ambiguous-organization-build-lock action inputs instead.
  */
 function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
   const violations = [];
 
-  // Workflow-level scan first; the sentinel name is forbidden anywhere.
+  // Workflow-level scan first; the organization lock name is forbidden as a
+  // native concurrency group at any scope.
   const workflowConcurrency = extractWorkflowConcurrencyGroup(lines);
   if (workflowConcurrency && workflowConcurrency.group === "wallstop-organization-builds") {
     violations.push(
@@ -1949,7 +2051,7 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
         relativePath,
         workflowConcurrency.line,
         `concurrency.group: ${workflowConcurrency.group}`,
-        `Workflow-level concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: job-level 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' on every Unity-credential-using job, combined with 'strategy.max-parallel: 1' on any matrix in those jobs. The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. Use the workflow's own \${{ github.workflow }}-\${{ github.ref }} group at workflow level if PR-level deduplication is needed. (Historical sentinel name: 'wallstop-organization-builds'.)`,
+        `Workflow-level concurrency.group 'wallstop-organization-builds' is forbidden. GitHub native concurrency is repository-scoped and serializes entire jobs; use the central Ambiguous-Interactive/ambiguous-organization-build-lock acquire/release actions with lock-name: wallstop-organization-builds instead.`,
         "error"
       )
     );
@@ -1968,7 +2070,7 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
           relativePath,
           concurrency.line,
           `concurrency.group: ${concurrency.group}`,
-          `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is a reserved sentinel. This single-slot org-wide group caused Unity matrix cancellations (\"higher priority waiting request\") and runner-pickup stalls. Replace with: 'concurrency.group: unity-pro-license' + 'cancel-in-progress: false' plus 'strategy.max-parallel: 1' on the matrix in this job (cross-workflow serialization without matrix eviction). The secondary escape hatch is to expand the group expression with a \${{ matrix.* }} token so each combo gets its own slot. (Historical sentinel name: 'wallstop-organization-builds'.)`,
+          `Job '${job.id}': concurrency.group 'wallstop-organization-builds' is forbidden. GitHub native concurrency is repository-scoped and would serialize the whole job before a runner is assigned; use the central Ambiguous-Interactive/ambiguous-organization-build-lock acquire/release actions with lock-name: wallstop-organization-builds instead.`,
           "error"
         )
       );
@@ -1981,16 +2083,17 @@ function findForbiddenSharedConcurrencyViolations(relativePath, lines) {
 /**
  * Checks for jobs that combine `strategy.matrix:` with a shared
  * `concurrency.group:` that exposes the matrix-eviction footgun. GitHub
- * Actions concurrency reserves one in-progress slot and one pending slot
- * per group, so without mitigation every third matrix entry to enqueue
- * evicts the previously-queued one (the original
- * `wallstop-organization-builds` incident).
+ * Actions concurrency historically reserved one in-progress slot and one
+ * pending slot per group, so without mitigation every third matrix entry to
+ * enqueue evicted the previously-queued one.
  *
  * A matrix + shared concurrency group is permitted IFF either:
  *   (a) The group expression includes a `${{ matrix.* }}` token, so each
  *       matrix entry occupies its own per-combination slot (no eviction by
  *       construction).
- *   (b) The strategy declares `max-parallel: 1`, which serializes matrix
+ *   (b) The concurrency block declares `queue: max` and
+ *       `cancel-in-progress: false`, so pending entries are retained.
+ *   (c) The strategy declares `max-parallel: 1`, which serializes matrix
  *       entries internally to the workflow run. Entries 2..N queue inside
  *       GitHub's matrix engine, not inside the concurrency group, so the
  *       group sees exactly one entrant per workflow run.
@@ -2024,7 +2127,12 @@ function findMatrixConcurrencyEvictionViolations(relativePath, lines) {
       continue;
     }
 
-    // Escape hatch (b): explicit serialization via max-parallel: 1.
+    // Escape hatch (b): larger queue with no cancellation.
+    if (concurrency.queue === "max" && concurrency.cancelInProgress === false) {
+      continue;
+    }
+
+    // Escape hatch (c): explicit serialization via max-parallel: 1.
     const maxParallel = extractJobMatrixMaxParallel(lines, job);
     if (maxParallel === 1) {
       continue;
@@ -2040,12 +2148,248 @@ function findMatrixConcurrencyEvictionViolations(relativePath, lines) {
         relativePath,
         concurrency.line,
         `concurrency.group: ${concurrency.group}`,
-        `Job '${job.id}' combines strategy.matrix with a shared concurrency.group ('${concurrency.group}') (${maxParallelDescription}). GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Allowed escape hatches: (a) expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, or (b) declare 'strategy.max-parallel: 1' so matrix entries serialize internally and never compete for the same group slot. Otherwise drop the job-level concurrency block entirely.`,
+        `Job '${job.id}' combines strategy.matrix with a shared concurrency.group ('${concurrency.group}') (${maxParallelDescription}). Without mitigation, GitHub Actions retains only 1 running + 1 pending slot per group, so every third matrix entry to enqueue will cancel the previously-queued one. Allowed escape hatches: (a) expand the group with at least one \${{ matrix.* }} expression so each combo gets its own slot, (b) declare 'queue: max' with 'cancel-in-progress: false', or (c) declare 'strategy.max-parallel: 1' so matrix entries serialize internally. Otherwise drop the job-level concurrency block entirely.`,
         "error"
       )
     );
   }
 
+  return violations;
+}
+
+function findConcurrencyQueueViolations(relativePath, lines) {
+  const violations = [];
+  const allConcurrency = [];
+  const workflowConcurrency = extractWorkflowConcurrencyGroup(lines);
+  if (workflowConcurrency) {
+    allConcurrency.push({ label: "Workflow-level", concurrency: workflowConcurrency });
+  }
+  for (const job of extractJobs(lines)) {
+    const concurrency = extractJobConcurrencyGroup(lines, job);
+    if (concurrency) {
+      allConcurrency.push({ label: `Job '${job.id}'`, concurrency });
+    }
+  }
+
+  for (const { label, concurrency } of allConcurrency) {
+    if (concurrency.queue === "max" && concurrency.cancelInProgress === true) {
+      violations.push(
+        new Violation(
+          relativePath,
+          concurrency.line,
+          "queue: max",
+          `${label}: queue: max cannot be combined with cancel-in-progress: true. Use cancel-in-progress: false or remove queue: max.`,
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
+}
+
+const GAME_CI_TEST_RUNNER_ALLOWED_INPUTS = new Set([
+  "unityVersion",
+  "customImage",
+  "projectPath",
+  "customParameters",
+  "testMode",
+  "coverageOptions",
+  "artifactsPath",
+  "useHostNetwork",
+  "sshAgent",
+  "sshPublicKeysDirectoryPath",
+  "gitPrivateToken",
+  "githubToken",
+  "checkName",
+  "packageMode",
+  "scopedRegistryUrl",
+  "registryScopes",
+  "chownFilesTo",
+  "dockerCpuLimit",
+  "dockerMemoryLimit",
+  "dockerIsolationMode",
+  "unityLicensingServer",
+  "containerRegistryRepository",
+  "containerRegistryImageVersion",
+  "runAsHostUser"
+]);
+
+function findGameCiTestRunnerInputViolations(relativePath, lines) {
+  const violations = [];
+  for (const job of extractJobs(lines)) {
+    const steps = extractJobSteps(lines, job);
+    for (const step of steps) {
+      if (step.uses !== "game-ci/unity-test-runner@v4") {
+        continue;
+      }
+      for (const key of step.with.keys()) {
+        if (!GAME_CI_TEST_RUNNER_ALLOWED_INPUTS.has(key)) {
+          violations.push(
+            new Violation(
+              relativePath,
+              step.startIndex + 1,
+              `${key}:`,
+              `Job '${job.id}' uses unsupported game-ci/unity-test-runner@v4 input '${key}'. Remove it or update GAME_CI_TEST_RUNNER_ALLOWED_INPUTS after verifying the upstream action supports it.`,
+              "error"
+            )
+          );
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+function findUnityGameCiLockAndPreflightViolations(relativePath, lines) {
+  const violations = [];
+  for (const job of extractJobs(lines)) {
+    const steps = extractJobSteps(lines, job);
+    for (let index = 0; index < steps.length; index++) {
+      const step = steps[index];
+      if (step.uses !== "game-ci/unity-test-runner@v4") {
+        continue;
+      }
+
+      const acquireIndex = steps.findIndex(
+        (candidate) =>
+          candidate.uses ===
+            "ambiguous-interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1" &&
+          candidate.startIndex < step.startIndex
+      );
+      const licensePreflightIndex = steps.findIndex(
+        (candidate) =>
+          candidate.uses === "./.github/actions/validate-unity-license" &&
+          candidate.startIndex < step.startIndex
+      );
+      const releaseIndex = steps.findIndex(
+        (candidate) =>
+          candidate.uses ===
+            "ambiguous-interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1" &&
+          candidate.startIndex > step.startIndex
+      );
+      const acquire = acquireIndex === -1 ? null : steps[acquireIndex];
+      const licensePreflight = licensePreflightIndex === -1 ? null : steps[licensePreflightIndex];
+      const release = releaseIndex === -1 ? null : steps[releaseIndex];
+
+      if (!acquire) {
+        violations.push(
+          new Violation(
+            relativePath,
+            step.startIndex + 1,
+            "game-ci/unity-test-runner@v4",
+            `Job '${job.id}' runs Unity without first acquiring the central organization lock. Add Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1 before game-ci.`,
+            "error"
+          )
+        );
+      } else if (acquire.with.get("lock-name") !== "wallstop-organization-builds") {
+        violations.push(
+          new Violation(
+            relativePath,
+            acquire.startIndex + 1,
+            "lock-name:",
+            `Job '${job.id}' must acquire lock-name: wallstop-organization-builds before game-ci.`,
+            "error"
+          )
+        );
+      }
+
+      if (!licensePreflight) {
+        violations.push(
+          new Violation(
+            relativePath,
+            step.startIndex + 1,
+            "game-ci/unity-test-runner@v4",
+            `Job '${job.id}' runs Unity without first validating Unity license secrets. Add ./.github/actions/validate-unity-license before game-ci.`,
+            "error"
+          )
+        );
+      } else if (acquire && licensePreflight.startIndex > acquire.startIndex) {
+        violations.push(
+          new Violation(
+            relativePath,
+            licensePreflight.startIndex + 1,
+            "validate-unity-license",
+            `Job '${job.id}' validates Unity license secrets after acquiring the organization lock. Move ./.github/actions/validate-unity-license before acquire-build-lock so missing secrets do not block the shared Unity seat.`,
+            "error"
+          )
+        );
+      }
+
+      if (acquire && acquire.env.get("BUILD_LOCK_TOKEN") !== "${{ secrets.ORG_BUILD_LOCK_TOKEN }}") {
+        violations.push(
+          new Violation(
+            relativePath,
+            acquire.startIndex + 1,
+            "BUILD_LOCK_TOKEN:",
+            `Job '${job.id}' acquire step must pass BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}.`,
+            "error"
+          )
+        );
+      }
+
+      if (!release) {
+        violations.push(
+          new Violation(
+            relativePath,
+            step.startIndex + 1,
+            "game-ci/unity-test-runner@v4",
+            `Job '${job.id}' runs Unity without a later central-lock release step. Add Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1 with if: always().`,
+            "error"
+          )
+        );
+      } else {
+        if (
+          acquire &&
+          (release.with.get("holder-id-suffix") || "default") !==
+            (acquire.with.get("holder-id-suffix") || "default")
+        ) {
+          violations.push(
+            new Violation(
+              relativePath,
+              release.startIndex + 1,
+              "holder-id-suffix:",
+              `Job '${job.id}' release holder-id-suffix must match the acquire step so the same holder can release the lock.`,
+              "error"
+            )
+          );
+        }
+        if (release.with.get("lock-name") !== "wallstop-organization-builds") {
+          violations.push(
+            new Violation(
+              relativePath,
+              release.startIndex + 1,
+              "lock-name:",
+              `Job '${job.id}' must release lock-name: wallstop-organization-builds after game-ci.`,
+              "error"
+            )
+          );
+        }
+        if (release.env.get("BUILD_LOCK_TOKEN") !== "${{ secrets.ORG_BUILD_LOCK_TOKEN }}") {
+          violations.push(
+            new Violation(
+              relativePath,
+              release.startIndex + 1,
+              "BUILD_LOCK_TOKEN:",
+              `Job '${job.id}' release step must pass BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}.`,
+              "error"
+            )
+          );
+        }
+        if (release.if !== "always()") {
+          violations.push(
+            new Violation(
+              relativePath,
+              release.startIndex + 1,
+              "if:",
+              `Job '${job.id}' central-lock release step must declare if: always() so failed Unity jobs do not leave the organization lock held.`,
+              "error"
+            )
+          );
+        }
+      }
+    }
+  }
   return violations;
 }
 
@@ -2789,7 +3133,13 @@ function validateWorkflow(filePath, options = {}) {
 
     violations.push(...findForbiddenSharedConcurrencyViolations(relativePath, lines));
 
+    violations.push(...findConcurrencyQueueViolations(relativePath, lines));
+
     violations.push(...findMatrixConcurrencyEvictionViolations(relativePath, lines));
+
+    violations.push(...findGameCiTestRunnerInputViolations(relativePath, lines));
+
+    violations.push(...findUnityGameCiLockAndPreflightViolations(relativePath, lines));
 
     violations.push(...findSelfHostedLabelAllowlistViolations(relativePath, lines));
 
@@ -2906,7 +3256,10 @@ if (typeof module !== "undefined" && module.exports) {
     findWindowsBashPortabilityViolations,
     findForbiddenRunsOnGroupViolations,
     findForbiddenSharedConcurrencyViolations,
+    findConcurrencyQueueViolations,
     findMatrixConcurrencyEvictionViolations,
+    findGameCiTestRunnerInputViolations,
+    findUnityGameCiLockAndPreflightViolations,
     findSelfHostedLabelAllowlistViolations,
     findDynamicRunsOnMissingNeedsViolations,
     extractJobConcurrencyGroup,

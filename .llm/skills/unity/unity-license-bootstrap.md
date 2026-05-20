@@ -146,7 +146,11 @@ setup, not an email/password-only activation.
 
 The active workflows under `.github/workflows/unity-*.yml` pass all three to
 `game-ci/unity-test-runner@v4` on the self-hosted Windows runners; it picks the
-activation path from whichever secrets are set. The
+activation path from whichever secrets are set. Each workflow runs
+`./.github/actions/validate-unity-license` before acquiring the central
+organization Unity lock so missing serial credentials, missing activation
+secrets, or ambiguous activation modes fail with a clear diagnostic before Unity
+starts or blocks the shared Unity seat. The
 `.github/workflows-disabled/*` files are the ubuntu reference mirrors.
 
 ## Professional Serial Path

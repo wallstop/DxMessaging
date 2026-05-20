@@ -416,6 +416,7 @@ describe("validate-npm-meta", () => {
 
     test("should reject development-only repository roots", () => {
       const files = [
+        ".ambiguous-organization-build-lock/README.md",
         ".config/tool.json",
         ".unity-test-project/Packages/manifest.json",
         ".unity-test-project.meta",
@@ -449,6 +450,7 @@ describe("validate-npm-meta", () => {
 
       expect(result.valid).toBe(false);
       expect(result.errors.map((error) => error.file)).toEqual([
+        ".ambiguous-organization-build-lock/README.md",
         ".config/tool.json",
         ".unity-test-project/Packages/manifest.json",
         ".unity-test-project.meta",

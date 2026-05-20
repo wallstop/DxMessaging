@@ -177,6 +177,7 @@ const metaRequirementExcludePatterns = [
 ];
 
 const developmentFileExcludePatterns = [
+  /^\.ambiguous-organization-build-lock(?:\/|\.meta$|$)/,
   /^\.config(?:\/|\.meta$|$)/,
   /^\.devcontainer(?:\/|\.meta$|$)/,
   /^\.git(?:\/|\.meta$|$)/,

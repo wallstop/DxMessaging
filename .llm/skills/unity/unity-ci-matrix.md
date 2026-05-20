@@ -97,6 +97,13 @@ status: "stable"
 
 Nine matrix cells. `editmode`/`playmode` run in-editor on Mono; `standalone` builds and runs the IL2CPP player natively via game-ci `testMode: standalone` (IL2CPP backend pinned in `.unity-test-project/ProjectSettings/ProjectSettings.asset` as `scriptingBackend: { Standalone: 1 }`, runtime-only assemblies because EditMode tests cannot run in a player). Workflow_dispatch inputs let you pin a single version or single mode for triage.
 
+Licensed Unity execution is serialized by the central
+`Ambiguous-Interactive/ambiguous-organization-build-lock` actions. The workflows
+validate Unity license secret shape, acquire `wallstop-organization-builds`
+immediately before game-ci, then release it with `if: always()`. Keep runner
+labels broad enough for both Windows machines; the lock protects only the Unity
+seat, not checkout, cache setup, or secret-shape validation.
+
 **Operator note (standalone IL2CPP image):** the `standalone` cells build a Windows IL2CPP player, which REQUIRES VS C++ Build Tools INSIDE the game-ci container. Host-installed Build Tools do NOT reach the container. Set the repo variable `UNITY_IL2CPP_WINDOWS_IMAGE` to a game-ci windows-il2cpp image that bundles them; `unity-tests.yml` wires it into the game-ci step's `customImage`. If `UNITY_IL2CPP_WINDOWS_IMAGE` is unset, `customImage` is empty and game-ci uses its stock image, so the IL2CPP build will FAIL LOUDLY (no Build Tools). `editmode`/`playmode` run in-editor and need no custom image.
 
 `unity-benchmarks.yml` (active; manual/nightly, NEVER on PRs):

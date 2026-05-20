@@ -1,0 +1,45 @@
+name: Validate Unity license secrets
+description: >-
+  Fail fast when Unity license secrets are absent or ambiguous before invoking
+  game-ci. Prints only configuration shape, never secret values.
+runs:
+  using: composite
+  steps:
+    - name: Validate Unity license secret shape
+      shell: pwsh
+      run: |
+        $hasLicense = -not [string]::IsNullOrWhiteSpace($env:UNITY_LICENSE)
+        $hasSerial = -not [string]::IsNullOrWhiteSpace($env:UNITY_SERIAL)
+        $hasEmail = -not [string]::IsNullOrWhiteSpace($env:UNITY_EMAIL)
+        $hasPassword = -not [string]::IsNullOrWhiteSpace($env:UNITY_PASSWORD)
+
+        Write-Host "::group::Unity license secret preflight"
+        Write-Host ("UNITY_LICENSE present:  " + $hasLicense)
+        Write-Host ("UNITY_SERIAL present:   " + $hasSerial)
+        Write-Host ("UNITY_EMAIL present:    " + $hasEmail)
+        Write-Host ("UNITY_PASSWORD present: " + $hasPassword)
+
+        if ($hasLicense -and $hasSerial) {
+          Write-Host "::error::Both UNITY_LICENSE and UNITY_SERIAL are set. Configure exactly one Unity activation path."
+          Write-Host "::endgroup::"
+          exit 1
+        }
+
+        if (-not $hasLicense -and -not $hasSerial) {
+          Write-Host "::error::No Unity activation secret is available. Set UNITY_LICENSE for ULF activation or UNITY_SERIAL for Pro serial activation."
+          Write-Host "::endgroup::"
+          exit 1
+        }
+
+        if ($hasSerial -and (-not $hasEmail -or -not $hasPassword)) {
+          Write-Host "::error::UNITY_EMAIL and UNITY_PASSWORD are required when UNITY_SERIAL is used."
+          Write-Host "::endgroup::"
+          exit 1
+        }
+
+        if ($hasLicense) {
+          Write-Host "::notice::Unity license preflight passed using UNITY_LICENSE."
+        } else {
+          Write-Host "::notice::Unity license preflight passed using UNITY_SERIAL plus account credentials."
+        }
+        Write-Host "::endgroup::"

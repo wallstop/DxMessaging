@@ -35,7 +35,10 @@ const yaml = require("js-yaml");
 
 const {
   findForbiddenSharedConcurrencyViolations,
+  findConcurrencyQueueViolations,
   findMatrixConcurrencyEvictionViolations,
+  findGameCiTestRunnerInputViolations,
+  findUnityGameCiLockAndPreflightViolations,
   findSelfHostedLabelAllowlistViolations,
   findDynamicRunsOnMissingNeedsViolations,
   extractEmittedLabelSetsFromBash,
@@ -94,7 +97,7 @@ jobs:
     expect(violations).toHaveLength(1);
     expect(violations[0].severity).toBe("error");
     expect(violations[0].message).toContain("wallstop-organization-builds");
-    expect(violations[0].message).toContain("reserved sentinel");
+    expect(violations[0].message).toContain("forbidden");
     // Line citation points at the group: line within the fixture.
     expect(violations[0].line).toBe(5);
   });
@@ -239,6 +242,26 @@ jobs:
     expect(findMatrixConcurrencyEvictionViolations("test.yml", lines)).toEqual([]);
   });
 
+  test("allows matrix job with shared concurrency.group when queue max keeps pending entries", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    concurrency:
+      group: shared-unity-lock
+      cancel-in-progress: false
+      queue: max
+    strategy:
+      matrix:
+        unity-version:
+          - "2021.3.45f1"
+          - "2022.3.45f1"
+    steps:
+      - run: echo hi
+`);
+    expect(findMatrixConcurrencyEvictionViolations("test.yml", lines)).toEqual([]);
+  });
+
   test("allows matrix job with no concurrency.group at all", () => {
     const lines = asLines(`
 jobs:
@@ -266,6 +289,136 @@ jobs:
       - run: echo hi
 `);
     expect(findMatrixConcurrencyEvictionViolations("test.yml", lines)).toEqual([]);
+  });
+});
+
+describe("findConcurrencyQueueViolations", () => {
+  test("flags queue max combined with cancel-in-progress true", () => {
+    const lines = asLines(`
+concurrency:
+  group: ci
+  cancel-in-progress: true
+  queue: max
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+`);
+    const violations = findConcurrencyQueueViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("cannot be combined");
+  });
+});
+
+describe("findGameCiTestRunnerInputViolations", () => {
+  test("flags unsupported game-ci/unity-test-runner inputs", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: .unity-test-project
+          targetPlatform: StandaloneWindows64
+`);
+    const violations = findGameCiTestRunnerInputViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("targetPlatform");
+  });
+});
+
+describe("findUnityGameCiLockAndPreflightViolations", () => {
+  const validUnityJob = `
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Validate Unity license secrets
+        uses: ./.github/actions/validate-unity-license
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: \${{ matrix.unity-version }}-\${{ matrix.test-mode }}
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: .unity-test-project
+      - name: Release organization Unity lock
+        if: always()
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: \${{ matrix.unity-version }}-\${{ matrix.test-mode }}
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+`;
+
+  test("allows game-ci when acquire, license preflight, and always release wrap it", () => {
+    expect(findUnityGameCiLockAndPreflightViolations("test.yml", asLines(validUnityJob))).toEqual(
+      []
+    );
+  });
+
+  test("flags game-ci without acquire/preflight/release", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: .unity-test-project
+`);
+    const violations = findUnityGameCiLockAndPreflightViolations("test.yml", lines);
+    expect(violations).toHaveLength(3);
+    expect(violations.map((violation) => violation.message).join("\n")).toContain(
+      "central organization lock"
+    );
+    expect(violations.map((violation) => violation.message).join("\n")).toContain(
+      "validating Unity license"
+    );
+    expect(violations.map((violation) => violation.message).join("\n")).toContain(
+      "if: always()"
+    );
+  });
+
+  test("flags lock preflight ordering, missing token env, and mismatched holder suffix", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: acquire
+      - name: Validate Unity license secrets
+        uses: ./.github/actions/validate-unity-license
+      - name: Run Unity Test Runner
+        uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: .unity-test-project
+      - name: Release organization Unity lock
+        if: always()
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: release
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+`);
+    const messages = findUnityGameCiLockAndPreflightViolations("test.yml", lines)
+      .map((violation) => violation.message)
+      .join("\n");
+    expect(messages).toContain("after acquiring the organization lock");
+    expect(messages).toContain("acquire step must pass BUILD_LOCK_TOKEN");
+    expect(messages).toContain("release holder-id-suffix must match");
   });
 });
 
@@ -655,7 +808,7 @@ jobs:
     const violations = findForbiddenSharedConcurrencyViolations("test.yml", lines);
     expect(violations).toHaveLength(1);
     expect(violations[0].message).toContain("wallstop-organization-builds");
-    expect(violations[0].message).toContain("reserved sentinel");
+    expect(violations[0].message).toContain("forbidden");
   });
 
   test("flags scalar shorthand at job level (double-quoted)", () => {

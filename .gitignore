@@ -31,6 +31,8 @@ bld/
 logs_*.zip
 logs_*.zip.meta
 logs_*
+# Local upload scaffold for the external organization build-lock repository.
+.ambiguous-organization-build-lock/
 
 Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.pdb*
 

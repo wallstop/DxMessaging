@@ -13,10 +13,8 @@ name: Stuck Job Watchdog
 #     the previous conservative 600s buffer unnecessary).
 #   * No job in the run is `status: in_progress` - a run with even one
 #     in-progress job is by definition holding/using a runner, not
-#     dispatcher-stuck. This is what prevents false positives for matrix
-#     entries waiting on `strategy.max-parallel: 1` or jobs blocked by the
-#     `unity-pro-license` concurrency group (where another job from the same
-#     run is actively running).
+#     dispatcher-stuck. This is what prevents false positives for matrix cells
+#     or jobs waiting while another job from the same run is actively running.
 #   * At least one job in the run is `status: queued`.
 #   * At least one idle runner's labels satisfy a queued job's label
 #     requirements (superset match).
@@ -292,11 +290,9 @@ jobs:
 
             if (( in_progress_count > 0 )); then
               # A run with even one in-progress job is by definition not
-              # dispatcher-stuck. This covers: matrix entries waiting on
-              # `strategy.max-parallel: 1`, jobs blocked by the
-              # `unity-pro-license` concurrency group while another job from
-              # the same run holds the license, and the general case of a
-              # run that has at least one runner.
+              # dispatcher-stuck. This covers matrix cells or later jobs
+              # waiting while another job from the same run is active, and the
+              # general case of a run that has at least one runner.
               log_summary "run ${run_id} (${run_path_base}, event=${run_event}): healthy queued (${in_progress_count} in_progress, ${queued_count} queued -- waiting on concurrency/matrix slot)."
               printf '* run %s (%s, event=%s) -- %d in_progress, %d queued\n' "${run_id}" "${run_path_base}" "${run_event}" "${in_progress_count}" "${queued_count}" >> "${healthy_runs_file}"
               continue
