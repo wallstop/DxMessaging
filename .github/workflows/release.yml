@@ -141,7 +141,7 @@ jobs:
     steps:
       - name: Probe self-hosted runner availability
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RUNNER_AUDIT_PAT || secrets.GITHUB_TOKEN }}
           REQUIRED_LABELS: "self-hosted,Windows,RAM-64GB"
         # gh api --paginate | jq -s pattern mirrors stuck-job-watchdog.yml.
         run: |
@@ -262,27 +262,20 @@ jobs:
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
-      # Run the maintained game-ci action. It selects the Windows Unity image,
-      # translates the workspace path, activates the license, and (with
-      # runAsHostUser) writes artifacts owned by the runner user. It runs on the
-      # self-hosted Windows runner against Docker Desktop in Windows-container
-      # mode. The release gate is a single editmode run pinned to 2022.3.45f1.
       - name: Run Unity Test Runner
-        uses: game-ci/unity-test-runner@v4
+        shell: pwsh
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          projectPath: .unity-test-project
-          unityVersion: "2022.3.45f1"
-          testMode: editmode
-          customParameters: -nographics -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}"
-          artifactsPath: .artifacts/unity/release-editmode
-          checkName: Unity release editmode
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          runAsHostUser: "true"
+          UNITY_ACCELERATOR_ENDPOINT: ${{ vars.UNITY_ACCELERATOR_ENDPOINT }}
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 `
+            -UnityVersion '2022.3.45f1' `
+            -TestMode 'editmode' `
+            -AssemblyNames $env:DXM_TEST_ASSEMBLIES `
+            -ArtifactsPath '.artifacts/unity/release-editmode'
 
       - name: Release organization Unity lock
         if: always()
@@ -293,10 +286,8 @@ jobs:
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
-      # CLASS GUARD: game-ci passes the job even when ZERO tests run (e.g. the
-      # assembly filter matched nothing) -- the exact "silent green" failure
-      # mode this whole change exists to prevent. The shared composite action
-      # fails unless a results XML exists AND reports total > 0.
+      # CLASS GUARD: Unity can fail before NUnit writes results. The shared
+      # composite fails unless a results XML exists AND reports total > 0.
       - name: Verify tests actually ran
         if: always()
         uses: ./.github/actions/verify-unity-results

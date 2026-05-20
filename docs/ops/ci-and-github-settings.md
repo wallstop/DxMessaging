@@ -53,13 +53,14 @@ enable private action access for this repository if the lock repo is private.
 Do not declare native `concurrency.group: wallstop-organization-builds`;
 that name is reserved for the central lock action input, not GitHub's
 repository-scoped concurrency feature. IL2CPP is the `standalone` entry in
-the `unity-tests` `test-mode` matrix (native game-ci `testMode:
-standalone`, IL2CPP via ProjectSettings, runtime-only assemblies), not a
-separate job.
+the `unity-tests` `test-mode` matrix. The direct Windows runner
+(`scripts/unity/run-ci-tests.ps1`) maps that mode to `StandaloneWindows64`
+and configures IL2CPP in the generated project, not a separate job.
 
 Per-runner Unity-cache safety is provided by each runner agent's exclusive
 workspace - a single self-hosted agent only ever runs one job at a time, so
-`.unity-test-project/Library` directories cannot collide.
+generated `.artifacts/unity/projects/<version>-<mode>/Library` directories
+cannot collide.
 
 Runner routing is uniform across all Unity-credential-using jobs:
 
@@ -186,8 +187,8 @@ Unity test matrix:
 - `6000.0.32f1`
 - `editmode`
 - `playmode`
-- `standalone` (native IL2CPP player via game-ci `testMode: standalone`,
-  IL2CPP from ProjectSettings, runtime-only assemblies)
+- `standalone` (native `StandaloneWindows64` IL2CPP player via
+  `scripts/unity/run-ci-tests.ps1`, runtime-only assemblies)
 
 Release checks default to `2022.3.45f1`. Benchmarks run on schedule
 or manual dispatch only.
@@ -252,9 +253,11 @@ Protect the default branch and release tags:
 
 Unity Library caches must include:
 
-- `.unity-test-project/Packages/manifest.json`
-- `.unity-test-project/Packages/packages-lock.json`
-- `.unity-test-project/ProjectSettings/ProjectVersion.txt`
+- runner OS and architecture
+- Unity version
+- Unity test mode
+- package/test input hashes
+- `scripts/unity/run-ci-tests.ps1`
 
 Do not add broad `restore-keys` for Unity Library caches.
 
@@ -278,11 +281,11 @@ Workflow-shape contract checklist:
    `benchmarks`, `unity-checks`) acquires
    `wallstop-organization-builds` through
    `Ambiguous-Interactive/ambiguous-organization-build-lock` before
-   `game-ci/unity-test-runner@v4`.
+   `scripts/unity/run-ci-tests.ps1`.
 1. Confirm each of those jobs runs `./.github/actions/validate-unity-license`
-   before game-ci.
-1. Confirm each of those jobs releases the organization lock after game-ci
-   with `if: always()`.
+   before the direct Unity runner.
+1. Confirm each of those jobs releases the organization lock after the direct
+   Unity runner with `if: always()`.
 1. Confirm each of those jobs declares the uniform static label set
    `runs-on: [self-hosted, Windows, RAM-64GB]` so either Windows machine
    can pick up any Unity job.

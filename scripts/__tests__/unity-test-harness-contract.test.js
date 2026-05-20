@@ -1,12 +1,10 @@
 /**
- * @fileoverview Contract tests for the .unity-test-project/ test harness.
+ * @fileoverview Contract tests for the generated Unity package test harness.
  *
- * Phase 1 of the Unity headless workflow lays down a Unity project under
- * .unity-test-project/ that pulls the package via `file:../..` and exposes
- * the package's Tests/ asmdefs through `testables`. Several downstream
- * artifacts (run-tests.sh, the GitHub Actions workflow's cache key)
- * hard-code paths/values from these files, so the goal of this suite is to
- * make any silent rename or shape drift fail loudly at the JS-test layer.
+ * CI creates an ephemeral Unity project under .artifacts/ that imports this
+ * repo as a UPM package and exposes the package's Tests/ asmdefs through
+ * `testables`. The repository itself remains a package, not a checked-in
+ * Unity project.
  */
 
 "use strict";
@@ -16,89 +14,50 @@ const path = require("path");
 const yaml = require("js-yaml");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const TEST_PROJECT = path.join(REPO_ROOT, ".unity-test-project");
+const CI_RUNNER = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
 
-describe("unity test harness contract (.unity-test-project/)", () => {
-  describe("Packages/manifest.json", () => {
-    const manifestPath = path.join(TEST_PROJECT, "Packages", "manifest.json");
+describe("generated Unity test harness contract", () => {
+  describe("scripts/unity/run-ci-tests.ps1", () => {
+    let content;
 
-    test("manifest.json exists and parses as JSON", () => {
-      expect(fs.existsSync(manifestPath)).toBe(true);
-      const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-      expect(parsed).toEqual(expect.any(Object));
+    beforeAll(() => {
+      expect(fs.existsSync(CI_RUNNER)).toBe(true);
+      content = fs.readFileSync(CI_RUNNER, "utf8");
     });
 
-    test("declares the package as `file:../..` (so the harness pulls the workspace package)", () => {
-      const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-      expect(parsed.dependencies).toBeDefined();
-      expect(parsed.dependencies["com.wallstop-studios.dxmessaging"]).toBe("file:../..");
+    test("creates the Unity project only under .artifacts", () => {
+      expect(content).toContain(".artifacts\\unity\\projects\\$Version-$Mode");
+      expect(content).toContain("Initialize-EphemeralProject");
+      expect(content).not.toContain(".unity-test-project");
     });
 
-    test("declares Performance Testing package required by perf asmdefs", () => {
-      const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-      expect(parsed.dependencies["com.unity.test-framework.performance"]).toBe("3.4.2");
+    test("generates a minimal manifest that imports this repo as the package under test", () => {
+      expect(content).toContain("'com.unity.test-framework'");
+      expect(content).toContain("'com.unity.test-framework.performance'");
+      expect(content).toContain("'com.wallstop-studios.dxmessaging'");
+      expect(content).toContain('"file:$packagePath"');
+      expect(content).toContain("testables = @($PackageName)");
     });
 
-    test("`testables` array contains the package id", () => {
-      const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-      expect(Array.isArray(parsed.testables)).toBe(true);
-      expect(parsed.testables).toContain("com.wallstop-studios.dxmessaging");
-    });
-  });
-
-  describe("Packages/packages-lock.json", () => {
-    const lockPath = path.join(TEST_PROJECT, "Packages", "packages-lock.json");
-
-    test("packages-lock.json exists and parses as JSON", () => {
-      expect(fs.existsSync(lockPath)).toBe(true);
-      const raw = fs.readFileSync(lockPath, "utf8");
-      // Throw a friendly error on parse failure rather than the bare JSON one.
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch (error) {
-        throw new Error(`packages-lock.json is not valid JSON: ${error.message}`);
-      }
-      expect(parsed).toEqual(expect.any(Object));
+    test("configures standalone Windows IL2CPP in the generated project", () => {
+      expect(content).toContain("DxmCiTestConfigurator");
+      expect(content).toContain("BuildTarget.StandaloneWindows64");
+      expect(content).toContain("ScriptingImplementation.IL2CPP");
     });
 
-    test("locks Performance Testing package required by perf asmdefs", () => {
-      const parsed = JSON.parse(fs.readFileSync(lockPath, "utf8"));
-      expect(parsed.dependencies["com.unity.test-framework.performance"]).toEqual(
-        expect.objectContaining({
-          version: "3.4.2",
-          source: "registry"
-        })
-      );
-    });
-  });
-
-  describe("ProjectSettings/ProjectVersion.txt", () => {
-    const versionPath = path.join(TEST_PROJECT, "ProjectSettings", "ProjectVersion.txt");
-
-    test("ProjectVersion.txt exists and contains m_EditorVersion", () => {
-      expect(fs.existsSync(versionPath)).toBe(true);
-      const content = fs.readFileSync(versionPath, "utf8");
-      expect(content).toMatch(/m_EditorVersion:/);
+    test("validates real NUnit output instead of trusting Unity process success", () => {
+      expect(content).toContain("Test-NUnitResults");
+      expect(content).toContain("SelectSingleNode('//test-run')");
+      expect(content).toContain("$total -lt 1");
+      expect(content).toContain("$failed -gt 0");
     });
 
-    test("editor version matches one of the disabled unity-tests.yml template matrix entries", () => {
-      const content = fs.readFileSync(versionPath, "utf8");
-      const match = content.match(/m_EditorVersion:\s*(\S+)/);
-      expect(match).not.toBeNull();
-      const projectVersion = match[1].trim();
-
-      const workflowPath = path.join(REPO_ROOT, ".github", "workflows-disabled", "unity-tests.yml");
-      const workflowText = fs.readFileSync(workflowPath, "utf8");
-      // The matrix is generated dynamically inside a shell heredoc, so a
-      // structural YAML walk would skip those values; the canonical list
-      // is encoded as a literal JSON array on one line. Grep for any
-      // version literal that looks like a Unity tag and verify the
-      // ProjectVersion is among them.
-      const versionRegex = /\d+\.\d+\.\d+f\d+/g;
-      const matrixVersions = new Set(workflowText.match(versionRegex) || []);
-      expect(matrixVersions.size).toBeGreaterThan(0);
-      expect(matrixVersions).toContain(projectVersion);
+    test("wires Unity Accelerator and UPM caches without mutating package source", () => {
+      expect(content).toContain("UNITY_ACCELERATOR_ENDPOINT");
+      expect(content).toContain("-cacheServerEndpoint");
+      expect(content).toContain("UPM_CACHE_ROOT");
+      expect(content).toContain("UPM_NPM_CACHE_PATH");
+      expect(content).toContain("LOCALAPPDATA");
     });
   });
 

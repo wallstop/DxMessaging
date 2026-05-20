@@ -72,39 +72,41 @@ status: "stable"
 
 # Unity CI Matrix
 
-> **One-line summary**: The active Unity workflows under `.github/workflows/` run game-ci on self-hosted Windows runners: `unity-tests.yml` is one unified matrix of three Unity versions x {editmode, playmode, standalone} = 9 jobs, where `standalone` is the native game-ci `testMode: standalone` that builds and runs the AOT-compiled IL2CPP player (IL2CPP via ProjectSettings, runtime-only assemblies). The `.github/workflows-disabled/*` files remain the ubuntu reference mirrors.
+> **One-line summary**: The active Unity workflows under `.github/workflows/` run `scripts/unity/run-ci-tests.ps1` on self-hosted Windows runners: `unity-tests.yml` is one unified matrix of three Unity versions x {editmode, playmode, standalone} = 9 jobs, where `standalone` builds and runs a `StandaloneWindows64` IL2CPP player from an ephemeral Unity project generated under `.artifacts/`.
 
 ## When to Use
 
 - Adding a new Unity LTS release to the supported set.
 - Triaging an IL2CPP-only test failure that does not reproduce in EditMode.
-- Investigating a game-ci log that fails before any test prints output.
+- Investigating a Unity CI log that fails before any test prints output.
 - Deciding whether to expand or contract the matrix to balance signal vs runtime.
 
 ## When NOT to Use
 
 - Tweaking which assemblies run. That is the asmdef-discovery module's responsibility (see [unity-perf-test-isolation](./unity-perf-test-isolation.md)).
-- Adjusting cache keys. Those live in the workflow's `actions/cache@v4` block; they hash `manifest.json` + `packages-lock.json` + `ProjectVersion.txt`.
+- Adjusting cache keys. Those live in the workflow's `actions/cache@v4` block; they hash package/test inputs plus the direct CI runner script and include OS, architecture, Unity version, and mode.
 
 ## Current Matrix
 
-`unity-tests.yml` (active; game-ci on self-hosted Windows; one unified matrix):
+`unity-tests.yml` (active; direct Unity on self-hosted Windows; one unified matrix):
 
 | Axis            | Values                                      |
 | --------------- | ------------------------------------------- |
 | `unity-version` | `2021.3.45f1`, `2022.3.45f1`, `6000.0.32f1` |
 | `test-mode`     | `editmode`, `playmode`, `standalone`        |
 
-Nine matrix cells. `editmode`/`playmode` run in-editor on Mono; `standalone` builds and runs the IL2CPP player natively via game-ci `testMode: standalone` (IL2CPP backend pinned in `.unity-test-project/ProjectSettings/ProjectSettings.asset` as `scriptingBackend: { Standalone: 1 }`, runtime-only assemblies because EditMode tests cannot run in a player). Workflow_dispatch inputs let you pin a single version or single mode for triage.
+Nine matrix cells. `editmode`/`playmode` run in-editor on Mono; `standalone` builds and runs a `StandaloneWindows64` IL2CPP player. The direct runner generates a temporary package host project under `.artifacts/unity/projects/<version>-<mode>/`, imports the repo package with a `file:` dependency, sets `testables`, and configures IL2CPP before running standalone tests. Workflow_dispatch inputs let you pin a single version or single mode for triage.
 
 Licensed Unity execution is serialized by the central
 `Ambiguous-Interactive/ambiguous-organization-build-lock` actions. The workflows
 validate Unity license secret shape, acquire `wallstop-organization-builds`
-immediately before game-ci, then release it with `if: always()`. Keep runner
+immediately before `scripts/unity/run-ci-tests.ps1`, then release it with `if: always()`. Keep runner
 labels broad enough for both Windows machines; the lock protects only the Unity
 seat, not checkout, cache setup, or secret-shape validation.
 
-**Operator note (standalone IL2CPP image):** the `standalone` cells build a Windows IL2CPP player, which REQUIRES VS C++ Build Tools INSIDE the game-ci container. Host-installed Build Tools do NOT reach the container. Set the repo variable `UNITY_IL2CPP_WINDOWS_IMAGE` to a game-ci windows-il2cpp image that bundles them; `unity-tests.yml` wires it into the game-ci step's `customImage`. If `UNITY_IL2CPP_WINDOWS_IMAGE` is unset, `customImage` is empty and game-ci uses its stock image, so the IL2CPP build will FAIL LOUDLY (no Build Tools). `editmode`/`playmode` run in-editor and need no custom image.
+**Operator note (standalone IL2CPP):** the `standalone` cells require the Windows IL2CPP Unity module and the host build toolchain needed by Unity for Windows players. `scripts/unity/ensure-editor.ps1` installs or verifies the requested Editor and the `windows-il2cpp` module before standalone runs.
+
+`unity-gameci-experiment.yml` is manual-only and non-required. It generates the same ephemeral project and then calls `game-ci/unity-test-runner@v4` in normal project mode (`packageMode: false`). Do not promote GameCI back to required Windows CI unless the full matrix produces real NUnit XML repeatedly.
 
 `unity-benchmarks.yml` (active; manual/nightly, NEVER on PRs):
 
@@ -133,7 +135,7 @@ Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the
 
    Append the new tag to the JSON array. Use the `unityci/editor` tag format (e.g., `2024.3.10f1`).
 
-1. Verify the corresponding `unityci/editor:<tag>-base-3` image exists at `https://hub.docker.com/r/unityci/editor/tags` (the local `--platform standalone` driver uses `-linux-il2cpp-3`). game-ci publishes images shortly after Unity ships; if the tag is missing, wait or pick the nearest released patch.
+1. Verify the Unity standalone CLI can install the requested version on the self-hosted Windows runner, or that the version already exists under `UNITY_EDITOR_INSTALL_ROOT` / `C:\Unity\Editors` / Unity Hub's install path.
 
 1. Run the runner locally to validate the new version:
 
@@ -143,7 +145,7 @@ Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the
 
 1. Push the workflow change. The first CI run will pull the new image (slow); subsequent runs hit the cache.
 
-The `actions/cache@v4` keys include `${{ matrix.unity-version }}`, mode, manifest hash, lockfile hash, and `ProjectVersion.txt`. Do not add broad `restore-keys` for `Library/`; restoring a Library from a different Unity version or package graph can corrupt domain reloads and make failures nondeterministic. A new version should start cold and warm on the next exact-key run.
+The `actions/cache@v4` keys include `${{ matrix.unity-version }}`, mode, OS, architecture, and hashes for package/test inputs plus `scripts/unity/run-ci-tests.ps1`. Do not add broad `restore-keys` for `Library/`; restoring a Library from a different Unity version or package graph can corrupt domain reloads and make failures nondeterministic. A new version should start cold and warm on the next exact-key run.
 
 ## IL2CPP-Only Failure Patterns
 
@@ -159,9 +161,9 @@ IL2CPP exercises an AOT-compiled path that EditMode/PlayMode under Mono cannot. 
 
 The `avoid-reflection-on-hot-paths` skill (see Performance section of the index) covers reflection-related cases in detail. The DxMessaging codebase uses the source generator precisely to avoid most reflection at runtime.
 
-## Reading game-ci Logs
+## Reading Unity CI Logs
 
-A game-ci job log is structured. To diagnose a failure, scan in this order:
+A direct Windows Unity job log is structured. To diagnose a failure, scan in this order:
 
 1. **Pre-Unity setup**: `Setup Node.js`, `Cache Unity Library`, `Compute test assembly list`. Failures here are infrastructure, not test logic.
 1. **License activation**: search for `LICENSE SYSTEM` or `License client failed`. See [unity-license-bootstrap](./unity-license-bootstrap.md).
@@ -170,7 +172,7 @@ A game-ci job log is structured. To diagnose a failure, scan in this order:
 1. **Test execution**: search for `Run tests on platform`. NUnit failures appear as `[Test Failed]` lines with stack traces.
 1. **Result emission**: search for `Test results saved at`. Missing results XML almost always means the player crashed before tests completed.
 
-For `standalone` runs, game-ci's `testMode: standalone` builds the IL2CPP player and runs it in one step. Build-stage failures are AOT or stripping; run-stage failures are runtime AOT or test-logic. The shared `verify-unity-results` composite asserts `total > 0` for every mode (including standalone), so a crash mid-run that emits no results cannot look green.
+For `standalone` runs, the direct runner first configures the generated project for `StandaloneWindows64` IL2CPP, then runs Unity Test Framework with `-testPlatform StandaloneWindows64`. Build-stage failures are AOT or stripping; run-stage failures are runtime AOT or test-logic. The shared `verify-unity-results` composite asserts `total > 0` for every mode, so a crash mid-run that emits no results cannot look green.
 
 ## See Also
 
@@ -181,7 +183,8 @@ For `standalone` runs, game-ci's `testMode: standalone` builds the IL2CPP player
 
 ## References
 
-- game-ci docs: https://game.ci/docs/
+- Unity CLI docs: https://docs.unity.com/en-us/hub/unity-cli
+- game-ci docs (experiment only): https://game.ci/docs/
 - Unity LTS roadmap: https://unity.com/releases/lts
 - Unity managed code stripping: https://docs.unity3d.com/Manual/ManagedCodeStripping.html
-- Active workflows: `.github/workflows/unity-tests.yml` (game-ci on self-hosted Windows; editmode/playmode/standalone), `.github/workflows/unity-benchmarks.yml`; ubuntu reference mirrors: `.github/workflows-disabled/`
+- Active workflows: `.github/workflows/unity-tests.yml` (direct Unity on self-hosted Windows; editmode/playmode/standalone), `.github/workflows/unity-benchmarks.yml`, `.github/workflows/unity-gameci-experiment.yml` (manual-only experiment); ubuntu reference mirrors: `.github/workflows-disabled/`

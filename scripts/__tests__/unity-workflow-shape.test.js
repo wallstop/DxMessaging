@@ -6,10 +6,9 @@
  * regressions:
  *   - Licensed Unity jobs must only run for same-repo pull requests,
  *     protected branch pushes, schedules, and manual dispatch.
- *   - All Unity workflows must include manifest, packages-lock, and
- *     ProjectVersion in the exact Library cache key, with no broad restore
- *     keys — otherwise stale Library/ dirs from a prior Unity version corrupt
- *     the run.
+ *   - Required Unity workflows must use exact per-version/per-mode Library
+ *     cache keys, with no broad restore keys, for the generated ephemeral
+ *     test project.
  *   - The devcontainer workflows must override `eventFilterForPush: ""` to
  *     avoid devcontainers/ci@v0.3's silent push-skip on schedule/dispatch.
  *
@@ -22,7 +21,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const childProcess = require("child_process");
 const yaml = require("js-yaml");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -35,6 +33,7 @@ const DIAGNOSTICS_ACTION = path.join(
   "action.yml"
 );
 const UNITY_WORKFLOWS = ["unity-tests.yml", "unity-benchmarks.yml"];
+const GAMECI_EXPERIMENT_WORKFLOW = "unity-gameci-experiment.yml";
 const UNITY_VERSIONS = ["2021.3.45f1", "2022.3.45f1", "6000.0.32f1"];
 
 function readWorkflow(name) {
@@ -77,9 +76,9 @@ function collectDevcontainerCiSteps(name) {
 
 function expectExactUnityLibraryCache(text) {
   expect(text).toContain("actions/cache@v4");
-  expect(text).toContain("manifest.json");
-  expect(text).toContain("packages-lock.json");
-  expect(text).toContain("ProjectVersion.txt");
+  expect(text).toContain("PACKAGE_HASH");
+  expect(text).toContain(".artifacts/unity/projects/");
+  expect(text).toContain(".artifacts/unity/cache/");
   expect(text).toContain("key: Library");
   expect(text).not.toContain("restore-keys:");
 }
@@ -92,8 +91,8 @@ function expectUnityRunnerContract(job, expectation) {
   // Unity Pro is a single-seat license shared across repositories. Native
   // GitHub concurrency is repository-scoped and would serialize whole jobs, so
   // the licensed section is protected by the central organization lock actions
-  // immediately around the game-ci step instead of a job-level concurrency
-  // block.
+  // immediately around the direct Unity runner instead of a job-level
+  // concurrency block.
   expect(job.concurrency).toBeUndefined();
 
   // All Unity-credential-using jobs request the same static label set so
@@ -148,10 +147,7 @@ const UNITY_LICENSED_JOBS = [
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
     hasMatrix: true,
-    // editmode/playmode/standalone all run via the game-ci test runner action.
-    // standalone uses testMode: standalone (native IL2CPP player build+run);
-    // IL2CPP comes from ProjectSettings, not a separate builder action.
-    gameCiAction: "game-ci/unity-test-runner@v4"
+    runnerScript: "scripts/unity/run-ci-tests.ps1"
   },
   {
     workflow: "unity-benchmarks.yml",
@@ -160,7 +156,7 @@ const UNITY_LICENSED_JOBS = [
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
     hasMatrix: true,
-    gameCiAction: "game-ci/unity-test-runner@v4"
+    runnerScript: "scripts/unity/run-ci-tests.ps1"
   },
   {
     workflow: "release.yml",
@@ -169,7 +165,7 @@ const UNITY_LICENSED_JOBS = [
     requiresLibraryCache: false,
     requiresLicenseSecrets: true,
     hasMatrix: false,
-    gameCiAction: "game-ci/unity-test-runner@v4"
+    runnerScript: "scripts/unity/run-ci-tests.ps1"
   }
 ];
 
@@ -217,7 +213,7 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   );
 
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow job '$jobId' wraps game-ci with org lock acquire/release and license preflight",
+    "$workflow job '$jobId' wraps direct Unity runner with org lock acquire/release and license preflight",
     ({ workflow, jobId }) => {
       const parsed = loadWorkflowYaml(workflow);
       const steps = parsed.jobs[jobId].steps;
@@ -229,7 +225,13 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       const preflightIndex = steps.findIndex(
         (step) => step.uses === "./.github/actions/validate-unity-license"
       );
-      const gameCiIndex = steps.findIndex((step) => step.uses === "game-ci/unity-test-runner@v4");
+      const runnerIndex = steps.findIndex(
+        (step) =>
+          step.name === "Run Unity Test Runner" &&
+          step.shell === "pwsh" &&
+          typeof step.run === "string" &&
+          step.run.includes("./scripts/unity/run-ci-tests.ps1")
+      );
       const releaseIndex = steps.findIndex(
         (step) =>
           step.uses ===
@@ -239,8 +241,8 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       expect(acquireIndex).toBeGreaterThanOrEqual(0);
       expect(preflightIndex).toBeGreaterThanOrEqual(0);
       expect(acquireIndex).toBeGreaterThan(preflightIndex);
-      expect(gameCiIndex).toBeGreaterThan(acquireIndex);
-      expect(releaseIndex).toBeGreaterThan(gameCiIndex);
+      expect(runnerIndex).toBeGreaterThan(acquireIndex);
+      expect(releaseIndex).toBeGreaterThan(runnerIndex);
 
       expect(steps[acquireIndex].with["lock-name"]).toBe("wallstop-organization-builds");
       expect(steps[releaseIndex].with["lock-name"]).toBe("wallstop-organization-builds");
@@ -277,42 +279,30 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   );
 
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow runs Unity via the maintained game-ci action ($gameCiAction)",
-    ({ workflow, gameCiAction }) => {
-      // CI now runs Unity through the maintained game-ci actions on
-      // self-hosted Windows (NOT the local run-tests.ps1 docker path).
-      // All Unity workflows use game-ci/unity-test-runner@v4; IL2CPP is the
-      // standalone testMode of unity-tests (native build+run). The local
-      // runner contract is guarded separately by
-      // unity-runner-script-contract.test.js.
+    "$workflow runs required Unity work through the repo-owned direct runner",
+    ({ workflow, runnerScript }) => {
+      // Required CI owns Unity invocation directly on self-hosted Windows.
+      // GameCI remains available only in the explicit non-required experiment
+      // workflow because the Windows container path has repeatedly failed
+      // before NUnit produced test results.
       const text = readWorkflow(workflow);
-      expect(text).toContain(`uses: ${gameCiAction}`);
-      // The migrated workflows must NOT call the local docker runner anymore.
-      expect(text).not.toContain("run-tests.ps1");
+      expect(text).toContain(runnerScript);
+      expect(text).not.toContain("uses: game-ci/unity-test-runner@v4");
       expect(text).not.toContain("-Runner docker");
     }
   );
 
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow runs the game-ci step as the host user (runAsHostUser)",
+    "$workflow does not rely on GameCI host-user artifact ownership",
     ({ workflow }) => {
-      // runAsHostUser: "true" makes game-ci write artifacts owned by the
-      // runner user instead of root, so subsequent steps and the Library
-      // cache are readable/writable. Required on the self-hosted runners.
       const text = readWorkflow(workflow);
-      expect(text).toMatch(/runAsHostUser:\s*["']true["']/);
+      expect(text).not.toMatch(/runAsHostUser:/);
     }
   );
 
   test.each(UNITY_LICENSED_JOBS)(
-    "$workflow grants checks: write so game-ci can create the check run",
+    "$workflow grants checks: write for Unity result annotations",
     ({ workflow, jobId }) => {
-      // game-ci creates a check run via githubToken. With only contents: read
-      // that POST 403s and the Unity gate silently stops failing on red tests.
-      // unity-tests / benchmarks grant checks: write at workflow
-      // scope; release.yml is contents: read at workflow scope and MUST grant
-      // checks: write on the unity-checks job (Fix 1). Pin both forms so the
-      // permission cannot regress.
       const parsed = loadWorkflowYaml(workflow);
       if (workflow === "release.yml") {
         expect(parsed.jobs[jobId].permissions).toEqual({
@@ -337,18 +327,11 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     }
   );
 
-  // Every running game-ci Unity job must use the shared verify composite so a
-  // zero-tests "silent green" is impossible -- including the standalone
-  // testMode entry in unity-tests.yml.
+  // Every required Unity job must use the shared verify composite so missing
+  // or zero-test results are impossible to treat as green.
   test.each(UNITY_LICENSED_JOBS)(
     "$workflow validates tests actually ran via the verify-unity-results composite",
     ({ workflow }) => {
-      // CLASS GUARD: game-ci passes the job even when ZERO tests run -- the
-      // exact "silent green" failure mode this migration exists to prevent.
-      // The guard logic now lives in the shared verify composite; every
-      // running game-ci workflow must reference it. The load-bearing
-      // <test-run>/total parsing is asserted against the composite action
-      // file itself below.
       const text = readWorkflow(workflow);
       expect(text).toContain("uses: ./.github/actions/verify-unity-results");
     }
@@ -474,57 +457,50 @@ describe(".github/workflows/unity-tests.yml", () => {
     expect(text).toContain("- standalone");
   });
 
-  test("standalone is a native unity-test-runner testMode, not a separate builder", () => {
-    // IL2CPP is now exercised natively via game-ci testMode: standalone, with
-    // the scripting backend pinned in ProjectSettings. There is no custom
-    // TestRunnerBuilder build method anymore.
-    expect(text).toContain("testMode: ${{ matrix.test-mode }}");
+  test("standalone is handled by the direct Unity runner, not a separate builder", () => {
+    expect(text).toContain("-TestMode '${{ matrix.test-mode }}'");
     expect(text).not.toContain("buildMethod");
     expect(text).not.toContain("BuildIL2CPPTestPlayer");
     expect(text).not.toContain("game-ci/unity-builder@v4");
   });
 
-  test("standalone uses the runtime-only assembly list and IL2CPP Windows player", () => {
+  test("standalone uses the runtime-only assembly list and direct Windows player path", () => {
     // EditMode tests cannot run inside a player, so standalone passes
-    // runtime-only: true to the compute-unity-assemblies composite. The
-    // game-ci test-runner action does not accept targetPlatform; standalone
-    // selection comes from testMode plus the ProjectSettings IL2CPP pin.
+    // runtime-only: true to the compute-unity-assemblies composite. The direct
+    // runner maps standalone to StandaloneWindows64 and configures IL2CPP in
+    // the generated project.
     expect(text).toMatch(
       /runtime-only:\s*"\$\{\{ matrix\.test-mode == 'standalone' && 'true' \|\| 'false' \}\}"/
     );
     expect(text).not.toMatch(/^\s*targetPlatform:/m);
-    expect(text).toMatch(
-      /customImage:\s*\$\{\{ matrix\.test-mode == 'standalone' && vars\.UNITY_IL2CPP_WINDOWS_IMAGE \|\| '' \}\}/
-    );
+    expect(text).not.toMatch(/customImage:/);
   });
 });
 
-describe(".unity-test-project/ProjectSettings/ProjectSettings.asset", () => {
-  const relPath = path.join(
-    ".unity-test-project",
-    "ProjectSettings",
-    "ProjectSettings.asset"
-  );
-  const settingsPath = path.join(REPO_ROOT, relPath);
+describe(".github/workflows/unity-gameci-experiment.yml", () => {
+  let text;
+  let parsed;
 
-  test("pins the Standalone scripting backend to IL2CPP (Standalone: 1)", () => {
-    // IL2CPP coverage for the standalone testMode comes from this ProjectSettings
-    // pin (player builds only; editmode/playmode still run in-editor Mono).
-    expect(fs.existsSync(settingsPath)).toBe(true);
-    const settings = fs.readFileSync(settingsPath, "utf8");
-    expect(settings).toMatch(/scriptingBackend:\s*\n\s+Standalone:\s*1/);
+  beforeAll(() => {
+    text = readWorkflow(GAMECI_EXPERIMENT_WORKFLOW);
+    parsed = loadWorkflowYaml(GAMECI_EXPERIMENT_WORKFLOW);
   });
 
-  test("is committed to git (a fresh CI checkout must see the IL2CPP pin)", () => {
-    // The file is normally gitignored under .unity-test-project/ProjectSettings/*;
-    // it is force-tracked via a .gitignore allowlist exception. If that exception
-    // is dropped, the working tree still has the pin but CI checks out Mono.
-    const result = childProcess.spawnSync(
-      "git",
-      ["ls-files", "--error-unmatch", relPath],
-      { cwd: REPO_ROOT }
-    );
-    expect(result.status).toBe(0);
+  test("is non-required by construction", () => {
+    const onBlock = getOnBlock(parsed);
+    expect(Object.keys(onBlock).sort()).toEqual(["workflow_dispatch"]);
+    expect(text).not.toContain("pull_request");
+    expect(text).not.toContain("push:");
+    expect(parsed.jobs["game-ci-experiment"]["continue-on-error"]).toBe(true);
+  });
+
+  test("uses GameCI only in normal project mode against the generated project", () => {
+    expect(text).toContain("uses: game-ci/unity-test-runner@v4");
+    expect(text).toContain("packageMode: false");
+    expect(text).toContain("-GenerateOnly");
+    expect(text).toContain(".artifacts/unity/game-ci-projects/");
+    expect(text).not.toContain("packageMode: true");
+    expect(text).not.toContain("projectPath: .unity-test-project");
   });
 });
 

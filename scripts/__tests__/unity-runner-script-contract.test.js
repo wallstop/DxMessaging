@@ -321,6 +321,56 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
   });
 });
 
+describe("scripts/unity direct CI runner contract", () => {
+  const ensureEditor = readScript("scripts/unity/ensure-editor.ps1");
+  const runCi = readScript("scripts/unity/run-ci-tests.ps1");
+
+  test("ensure-editor installs through the standalone Unity CLI and resolves Unity.exe", () => {
+    expect(ensureEditor).toContain("UnityVersion");
+    expect(ensureEditor).toContain("Ensure-UnityCli");
+    expect(ensureEditor).toContain("Set-UnityCliInstallPath");
+    expect(ensureEditor).toContain("install-path");
+    expect(ensureEditor).toContain("$installArgs = @('install', $UnityVersion)");
+    expect(ensureEditor).toContain("install-modules");
+    expect(ensureEditor).toContain("windows-il2cpp");
+    expect(ensureEditor).toContain("Unity.exe");
+  });
+
+  test("run-ci-tests exposes the required CI surface", () => {
+    for (const token of [
+      "UnityVersion",
+      "TestMode",
+      "AssemblyNames",
+      "ArtifactsPath",
+      "ProjectPath",
+      "GenerateOnly"
+    ]) {
+      expect(runCi).toContain(token);
+    }
+    expect(runCi).toMatch(
+      /\[ValidateSet\(\s*'editmode'\s*,\s*'playmode'\s*,\s*'standalone'\s*\)\]/
+    );
+  });
+
+  test("run-ci-tests creates an ephemeral package host project", () => {
+    expect(runCi).toContain("Initialize-EphemeralProject");
+    expect(runCi).toContain("Packages\\manifest.json");
+    expect(runCi).toContain("ProjectSettings\\ProjectVersion.txt");
+    expect(runCi).toContain("testables = @($PackageName)");
+    expect(runCi).toContain(".artifacts\\unity\\projects\\$Version-$Mode");
+    expect(runCi).not.toContain("projectPath: .unity-test-project");
+  });
+
+  test("run-ci-tests owns cache, Accelerator, and result validation diagnostics", () => {
+    expect(runCi).toContain("Initialize-UnityCacheEnvironment");
+    expect(runCi).toContain("UPM_CACHE_ROOT");
+    expect(runCi).toContain("UNITY_ACCELERATOR_ENDPOINT");
+    expect(runCi).toContain("-EnableCacheServer");
+    expect(runCi).toContain("Test-NUnitResults");
+    expect(runCi).toContain("0 tests ran");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Regression guards (data-driven over BOTH runner scripts).
 //

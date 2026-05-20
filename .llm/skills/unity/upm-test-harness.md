@@ -9,10 +9,9 @@ updated: "2026-05-05"
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
   files:
-    - path: ".unity-test-project/Packages/manifest.json"
-    - path: ".unity-test-project/Packages/packages-lock.json"
-    - path: ".unity-test-project/ProjectSettings/ProjectVersion.txt"
-    - path: ".unity-test-project/ProjectSettings/ProjectSettings.asset"
+    - path: "scripts/unity/run-ci-tests.ps1"
+    - path: "scripts/unity/ensure-editor.ps1"
+    - path: "scripts/unity/lib/asmdef-discovery.js"
   url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
@@ -24,7 +23,7 @@ tags:
 
 complexity:
   level: "basic"
-  reasoning: "Four committed files; standard UPM testables semantics."
+  reasoning: "Generated project; standard UPM testables semantics."
 
 impact:
   performance:
@@ -32,7 +31,7 @@ impact:
     details: "Test infrastructure only"
   maintainability:
     rating: "high"
-    details: "Pinned manifest + lock + ProjectVersion guarantees reproducible test runs across machines and CI"
+    details: "Generated manifest and exact Library cache keys keep CI reproducible without committing a Unity project"
   testability:
     rating: "high"
     details: "Without this harness, the package has no Unity surface to execute against"
@@ -57,7 +56,7 @@ applies_to:
 
 aliases:
   - "Unity test project"
-  - ".unity-test-project"
+  - "ephemeral Unity test project"
   - "Test harness"
 
 related:
@@ -72,19 +71,19 @@ status: "stable"
 
 # UPM Test Harness
 
-> **One-line summary**: `.unity-test-project/` is a thin Unity host project whose only job is to import the package via `file:../..` and expose its `Tests/` asmdefs through the UPM `testables` field; everything else is gitignored.
+> **One-line summary**: CI generates a thin Unity host project under `.artifacts/unity/projects/<version>-<mode>/`; its only job is to import the package via a local `file:` dependency and expose its `Tests/` asmdefs through the UPM `testables` field.
 
 ## When to Use
 
 - Adding a new `.asmdef` under `Tests/` and verifying it shows up in Test Runner.
 - Reproducing a CI failure that needs a working Unity project on disk.
-- Adding a UPM dependency that the test asmdefs need (e.g., a future Reflex DI integration).
+- Changing the generated CI manifest in `scripts/unity/run-ci-tests.ps1`.
 - Diagnosing "Test framework not found" or empty test-run failures.
 
 ## When NOT to Use
 
 - Editing source files for the package itself. Those live at the repo root (`Runtime/`, `Editor/`, `Tests/`); this harness only references them.
-- Adding regular `Assets/` content. The harness intentionally ships no application code -- no scenes, sprites, or prefabs. The former `Assets/Editor/` folder and its `.meta` were removed (IL2CPP is native via `testMode: standalone`, so there is no build harness and nothing under `Assets/` is tracked).
+- Adding regular `Assets/` content to the repo. The generated CI project may create temporary `Assets/Editor/` configuration code under `.artifacts/`, but no Unity project assets belong in the package root.
 
 ## Architecture
 
@@ -96,42 +95,37 @@ repo-root/
 +-- Tests/
 |   +-- Editor/                   # NUnit + UTF tests (asmdefs)
 |   +-- Runtime/                  # PlayMode tests (asmdefs)
-+-- .unity-test-project/          # thin host that imports the package
++-- .artifacts/unity/projects/    # generated thin hosts that import the package
     +-- Packages/
-    |   +-- manifest.json         # "com.wallstop-studios.dxmessaging": "file:../..",
+    |   +-- manifest.json         # "com.wallstop-studios.dxmessaging": "file:<repo-root>",
     |   |                         # plus "testables" exposing the package's Tests
-    |   +-- packages-lock.json    # committed for deterministic resolution
     +-- ProjectSettings/
-    |   +-- ProjectVersion.txt    # pinned to 2022.3.45f1
-    |   +-- ProjectSettings.asset # scriptingBackend: { Standalone: 1 } pins IL2CPP for the player
-    +-- Assets/                   # gitignored; nothing tracked (IL2CPP is native, no build harness)
+    |   +-- ProjectVersion.txt    # generated for the selected matrix version
+    +-- Assets/Editor/            # generated CI configurator for standalone IL2CPP
     +-- Library/                  # gitignored, populated on first run
     +-- Temp/                     # gitignored
     +-- Logs/                     # gitignored
     +-- Builds/                   # gitignored, native standalone player output lands here
 ```
 
-The shape is deliberate. UPM resolves `file:../..` to the repo root, the package surfaces its asmdefs, and the `testables` array tells Unity Test Framework to scan that package's Tests assemblies. The harness has zero application code.
+The shape is deliberate. UPM resolves the local `file:` dependency to the repo root, the package surfaces its asmdefs, and the `testables` array tells Unity Test Framework to scan that package's Tests assemblies. The checked-in repo remains a package, not a Unity project.
 
 ## Key Files
 
-| File                                    | Role                                                                                |
-| --------------------------------------- | ----------------------------------------------------------------------------------- |
-| `Packages/manifest.json`                | Declares the package via `file:../..` and lists it under `testables`.               |
-| `Packages/packages-lock.json`           | Committed so the test environment resolves identically across machines and CI.      |
-| `ProjectSettings/ProjectVersion.txt`    | Pinned Editor version. CI cache keys hash this; bumping it busts the Library cache. |
-| `ProjectSettings/ProjectSettings.asset` | `scriptingBackend: { Standalone: 1 }` pins IL2CPP for player (standalone) builds.   |
+| File                                               | Role                                                                                |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Generated `Packages/manifest.json`                 | Declares the package via local `file:` and lists it under `testables`.              |
+| Generated `ProjectSettings/ProjectVersion.txt`     | Pins the selected matrix Editor version for that ephemeral project.                 |
+| Generated `Assets/Editor/DxmCiTestConfigurator.cs` | Sets standalone tests to `StandaloneWindows64` IL2CPP before player test execution. |
 
-The current `manifest.json` (verbatim):
+The generated manifest shape:
 
 ```json
 {
   "dependencies": {
     "com.unity.test-framework": "1.4.5",
     "com.unity.test-framework.performance": "3.4.2",
-    "com.unity.ide.rider": "3.0.31",
-    "com.unity.ide.visualstudio": "2.0.22",
-    "com.wallstop-studios.dxmessaging": "file:../.."
+    "com.wallstop-studios.dxmessaging": "file:<repo-root>"
   },
   "scopedRegistries": [],
   "testables": ["com.wallstop-studios.dxmessaging"]
@@ -140,23 +134,20 @@ The current `manifest.json` (verbatim):
 
 ## What to Commit vs Gitignore
 
-Committed:
+Committed source of truth:
 
-- `Packages/manifest.json`
-- `Packages/packages-lock.json`
-- `ProjectSettings/ProjectVersion.txt`
-- `ProjectSettings/ProjectSettings.asset` (pins IL2CPP for standalone)
+- `scripts/unity/run-ci-tests.ps1`
+- package source at `Runtime/`, `Editor/`, `Tests/`
 
-Gitignored (the repo `.gitignore` already covers these):
+Generated and gitignored:
 
-- `.unity-test-project/Library/`
-- `.unity-test-project/Temp/`
-- `.unity-test-project/Logs/`
-- `.unity-test-project/Builds/`
-- `.unity-test-project/UserSettings/`
-- `.unity-test-project/obj/`
+- `.artifacts/unity/projects/**/Library/`
+- `.artifacts/unity/projects/**/Temp/`
+- `.artifacts/unity/projects/**/Logs/`
+- `.artifacts/unity/projects/**/UserSettings/`
+- `.artifacts/unity/cache/**`
 
-`Library/` is shared with the runner via a Docker volume whose name is derived from the Unity image tag and test mode (for example, `dxm-unity-library-2022.3.45f1-base-3-editmode`). This keeps local caches warm without allowing one Unity version or IL2CPP/editor mode to reuse another mode's `Library/`.
+CI caches the generated project's `Library/` with an exact key that includes OS, architecture, Unity version, mode, package/test inputs, and `scripts/unity/run-ci-tests.ps1`. Do not add broad restore keys.
 
 ## Adding a New Test Asmdef
 
@@ -182,11 +173,11 @@ If the new asmdef is a perf or DI-integration suite, name it accordingly (`*Benc
 
 When a new test suite needs an additional UPM package (a DI container, a third-party assertion library, etc.):
 
-1. Add it to `.unity-test-project/Packages/manifest.json` `dependencies` block.
-1. Open the harness in Unity once locally so UPM can resolve and write `packages-lock.json`. Commit the regenerated lock.
-1. Re-run the headless runner to confirm the new dependency loads cleanly.
+1. Add the generated dependency to `New-ManifestJson` in `scripts/unity/run-ci-tests.ps1`.
+1. Re-run the CI runner in `-GenerateOnly` mode to inspect the generated manifest.
+1. Re-run the Unity suite to confirm the new dependency loads cleanly.
 
-Avoid adding heavyweight runtime dependencies unless the corresponding tests can opt in via the `--include-integrations` flag. The default suite stays lean for local runs and for the active Unity gate (game-ci on self-hosted Windows).
+Avoid adding heavyweight runtime dependencies unless the corresponding tests can opt in via the `--include-integrations` flag. The default suite stays lean for local runs and for the active Unity gate (direct Unity on self-hosted Windows).
 
 ## See Also
 
@@ -198,4 +189,4 @@ Avoid adding heavyweight runtime dependencies unless the corresponding tests can
 
 - Unity Package Manager testables: https://docs.unity3d.com/Manual/cus-tests.html
 - Unity Test Framework: https://docs.unity3d.com/Packages/com.unity.test-framework@1.4/manual/index.html
-- Source: `.unity-test-project/Packages/manifest.json`
+- Source: `scripts/unity/run-ci-tests.ps1`

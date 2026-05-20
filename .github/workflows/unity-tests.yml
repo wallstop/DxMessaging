@@ -100,7 +100,7 @@ jobs:
     steps:
       - name: Probe self-hosted runner availability
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RUNNER_AUDIT_PAT || secrets.GITHUB_TOKEN }}
           REQUIRED_LABELS: "self-hosted,Windows,RAM-64GB"
         # Repeated literal of the labels list. Keep in sync with unity-tests
         # `runs-on:` declaration below; the validator
@@ -211,15 +211,15 @@ jobs:
         with:
           matrix-note: "default (organization lock wraps the Unity section)"
 
-      - name: Cache Unity Library
+      - name: Cache Unity Library and package caches
         uses: actions/cache@v4
         env:
-          MANIFEST_HASH: ${{ hashFiles('.unity-test-project/Packages/manifest.json') }}
-          LOCK_HASH: ${{ hashFiles('.unity-test-project/Packages/packages-lock.json') }}
-          VERSION_HASH: ${{ hashFiles('.unity-test-project/ProjectSettings/ProjectVersion.txt') }}
+          PACKAGE_HASH: ${{ hashFiles('package.json', 'Runtime/**', 'Editor/**', 'Tests/**', 'scripts/unity/run-ci-tests.ps1') }}
         with:
-          path: .unity-test-project/Library
-          key: Library-${{ matrix.unity-version }}-${{ matrix.test-mode }}-${{ env.MANIFEST_HASH }}-${{ env.LOCK_HASH }}-${{ env.VERSION_HASH }}
+          path: |
+            .artifacts/unity/projects/${{ matrix.unity-version }}-${{ matrix.test-mode }}/Library
+            .artifacts/unity/cache/${{ matrix.unity-version }}
+          key: Library-${{ runner.os }}-${{ runner.arch }}-${{ matrix.unity-version }}-${{ matrix.test-mode }}-${{ env.PACKAGE_HASH }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -252,37 +252,20 @@ jobs:
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
-      # Run the maintained game-ci action. It selects the Windows Unity image,
-      # translates the workspace path, activates the license, and (with
-      # runAsHostUser) writes artifacts owned by the runner user. It runs on the
-      # self-hosted Windows runner against Docker Desktop in Windows-container
-      # mode.
       - name: Run Unity Test Runner
-        uses: game-ci/unity-test-runner@v4
+        shell: pwsh
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          projectPath: .unity-test-project
-          unityVersion: ${{ matrix.unity-version }}
-          testMode: ${{ matrix.test-mode }}
-          # standalone builds + runs a Windows IL2CPP player (IL2CPP comes from
-          # ProjectSettings scriptingBackend Standalone: 1). A Windows IL2CPP build
-          # REQUIRES VS C++ Build Tools INSIDE the game-ci container -- host-installed
-          # Build Tools do NOT reach the container. Set repo variable
-          # UNITY_IL2CPP_WINDOWS_IMAGE to a game-ci windows-il2cpp image that bundles
-          # them, and customImage will point game-ci at it. If UNITY_IL2CPP_WINDOWS_IMAGE
-          # is unset, customImage is '' so game-ci uses its stock image and the IL2CPP
-          # build FAILS LOUDLY (no Build Tools). Both inputs default to '' (unset) for
-          # editmode/playmode, which run in-editor and need neither.
-          customImage: ${{ matrix.test-mode == 'standalone' && vars.UNITY_IL2CPP_WINDOWS_IMAGE || '' }}
-          customParameters: -nographics -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}"
-          artifactsPath: .artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}
-          checkName: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          runAsHostUser: "true"
+          UNITY_ACCELERATOR_ENDPOINT: ${{ vars.UNITY_ACCELERATOR_ENDPOINT }}
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 `
+            -UnityVersion '${{ matrix.unity-version }}' `
+            -TestMode '${{ matrix.test-mode }}' `
+            -AssemblyNames $env:DXM_TEST_ASSEMBLIES `
+            -ArtifactsPath '.artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}'
 
       - name: Release organization Unity lock
         if: always()
@@ -293,10 +276,8 @@ jobs:
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
-      # CLASS GUARD: game-ci passes the job even when ZERO tests run (e.g. the
-      # assembly filter matched nothing) -- the exact "silent green" failure
-      # mode this whole change exists to prevent. The shared composite action
-      # fails unless a results XML exists AND reports total > 0.
+      # CLASS GUARD: Unity can fail before NUnit writes results. The shared
+      # composite fails unless a results XML exists AND reports total > 0.
       - name: Verify tests actually ran
         if: always()
         uses: ./.github/actions/verify-unity-results

@@ -224,10 +224,10 @@
 | [Devcontainer Cache Contract](./unity/devcontainer-cache-contract.md)     | [ok] 180   | [intermediate] | [stable] | [risk: high] | devcontainer, docker |
 | [Headless Unity Test Runner](./unity/headless-test-runner.md)             | [ok] 225   | [intermediate] | [stable] | [risk: none] | unity, testing       |
 | [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
-| [Unity CI Matrix](./unity/unity-ci-matrix.md)                             | [ok] 188   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
+| [Unity CI Matrix](./unity/unity-ci-matrix.md)                             | [ok] 191   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
 | [Unity License Bootstrap](./unity/unity-license-bootstrap.md)             | [ok] 222   | [basic]        | [stable] | [risk: none] | unity, license       |
 | [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)         | [ok] 219   | [intermediate] | [stable] | [risk: high] | unity, performance   |
-| [UPM Test Harness](./unity/upm-test-harness.md)                           | [ok] 202   | [basic]        | [stable] | [risk: none] | unity, upm           |
+| [UPM Test Harness](./unity/upm-test-harness.md)                           | [ok] 193   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---
 

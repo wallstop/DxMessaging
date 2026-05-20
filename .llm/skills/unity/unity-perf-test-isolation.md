@@ -103,7 +103,7 @@ const PERF_NAME_REGEX = /(?:Benchmarks|Allocations)/;
 const COMPARISON_NAME_REGEX = /(?:Comparisons)/;
 ```
 
-Any asmdef under `Tests/` whose `name` field contains `Benchmarks` or `Allocations` is classified as `perf`; `Comparisons` is classified as `comparison` because those suites depend on external comparison packages that are not in the default harness manifest. The perf path assumes `.unity-test-project/Packages/manifest.json` includes `com.unity.test-framework.performance`, because benchmark and allocation asmdefs reference `Unity.PerformanceTesting`. Three things have to be true for the isolation to hold:
+Any asmdef under `Tests/` whose `name` field contains `Benchmarks` or `Allocations` is classified as `perf`; `Comparisons` is classified as `comparison` because those suites depend on external comparison packages that are not in the default harness manifest. The generated CI manifest in `scripts/unity/run-ci-tests.ps1` includes `com.unity.test-framework.performance`, because benchmark and allocation asmdefs reference `Unity.PerformanceTesting`. Three things have to be true for the isolation to hold:
 
 1. Perf assemblies live under `Tests/Editor/Benchmarks`, `Tests/Editor/Allocations`, `Tests/Editor/Comparisons`, or `Tests/Runtime/Benchmarks`.
 1. Their asmdef `name` field contains `Benchmarks`, `Allocations`, or `Comparisons` so classification matches.
@@ -168,13 +168,13 @@ If the asmdef ends up in the `core` bucket instead, the most common cause is the
 | `unity-tests.yml`      | PR / push / schedule / dispatch | NO             |
 | `unity-benchmarks.yml` | schedule / dispatch             | YES            |
 
-The active `.github/workflows/unity-*.yml` workflows run Unity via game-ci on
-self-hosted Windows runners (benchmarks included). The `.github/workflows-disabled/*`
-files are the ubuntu reference mirrors kept for parity, not the live templates.
-Note: IL2CPP is now the `standalone` entry in the `unity-tests.yml` `test-mode`
-matrix (native game-ci `testMode: standalone`, IL2CPP via ProjectSettings,
-runtime-only assemblies) -- there is no separate il2cpp workflow. Verify the
-active workflows still exist any time you edit them:
+The active `.github/workflows/unity-*.yml` workflows run Unity directly on
+self-hosted Windows runners through `scripts/unity/run-ci-tests.ps1` (benchmarks
+included). The `.github/workflows-disabled/*` files are the ubuntu reference
+mirrors kept for parity, not the live templates. Note: IL2CPP is now the
+`standalone` entry in the `unity-tests.yml` `test-mode` matrix; the direct runner
+maps it to `StandaloneWindows64` and configures IL2CPP in the generated project.
+Verify the active workflows still exist any time you edit them:
 
 ```bash
 test -e .github/workflows/unity-tests.yml
@@ -183,7 +183,7 @@ test -e .github/workflows/unity-benchmarks.yml
 
 ## Comparison Suites
 
-Comparison asmdefs live under `Tests/Editor/Comparisons/` and benchmark against external libraries such as MessagePipe, UniRx, UniTask, and Zenject. They are excluded from `--include-perf` because the default `.unity-test-project/Packages/manifest.json` does not install those packages. To run them locally, add the external packages to the harness manifest and pass:
+Comparison asmdefs live under `Tests/Editor/Comparisons/` and benchmark against external libraries such as MessagePipe, UniRx, UniTask, and Zenject. They are excluded from `--include-perf` because the default generated manifest does not install those packages. To run them locally, add the external packages to the generated manifest or a local harness manifest and pass:
 
 ```bash
 bash scripts/unity/run-tests.sh --platform editmode --include-comparisons
@@ -213,6 +213,6 @@ The test catches the silent regression "I added a new perf asmdef and forgot to 
 
 - Source: `scripts/unity/lib/asmdef-discovery.js`
 - Source-of-truth: `.llm/context.md`
-- Active workflows: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-benchmarks.yml` (game-ci on self-hosted Windows)
+- Active workflows: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-benchmarks.yml` (direct Unity on self-hosted Windows)
 - Shared composite: `.github/actions/compute-unity-assemblies/action.yml`
 - Ubuntu reference mirrors: `.github/workflows-disabled/unity-tests.yml`, `.github/workflows-disabled/unity-benchmarks.yml`
