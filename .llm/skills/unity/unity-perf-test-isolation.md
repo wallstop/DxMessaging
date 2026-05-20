@@ -124,8 +124,8 @@ Three callers consume this module:
 
 - `scripts/unity/run-tests.sh` builds its assembly list at startup and passes it to Unity via `-assemblyNames`.
 - `scripts/unity/run-tests.ps1` does the same on Windows.
-- Disabled workflow templates under `.github/workflows-disabled/` still shell out to the same asmdef-discovery module so they can be re-enabled without hand-maintained lists.
-- The disabled `unity-benchmarks.yml` template calls `defaultIncludeAssemblies(process.cwd(), { includePerf: true })` and skips integrations plus external comparisons.
+- The active workflows under `.github/workflows/unity-*.yml` resolve the list through the `.github/actions/compute-unity-assemblies` composite action, which calls the same asmdef-discovery module -- no hand-maintained lists.
+- The active `unity-benchmarks.yml` passes `include-perf: "true"` to that composite (which calls `defaultIncludeAssemblies(process.cwd(), { includePerf: true })`) and skips integrations plus external comparisons. The `.github/workflows-disabled/*` files are the ubuntu reference mirrors of the active self-hosted Windows workflows.
 
 Because every caller goes through the same module, adding a new perf asmdef requires no edits to the workflows or runner scripts.
 
@@ -163,20 +163,24 @@ If the asmdef ends up in the `core` bucket instead, the most common cause is the
 
 ## Where Perf Actually Runs
 
-| Workflow               | Triggers                         | Includes Perf? |
-| ---------------------- | -------------------------------- | -------------- |
-| `unity-tests.yml`      | Moved out of `.github/workflows` | NO             |
-| `unity-il2cpp.yml`     | Moved out of `.github/workflows` | NO             |
-| `unity-benchmarks.yml` | Moved out of `.github/workflows` | YES            |
+| Workflow               | Triggers                                        | Includes Perf? |
+| ---------------------- | ----------------------------------------------- | -------------- |
+| `unity-tests.yml`      | PR / push / schedule / dispatch                 | NO             |
+| `unity-il2cpp.yml`     | PR / push / schedule / dispatch (job gated off) | NO             |
+| `unity-benchmarks.yml` | schedule / dispatch                             | YES            |
 
-Unity game-ci jobs are temporarily disabled in GitHub by moving them to
-`.github/workflows-disabled/` and kept local-only via `scripts/unity/run-tests.sh`.
-Verify any time you edit the workflow templates:
+The active `.github/workflows/unity-*.yml` workflows run Unity via game-ci on
+self-hosted Windows runners (benchmarks included). The `.github/workflows-disabled/*`
+files are the ubuntu reference mirrors kept for parity, not the live templates.
+Note: the `il2cpp-tests` job in `unity-il2cpp.yml` is currently gated off
+(`if: ${{ false }}`) pending two documented blockers (Linux-hardcoded build
+target in `TestRunnerBuilder.cs` and missing VS Build Tools in stock game-ci
+Windows images). Verify the active workflows still exist any time you edit them:
 
 ```bash
-test ! -e .github/workflows/unity-tests.yml
-test ! -e .github/workflows/unity-il2cpp.yml
-test ! -e .github/workflows/unity-benchmarks.yml
+test -e .github/workflows/unity-tests.yml
+test -e .github/workflows/unity-il2cpp.yml
+test -e .github/workflows/unity-benchmarks.yml
 ```
 
 ## Comparison Suites
@@ -211,4 +215,6 @@ The test catches the silent regression "I added a new perf asmdef and forgot to 
 
 - Source: `scripts/unity/lib/asmdef-discovery.js`
 - Source-of-truth: `.llm/context.md`
-- Workflow templates: `.github/workflows-disabled/unity-tests.yml`, `.github/workflows-disabled/unity-benchmarks.yml`
+- Active workflows: `.github/workflows/unity-tests.yml`, `.github/workflows/unity-benchmarks.yml` (game-ci on self-hosted Windows)
+- Shared composite: `.github/actions/compute-unity-assemblies/action.yml`
+- Ubuntu reference mirrors: `.github/workflows-disabled/unity-tests.yml`, `.github/workflows-disabled/unity-benchmarks.yml`

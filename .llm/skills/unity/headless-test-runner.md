@@ -109,7 +109,7 @@ status: "stable"
 | `--results`              | path       | `.artifacts/unity/results.xml`      | Override NUnit XML output path. Must live under the repo (bind-mount limit).                    |
 | `--help`                 | flag       | -                                   | Print usage and exit 0.                                                                         |
 
-The defaults match `defaultIncludeAssemblies(repoRoot)` from `scripts/unity/lib/asmdef-discovery.js`. That module is the single source of truth and is also called by the disabled `unity-tests.yml` workflow template.
+The defaults match `defaultIncludeAssemblies(repoRoot)` from `scripts/unity/lib/asmdef-discovery.js`. That module is the single source of truth and is also resolved by the active Unity workflows via the `.github/actions/compute-unity-assemblies` composite action.
 
 ## Expected Runtimes
 
@@ -198,14 +198,16 @@ Pick the matching error signature in stdout, then apply the listed remediation.
 
 `unityci/editor` images are amd64-only as of 2026-05. Running them via `docker run` on Apple Silicon falls back to QEMU emulation, which is roughly 10x slower and frequently hangs the editor during domain reload. There are two sanctioned paths on M-series Macs:
 
-1. Skip local Unity runs only when GitHub Unity workflows are re-enabled. They are currently local-only.
+1. Skip local Unity runs and rely on CI: the active GitHub Unity workflows run game-ci on self-hosted Windows runners, so an ARM Mac can push and let CI exercise Unity.
 1. Open the repo in a hosted GitHub Codespace (`gh codespace create`). The Codespace runs on amd64 hardware and the in-container Unity flow works the same as on Linux/Windows hosts.
 
 `.llm/context.md` carries a single-line warning so an agent flags this proactively when `uname -m` returns `arm64`.
 
-## CI Parity
+## CI vs Local
 
-When `CI=true` is set, the script does NOT spawn docker locally. It prints the equivalent `game-ci/unity-test-runner@v4` parameters and exits 0. This is what the disabled `unity-tests.yml` template consumes when re-enabled. The shape is locked by a Phase 4 contract test (`unity-runner-script-contract.test.js`) so help text, flag names, and the assembly source-of-truth cannot drift apart.
+CI no longer calls these scripts. The active Unity workflows run Unity through the maintained game-ci actions on self-hosted Windows runners (Docker Desktop in Windows-container mode): `game-ci/unity-test-runner@v4` for editmode/playmode (unity-tests, benchmarks, release) and `game-ci/unity-builder@v4` for the IL2CPP standalone build. Each game-ci step sets `runAsHostUser: "true"` so artifacts are owned by the runner user, and each workflow adds a results-validation step that parses the NUnit XML with native PowerShell `[xml]` and FAILS when zero tests ran -- game-ci passes even on a zero-test run, so this guard prevents the silent-green regression. The single source of truth for the assembly include list is still `scripts/unity/lib/asmdef-discovery.js` (`defaultIncludeAssemblies`), invoked from a `Compute test assembly list` step.
+
+The `run-tests.sh` / `run-tests.ps1` scripts are the canonical LOCAL reproduction path (devcontainer / local docker / local Windows Unity). They still validate `results.xml` via `parse-test-results.py`, FAIL the run if zero tests ran (`total=0`), and -- when `CI=true` is set -- emit GitHub Actions `::error::` annotations on failure (and a `::notice::` on pass). `CI` only adds annotations; it never skips work or changes control flow. The shape is locked by a contract test (`unity-runner-script-contract.test.js`) so help text, flag names, the assembly source-of-truth, and the never-report-success-without-results invariant cannot drift apart.
 
 ## See Also
 

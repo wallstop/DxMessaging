@@ -233,22 +233,45 @@ jobs:
         with:
           node-version: "22.18.0"
 
-      - name: Run Unity tests
-        shell: pwsh
+      # Single source of truth for the assembly include list: the same
+      # asmdef-discovery.js module the local run-tests scripts use. Extracted
+      # into a composite action so all four Unity workflows share one
+      # implementation. shell: pwsh is enforced inside the composite.
+      - name: Compute test assembly list
+        uses: ./.github/actions/compute-unity-assemblies
+
+      # Run the maintained game-ci action. It selects the Windows Unity image,
+      # translates the workspace path, activates the license, and (with
+      # runAsHostUser) writes artifacts owned by the runner user. It runs on the
+      # self-hosted Windows runner against Docker Desktop in Windows-container
+      # mode.
+      - name: Run Unity Test Runner
+        uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_VERSION: ${{ matrix.unity-version }}
-          CI: "true"
-        run: |
-          $results = ".artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}/results.xml"
-          ./scripts/unity/run-tests.ps1 `
-            -Platform "${{ matrix.test-mode }}" `
-            -UnityVersion "${{ matrix.unity-version }}" `
-            -Runner docker `
-            -Results $results
+        with:
+          projectPath: .unity-test-project
+          unityVersion: ${{ matrix.unity-version }}
+          testMode: ${{ matrix.test-mode }}
+          customParameters: -nographics -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}"
+          artifactsPath: .artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          checkName: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          runAsHostUser: "true"
+
+      # CLASS GUARD: game-ci passes the job even when ZERO tests run (e.g. the
+      # assembly filter matched nothing) -- the exact "silent green" failure
+      # mode this whole change exists to prevent. The shared composite action
+      # fails unless a results XML exists AND reports total > 0.
+      - name: Verify tests actually ran
+        if: always()
+        uses: ./.github/actions/verify-unity-results
+        with:
+          results-dir: .artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          label: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
 
       - name: Upload Unity test artifacts
         if: always()

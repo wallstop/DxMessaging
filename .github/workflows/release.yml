@@ -207,6 +207,12 @@ jobs:
       - verify-tag
       - runner-preflight
     runs-on: [self-hosted, Windows, RAM-64GB]
+    # Workflow-level permissions are `contents: read` (no checks: write), so
+    # this job needs its own checks: write or game-ci's check-run creation
+    # 403s and the release Unity gate silently stops failing on red tests.
+    permissions:
+      contents: read
+      checks: write
     timeout-minutes: 120
     concurrency:
       group: unity-pro-license
@@ -233,20 +239,56 @@ jobs:
 
       - name: Run Unity contract checks
         shell: pwsh
+        run: npm run test:unity-contracts
+
+      # Single source of truth for the assembly include list: the same
+      # asmdef-discovery.js module the local run-tests scripts use. Extracted
+      # into a composite action shared by all four Unity workflows; shell: pwsh
+      # is enforced inside the composite.
+      - name: Compute test assembly list
+        uses: ./.github/actions/compute-unity-assemblies
+
+      # Run the maintained game-ci action. It selects the Windows Unity image,
+      # translates the workspace path, activates the license, and (with
+      # runAsHostUser) writes artifacts owned by the runner user. It runs on the
+      # self-hosted Windows runner against Docker Desktop in Windows-container
+      # mode. The release gate is a single editmode run pinned to 2022.3.45f1.
+      - name: Run Unity Test Runner
+        uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_VERSION: "2022.3.45f1"
-          CI: "true"
-        run: |
-          npm run test:unity-contracts
-          ./scripts/unity/run-tests.ps1 `
-            -Platform editmode `
-            -UnityVersion "2022.3.45f1" `
-            -Runner docker `
-            -Results ".artifacts/unity/release-editmode/results.xml"
+        with:
+          projectPath: .unity-test-project
+          unityVersion: "2022.3.45f1"
+          testMode: editmode
+          customParameters: -nographics -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}"
+          artifactsPath: .artifacts/unity/release-editmode
+          checkName: Unity release editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          runAsHostUser: "true"
+
+      # CLASS GUARD: game-ci passes the job even when ZERO tests run (e.g. the
+      # assembly filter matched nothing) -- the exact "silent green" failure
+      # mode this whole change exists to prevent. The shared composite action
+      # fails unless a results XML exists AND reports total > 0.
+      - name: Verify tests actually ran
+        if: always()
+        uses: ./.github/actions/verify-unity-results
+        with:
+          results-dir: .artifacts/unity/release-editmode
+          label: Unity release editmode
+
+      - name: Upload release Unity artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unity-release-editmode
+          path: .artifacts/unity/release-editmode
+          if-no-files-found: warn
+          retention-days: 14
 
   publish:
     name: Publish npm package and GitHub Release

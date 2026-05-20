@@ -1,0 +1,23 @@
+name: Compute Unity test assembly list
+description: >-
+  Resolve the default Unity test assembly include list via the single-source
+  asmdef-discovery.js module and export it as the DXM_TEST_ASSEMBLIES env var.
+inputs:
+  include-perf:
+    description: "Include the Benchmarks/Allocations perf assemblies."
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Compute assembly list
+      shell: pwsh
+      run: |
+        $opts = if ("${{ inputs.include-perf }}" -eq "true") { "{ includePerf: true }" } else { "{}" }
+        $assemblies = node -e "const m=require('./scripts/unity/lib/asmdef-discovery.js'); console.log(m.defaultIncludeAssemblies(process.cwd(), $opts).join(';'))"
+        if ([string]::IsNullOrWhiteSpace($assemblies)) {
+          Write-Host "::error::asmdef discovery returned an empty assembly list"
+          exit 1
+        }
+        Add-Content -Path $env:GITHUB_ENV -Value "DXM_TEST_ASSEMBLIES=$assemblies" -Encoding utf8
+        Write-Host "Resolved assemblies: $assemblies"

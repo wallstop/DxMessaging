@@ -158,15 +158,24 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: true,
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
-    hasMatrix: true
+    hasMatrix: true,
+    // editmode/playmode runs use the game-ci test runner action.
+    gameCiAction: "game-ci/unity-test-runner@v4"
   },
   {
     workflow: "unity-il2cpp.yml",
     jobId: "il2cpp-tests",
-    requiresProtectedBranchGuard: true,
+    // GATED OFF: the il2cpp-tests job is `if: ${{ false }}` (red-by-design on
+    // Windows containers -- see the workflow comments). The protected-branch
+    // guard no longer applies because the job never runs; that is asserted
+    // separately by the "il2cpp-tests job is gated off" test below.
+    requiresProtectedBranchGuard: false,
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
-    hasMatrix: true
+    hasMatrix: true,
+    // IL2CPP builds a standalone player, so it uses the game-ci BUILDER
+    // action (not the test-runner action) and then runs the produced player.
+    gameCiAction: "game-ci/unity-builder@v4"
   },
   {
     workflow: "unity-benchmarks.yml",
@@ -174,7 +183,8 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: false,
     requiresLibraryCache: true,
     requiresLicenseSecrets: true,
-    hasMatrix: true
+    hasMatrix: true,
+    gameCiAction: "game-ci/unity-test-runner@v4"
   },
   {
     workflow: "release.yml",
@@ -182,7 +192,8 @@ const UNITY_LICENSED_JOBS = [
     requiresProtectedBranchGuard: false,
     requiresLibraryCache: false,
     requiresLicenseSecrets: true,
-    hasMatrix: false
+    hasMatrix: false,
+    gameCiAction: "game-ci/unity-test-runner@v4"
   }
 ];
 
@@ -274,6 +285,110 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       }
     }
   );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow runs Unity via the maintained game-ci action ($gameCiAction)",
+    ({ workflow, gameCiAction }) => {
+      // CI now runs Unity through the maintained game-ci actions on
+      // self-hosted Windows (NOT the local run-tests.ps1 docker path).
+      // editmode/playmode workflows use game-ci/unity-test-runner@v4;
+      // IL2CPP builds a player with game-ci/unity-builder@v4. The local
+      // runner contract is guarded separately by
+      // unity-runner-script-contract.test.js.
+      const text = readWorkflow(workflow);
+      expect(text).toContain(`uses: ${gameCiAction}`);
+      // The migrated workflows must NOT call the local docker runner anymore.
+      expect(text).not.toContain("run-tests.ps1");
+      expect(text).not.toContain("-Runner docker");
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow runs the game-ci step as the host user (runAsHostUser)",
+    ({ workflow }) => {
+      // runAsHostUser: "true" makes game-ci write artifacts owned by the
+      // runner user instead of root, so subsequent steps and the Library
+      // cache are readable/writable. Required on the self-hosted runners.
+      const text = readWorkflow(workflow);
+      expect(text).toMatch(/runAsHostUser:\s*["']true["']/);
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow grants checks: write so game-ci can create the check run",
+    ({ workflow, jobId }) => {
+      // game-ci creates a check run via githubToken. With only contents: read
+      // that POST 403s and the Unity gate silently stops failing on red tests.
+      // unity-tests / benchmarks / il2cpp grant checks: write at workflow
+      // scope; release.yml is contents: read at workflow scope and MUST grant
+      // checks: write on the unity-checks job (Fix 1). Pin both forms so the
+      // permission cannot regress.
+      const parsed = loadWorkflowYaml(workflow);
+      if (workflow === "release.yml") {
+        expect(parsed.jobs[jobId].permissions).toEqual({
+          contents: "read",
+          checks: "write"
+        });
+      } else {
+        expect(parsed.permissions).toMatchObject({ checks: "write" });
+      }
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow resolves its assembly list via the compute-unity-assemblies composite",
+    ({ workflow }) => {
+      // The duplicated inline `Compute test assembly list` pwsh steps were
+      // extracted into a single composite action (single source of truth).
+      // Every Unity workflow must reference it instead of re-implementing the
+      // asmdef-discovery shell-out.
+      const text = readWorkflow(workflow);
+      expect(text).toContain("uses: ./.github/actions/compute-unity-assemblies");
+    }
+  );
+
+  // The il2cpp-tests job is gated off and keeps a bespoke inline
+  // `Parse IL2CPP test results` step (different exit-code-first guard shape),
+  // so it does NOT use the shared verify composite. The verify composite is
+  // required for the workflows whose game-ci jobs still actually run.
+  test.each(UNITY_LICENSED_JOBS.filter((job) => job.workflow !== "unity-il2cpp.yml"))(
+    "$workflow validates tests actually ran via the verify-unity-results composite",
+    ({ workflow }) => {
+      // CLASS GUARD: game-ci passes the job even when ZERO tests run -- the
+      // exact "silent green" failure mode this migration exists to prevent.
+      // The guard logic now lives in the shared verify composite; every
+      // running game-ci workflow must reference it. The load-bearing
+      // <test-run>/total parsing is asserted against the composite action
+      // file itself below.
+      const text = readWorkflow(workflow);
+      expect(text).toContain("uses: ./.github/actions/verify-unity-results");
+    }
+  );
+
+  test("verify-unity-results composite action carries the load-bearing guard logic", () => {
+    // Pin the actual guard logic to the composite action file so it cannot be
+    // hollowed out during a future refactor. This is the single source of
+    // truth for the "0 tests ran" / silent-green guard.
+    const actionPath = path.join(ACTIONS_DIR, "verify-unity-results", "action.yml");
+    expect(fs.existsSync(actionPath)).toBe(true);
+    const text = fs.readFileSync(actionPath, "utf8");
+    expect(text).toContain("<test-run");
+    expect(text).toMatch(/\$total\s*=\s*\[int\]/);
+    expect(text).toContain("$total -lt 1");
+    // Composite run: steps on self-hosted Windows MUST set shell: pwsh.
+    expect(text).toMatch(/shell:\s*pwsh/);
+  });
+
+  test("compute-unity-assemblies composite action shells out to asmdef-discovery", () => {
+    // Pin the single-source assembly resolution to the composite action file.
+    const actionPath = path.join(ACTIONS_DIR, "compute-unity-assemblies", "action.yml");
+    expect(fs.existsSync(actionPath)).toBe(true);
+    const text = fs.readFileSync(actionPath, "utf8");
+    expect(text).toContain("asmdef-discovery");
+    expect(text).toContain("DXM_TEST_ASSEMBLIES");
+    // Composite run: steps on self-hosted Windows MUST set shell: pwsh.
+    expect(text).toMatch(/shell:\s*pwsh/);
+  });
 
   test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresProtectedBranchGuard))(
     "$workflow job '$jobId' guards same-repo + protected-branch execution",
@@ -378,9 +493,37 @@ describe(".github/workflows/unity-il2cpp.yml", () => {
     expect(text).not.toContain("pull_request_target");
   });
 
-  test("runs the standalone IL2CPP path through the repo runner", () => {
-    expect(text).toContain("-Platform standalone");
-    expect(text).toContain("-Runner docker");
+  test("builds the standalone IL2CPP player via the game-ci builder for Windows", () => {
+    // IL2CPP now builds a player with game-ci/unity-builder@v4 and runs it,
+    // instead of the old local run-tests.ps1 -Platform standalone -Runner
+    // docker path. The build target MUST be StandaloneWindows64: a Windows
+    // container cannot execute a Linux ELF (Tests.exe, not Tests.x86_64).
+    expect(text).toContain("uses: game-ci/unity-builder@v4");
+    expect(text).toContain("targetPlatform: StandaloneWindows64");
+    expect(text).not.toContain("-Platform standalone");
+    expect(text).not.toContain("-Runner docker");
+  });
+
+  test("resolves its assembly list via the compute-unity-assemblies composite", () => {
+    // The inline `Compute test assembly list` pwsh step was extracted into the
+    // shared composite (no include-perf for il2cpp). The bespoke
+    // `Parse IL2CPP test results` step stays inline (different guard shape).
+    expect(text).toContain("uses: ./.github/actions/compute-unity-assemblies");
+  });
+
+  test("il2cpp-tests job is gated off (if: false) pending the two documented blockers", () => {
+    // The job is red-by-design on Windows containers: TestRunnerBuilder.cs
+    // hardcodes StandaloneLinux64 (a Windows container cannot run a Linux ELF)
+    // and Windows IL2CPP needs VS Build Tools absent from stock game-ci images.
+    // Because all Unity jobs share the single-seat unity-pro-license group, a
+    // red il2cpp job would also starve the working editmode/playmode jobs of
+    // the license slot, so it must stay gated off until both blockers clear.
+    const il2cppJob = parsed.jobs["il2cpp-tests"];
+    expect(il2cppJob).toBeDefined();
+    expect(String(il2cppJob.if).trim()).toMatch(/^(\$\{\{\s*false\s*\}\}|false)$/);
+    // Keep the migrated build/run/parse steps intact so re-enabling is a
+    // one-line `if:` flip -- guard against silent removal.
+    expect(text).toContain("uses: game-ci/unity-builder@v4");
   });
 });
 
@@ -414,8 +557,14 @@ describe(".github/workflows/unity-benchmarks.yml", () => {
     expect(onSection).not.toMatch(/^\s{2}push:/m);
   });
 
-  test("includes perf assemblies through the repo runner", () => {
-    expect(text).toContain("-IncludePerf");
+  test("opts the assembly computation into perf assemblies", () => {
+    // Benchmarks must include the perf (Benchmarks/Allocations) assemblies.
+    // The migrated workflow now opts in by passing include-perf: "true" to the
+    // shared compute-unity-assemblies composite (which forwards
+    // { includePerf: true } to asmdef-discovery) rather than computing it
+    // inline or calling run-tests.ps1.
+    expect(text).toContain("uses: ./.github/actions/compute-unity-assemblies");
+    expect(text).toContain('include-perf: "true"');
     expect(text).not.toContain("pull_request_target");
   });
 });

@@ -191,7 +191,7 @@ When a new test suite needs an additional UPM package (a DI container, a third-p
 1. Open the harness in Unity once locally so UPM can resolve and write `packages-lock.json`. Commit the regenerated lock.
 1. Re-run the headless runner to confirm the new dependency loads cleanly.
 
-Avoid adding heavyweight runtime dependencies unless the corresponding tests can opt in via the `--include-integrations` flag. The default suite stays lean for local runs and for the Unity gate when it is re-enabled.
+Avoid adding heavyweight runtime dependencies unless the corresponding tests can opt in via the `--include-integrations` flag. The default suite stays lean for local runs and for the active Unity gate (game-ci on self-hosted Windows).
 
 ## See Also
 

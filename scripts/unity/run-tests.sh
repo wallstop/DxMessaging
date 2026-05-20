@@ -7,9 +7,11 @@
 # in .devcontainer/devcontainer.json) and streams Unity's log to stdout in
 # realtime.
 #
-# This is the canonical local entry point. CI (Phase 3) invokes
-# game-ci/unity-test-runner@v4 directly; in CI mode this script prints the
-# equivalent parameters and exits 0 instead of spawning docker locally.
+# This is the canonical LOCAL entry point (devcontainer / local docker) for the
+# headless Unity test flow. CI no longer calls this script: the GitHub workflows
+# run Unity via the maintained game-ci actions directly (see
+# .github/workflows/unity-*.yml). Locally, the run FAILS if zero tests run
+# (results.xml is validated, total>0 required).
 #
 # Default behavior excludes Benchmarks/Allocations/Comparisons assemblies per
 # .llm/context.md line 114 (perf isolation). Use --include-perf to override.
@@ -103,9 +105,9 @@ Environment:
   UNITY_EMAIL, UNITY_PASSWORD  Unity account credentials. Required with
                              UNITY_SERIAL and commonly required by GameCI when
                              reactivating a UNITY_LICENSE .ulf.
-  CI                         When "true", prints the equivalent
-                             game-ci/unity-test-runner@v4 parameters and exits
-                             without invoking docker locally.
+  CI                         When "true", emits GitHub Actions ::error::
+                             annotations on failure; the docker run still
+                             executes normally.
   LOCAL_WORKSPACE_FOLDER     HOST path to the repo root. Set automatically by
                              the VS Code Dev Containers extension when
                              docker-outside-of-docker is configured.
@@ -243,26 +245,6 @@ if [[ -z "${ASSEMBLIES}" ]]; then
     printf '%sError: assembly include list is empty (asmdef discovery failed).%s\n' \
         "${C_RED}" "${C_NC}" >&2
     exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# CI mode short-circuit
-# ---------------------------------------------------------------------------
-if [[ "${CI:-false}" == "true" ]]; then
-    printf '%sCI mode detected — skipping local docker invocation.%s\n' \
-        "${C_BLUE}" "${C_NC}"
-    printf 'game-ci/unity-test-runner@v4 parameters:\n'
-    printf '  projectPath:      .unity-test-project\n'
-    printf '  unityVersion:     %s\n' "${UNITY_VERSION_RESOLVED}"
-    printf '  testMode:         %s\n' "${PLATFORM}"
-    assemblies_ci_q="$(printf '%q' "${ASSEMBLIES}")"
-    printf '  customParameters: -nographics -assemblyNames %s' "${assemblies_ci_q}"
-    if [[ -n "${TEST_FILTER}" ]]; then
-        filter_ci_q="$(printf '%q' "${TEST_FILTER}")"
-        printf ' -testFilter %s' "${filter_ci_q}"
-    fi
-    printf '\n'
-    exit 0
 fi
 
 # ---------------------------------------------------------------------------
@@ -601,6 +583,10 @@ build_standalone_run_cmd_inner() {
 # ---------------------------------------------------------------------------
 # Invoke docker
 # ---------------------------------------------------------------------------
+# Plan banner: one line describing exactly what is about to run, emitted before
+# the docker dispatch so the chosen path is visible in local + CI logs.
+printf '%s[run-tests] runner=docker platform=%s unity=%s ci=%s%s\n' \
+    "${C_BLUE}" "${PLATFORM}" "${UNITY_VERSION_RESOLVED}" "${CI:-}" "${C_NC}"
 printf '%sLaunching %s%s\n' "${C_BLUE}" "${IMAGE_REF}" "${C_NC}"
 printf '  platform=%s assemblies=%s\n' "${PLATFORM}" "${ASSEMBLIES}"
 printf '  results=%s log=%s/log.txt\n' "${RESULTS_PATH}" "${ARTIFACTS_DIR}"
@@ -669,6 +655,10 @@ print_results_summary() {
     local results_xml="$1"
     if [[ ! -f "${results_xml}" ]]; then
         printf '%sNo results.xml at %s%s\n' "${C_YELLOW}" "${results_xml}" "${C_NC}"
+        if [[ "${CI:-false}" == "true" ]]; then
+            printf '::error::run-tests: no results.xml produced for %s/%s -- tests did not run\n' \
+                "${PLATFORM}" "${UNITY_VERSION_RESOLVED}"
+        fi
         return 2
     fi
 
@@ -677,12 +667,20 @@ print_results_summary() {
     if ! summary="$(python3 "${parser}" "${results_xml}")"; then
         printf '%sCould not parse results summary: %s%s\n' \
             "${C_YELLOW}" "${summary}" "${C_NC}"
+        if [[ "${CI:-false}" == "true" ]]; then
+            printf '::error::run-tests: could not parse results.xml for %s/%s -- %s\n' \
+                "${PLATFORM}" "${UNITY_VERSION_RESOLVED}" "${summary}"
+        fi
         return 2
     fi
 
     if [[ "${summary}" != OK* ]]; then
         printf '%sCould not parse results summary: %s%s\n' \
             "${C_YELLOW}" "${summary}" "${C_NC}"
+        if [[ "${CI:-false}" == "true" ]]; then
+            printf '::error::run-tests: could not parse results.xml for %s/%s -- %s\n' \
+                "${PLATFORM}" "${UNITY_VERSION_RESOLVED}" "${summary}"
+        fi
         return 2
     fi
 
@@ -703,17 +701,29 @@ print_results_summary() {
             "${C_RED}" "${C_NC}" >&2
         printf '  failed=%s passed=%s skipped=%s\n' \
             "${failed:-0}" "${passed:-0}" "${skipped:-0}" >&2
+        if [[ "${CI:-false}" == "true" ]]; then
+            printf '::error::run-tests: 0 tests ran (total=0) for %s/%s -- check assembly list / filter\n' \
+                "${PLATFORM}" "${UNITY_VERSION_RESOLVED}"
+        fi
         return 2
     fi
 
     if [[ "${failed:-0}" == "0" ]]; then
         printf '%sPASS%s %s passed (total=%s skipped=%s)\n' \
             "${C_GREEN}" "${C_NC}" "${passed:-0}" "${total}" "${skipped:-0}"
+        if [[ "${CI:-false}" == "true" ]]; then
+            printf '::notice::run-tests: %s passed (total=%s skipped=%s) for %s/%s\n' \
+                "${passed:-0}" "${total}" "${skipped:-0}" "${PLATFORM}" "${UNITY_VERSION_RESOLVED}"
+        fi
         return 0
     fi
 
     printf '%sFAIL%s %s failed of %s (passed=%s skipped=%s)\n' \
         "${C_RED}" "${C_NC}" "${failed}" "${total}" "${passed:-0}" "${skipped:-0}"
+    if [[ "${CI:-false}" == "true" ]]; then
+        printf '::error::run-tests: %s failed of %s for %s/%s (passed=%s skipped=%s)\n' \
+            "${failed}" "${total}" "${PLATFORM}" "${UNITY_VERSION_RESOLVED}" "${passed:-0}" "${skipped:-0}"
+    fi
     return 1
 }
 

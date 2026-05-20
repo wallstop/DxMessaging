@@ -85,13 +85,13 @@ For Unity-side tests in `Tests/Editor/` or `Tests/Runtime/` (excludes Benchmarks
 - PlayMode: `bash scripts/unity/run-tests.sh --platform playmode`
 - IL2CPP standalone: `bash scripts/unity/run-tests.sh --platform standalone`
 - Filter: `--filter <regex>` (passed to `-testFilter`)
-- Include perf: `--include-perf` (off by default; GitHub benchmark workflow template is disabled)
+- Include perf: `--include-perf` (off by default; the active `unity-benchmarks.yml` opts in via the `compute-unity-assemblies` action's `include-perf` input)
 - Include comparisons: `--include-comparisons` (off by default; requires MessagePipe/UniRx/UniTask/Zenject packages in the harness)
 - Include DI integrations (Reflex/Zenject/VContainer): `--include-integrations` (off by default)
 - Realtime log streams to stdout; XML written to `.artifacts/unity/results.xml` unless `--results` overrides it
 - Bootstrap project: `.unity-test-project/` -- see [UPM Test Harness](./skills/unity/upm-test-harness.md)
 - License: see [Unity License Bootstrap](./skills/unity/unity-license-bootstrap.md) (Personal/GameCI: raw `.ulf` in `UNITY_LICENSE` plus credentials; Professional: `UNITY_SERIAL` plus credentials; local shells may use `UNITY_LICENSE_B64`.)
-- ARM Mac (Apple Silicon): not supported locally -- use a non-ARM local shell or Codespace while Unity GitHub workflows are disabled
+- ARM Mac (Apple Silicon): not supported locally -- use a non-ARM local shell or Codespace, or rely on the active Unity GitHub workflows (game-ci on self-hosted Windows)
 - For source-generator tests (no Unity), use `dotnet test SourceGenerators/...Tests`
 
 ## GitHub Actions / CI Runners

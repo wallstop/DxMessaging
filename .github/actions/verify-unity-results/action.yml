@@ -1,0 +1,43 @@
+name: Verify Unity tests actually ran
+description: >-
+  Fail unless an NUnit results.xml under results-dir reports total > 0. Closes
+  the game-ci "passes with zero tests" silent-green gap.
+inputs:
+  results-dir:
+    description: "Directory game-ci wrote the NUnit results XML into."
+    required: true
+  label:
+    description: "Human label used in log lines and annotations."
+    required: false
+    default: "Unity tests"
+runs:
+  using: composite
+  steps:
+    - name: Verify tests actually ran
+      shell: pwsh
+      run: |
+        $dir = "${{ inputs.results-dir }}"
+        $label = "${{ inputs.label }}"
+        if (-not (Test-Path $dir)) {
+          Write-Host "::error::No artifacts directory ($dir) -- Unity Test Runner did not produce results for $label"
+          exit 1
+        }
+        $xml = Get-ChildItem -Path $dir -Recurse -Filter *.xml -ErrorAction SilentlyContinue |
+          Where-Object { Select-String -Path $_.FullName -Pattern '<test-run' -Quiet } |
+          Select-Object -First 1
+        if (-not $xml) {
+          Write-Host "::error::No NUnit results.xml (with a <test-run> element) under $dir -- tests did not run for $label"
+          exit 1
+        }
+        [xml]$doc = Get-Content -LiteralPath $xml.FullName
+        $run = $doc.SelectSingleNode('//test-run')
+        $total = [int]($run.total)
+        $passed = [int]($run.passed)
+        $failed = [int]($run.failed)
+        $skipped = [int]($run.skipped)
+        Write-Host "Results: total=$total passed=$passed failed=$failed skipped=$skipped ($($xml.Name))"
+        if ($total -lt 1) {
+          Write-Host "::error::0 tests ran for $label -- check the assembly list / filter"
+          exit 1
+        }
+        Write-Host "::notice::${label}: total=$total passed=$passed failed=$failed skipped=$skipped"

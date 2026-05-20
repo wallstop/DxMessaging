@@ -144,9 +144,10 @@ setup, not an email/password-only activation.
 | `UNITY_PASSWORD` | Unity account password | Yes      |
 | `UNITY_LICENSE`  | Raw `.ulf` contents    | Yes      |
 
-The disabled workflow templates under `.github/workflows-disabled/unity-*.yml`
-pass all three to `game-ci/unity-test-runner@v4`; it picks the path from which
-secrets are set after the templates are moved back under `.github/workflows/`.
+The active workflows under `.github/workflows/unity-*.yml` pass all three to
+`game-ci/unity-test-runner@v4` on the self-hosted Windows runners; it picks the
+activation path from whichever secrets are set. The
+`.github/workflows-disabled/*` files are the ubuntu reference mirrors.
 
 ## Professional Serial Path
 

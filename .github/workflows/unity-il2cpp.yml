@@ -142,12 +142,22 @@ jobs:
     needs:
       - matrix-config
       - runner-preflight
-    if: >-
-      ${{
-        (github.event_name != 'pull_request' ||
-          github.event.pull_request.head.repo.full_name == github.repository) &&
-        (github.event_name != 'push' || github.ref_protected)
-      }}
+    # GATED OFF (if: false): this job is red-by-design today and must not run.
+    # See the BEST-EFFORT comment block in the steps below for the full detail.
+    # Two documented blockers keep it broken on Windows containers:
+    #   1. TestRunnerBuilder.BuildIL2CPPTestPlayer
+    #      (.unity-test-project/Assets/Editor/TestRunnerBuilder.cs:79) hardcodes
+    #      BuildTarget.StandaloneLinux64, so it emits a Linux ELF a Windows
+    #      container cannot execute -- even though we request StandaloneWindows64.
+    #   2. Windows IL2CPP needs the VS C++ Build Tools, which are not present in
+    #      stock game-ci Windows images (a custom image is required).
+    # Because every Unity job shares the single-seat unity-pro-license
+    # concurrency group, a red-by-design il2cpp job would also starve the working
+    # editmode/playmode jobs of the license slot. The migrated build/run/parse
+    # steps below are kept intact so re-enabling is a one-line `if:` flip once
+    # TestRunnerBuilder.cs honors the requested target AND a custom game-ci
+    # Windows image with VS Build Tools exists.
+    if: ${{ false }}
     runs-on: [self-hosted, Windows, RAM-64GB]
     timeout-minutes: 120
     concurrency:
@@ -190,27 +200,155 @@ jobs:
         with:
           node-version: "22.18.0"
 
-      - name: Run IL2CPP tests
-        shell: pwsh
+      # =====================================================================
+      # BEST-EFFORT / PENDING RUNNER VALIDATION -- READ BEFORE EDITING.
+      # =====================================================================
+      # IL2CPP standalone in a Windows container is fundamentally harder than
+      # the editmode/playmode game-ci path:
+      #
+      #   1. IL2CPP for StandaloneWindows64 requires the Visual Studio C++
+      #      Build Tools at build time. Microsoft does NOT permit redistributing
+      #      VS Build Tools inside the stock game-ci Windows Unity images, so a
+      #      CUSTOM image (game-ci base + VS Build Tools installed) is very
+      #      likely required for this job to actually build a Windows player.
+      #      Until that image is built and the self-hosted runner is validated,
+      #      treat this job as best-effort.
+      #
+      #   2. CAVEAT (Unity internals): the build entry point
+      #      WallstopStudios.DxMessaging.TestHarness.Editor.TestRunnerBuilder.
+      #      BuildIL2CPPTestPlayer (in .unity-test-project/Assets/Editor/
+      #      TestRunnerBuilder.cs) HARDCODES BuildTarget.StandaloneLinux64.
+      #      DXM_IL2CPP_BUILD_PATH below only controls the OUTPUT FILE PATH/NAME,
+      #      not the build target. So even though we request StandaloneWindows64
+      #      on the unity-builder step and name the output Tests.exe, the .cs
+      #      method as written will still produce a Linux ELF unless/until the
+      #      builder is taught to honor the requested target (a Unity-internals
+      #      change outside this CI migration's scope). A Windows container
+      #      cannot execute a Linux ELF, so the "Run IL2CPP player" step will
+      #      fail until TestRunnerBuilder.cs is updated. This is documented here
+      #      rather than silently broken.
+      # =====================================================================
+
+      # Single source of truth for the assembly include list: the same
+      # asmdef-discovery.js module the local run-tests scripts use. Extracted
+      # into a composite action shared by all four Unity workflows; shell: pwsh
+      # is enforced inside the composite. NOTE: -assemblyNames is a Unity Test
+      # Runner argument consumed at PLAYER LAUNCH, not at build time -- the
+      # filter is applied in the "Run IL2CPP player" step below.
+      - name: Compute test assembly list
+        uses: ./.github/actions/compute-unity-assemblies
+
+      # Build the IL2CPP player with the maintained game-ci builder. Targets
+      # StandaloneWindows64 (a Windows container CANNOT execute a Linux ELF).
+      # runAsHostUser writes the build owned by the runner user. See the
+      # BEST-EFFORT caveat above re: VS Build Tools + TestRunnerBuilder.cs.
+      - name: Build IL2CPP test player
+        uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_VERSION: ${{ matrix.unity-version }}
-          CI: "true"
+          # TestRunnerBuilder.BuildIL2CPPTestPlayer reads this env var to decide
+          # where to write the player. A Windows path under github.workspace
+          # ending in Tests.exe. (See caveat above: the .cs method as written
+          # still picks the build TARGET itself; this only sets the output path.)
+          DXM_IL2CPP_BUILD_PATH: ${{ github.workspace }}\builds\StandaloneWindows64\IL2CPPTests\Tests.exe
+        with:
+          projectPath: .unity-test-project
+          unityVersion: ${{ matrix.unity-version }}
+          targetPlatform: StandaloneWindows64
+          buildMethod: WallstopStudios.DxMessaging.TestHarness.Editor.TestRunnerBuilder.BuildIL2CPPTestPlayer
+          # -assemblyNames is consumed at player launch (below), not at build.
+          customParameters: -nographics
+          buildName: IL2CPPTests
+          buildsPath: builds
+          runAsHostUser: "true"
+
+      # Launch the produced player and capture its exit code. The player runs
+      # the embedded Unity Test Runner and writes NUnit XML. Capture $LASTEXITCODE
+      # immediately -- a crash can leave failed=0/total>0 which the guard below
+      # treats as a failure via the exit-code-first ordering.
+      - name: Run IL2CPP player
+        id: run-il2cpp
+        shell: pwsh
         run: |
-          ./scripts/unity/run-tests.ps1 `
-            -Platform standalone `
-            -UnityVersion "${{ matrix.unity-version }}" `
-            -Runner docker `
-            -Results ".artifacts/unity/il2cpp-${{ matrix.unity-version }}/results.xml"
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $binary = "${{ github.workspace }}\builds\StandaloneWindows64\IL2CPPTests\Tests.exe"
+          if (-not (Test-Path $binary)) {
+            $alt = Get-ChildItem -Path . -Recurse -Filter Tests.exe -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '[\\/](builds|Builds)[\\/]' } |
+              Select-Object -First 1
+            if ($alt) {
+              $binary = $alt.FullName
+            } else {
+              Write-Host "::error::IL2CPP player binary (Tests.exe) not found under builds/ -- see the BEST-EFFORT caveat (Linux target / VS Build Tools)"
+              Get-ChildItem -Path . -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match '[\\/](builds|Builds)[\\/]' } |
+                Select-Object -ExpandProperty FullName
+              exit 1
+            }
+          }
+          Write-Host "Launching $binary"
+          & $binary -batchmode -nographics -runTests `
+            -testResults "artifacts/il2cpp-results.xml" `
+            -assemblyNames "${{ env.DXM_TEST_ASSEMBLIES }}" `
+            -logFile - 2>&1 | Tee-Object -FilePath "artifacts/il2cpp-log.txt"
+          $status = $LASTEXITCODE
+          "il2cpp-exit-code=$status" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Player exited with status $status"
+
+      # GUARD ORDER (mirrors the disabled reference): check the player exit code
+      # FIRST (a crash can leave failed=0/total>0 yet the binary aborted), THEN
+      # require total>0, THEN require failed==0. Native [xml] parsing keeps this
+      # dependent only on PowerShell (no python3 on the Windows host).
+      - name: Parse IL2CPP test results
+        if: always()
+        shell: pwsh
+        env:
+          IL2CPP_EXIT_CODE: ${{ steps.run-il2cpp.outputs.il2cpp-exit-code }}
+        run: |
+          $xml = "artifacts/il2cpp-results.xml"
+          if (-not (Test-Path $xml)) {
+            Write-Host "::error::IL2CPP results XML missing at $xml -- player did not produce results"
+            exit 1
+          }
+          [xml]$doc = Get-Content -LiteralPath $xml
+          $run = $doc.SelectSingleNode('//test-run')
+          if (-not $run) {
+            Write-Host "::error::No <test-run> element in $xml -- tests did not run"
+            exit 1
+          }
+          $total = [int]($run.total)
+          $passed = [int]($run.passed)
+          $failed = [int]($run.failed)
+          $skipped = [int]($run.skipped)
+          Write-Host "Results: total=$total passed=$passed failed=$failed skipped=$skipped"
+          # N3: check the player exit code FIRST. A crash after partial test
+          # execution can leave failed=0/total>0 yet the binary aborted; we must
+          # not let that look like a green run.
+          $exitCode = $env:IL2CPP_EXIT_CODE
+          if (-not [string]::IsNullOrEmpty($exitCode) -and $exitCode -ne "0") {
+            Write-Host "::error::IL2CPP player exited with code $exitCode (possible crash)"
+            exit [int]$exitCode
+          }
+          if ($total -lt 1) {
+            Write-Host "::error::IL2CPP run produced 0 tests -- check the assembly list"
+            exit 1
+          }
+          if ($failed -ne 0) {
+            Write-Host "::error::IL2CPP run reported $failed failed test(s)"
+            exit 1
+          }
+          Write-Host "::notice::IL2CPP ${{ matrix.unity-version }}: total=$total passed=$passed failed=$failed skipped=$skipped"
 
       - name: Upload IL2CPP artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: il2cpp-${{ matrix.unity-version }}
-          path: .artifacts/unity/il2cpp-${{ matrix.unity-version }}
+          path: |
+            artifacts/il2cpp-results.xml
+            artifacts/il2cpp-log.txt
           if-no-files-found: warn
           retention-days: 14

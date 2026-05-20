@@ -210,20 +210,80 @@ if ([string]::IsNullOrWhiteSpace($Assemblies)) {
 }
 
 # ---------------------------------------------------------------------------
-# CI mode short-circuit
+# Summary tail (B2: delegate parsing to scripts/unity/lib/parse-test-results.py
+# so this script, the IL2CPP workflow, and run-tests.sh all share one parser
+# implementation. The helper emits "OK total=.. passed=.. failed=.. skipped=.."
+# on success and "PARSE_ERROR:<reason>" on failure with exit code 2.)
+#
+# Defined here (before any runner dispatch) so BOTH the local and docker paths
+# can route their results validation through the same function. The contract is
+# uniform: a runner must NEVER report success without a results.xml proving
+# tests actually ran (total > 0). Under CI we additionally emit GitHub Actions
+# annotations so failures surface in the Actions UI (annotations only -- they
+# do NOT change control flow or skip work).
 # ---------------------------------------------------------------------------
-if ($env:CI -eq 'true') {
-    Write-Host 'CI mode detected -- skipping local docker invocation.' -ForegroundColor Cyan
-    Write-Host 'game-ci/unity-test-runner@v4 parameters:'
-    Write-Host "  projectPath:      .unity-test-project"
-    Write-Host "  unityVersion:     $UnityVersion"
-    Write-Host "  testMode:         $Platform"
-    $cp = "-nographics -assemblyNames `"$Assemblies`""
-    if (-not [string]::IsNullOrWhiteSpace($Filter)) {
-        $cp = "$cp -testFilter `"$Filter`""
+function Write-ResultsSummary {
+    param([string]$ResultsXml)
+
+    if (-not (Test-Path $ResultsXml)) {
+        Write-Host "No results.xml at $ResultsXml" -ForegroundColor Yellow
+        if ($env:CI -eq 'true') {
+            Write-Host "::error::run-tests: no results.xml produced for $Platform/$UnityVersion -- tests did not run"
+        }
+        return 2
     }
-    Write-Host "  customParameters: $cp"
-    return
+
+    $parser = Join-Path $RepoRoot 'scripts/unity/lib/parse-test-results.py'
+    $summary = & python3 $parser $ResultsXml
+    if ($LASTEXITCODE -ne 0 -or -not ($summary -match '^OK ')) {
+        Write-Host "Could not parse results summary: $summary" -ForegroundColor Yellow
+        if ($env:CI -eq 'true') {
+            Write-Host "::error::run-tests: could not parse results.xml for $Platform/$UnityVersion -- $summary"
+        }
+        return 2
+    }
+
+    $kvLine = $summary -replace '^OK ', ''
+    $kvs = @{}
+    foreach ($pair in ($kvLine -split '\s+')) {
+        if ($pair -match '^(\w+)=(.*)$') {
+            $kvs[$Matches[1]] = $Matches[2]
+        }
+    }
+    $total   = if ($kvs.ContainsKey('total'))   { $kvs['total']   } else { '0' }
+    $passed  = if ($kvs.ContainsKey('passed'))  { $kvs['passed']  } else { '0' }
+    $failed  = if ($kvs.ContainsKey('failed'))  { $kvs['failed']  } else { '0' }
+    $skipped = if ($kvs.ContainsKey('skipped')) { $kvs['skipped'] } else { '0' }
+
+    if ($total -eq '0') {
+        Write-Host 'ERROR: 0 tests ran. Check filter / assembly list.' -ForegroundColor Red
+        Write-Host "  failed=$failed passed=$passed skipped=$skipped" -ForegroundColor Red
+        if ($env:CI -eq 'true') {
+            Write-Host "::error::run-tests: 0 tests ran (total=0) for $Platform/$UnityVersion -- check assembly list / filter"
+        }
+        return 2
+    }
+
+    if ($failed -eq '0') {
+        Write-Host "PASS $passed passed (total=$total skipped=$skipped)" -ForegroundColor Green
+        if ($env:CI -eq 'true') {
+            Write-Host "::notice::run-tests: $passed passed (total=$total skipped=$skipped) for $Platform/$UnityVersion"
+        }
+        return 0
+    }
+
+    Write-Host "FAIL $failed failed of $total (passed=$passed skipped=$skipped)" -ForegroundColor Red
+    if ($env:CI -eq 'true') {
+        Write-Host "::error::run-tests: $failed failed of $total for $Platform/$UnityVersion (passed=$passed skipped=$skipped)"
+    }
+    return 1
+}
+
+function Test-ActivationFailureLog {
+    param([string]$LogPath)
+    if (-not (Test-Path $LogPath)) { return $false }
+    $needle = '2FA|two-factor|verification code|License client failed|LICENSE SYSTEM .* (Failed|invalid)|com\.unity\.editor\.headless|No valid Unity Editor license found'
+    return (Select-String -Path $LogPath -Pattern $needle -Quiet -ErrorAction SilentlyContinue) -eq $true
 }
 
 function Find-UnityEditorPath {
@@ -305,10 +365,11 @@ Set UNITY_EDITOR_PATH to your Unity.exe path, for example:
         exit $UnityExit
     }
 
-    if (-not (Test-Path $Results)) {
-        Write-Host "Unity exited 0 but no results.xml was produced at $Results." -ForegroundColor Red
-        exit 1
-    }
+    # Unity exited 0; route through the shared validator so the local path
+    # fails loudly on a missing results.xml or zero tests (total=0), exactly
+    # like the docker path. Write-ResultsSummary returns 2 for those cases.
+    $summaryExit = Write-ResultsSummary -ResultsXml $Results
+    exit $summaryExit
 }
 
 $ResolvedRunner = $Runner
@@ -319,6 +380,11 @@ if ($ResolvedRunner -eq 'auto') {
         $ResolvedRunner = 'docker'
     }
 }
+
+# Plan banner: one line describing exactly what is about to run, emitted before
+# any runner dispatch so the chosen path is visible in local + CI logs.
+Write-Host "[run-tests] runner=$ResolvedRunner platform=$Platform unity=$UnityVersion ci=$($env:CI)" -ForegroundColor Cyan
+
 if ($ResolvedRunner -eq 'local') {
     if ($Platform -eq 'standalone') {
         Write-Host 'ERROR: -Runner local does not support standalone; use -Runner docker.' -ForegroundColor Red
@@ -740,61 +806,11 @@ if ($Platform -eq 'standalone') {
 }
 
 # ---------------------------------------------------------------------------
-# Summary tail (B2: delegate parsing to scripts/unity/lib/parse-test-results.py
-# so this script, the IL2CPP workflow, and run-tests.sh all share one parser
-# implementation. The helper emits "OK total=.. passed=.. failed=.. skipped=.."
-# on success and "PARSE_ERROR:<reason>" on failure with exit code 2.)
+# Summary tail: route the docker results through the shared Write-ResultsSummary
+# defined near the top of the file (same validator the local path uses). A
+# non-zero return (missing results.xml, parse error, or total=0) fails the run.
 # ---------------------------------------------------------------------------
-function Write-ResultsSummary {
-    param([string]$ResultsXml)
-
-    if (-not (Test-Path $ResultsXml)) {
-        Write-Host "No results.xml at $ResultsXml" -ForegroundColor Yellow
-        return 2
-    }
-
-    $parser = Join-Path $RepoRoot 'scripts/unity/lib/parse-test-results.py'
-    $summary = & python3 $parser $ResultsXml
-    if ($LASTEXITCODE -ne 0 -or -not ($summary -match '^OK ')) {
-        Write-Host "Could not parse results summary: $summary" -ForegroundColor Yellow
-        return 2
-    }
-
-    $kvLine = $summary -replace '^OK ', ''
-    $kvs = @{}
-    foreach ($pair in ($kvLine -split '\s+')) {
-        if ($pair -match '^(\w+)=(.*)$') {
-            $kvs[$Matches[1]] = $Matches[2]
-        }
-    }
-    $total   = if ($kvs.ContainsKey('total'))   { $kvs['total']   } else { '0' }
-    $passed  = if ($kvs.ContainsKey('passed'))  { $kvs['passed']  } else { '0' }
-    $failed  = if ($kvs.ContainsKey('failed'))  { $kvs['failed']  } else { '0' }
-    $skipped = if ($kvs.ContainsKey('skipped')) { $kvs['skipped'] } else { '0' }
-
-    if ($total -eq '0') {
-        Write-Host 'ERROR: 0 tests ran. Check filter / assembly list.' -ForegroundColor Red
-        Write-Host "  failed=$failed passed=$passed skipped=$skipped" -ForegroundColor Red
-        return 2
-    }
-
-    if ($failed -eq '0') {
-        Write-Host "PASS $passed passed (total=$total skipped=$skipped)" -ForegroundColor Green
-        return 0
-    }
-
-    Write-Host "FAIL $failed failed of $total (passed=$passed skipped=$skipped)" -ForegroundColor Red
-    return 1
-}
-
 $SummaryExit = Write-ResultsSummary -ResultsXml $Results
-
-function Test-ActivationFailureLog {
-    param([string]$LogPath)
-    if (-not (Test-Path $LogPath)) { return $false }
-    $needle = '2FA|two-factor|verification code|License client failed|LICENSE SYSTEM .* (Failed|invalid)|com\.unity\.editor\.headless|No valid Unity Editor license found'
-    return (Select-String -Path $LogPath -Pattern $needle -Quiet -ErrorAction SilentlyContinue) -eq $true
-}
 
 if ($ExitCode -ne 0) {
     Write-Host "Unity exited with code $ExitCode." -ForegroundColor Red

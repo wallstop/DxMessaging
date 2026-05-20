@@ -290,6 +290,63 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regression guards (data-driven over BOTH runner scripts).
+//
+// These lock in the fix for the "CI mode short-circuit" bug: both run-tests.sh
+// and run-tests.ps1 used to detect CI=true, print would-be
+// game-ci/unity-test-runner@v4 parameters, and exit 0 WITHOUT running Unity.
+// Every CI job went green having run ZERO tests. The principle (.llm/context.md:
+// never silently default to permissive behavior) is: a runner must NEVER report
+// success without a results.xml proving tests ran (total > 0), on EVERY path.
+//
+// We assert against BOTH scripts at once so a regression in either half — or a
+// reintroduction of the no-op stub — fails loudly. Assertions stay simple and
+// string-based to match this file's existing grep style.
+// ---------------------------------------------------------------------------
+describe("Unity runner scripts never short-circuit success without running tests", () => {
+  const RUNNER_SCRIPTS = [
+    { name: "run-tests.sh", content: readScript("scripts/unity/run-tests.sh") },
+    { name: "run-tests.ps1", content: readScript("scripts/unity/run-tests.ps1") }
+  ];
+
+  test.each(RUNNER_SCRIPTS)(
+    "$name does NOT contain the no-op CI short-circuit stub strings",
+    ({ content }) => {
+      // The old stub printed these exact strings before exiting 0 without
+      // spawning Unity. None may ever reappear.
+      expect(content).not.toContain("skipping local docker invocation");
+      expect(content).not.toContain("CI mode detected");
+      expect(content).not.toContain("game-ci/unity-test-runner@v4 parameters");
+      // A case-insensitive belt-and-suspenders check for the most distinctive
+      // fragment (catches re-wordings like "Skipping local docker run").
+      expect(content).not.toMatch(/skipping local docker/i);
+    }
+  );
+
+  test.each(RUNNER_SCRIPTS)(
+    "$name routes results through the shared parse-test-results.py validator",
+    ({ content }) => {
+      // Success can only be reported via Write-ResultsSummary /
+      // print_results_summary, which delegate to the shared parser.
+      expect(content).toContain("parse-test-results.py");
+      // The total==0 guard text is the load-bearing "tests actually ran"
+      // assertion; it must be present in both scripts.
+      expect(content).toContain("0 tests ran");
+    }
+  );
+
+  test.each(RUNNER_SCRIPTS)(
+    "$name emits CI annotations via the CI env var (annotations, not control flow)",
+    ({ content }) => {
+      // CI is still referenced — but ONLY to emit ::error::/::notice::
+      // GitHub Actions annotations, never to gate execution.
+      expect(content).toContain("::error::");
+      expect(content).toContain("::notice::");
+    }
+  );
+});
+
 describe("scripts/unity/activate-license.sh contract", () => {
   const licPath = path.join(UNITY_SCRIPTS, "activate-license.sh");
   let content;
