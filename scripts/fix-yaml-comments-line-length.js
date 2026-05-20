@@ -4,200 +4,21 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const { normalizeToLf } = require("./lib/quote-parser");
+// Single source of truth for the YAML line-length policy, parser, AND the
+// comment-wrap functions. Hoisted into scripts/lib/yaml-line-length.js so this
+// commit-time fixer and the agentic PostToolUse guard cannot silently diverge.
+const {
+  DEFAULT_MAX_LINE_LENGTH,
+  parseYamlBoolean,
+  resolveYamlLineLengthPolicy,
+  splitWords,
+  wrapCommentLine,
+  wrapYamlCommentLines
+} = require("./lib/yaml-line-length");
 
-const DEFAULT_MAX_LINE_LENGTH = 200;
-const DEFAULT_POLICY = Object.freeze({
-  max: DEFAULT_MAX_LINE_LENGTH,
-  allowNonBreakableWords: true,
-  allowNonBreakableInlineMappings: false
-});
-
-function parseYamlBoolean(rawValue) {
-  if (typeof rawValue !== "string") {
-    return null;
-  }
-
-  const normalized = rawValue.trim().toLowerCase();
-  if (normalized === "true") {
-    return true;
-  }
-  if (normalized === "false") {
-    return false;
-  }
-
-  return null;
-}
-
-function getIndent(line) {
-  return line.length - line.trimStart().length;
-}
-
-function resolveYamlLineLengthPolicy(configPath) {
-  const policy = {
-    max: DEFAULT_POLICY.max,
-    allowNonBreakableWords: DEFAULT_POLICY.allowNonBreakableWords,
-    allowNonBreakableInlineMappings: DEFAULT_POLICY.allowNonBreakableInlineMappings
-  };
-
-  let content;
-  try {
-    content = fs.readFileSync(configPath, "utf8");
-  } catch (_error) {
-    return policy;
-  }
-
-  const lines = normalizeToLf(content).split("\n");
-  let inLineLengthBlock = false;
-  let blockIndent = -1;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (!inLineLengthBlock) {
-      if (/^\s*line-length:\s*(?:#.*)?$/.test(line)) {
-        inLineLengthBlock = true;
-        blockIndent = getIndent(line);
-      }
-      continue;
-    }
-
-    if (trimmed.length === 0 || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const indent = getIndent(line);
-    if (indent <= blockIndent) {
-      break;
-    }
-
-    const maxMatch = /^\s*max:\s*([0-9]+)\s*(?:#.*)?$/.exec(line);
-    if (maxMatch) {
-      const parsedMax = Number.parseInt(maxMatch[1], 10);
-      if (Number.isFinite(parsedMax) && parsedMax > 0) {
-        policy.max = parsedMax;
-      }
-      continue;
-    }
-
-    const allowWordsMatch = /^\s*allow-non-breakable-words:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
-    if (allowWordsMatch) {
-      const parsedBoolean = parseYamlBoolean(allowWordsMatch[1]);
-      if (parsedBoolean !== null) {
-        policy.allowNonBreakableWords = parsedBoolean;
-      }
-      continue;
-    }
-
-    const allowInlineMappingsMatch =
-      /^\s*allow-non-breakable-inline-mappings:\s*([^#]+?)\s*(?:#.*)?$/.exec(line);
-    if (!allowInlineMappingsMatch) {
-      continue;
-    }
-
-    const parsedBoolean = parseYamlBoolean(allowInlineMappingsMatch[1]);
-    if (parsedBoolean !== null) {
-      policy.allowNonBreakableInlineMappings = parsedBoolean;
-    }
-  }
-
-  if (policy.allowNonBreakableInlineMappings) {
-    policy.allowNonBreakableWords = true;
-  }
-
-  return policy;
-}
-
-function splitWords(text) {
-  return text
-    .split(/\s+/)
-    .map((word) => word.trim())
-    .filter((word) => word.length > 0);
-}
-
-function wrapCommentLine(line, maxLength, options = {}) {
-  if (line.length <= maxLength) {
-    return [line];
-  }
-
-  const commentMatch = /^(\s*#\s?)(.*)$/.exec(line);
-  if (!commentMatch) {
-    return [line];
-  }
-
-  const prefix = commentMatch[1];
-  const commentText = commentMatch[2].trim();
-  if (commentText.length === 0) {
-    return [line];
-  }
-
-  const available = maxLength - prefix.length;
-  if (available <= 0) {
-    return [line];
-  }
-
-  const words = splitWords(commentText);
-  if (words.length === 0) {
-    return [line];
-  }
-
-  if (options.allowNonBreakableWords === true && words.some((word) => word.length > available)) {
-    return [line];
-  }
-
-  const wrapped = [];
-  let current = "";
-
-  for (const word of words) {
-    if (current.length === 0) {
-      current = word;
-      continue;
-    }
-
-    if (current.length + 1 + word.length <= available) {
-      current += ` ${word}`;
-      continue;
-    }
-
-    wrapped.push(`${prefix}${current}`);
-    current = word;
-  }
-
-  if (current.length > 0) {
-    wrapped.push(`${prefix}${current}`);
-  }
-
-  if (wrapped.length === 0) {
-    return [line];
-  }
-
-  return wrapped;
-}
-
-function rewriteYamlCommentLines(content, policy) {
-  const normalized = normalizeToLf(content);
-  const lines = normalized.split("\n");
-  const rewritten = [];
-  const changedLines = [];
-
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index];
-    const wrapped = wrapCommentLine(line, policy.max, {
-      allowNonBreakableWords: policy.allowNonBreakableWords
-    });
-
-    rewritten.push(...wrapped);
-
-    if (wrapped.length !== 1 || wrapped[0] !== line) {
-      changedLines.push(index + 1);
-    }
-  }
-
-  return {
-    content: rewritten.join("\n"),
-    changedLines
-  };
-}
+// Preserve the historical name/shape of this module's wrapping helper while
+// sourcing the behavior from the lib (single source of truth).
+const rewriteYamlCommentLines = wrapYamlCommentLines;
 
 function looksLikeYamlPath(candidate) {
   return /\.ya?ml$/i.test(candidate);

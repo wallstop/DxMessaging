@@ -349,7 +349,8 @@ __pycache__.meta
 site.meta
 progress.meta
 
-.claude/
+.claude/*
+!.claude/settings.json
 .vscode/settings.json
 pre-commit.md*
 pre-commit.txt*

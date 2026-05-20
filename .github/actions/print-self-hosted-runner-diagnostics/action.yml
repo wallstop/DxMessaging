@@ -1,9 +1,12 @@
 name: Print self-hosted runner diagnostics
 description: >-
   Emit a self-contained diagnostic block for a self-hosted Windows Unity
-  runner. Uses PowerShell so we never depend on the runner-host PATH
-  ordering between WSL bash and Git Bash. Surfaces the resolved bash path
-  and warns when the WSL stub at System32\bash.exe leaks ahead of
+  runner. First runs a Windows PowerShell 5.1 preflight that fails fast with
+  a clear, actionable error when PowerShell 7 (pwsh) is missing, so the
+  cryptic "pwsh: command not found" never surfaces. Then emits diagnostics
+  via PowerShell so we never depend on the runner-host PATH ordering between
+  WSL bash and Git Bash. Surfaces the resolved bash path and warns when the
+  WSL stub at System32\bash.exe leaks ahead of
   C:\Program Files\Git\bin\bash.exe so the operator can fix the agent
   PATH before queueing further Unity work.
 
@@ -24,6 +27,22 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Runs in Windows PowerShell 5.1 (always built into Windows runners), so
+    # it executes even when pwsh is absent. The remaining steps in this action
+    # and the Unity jobs that consume it use `shell: pwsh`; without this
+    # preflight a missing pwsh surfaces only as the cryptic
+    # "##[error]pwsh: command not found". This turns that into a clear,
+    # actionable failure pointing at the runbook. PowerShell 5.1-safe: no
+    # `??`, no ternary.
+    - name: Verify PowerShell 7 (pwsh) is available
+      shell: powershell
+      run: |
+        if ($null -eq (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+            Write-Output ("::error title=pwsh missing on self-hosted runner::PowerShell 7 (pwsh) is not installed on runner '$env:RUNNER_NAME'. Install it before queueing Unity jobs -- see " +
+            "docs/runbooks/unity-runners-after-transfer.md (PowerShell 7 prerequisite).")
+            exit 1
+        }
+        Write-Output "pwsh found at: $((Get-Command pwsh).Source)"
     - name: Emit runner diagnostics
       shell: pwsh
       env:

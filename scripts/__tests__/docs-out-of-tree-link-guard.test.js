@@ -6,6 +6,12 @@
  * invalid in mkdocs strict mode because mkdocs only resolves links inside
  * the docs/ tree. Such references must use the absolute `https://github.com/.../blob/master/...`
  * URL instead.
+ *
+ * The validator additionally checks the OTHER half of the linking contract:
+ * every self-repo `.../blob/<ref>/<path>` URL must resolve to a real file or
+ * directory in the working tree (validated offline -- lychee excludes these
+ * URLs because a network check 404s for files added in the same PR before
+ * they reach master). Fixtures tagged with `reasonMatch` exercise that path.
  */
 
 "use strict";
@@ -243,6 +249,128 @@ const FIXTURES = [
       "Outside: [other](./other.md)"
     ].join("\n"),
     expectedViolations: 0
+  },
+  // ---------------------------------------------------------------------------
+  // Self-repo blob-link OFFLINE existence checks (concern 2). These verify the
+  // `.../blob/<ref>/<path>` target resolves against the working tree. The
+  // `<path>` portions below are real repo files/dirs (or deliberately bogus).
+  // ---------------------------------------------------------------------------
+  {
+    name: "BLOB: self-repo link to an EXISTING tree path is OK",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [watchdog](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml).",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: self-repo link to a directory target is OK",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [scripts dir](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/scripts).",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB FAILS: self-repo link to a MISSING tree path",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [ghost](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/does-not-exist.yml).",
+    expectedViolations: 1,
+    reasonMatch: /does not exist in the working tree: \.github\/workflows\/does-not-exist\.yml/
+  },
+  {
+    name: "BLOB: %20 (space) is decoded before resolution (Mini Combat README)",
+    relativePath: "docs/getting-started/index.md",
+    content:
+      "Try [Mini Combat](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md).",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: %2B (plus) and %20 are decoded before resolution (UI Buttons + Inspector README)",
+    relativePath: "docs/getting-started/index.md",
+    content:
+      "Try [UI Buttons + Inspector](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md).",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: a #anchor is stripped before resolution",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Jump [there](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml#L10).",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: a ?query is stripped before resolution",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Raw [there](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml?raw=true).",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: link inside a fenced code block is ignored even if target is missing",
+    relativePath: "docs/runbooks/foo.md",
+    content: [
+      "```text",
+      "[ghost](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/no/such/path.txt)",
+      "```",
+      "",
+      "Real OK link [other](./other.md)"
+    ].join("\n"),
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: link inside an inline code span is ignored even if target is missing",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Sample `[ghost](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/no/such/path.txt)` -- ignore it.",
+    expectedViolations: 0
+  },
+  {
+    name: "BLOB: a ref segment other than master still resolves against the working tree",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [watchdog](https://github.com/Ambiguous-Interactive/DxMessaging/blob/dev%2Fbranch/.github/workflows/stuck-job-watchdog.yml).",
+    expectedViolations: 0
+  },
+  // ---------------------------------------------------------------------------
+  // FIX 1 regression: a MALFORMED percent-encoding in a self-repo blob URL must
+  // NOT crash the validator (decodeURIComponent throws URIError on `%bar` /
+  // truncated `%2`). The raw path is kept; it cannot exist on disk, so it is
+  // reported as exactly one normal "missing target" violation.
+  // ---------------------------------------------------------------------------
+  {
+    name: "BLOB: malformed percent-encoding does not crash and produces exactly 1 violation",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Broken [bad](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/foo%bar.md).",
+    expectedViolations: 1,
+    reasonMatch: /does not exist in the working tree: foo%bar\.md/
+  },
+  {
+    name: "BLOB: truncated percent-encoding does not crash and produces exactly 1 violation",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Broken [bad](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/foo%2).",
+    expectedViolations: 1,
+    reasonMatch: /does not exist in the working tree: foo%2/
+  },
+  // ---------------------------------------------------------------------------
+  // FIX 2: self-repo `tree/<ref>/<path>` DIRECTORY links are covered by the same
+  // offline existence check as `blob/` links (fs.existsSync resolves dirs too).
+  // ---------------------------------------------------------------------------
+  {
+    name: "TREE: self-repo directory link to an EXISTING dir is OK",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [scripts dir](https://github.com/Ambiguous-Interactive/DxMessaging/tree/master/scripts).",
+    expectedViolations: 0
+  },
+  {
+    name: "TREE FAILS: self-repo directory link to a MISSING dir",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [ghost dir](https://github.com/Ambiguous-Interactive/DxMessaging/tree/master/no/such/dir).",
+    expectedViolations: 1,
+    reasonMatch: /does not exist in the working tree: no\/such\/dir/
   }
 ];
 
@@ -255,22 +383,30 @@ describe("validate-docs-out-of-tree-links scanContent", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test.each(FIXTURES)("$name", ({ relativePath, content, expectedViolations }) => {
-    // Build a synthetic docs root in tempDir so escapesDocsTree compares
-    // against THIS tree, not the repo's real docs/. The validator uses
-    // `validator.DOCS_ROOT` as the boundary, so we point relative paths
-    // at the real docs/ by faking the file path under <repo>/docs/.
-    const realDocsRoot = validator.DOCS_ROOT;
-    const fakeAbsPath = path.join(realDocsRoot, "..", relativePath.replace(/^docs\//, "docs/"));
-    // Make sure the file we hand the scanner actually points into the
-    // real docs/ subtree (we never write to it on disk; scanContent
-    // only needs the path to resolve the link's destination).
-    const violations = validator.scanContent(fakeAbsPath, content);
-    expect(violations).toHaveLength(expectedViolations);
-    for (const v of violations) {
-      expect(v.reason).toMatch(/full https:\/\/github\.com/);
+  test.each(FIXTURES)(
+    "$name",
+    ({ relativePath, content, expectedViolations, reasonMatch }) => {
+      // Build a synthetic docs root in tempDir so escapesDocsTree compares
+      // against THIS tree, not the repo's real docs/. The validator uses
+      // `validator.DOCS_ROOT` as the boundary, so we point relative paths
+      // at the real docs/ by faking the file path under <repo>/docs/.
+      const realDocsRoot = validator.DOCS_ROOT;
+      const fakeAbsPath = path.join(realDocsRoot, "..", relativePath.replace(/^docs\//, "docs/"));
+      // Make sure the file we hand the scanner actually points into the
+      // real docs/ subtree (we never write to it on disk; scanContent
+      // only needs the path to resolve the link's destination). Self-repo
+      // blob fixtures additionally resolve their target against the real
+      // working tree (validator.REPO_ROOT), which is why the existing/bogus
+      // paths above are chosen relative to the actual repo.
+      const violations = validator.scanContent(fakeAbsPath, content);
+      expect(violations).toHaveLength(expectedViolations);
+      for (const v of violations) {
+        // Self-repo blob existence violations carry a distinct reason; the
+        // out-of-tree relative-link violations carry the original one.
+        expect(v.reason).toMatch(reasonMatch || /full https:\/\/github\.com/);
+      }
     }
-  });
+  );
 });
 
 describe("validate-docs-out-of-tree-links isDocsMarkdown", () => {
@@ -284,6 +420,75 @@ describe("validate-docs-out-of-tree-links isDocsMarkdown", () => {
     expect(validator.isDocsMarkdown(path.join(validator.DOCS_ROOT, "runbooks", "x.txt"))).toBe(
       false
     );
+  });
+});
+
+describe("validate-docs-out-of-tree-links selfRepoBlobTarget (unit)", () => {
+  test("returns null for an empty path (blob/<ref>/ with nothing after)", () => {
+    expect(
+      validator.selfRepoBlobTarget(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/"
+      )
+    ).toBeNull();
+  });
+
+  test("returns null for a non-self-repo github URL", () => {
+    expect(
+      validator.selfRepoBlobTarget("https://github.com/orgs/community/discussions/186811")
+    ).toBeNull();
+  });
+
+  test("decodes %20 (space) in the captured path", () => {
+    expect(
+      validator.selfRepoBlobTarget(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/Samples~/Mini%20Combat/README.md"
+      )
+    ).toBe("Samples~/Mini Combat/README.md");
+  });
+
+  test("decodes %2B (plus) and %20 in the captured path", () => {
+    expect(
+      validator.selfRepoBlobTarget(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/Samples~/UI%20Buttons%20%2B%20Inspector/README.md"
+      )
+    ).toBe("Samples~/UI Buttons + Inspector/README.md");
+  });
+
+  test("does NOT throw on malformed percent-encoding; falls back to the raw path (FIX 1)", () => {
+    let result;
+    expect(() => {
+      result = validator.selfRepoBlobTarget(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/foo%bar.md"
+      );
+    }).not.toThrow();
+    expect(result).toBe("foo%bar.md");
+  });
+
+  test("recognizes tree/ directory links and returns the repo-relative path", () => {
+    expect(
+      validator.selfRepoBlobTarget(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/tree/master/scripts"
+      )
+    ).toBe("scripts");
+  });
+});
+
+describe("validate-docs-out-of-tree-links selfRepoBlobTargetExists (unit)", () => {
+  test("resolves an existing real path with a trailing prose '.' via the trim", () => {
+    // `scripts` exists; the trailing `.` is conservatively trimmed.
+    expect(validator.selfRepoBlobTargetExists("scripts.")).toBe(true);
+  });
+
+  test("resolves an existing real path with a trailing prose ')' via the trim", () => {
+    expect(validator.selfRepoBlobTargetExists("scripts)")).toBe(true);
+  });
+
+  test("returns false for a genuinely missing path (trim does not mask it)", () => {
+    expect(validator.selfRepoBlobTargetExists("scripts/genuinely-missing-xyz.js")).toBe(false);
+  });
+
+  test("resolves an existing directory (tree-link target)", () => {
+    expect(validator.selfRepoBlobTargetExists("scripts")).toBe(true);
   });
 });
 

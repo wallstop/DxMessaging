@@ -96,6 +96,63 @@ The preflight shell currently lives inline in four workflows (`unity-tests.yml`,
 
 If the preflight passes but the matrix job still stays queued, the cause is more likely the dispatcher bug (see [GitHub Community Discussion #186811](https://github.com/orgs/community/discussions/186811)) than the access list. Use the recovery workflows in this repository: [unstick-run.yml](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/unstick-run.yml) for manual recovery and [stuck-job-watchdog.yml](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml) for the automated path.
 
+## PowerShell 7 prerequisite on self-hosted runners
+
+Self-hosted Windows Unity runners require **PowerShell 7 (`pwsh`)** in
+addition to Git Bash. Every Unity workflow consumes the
+`print-self-hosted-runner-diagnostics` composite action
+(`.github/actions/print-self-hosted-runner-diagnostics/action.yml`) before its
+own steps, and that action plus several Unity build steps run with
+`shell: pwsh`. PowerShell 7 is _not_ the Windows-built-in PowerShell 5.1
+(`powershell`); it is a separate install that provides the `pwsh` executable.
+
+### Symptom
+
+- A self-hosted Unity job fails almost immediately with
+  `##[error]pwsh: command not found`.
+- The failure originates from the first `shell: pwsh` step the agent reaches.
+- Git Bash and the runner agent are otherwise healthy.
+
+The diagnostics composite action now fails fast with a clear, actionable
+error annotation (`pwsh missing on self-hosted runner`) when `pwsh` is absent,
+so this state no longer surfaces only as the cryptic
+`pwsh: command not found`. The preflight step that emits that error runs under
+Windows PowerShell 5.1, which is always present, so it executes even when
+PowerShell 7 is missing.
+
+### Install PowerShell 7
+
+On a machine with winget:
+
+```powershell
+winget install --id Microsoft.PowerShell --source winget
+```
+
+For machines without winget, download and run the latest MSI installer from
+the official releases page:
+<https://github.com/PowerShell/PowerShell/releases>.
+
+### Verify
+
+Open a **new** shell (so the updated PATH is picked up) and confirm:
+
+```powershell
+pwsh -v
+Get-Command pwsh
+```
+
+`pwsh -v` should print the installed PowerShell 7 version, and
+`Get-Command pwsh` should resolve to the installed executable's path.
+
+### Restart the runner agent
+
+After installing PowerShell 7, restart the self-hosted runner service/agent
+(or refresh the machine's PATH and restart the runner) so the agent process
+sees `pwsh` on its PATH. The runner agent inherits its environment at start
+time; until it is restarted it will keep reporting `pwsh: command not found`
+even though a fresh interactive shell can find `pwsh`. Re-run the queued
+Unity workflow once the agent is back online.
+
 ## Local documentation validation
 
 To reproduce the strict-mode mkdocs build that runs in CI:

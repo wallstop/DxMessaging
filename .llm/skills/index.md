@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 161   |
+| Total Skills | 162   |
 | Categories   | 8     |
 
 ---
@@ -17,7 +17,7 @@
 ## Table of Contents
 
 - [Documentation](#documentation) (30)
-- [GitHub Actions](#github-actions) (6)
+- [GitHub Actions](#github-actions) (7)
 - [Packaging](#packaging) (2)
 - [Performance](#performance) (45)
 - [Scripting](#scripting) (18)
@@ -72,6 +72,7 @@
 | [GitHub Actions Workflow Consistency Part 1](./github-actions/workflow-consistency-part-1.md)          | [ok] 196   | [intermediate] | [stable] | [risk: low]    | migration, split      |
 | [Lychee Link Checker Configuration Management](./github-actions/lychee-configuration.md)               | [ok] 252   | [intermediate] | [stable] | [risk: low]    | github-actions, ci-cd |
 | [Lychee Link Checker Configuration Management Part 1](./github-actions/lychee-configuration-part-1.md) | [draft] 72 | [intermediate] | [stable] | [risk: low]    | migration, split      |
+| [YAML Line-Length Budget](./github-actions/yaml-line-length.md)                                        | [ok] 169   | [intermediate] | [stable] | [risk: low]    | github-actions, yaml  |
 
 ## Packaging
 

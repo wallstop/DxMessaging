@@ -258,57 +258,87 @@ const HAS_BASH_FOR_MOUNT_FN = canRunBash();
       });
     }
 
-    test("matches canonical source,target,type-volume entry", () => {
-      const result = runMatches(
-        "source=dxm-cache,target=/cache,type=volume",
-        "dxm-cache",
-        "/cache"
-      );
-      expect(result.status).toBe(0);
-      expect(result.stdout.trim()).toBe("MATCH");
-      expect(result.stderr).toBe("");
-    });
+    // Table-driven cases. Each row carries the runMatches args, the expected
+    // exit status (0 where the original asserted it, undefined where it did
+    // not), the expected stdout sentinel, and optional stderr regex
+    // expectations. `stderrEmpty` distinguishes the canonical case's
+    // `stderr === ""` assertion from cases that made no stderr assertion.
+    const cases = [
+      {
+        description: "matches canonical source,target,type-volume entry",
+        mountEntry: "source=dxm-cache,target=/cache,type=volume",
+        sourceName: "dxm-cache",
+        targetDir: "/cache",
+        expectedStatus: 0,
+        expectedStdout: "MATCH",
+        stderrEmpty: true
+      },
+      {
+        description: "permuted field order still matches",
+        mountEntry: "type=volume,target=/cache,source=dxm-cache",
+        sourceName: "dxm-cache",
+        targetDir: "/cache",
+        expectedStatus: 0,
+        expectedStdout: "MATCH"
+      },
+      {
+        description: "accepts spec-allowed extra fields and surfaces INFO diagnostic",
+        mountEntry: "source=dxm-cache,target=/cache,type=volume,bind-propagation=rprivate",
+        sourceName: "dxm-cache",
+        targetDir: "/cache",
+        expectedStatus: 0,
+        expectedStdout: "MATCH",
+        expectedStderr: [/INFO/, /bind-propagation=rprivate/]
+      },
+      {
+        description: "rejects entry with wrong type (bind instead of volume)",
+        mountEntry: "source=dxm-cache,target=/cache,type=bind",
+        sourceName: "dxm-cache",
+        targetDir: "/cache",
+        expectedStdout: "NOMATCH"
+      },
+      {
+        description: "rejects entry with wrong source name",
+        mountEntry: "source=other,target=/cache,type=volume",
+        sourceName: "dxm-cache",
+        targetDir: "/cache",
+        expectedStdout: "NOMATCH"
+      },
+      {
+        description: "rejects entry with wrong target dir",
+        mountEntry: "source=dxm-cache,target=/elsewhere,type=volume",
+        sourceName: "dxm-cache",
+        targetDir: "/cache",
+        expectedStdout: "NOMATCH"
+      }
+    ];
 
-    test("permuted field order still matches", () => {
-      const result = runMatches(
-        "type=volume,target=/cache,source=dxm-cache",
-        "dxm-cache",
-        "/cache"
-      );
-      expect(result.status).toBe(0);
-      expect(result.stdout.trim()).toBe("MATCH");
-    });
-
-    test("accepts spec-allowed extra fields and surfaces INFO diagnostic", () => {
-      const result = runMatches(
-        "source=dxm-cache,target=/cache,type=volume,bind-propagation=rprivate",
-        "dxm-cache",
-        "/cache"
-      );
-      expect(result.status).toBe(0);
-      expect(result.stdout.trim()).toBe("MATCH");
-      expect(result.stderr).toMatch(/INFO/);
-      expect(result.stderr).toMatch(/bind-propagation=rprivate/);
-    });
-
-    test("rejects entry with wrong type (bind instead of volume)", () => {
-      const result = runMatches("source=dxm-cache,target=/cache,type=bind", "dxm-cache", "/cache");
-      expect(result.stdout.trim()).toBe("NOMATCH");
-    });
-
-    test("rejects entry with wrong source name", () => {
-      const result = runMatches("source=other,target=/cache,type=volume", "dxm-cache", "/cache");
-      expect(result.stdout.trim()).toBe("NOMATCH");
-    });
-
-    test("rejects entry with wrong target dir", () => {
-      const result = runMatches(
-        "source=dxm-cache,target=/elsewhere,type=volume",
-        "dxm-cache",
-        "/cache"
-      );
-      expect(result.stdout.trim()).toBe("NOMATCH");
-    });
+    test.each(cases)(
+      "$description",
+      ({
+        mountEntry,
+        sourceName,
+        targetDir,
+        expectedStatus,
+        expectedStdout,
+        expectedStderr,
+        stderrEmpty
+      }) => {
+        const result = runMatches(mountEntry, sourceName, targetDir);
+        if (expectedStatus !== undefined) {
+          expect(result.status).toBe(expectedStatus);
+        }
+        expect(result.stdout.trim()).toBe(expectedStdout);
+        if (stderrEmpty) {
+          expect(result.stderr).toBe("");
+        }
+        if (expectedStderr) {
+          for (const re of expectedStderr) {
+            expect(result.stderr).toMatch(re);
+          }
+        }
+      }
+    );
   }
 );
 

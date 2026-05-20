@@ -14,6 +14,9 @@ const {
   processFiles
 } = require("../fix-yaml-comments-line-length");
 
+const lib = require("../lib/yaml-line-length");
+const guard = require("../hooks/yaml-line-length-guard");
+
 describe("fix-yaml-comments-line-length", () => {
   test("parseYamlBoolean handles true/false and rejects other values", () => {
     expect(parseYamlBoolean("true")).toBe(true);
@@ -156,6 +159,43 @@ describe("fix-yaml-comments-line-length", () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  // Parity lock (Fix 1): the comment-wrap logic must be sourced from the single
+  // source of truth (scripts/lib/yaml-line-length.js). A future change to the
+  // wrap policy cannot diverge the commit-time CLI from the agentic guard
+  // without failing here, because all three resolve to the SAME function.
+  describe("comment-wrap parity: CLI, guard, and lib share one source of truth", () => {
+    test("wrapCommentLine is the SAME function reference across lib/CLI/guard", () => {
+      expect(typeof lib.wrapCommentLine).toBe("function");
+      expect(wrapCommentLine).toBe(lib.wrapCommentLine);
+      expect(guard.wrapCommentLine).toBe(lib.wrapCommentLine);
+    });
+
+    test("splitWords is the SAME function reference across lib and CLI", () => {
+      const cli = require("../fix-yaml-comments-line-length");
+      expect(typeof lib.splitWords).toBe("function");
+      expect(cli.splitWords).toBe(lib.splitWords);
+    });
+
+    test("rewriteYamlCommentLines is sourced from the lib's wrapYamlCommentLines", () => {
+      expect(typeof lib.wrapYamlCommentLines).toBe("function");
+      expect(rewriteYamlCommentLines).toBe(lib.wrapYamlCommentLines);
+    });
+
+    test("behavioral parity: the guard's wrap output equals the CLI's on a sample", () => {
+      const policy = { max: 60, allowNonBreakableWords: true };
+      const content = [
+        "# this is an intentionally long comment line that must be wrapped to fit",
+        "key: value"
+      ].join("\n");
+      const viaCli = rewriteYamlCommentLines(content, policy).content;
+      const viaGuard = guard.guardContent(
+        content,
+        Object.assign({ allowNonBreakableInlineMappings: false }, policy)
+      ).content;
+      expect(viaGuard).toBe(viaCli);
+    });
   });
 
   test("resolveYamlLineLengthPolicy loads max and booleans from .yamllint.yaml", () => {

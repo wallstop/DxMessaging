@@ -237,7 +237,9 @@ if ! mounts_output="$(parse_devcontainer_mounts \
     configured_mounts=()
 else
     if [[ -n "$mounts_output" ]]; then
-        mapfile -t configured_mounts <<< "$mounts_output"
+        while IFS= read -r line; do
+            configured_mounts+=("$line")
+        done <<< "$mounts_output"
     fi
     check_pass "Parsed mounts from devcontainer.json via JSONC->jq pipeline (count=${#configured_mounts[@]})"
 fi

@@ -26,7 +26,13 @@ const yaml = require("js-yaml");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows");
+const ACTIONS_DIR = path.join(REPO_ROOT, ".github", "actions");
 const DISABLED_WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows-disabled");
+const DIAGNOSTICS_ACTION = path.join(
+  ACTIONS_DIR,
+  "print-self-hosted-runner-diagnostics",
+  "action.yml"
+);
 const UNITY_WORKFLOWS = ["unity-tests.yml", "unity-il2cpp.yml", "unity-benchmarks.yml"];
 const UNITY_VERSIONS = ["2021.3.45f1", "2022.3.45f1", "6000.0.32f1"];
 
@@ -52,6 +58,11 @@ function loadWorkflowYaml(name) {
 
 function loadDisabledWorkflowYaml(name) {
   return yaml.load(readDisabledWorkflow(name));
+}
+
+function loadDiagnosticsAction() {
+  expect(fs.existsSync(DIAGNOSTICS_ACTION)).toBe(true);
+  return yaml.load(fs.readFileSync(DIAGNOSTICS_ACTION, "utf8"));
 }
 
 function collectSteps(parsed) {
@@ -273,6 +284,50 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       expect(text).not.toContain("pull_request_target");
     }
   );
+});
+
+describe("print-self-hosted-runner-diagnostics composite action", () => {
+  let action;
+  let steps;
+
+  beforeAll(() => {
+    action = loadDiagnosticsAction();
+    expect(action).toBeDefined();
+    expect(action.runs).toBeDefined();
+    expect(action.runs.using).toBe("composite");
+    steps = action.runs.steps;
+    expect(Array.isArray(steps)).toBe(true);
+  });
+
+  test("first step is a Windows PowerShell 5.1 pwsh preflight that fails fast", () => {
+    // The self-hosted Windows Unity runners only ship Windows PowerShell 5.1
+    // (`powershell`) until an operator installs PowerShell 7 (`pwsh`). The
+    // remaining step here (and the Unity jobs that consume this action) use
+    // `shell: pwsh`, so a missing pwsh would otherwise surface only as the
+    // cryptic "##[error]pwsh: command not found". The FIRST step must run in
+    // the always-present Windows PowerShell 5.1 and fail fast with a clear,
+    // runbook-pointing error. See docs/runbooks/unity-runners-after-transfer.md.
+    expect(steps.length).toBeGreaterThanOrEqual(2);
+
+    const preflight = steps[0];
+    expect(preflight).toBeDefined();
+    // shell:powershell is Windows PowerShell 5.1, which is always present on
+    // Windows runners — so this step runs even when pwsh is absent.
+    expect(String(preflight.shell).toLowerCase()).toBe("powershell");
+    expect(typeof preflight.run).toBe("string");
+    // The preflight detects pwsh via Get-Command and exits non-zero when it
+    // is missing.
+    expect(preflight.run).toContain("Get-Command");
+    expect(preflight.run).toContain("pwsh");
+    expect(preflight.run).toContain("exit 1");
+  });
+
+  test("second step is the existing pwsh diagnostics emitter", () => {
+    const diagnostics = steps[1];
+    expect(diagnostics).toBeDefined();
+    expect(diagnostics.name).toBe("Emit runner diagnostics");
+    expect(String(diagnostics.shell).toLowerCase()).toBe("pwsh");
+  });
 });
 
 describe(".github/workflows/unity-tests.yml", () => {

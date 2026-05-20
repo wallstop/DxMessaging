@@ -2,12 +2,26 @@
 /**
  * validate-docs-out-of-tree-links.js
  *
- * Scans Markdown files inside docs/ for relative links that climb above the
- * docs/ tree. mkdocs strict mode escalates "warnings" for such links into
- * build failures (it cannot resolve repo files outside docs/ as valid
- * navigation targets). Docs-to-repo references must use the absolute
- * `https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/...` URL
- * so the rendered site links work and the strict build stays green.
+ * This validator enforces two complementary docs-to-repo linking concerns:
+ *
+ * 1. OUT-OF-TREE RELATIVE LINKS. Scans Markdown files inside docs/ for relative
+ *    links that climb above the docs/ tree. mkdocs strict mode escalates
+ *    "warnings" for such links into build failures (it cannot resolve repo
+ *    files outside docs/ as valid navigation targets). Docs-to-repo references
+ *    must instead use the absolute
+ *    `https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/...` URL
+ *    so the rendered site links work and the strict build stays green.
+ *
+ * 2. SELF-REPO BLOB/TREE-LINK TARGETS (validated OFFLINE). The absolute
+ *    self-repo blob (file) and tree (directory) URLs that concern (1)
+ *    recommends are checked against the WORKING TREE rather than over the
+ *    network. The lychee link checker excludes these URLs (see .lychee.toml)
+ *    precisely because a network check 404s for files added in the same PR as
+ *    the doc that references them (the file is not on master yet) and is
+ *    otherwise fragile (rate limits, private-repo 404s). Here we confirm each
+ *    `.../blob/<ref>/<path>` or `.../tree/<ref>/<path>` resolves to a real file
+ *    or directory on disk; the `<ref>` (branch/sha) segment is ignored because
+ *    the working tree is the source of truth.
  *
  * @usage
  *   node scripts/validate-docs-out-of-tree-links.js [<file>...]
@@ -17,7 +31,8 @@
  *
  * @exitcodes
  *   0 - All checked files are clean.
- *   1 - At least one out-of-tree relative link was found.
+ *   1 - At least one out-of-tree relative link or missing self-repo blob
+ *       target was found.
  */
 
 "use strict";
@@ -155,6 +170,78 @@ function escapesDocsTree(fromFile, linkTarget) {
   return false;
 }
 
+// Self-repo blob/tree URL shape: `.../blob/<ref>/<path>` (file links) and
+// `.../tree/<ref>/<path>` (directory links). The `<ref>` is a single branch/sha
+// segment ([^/]+); everything after it is the repo-relative path we validate
+// against the working tree (fs.existsSync resolves files AND directories, so the
+// same check covers both forms). Anchored so it only matches OUR repo.
+const SELF_REPO_BLOB_RE =
+  /^https:\/\/github\.com\/Ambiguous-Interactive\/DxMessaging\/(?:blob|tree)\/[^/]+\/(.+)$/;
+// A single trailing prose character that can leak into a captured token in
+// edge cases (e.g. a stray trailing backtick, period, closing paren, or
+// comma). We only ever trim ONE of these, and only when doing so makes a
+// previously-missing path resolve -- never when it would mask a real broken
+// link. See selfRepoBlobTarget for the conservative application rule.
+const TRAILING_PROSE_CHARS = new Set(["`", ".", ")", ","]);
+
+/**
+ * Decode a self-repo blob/tree URL into the repo-relative path it points at, or
+ * return null when the URL is not a self-repo blob or tree link.
+ *
+ * The returned path is the destination AS A WORKING-TREE PATH:
+ *   - the `<ref>` (branch/sha) segment is dropped (working tree is truth);
+ *   - a trailing `#fragment` and `?query` are removed;
+ *   - the result is `decodeURIComponent`-decoded (`%20`->space, `%2B`->`+`).
+ * Tilde is NOT expanded: a literal `~` (as in `Samples~/`) is a real dir char.
+ *
+ * @param {string} url - candidate link URL.
+ * @returns {string|null} repo-relative path, or null if not a self-repo blob/tree.
+ */
+function selfRepoBlobTarget(url) {
+  const match = SELF_REPO_BLOB_RE.exec(url);
+  if (!match) {
+    return null;
+  }
+  // Drop fragment/query before decoding so encoded `#`/`?` inside the path are
+  // not mistaken for delimiters (they would already be percent-encoded here).
+  let captured = match[1].split("#")[0].split("?")[0];
+  let decoded;
+  try {
+    decoded = decodeURIComponent(captured);
+  } catch {
+    // Malformed percent-encoding (e.g. `foo%bar.md` or a truncated `foo%2`)
+    // makes decodeURIComponent throw a URIError. Keep the RAW captured path so
+    // the existence check still runs and reports it as a (correctly) missing
+    // target rather than letting the URIError crash the whole validator run.
+    decoded = captured;
+  }
+  return decoded;
+}
+
+/**
+ * Resolve a self-repo blob/tree target path against the working tree, applying
+ * the conservative trailing-prose-punctuation trim. Returns true when the
+ * target (file or directory) exists on disk. The trim removes a SINGLE trailing
+ * `` ` ``/`.`/`)`/`,` ONLY when the untrimmed path is missing AND the trimmed
+ * path exists -- so a genuine broken link is never masked.
+ *
+ * @param {string} repoRelPath - decoded repo-relative path from selfRepoBlobTarget.
+ * @returns {boolean} whether the (optionally trimmed) path exists in the tree.
+ */
+function selfRepoBlobTargetExists(repoRelPath) {
+  if (fs.existsSync(path.resolve(REPO_ROOT, repoRelPath))) {
+    return true;
+  }
+  const last = repoRelPath.slice(-1);
+  if (TRAILING_PROSE_CHARS.has(last)) {
+    const trimmed = repoRelPath.slice(0, -1);
+    if (trimmed && fs.existsSync(path.resolve(REPO_ROOT, trimmed))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function lineNumberOf(text, charIndex) {
   let n = 1;
   for (let i = 0; i < charIndex && i < text.length; i++) {
@@ -177,6 +264,28 @@ function scanContent(filePath, content) {
   stripped = stripIndentedCodeBlocks(stripped);
 
   const checkUrl = (url, charIndex) => {
+    // CONCERN 2 (offline self-repo blob/tree existence) runs FIRST and
+    // independently of the out-of-tree check below. A self-repo blob/tree URL is
+    // an EXTERNAL url (starts with `https:`), so the `isExternalUrl`
+    // short-circuit further down would otherwise skip it entirely. We
+    // deliberately check it here, before that early-return, and then fall
+    // through (a self-repo blob/tree URL never also trips the out-of-tree check,
+    // because `isExternalUrl` will return for it).
+    const blobTarget = selfRepoBlobTarget(url);
+    if (blobTarget !== null) {
+      if (!selfRepoBlobTargetExists(blobTarget)) {
+        violations.push({
+          file: filePath,
+          line: lineNumberOf(stripped, charIndex),
+          url,
+          reason: `self-repo blob/tree link target does not exist in the working tree: ${blobTarget}`
+        });
+      }
+      return;
+    }
+
+    // CONCERN 1 (out-of-tree relative links). External/mailto/anchor links are
+    // never out-of-tree relative links, so short-circuit them here.
     if (isExternalUrl(url) || isMailtoOrAnchor(url)) {
       return;
     }
@@ -287,6 +396,10 @@ module.exports = {
   scanContent,
   scanFile,
   escapesDocsTree,
+  // Names kept as `*BlobTarget*` for stability (tests import them), but they
+  // cover BOTH self-repo `blob/` (file) and `tree/` (directory) links.
+  selfRepoBlobTarget,
+  selfRepoBlobTargetExists,
   isDocsMarkdown,
   listAllDocsFiles,
   stripFencedBlocks,
