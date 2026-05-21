@@ -142,9 +142,9 @@
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 213    | [intermediate] | [stable] | [risk: none] | jest, pre-commit                 |
 | [Let Tools Resolve Modules](./scripting/let-tools-resolve-modules.md)                                    | [ok] 152    | [basic]        | [stable] | [risk: none] | cross-platform, tooling          |
-| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 105 | [intermediate] | [stable] | [risk: none] | powershell, scripting            |
+| [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 106 | [intermediate] | [stable] | [risk: none] | powershell, scripting            |
 | [PowerShell Scripting Best Practices Part 1](./scripting/powershell-best-practices-part-1.md)            | [ok] 204    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
-| [PowerShell Scripting Best Practices Part 2](./scripting/powershell-best-practices-part-2.md)            | [ok] 139    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
+| [PowerShell Scripting Best Practices Part 2](./scripting/powershell-best-practices-part-2.md)            | [ok] 223    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [Regex Pattern Documentation](./scripting/regex-documentation.md)                                        | [ok] 150    | [intermediate] | [stable] | [risk: none] | regex, documentation             |
 | [Regex Pattern Documentation Part 1](./scripting/regex-documentation-part-1.md)                          | [ok] 193    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [Regex Pattern Documentation Part 2](./scripting/regex-documentation-part-2.md)                          | [ok] 180    | [intermediate] | [stable] | [risk: low]  | migration, split                 |

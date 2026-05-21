@@ -302,8 +302,16 @@ if (-not (Test-Path -LiteralPath $UnityEditorPath -PathType Leaf)) {
 }
 
 Install-UnityLicenseFile
-$licenseArgs = Get-UnityLicenseArguments
-$acceleratorArgs = Get-AcceleratorArguments -Endpoint $env:UNITY_ACCELERATOR_ENDPOINT -Version $UnityVersion -Mode $TestMode
+# Array-wrap the captures so they are ALWAYS arrays under Set-StrictMode -Version
+# Latest. A function that `return @()` on its empty path emits ZERO objects, so a
+# bare `$x = Get-Foo` assigns AutomationNull (the empty array unwraps to nothing).
+# Then reading `$x.Count` THROWS "property 'Count' cannot be found on this object"
+# under StrictMode 2.0+ (verified on pwsh 7.6.1). @(...) forces Count 0 when empty
+# so the read is safe. (The later `... + $x` concat was fine either way: `+` DROPS
+# the empty/AutomationNull capture rather than adding it -- only a LITERAL $null
+# operand would add a spurious element.)
+$licenseArgs = @(Get-UnityLicenseArguments)
+$acceleratorArgs = @(Get-AcceleratorArguments -Endpoint $env:UNITY_ACCELERATOR_ENDPOINT -Version $UnityVersion -Mode $TestMode)
 if ($acceleratorArgs.Count -gt 0) {
     Write-CiNotice "Unity Accelerator enabled for namespace dxmessaging-$UnityVersion-$TestMode."
 } else {
