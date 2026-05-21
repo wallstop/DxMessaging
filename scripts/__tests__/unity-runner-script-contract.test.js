@@ -334,6 +334,25 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
     expect(ensureEditor).toContain("Unity.exe");
+    // Regression guard for the Unity CLI PATH fix: the installer updates only
+    // the User-scope registry PATH, so the script must refresh the session
+    // PATH from the registry and resolve the CLI via $script:UnityCliPath
+    // (absolute-path fallback) instead of a bare `unity` on PATH.
+    expect(ensureEditor).toContain("$script:UnityCliPath");
+    expect(ensureEditor).toContain("GetEnvironmentVariable");
+    // Structural guards (beyond token tripwires): the registry-refresh helper
+    // must exist, the post-install loop must sleep AND re-probe `unity` after a
+    // refresh, and an absolute-path fallback must resolve the installer's known
+    // %LOCALAPPDATA%\Unity\bin\unity.exe target when the CLI never lands on PATH.
+    expect(ensureEditor).toContain("Update-SessionPathFromRegistry");
+    expect(ensureEditor).toContain("Start-Sleep");
+    // Post-install retry: a `Get-Command unity` must appear AFTER the standalone
+    // installer download so the script re-probes once the registry/PATH lands.
+    const installIndex = ensureEditor.indexOf("install.ps1");
+    expect(installIndex).toBeGreaterThan(-1);
+    expect(ensureEditor.indexOf("Get-Command unity", installIndex)).toBeGreaterThan(installIndex);
+    // Absolute-path fallback literal.
+    expect(ensureEditor).toMatch(/Unity\\bin\\unity\.exe/);
   });
 
   test("run-ci-tests exposes the required CI surface", () => {

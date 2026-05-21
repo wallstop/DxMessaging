@@ -188,9 +188,10 @@ jobs:
         (github.event_name != 'push' || github.ref_protected)
       }}
     runs-on: [self-hosted, Windows, RAM-64GB]
-    timeout-minutes: 90
+    timeout-minutes: 420
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         unity-version: ${{ fromJSON(needs.matrix-config.outputs.unity-versions) }}
         test-mode: ${{ fromJSON(needs.matrix-config.outputs.test-modes) }}
@@ -248,11 +249,12 @@ jobs:
         with:
           lock-name: wallstop-organization-builds
           holder-id-suffix: ${{ matrix.unity-version }}-${{ matrix.test-mode }}
-          timeout-minutes: "180"
+          timeout-minutes: "300"
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
       - name: Run Unity Test Runner
+        timeout-minutes: 120
         shell: pwsh
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}

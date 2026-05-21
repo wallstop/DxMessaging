@@ -45,9 +45,13 @@ const {
   extractJobConcurrencyGroup,
   extractWorkflowConcurrencyGroup,
   extractJobMatrixMaxParallel,
+  extractJobTimeoutMinutes,
+  extractStepTimeoutMinutes,
+  findUnityLockTimeoutViolations,
   extractJobNeeds,
   parseInlineLabelArray,
-  extractJobs
+  extractJobs,
+  extractJobSteps
 } = require("../validate-workflows.js");
 
 const REPO_ROOT_FOR_FILES = path.resolve(__dirname, "..", "..");
@@ -536,6 +540,425 @@ jobs:
       - run: echo hi
 `);
     expect(extractJobMatrixMaxParallel(lines, job)).toBeNull();
+  });
+});
+
+describe("extractJobTimeoutMinutes", () => {
+  function jobOf(text) {
+    const lines = asLines(text);
+    const jobs = extractJobs(lines);
+    return { lines, job: jobs[0] };
+  }
+
+  test("returns the integer value for a bare `timeout-minutes: 90`", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 90
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobTimeoutMinutes(lines, job)).toBe(90);
+  });
+
+  test('returns the integer value for a quoted `timeout-minutes: "120"`', () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: "120"
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobTimeoutMinutes(lines, job)).toBe(120);
+  });
+
+  test("returns null when no job-level timeout-minutes is declared", () => {
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - run: echo hi
+`);
+    expect(extractJobTimeoutMinutes(lines, job)).toBeNull();
+  });
+
+  test("is not confused by a deeper-indented strategy.max-parallel timeout sibling", () => {
+    // The job-level scan must match ONLY a `timeout-minutes:` line at exactly
+    // job.indent + 2; a deeper-indented strategy key (or a step-level
+    // timeout) must not be mistaken for the job timeout.
+    const { lines, job } = jobOf(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    strategy:
+      max-parallel: 1
+      matrix:
+        unity-version:
+          - "2021.3.45f1"
+    steps:
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: echo hi
+`);
+    expect(extractJobTimeoutMinutes(lines, job)).toBeNull();
+  });
+});
+
+describe("extractStepTimeoutMinutes", () => {
+  function firstStep(text) {
+    const lines = asLines(text);
+    const jobs = extractJobs(lines);
+    const steps = extractJobSteps(lines, jobs[0]);
+    return { lines, step: steps[0] };
+  }
+
+  test("returns the integer value for a step `timeout-minutes: 120`", () => {
+    const { lines, step } = firstStep(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    expect(extractStepTimeoutMinutes(lines, step)).toBe(120);
+  });
+
+  test("returns null when the step declares no step-level timeout-minutes", () => {
+    const { lines, step } = firstStep(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    expect(extractStepTimeoutMinutes(lines, step)).toBeNull();
+  });
+
+  test("is NOT confused by a deeper-indented with.timeout-minutes action input", () => {
+    // The acquire step carries `with: { timeout-minutes: "300" }`. That deeper
+    // input is the lock POLL budget, not the step's own GitHub-Actions clock, so
+    // extractStepTimeoutMinutes (which scans only the step key indent) must
+    // ignore it and return null.
+    const { lines, step } = firstStep(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          timeout-minutes: "300"
+`);
+    expect(extractStepTimeoutMinutes(lines, step)).toBeNull();
+  });
+});
+
+describe("findUnityLockTimeoutViolations", () => {
+  // Builds a Unity-licensed job that acquires the lock then runs the Unity
+  // execution step. The run step uses `run-ci-tests.ps1` so the step-timeout
+  // rule recognizes it; pass runStepTimeout=null to omit the step timeout.
+  function unityLockJob({ jobTimeout, acquireTimeout, runStepTimeout = 120 }) {
+    const jobTimeoutLine = jobTimeout === null ? "" : `\n    timeout-minutes: ${jobTimeout}`;
+    const runTimeoutLine =
+      runStepTimeout === null ? "" : `\n        timeout-minutes: ${runStepTimeout}`;
+    return asLines(`
+jobs:
+  unity-tests:
+    runs-on: [self-hosted, Windows, RAM-64GB]${jobTimeoutLine}
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: editmode
+          timeout-minutes: "${acquireTimeout}"
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner${runTimeoutLine}
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+  }
+
+  test("clean pass when job timeout >= acquire timeout + run budget", () => {
+    // Mirrors the real workflows: job 420 / acquire "300" / run step 120.
+    const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 120 });
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("flags a job whose timeout is below acquire + run budget", () => {
+    // job 290 < acquire 180 + budget 120 (= 300) -> numeric violation. The run
+    // step timeout (120) stays valid (>= budget and strictly below job 290), so
+    // ONLY the numeric violation fires.
+    const lines = unityLockJob({ jobTimeout: 290, acquireTimeout: 180, runStepTimeout: 120 });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("job_timeout (290)");
+    expect(violations[0].message).toContain("acquire_timeout (180)");
+    expect(violations[0].message).toContain("RUN_BUDGET (120)");
+  });
+
+  test("numeric violation cites the acquire step's timeout-minutes input line", () => {
+    // B2: the citation must point at the acquire `timeout-minutes:` line, not
+    // the acquire step header. In this fixture the acquire header is line 6 and
+    // its `timeout-minutes:` input is line 11.
+    const lines = unityLockJob({ jobTimeout: 290, acquireTimeout: 180, runStepTimeout: 120 });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(lines[violations[0].line - 1].trim()).toMatch(/^timeout-minutes:\s*"180"$/);
+  });
+
+  test("flags a job that acquires the lock but declares no job-level timeout", () => {
+    const lines = unityLockJob({ jobTimeout: null, acquireTimeout: 300 });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("declares no");
+    expect(violations[0].message).toContain("squat the shared");
+  });
+
+  test("ignores a job that does not acquire the organization lock", () => {
+    const lines = asLines(`
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo hi
+`);
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("skips the numeric check when the acquire timeout is an unquoted ${{ }} expression", () => {
+    const lines = asLines(`
+jobs:
+  unity-tests:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 420
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: editmode
+          timeout-minutes: \${{ vars.LOCK_TIMEOUT }}
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("skips the numeric check when the acquire timeout is a QUOTED ${{ }} expression", () => {
+    // C2(a): a quoted expression value must also be treated as non-numeric.
+    const lines = asLines(`
+jobs:
+  unity-tests:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 420
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: editmode
+          timeout-minutes: "\${{ vars.LOCK_TIMEOUT }}"
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("skips the numeric check when the acquire with: has no timeout-minutes key (job-timeout still enforced)", () => {
+    // C2(b): no acquire timeout-minutes input -> numeric comparison cannot run,
+    // but the job-timeout-presence error must still fire when it is missing.
+    const withKeyButNoTimeout = asLines(`
+jobs:
+  unity-tests:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 420
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: editmode
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    // Numeric check skipped (no acquire timeout-minutes) -> clean here.
+    expect(findUnityLockTimeoutViolations("test.yml", withKeyButNoTimeout)).toEqual([]);
+
+    const missingJobTimeout = asLines(`
+jobs:
+  unity-tests:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: editmode
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    const violations = findUnityLockTimeoutViolations("test.yml", missingJobTimeout);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("declares no");
+  });
+
+  // --- Step-level Unity-run timeout rule (B1) ---
+
+  test("step-timeout clean pass: job 420 / acquire 300 / run step 120 -> []", () => {
+    const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 120 });
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("step-timeout: missing run-step timeout -> 1 error", () => {
+    const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: null });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("no step-level timeout-minutes");
+    expect(violations[0].message).toContain("squat the shared Unity seat");
+  });
+
+  test("step-timeout: run-step timeout below the run budget -> 1 error", () => {
+    const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 60 });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("is below the run budget");
+    expect(violations[0].message).toContain("(60)");
+  });
+
+  test("step-timeout: run-step timeout >= job timeout -> 1 error", () => {
+    // step 420, job 420 -> not < job, so the step clock cannot fire first.
+    const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 420 });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("STRICTLY less than the job timeout");
+    expect(violations[0].message).toContain("(420)");
+  });
+
+  test("step-timeout boundary: step 120, budget 120, job 420 stays clean", () => {
+    // 120 is NOT < 120 (>= budget, OK) and 120 < 420 (strictly below job, OK).
+    const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 120 });
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  // --- GameCI-form run step recognition (isUnityRunStep via `uses:`) ---
+  // The GameCI experiment runs Unity via `uses: game-ci/unity-test-runner@v4`
+  // instead of `run: run-ci-tests.ps1`, but it acquires the same single seat,
+  // so the step-timeout rule must recognize the `uses:` form too.
+  //
+  // Builds a job whose post-acquire Unity step is the game-ci runner. Pass
+  // runStepTimeout=null to omit the step-level timeout.
+  function gameCiLockJob({ jobTimeout, acquireTimeout, runStepTimeout = 120 }) {
+    const jobTimeoutLine = jobTimeout === null ? "" : `\n    timeout-minutes: ${jobTimeout}`;
+    const runTimeoutLine =
+      runStepTimeout === null ? "" : `\n        timeout-minutes: ${runStepTimeout}`;
+    return asLines(`
+jobs:
+  game-ci-experiment:
+    runs-on: [self-hosted, Windows, RAM-64GB]${jobTimeoutLine}
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: game-ci-experiment
+          timeout-minutes: "${acquireTimeout}"
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run GameCI normal project mode${runTimeoutLine}
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: \${{ secrets.UNITY_LICENSE }}
+`);
+  }
+
+  test("game-ci run step (uses form) with no step timeout -> 1 step-timeout error", () => {
+    // The post-acquire Unity step is `uses: game-ci/unity-test-runner@v4` with
+    // NO step-level timeout-minutes, so isUnityRunStep recognizes it and the
+    // missing-step-timeout error fires exactly once.
+    const lines = gameCiLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: null });
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("no step-level timeout-minutes");
+    expect(violations[0].message).toContain("squat the shared Unity seat");
+  });
+
+  test("game-ci run step (uses form) WITH timeout 120 / job 420 / acquire 300 -> []", () => {
+    const lines = gameCiLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 120 });
+    expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  // --- Per-job isolation across TWO acquire-lock jobs in one workflow ---
+
+  test("two acquire-lock jobs in one workflow: only the non-compliant job is flagged", () => {
+    // One compliant job (job 420 / acquire "300" / run step 120) and one
+    // non-compliant job (same numbers but MISSING the run-step timeout). Exactly
+    // one violation must fire, and it must name the bad job -- proving per-job
+    // isolation (the validator iterates jobs independently).
+    const lines = asLines(`
+jobs:
+  unity-good:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 420
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: good
+          timeout-minutes: "300"
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        timeout-minutes: 120
+        run: ./scripts/unity/run-ci-tests.ps1
+  unity-bad:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 420
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: bad
+          timeout-minutes: "300"
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].severity).toBe("error");
+    expect(violations[0].message).toContain("Job 'unity-bad'");
+    expect(violations[0].message).not.toContain("unity-good");
+    expect(violations[0].message).toContain("no step-level timeout-minutes");
   });
 });
 

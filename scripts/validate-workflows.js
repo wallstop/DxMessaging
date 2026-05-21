@@ -59,6 +59,25 @@ const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
 const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
 const DEFAULT_WORKFLOW_LINE_LENGTH = 200;
 
+// Per-job Unity run budget (minutes) charged on top of the organization lock
+// poll wait. A Unity-licensed job's `timeout-minutes` must cover BOTH the
+// acquire-build-lock poll budget (counted against the job clock) AND this
+// run budget; otherwise GitHub kills a job that is still waiting for the
+// shared single-seat Unity Pro license. Mirrors the step-level
+// `timeout-minutes: 120` guard on the Unity run step.
+const UNITY_LOCK_RUN_BUDGET_MINUTES = 120;
+
+// Lowercased `uses` refs for the organization build-lock action (the validator
+// lowercases all `uses` values, so these constants are pre-lowercased).
+const ORGANIZATION_BUILD_LOCK_ACQUIRE_USES =
+  "ambiguous-interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1";
+
+const ORGANIZATION_BUILD_LOCK_RELEASE_USES =
+  "ambiguous-interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1";
+
+// Lowercased `uses` ref for the game-ci test runner action.
+const GAME_CI_UNITY_TEST_RUNNER_USES = "game-ci/unity-test-runner@";
+
 /**
  * Represents a validation violation.
  */
@@ -1671,6 +1690,227 @@ function extractJobMatrixMaxParallel(lines, job) {
 }
 
 /**
+ * Returns the job-level `timeout-minutes` as an integer, or null when absent.
+ * Only a line at EXACTLY `job.indent + 2` is considered so deeper step-level
+ * `timeout-minutes:` declarations (and strategy/matrix keys) are ignored.
+ */
+function extractJobTimeoutMinutes(lines, job) {
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
+
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (indent !== job.indent + 2) {
+      continue;
+    }
+
+    const timeoutMatch = /^\s*timeout-minutes:\s*["']?([0-9]+)["']?\s*(?:#.*)?$/.exec(line);
+    if (timeoutMatch) {
+      return Number.parseInt(timeoutMatch[1], 10);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Returns a step's OWN `timeout-minutes` as an integer, or null when absent.
+ * Only a line at EXACTLY the step key indent (`getIndent(step header) + 2`) is
+ * considered, so a deeper `with.timeout-minutes:` (an action input, e.g. the
+ * acquire step's `with: { timeout-minutes: "300" }`) is NOT mistaken for the
+ * step's own GitHub-Actions `timeout-minutes` clock.
+ */
+function extractStepTimeoutMinutes(lines, step) {
+  const stepKeyIndent = getIndent(lines[step.startIndex]) + 2;
+
+  for (let i = step.startIndex; i <= step.endIndex; i++) {
+    const line = lines[i];
+    if (getIndent(line) !== stepKeyIndent) {
+      continue;
+    }
+
+    const timeoutMatch = /^\s*timeout-minutes:\s*["']?([0-9]+)["']?\s*(?:#.*)?$/.exec(line);
+    if (timeoutMatch) {
+      return Number.parseInt(timeoutMatch[1], 10);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Scans the acquire step's line range for its `timeout-minutes:` input line and
+ * returns the 1-based line number (so violations cite the exact input rather
+ * than the step header). Falls back to the step header line if not found.
+ */
+function findAcquireTimeoutLine(lines, acquireStep) {
+  for (let i = acquireStep.startIndex; i <= acquireStep.endIndex; i++) {
+    if (/^\s*timeout-minutes:\s*/.test(lines[i])) {
+      return i + 1;
+    }
+  }
+  return acquireStep.startIndex + 1;
+}
+
+/**
+ * Identifies the Unity execution step within a job: the step whose `run` text
+ * invokes `run-ci-tests.ps1`, or whose `uses` is the game-ci test runner.
+ */
+function isUnityRunStep(step) {
+  if (step.run && typeof step.run.text === "string" && /run-ci-tests\.ps1/.test(step.run.text)) {
+    return true;
+  }
+  if (typeof step.uses === "string" && step.uses.includes(GAME_CI_UNITY_TEST_RUNNER_USES)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Enforces the Unity organization-lock timeout invariant:
+ *   job timeout-minutes >= acquire timeout-minutes + UNITY_LOCK_RUN_BUDGET_MINUTES.
+ * The acquire input is the lock *poll* budget counted against the job clock, so
+ * a job whose timeout cannot also cover the run budget is killed by GitHub while
+ * still waiting for the single-seat Unity Pro license. A job that acquires the
+ * lock with no job-level timeout can squat the shared seat indefinitely, so the
+ * missing-timeout case is its own error. A `${{ }}` acquire timeout cannot be
+ * resolved statically, so the numeric comparison is skipped (job-timeout
+ * presence is still enforced).
+ *
+ * The Unity *run* step also needs its own step-level `timeout-minutes`: a hung
+ * editor would otherwise squat the single shared seat for the entire job
+ * timeout (the stuck-job-watchdog ignores any in_progress job). The step clock
+ * must be >= UNITY_LOCK_RUN_BUDGET_MINUTES and STRICTLY below the job timeout so
+ * the step fails first and releases the lock instead of the whole job being
+ * cancelled with the seat still held.
+ */
+function findUnityLockTimeoutViolations(relativePath, lines) {
+  const violations = [];
+  const jobs = extractJobs(lines);
+
+  for (const job of jobs) {
+    const steps = extractJobSteps(lines, job);
+    const acquireStep = steps.find(
+      (step) => step.uses === ORGANIZATION_BUILD_LOCK_ACQUIRE_USES
+    );
+
+    if (!acquireStep) {
+      continue;
+    }
+
+    const jobTimeout = extractJobTimeoutMinutes(lines, job);
+    if (jobTimeout === null) {
+      violations.push(
+        new Violation(
+          relativePath,
+          job.startLine,
+          job.id,
+          `Job '${job.id}' acquires the organization lock but declares no ` +
+            `job-level timeout-minutes; an unbounded job can squat the shared ` +
+            `Unity seat.`,
+          "error"
+        )
+      );
+    } else {
+      const acquireTimeoutRaw = acquireStep.with.get("timeout-minutes");
+      if (
+        acquireTimeoutRaw !== undefined &&
+        !/\$\{\{/.test(acquireTimeoutRaw) &&
+        /^[0-9]+$/.test(acquireTimeoutRaw.trim())
+      ) {
+        const acquireTimeout = Number.parseInt(acquireTimeoutRaw.trim(), 10);
+        if (jobTimeout < acquireTimeout + UNITY_LOCK_RUN_BUDGET_MINUTES) {
+          violations.push(
+            new Violation(
+              relativePath,
+              findAcquireTimeoutLine(lines, acquireStep),
+              `timeout-minutes: "${acquireTimeoutRaw}"`,
+              `Job '${job.id}' acquires the organization Unity lock with ` +
+                `acquire timeout-minutes (${acquireTimeout}) but its job-level ` +
+                `timeout-minutes (${jobTimeout}) is too small: job_timeout ` +
+                `(${jobTimeout}) must be >= acquire_timeout (${acquireTimeout}) + ` +
+                `RUN_BUDGET (${UNITY_LOCK_RUN_BUDGET_MINUTES}). GitHub counts the ` +
+                `lock-wait against the job clock, so the job is killed before its ` +
+                `lock wait can finish.`,
+              "error"
+            )
+          );
+        }
+      }
+    }
+
+    // Step-level timeout guard on the Unity run step itself. Only a run that
+    // happens AFTER the lock is acquired can squat the shared seat, so restrict
+    // the search to steps following the acquire step. (A pre-lock
+    // `run-ci-tests.ps1 -GenerateOnly` only scaffolds the ephemeral project and
+    // does not hold the Unity seat.)
+    const runStep = steps.find(
+      (step) => step.startIndex > acquireStep.startIndex && isUnityRunStep(step)
+    );
+    if (runStep) {
+      const stepTimeout = extractStepTimeoutMinutes(lines, runStep);
+      if (stepTimeout === null) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runStep.startIndex + 1,
+            runStep.name || "Unity run step",
+            `Job '${job.id}' Unity run step has no step-level timeout-minutes; ` +
+              `a hung editor can squat the shared Unity seat for the entire job ` +
+              `timeout. Add timeout-minutes: ${UNITY_LOCK_RUN_BUDGET_MINUTES} to ` +
+              `the run step.`,
+            "error"
+          )
+        );
+      } else {
+        if (stepTimeout < UNITY_LOCK_RUN_BUDGET_MINUTES) {
+          violations.push(
+            new Violation(
+              relativePath,
+              runStep.startIndex + 1,
+              runStep.name || "Unity run step",
+              `Job '${job.id}' Unity run step timeout-minutes (${stepTimeout}) ` +
+                `is below the run budget: it must be >= ` +
+                `${UNITY_LOCK_RUN_BUDGET_MINUTES} so a real Unity run is not ` +
+                `prematurely killed while still holding the shared seat.`,
+              "error"
+            )
+          );
+        }
+        if (jobTimeout !== null && stepTimeout >= jobTimeout) {
+          violations.push(
+            new Violation(
+              relativePath,
+              runStep.startIndex + 1,
+              runStep.name || "Unity run step",
+              `Job '${job.id}' Unity run step timeout-minutes (${stepTimeout}) ` +
+                `must be STRICTLY less than the job timeout-minutes ` +
+                `(${jobTimeout}) so the step clock fires first and releases the ` +
+                `lock, instead of the whole job being cancelled with the shared ` +
+                `Unity seat still held.`,
+              "error"
+            )
+          );
+        }
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
  * Returns the set of job ids referenced by the job's `needs:` declaration,
  * as a string[] (or empty array when no needs are declared). Supports the
  * scalar form (`needs: foo`), the inline-array form (`needs: [foo, bar]`),
@@ -2253,8 +2493,7 @@ function findUnityGameCiLockAndPreflightViolations(relativePath, lines) {
 
       const acquireIndex = steps.findIndex(
         (candidate) =>
-          candidate.uses ===
-            "ambiguous-interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1" &&
+          candidate.uses === ORGANIZATION_BUILD_LOCK_ACQUIRE_USES &&
           candidate.startIndex < step.startIndex
       );
       const licensePreflightIndex = steps.findIndex(
@@ -2264,8 +2503,7 @@ function findUnityGameCiLockAndPreflightViolations(relativePath, lines) {
       );
       const releaseIndex = steps.findIndex(
         (candidate) =>
-          candidate.uses ===
-            "ambiguous-interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1" &&
+          candidate.uses === ORGANIZATION_BUILD_LOCK_RELEASE_USES &&
           candidate.startIndex > step.startIndex
       );
       const acquire = acquireIndex === -1 ? null : steps[acquireIndex];
@@ -3150,6 +3388,8 @@ function validateWorkflow(filePath, options = {}) {
     violations.push(...findSelfHostedRunnerPreflightViolations(relativePath, lines));
 
     violations.push(...findForbidPlainShellBashOnSelfHostedWindowsViolations(relativePath, lines));
+
+    violations.push(...findUnityLockTimeoutViolations(relativePath, lines));
   } catch (error) {
     violations.push(
       new Violation(
@@ -3267,6 +3507,10 @@ if (typeof module !== "undefined" && module.exports) {
     extractConcurrencyGroupFromBlock,
     jobHasMatrix,
     extractJobMatrixMaxParallel,
+    extractJobTimeoutMinutes,
+    extractStepTimeoutMinutes,
+    findUnityLockTimeoutViolations,
+    UNITY_LOCK_RUN_BUDGET_MINUTES,
     extractJobRunsOn,
     extractJobNeeds,
     parseInlineLabelArray,

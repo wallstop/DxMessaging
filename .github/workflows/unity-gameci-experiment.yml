@@ -75,7 +75,7 @@ jobs:
     name: GameCI ${{ inputs.unity-version }} ${{ inputs.test-mode }}
     needs: runner-preflight
     runs-on: [self-hosted, Windows, RAM-64GB]
-    timeout-minutes: 90
+    timeout-minutes: 420
     continue-on-error: true
     steps:
       - name: Checkout
@@ -122,12 +122,13 @@ jobs:
         with:
           lock-name: wallstop-organization-builds
           holder-id-suffix: game-ci-experiment
-          timeout-minutes: "180"
+          timeout-minutes: "300"
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
       - name: Run GameCI normal project mode
         id: game_ci
+        timeout-minutes: 120
         uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}

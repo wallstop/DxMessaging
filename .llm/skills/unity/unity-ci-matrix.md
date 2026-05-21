@@ -2,9 +2,9 @@
 title: "Unity CI Matrix"
 id: "unity-ci-matrix"
 category: "unity"
-version: "1.0.0"
+version: "1.1.0"
 created: "2026-05-05"
-updated: "2026-05-05"
+updated: "2026-05-20"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -104,6 +104,27 @@ immediately before `scripts/unity/run-ci-tests.ps1`, then release it with `if: a
 labels broad enough for both Windows machines; the lock protects only the Unity
 seat, not checkout, cache setup, or secret-shape validation.
 
+## Serialization + Timeout Invariant
+
+Unity Pro is a single seat shared across the whole org, so Unity-licensed jobs must be serialized in TWO complementary layers. Neither layer alone is sufficient.
+
+**Two-layer serialization.** `strategy.max-parallel: 1` serializes the matrix cells WITHIN a single run, and the external `ambiguous-organization-build-lock` action serializes ACROSS runs, workflows, and repositories.
+
+- `max-parallel: 1` only: cannot prevent two separate runs (two pushes, `unity-tests` plus `unity-benchmarks`, or another org repo) from racing for the seat.
+- The lock only: leaves all 9 cells spawning at once, so 8 idle cells burn their job-timeout clocks waiting, race for the seat, and clutter logs. Since the single seat already forces one-Unity-at-a-time, that parallelism buys ZERO throughput.
+
+With both layers, the within-run lock wait collapses to near-zero, so the cross-run lock poll budget can stay generous. This is `max-parallel: 1` ONLY -- it is NOT a native concurrency group. A native `concurrency.group: wallstop-organization-builds` is repository-scoped, serializes whole jobs, and is forbidden by `scripts/validate-workflows.js`. Add `max-parallel: 1` under `strategy:` (sibling of `fail-fast`/`matrix`) on the matrix workflows only (`unity-tests.yml`, `unity-benchmarks.yml`); single-job workflows (`release.unity-checks`, the GameCI experiment) have no matrix and rely solely on the lock for across-run serialization.
+
+**Timeout invariant.** GitHub counts the lock-wait against the job clock, so a job at the back of the serialized queue is killed before its lock wait can finish unless:
+
+```text
+job timeout-minutes >= acquire timeout-minutes + RUN_BUDGET (120)
+```
+
+The acquire input `timeout-minutes` is the lock POLL budget (how long the action waits for the seat), counted against the job clock. The current magnitudes are: acquire `timeout-minutes: "300"`, job `timeout-minutes: 420`, and a step-level `timeout-minutes: 120` on the Unity run step. `scripts/validate-workflows.js` enforces the invariant via `findUnityLockTimeoutViolations` (constant `UNITY_LOCK_RUN_BUDGET_MINUTES = 120`); `scripts/__tests__/unity-workflow-shape.test.js` pins the same numbers per job.
+
+The step-level `timeout-minutes: 120` protects the single seat from a hung editor: it must be `>= 120` and STRICTLY below the job timeout so the step fails first and releases the lock instead of the whole job being cancelled with the seat still held. This step guard matters because `stuck-job-watchdog.yml` ignores any `in_progress` job -- nothing else bounds a post-acquire hang, so without the step timeout a wedged editor would squat the seat for the full job timeout.
+
 **Operator note (standalone IL2CPP):** the `standalone` cells require the Windows IL2CPP Unity module and the host build toolchain needed by Unity for Windows players. `scripts/unity/ensure-editor.ps1` installs or verifies the requested Editor and the `windows-il2cpp` module before standalone runs.
 
 `unity-gameci-experiment.yml` is manual-only and non-required. It generates the same ephemeral project and then calls `game-ci/unity-test-runner@v4` in normal project mode (`packageMode: false`). Do not promote GameCI back to required Windows CI unless the full matrix produces real NUnit XML repeatedly.
@@ -176,6 +197,7 @@ For `standalone` runs, the direct runner first configures the generated project 
 
 ## See Also
 
+- [Unity Editor CLI Bootstrap](./unity-editor-cli-bootstrap.md)
 - [Headless Test Runner](./headless-test-runner.md)
 - [Unity License Bootstrap](./unity-license-bootstrap.md)
 - [Unity Perf Test Isolation](./unity-perf-test-isolation.md)

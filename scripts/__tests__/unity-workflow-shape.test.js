@@ -100,9 +100,17 @@ function expectUnityRunnerContract(job, expectation) {
   // serialized by the central lock action after the job starts.
   expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
 
+  // Two-layer serialization. The single Unity Pro seat is serialized ACROSS
+  // runs/workflows/repos by the central organization lock action; WITHIN a run
+  // the matrix is serialized by `strategy.max-parallel: 1` so the 9 (3 versions
+  // x 3 modes) cells queue behind one another instead of spawning a thundering
+  // herd that races the lock and burns idle job-timeout clocks. The two layers
+  // are complementary, not redundant: max-parallel:1 alone cannot stop two
+  // separate runs from racing, and the lock alone leaves the herd in place.
+  // This is `max-parallel: 1` ONLY -- never a native concurrency group.
   if (expectation.hasMatrix) {
     expect(job.strategy).toBeDefined();
-    expect(job.strategy["max-parallel"]).toBeUndefined();
+    expect(job.strategy["max-parallel"]).toBe(1);
   } else if (job.strategy !== undefined) {
     expect(job.strategy["max-parallel"]).toBeUndefined();
   }
@@ -252,6 +260,45 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       expect(steps[releaseIndex].if).toBe("always()");
       expect(steps[acquireIndex].env.BUILD_LOCK_TOKEN).toBe("${{ secrets.ORG_BUILD_LOCK_TOKEN }}");
       expect(steps[releaseIndex].env.BUILD_LOCK_TOKEN).toBe("${{ secrets.ORG_BUILD_LOCK_TOKEN }}");
+    }
+  );
+
+  // Timeout invariant: GitHub charges the organization-lock poll wait against
+  // the job clock, so a job at the back of the serialized queue is killed
+  // before its lock wait can finish unless
+  //   job timeout-minutes >= acquire timeout-minutes + RUN_BUDGET(120).
+  // The step-level run timeout (>= 120) protects the single seat from a hung
+  // editor (the stuck-job-watchdog ignores any in_progress job) and must stay
+  // strictly below the job timeout so the step fails first and releases the
+  // lock instead of the whole job being cancelled.
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow job '$jobId' job timeout covers acquire timeout + the 120m run budget",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const job = parsed.jobs[jobId];
+      const steps = job.steps;
+
+      const acquireStep = steps.find(
+        (step) =>
+          step.uses ===
+          "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
+      );
+      const runStep = steps.find((step) => step.name === "Run Unity Test Runner");
+
+      expect(acquireStep).toBeDefined();
+      expect(runStep).toBeDefined();
+
+      const acquireTimeout = Number.parseInt(acquireStep.with["timeout-minutes"], 10);
+      expect(Number.isInteger(acquireTimeout)).toBe(true);
+
+      const jobTimeout = job["timeout-minutes"];
+      expect(Number.isInteger(jobTimeout)).toBe(true);
+      expect(jobTimeout).toBeGreaterThanOrEqual(acquireTimeout + 120);
+
+      const runTimeout = runStep["timeout-minutes"];
+      expect(Number.isInteger(runTimeout)).toBe(true);
+      expect(runTimeout).toBeGreaterThanOrEqual(120);
+      expect(runTimeout).toBeLessThan(jobTimeout);
     }
   );
 
@@ -501,6 +548,36 @@ describe(".github/workflows/unity-gameci-experiment.yml", () => {
     expect(text).toContain(".artifacts/unity/game-ci-projects/");
     expect(text).not.toContain("packageMode: true");
     expect(text).not.toContain("projectPath: .unity-test-project");
+  });
+
+  test("job timeout covers acquire timeout + the 120m run budget on the GameCI run step", () => {
+    // The non-required GameCI experiment also acquires the single Unity seat,
+    // so it obeys the same timeout invariant: job >= acquire + RUN_BUDGET(120)
+    // and a step-level guard >= 120 and strictly below the job timeout.
+    const job = parsed.jobs["game-ci-experiment"];
+    const steps = job.steps;
+
+    const acquireStep = steps.find(
+      (step) =>
+        step.uses ===
+        "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
+    );
+    const runStep = steps.find((step) => step.name === "Run GameCI normal project mode");
+
+    expect(acquireStep).toBeDefined();
+    expect(runStep).toBeDefined();
+
+    const acquireTimeout = Number.parseInt(acquireStep.with["timeout-minutes"], 10);
+    expect(Number.isInteger(acquireTimeout)).toBe(true);
+
+    const jobTimeout = job["timeout-minutes"];
+    expect(Number.isInteger(jobTimeout)).toBe(true);
+    expect(jobTimeout).toBeGreaterThanOrEqual(acquireTimeout + 120);
+
+    const runTimeout = runStep["timeout-minutes"];
+    expect(Number.isInteger(runTimeout)).toBe(true);
+    expect(runTimeout).toBeGreaterThanOrEqual(120);
+    expect(runTimeout).toBeLessThan(jobTimeout);
   });
 });
 

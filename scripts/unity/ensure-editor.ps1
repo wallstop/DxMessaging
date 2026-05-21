@@ -13,6 +13,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$script:UnityCliPath = 'unity'
+
 function Write-CiNotice {
     param([Parameter(Mandatory = $true)][string]$Message)
     Write-Host "::notice::$Message"
@@ -54,9 +56,43 @@ function Set-UnityCliInstallPath {
     Invoke-UnityCli -Arguments @('install-path', $Root)
 }
 
+function Update-SessionPathFromRegistry {
+    # The standalone Unity CLI installer writes %LOCALAPPDATA%\Unity\bin\unity.exe
+    # and updates only the User-scope registry PATH; it never refreshes the
+    # current session's $env:PATH. Rebuild the session PATH from the persisted
+    # Machine + User registry values so the freshly installed CLI resolves in
+    # this process, and prepend the installer's known target in case the
+    # registry write lags. CRUCIAL: this .ps1 shares the caller's process
+    # environment, so the existing $env:PATH carries process-only entries (e.g.
+    # node added by setup-node via $GITHUB_PATH). Append it as the FINAL segment
+    # so those entries survive instead of being clobbered.
+    $segments = New-Object System.Collections.Generic.List[string]
+
+    if ($env:LOCALAPPDATA) {
+        $segments.Add((Join-Path $env:LOCALAPPDATA 'Unity\bin'))
+    }
+
+    $machinePath = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
+    if ($machinePath) {
+        $segments.Add($machinePath)
+    }
+
+    $userPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath) {
+        $segments.Add($userPath)
+    }
+
+    if ($env:PATH) {
+        $segments.Add($env:PATH)
+    }
+
+    $env:PATH = (($segments | Where-Object { $_ -and $_.Trim().Length -gt 0 }) -join ';')
+}
+
 function Ensure-UnityCli {
     $command = Get-Command unity -ErrorAction SilentlyContinue
     if ($command) {
+        $script:UnityCliPath = $command.Source
         return $command.Source
     }
 
@@ -64,21 +100,37 @@ function Ensure-UnityCli {
     $env:UNITY_CLI_CHANNEL = if ($env:UNITY_CLI_CHANNEL) { $env:UNITY_CLI_CHANNEL } else { 'beta' }
     Invoke-Expression (Invoke-RestMethod 'https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1')
 
-    $command = Get-Command unity -ErrorAction SilentlyContinue
-    if (-not $command) {
-        throw "Unity CLI installation completed but 'unity' is still not on PATH. Reopen the runner shell or add the Unity CLI install directory to PATH."
+    $maxTries = 3
+    for ($try = 1; $try -le $maxTries; $try++) {
+        Update-SessionPathFromRegistry
+        $command = Get-Command unity -ErrorAction SilentlyContinue
+        if ($command) {
+            $script:UnityCliPath = $command.Source
+            return $command.Source
+        }
+        if ($try -lt $maxTries) {
+            Start-Sleep -Seconds 2
+        }
     }
 
-    return $command.Source
+    if ($env:LOCALAPPDATA) {
+        $fallback = Join-Path $env:LOCALAPPDATA 'Unity\bin\unity.exe'
+        if (Test-Path -LiteralPath $fallback -PathType Leaf) {
+            $script:UnityCliPath = (Resolve-Path -LiteralPath $fallback).Path
+            return $script:UnityCliPath
+        }
+    }
+
+    throw "Unity CLI installation completed but 'unity' is still not on PATH. Reopen the runner shell or add the Unity CLI install directory to PATH."
 }
 
 function Invoke-UnityCli {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
-    Write-Host "unity $($Arguments -join ' ')"
-    & unity @Arguments
+    Write-Host "$script:UnityCliPath $($Arguments -join ' ')"
+    & $script:UnityCliPath @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "Unity CLI command failed with exit code ${LASTEXITCODE}: unity $($Arguments -join ' ')"
+        throw "Unity CLI command failed with exit code ${LASTEXITCODE}: $script:UnityCliPath $($Arguments -join ' ')"
     }
 }
 

@@ -213,7 +213,7 @@ jobs:
     permissions:
       contents: read
       checks: write
-    timeout-minutes: 120
+    timeout-minutes: 420
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -258,11 +258,12 @@ jobs:
         with:
           lock-name: wallstop-organization-builds
           holder-id-suffix: release-editmode
-          timeout-minutes: "180"
+          timeout-minutes: "300"
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
       - name: Run Unity Test Runner
+        timeout-minutes: 120
         shell: pwsh
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
