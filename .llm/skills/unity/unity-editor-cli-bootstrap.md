@@ -2,9 +2,9 @@
 title: "Unity Editor CLI Bootstrap"
 id: "unity-editor-cli-bootstrap"
 category: "unity"
-version: "1.0.0"
+version: "1.1.1"
 created: "2026-05-20"
-updated: "2026-05-20"
+updated: "2026-05-21"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -22,7 +22,7 @@ tags:
 
 complexity:
   level: "intermediate"
-  reasoning: "Requires understanding Windows registry PATH scopes and the difference between the persisted environment and the current process environment."
+  reasoning: "Requires understanding Windows registry PATH scopes plus the getter-vs-setter surface of a beta Unity CLI whose flags are not fully documented."
 
 impact:
   performance:
@@ -30,10 +30,10 @@ impact:
     details: "One-time per-runner installer cost; does not affect steady-state run time"
   maintainability:
     rating: "high"
-    details: "A single helper centralizes session-PATH refresh and absolute-path fallback so the installer's PATH lag cannot break Unity bootstrap"
+    details: "Centralizes session-PATH refresh, a best-effort invoker, and getter-based discovery so a beta CLI flag drift cannot break Unity bootstrap"
   testability:
     rating: "medium"
-    details: "powershell-syntax.test.js reparses the script; unity-runner-script-contract.test.js pins the PATH-fix tokens"
+    details: "powershell-syntax.test.js reparses the script; unity-runner-script-contract.test.js pins the PATH and resilience tokens"
 
 prerequisites:
   - "Familiarity with Windows PowerShell 5.1 and Set-StrictMode"
@@ -64,41 +64,50 @@ related:
 status: "stable"
 ---
 
-<!-- trigger: unity, cli, path, bootstrap, ensure-editor, powershell | Standalone Unity CLI install + session PATH refresh on self-hosted runners | Core -->
+<!-- trigger: unity, cli, path, bootstrap, ensure-editor, powershell, install-path | Standalone Unity CLI install + session PATH refresh + getter-based discovery on self-hosted runners | Core -->
 
 # Unity Editor CLI Bootstrap
 
-> **One-line summary**: `scripts/unity/ensure-editor.ps1` installs the standalone Unity CLI on a self-hosted Windows runner and must refresh the current session's `$env:PATH` from the registry (with an absolute-path fallback) because the installer updates only the User-scope registry PATH, never the running process.
+> **One-line summary**: `scripts/unity/ensure-editor.ps1` installs the standalone Unity CLI on a self-hosted Windows runner, refreshes the session `$env:PATH` from the registry, and discovers the installed editor through a best-effort SET plus a getter-based resolver so a beta CLI with uncertain flags cannot break the bootstrap.
 
 ## Overview
 
-The active Unity workflows run directly on self-hosted Windows runners and rely on the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH, it downloads and runs the official installer, then uses the CLI to install the requested editor version and (for standalone IL2CPP) the `windows-il2cpp` module.
+The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then installs the requested editor version and (for standalone IL2CPP) the `windows-il2cpp` module.
 
-The installer at `https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1` writes the binary to `%LOCALAPPDATA%\Unity\bin\unity.exe` and persists that directory onto the User-scope registry PATH via `[Environment]::SetEnvironmentVariable("PATH", ..., "User")`. The trap: a registry PATH write does NOT mutate the already-running process's `$env:PATH`. A child process inherits the environment that existed when it was spawned, so an in-session `Get-Command unity` immediately after install still fails. The historical symptom was a hard failure with "Unity CLI installation completed but 'unity' is still not on PATH. Reopen the runner shell...", which is unactionable inside a CI step that cannot reopen its shell.
+The standalone CLI is a moving beta surface (`v0.1.0-beta.x`). Some flags are undocumented and differ between releases, so the script treats every optional operation as best-effort and never lets an uncertain flag abort the install. Two failure modes drove the current design: the installer leaves `unity` off the current session PATH, and `unity install-path` was once called with a positional directory argument, which the CLI rejected.
 
-This bootstrap matters because the script is parsed cross-platform: `scripts/__tests__/powershell-syntax.test.js` reparses the `.ps1` on Linux `pwsh`, so the script must stay syntactically valid and PowerShell 5.1 + `Set-StrictMode -Version Latest` safe even though the Windows-only registry calls never execute on Linux.
+The script is parsed cross-platform: `scripts/__tests__/powershell-syntax.test.js` reparses the `.ps1` on Linux `pwsh`, so it must stay valid PowerShell 5.1 under `Set-StrictMode -Version Latest` even though the Windows-only registry calls never execute on Linux.
 
 ## Problem Statement
 
-After `Invoke-Expression (Invoke-RestMethod '.../cli/install.ps1')`, the installer:
+Two distinct problems, both fatal to a naive bootstrap:
 
-- Drops `unity.exe` at `%LOCALAPPDATA%\Unity\bin\unity.exe` (a known, fixed target).
-- Appends that directory to the User-scope registry PATH only.
-- Does NOT touch the Machine-scope registry PATH.
-- Does NOT update `$env:PATH` in the current PowerShell process.
+1. **Session PATH lag.** The installer at `https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1` writes `%LOCALAPPDATA%\Unity\bin\unity.exe` and appends that directory to the User-scope registry PATH only. A registry write does not mutate the running process `$env:PATH`, so `Get-Command unity` immediately after install still fails even on a perfect install. The registry write can also lag behind the binary on disk.
+1. **Getter-vs-setter confusion.** `unity install-path` with NO arguments is a GETTER that prints the current editor install directory. The original code passed a positional directory to it, producing the failure `too many arguments for 'install-path'. Expected 0 arguments but got 1`. The SET form uses a flag, not a positional argument.
 
-So a naive re-check throws even on a perfectly successful install. Two compounding hazards:
-
-1. The registry write can lag slightly behind the binary appearing on disk, so even reading the registry back immediately is not guaranteed to show the new entry on the first try.
-1. Under `Set-StrictMode -Version Latest`, reading an uninitialized variable is a terminating error, so any module-scope state the helpers depend on must be initialized up front.
+Under `Set-StrictMode -Version Latest`, reading an uninitialized variable is a terminating error, so module-scope state the helpers depend on must be initialized up front.
 
 ## Solution
 
-The script defines a script-scope default and a session-PATH refresh helper, then resolves the CLI through a bounded retry loop with an absolute-path fallback. Only when every path fails does it throw the original message verbatim (so historical log greps keep matching).
+The script initializes `$script:UnityCliPath = 'unity'` after `Set-StrictMode`, refreshes the session PATH from the registry through a bounded retry loop, and discovers the editor through layered, defensive strategies.
 
-### Script-scope default
+### Standalone CLI surface: VERIFIED vs UNCERTAIN
 
-Initialize `$script:UnityCliPath = 'unity'` near the top, right after `Set-StrictMode`. StrictMode then never reads it uninitialized, and callers that resolve the CLI later overwrite it with the concrete source.
+VERIFIED (relied on directly by the script):
+
+- `unity install <version>` -- positional version; `-m <id>` adds a module (the editor install adds `-m windows-il2cpp` only under the `$WithWindowsIl2Cpp` switch).
+- `unity install-path` with NO arguments -- a 0-arg GETTER that prints the current editor install directory. Passing a positional directory is the root cause of the "Expected 0 arguments but got 1" failure.
+- `unity editors -i` (with `--format json` for parsing; bare `-i` for the diagnostic dump).
+- `unity install-modules -e <version> -m <id>` (authoritative, fatal on failure); the `-l` flag lists installable module ids (best-effort sanity check only).
+
+UNCERTAIN (treated best-effort; docs punt to `--help`):
+
+- The install-path SET flag. The Hub CLI uses `-s <dir>`; the standalone CLI likely mirrors `-s`/`--set`. The script tries `-s` then `--set`, then continues.
+- The `editors --format json` schema (field names are scanned, not assumed; a wrapper object such as `{"editors":[...]}` is flattened).
+- Whether the Windows IL2CPP module id is exactly `windows-il2cpp` (the standard Hub id, very likely). The `-l` listing is a best-effort sanity check; the throwing `-m` install is the source of truth.
+- `-c <changeset>` (only meaningful for non-release builds). The script never passes it, so it is NOT exercised here.
+
+Sources: docs.unity.com/en-us/hub/unity-cli, docs.unity.com/en-us/hub/cli-overview.
 
 ### Refresh the session PATH from the registry
 
@@ -123,32 +132,30 @@ function Update-SessionPathFromRegistry {
 }
 ```
 
-Read BOTH Machine and User registry scopes (the persisted PATH after the installer's write), null-guard each so a missing scope cannot break the join, prepend the installer's known `%LOCALAPPDATA%\Unity\bin` target in case the registry write lags, and -- crucially, because this `.ps1` shares the caller's process environment -- append the existing `$env:PATH` LAST so process-only entries (such as node added by `setup-node` via `$GITHUB_PATH`) are preserved rather than clobbered. Filter empty/null segments before the `;` join. Note the LOCALAPPDATA guard wraps the INPUT to `Join-Path`, which throws on null before any output guard could run.
+Read BOTH Machine and User registry scopes, null-guard each, prepend the installer's known `%LOCALAPPDATA%\Unity\bin` target in case the registry write lags, and -- because this `.ps1` shares the caller's process environment -- append the existing `$env:PATH` LAST so process-only entries (node added by `setup-node` via `$GITHUB_PATH`) survive instead of being clobbered. `Ensure-UnityCli` re-checks `Get-Command unity` about 3 times, refreshing PATH each pass with `Start-Sleep -Seconds 2` between tries; on exhaustion it falls back to the absolute `%LOCALAPPDATA%\Unity\bin\unity.exe`, and only a genuinely missing binary throws the original message verbatim (so historical log greps keep matching).
 
-### Bounded retry, then absolute-path fallback
+### Three invokers with distinct contracts
 
-`Ensure-UnityCli` re-checks `Get-Command unity` in a short bounded loop (about 3 tries, refreshing the session PATH each pass, `Start-Sleep -Seconds 2` between tries with no trailing sleep on the last try). On success it sets `$script:UnityCliPath = $command.Source` and returns. If the loop exhausts, it falls back to the absolute path:
+- `Invoke-UnityCli` -- THROWING. Used only where failure is fatal (the editor install, the standalone module install). Echoes `$script:UnityCliPath` and throws on a non-zero `$LASTEXITCODE`.
+- `Invoke-UnityCliSafe` -- NON-throwing best-effort. Returns `$true`/`$false`, merges stderr into stdout (`2>&1`) so a beta CLI writing usage to stderr cannot trip `$ErrorActionPreference = 'Stop'`. Used for optional effects such as setting the install path.
+- `Get-UnityCliOutput` -- CAPTURING, non-throwing. Returns stdout lines or `$null`. It deliberately keeps getter output OFF this script's success stream because the caller (`run-ci-tests.ps1`) reads our LAST stdout line as the resolved editor path via `Select-Object -Last 1`; getter chatter must never leak there.
 
-```powershell
-$fallback = Join-Path $env:LOCALAPPDATA 'Unity\bin\unity.exe'
-if (Test-Path -LiteralPath $fallback -PathType Leaf) {
-    $script:UnityCliPath = (Resolve-Path -LiteralPath $fallback).Path
-    return $script:UnityCliPath
-}
+### Best-effort SET, getter-based authoritative discovery
 
-throw "Unity CLI installation completed but 'unity' is still not on PATH. Reopen the runner shell or add the Unity CLI install directory to PATH."
-```
+`Set-UnityCliInstallPath` calls `Invoke-UnityCliSafe -Arguments @('install-path', '-s', $Root)`, then `--set` on failure, then emits a `::notice::` (NOT an error) and continues. Setting the path is an optimization, never a requirement.
 
-The throw message is preserved verbatim so historical log greps still match; it now fires only when the binary is genuinely absent.
+`Get-UnityCliInstallRoot` runs the 0-arg GETTER `Get-UnityCliOutput -Arguments @('install-path')` and takes the last path-like line (validated by `Test-LooksLikeAbsolutePath`, which accepts only `C:\...` or `\\...`). This reports the CLI's REAL install location whether or not the SET succeeded, so discovery never depends on the uncertain set flag.
 
-### Invoke through the resolved path
+`Resolve-InstalledEditor` layers: (a) probe under the getter-reported root, (b) the candidate-path search under the configured `$InstallRoot`, (c) a defensive parse of `unity editors -i --format json`. `Resolve-EditorFromCliJson` wraps `ConvertFrom-Json` in try/catch -- malformed or banner-prefixed beta output returns `$null` instead of throwing -- and scans candidate version fields and path fields rather than assuming a schema.
 
-`Invoke-UnityCli` calls `& $script:UnityCliPath @Arguments` (and echoes `$script:UnityCliPath`) instead of a bare `& unity`, so commands run against whichever source `Ensure-UnityCli` resolved -- PATH entry or absolute fallback. Its command-FAILED `throw` interpolates `$script:UnityCliPath` too, so the error reports the path that actually ran (not a misleading literal `unity`). The `$LASTEXITCODE` handling is unchanged.
+### Modules only for standalone, with id verification
+
+The editor install adds `-m windows-il2cpp` ONLY under the `$WithWindowsIl2Cpp` switch; editmode and playmode never install modules. `Add-WindowsIl2CppModule` runs `install-modules -e <version> -l` as a best-effort sanity check: if that listing is readable but omits the literal `windows-il2cpp`, it emits a `::warning::` and CONTINUES (a beta CLI may use a different listing format or display name, so a mismatch must not abort a standalone run on its own); if the listing is unavailable it proceeds optimistically with the standard id. Either way the throwing `install-modules -e <version> -m windows-il2cpp` is the authoritative source of truth and is fatal on real failure.
 
 ## Verification
 
 - `scripts/__tests__/powershell-syntax.test.js` reparses the edited `.ps1`; keep it valid PowerShell 5.1.
-- `scripts/__tests__/unity-runner-script-contract.test.js` asserts the script contains `$script:UnityCliPath` and `GetEnvironmentVariable` as a regression guard for the PATH fix, alongside the existing tokens (`Ensure-UnityCli`, `Set-UnityCliInstallPath`, `install-path`, `install-modules`, `windows-il2cpp`, `Unity.exe`).
+- `scripts/__tests__/unity-runner-script-contract.test.js` pins both the PATH fix (`$script:UnityCliPath`, `GetEnvironmentVariable`, `Update-SessionPathFromRegistry`, the absolute-path fallback) and the resilience design: `install-path` SET uses `-s` (never a positional `$Root`), `Invoke-UnityCliSafe` exists, `Get-UnityCliInstallRoot` reads `@('install-path')`, the defensive `--format json` / `ConvertFrom-Json` discovery, and standalone-only `-m windows-il2cpp` gating.
 
 ## See Also
 
@@ -159,5 +166,6 @@ The throw message is preserved verbatim so historical log greps still match; it 
 ## References
 
 - Unity CLI docs: https://docs.unity.com/en-us/hub/unity-cli
+- Unity CLI overview: https://docs.unity.com/en-us/hub/cli-overview
 - Standalone CLI installer: https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1
 - Bootstrap script: `scripts/unity/ensure-editor.ps1`

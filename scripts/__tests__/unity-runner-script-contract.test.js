@@ -329,7 +329,10 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("UnityVersion");
     expect(ensureEditor).toContain("Ensure-UnityCli");
     expect(ensureEditor).toContain("Set-UnityCliInstallPath");
-    expect(ensureEditor).toContain("install-path");
+    // NOTE: a bare `toContain("install-path")` was intentionally removed -- it
+    // matched both the old positional bug shape and the new getter/`-s` form, so
+    // it was tautological. The form-specific `'install-path', '-s'` SET and
+    // `@('install-path')` getter assertions below cover the surface precisely.
     expect(ensureEditor).toContain("$installArgs = @('install', $UnityVersion)");
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
@@ -353,6 +356,128 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor.indexOf("Get-Command unity", installIndex)).toBeGreaterThan(installIndex);
     // Absolute-path fallback literal.
     expect(ensureEditor).toMatch(/Unity\\bin\\unity\.exe/);
+  });
+
+  test("ensure-editor is resilient to the unstable standalone Unity CLI surface", () => {
+    // ----------------------------------------------------------------------
+    // Regression guards for the "wrong argument counts" CI failure. The
+    // standalone Unity CLI v0.1.0-beta.x is a moving surface: `install-path`
+    // with NO args is a GETTER, and the SET flag is undocumented. The script
+    // must (a) never pass a positional dir to install-path, (b) set the path
+    // best-effort via -s, (c) resolve the install root from the getter, (d)
+    // discover editors defensively, and (e) gate module installs to standalone.
+    // ----------------------------------------------------------------------
+
+    // (a) install-path SET must use the -s flag, NOT a positional directory.
+    // The original bug was `Invoke-UnityCli -Arguments @('install-path', $Root)`
+    // (positional dir). That exact shape must never reappear in ANY form.
+    expect(ensureEditor).toContain("'install-path', '-s'");
+    expect(ensureEditor).not.toMatch(/'install-path',\s*\$Root\b/);
+    expect(ensureEditor).not.toMatch(/'install-path',\s*\$InstallRoot\b/);
+    // Catch the un-quoted positional shapes too: `install-path $Root` and
+    // `'install-path' $Root` (no comma) -- either would re-introduce the
+    // "Expected 0 arguments but got 1" failure the getter design eliminated.
+    expect(ensureEditor).not.toMatch(/'?install-path'?\s+\$Root\b/);
+    expect(ensureEditor).not.toMatch(/'?install-path'?\s+\$InstallRoot\b/);
+    // A SET fallback exists: try -s first, then --set, before giving up.
+    expect(ensureEditor).toContain("'install-path', '--set'");
+    // The throwing invoker must NOT be used for setting the install path
+    // (set is an optimization, not a hard requirement). The \s after
+    // Invoke-UnityCli excludes the legitimate Invoke-UnityCliSafe calls.
+    expect(ensureEditor).not.toMatch(/Invoke-UnityCli\s+-Arguments\s+@\('install-path'/);
+
+    // (b) A non-throwing best-effort invoker exists and is distinct from the
+    // throwing Invoke-UnityCli, so optional CLI ops cannot abort the bootstrap.
+    // Both the best-effort invoker AND the capturing getter invoker must exist;
+    // the design depends on getter output staying OFF the success stream that
+    // run-ci-tests.ps1 reads via `Select-Object -Last 1`.
+    expect(ensureEditor).toContain("function Invoke-UnityCliSafe");
+    expect(ensureEditor).toContain("function Get-UnityCliOutput");
+    // Invoke-UnityCliSafe is non-throwing: it returns a boolean and swallows
+    // non-zero exits (it never re-throws on $LASTEXITCODE). Pin the boolean
+    // return contract so a refactor cannot quietly make it throw.
+    expect(ensureEditor).toMatch(/function Invoke-UnityCliSafe[\s\S]*?return \(\$exit -eq 0\)/);
+    // Set-UnityCliInstallPath routes through the best-effort invoker. Constrain
+    // the gap with `[^}]*?` (no brace, so the match cannot cross out of the
+    // function body) so a stray `Invoke-UnityCliSafe ... '-s' ...` in an unrelated
+    // later function could not satisfy this assertion.
+    expect(ensureEditor).toMatch(
+      /Set-UnityCliInstallPath[^}]*?Invoke-UnityCliSafe -Arguments @\('install-path', '-s', \$Root\)/
+    );
+    // Failure to set the path emits a notice (not an error) and continues. Pin
+    // the ACTUAL emit (the Write-CiNotice fallback line), not a bare `::notice::`
+    // token: the old loose form was satisfied by the function's own comment, so
+    // it stayed green even if the real notice-on-failure line were deleted.
+    expect(ensureEditor).toMatch(
+      /Set-UnityCliInstallPath[\s\S]*?Write-CiNotice "Could not set the Unity CLI install path/
+    );
+
+    // (c) Getter-based authoritative resolver: runs `unity install-path` with
+    // NO extra args via the CAPTURING (non-throwing) invoker and uses path-like
+    // output as the root. It must route through Get-UnityCliOutput, never the
+    // throwing/echoing invokers, so getter chatter cannot leak to the success
+    // stream or abort the bootstrap on a non-zero beta exit.
+    expect(ensureEditor).toContain("function Get-UnityCliInstallRoot");
+    expect(ensureEditor).toContain("Get-UnityCliOutput -Arguments @('install-path')");
+    expect(ensureEditor).not.toMatch(/Invoke-UnityCli(Safe)?\s+-Arguments\s+@\('install-path'\)/);
+    expect(ensureEditor).toContain("Test-LooksLikeAbsolutePath");
+    // The path-like guard accepts a Windows drive-letter or UNC path only, so a
+    // beta banner line cannot be mistaken for the install root.
+    expect(ensureEditor).toMatch(/function Test-LooksLikeAbsolutePath/);
+    expect(ensureEditor).toMatch(/\^\[A-Za-z\]:\[\\\\\/\]/);
+
+    // (d) Defensive JSON discovery: editors -i --format json read through the
+    // capturing invoker and parsed inside a try/catch with ConvertFrom-Json so
+    // malformed beta output returns $null (continues) instead of throwing.
+    expect(ensureEditor).toContain("'editors', '-i', '--format', 'json'");
+    expect(ensureEditor).toMatch(
+      /Get-UnityCliOutput -Arguments @\('editors', '-i', '--format', 'json'\)/
+    );
+    expect(ensureEditor).toContain("ConvertFrom-Json");
+    // The ConvertFrom-Json call sits in a try whose catch returns (does not
+    // re-throw), proving malformed JSON is non-fatal. Constrain the catch-body
+    // gap with `[^}]*?` so the `return` must live INSIDE the catch block (cannot
+    // be satisfied by an empty catch followed by a `return` in a later function).
+    expect(ensureEditor).toMatch(/try\s*\{[^}]*ConvertFrom-Json[\s\S]*?\}\s*catch\s*\{[^}]*?return/);
+
+    // (e) Module gating: the install `-m windows-il2cpp` and the install-modules
+    // path are reachable ONLY under the $WithWindowsIl2Cpp switch. editmode /
+    // playmode (the switch absent) must never install a module. Pin `-m
+    // windows-il2cpp` to the `$installArgs +=` line INSIDE the if block so a loose
+    // `[\s\S]*?` match cannot be satisfied by the literal appearing in an
+    // unrelated later function (e.g. Add-WindowsIl2CppModule's install call).
+    expect(ensureEditor).toMatch(
+      /if \(\$WithWindowsIl2Cpp\)\s*\{\s*\$installArgs \+= @\('-m', 'windows-il2cpp'\)/
+    );
+    expect(ensureEditor).toMatch(/elseif \(\$WithWindowsIl2Cpp\)/);
+    // IL2CPP module install verifies the id via the -l listing before installing.
+    expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-l'");
+    expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-m'");
+    // The -l listing is read non-throwing (best-effort verification) while the
+    // actual module install is THROWING (fatal for standalone). Pin both halves.
+    expect(ensureEditor).toMatch(
+      /Get-UnityCliOutput -Arguments @\('install-modules', '-e', \$Version, '-l'\)/
+    );
+    expect(ensureEditor).toMatch(
+      /Invoke-UnityCli -Arguments @\('install-modules', '-e', \$Version, '-m', \$moduleId\)/
+    );
+
+    // Layered discovery wiring: install branch resolves through the layered
+    // resolver, not the bare candidate search alone. Resolve-InstalledEditor
+    // must consult the getter root, the candidate search, AND the JSON parse.
+    expect(ensureEditor).toContain("Resolve-InstalledEditor");
+    expect(ensureEditor).toMatch(
+      /function Resolve-InstalledEditor[\s\S]*?Get-UnityCliInstallRoot[\s\S]*?Find-UnityEditor[\s\S]*?Resolve-EditorFromCliJson/
+    );
+    // Pin the MAIN-FLOW call site (not just the function definition): the install
+    // branch must actually invoke the layered resolver with the requested version
+    // and configured root. A definition that nothing calls would be dead code.
+    expect(ensureEditor).toMatch(
+      /\$editor = Resolve-InstalledEditor -Version \$UnityVersion -Root \$InstallRoot/
+    );
+    // Pin the module call site: the IL2CPP-only elseif branch must invoke the
+    // module installer with the requested version.
+    expect(ensureEditor).toMatch(/Add-WindowsIl2CppModule -Version \$UnityVersion/);
   });
 
   test("run-ci-tests exposes the required CI surface", () => {
