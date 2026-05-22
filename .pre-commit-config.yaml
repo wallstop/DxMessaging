@@ -532,7 +532,7 @@ repos:
         language: system
         pass_filenames: false
         files: >-
-          ^(\.pre-commit-config\.yaml|package\.json|\.devcontainer/|\.unity-test-project/|scripts/unity/|scripts/__tests__/(unity-test-harness-contract|unity-runner-script-contract|unity-perf-baseline-script-contract|devcontainer-cache-contract|unity-workflow-shape|unity-perf-isolation|claude-permissions-contract|llm-skills-unity-coverage)\.test\.js|\.github/workflows/(script-tests|unity-|devcontainer-)|\.claude/settings\.local\.json|\.llm/skills/unity/|\.llm/skills/github-actions/cicd-devcontainer-workflows\.md|\.llm/context\.md|Tests/.+/.+\.asmdef$)
+          ^(\.pre-commit-config\.yaml|package\.json|\.devcontainer/|\.unity-test-project/|scripts/unity/|scripts/__tests__/(unity-test-harness-contract|unity-runner-script-contract|unity-perf-baseline-script-contract|devcontainer-cache-contract|unity-workflow-shape|unity-perf-isolation|claude-permissions-contract|llm-skills-unity-coverage)\.test\.js|\.github/actions/.+/action\.ya?ml|\.github/workflows/(script-tests|unity-|devcontainer-)|\.claude/settings\.local\.json|\.llm/skills/unity/|\.llm/skills/github-actions/cicd-devcontainer-workflows\.md|\.llm/context\.md|Tests/.+/.+\.asmdef$)
         stages:
           - pre-push
         description: >-

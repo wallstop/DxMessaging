@@ -12,9 +12,17 @@
 const fs = require("fs");
 const path = require("path");
 const yaml = require("js-yaml");
+const { spawnSync } = require("child_process");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const CI_RUNNER = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
+
+function pwshAvailable() {
+  const probe = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
+    encoding: "utf8"
+  });
+  return probe.status === 0;
+}
 
 describe("generated Unity test harness contract", () => {
   describe("scripts/unity/run-ci-tests.ps1", () => {
@@ -43,6 +51,101 @@ describe("generated Unity test harness contract", () => {
       expect(content).toContain("DxmCiTestConfigurator");
       expect(content).toContain("BuildTarget.StandaloneWindows64");
       expect(content).toContain("ScriptingImplementation.IL2CPP");
+    });
+
+    test("writes DxMessaging analyzer csc.rsp before any Unity compile", () => {
+      const initializeIndex = content.indexOf("function Initialize-EphemeralProject");
+      const cscWriteIndex = content.indexOf(
+        "New-CscRspContent -Root $Root -Project $project",
+        initializeIndex
+      );
+      const generateOnlyIndex = content.indexOf("if ($GenerateOnly)");
+      const firstUnityLaunchIndex = content.indexOf(
+        "Invoke-UnityNativeStartupProbe -EditorPath $UnityEditorPath"
+      );
+
+      expect(initializeIndex).toBeGreaterThanOrEqual(0);
+      expect(cscWriteIndex).toBeGreaterThan(initializeIndex);
+      expect(cscWriteIndex).toBeLessThan(generateOnlyIndex);
+      expect(cscWriteIndex).toBeLessThan(firstUnityLaunchIndex);
+      expect(content).toContain("Join-Path $project 'Assets\\csc.rsp'");
+    });
+
+    test("generated csc.rsp contains DxMessaging source-generator and analyzer entries", () => {
+      expect(content).toContain("function New-CscRspContent");
+      expect(content).toContain("WallstopStudios.DxMessaging.SourceGenerators.dll");
+      expect(content).toContain("WallstopStudios.DxMessaging.Analyzer.dll");
+      expect(content).toContain("Missing required DxMessaging analyzer DLL(s)");
+      expect(content).toContain('-a:`"Packages/$PackageName/Editor/Analyzers/$dllName`"');
+      expect(content).toContain('-additionalfile:`"$ignoreSidecarRelativePath`"');
+    });
+
+    test("reports whether Unity compile logs mention DxMessaging analyzer arguments", () => {
+      expect(content).toContain("function Write-CscRspDiagnostics");
+      expect(content).toContain("Generated Assets/csc.rsp is missing required");
+      expect(content).toContain("Unity compile log mentioned DxMessaging source-generator arg");
+      expect(content).toContain("Unity compile log mentioned DxMessaging analyzer arg");
+      expect(content).toContain("Write-CscRspDiagnostics -Project $ProjectPath");
+    });
+
+    test("GenerateOnly writes Assets/csc.rsp with required DxMessaging analyzer entries", () => {
+      if (!pwshAvailable()) {
+        console.warn("[unity-harness-contract] pwsh not found; skipping GenerateOnly assertion.");
+        return;
+      }
+
+      const base = fs.mkdtempSync(path.join(require("os").tmpdir(), "dxm-generate-only-"));
+      const repoRoot = path.join(base, "repo");
+      const project = path.join(base, "project");
+      const artifacts = path.join(base, "artifacts");
+      try {
+        fs.mkdirSync(path.join(repoRoot, "Runtime"), { recursive: true });
+        fs.mkdirSync(path.join(repoRoot, "Editor", "Analyzers"), { recursive: true });
+        fs.writeFileSync(path.join(repoRoot, "package.json"), "{}\n", "utf8");
+        for (const dllName of [
+          "WallstopStudios.DxMessaging.SourceGenerators.dll",
+          "WallstopStudios.DxMessaging.Analyzer.dll"
+        ]) {
+          fs.writeFileSync(path.join(repoRoot, "Editor", "Analyzers", dllName), "stub", "utf8");
+        }
+
+        const run = spawnSync(
+          "pwsh",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            CI_RUNNER,
+            "-UnityVersion",
+            "2021.3.45f1",
+            "-TestMode",
+            "editmode",
+            "-AssemblyNames",
+            "WallstopStudios.DxMessaging.Tests.Editor",
+            "-ArtifactsPath",
+            artifacts,
+            "-RepoRoot",
+            repoRoot,
+            "-ProjectPath",
+            project,
+            "-GenerateOnly"
+          ],
+          { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
+        );
+
+        expect(run.status).toBe(0);
+        const rspPath = path.join(project, "Assets", "csc.rsp");
+        expect(fs.existsSync(rspPath)).toBe(true);
+        const rsp = fs.readFileSync(rspPath, "utf8");
+        expect(rsp).toContain(
+          '-a:"Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll"'
+        );
+        expect(rsp).toContain(
+          '-a:"Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll"'
+        );
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
     });
 
     test("validates real NUnit output instead of trusting Unity process success", () => {
@@ -130,4 +233,40 @@ describe("generated Unity test harness contract", () => {
   test("js-yaml is available for downstream YAML-shape suites", () => {
     expect(typeof yaml.load).toBe("function");
   });
+
+  describe("Unity 2021 compiler compatibility guards", () => {
+    const tokenPath = path.join(REPO_ROOT, "Runtime", "Core", "MessageRegistrationToken.cs");
+
+    test("runtime sources avoid null-conditional out-var definite-assignment patterns", () => {
+      const runtimeFiles = listTrackedRuntimeSources();
+      expect(runtimeFiles.length).toBeGreaterThan(0);
+      const violations = [];
+      for (const relPath of runtimeFiles) {
+        const source = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
+        const pattern =
+          /\?\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\bout\s+(?:var|[A-Za-z_][A-Za-z0-9_<>,.?[\]\s]*)\s+[A-Za-z_][A-Za-z0-9_]*/g;
+        if (pattern.test(source)) {
+          violations.push(relPath);
+        }
+      }
+
+      expect(violations).toEqual([]);
+      const tokenSource = fs.readFileSync(tokenPath, "utf8");
+      expect(tokenSource).toContain(
+        "_deregistrations.Remove(handle, out Action deregistrationAction)"
+      );
+    });
+  });
 });
+
+function listTrackedRuntimeSources() {
+  const result = spawnSync("git", ["ls-files", "Runtime/**/*.cs"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8"
+  });
+  expect(result.status).toBe(0);
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}

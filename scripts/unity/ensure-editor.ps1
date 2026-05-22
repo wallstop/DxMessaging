@@ -83,13 +83,21 @@ function Get-UnityEditorCandidates {
         [Parameter(Mandatory = $true)][string]$Root
     )
 
-    @(
-        (Join-Path $Root "$Version\Editor\Unity.exe"),
-        (Join-Path $Root "$Version\Unity.exe"),
-        (Join-Path ${env:ProgramFiles} "Unity\Hub\Editor\$Version\Editor\Unity.exe"),
-        (Join-Path ${env:ProgramFiles} "Unity\$Version\Editor\Unity.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor\$Version\Editor\Unity.exe")
-    ) | Where-Object { $_ -and $_.Trim().Length -gt 0 }
+    $candidates = New-Object System.Collections.Generic.List[string]
+    $candidates.Add((Join-Path $Root "$Version\Editor\Unity.exe"))
+    $candidates.Add((Join-Path $Root "$Version\Unity.exe"))
+
+    if (${env:ProgramFiles} -and ${env:ProgramFiles}.Trim().Length -gt 0) {
+        $candidates.Add((Join-Path ${env:ProgramFiles} "Unity\Hub\Editor\$Version\Editor\Unity.exe"))
+        $candidates.Add((Join-Path ${env:ProgramFiles} "Unity\$Version\Editor\Unity.exe"))
+    }
+    if (${env:ProgramFiles(x86)} -and ${env:ProgramFiles(x86)}.Trim().Length -gt 0) {
+        $candidates.Add(
+            (Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor\$Version\Editor\Unity.exe")
+        )
+    }
+
+    return @($candidates.ToArray() | Where-Object { $_ -and $_.Trim().Length -gt 0 })
 }
 
 function Find-UnityEditor {
@@ -489,10 +497,8 @@ function Resolve-InstalledEditor {
 function Test-Il2CppModulePresent {
     # Disk-authoritative, best-effort probe for whether Windows IL2CPP support is
     # already installed for a resolved editor. The standalone CLI's
-    # `install-modules` is not a reliable source of truth here: it returns "No
-    # modules found to install." (exit 6) when the module is ALREADY present,
-    # which is an idempotent no-op rather than a failure. The on-disk layout is
-    # the real evidence.
+    # `install-modules` output is not a reliable success source by itself. Disk
+    # evidence is the success proof we accept after a non-zero module install.
     #
     # IMPORTANT: the exact on-disk layout VARIES BY UNITY VERSION (and has shifted
     # across the 2020->6000 lineage), so this probes two STANDALONE-SPECIFIC IL2CPP
@@ -501,7 +507,8 @@ function Test-Il2CppModulePresent {
     # folder, and (b) any subdirectory of the standalone Variations folder whose
     # name contains 'il2cpp'. It is best-effort CORROBORATION only -- a $false
     # result does not prove the module is absent (the layout may be one we don't
-    # know), so callers must not treat $false as a hard "missing" signal. Fully
+    # know), but CI must fail when a failed module install leaves no disk proof
+    # because standalone tests otherwise fail later with weaker diagnostics. Fully
     # StrictMode-safe: every path read is guarded, missing paths yield $false, and
     # nothing throws.
     param([Parameter(Mandatory = $true)][string]$EditorPath)
@@ -553,22 +560,16 @@ function Test-Il2CppModulePresent {
 
 function Add-WindowsIl2CppModule {
     # IDEMPOTENT, disk-authoritative IL2CPP module install for standalone. The
-    # standalone beta CLI returns "No modules found to install." with exit code 6
-    # when the IL2CPP module is ALREADY present -- an idempotent no-op, NOT a
-    # failure -- so blindly treating any non-zero exit as fatal wrongly aborts the
-    # job. We instead attempt the install via the NON-throwing capturing path and
-    # CLASSIFY the result against the disk:
+    # standalone beta CLI can return "No modules found to install." with exit code 6
+    # when the IL2CPP module is ALREADY present, so blindly treating any non-zero
+    # exit as fatal wrongly aborts healthy reruns. We instead attempt the install
+    # via the NON-throwing capturing path and CLASSIFY the result against the disk:
     #   1. install succeeded (exit 0)                              -> done.
     #   2. install failed BUT IL2CPP is present on disk            -> ::notice::, return.
-    #   3. install failed, output matches a benign "nothing to do"
-    #      pattern AND disk probe is inconclusive                 -> ::warning::, return.
+    #   3. install failed with benign nothing-to-do text but no
+    #      disk proof                                             -> THROW (fatal).
     #   4. anything else                                          -> THROW (fatal),
     #      including the captured CLI output tail + exit code.
-    # Case 4 preserves the original guarantee: a genuinely missing module with a
-    # non-benign error STILL fails the job loudly. The benign-pattern branch
-    # (case 3) does not mask that -- a real missing module produces no IL2CPP on
-    # disk AND, when the CLI reports nothing to install, the absence will surface
-    # at standalone build/test time; a non-benign error skips straight to case 4.
     param(
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath
@@ -611,19 +612,54 @@ function Add-WindowsIl2CppModule {
         return
     }
 
-    # Case 3: install failed with a benign "nothing to install / already
-    # installed" message AND the disk probe was inconclusive (we could not
-    # corroborate presence, but the CLI itself says there is nothing to do). Do
-    # NOT abort: a genuinely missing module will surface in the standalone
-    # build/test step. Warn so the situation is visible in CI logs.
     if ($outputText -match '(?i)no modules found to install|already installed|is already installed') {
-        Write-Host "::warning::Unity $Version 'install-modules -m $moduleId' reported nothing to install (exit code $($result.ExitCode)) and IL2CPP could not be corroborated on disk. Continuing; a genuinely missing module will surface in the standalone build/test."
-        return
+        throw "Unity $Version 'install-modules -m $moduleId' reported nothing to install with exit code $($result.ExitCode), but Windows IL2CPP is not present on disk. Treating this as a partial or unmanaged editor install. CLI output tail:`n$tail"
     }
 
-    # Case 4: genuine, non-benign failure. Fatal -- include the captured output
+    # Case 3: genuine, non-benign failure. Fatal -- include the captured output
     # tail and exit code so CI logs show WHY the module install failed.
     throw "Unity $Version 'install-modules -m $moduleId' failed with exit code $($result.ExitCode) and Windows IL2CPP is not present on disk. CLI output tail:`n$tail"
+}
+
+function Write-InstalledEditorDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    Write-Host "::group::Unity editor resolution diagnostics"
+    Write-Host "Reason: $Reason"
+    Write-Host "Requested Unity version: $Version"
+    Write-Host "Configured install root: $Root"
+    try {
+        $cliRoot = Get-UnityCliInstallRoot
+        if ($cliRoot) {
+            Write-Host "Unity CLI reported install root: $cliRoot"
+        } else {
+            Write-Host "Unity CLI reported install root: (unavailable)"
+        }
+    } catch {
+        Write-Host "::notice::Could not query Unity CLI install root: $($_.Exception.Message)"
+    }
+
+    try {
+        Write-Host "Known Unity.exe candidate paths:"
+        foreach ($candidate in Get-UnityEditorCandidates -Version $Version -Root $Root) {
+            $exists = Test-Path -LiteralPath $candidate -PathType Leaf
+            Write-Host "  [$exists] $candidate"
+        }
+    } catch {
+        Write-Host "::notice::Could not enumerate Unity.exe candidates: $($_.Exception.Message)"
+    }
+
+    try {
+        Write-Host "Installed Unity editors reported by CLI:"
+        Invoke-UnityCliSafe -Arguments @('editors', '-i') | Out-Null
+    } catch {
+        Write-Host "::notice::Could not query installed Unity editors: $($_.Exception.Message)"
+    }
+    Write-Host "::endgroup::"
 }
 
 function Write-InstallDiagnostics {
@@ -698,25 +734,60 @@ if (-not $editor) {
     # CAPTURING invoker so a final failure THROWS with the CLI output tail + exit
     # code -- the previous failure surfaced no actionable diagnostics. Output is
     # still streamed live by Invoke-UnityCliCapture, never silently buffered.
-    Invoke-WithRetry -MaxAttempts 2 -DelaySeconds 15 -Action {
+    $retryDelaySeconds = 15
+    if ($env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS) {
+        $parsedDelay = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS, [ref]$parsedDelay) -and
+            $parsedDelay -ge 0
+        ) {
+            $retryDelaySeconds = $parsedDelay
+        } else {
+            Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS='$env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS'; using $retryDelaySeconds second(s)."
+        }
+    }
+
+    $recoveredEditor = Invoke-WithRetry -MaxAttempts 2 -DelaySeconds $retryDelaySeconds -Action {
         $installResult = Invoke-UnityCliCapture -Arguments $installArgs
         if (-not $installResult.Success) {
             $installLines = @($installResult.Output)
+            $installText = ($installLines -join "`n")
             $installTailCount = [Math]::Min(40, $installLines.Count)
             $installTail = if ($installTailCount -gt 0) {
                 ($installLines[($installLines.Count - $installTailCount)..($installLines.Count - 1)] -join "`n")
             } else {
                 '(no output captured)'
             }
+
+            $resolvedAfterFailure = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot
+            if ($resolvedAfterFailure) {
+                Write-CiNotice "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; treating the install as already present."
+                if ($WithWindowsIl2Cpp) {
+                    Write-CiNotice "Verifying Windows IL2CPP after recovered editor install."
+                    Add-WindowsIl2CppModule -Version $UnityVersion -EditorPath $resolvedAfterFailure
+                }
+                return $resolvedAfterFailure
+            }
+
+            if ($installText -match '(?i)already installed|editor already installed|is already installed') {
+                Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI reported the editor is already installed, but Unity.exe could not be resolved afterward."
+                throw "Unity CLI '$($installArgs -join ' ')' reported an already-installed editor with exit code $($installResult.ExitCode), but Unity.exe could not be found. This looks like a partial or corrupt install. CLI output tail:`n$installTail"
+            }
+
+            Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install failed and Unity.exe could not be resolved afterward."
             throw "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode). CLI output tail:`n$installTail"
         }
+
+        return $null
     }
 
-    $editor = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot
+    if ($recoveredEditor) {
+        $editor = $recoveredEditor
+    } else {
+        $editor = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot
+    }
     if (-not $editor) {
-        Write-Host "::group::Installed Unity Editors"
-        Invoke-UnityCliSafe -Arguments @('editors', '-i') | Out-Null
-        Write-Host "::endgroup::"
+        Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward."
         throw "Unity $UnityVersion was installed or already present, but Unity.exe could not be found in known locations. Set UNITY_EDITOR_INSTALL_ROOT or UNITY_EDITOR_PATH."
     }
 } elseif ($WithWindowsIl2Cpp) {

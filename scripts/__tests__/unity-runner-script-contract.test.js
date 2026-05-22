@@ -484,7 +484,9 @@ describe("scripts/unity direct CI runner contract", () => {
     // re-throw), proving malformed JSON is non-fatal. Constrain the catch-body
     // gap with `[^}]*?` so the `return` must live INSIDE the catch block (cannot
     // be satisfied by an empty catch followed by a `return` in a later function).
-    expect(ensureEditor).toMatch(/try\s*\{[^}]*ConvertFrom-Json[\s\S]*?\}\s*catch\s*\{[^}]*?return/);
+    expect(ensureEditor).toMatch(
+      /try\s*\{[^}]*ConvertFrom-Json[\s\S]*?\}\s*catch\s*\{[^}]*?return/
+    );
 
     // (e) Module gating: the install `-m windows-il2cpp` and the install-modules
     // path are reachable ONLY under the $WithWindowsIl2Cpp switch. editmode /
@@ -534,8 +536,12 @@ describe("scripts/unity direct CI runner contract", () => {
     // with exit 6) and routed through the capturing invoker so a final failure
     // throws WITH the CLI output tail + exit code for diagnosis.
     expect(ensureEditor).toContain("function Invoke-WithRetry");
+    expect(ensureEditor).toContain("DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS");
     expect(ensureEditor).toMatch(
-      /Invoke-WithRetry -MaxAttempts 2 -DelaySeconds 15 -Action \{\s*\$installResult = Invoke-UnityCliCapture -Arguments \$installArgs/
+      /Invoke-WithRetry -MaxAttempts 2 -DelaySeconds \$retryDelaySeconds -Action \{\s*\$installResult = Invoke-UnityCliCapture -Arguments \$installArgs/
+    );
+    expect(ensureEditor).toMatch(
+      /if \(\$WithWindowsIl2Cpp\) \{\s*Write-CiNotice "Verifying Windows IL2CPP after recovered editor install\."\s*Add-WindowsIl2CppModule -Version \$UnityVersion -EditorPath \$resolvedAfterFailure/
     );
 
     // Layered discovery wiring: install branch resolves through the layered

@@ -110,6 +110,92 @@ function probeIl2Cpp(editorPath) {
   return { stdout: (run.stdout || "").trim(), stderr: run.stderr || "", status: run.status };
 }
 
+function runPwshScript(scriptText) {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-harness-"));
+  workspaces.push(base);
+  const harnessPath = path.join(base, "harness.ps1");
+  fs.writeFileSync(harnessPath, scriptText, "utf8");
+  return spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", harnessPath], {
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024
+  });
+}
+
+function extractEnsureEditorFunctions(functionNames) {
+  const escapedPath = ENSURE_EDITOR.replace(/'/g, "''");
+  const names = functionNames.map((name) => `'${name.replace(/'/g, "''")}'`).join(", ");
+  return [
+    `$src = '${escapedPath}'`,
+    `$wanted = @(${names})`,
+    "$tokens = $null; $errs = $null",
+    "$ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$tokens, [ref]$errs)",
+    "$functions = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $n.Name }, $true)",
+    'foreach ($name in $wanted) { if (-not ($functions | Where-Object { $_.Name -eq $name })) { Write-Error "Function $name not found"; exit 3 } }',
+    "foreach ($fn in $functions) { Invoke-Expression $fn.Extent.Text }"
+  ].join("\n");
+}
+
+function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
+  const outputLiteral = outputText.replace(/'/g, "''");
+  const editorLiteral = editorPath.replace(/'/g, "''");
+  return runPwshScript(
+    [
+      "Set-StrictMode -Version Latest",
+      "$ErrorActionPreference = 'Stop'",
+      'function Write-CiNotice { param([string]$Message) Write-Host "::notice::$Message" }',
+      "function Get-UnityCliOutput { param([string[]]$Arguments) return @() }",
+      "function Invoke-UnityCliCapture {",
+      "  param([string[]]$Arguments)",
+      `  return @{ Success = $false; ExitCode = 6; Output = @('${outputLiteral}') }`,
+      "}",
+      extractEnsureEditorFunctions(["Test-Il2CppModulePresent", "Add-WindowsIl2CppModule"]),
+      "try {",
+      `  Add-WindowsIl2CppModule -Version '6000.0.32f1' -EditorPath '${editorLiteral}'`,
+      "  Write-Output 'SUCCESS'",
+      "} catch {",
+      "  Write-Output ('ERROR: ' + $_.Exception.Message)",
+      "  exit 7",
+      "}"
+    ].join("\n")
+  );
+}
+
+function makeFakeUnityCli(binDir, bodyLines) {
+  fs.mkdirSync(binDir, { recursive: true });
+  const unityPath = path.join(binDir, "unity");
+  fs.writeFileSync(
+    unityPath,
+    ["#!/usr/bin/env bash", "set -u", ...bodyLines, ""].join("\n"),
+    "utf8"
+  );
+  fs.chmodSync(unityPath, 0o755);
+  return unityPath;
+}
+
+function runEnsureEditorWithFakeCli(bodyLines, installRoot) {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-full-"));
+  workspaces.push(base);
+  const binDir = path.join(base, "bin");
+  makeFakeUnityCli(binDir, bodyLines);
+  const env = { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ""}` };
+  delete env.UNITY_EDITOR_INSTALL_ROOT;
+  env.DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS = "0";
+  return spawnSync(
+    "pwsh",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      ENSURE_EDITOR,
+      "-UnityVersion",
+      "6000.0.32f1",
+      "-InstallRoot",
+      installRoot
+    ],
+    { env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }
+  );
+}
+
 describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
   // Always runs (even without pwsh): proves the script under test exists, so a
   // rename/move cannot silently turn this whole guard into a no-op.
@@ -171,5 +257,102 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const out = probeIl2Cpp(editorExe);
     expect(out.status).toBe(0);
     expect(out.stdout).toBe("True");
+  });
+
+  test("Add-WindowsIl2CppModule treats No modules found as fatal when IL2CPP is not on disk", () => {
+    const fake = path.join(os.tmpdir(), "dxm-no-il2cpp", "Editor", "Unity.exe");
+    const out = runAddWindowsIl2CppModuleHarness(fake, "No modules found to install");
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    expect(out.status).toBe(7);
+    expect(combined).toContain("reported nothing to install");
+    expect(combined).toContain("Windows IL2CPP is not present on disk");
+    expect(combined).toContain("No modules found to install");
+  });
+
+  test("Add-WindowsIl2CppModule accepts No modules found only when IL2CPP is on disk", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-il2cpp-editor-"));
+    workspaces.push(base);
+    const variationDir = path.join(base, "6000.0.32f1", IL2CPP_VARIATION_REL);
+    fs.mkdirSync(variationDir, { recursive: true });
+    const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
+    fs.writeFileSync(editorExe, "stub", "utf8");
+
+    const out = runAddWindowsIl2CppModuleHarness(editorExe, "No modules found to install");
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    expect(out.status).toBe(0);
+    expect(combined).toContain("Windows IL2CPP already present on disk");
+    expect(combined).toContain("SUCCESS");
+  });
+
+  test("Invoke-UnityCliCapture captures spawn failures with exit code -1", () => {
+    const out = runPwshScript(
+      [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        extractEnsureEditorFunctions(["Invoke-UnityCliCapture"]),
+        "$script:UnityCliPath = '/definitely/not/a/unity-cli'",
+        "$result = Invoke-UnityCliCapture -Arguments @('install', '6000.0.32f1')",
+        "Write-Output ('SUCCESS=' + $result.Success)",
+        "Write-Output ('EXIT=' + $result.ExitCode)",
+        "Write-Output ('OUTPUT=' + ($result.Output -join '|'))"
+      ].join("\n")
+    );
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    expect(out.status).toBe(0);
+    expect(combined).toContain("SUCCESS=False");
+    expect(combined).toContain("EXIT=-1");
+    expect(combined).toContain("Unity CLI capture invoker threw");
+  });
+
+  test("base editor install failure recovers when Unity.exe resolves afterward", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-recover-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const cliRoot = path.join(base, "cli-root");
+    const resolvedEditor = path.join(cliRoot, "6000.0.32f1", "Editor", "Unity.exe");
+    fs.mkdirSync(path.dirname(resolvedEditor), { recursive: true });
+    fs.writeFileSync(resolvedEditor, "stub", "utf8");
+
+    const cliBody = [
+      `if [ "$#" -eq 1 ] && [ "$1" = "install-path" ]; then printf '%s\\n' '${cliRoot.replace(/'/g, "'\\''")}'; exit 0; fi`,
+      'if [ "$#" -ge 1 ] && [ "$1" = "install-path" ]; then exit 0; fi',
+      'if [ "$#" -ge 1 ] && [ "$1" = "install" ]; then echo "Editor already installed"; exit 6; fi',
+      `if [ "$#" -ge 1 ] && [ "$1" = "editors" ]; then printf '%s\\n' '{"editors":[{"version":"6000.0.32f1","path":"${path.dirname(path.dirname(resolvedEditor)).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"}]}'; exit 0; fi`,
+      "exit 0"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+    const stdout = out.stdout || "";
+
+    expect(out.status).toBe(0);
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(resolvedEditor);
+    expect(stdout).toContain("Unity.exe is resolvable afterward");
+  });
+
+  test("already-installed base editor failure without Unity.exe reports partial-install diagnostics", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-partial-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const cliRoot = path.join(base, "cli-root");
+
+    const cliBody = [
+      `if [ "$#" -eq 1 ] && [ "$1" = "install-path" ]; then printf '%s\\n' '${cliRoot.replace(/'/g, "'\\''")}'; exit 0; fi`,
+      'if [ "$#" -ge 1 ] && [ "$1" = "install-path" ]; then exit 0; fi',
+      'if [ "$#" -ge 1 ] && [ "$1" = "install" ]; then echo "Editor already installed"; echo "partial install marker"; exit 6; fi',
+      'if [ "$#" -ge 1 ] && [ "$1" = "editors" ]; then echo "partial editor inventory"; exit 0; fi',
+      "exit 0"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    expect(out.status).not.toBe(0);
+    expect(combined).toContain("Unity editor resolution diagnostics");
+    expect(combined).toContain("partial install marker");
+    expect(combined).toContain("partial editor inventory");
+    expect(combined).toContain("partial or corrupt install");
   });
 });

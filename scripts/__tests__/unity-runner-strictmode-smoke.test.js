@@ -116,7 +116,7 @@ const RUNTESTS_PASSING = [
   "  if ($i -ge 0 -and ($i + 1) -lt $Rest.Count) {",
   "    $out = $Rest[$i + 1]; $d = Split-Path -Parent $out",
   "    if ($d) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
-  "    '<?xml version=\"1.0\" encoding=\"utf-8\"?><test-run total=\"1\" passed=\"1\" failed=\"0\" skipped=\"0\" result=\"Passed\"></test-run>' | Set-Content -LiteralPath $out -Encoding UTF8",
+  '    \'<?xml version="1.0" encoding="utf-8"?><test-run total="1" passed="1" failed="0" skipped="0" result="Passed"></test-run>\' | Set-Content -LiteralPath $out -Encoding UTF8',
   "  }",
   "  exit 0"
 ].join("\n");
@@ -172,7 +172,14 @@ function makeWorkspace() {
   const project = path.join(base, "project");
 
   fs.mkdirSync(path.join(repoRoot, "Runtime"), { recursive: true });
+  fs.mkdirSync(path.join(repoRoot, "Editor", "Analyzers"), { recursive: true });
   fs.writeFileSync(path.join(repoRoot, "package.json"), "{}\n", "utf8");
+  for (const dllName of [
+    "WallstopStudios.DxMessaging.SourceGenerators.dll",
+    "WallstopStudios.DxMessaging.Analyzer.dll"
+  ]) {
+    fs.writeFileSync(path.join(repoRoot, "Editor", "Analyzers", dllName), "stub", "utf8");
+  }
   fs.mkdirSync(artifacts, { recursive: true });
   fs.mkdirSync(project, { recursive: true });
 

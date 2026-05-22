@@ -44,6 +44,19 @@ $PSNativeCommandUseErrorActionPreference = $false
 $PackageName = 'com.wallstop-studios.dxmessaging'
 $TestFrameworkVersion = '1.4.5'
 $PerformanceFrameworkVersion = '3.4.2'
+$DxMessagingAnalyzerDllNames = @(
+    'WallstopStudios.DxMessaging.SourceGenerators.dll',
+    'WallstopStudios.DxMessaging.Analyzer.dll',
+    'Microsoft.CodeAnalysis.dll',
+    'Microsoft.CodeAnalysis.CSharp.dll',
+    'System.Reflection.Metadata.dll',
+    'System.Runtime.CompilerServices.Unsafe.dll',
+    'System.Collections.Immutable.dll'
+)
+$RequiredDxMessagingAnalyzerDllNames = @(
+    'WallstopStudios.DxMessaging.SourceGenerators.dll',
+    'WallstopStudios.DxMessaging.Analyzer.dll'
+)
 
 function Write-CiError {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -140,6 +153,77 @@ public static class DxmCiTestConfigurator
 '@
 }
 
+function New-CscRspContent {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Project
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $missingRequired = New-Object System.Collections.Generic.List[string]
+    foreach ($dllName in $DxMessagingAnalyzerDllNames) {
+        $sourcePath = Join-Path $Root "Editor\Analyzers\$dllName"
+        if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
+            $lines.Add("-a:`"Packages/$PackageName/Editor/Analyzers/$dllName`"")
+        } elseif ($RequiredDxMessagingAnalyzerDllNames -contains $dllName) {
+            $missingRequired.Add($sourcePath)
+        }
+    }
+
+    if ($missingRequired.Count -gt 0) {
+        throw "Missing required DxMessaging analyzer DLL(s) for generated csc.rsp:`n$($missingRequired.ToArray() -join "`n")"
+    }
+
+    $ignoreSidecarRelativePath = 'Assets/Editor/DxMessaging.BaseCallIgnore.txt'
+    $ignoreSidecarPath = Join-Path $Project $ignoreSidecarRelativePath
+    if (Test-Path -LiteralPath $ignoreSidecarPath -PathType Leaf) {
+        $lines.Add("-additionalfile:`"$ignoreSidecarRelativePath`"")
+    }
+
+    if ($lines.Count -eq 0) {
+        return ''
+    }
+
+    return (($lines.ToArray() -join [Environment]::NewLine) + [Environment]::NewLine)
+}
+
+function Write-CscRspDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)][string]$Project,
+        [string]$LogPath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $rspPath = Join-Path $Project 'Assets\csc.rsp'
+    $rspExists = Test-Path -LiteralPath $rspPath -PathType Leaf
+    $rspText = if ($rspExists) { Get-Content -LiteralPath $rspPath -Raw } else { '' }
+    $rspHasSourceGenerator = $rspText -match 'WallstopStudios\.DxMessaging\.SourceGenerators\.dll'
+    $rspHasAnalyzer = $rspText -match 'WallstopStudios\.DxMessaging\.Analyzer\.dll'
+    $logHasSourceGeneratorArg = $false
+    $logHasAnalyzerArg = $false
+    if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+        $logText = Get-Content -LiteralPath $LogPath -Raw
+        $logHasSourceGeneratorArg = $logText -match 'WallstopStudios\.DxMessaging\.SourceGenerators\.dll'
+        $logHasAnalyzerArg = $logText -match 'WallstopStudios\.DxMessaging\.Analyzer\.dll'
+    }
+
+    Write-Host "::group::DxMessaging compiler response diagnostics ($Label)"
+    Write-Host "csc.rsp exists: $rspExists"
+    Write-Host "csc.rsp has source generator: $rspHasSourceGenerator"
+    Write-Host "csc.rsp has analyzer: $rspHasAnalyzer"
+    Write-Host "Unity compile log mentioned DxMessaging source-generator arg: $logHasSourceGeneratorArg"
+    Write-Host "Unity compile log mentioned DxMessaging analyzer arg: $logHasAnalyzerArg"
+    if ($rspExists) {
+        Write-Host "csc.rsp:"
+        Get-Content -LiteralPath $rspPath
+    }
+    Write-Host "::endgroup::"
+
+    if (-not ($rspExists -and $rspHasSourceGenerator -and $rspHasAnalyzer)) {
+        throw "Generated Assets/csc.rsp is missing required DxMessaging source-generator/analyzer entries."
+    }
+}
+
 function Initialize-EphemeralProject {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
@@ -164,6 +248,8 @@ function Initialize-EphemeralProject {
         Set-Content -LiteralPath (Join-Path $project 'ProjectSettings\ProjectVersion.txt') -Encoding UTF8
     New-ConfiguratorSource |
         Set-Content -LiteralPath (Join-Path $project 'Assets\Editor\DxmCiTestConfigurator.cs') -Encoding UTF8
+    New-CscRspContent -Root $Root -Project $project |
+        Set-Content -LiteralPath (Join-Path $project 'Assets\csc.rsp') -Encoding UTF8
 
     return $project
 }
@@ -330,6 +416,85 @@ function Invoke-UnityEditor {
     }
 }
 
+function Get-NativeExitCodeDescription {
+    param([Parameter(Mandatory = $true)][int]$ExitCode)
+
+    $normalized = if ($ExitCode -lt 0) {
+        [uint32]($ExitCode + 4294967296)
+    } else {
+        [uint32]$ExitCode
+    }
+    $hex = "0x$($normalized.ToString('X8'))"
+    if ($normalized -eq 0xC0000135) {
+        return "$hex / STATUS_DLL_NOT_FOUND"
+    }
+
+    return $hex
+}
+
+function Invoke-UnityNativeStartupProbe {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path -LiteralPath $logDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+
+    Write-Host "::group::Unity native startup diagnostics"
+    Write-Host "Runner name: $env:RUNNER_NAME"
+    Write-Host "Runner OS: $env:RUNNER_OS"
+    Write-Host "Runner architecture: $env:RUNNER_ARCH"
+    Write-Host "Unity editor path: $EditorPath"
+    try {
+        $editorItem = Get-Item -LiteralPath $EditorPath
+        Write-Host "Unity editor file version: $($editorItem.VersionInfo.FileVersion)"
+        Write-Host "Unity editor product version: $($editorItem.VersionInfo.ProductVersion)"
+    } catch {
+        Write-Host "::notice::Could not read Unity editor version info: $($_.Exception.Message)"
+    }
+
+    Write-Host "Unity licensing client inventory:"
+    $licensingClientCandidates = New-Object System.Collections.Generic.List[string]
+    foreach ($root in @(${env:ProgramFiles}, ${env:ProgramFiles(x86)})) {
+        if ($root -and $root.Trim().Length -gt 0) {
+            $licensingClientCandidates.Add(
+                (Join-Path $root 'Common Files\Unity\UnityLicensingClient\Unity.Licensing.Client.exe')
+            )
+        }
+    }
+    if ($env:LOCALAPPDATA -and $env:LOCALAPPDATA.Trim().Length -gt 0) {
+        $licensingClientCandidates.Add(
+            (Join-Path $env:LOCALAPPDATA 'Unity\Unity.Licensing.Client\Unity.Licensing.Client.exe')
+        )
+    }
+    foreach ($candidate in $licensingClientCandidates) {
+        $exists = Test-Path -LiteralPath $candidate -PathType Leaf
+        Write-Host "  [$exists] $candidate"
+    }
+
+    $probeArgs = @(
+        '-version',
+        '-batchmode',
+        '-nographics',
+        '-quit',
+        '-logFile', '-'
+    )
+
+    Write-Host "`"$EditorPath`" $($probeArgs -join ' ')"
+    & $EditorPath @probeArgs 2>&1 | Tee-Object -FilePath $LogPath
+    $exitCode = $LASTEXITCODE
+    $description = Get-NativeExitCodeDescription -ExitCode $exitCode
+    Write-Host "Unity native startup probe exit code: $exitCode ($description)"
+    Write-Host "::endgroup::"
+
+    if ($exitCode -ne 0) {
+        throw "Unity native startup probe failed with exit code $exitCode ($description). See the streamed probe log above (also saved to $LogPath)."
+    }
+}
+
 function Test-NUnitResults {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -384,6 +549,8 @@ Write-Host "LibraryPath: $LibraryPath"
 Write-Host "ArtifactsPath: $ArtifactsPath"
 Write-Host "Manifest:"
 Get-Content -LiteralPath (Join-Path $ProjectPath 'Packages\manifest.json')
+Write-Host "Assets/csc.rsp:"
+Get-Content -LiteralPath (Join-Path $ProjectPath 'Assets\csc.rsp')
 Write-Host "::endgroup::"
 
 if ($GenerateOnly) {
@@ -459,6 +626,7 @@ $testPlatform = switch ($TestMode) {
 $resultsPath = Join-Path $ArtifactsPath 'results.xml'
 $logPath = Join-Path $ArtifactsPath 'unity.log'
 $configureLogPath = Join-Path $ArtifactsPath 'configure.log'
+$startupProbeLogPath = Join-Path $ArtifactsPath 'unity-startup-probe.log'
 
 # Activation/return carry the serial/email/password in their argument arrays and
 # Unity may echo account/serial fragments into the activation log, so these logs
@@ -478,6 +646,8 @@ if ($hasLicenseCreds) {
 }
 
 try {
+    Invoke-UnityNativeStartupProbe -EditorPath $UnityEditorPath -LogPath $startupProbeLogPath
+
     # Activate the paid seat BEFORE configure/run so the test editor launches
     # licensed. Activation THROWS on failure (caught by this try's finally, which
     # still returns the seat). Skipped locally when creds are absent (the machine
@@ -497,6 +667,7 @@ try {
             '-logFile', '-'
         ) + $acceleratorArgs
         Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $configureArgs -Label 'Configure standalone IL2CPP project' -LogPath $configureLogPath
+        Write-CscRspDiagnostics -Project $ProjectPath -LogPath $configureLogPath -Label 'standalone configure'
     }
 
     $testArgs = @(
@@ -516,6 +687,7 @@ try {
     }
 
     Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $testArgs -Label "Run Unity $UnityVersion $TestMode tests" -LogPath $logPath
+    Write-CscRspDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion $TestMode test compile"
     Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode"
 } finally {
     # Deterministic RETURN of the seat on EVERY exit path (clean exit, throw, or a

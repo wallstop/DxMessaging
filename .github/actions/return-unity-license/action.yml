@@ -9,7 +9,6 @@ inputs:
   unity-editor-path:
     description: "Path to the resolved Unity editor exe (exported to GITHUB_ENV by run-ci-tests.ps1). When empty there is nothing to return."
     required: false
-    default: ${{ env.UNITY_EDITOR_PATH }}
 runs:
   using: composite
   steps:
@@ -34,6 +33,9 @@ runs:
         # below is skipped.
         try {
           $editorPath = '${{ inputs.unity-editor-path }}'
+          if ([string]::IsNullOrWhiteSpace($editorPath)) {
+            $editorPath = $env:UNITY_EDITOR_PATH
+          }
 
           # Nothing to return when the editor path was never resolved (the Unity
           # run never reached the point of exporting UNITY_EDITOR_PATH).

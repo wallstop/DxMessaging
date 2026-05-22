@@ -12,6 +12,8 @@ on:
       - ".yamllint.yaml"
       - ".github/workflows/**/*.yml"
       - ".github/workflows/**/*.yaml"
+      - ".github/actions/**/*.yml"
+      - ".github/actions/**/*.yaml"
       - ".github/workflows/pre-commit-tooling-check.yml"
   push:
     branches:
@@ -27,6 +29,8 @@ on:
       - ".yamllint.yaml"
       - ".github/workflows/**/*.yml"
       - ".github/workflows/**/*.yaml"
+      - ".github/actions/**/*.yml"
+      - ".github/actions/**/*.yaml"
       - ".github/workflows/pre-commit-tooling-check.yml"
   workflow_dispatch:
 

@@ -454,6 +454,33 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     expect(text).not.toContain("--return-floating");
   });
 
+  test("composite action input defaults do not reference workflow env context", () => {
+    const actionFiles = fs
+      .readdirSync(ACTIONS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(ACTIONS_DIR, entry.name, "action.yml"))
+      .filter((actionPath) => fs.existsSync(actionPath));
+
+    expect(actionFiles.length).toBeGreaterThan(0);
+    for (const actionPath of actionFiles) {
+      const parsed = yaml.load(fs.readFileSync(actionPath, "utf8"));
+      if (!parsed || !parsed.inputs) {
+        continue;
+      }
+
+      for (const [inputName, input] of Object.entries(parsed.inputs)) {
+        if (
+          !input ||
+          typeof input !== "object" ||
+          !Object.prototype.hasOwnProperty.call(input, "default")
+        ) {
+          continue;
+        }
+        expect(String(input.default)).not.toMatch(/\$\{\{\s*env\./);
+      }
+    }
+  });
+
   test.each(UNITY_LICENSED_JOBS)(
     "$workflow job '$jobId' returns the seat via an if: always() step after the run and before the org-lock release",
     ({ workflow, jobId }) => {
