@@ -160,26 +160,72 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
   );
 }
 
-function makeFakeUnityCli(binDir, bodyLines) {
+function makeFakeUnityCli(binDir, handlerLines) {
   fs.mkdirSync(binDir, { recursive: true });
+  const scriptPath = path.join(binDir, "fake-unity-cli.js");
+  fs.writeFileSync(
+    scriptPath,
+    [
+      "#!/usr/bin/env node",
+      '"use strict";',
+      "const args = process.argv.slice(2);",
+      "function write(line) { process.stdout.write(`${line}\\n`); }",
+      "function exit(code) { process.exit(code); }",
+      ...handlerLines,
+      "exit(0);",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  fs.chmodSync(scriptPath, 0o755);
+
+  if (process.platform === "win32") {
+    const unityCmdPath = path.join(binDir, "unity.cmd");
+    fs.writeFileSync(
+      unityCmdPath,
+      ["@echo off", 'node "%~dp0fake-unity-cli.js" %*', ""].join("\r\n"),
+      "utf8"
+    );
+    return unityCmdPath;
+  }
+
   const unityPath = path.join(binDir, "unity");
   fs.writeFileSync(
     unityPath,
-    ["#!/usr/bin/env bash", "set -u", ...bodyLines, ""].join("\n"),
+    ["#!/usr/bin/env sh", 'exec node "$(dirname "$0")/fake-unity-cli.js" "$@"', ""].join("\n"),
     "utf8"
   );
   fs.chmodSync(unityPath, 0o755);
   return unityPath;
 }
 
-function runEnsureEditorWithFakeCli(bodyLines, installRoot) {
+function assertFakeUnityCliResolves(env, expectedPath) {
+  const probe = spawnSync(
+    "pwsh",
+    ["-NoProfile", "-NonInteractive", "-Command", "(Get-Command unity -ErrorAction Stop).Source"],
+    { env, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
+  );
+
+  expect(probe.status).toBe(0);
+  const actual = path.normalize((probe.stdout || "").trim());
+  const expected = path.normalize(expectedPath);
+  expect(process.platform === "win32" ? actual.toLowerCase() : actual).toBe(
+    process.platform === "win32" ? expected.toLowerCase() : expected
+  );
+}
+
+function runEnsureEditorWithFakeCli(handlerLines, installRoot) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-full-"));
   workspaces.push(base);
   const binDir = path.join(base, "bin");
-  makeFakeUnityCli(binDir, bodyLines);
+  const unityPath = makeFakeUnityCli(binDir, handlerLines);
   const env = { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ""}` };
   delete env.UNITY_EDITOR_INSTALL_ROOT;
+  delete env.ProgramFiles;
+  delete env["ProgramFiles(x86)"];
+  delete env.LOCALAPPDATA;
   env.DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS = "0";
+  assertFakeUnityCliResolves(env, unityPath);
   return spawnSync(
     "pwsh",
     [
@@ -317,11 +363,12 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     fs.writeFileSync(resolvedEditor, "stub", "utf8");
 
     const cliBody = [
-      `if [ "$#" -eq 1 ] && [ "$1" = "install-path" ]; then printf '%s\\n' '${cliRoot.replace(/'/g, "'\\''")}'; exit 0; fi`,
-      'if [ "$#" -ge 1 ] && [ "$1" = "install-path" ]; then exit 0; fi',
-      'if [ "$#" -ge 1 ] && [ "$1" = "install" ]; then echo "Editor already installed"; exit 6; fi',
-      `if [ "$#" -ge 1 ] && [ "$1" = "editors" ]; then printf '%s\\n' '{"editors":[{"version":"6000.0.32f1","path":"${path.dirname(path.dirname(resolvedEditor)).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"}]}'; exit 0; fi`,
-      "exit 0"
+      `const cliRoot = ${JSON.stringify(cliRoot)};`,
+      `const editorRoot = ${JSON.stringify(path.dirname(path.dirname(resolvedEditor)))};`,
+      "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install') { write('Editor already installed'); exit(6); }",
+      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
     ];
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
@@ -339,11 +386,11 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const cliRoot = path.join(base, "cli-root");
 
     const cliBody = [
-      `if [ "$#" -eq 1 ] && [ "$1" = "install-path" ]; then printf '%s\\n' '${cliRoot.replace(/'/g, "'\\''")}'; exit 0; fi`,
-      'if [ "$#" -ge 1 ] && [ "$1" = "install-path" ]; then exit 0; fi',
-      'if [ "$#" -ge 1 ] && [ "$1" = "install" ]; then echo "Editor already installed"; echo "partial install marker"; exit 6; fi',
-      'if [ "$#" -ge 1 ] && [ "$1" = "editors" ]; then echo "partial editor inventory"; exit 0; fi',
-      "exit 0"
+      `const cliRoot = ${JSON.stringify(cliRoot)};`,
+      "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install') { write('Editor already installed'); write('partial install marker'); exit(6); }",
+      "if (args.length >= 1 && args[0] === 'editors') { write('partial editor inventory'); exit(0); }"
     ];
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);

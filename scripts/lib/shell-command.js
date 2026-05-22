@@ -58,7 +58,7 @@ function resolveSpawnOptions(command, options = {}, platform = process.platform)
   const resolvedOptions = { ...options };
 
   if (platform === "win32" && isShellShimCommand(command)) {
-    resolvedOptions.shell = true;
+    resolvedOptions.shell = false;
 
     if (resolvedOptions.windowsHide === undefined) {
       resolvedOptions.windowsHide = true;
@@ -85,10 +85,16 @@ function spawnPlatformCommandSync(
   spawnSyncImpl = childProcess.spawnSync,
   platform = process.platform
 ) {
-  const resolvedCommand = resolveSpawnCommand(command, platform);
+  let resolvedCommand = resolveSpawnCommand(command, platform);
+  let resolvedArgs = args;
   const resolvedOptions = resolveSpawnOptions(command, options, platform);
 
-  return spawnSyncImpl(resolvedCommand, args, resolvedOptions);
+  if (platform === "win32" && isShellShimCommand(command)) {
+    resolvedArgs = ["/d", "/s", "/c", resolvedCommand, ...args];
+    resolvedCommand = process.env.ComSpec || "cmd.exe";
+  }
+
+  return spawnSyncImpl(resolvedCommand, resolvedArgs, resolvedOptions);
 }
 
 module.exports = {

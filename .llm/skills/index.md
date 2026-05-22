@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 164   |
+| Total Skills | 165   |
 | Categories   | 8     |
 
 ---
@@ -20,7 +20,7 @@
 - [GitHub Actions](#github-actions) (7)
 - [Packaging](#packaging) (2)
 - [Performance](#performance) (45)
-- [Scripting](#scripting) (18)
+- [Scripting](#scripting) (19)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
 - [Unity](#unity) (9)
@@ -142,6 +142,7 @@
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 213    | [intermediate] | [stable] | [risk: none] | jest, pre-commit                 |
 | [Let Tools Resolve Modules](./scripting/let-tools-resolve-modules.md)                                    | [ok] 152    | [basic]        | [stable] | [risk: none] | cross-platform, tooling          |
+| [Native Git Hook Bootstrap](./scripting/native-git-hooks.md)                                             | [draft] 108 | [intermediate] | [stable] | [risk: low]  | git-hooks, cross-platform        |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 106 | [intermediate] | [stable] | [risk: none] | powershell, scripting            |
 | [PowerShell Scripting Best Practices Part 1](./scripting/powershell-best-practices-part-1.md)            | [ok] 204    | [intermediate] | [stable] | [risk: low]  | migration, split                 |
 | [PowerShell Scripting Best Practices Part 2](./scripting/powershell-best-practices-part-2.md)            | [ok] 223    | [intermediate] | [stable] | [risk: low]  | migration, split                 |

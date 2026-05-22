@@ -129,8 +129,8 @@ describe("YAML line-length prevention wiring", () => {
       expect(command).toContain(".github/workflows/**/*.yaml");
     });
 
-    test("keeps the pinned cspell@10.0.0 version and flags identical", () => {
-      expect(command).toContain("cspell@10.0.0");
+    test("uses managed cspell with the required flags", () => {
+      expect(command).toContain("node scripts/run-managed-cspell.js");
       expect(command).toContain("--no-progress");
       expect(command).toContain("--no-summary");
     });

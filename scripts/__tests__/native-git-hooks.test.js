@@ -1,0 +1,139 @@
+/**
+ * @fileoverview Native Git hook bootstrap contract.
+ */
+
+"use strict";
+
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const childProcess = require("child_process");
+const { installGitHooks } = require("../install-git-hooks");
+const { repairNodeTooling } = require("../repair-node-tooling");
+
+const REPO_ROOT = path.resolve(__dirname, "..", "..");
+const PRE_PUSH_HOOK = path.join(REPO_ROOT, "scripts", "hooks", "pre-push");
+const POSTINSTALL = path.join(REPO_ROOT, "scripts", "postinstall.js");
+const PACKAGE_JSON = path.join(REPO_ROOT, "package.json");
+
+function runGit(args, cwd) {
+  return childProcess.spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+}
+
+describe("native Git hooks", () => {
+  test("pre-push hook is a Node wrapper for the full pre-push preflight", () => {
+    expect(fs.existsSync(PRE_PUSH_HOOK)).toBe(true);
+
+    const content = fs.readFileSync(PRE_PUSH_HOOK, "utf8");
+    expect(content.startsWith("#!/usr/bin/env node\n")).toBe(true);
+    expect(content).toContain("repair-node-tooling.js");
+    expect(content).toContain('"doctor"');
+    expect(content).toContain('"preflight:pre-push"');
+    expect(content).toContain("spawnPlatformCommandSync");
+    expect(content).not.toMatch(/\b(?:bash|sh|pwsh|powershell)\b/);
+    expect(content).not.toContain("shell: true");
+
+    const repairIndex = content.indexOf("repair-node-tooling.js");
+    const doctorIndex = content.indexOf('"doctor"');
+    const preflightIndex = content.indexOf('"preflight:pre-push"');
+    expect(repairIndex).toBeGreaterThanOrEqual(0);
+    expect(doctorIndex).toBeGreaterThan(repairIndex);
+    expect(preflightIndex).toBeGreaterThan(doctorIndex);
+  });
+
+  test("native hook executability is tracked in Git metadata", () => {
+    for (const hookPath of ["scripts/hooks/pre-commit", "scripts/hooks/pre-push"]) {
+      const result = runGit(["ls-files", "--stage", "--", hookPath], REPO_ROOT);
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toMatch(/^100755\s/);
+    }
+  });
+
+  test("preflight repairs node tooling before read-only validation", () => {
+    const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, "utf8"));
+    const preflight = pkg.scripts["preflight:pre-commit"];
+
+    expect(pkg.scripts["repair:node-tooling"]).toBe("node scripts/repair-node-tooling.js");
+    expect(preflight).toContain("npm run repair:node-tooling");
+    expect(preflight.indexOf("npm run repair:node-tooling")).toBeLessThan(
+      preflight.indexOf("npm run validate:node-tooling")
+    );
+  });
+
+  test("repair-node-tooling invokes the shared integrity gate with recovery enabled", () => {
+    const runIntegrityGateWithRecoveryFn = jest.fn(() => ({ ok: true, didRecover: true }));
+    const result = repairNodeTooling({
+      env: {},
+      repoRoot: REPO_ROOT,
+      runIntegrityGateWithRecoveryFn,
+      probeIntegrityFn: jest.fn(),
+      probeIntegrityInSubprocessFn: jest.fn(),
+      probeResolverHealthFn: jest.fn(),
+      attemptNpmCiRecoveryFn: jest.fn(),
+      getNpmMajorVersionFn: jest.fn(() => 11),
+      printActionableRepairBannerFn: jest.fn(),
+      warnFn: jest.fn()
+    });
+
+    expect(result.status).toBe(0);
+    expect(runIntegrityGateWithRecoveryFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoRoot: REPO_ROOT,
+        bypassCache: true,
+        attemptNpmCiRecoveryFn: expect.any(Function),
+        isAutoRepairAllowedFn: expect.any(Function)
+      })
+    );
+  });
+
+  test("postinstall attempts native hook installation without making npm install fatal", () => {
+    const content = fs.readFileSync(POSTINSTALL, "utf8");
+
+    expect(content).toContain("install-git-hooks.js");
+    expect(content).toContain("runNonFatal");
+    expect(content).toContain("process.exit(0)");
+  });
+
+  test("installer configures core.hooksPath in a Git worktree", () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-native-hooks-"));
+    try {
+      expect(runGit(["init"], temp).status).toBe(0);
+
+      const hooksDir = path.join(temp, "scripts", "hooks");
+      fs.mkdirSync(hooksDir, { recursive: true });
+      fs.writeFileSync(path.join(hooksDir, "pre-push"), "#!/usr/bin/env node\n", "utf8");
+
+      const result = installGitHooks({
+        cwd: temp,
+        log: () => {},
+        warn: () => {}
+      });
+
+      expect(result).toEqual({ ok: true, changed: true, skipped: false });
+      const configured = runGit(["config", "--local", "--get", "core.hooksPath"], temp);
+      expect(configured.status).toBe(0);
+      expect(configured.stdout.trim()).toBe("scripts/hooks");
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  test("installer no-ops outside a Git worktree", () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-native-hooks-outside-"));
+    try {
+      const result = installGitHooks({
+        cwd: temp,
+        log: () => {},
+        warn: () => {}
+      });
+
+      expect(result).toEqual({ ok: true, changed: false, skipped: true });
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+});

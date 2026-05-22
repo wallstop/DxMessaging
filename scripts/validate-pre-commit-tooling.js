@@ -27,6 +27,7 @@ const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.ya
 const PACKAGE_JSON_PATH = path.join(__dirname, "..", "package.json");
 const REQUIRED_PRECHECK_PARSER_COMMAND =
   "pre-commit run --hook-stage pre-push script-parser-tests --all-files";
+const REQUIRED_NODE_REPAIR_COMMAND = "npm run repair:node-tooling";
 const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
 const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
 const REQUIRED_CHANGED_DOCS_COMMAND = "npm run validate:changed-docs";
@@ -200,6 +201,25 @@ function hasRequiredPreflightCommand(preflightScript, requiredCommand) {
 
 function hasRequiredParserPrecheckCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_PRECHECK_PARSER_COMMAND);
+}
+
+function hasRequiredNodeRepairCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_NODE_REPAIR_COMMAND);
+}
+
+function hasNodeRepairBeforeNodeValidation(preflightScript) {
+  if (
+    typeof preflightScript !== "string" ||
+    !hasRequiredNodeRepairCommand(preflightScript) ||
+    !hasRequiredNodeToolingCommand(preflightScript)
+  ) {
+    return false;
+  }
+
+  return (
+    preflightScript.indexOf(REQUIRED_NODE_REPAIR_COMMAND) <
+    preflightScript.indexOf(REQUIRED_NODE_TOOLING_COMMAND)
+  );
 }
 
 function hasRequiredPackageJsonFormatCommand(preflightScript) {
@@ -657,6 +677,17 @@ function validatePreflightScriptPolicy(
     );
   }
 
+  if (!hasNodeRepairBeforeNodeValidation(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must run '${REQUIRED_NODE_REPAIR_COMMAND}' before '${REQUIRED_NODE_TOOLING_COMMAND}' so partial node_modules installs are auto-repaired before read-only validation.`,
+        preflightScript
+      )
+    );
+  }
+
   if (!hasRequiredNodeToolingCommand(preflightScript)) {
     violations.push(
       new Violation(
@@ -932,6 +963,8 @@ module.exports = {
   escapeRegexLiteral,
   hasRequiredPreflightCommand,
   hasRequiredParserPrecheckCommand,
+  hasRequiredNodeRepairCommand,
+  hasNodeRepairBeforeNodeValidation,
   hasRequiredPackageJsonFormatCommand,
   hasRequiredYamlValidationCommand,
   hasRequiredYamlCommentsCheckCommand,
@@ -963,6 +996,7 @@ module.exports = {
   validatePerfBudget,
   PACKAGE_JSON_PATH,
   REQUIRED_PRECHECK_PARSER_COMMAND,
+  REQUIRED_NODE_REPAIR_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_CHANGED_DOCS_COMMAND,

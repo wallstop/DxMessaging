@@ -28,8 +28,9 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Run file-scoped validation during editing; do not treat git hooks as the first signal of quality issues.
 - When editing `.llm/context.md` or `.llm/skills/**/*.md`, run `npm run validate:llm-markdown` before finishing.
 - For user-visible code edits (`Runtime/`, `Samples~/`, user-facing `Editor/`, or shipped `SourceGenerators/` code), run `npm run validate:changelog:coverage` before finishing and resolve any `W002` warnings by rewriting entries around user impact.
-- When editing `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, or `.js` files, run file-scoped cspell on touched files and update `.cspell.json` in the same change for legitimate domain terms.
+- When editing `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, or `.js` files, run file-scoped cspell on touched files with `node scripts/run-managed-cspell.js --no-progress --no-summary <changed-files...>` and update `.cspell.json` in the same change for legitimate domain terms.
 - Before invoking git hooks or reporting completion after documentation edits, run `npm run validate:changed-docs` so changed Markdown and C# XML doc comments hit the ASCII/code-pattern/prose validators before hook-time.
+- Native Git hooks are versioned under `scripts/hooks` and installed by `scripts/install-git-hooks.js` through `core.hooksPath`. For any hook-gated tooling, script, workflow, or `.llm` edit, run `npm run doctor` and then `npm run preflight:pre-push` before reporting completion; the hook should be the last signal, not the first.
 - For Node child-process calls in `scripts/*.js`, prefer argument-array invocations (`spawnSync` / `execFileSync`) and `stdio` options instead of shell redirection.
 - For dynamic `import()` in `scripts/*.js`, convert filesystem paths with `pathToFileURL(...).href` before importing (raw Windows drive-letter paths fail Node's ESM loader).
 - When editing `.pre-commit-config.yaml`, `scripts/*` hook tooling, `.github/workflows/*.yml`, or hook-related scripts in `package.json`, run `npm run preflight:pre-commit` before finishing.
@@ -66,7 +67,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate changelog structure plus changed-file coverage: `npm run validate:changelog:coverage`
 - Check C# method naming (no underscores): `node scripts/fix-csharp-underscore-methods.js --check --all`
 - Auto-fix C# method naming on selected files: `node scripts/fix-csharp-underscore-methods.js <changed-files...>`
-- File-scoped spellcheck: `npx --yes cspell@10.0.0 --no-progress --no-summary <changed-files...>`
+- File-scoped spellcheck: `node scripts/run-managed-cspell.js --no-progress --no-summary <changed-files...>`
 - Script-wide spellcheck preflight: `npm run check:cspell:scripts`
 - Note: Prettier does not auto-wrap long YAML lines; use `format:yaml:comments` for breakable YAML comments and rely on yamllint for non-breakable overflows.
 - For long `.pre-commit-config.yaml` values (especially `description:` fields), use YAML folded scalars (`>-`) instead of single-line strings.
@@ -222,6 +223,7 @@ Use the index above and then select the most relevant skill pages. Frequently us
 - [Integrity Gate Robustness](./skills/scripting/integrity-gate-robustness.md)
 - [Jest Hook Robustness](./skills/scripting/jest-hook-robustness.md)
 - [Let Tools Resolve Modules](./skills/scripting/let-tools-resolve-modules.md)
+- [Native Git Hook Bootstrap](./skills/scripting/native-git-hooks.md)
 - [Test Failure Investigation and Zero-Flaky Policy](./skills/testing/test-failure-investigation.md)
 - [Lifecycle Edge-Case Test Coverage](./skills/testing/lifecycle-edge-coverage.md)
 - [LeakWatcher: Detecting Registration Leaks in Tests](./skills/testing/leak-watcher-usage.md)

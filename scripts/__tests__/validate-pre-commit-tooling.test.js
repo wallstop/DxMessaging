@@ -13,6 +13,8 @@ const {
   parseHookIds,
   parseHookConfigs,
   hasRequiredParserPrecheckCommand,
+  hasRequiredNodeRepairCommand,
+  hasNodeRepairBeforeNodeValidation,
   hasRequiredPackageJsonFormatCommand,
   hasRequiredYamlValidationCommand,
   hasRequiredYamlCommentsCheckCommand,
@@ -42,6 +44,7 @@ const {
   validatePreflightScriptPolicy,
   validatePerfBudget,
   REQUIRED_PRECHECK_PARSER_COMMAND,
+  REQUIRED_NODE_REPAIR_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_CHANGED_DOCS_COMMAND,
@@ -62,6 +65,7 @@ const {
 
 function requiredPreflightScript({ remove = [] } = {}) {
   const requiredCommands = [
+    REQUIRED_NODE_REPAIR_COMMAND,
     REQUIRED_NODE_TOOLING_COMMAND,
     REQUIRED_HOOK_MARKDOWN_COMMAND,
     REQUIRED_CHANGED_DOCS_COMMAND,
@@ -285,6 +289,15 @@ describe("validate-pre-commit-tooling", () => {
     const script = "npm run validate:pre-commit-tooling && echo npm run validate:node-tooling";
 
     expect(hasRequiredNodeToolingCommand(script)).toBe(false);
+  });
+
+  test("hasNodeRepairBeforeNodeValidation requires repair before read-only validation", () => {
+    const valid = [REQUIRED_NODE_REPAIR_COMMAND, REQUIRED_NODE_TOOLING_COMMAND].join(" && ");
+    const reversed = [REQUIRED_NODE_TOOLING_COMMAND, REQUIRED_NODE_REPAIR_COMMAND].join(" && ");
+
+    expect(hasRequiredNodeRepairCommand(valid)).toBe(true);
+    expect(hasNodeRepairBeforeNodeValidation(valid)).toBe(true);
+    expect(hasNodeRepairBeforeNodeValidation(reversed)).toBe(false);
   });
 
   test("hasRequiredHookMarkdownCommand detects markdown hook parity precheck step", () => {
@@ -951,6 +964,10 @@ describe("validate-pre-commit-tooling", () => {
     expect(packageJson.scripts["check:prettier:hooks"]).toContain(
       "node scripts/run-managed-prettier.js --check"
     );
+    expect(preflightScript).toContain("npm run repair:node-tooling");
+    expect(preflightScript.indexOf("npm run repair:node-tooling")).toBeLessThan(
+      preflightScript.indexOf(REQUIRED_NODE_TOOLING_COMMAND)
+    );
     expect(preflightScript).toContain(REQUIRED_NODE_TOOLING_COMMAND);
     expect(preflightScript).toContain("npm run validate:hook-markdown");
     expect(preflightScript).toContain(REQUIRED_CHANGED_DOCS_COMMAND);
@@ -962,7 +979,9 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain(REQUIRED_WORKFLOW_VALIDATION_COMMAND);
     expect(preflightScript).toContain(REQUIRED_BANNER_SYNC_COMMAND);
     expect(preflightScript).toContain(REQUIRED_CHANGELOG_VALIDATION_COMMAND);
-    expect(packageJson.scripts["check:workflow-cspell"]).toContain("cspell@10.0.0");
+    expect(packageJson.scripts["check:workflow-cspell"]).toContain(
+      "node scripts/run-managed-cspell.js"
+    );
     expect(packageJson.scripts["check:banner-sync"]).toBe("node scripts/validate-banner.js");
     expect(packageJson.scripts["check:yaml"]).toContain(REQUIRED_YAML_COMMENTS_CHECK_COMMAND);
     expect(packageJson.scripts["check:yaml"]).toContain("pre-commit run yamllint --all-files");

@@ -213,5 +213,17 @@ describe("pre-commit hook stage policy", () => {
     expect(blockText).toContain("scripts/__tests__/validate-changelog.test.js");
     expect(blockText).toContain("scripts/__tests__/validate-changed-docs.test.js");
     expect(blockText).toContain("scripts/__tests__/check-conflict-markers.test.js");
+    expect(blockText).toContain("scripts/__tests__/native-git-hooks.test.js");
+  });
+
+  test("native tracked hooks cover pre-commit and pre-push", () => {
+    const hooksDir = path.resolve(__dirname, "../../scripts/hooks");
+    for (const hookName of ["pre-commit", "pre-push"]) {
+      const hookPath = path.join(hooksDir, hookName);
+      expect(fs.existsSync(hookPath)).toBe(true);
+      const content = fs.readFileSync(hookPath, "utf8");
+      expect(content.startsWith("#!/usr/bin/env node\n")).toBe(true);
+      expect(content).not.toMatch(/\b(?:bash|sh|pwsh|powershell)\b/);
+    }
   });
 });

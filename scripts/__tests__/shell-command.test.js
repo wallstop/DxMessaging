@@ -32,13 +32,13 @@ describe("shell-command", () => {
     expect(resolveSpawnCommand("npm", "linux")).toBe("npm");
   });
 
-  test("resolveSpawnOptions enforces shell mode for npm/npx on win32", () => {
+  test("resolveSpawnOptions avoids shell mode for npm/npx on win32", () => {
     const options = resolveSpawnOptions("npm", { cwd: "C:/repo", shell: false }, "win32");
 
     expect(options).toEqual(
       expect.objectContaining({
         cwd: "C:/repo",
-        shell: true,
+        shell: false,
         windowsHide: true
       })
     );
@@ -62,11 +62,10 @@ describe("shell-command", () => {
     spawnPlatformCommandSync("npm", ["--version"], { cwd: "C:/repo" }, spawnSyncMock, "win32");
 
     expect(spawnSyncMock).toHaveBeenCalledWith(
-      "npm.cmd",
-      ["--version"],
+      expect.stringMatching(/(?:cmd\.exe|cmd)$/i),
+      ["/d", "/s", "/c", "npm.cmd", "--version"],
       expect.objectContaining({
         cwd: "C:/repo",
-        shell: true,
         windowsHide: true
       })
     );

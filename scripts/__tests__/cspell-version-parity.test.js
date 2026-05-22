@@ -20,6 +20,7 @@ const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
 const PRE_COMMIT_CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
 const CSPELL_CONFIG_PATH = path.join(REPO_ROOT, ".cspell.json");
 const WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows");
+const MANAGED_CSPELL_PATH = path.join(REPO_ROOT, "scripts", "run-managed-cspell.js");
 
 function readPackageJson() {
   return JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, "utf8"));
@@ -90,10 +91,6 @@ describe("cspell version parity", () => {
     {
       name: ".pre-commit-config.yaml cspell fallback",
       version: entryVersion
-    },
-    {
-      name: "package.json scripts.check:cspell:scripts",
-      version: findPinnedVersionInEntry(pkg.scripts?.["check:cspell:scripts"], "cspell")
     }
   ];
 
@@ -115,6 +112,14 @@ describe("cspell version parity", () => {
       expect(version).toBe(declaredVersion);
     }
   );
+
+  test("package cspell scripts use the managed runner with the repository-pinned fallback", () => {
+    expect(pkg.scripts?.["check:cspell:scripts"]).toContain("node scripts/run-managed-cspell.js");
+    expect(pkg.scripts?.["check:workflow-cspell"]).toContain("node scripts/run-managed-cspell.js");
+
+    const managedCspell = fs.readFileSync(MANAGED_CSPELL_PATH, "utf8");
+    expect(managedCspell).toContain(`FALLBACK_CSPELL_SPEC = "cspell@${declaredVersion}"`);
+  });
 
   test("workflow npx fallback pins match package.json devDependency version", () => {
     const workflowPins = readWorkflowFiles().flatMap((workflowFile) =>
