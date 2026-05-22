@@ -41,7 +41,7 @@ impact:
 
 prerequisites:
   - "Devcontainer running with docker-outside-of-docker enabled"
-  - "UNITY_LICENSE, UNITY_LICENSE_B64, or UNITY_SERIAL path configured (see unity-license-bootstrap)"
+  - "UNITY_SERIAL (+ UNITY_EMAIL/UNITY_PASSWORD) or a UNITY_LICENSE/UNITY_LICENSE_B64 .ulf path configured (see unity-license-bootstrap)"
 
 dependencies:
   packages: []
@@ -67,6 +67,7 @@ aliases:
 
 related:
   - "unity-license-bootstrap"
+  - "unity-license-return-guarantee"
   - "upm-test-harness"
   - "unity-perf-test-isolation"
   - "unity-ci-matrix"
@@ -131,14 +132,15 @@ If a warm run takes more than 2x the expected time, the Library cache is likely 
 
 ## License Setup
 
-The runner refuses to launch without a supported Unity license path. The exact bootstrap flow lives in [unity-license-bootstrap](./unity-license-bootstrap.md):
+The runner refuses to launch without a supported Unity license path. Local runs prefer a paid serial and fall back to a `.ulf`: `run-tests.sh` / `run-tests.ps1` use `UNITY_SERIAL` + `UNITY_EMAIL` + `UNITY_PASSWORD` (classic `-serial` activation, with the seat returned on exit) when all three are set, and fall back to the local ULF path (`UNITY_LICENSE_B64` / `UNITY_LICENSE_FILE` / raw `UNITY_LICENSE`) otherwise (for example, a Personal license in a cloud Codespace). The exact bootstrap flow lives in [unity-license-bootstrap](./unity-license-bootstrap.md):
 
-1. For GameCI-compatible ULF activation, set raw `.ulf` contents in `UNITY_LICENSE`.
-1. For local shell profiles, run `bash scripts/unity/activate-license.sh --apply <path-to.ulf>` and add the printed `UNITY_LICENSE_B64` export.
-1. For paid serial activation, set `UNITY_SERIAL`, `UNITY_EMAIL`, and `UNITY_PASSWORD`.
+1. For a paid serial, set `UNITY_SERIAL`, `UNITY_EMAIL`, and `UNITY_PASSWORD`.
+1. For the ULF fallback, run `bash scripts/unity/activate-license.sh --apply <path-to.ulf>` and add the printed `UNITY_LICENSE_B64` export.
 1. Run `bash scripts/unity/activate-license.sh --check` before the first test run.
 
-The devcontainer forwards `UNITY_LICENSE`, `UNITY_LICENSE_B64`, `UNITY_SERIAL`, `UNITY_EMAIL`, `UNITY_PASSWORD`, and `LOCAL_WORKSPACE_FOLDER` from the host via `remoteEnv` in `.devcontainer/devcontainer.json`. Inside a devcontainer the local runner still prefers `docker inspect` of the current container mount over `LOCAL_WORKSPACE_FOLDER`; this avoids passing Windows drive-letter paths to a Linux Docker CLI.
+The devcontainer forwards `UNITY_SERIAL`, `UNITY_EMAIL`, `UNITY_PASSWORD`, `UNITY_LICENSE`, `UNITY_LICENSE_B64`, and `LOCAL_WORKSPACE_FOLDER` from the host via `remoteEnv` in `.devcontainer/devcontainer.json`. Inside a devcontainer the local runner still prefers `docker inspect` of the current container mount over `LOCAL_WORKSPACE_FOLDER`; this avoids passing Windows drive-letter paths to a Linux Docker CLI.
+
+In CI the serial is activated and returned per run; see [unity-license-return-guarantee](./unity-license-return-guarantee.md) for the four-layer always-return guarantee.
 
 ## Iteration Patterns
 
@@ -211,6 +213,7 @@ The `run-tests.sh` / `run-tests.ps1` scripts are the canonical LOCAL reproductio
 ## See Also
 
 - [Unity License Bootstrap](./unity-license-bootstrap.md)
+- [Unity License Return Guarantee](./unity-license-return-guarantee.md)
 - [UPM Test Harness](./upm-test-harness.md)
 - [Unity Perf Test Isolation](./unity-perf-test-isolation.md)
 - [Unity CI Matrix](./unity-ci-matrix.md)

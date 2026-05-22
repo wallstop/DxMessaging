@@ -79,8 +79,9 @@ Reference: [GitHub repository transfer documentation](https://docs.github.com/ar
 
 Unity workflows target self-hosted Windows runners by labels only. No
 dedicated runner group is provisioned; runners may live in the organization's
-default runner group. Unity Pro is a single-seat license, so cross-repository
-serialization is provided by the central
+default runner group. The Unity serial has only a small activation-seat pool
+(typically ~2 seats) with no server-side reclaim, so cross-repository
+serialization to one-Unity-at-a-time is provided by the central
 `Ambiguous-Interactive/ambiguous-organization-build-lock` actions. Native
 GitHub `concurrency` is repository-scoped and must not be used as the
 organization lock.
@@ -90,7 +91,8 @@ organization lock.
 - Additional speed marker applied only to `ELI-MACHINE`: `fast` (kept for
   future opt-in hotfix dispatch; no job currently requests it).
 - Every Unity-credential-using job validates Unity license secret shape, then
-  acquires the central lock immediately before `game-ci/unity-test-runner@v4`:
+  acquires the central lock immediately before running the licensed Unity
+  section `scripts/unity/run-ci-tests.ps1`:
 
   ```yaml
   - name: Validate Unity license secrets
@@ -129,7 +131,8 @@ RAM-64GB]` so either Windows machine can pick up any Unity job. The
       `.github/workflows/unity-benchmarks.yml`, and the `unity-checks`
       job in `.github/workflows/release.yml` acquires
       `wallstop-organization-builds`, validates Unity license secrets, runs
-      game-ci, and releases the lock with `if: always()`.
+      `scripts/unity/run-ci-tests.ps1`, and releases the lock with
+      `if: always()`.
 - [ ] Confirm the string `wallstop-organization-builds` appears only as a
       central lock action input, not as native GitHub `concurrency.group`.
 - [ ] Confirm `.github/workflows/stuck-job-watchdog.yml` is enabled. It
@@ -173,8 +176,13 @@ Reference: [GitHub self-hosted runners documentation](https://docs.github.com/en
 The tracked workflows expose only secret names. Never write the values into a
 tracked file or generated artifact.
 
-- [ ] Confirm Unity workflows can read the required secret names:
-      `UNITY_LICENSE`, `UNITY_SERIAL`, `UNITY_EMAIL`, and `UNITY_PASSWORD`.
+- [ ] Confirm Unity workflows can read the three required secret names:
+      `UNITY_SERIAL`, `UNITY_EMAIL`, and `UNITY_PASSWORD` (the classic-serial
+      activation path; the single CI activation path).
+- [ ] Confirm the retired `UNITY_LICENSING_SERVER` secret is removed from the
+      workflows. The `validate-unity-license` action fails the run if it is still
+      set; a `.ulf` (`UNITY_LICENSE` / `UNITY_LICENSE_B64`) remains only as a
+      local development fallback.
 - [ ] Confirm `.github/workflows/release.yml` does not require `NPM_TOKEN`; npm
       publishing should use Trusted Publishing and OIDC.
 - [ ] Confirm the release workflow grants `id-token: write` only to jobs that
@@ -324,7 +332,7 @@ Run these checks after the transfer and again after the first tagged release.
       pull requests or protected branch pushes. Either Windows machine can
       pick up any Unity job; cross-repository license serialization is
       enforced by the central `ambiguous-organization-build-lock` actions
-      around the licensed game-ci section.
+      around the licensed Unity section.
 - [ ] `.github/workflows/release.yml` succeeds for a real semver tag and does
       not require `NPM_TOKEN`.
 - [ ] npm, OpenUPM, GitHub Releases, and GitHub Pages all point to

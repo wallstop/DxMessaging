@@ -62,6 +62,7 @@ aliases:
 related:
   - "headless-test-runner"
   - "unity-license-bootstrap"
+  - "unity-license-return-guarantee"
   - "unity-perf-test-isolation"
   - "cicd-devcontainer-workflows"
 
@@ -99,19 +100,24 @@ Nine matrix cells. `editmode`/`playmode` run in-editor on Mono; `standalone` bui
 
 Licensed Unity execution is serialized by the central
 `Ambiguous-Interactive/ambiguous-organization-build-lock` actions. The workflows
-validate Unity license secret shape, acquire `wallstop-organization-builds`
+validate the three Unity serial secrets, acquire `wallstop-organization-builds`
 immediately before `scripts/unity/run-ci-tests.ps1`, then release it with `if: always()`. Keep runner
 labels broad enough for both Windows machines; the lock protects only the Unity
-seat, not checkout, cache setup, or secret-shape validation.
+seat, not checkout, cache setup, or secret-shape validation. The licensed section
+activates a classic serial (`UNITY_SERIAL` + `UNITY_EMAIL` + `UNITY_PASSWORD`)
+and returns the license on every exit path through four redundant layers
+(return-at-start, PowerShell `try`/`finally`, an `if: always()` return step
+inside the org-lock window, and the next run's return-at-start) -- see
+[unity-license-return-guarantee](./unity-license-return-guarantee.md).
 
 ## Serialization + Timeout Invariant
 
-Unity Pro is a single seat shared across the whole org, so Unity-licensed jobs must be serialized in TWO complementary layers. Neither layer alone is sufficient.
+The Unity serial has only a small activation-seat pool (typically ~2 seats) shared across the whole org and no server-side reclaim, so Unity-licensed jobs are serialized to one-at-a-time in TWO complementary layers. Neither layer alone is sufficient.
 
 **Two-layer serialization.** `strategy.max-parallel: 1` serializes the matrix cells WITHIN a single run, and the external `ambiguous-organization-build-lock` action serializes ACROSS runs, workflows, and repositories.
 
 - `max-parallel: 1` only: cannot prevent two separate runs (two pushes, `unity-tests` plus `unity-benchmarks`, or another org repo) from racing for the seat.
-- The lock only: leaves all 9 cells spawning at once, so 8 idle cells burn their job-timeout clocks waiting, race for the seat, and clutter logs. Since the single seat already forces one-Unity-at-a-time, that parallelism buys ZERO throughput.
+- The lock only: leaves all 9 cells spawning at once, so 8 idle cells burn their job-timeout clocks waiting, race for the seat, and clutter logs. Since the lock already forces one-Unity-at-a-time, that parallelism buys ZERO throughput.
 
 With both layers, the within-run lock wait collapses to near-zero, so the cross-run lock poll budget can stay generous. This is `max-parallel: 1` ONLY -- it is NOT a native concurrency group. A native `concurrency.group: wallstop-organization-builds` is repository-scoped, serializes whole jobs, and is forbidden by `scripts/validate-workflows.js`. Add `max-parallel: 1` under `strategy:` (sibling of `fail-fast`/`matrix`) on the matrix workflows only (`unity-tests.yml`, `unity-benchmarks.yml`); single-job workflows (`release.unity-checks`, the GameCI experiment) have no matrix and rely solely on the lock for across-run serialization.
 
@@ -123,7 +129,7 @@ job timeout-minutes >= acquire timeout-minutes + RUN_BUDGET (120)
 
 The acquire input `timeout-minutes` is the lock POLL budget (how long the action waits for the seat), counted against the job clock. The current magnitudes are: acquire `timeout-minutes: "300"`, job `timeout-minutes: 420`, and a step-level `timeout-minutes: 120` on the Unity run step. `scripts/validate-workflows.js` enforces the invariant via `findUnityLockTimeoutViolations` (constant `UNITY_LOCK_RUN_BUDGET_MINUTES = 120`); `scripts/__tests__/unity-workflow-shape.test.js` pins the same numbers per job.
 
-The step-level `timeout-minutes: 120` protects the single seat from a hung editor: it must be `>= 120` and STRICTLY below the job timeout so the step fails first and releases the lock instead of the whole job being cancelled with the seat still held. This step guard matters because `stuck-job-watchdog.yml` ignores any `in_progress` job -- nothing else bounds a post-acquire hang, so without the step timeout a wedged editor would squat the seat for the full job timeout.
+The step-level `timeout-minutes: 120` protects the in-use seat from a hung editor: it must be `>= 120` and STRICTLY below the job timeout so the step fails first and releases the lock instead of the whole job being cancelled with the seat still held. This step guard matters because `stuck-job-watchdog.yml` ignores any `in_progress` job -- nothing else bounds a post-acquire hang, so without the step timeout a wedged editor would squat the seat for the full job timeout.
 
 **Operator note (standalone IL2CPP):** the `standalone` cells require the Windows IL2CPP Unity module and the host build toolchain needed by Unity for Windows players. `scripts/unity/ensure-editor.ps1` installs or verifies the requested Editor and the `windows-il2cpp` module before standalone runs. That script treats the beta standalone Unity CLI as a moving surface: it discovers the install root through the 0-arg `unity install-path` GETTER and sets the path best-effort, so an uncertain flag never aborts the matrix. See [unity-editor-cli-bootstrap](./unity-editor-cli-bootstrap.md) for the getter-vs-setter detail.
 
@@ -187,7 +193,7 @@ The `avoid-reflection-on-hot-paths` skill (see Performance section of the index)
 A direct Windows Unity job log is structured. To diagnose a failure, scan in this order:
 
 1. **Pre-Unity setup**: `Setup Node.js`, `Cache Unity Library`, `Compute test assembly list`. Failures here are infrastructure, not test logic.
-1. **License activation**: search for `LICENSE SYSTEM` or `License client failed`. See [unity-license-bootstrap](./unity-license-bootstrap.md).
+1. **License activation**: search for `LICENSE SYSTEM` or `Failed to activate`. The serial is activated (and returned) per run. See [unity-license-bootstrap](./unity-license-bootstrap.md) and [unity-license-return-guarantee](./unity-license-return-guarantee.md).
 1. **Editor startup**: search for `[Licensing]` or `Loading native plugins`. A timeout here usually means a corrupted Library cache.
 1. **Domain reload**: search for `Reloading assemblies`. A hang here typically means a circular asmdef reference or a missing dependency.
 1. **Test execution**: search for `Run tests on platform`. NUnit failures appear as `[Test Failed]` lines with stack traces.

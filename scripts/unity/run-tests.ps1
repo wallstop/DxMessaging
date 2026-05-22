@@ -330,6 +330,16 @@ function Find-UnityEditorPath {
 }
 
 function Invoke-LocalUnityTests {
+    # Local activation: when UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD are all
+    # set we activate the paid seat with -serial -username -password and RETURN it
+    # in a finally so a local run never leaks it. Otherwise we assume the machine
+    # is already licensed (Hub sign-in / a local .ulf) and just launch the editor.
+    $useSerial = (
+        (-not [string]::IsNullOrWhiteSpace($env:UNITY_SERIAL)) -and
+        (-not [string]::IsNullOrWhiteSpace($env:UNITY_EMAIL)) -and
+        (-not [string]::IsNullOrWhiteSpace($env:UNITY_PASSWORD))
+    )
+
     $unityPath = Find-UnityEditorPath $UnityVersion
     if ([string]::IsNullOrWhiteSpace($unityPath)) {
         Write-Host @"
@@ -353,6 +363,15 @@ Set UNITY_EDITOR_PATH to your Unity.exe path, for example:
     if (-not [string]::IsNullOrWhiteSpace($Filter)) {
         $unityArgs += @('-testFilter', $Filter)
     }
+    # Serial activation passes the creds in the SAME run (no separate activation
+    # pass on the local path); the seat is returned in the finally below.
+    if ($useSerial) {
+        $unityArgs += @(
+            '-serial', $env:UNITY_SERIAL,
+            '-username', $env:UNITY_EMAIL,
+            '-password', $env:UNITY_PASSWORD
+        )
+    }
     $unityArgs += @('-logFile', '-')
 
     Write-Host "Launching local Unity: $unityPath" -ForegroundColor Cyan
@@ -360,21 +379,66 @@ Set UNITY_EDITOR_PATH to your Unity.exe path, for example:
     Write-Host "  results=$Results log=$ArtifactsDir/log.txt"
     Write-Host "  perf=$($IncludePerf.IsPresent) comparisons=$($IncludeComparisons.IsPresent) integrations=$($IncludeIntegrations.IsPresent) filter=$Filter"
 
-    & $unityPath @unityArgs 2>&1 | Tee-Object -FilePath (Join-Path $ArtifactsDir 'log.txt')
-    $UnityExit = $LASTEXITCODE
-    if ($UnityExit -ne 0) {
-        if (-not (Test-Path $Results)) {
-            Write-Host "No results.xml at $Results" -ForegroundColor Yellow
+    # $exitToUse is computed inside the try and consumed AFTER the finally so the
+    # license return ALWAYS runs before we leave the process. We cannot `exit`
+    # inside the try -- PowerShell's `exit` terminates the runspace and SKIPS the
+    # finally, which would leak the seat.
+    $exitToUse = 0
+    try {
+        # SECURITY: the serial/email/password ride in $unityArgs (when $useSerial),
+        # so this site must NEVER echo $unityArgs and the Unity log on stdout is the
+        # only sink (no creds are written to a separate file by us).
+        & $unityPath @unityArgs 2>&1 | Tee-Object -FilePath (Join-Path $ArtifactsDir 'log.txt')
+        $UnityExit = $LASTEXITCODE
+        if ($UnityExit -ne 0) {
+            if (-not (Test-Path $Results)) {
+                Write-Host "No results.xml at $Results" -ForegroundColor Yellow
+            }
+            Write-Host "Unity exited with code $UnityExit." -ForegroundColor Red
+            $exitToUse = $UnityExit
+        } else {
+            # Unity exited 0; route through the shared validator so the local path
+            # fails loudly on a missing results.xml or zero tests (total=0),
+            # exactly like the docker path. Write-ResultsSummary returns 2 for
+            # those cases.
+            $exitToUse = Write-ResultsSummary -ResultsXml $Results
         }
-        Write-Host "Unity exited with code $UnityExit." -ForegroundColor Red
-        exit $UnityExit
+    } finally {
+        # Return the seat on EVERY exit path (clean exit, test failure, throw, or
+        # Ctrl-C that still unwinds this finally) so a local serial run never leaks
+        # it. Best-effort and never throws; skipped when no serial creds were used
+        # (a Hub/.ulf machine has nothing to return).
+        if ($useSerial) {
+            try {
+                # SECURITY: email/password ride in the argument array (never echoed).
+                # `-logFile -` puts the Unity log on stdout; Tee-Object DOES persist
+                # it, but to the system temp dir ($returnLog below), NOT $ArtifactsDir,
+                # so it stays out of any UPLOADED ARTIFACT and the account fragments
+                # Unity may echo never land in the artifacts tree. Same Tee-Object
+                # wait + $LASTEXITCODE idiom as the run above (a bare `&` would not
+                # wait for the GUI-subsystem editor).
+                $returnArgs = @(
+                    '-quit',
+                    '-batchmode',
+                    '-nographics',
+                    '-returnlicense',
+                    '-username', $env:UNITY_EMAIL,
+                    '-password', $env:UNITY_PASSWORD,
+                    '-logFile', '-'
+                )
+                $returnLog = Join-Path ([System.IO.Path]::GetTempPath()) 'unity-return-license.log'
+                & $unityPath @returnArgs 2>&1 | Tee-Object -FilePath $returnLog
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Unity license return exited with code $LASTEXITCODE (continuing)." -ForegroundColor Yellow
+                } else {
+                    Write-Host 'Returned the Unity license (serial).' -ForegroundColor Cyan
+                }
+            } catch {
+                Write-Host "Unity license return failed: $($_.Exception.Message) (continuing)." -ForegroundColor Yellow
+            }
+        }
     }
-
-    # Unity exited 0; route through the shared validator so the local path
-    # fails loudly on a missing results.xml or zero tests (total=0), exactly
-    # like the docker path. Write-ResultsSummary returns 2 for those cases.
-    $summaryExit = Write-ResultsSummary -ResultsXml $Results
-    exit $summaryExit
+    exit $exitToUse
 }
 
 $ResolvedRunner = $Runner
@@ -475,7 +539,19 @@ function Get-UnityLicenseFileCandidates {
     return $candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 }
 
-if ([string]::IsNullOrEmpty($env:UNITY_LICENSE) -and [string]::IsNullOrEmpty($env:UNITY_LICENSE_B64)) {
+# Serial-first: prefer paid serial activation when all three creds are set.
+# Otherwise fall back to a ULF (env or a local .ulf file). A present serial is
+# preferred, so we only auto-load a local .ulf when no serial AND no explicit ULF
+# is configured (a stray local .ulf must not shadow the serial path).
+$LicenseMode = ''
+$UseSerial = (
+    (-not [string]::IsNullOrWhiteSpace($env:UNITY_SERIAL)) -and
+    (-not [string]::IsNullOrWhiteSpace($env:UNITY_EMAIL)) -and
+    (-not [string]::IsNullOrWhiteSpace($env:UNITY_PASSWORD))
+)
+
+if (-not $UseSerial -and
+    [string]::IsNullOrEmpty($env:UNITY_LICENSE) -and [string]::IsNullOrEmpty($env:UNITY_LICENSE_B64)) {
     foreach ($licensePath in Get-UnityLicenseFileCandidates) {
         if (Test-Path -LiteralPath $licensePath -PathType Leaf) {
             $env:UNITY_LICENSE = Get-Content -LiteralPath $licensePath -Raw
@@ -485,22 +561,22 @@ if ([string]::IsNullOrEmpty($env:UNITY_LICENSE) -and [string]::IsNullOrEmpty($en
     }
 }
 
-$LicenseMode = ''
-if (-not [string]::IsNullOrEmpty($env:UNITY_LICENSE)) {
+if ($UseSerial) {
+    $LicenseMode = 'serial'
+} elseif (-not [string]::IsNullOrEmpty($env:UNITY_LICENSE)) {
     $LicenseMode = 'ulf'
 } elseif (-not [string]::IsNullOrEmpty($env:UNITY_LICENSE_B64)) {
     $LicenseMode = 'ulf-b64'
-} elseif ((-not [string]::IsNullOrEmpty($env:UNITY_SERIAL)) -and `
-          (-not [string]::IsNullOrEmpty($env:UNITY_EMAIL)) -and `
-          (-not [string]::IsNullOrEmpty($env:UNITY_PASSWORD))) {
-    $LicenseMode = 'serial'
 } else {
+    # Serial-first ordering: serial is the preferred/primary path, the .ulf vars
+    # are the fallback. Keep this list in the SAME order as the .SYNOPSIS/help and
+    # the bash mirror so the recommended path is always shown first.
     Write-Host @"
 ERROR: No Unity license configured.
 Set EITHER:
+  UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD   (preferred paid serial activation)
   UNITY_LICENSE       (raw .ulf contents; GameCI-compatible)
   UNITY_LICENSE_B64   (base64 .ulf contents; local shell convenience)
-  UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD   (paid serial activation)
 
 UNITY_EMAIL + UNITY_PASSWORD alone is not a supported headless container license path.
 Run 'bash scripts/unity/activate-license.sh --check' for diagnostics.
@@ -634,6 +710,16 @@ function Get-EditorCommandInner {
     $resultsQ = ConvertTo-BashSingleQuotedString $ResultsContainer
     $assembliesQ = ConvertTo-BashSingleQuotedString $Assemblies
     $testPlatform = if ($Platform -eq 'standalone') { 'StandaloneLinux64' } else { $Platform }
+    # `set -o pipefail` (part of `set -euo pipefail` below) is LOAD-BEARING for the
+    # editor test pipeline `Unity ... | tee log.txt`: without it the pipeline's exit
+    # status would be `tee`'s (always 0), masking a failing Unity behind a passing
+    # tee. With pipefail a non-zero Unity propagates as the inner script's exit code.
+    #
+    # EVERY command in the EXIT trap body below is suffixed `|| true` ON PURPOSE: the
+    # trap fires AFTER the editor pipeline has already set the script's exit code, so
+    # a license-return failure (or a chown failure) must NEVER overwrite the editor's
+    # non-zero exit code with its own. `|| true` forces each cleanup command to a 0
+    # status so the trap cannot clobber the real test result. Mirrors run-tests.sh.
     [void]$sb.AppendLine('set -euo pipefail')
     [void]$sb.AppendLine('cleanup_ownership() {')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true')
@@ -647,6 +733,18 @@ function Get-EditorCommandInner {
     [void]$sb.AppendLine('        fi')
     [void]$sb.AppendLine('    fi')
     [void]$sb.AppendLine('    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true')
+    if ($LicenseMode -eq 'serial') {
+        # Serial activation consumes a seat, so we MUST return it on EVERY exit
+        # path -- clean exit, test failure, or Ctrl-C -- or a local run leaks the
+        # seat. The return runs INSIDE the same EXIT trap as the chown cleanup so
+        # it fires even when the editor (and the `tee` pipeline) failed. It is
+        # best-effort (|| true): a failed return must never mask the real test
+        # exit code. The return log goes to /tmp (NOT under /workspace/.artifacts,
+        # which is bind-mounted to the repo and would persist the creds Unity may
+        # echo). UNITY_EMAIL/UNITY_PASSWORD are forwarded into the container via
+        # -e; we never echo them. Mirrors run-tests.sh.
+        [void]$sb.AppendLine('    /opt/unity/Editor/Unity -quit -batchmode -nographics -returnlicense -username "${UNITY_EMAIL}" -password "${UNITY_PASSWORD}" -logFile - > /tmp/unity-return-license.log 2>&1 || true')
+    }
     [void]$sb.AppendLine('}')
     [void]$sb.AppendLine('trap cleanup_ownership EXIT')
     [void]$sb.AppendLine('mkdir -p /root/.cache/unity3d')

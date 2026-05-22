@@ -112,7 +112,6 @@ jobs:
       - name: Validate Unity license secrets
         uses: ./.github/actions/validate-unity-license
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
@@ -129,12 +128,14 @@ jobs:
       - name: Run GameCI normal project mode
         id: game_ci
         timeout-minutes: 120
-        uses: game-ci/unity-test-runner@v4
+        # game-ci reads UNITY_SERIAL/UNITY_EMAIL/UNITY_PASSWORD from env for
+        # classic serial activation (the unityLicensingServer input is retired
+        # now that this repo moved off the floating-license server).
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        uses: game-ci/unity-test-runner@v4
         with:
           packageMode: false
           projectPath: .artifacts/unity/game-ci-projects/${{ inputs.unity-version }}-${{ inputs.test-mode }}
@@ -144,6 +145,24 @@ jobs:
           artifactsPath: .artifacts/unity/game-ci/${{ inputs.unity-version }}-${{ inputs.test-mode }}
           checkName: GameCI experiment ${{ inputs.unity-version }} ${{ inputs.test-mode }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      # Kept for uniformity with the required workflows and to satisfy the
+      # leak-safety guard (every Unity-native job must carry this if:always()
+      # step). HONEST CAVEAT: this experiment uses game-ci's own editor install,
+      # and run-ci-tests.ps1 ran above only with -GenerateOnly (it exits before
+      # exporting UNITY_EDITOR_PATH), so this composite has no editor path to
+      # resolve and intentionally NO-OPS here (it logs a notice and exits 0).
+      # The serial seat game-ci activated is reclaimed by: (1) game-ci's own
+      # return-license (best-effort; Linux-only/flaky on Windows self-hosted),
+      # and definitively by (2) the next REQUIRED Unity run's return-at-start,
+      # which is account-wide and version-agnostic (Layer 4). This is acceptable
+      # because the experiment is workflow_dispatch-only and continue-on-error.
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
 
       - name: Release organization Unity lock
         if: always()

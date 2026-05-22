@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-21. Do not edit manually.
+> **Auto-generated** on 2026-05-22. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 163   |
+| Total Skills | 164   |
 | Categories   | 8     |
 
 ---
@@ -23,7 +23,7 @@
 - [Scripting](#scripting) (18)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
-- [Unity](#unity) (8)
+- [Unity](#unity) (9)
 
 ---
 
@@ -219,16 +219,17 @@
 
 ## Unity
 
-| Skill                                                                     | Lines      | Complexity     | Status   | Performance  | Tags                 |
-| ------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | -------------------- |
-| [Devcontainer Cache Contract](./unity/devcontainer-cache-contract.md)     | [ok] 180   | [intermediate] | [stable] | [risk: high] | devcontainer, docker |
-| [Headless Unity Test Runner](./unity/headless-test-runner.md)             | [ok] 225   | [intermediate] | [stable] | [risk: none] | unity, testing       |
-| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md) | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
-| [Unity CI Matrix](./unity/unity-ci-matrix.md)                             | [ok] 213   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
-| [Unity Editor CLI Bootstrap](./unity/unity-editor-cli-bootstrap.md)       | [ok] 172   | [intermediate] | [stable] | [risk: none] | unity, cli           |
-| [Unity License Bootstrap](./unity/unity-license-bootstrap.md)             | [ok] 222   | [basic]        | [stable] | [risk: none] | unity, license       |
-| [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)         | [ok] 219   | [intermediate] | [stable] | [risk: high] | unity, performance   |
-| [UPM Test Harness](./unity/upm-test-harness.md)                           | [ok] 193   | [basic]        | [stable] | [risk: none] | unity, upm           |
+| Skill                                                                       | Lines      | Complexity     | Status   | Performance  | Tags                 |
+| --------------------------------------------------------------------------- | ---------- | -------------- | -------- | ------------ | -------------------- |
+| [Devcontainer Cache Contract](./unity/devcontainer-cache-contract.md)       | [ok] 180   | [intermediate] | [stable] | [risk: high] | devcontainer, docker |
+| [Headless Unity Test Runner](./unity/headless-test-runner.md)               | [ok] 228   | [intermediate] | [stable] | [risk: none] | unity, testing       |
+| [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md)   | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
+| [Unity CI Matrix](./unity/unity-ci-matrix.md)                               | [ok] 219   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
+| [Unity Editor CLI Bootstrap](./unity/unity-editor-cli-bootstrap.md)         | [ok] 172   | [intermediate] | [stable] | [risk: none] | unity, cli           |
+| [Unity License Bootstrap](./unity/unity-license-bootstrap.md)               | [ok] 240   | [basic]        | [stable] | [risk: none] | unity, license       |
+| [Unity License Return Guarantee](./unity/unity-license-return-guarantee.md) | [warn] 290 | [intermediate] | [stable] | [risk: none] | unity, serial        |
+| [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)           | [ok] 219   | [intermediate] | [stable] | [risk: high] | unity, performance   |
+| [UPM Test Harness](./unity/upm-test-harness.md)                             | [ok] 193   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---
 

@@ -84,7 +84,7 @@ describe("scripts/unity/run-tests.sh contract", () => {
     );
   });
 
-  test("license contract supports ULF, local base64 ULF, and serial paths", () => {
+  test("license contract supports serial activation plus ULF / local base64 ULF fallback", () => {
     expect(content).toContain("UNITY_LICENSE");
     expect(content).toContain("UNITY_LICENSE_B64");
     expect(content).toContain("UNITY_SERIAL");
@@ -92,6 +92,30 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).toContain("UNITY_PASSWORD");
     expect(content).not.toContain('-serial ""');
     expect(content).not.toContain("personal-email");
+  });
+
+  test("is serial-FIRST with the .ulf fallback retained", () => {
+    // The repo removed the self-hosted Unity Licensing Server and switched to
+    // classic SERIAL activation. The local script prefers UNITY_SERIAL +
+    // UNITY_EMAIL + UNITY_PASSWORD (-> -serial -username -password), then falls
+    // back to a .ulf in UNITY_LICENSE (raw) or UNITY_LICENSE_B64 (base64). The
+    // floating-server surface must be GONE.
+    expect(content).toContain("-serial");
+    expect(content).toContain("-username");
+    expect(content).toContain("-password");
+    expect(content).not.toContain("UNITY_LICENSING_SERVER");
+    expect(content).not.toContain("services-config.json");
+  });
+
+  test("returns the serial seat on EVERY exit via the EXIT trap (no leaked seat)", () => {
+    // Serial activation consumes the single shared seat, so a local run MUST
+    // return it on EVERY exit path. The return runs inside the same EXIT trap as
+    // the chown cleanup (gated to serial mode) so it fires even when the editor
+    // failed, and is best-effort (|| true) so it cannot mask the real exit code.
+    expect(content).toContain("trap cleanup_ownership EXIT");
+    expect(content).toMatch(/-returnlicense[\s\S]*?-username "\$\{UNITY_EMAIL\}"/);
+    // The return is gated to the serial license mode (not run for the .ulf paths).
+    expect(content).toMatch(/LICENSE_MODE.*==.*"serial"/);
   });
 
   test("auto-loads common local Unity license files before failing", () => {
@@ -224,12 +248,34 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     );
   });
 
-  test("license contract supports ULF, local base64 ULF, and serial paths", () => {
+  test("license contract supports serial activation plus ULF / local base64 ULF fallback", () => {
     expect(content).toContain("UNITY_LICENSE");
     expect(content).toContain("UNITY_LICENSE_B64");
     expect(content).toContain("UNITY_SERIAL");
+    expect(content).toContain("UNITY_EMAIL");
+    expect(content).toContain("UNITY_PASSWORD");
     expect(content).not.toContain('-serial ""');
     expect(content).not.toContain("personal-email");
+  });
+
+  test("is serial-FIRST with the .ulf fallback retained", () => {
+    // Parity with run-tests.sh: classic SERIAL activation (UNITY_SERIAL +
+    // UNITY_EMAIL + UNITY_PASSWORD -> -serial -username -password), with the
+    // .ulf fallback (UNITY_LICENSE / UNITY_LICENSE_B64) retained for offline use.
+    // The floating-server surface must be GONE.
+    expect(content).toContain("-serial");
+    expect(content).toContain("-username");
+    expect(content).toContain("-password");
+    expect(content).not.toContain("UNITY_LICENSING_SERVER");
+    expect(content).not.toContain("services-config.json");
+  });
+
+  test("returns the serial seat on EVERY exit via the EXIT trap (no leaked seat)", () => {
+    // Parity with run-tests.sh: the generated docker bash payload returns the
+    // serial seat inside its EXIT trap so a local run never leaks the single
+    // shared seat.
+    expect(content).toContain("trap cleanup_ownership EXIT");
+    expect(content).toMatch(/-returnlicense[\s\S]*?-username "\$\{UNITY_EMAIL\}"/);
   });
 
   test("auto-loads common local Unity license files before failing", () => {
@@ -453,13 +499,43 @@ describe("scripts/unity direct CI runner contract", () => {
     // IL2CPP module install verifies the id via the -l listing before installing.
     expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-l'");
     expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-m'");
-    // The -l listing is read non-throwing (best-effort verification) while the
-    // actual module install is THROWING (fatal for standalone). Pin both halves.
+    // The -l listing is read non-throwing (best-effort verification). The module
+    // install now runs through the CAPTURING (non-throwing) invoker so its exit
+    // code AND output can be classified against the on-disk module layout: the
+    // standalone beta CLI returns "No modules found to install." (exit 6) when
+    // IL2CPP is ALREADY present, which is an idempotent no-op rather than a
+    // failure. A genuine, non-benign failure with no on-disk corroboration STILL
+    // throws (case 4 below), preserving the "real failure fails loudly" guarantee.
     expect(ensureEditor).toMatch(
       /Get-UnityCliOutput -Arguments @\('install-modules', '-e', \$Version, '-l'\)/
     );
     expect(ensureEditor).toMatch(
+      /Invoke-UnityCliCapture -Arguments @\('install-modules', '-e', \$Version, '-m', \$moduleId\)/
+    );
+    // The OLD unconditional throwing install of the module must NOT reappear: it
+    // wrongly aborted standalone on the idempotent "No modules found to install"
+    // no-op. (Invoke-UnityCli is the throwing invoker; Invoke-UnityCliCapture is
+    // its capturing, classify-then-decide replacement for the module install.)
+    expect(ensureEditor).not.toMatch(
       /Invoke-UnityCli -Arguments @\('install-modules', '-e', \$Version, '-m', \$moduleId\)/
+    );
+    // Idempotency classification surface: a disk-authoritative IL2CPP probe gates
+    // the "treat the CLI no-op as success" path, and a benign "nothing to
+    // install / already installed" message is recognized. Both must be present so
+    // the idempotent contract cannot silently regress to a hard failure.
+    expect(ensureEditor).toContain("function Test-Il2CppModulePresent");
+    expect(ensureEditor).toMatch(/Test-Il2CppModulePresent -EditorPath/);
+    expect(ensureEditor).toMatch(/no modules found to install\|already installed/i);
+    // The module installer receives the resolved editor path so it can probe disk.
+    expect(ensureEditor).toMatch(
+      /Add-WindowsIl2CppModule -Version \$UnityVersion -EditorPath \$editor/
+    );
+    // The base editor install is RETRIED (it has failed flakily after a long run
+    // with exit 6) and routed through the capturing invoker so a final failure
+    // throws WITH the CLI output tail + exit code for diagnosis.
+    expect(ensureEditor).toContain("function Invoke-WithRetry");
+    expect(ensureEditor).toMatch(
+      /Invoke-WithRetry -MaxAttempts 2 -DelaySeconds 15 -Action \{\s*\$installResult = Invoke-UnityCliCapture -Arguments \$installArgs/
     );
 
     // Layered discovery wiring: install branch resolves through the layered
@@ -512,6 +588,32 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).toContain("-EnableCacheServer");
     expect(runCi).toContain("Test-NUnitResults");
     expect(runCi).toContain("0 tests ran");
+  });
+
+  test("run-ci-tests uses classic serial activation with a guaranteed license return", () => {
+    // The direct CI runner uses classic SERIAL activation: it activates the paid
+    // seat from UNITY_SERIAL/UNITY_EMAIL/UNITY_PASSWORD (-serial -username
+    // -password) via Invoke-UnityLicenseActivate (which THROWS on failure) and
+    // returns it via Invoke-UnityLicenseReturn (best-effort, never throws,
+    // `-returnlicense`). These reads see the RAW file text, so the in-array flag
+    // literals (-serial / -returnlicense) are assertable directly here.
+    expect(runCi).toContain("Invoke-UnityLicenseActivate");
+    expect(runCi).toContain("Invoke-UnityLicenseReturn");
+    expect(runCi).toContain("-returnlicense");
+    expect(runCi).toContain("-serial");
+    expect(runCi).toContain("-username");
+    expect(runCi).toContain("-password");
+    // The three serial credentials gate activation (all required in CI).
+    expect(runCi).toContain("UNITY_SERIAL");
+    expect(runCi).toContain("UNITY_EMAIL");
+    expect(runCi).toContain("UNITY_PASSWORD");
+    // The OLD floating-license-server surface must be GONE from the CI runner.
+    expect(runCi).not.toContain("--acquire-floating");
+    expect(runCi).not.toContain("--return-floating");
+    expect(runCi).not.toContain("UNITY_LICENSING_SERVER");
+    expect(runCi).not.toContain("services-config.json");
+    expect(runCi).not.toContain("Write-UnityLicensingServerConfig");
+    expect(runCi).not.toContain("Resolve-UnityLicensingClient");
   });
 });
 

@@ -142,6 +142,11 @@ describe(".devcontainer cache mount contract", () => {
   });
 
   test("devcontainer forwards Unity license and host workspace env vars", () => {
+    // Classic serial activation (UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD) is
+    // the primary local path, with the ULF fallback (UNITY_LICENSE /
+    // UNITY_LICENSE_B64) retained. The floating-license server was retired, so
+    // UNITY_LICENSING_SERVER must NOT be forwarded any longer.
+    expect(devcontainerJson).not.toContain('"UNITY_LICENSING_SERVER"');
     expect(devcontainerJson).toContain('"UNITY_LICENSE"');
     expect(devcontainerJson).toContain('"UNITY_LICENSE_B64"');
     expect(devcontainerJson).toContain('"UNITY_SERIAL"');

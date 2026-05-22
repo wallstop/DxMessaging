@@ -29,6 +29,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# PowerShell 7.4 introduced $PSNativeCommandUseErrorActionPreference (stabilizing
+# the native-error experimental feature). Its default is $false on current builds,
+# so `& <native>` does NOT throw on a non-zero exit and our explicit checks run as
+# written. However, a host profile or a future/different build could enable it,
+# which would make `& <native>` THROW on a non-zero exit BEFORE our explicit
+# `$LASTEXITCODE` check runs -- short-circuiting Invoke-UnityEditor's exit-code
+# diagnostic and making the best-effort license return rely on its catch block
+# instead of finishing. Pinning it $false makes LASTEXITCODE-based handling
+# authoritative and identical across hosts/versions. (PS 5.1 lacks this variable;
+# assigning it there is harmless, and the assignment is StrictMode-safe.)
+$PSNativeCommandUseErrorActionPreference = $false
+
 $PackageName = 'com.wallstop-studios.dxmessaging'
 $TestFrameworkVersion = '1.4.5'
 $PerformanceFrameworkVersion = '3.4.2'
@@ -184,43 +196,137 @@ function Get-AcceleratorArguments {
     )
 }
 
-function Install-UnityLicenseFile {
-    if (-not $env:UNITY_LICENSE -or $env:UNITY_LICENSE.Trim().Length -eq 0) {
-        return
+function Invoke-UnityLicenseActivate {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$Serial,
+        [Parameter(Mandatory = $true)][string]$Email,
+        [Parameter(Mandatory = $true)][string]$Password,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+
+    # Classic SERIAL activation: a single editor invocation that activates the
+    # paid Unity seat and immediately quits. This MUST succeed before the test
+    # run, so unlike the return path it THROWS on a non-zero exit -- a failed
+    # activation means the test editor would launch unlicensed and fail opaquely.
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path -LiteralPath $logDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
     }
 
-    $licenseDir = Join-Path $env:ProgramData 'Unity'
-    New-Item -ItemType Directory -Force -Path $licenseDir | Out-Null
-    $licensePath = Join-Path $licenseDir 'Unity_lic.ulf'
-    $env:UNITY_LICENSE | Set-Content -LiteralPath $licensePath -Encoding UTF8
-    Write-CiNotice "Installed UNITY_LICENSE into ProgramData for direct Unity execution."
+    # SECURITY: the serial/email/password ride in the argument array, so this site
+    # must NEVER echo the args (no "...$activateArgs..." Write-Host). The caller
+    # passes a $LogPath that lives under a NON-uploaded temp dir (RUNNER_TEMP /
+    # system temp), never under $ArtifactsPath, so the credentials cannot leak into
+    # an uploaded artifact.
+    $activateArgs = @(
+        '-quit',
+        '-batchmode',
+        '-nographics',
+        '-serial', $Serial,
+        '-username', $Email,
+        '-password', $Password,
+        '-logFile', '-'
+    )
+
+    Write-Host "::group::Activate Unity license (serial)"
+    # Unity.exe is a Windows GUI-subsystem binary: PowerShell's `&` does NOT wait
+    # for it or set $LASTEXITCODE unless its stdout is consumed via the pipeline.
+    # `-logFile -` puts the Unity log on stdout and `| Tee-Object` forces the wait,
+    # sets $LASTEXITCODE, and persists the (non-uploaded) temp log. (Proven idiom;
+    # see Invoke-UnityEditor.)
+    & $EditorPath @activateArgs 2>&1 | Tee-Object -FilePath $LogPath
+    $exitCode = $LASTEXITCODE
+    Write-Host "::endgroup::"
+    if ($exitCode -ne 0) {
+        # The message names the failure and the (non-uploaded) log path ONLY -- it
+        # must never embed the serial/email/password values.
+        throw "Unity license activation failed with exit code $exitCode. See the activation log at $LogPath (not uploaded as an artifact)."
+    }
+
+    Write-CiNotice 'Activated the Unity license (serial).'
 }
 
-function Get-UnityLicenseArguments {
-    if ($env:UNITY_SERIAL -and $env:UNITY_SERIAL.Trim().Length -gt 0) {
-        if (-not $env:UNITY_EMAIL -or -not $env:UNITY_PASSWORD) {
-            throw 'UNITY_EMAIL and UNITY_PASSWORD are required when UNITY_SERIAL is used.'
-        }
-        return @('-serial', $env:UNITY_SERIAL, '-username', $env:UNITY_EMAIL, '-password', $env:UNITY_PASSWORD)
-    }
+function Invoke-UnityLicenseReturn {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$Email,
+        [Parameter(Mandatory = $true)][string]$Password,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
 
-    return @()
+    # Best-effort, defense-in-depth: this MUST NEVER throw. The license is also
+    # returned by the workflow if:always() step (a backstop for a hard-killed
+    # editor that never reaches this finally) and by the NEXT run's
+    # return-at-start (which reclaims a seat leaked by a prior force-killed run on
+    # this persistent self-hosted runner).
+    try {
+        $logDir = Split-Path -Parent $LogPath
+        if ($logDir -and -not (Test-Path -LiteralPath $logDir -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+        }
+
+        # SECURITY: email/password ride in the argument array; never echo the args
+        # and keep the return log in the NON-uploaded temp dir, never under
+        # $ArtifactsPath.
+        $returnArgs = @(
+            '-quit',
+            '-batchmode',
+            '-nographics',
+            '-returnlicense',
+            '-username', $Email,
+            '-password', $Password,
+            '-logFile', '-'
+        )
+
+        Write-Host "::group::Return Unity license (serial)"
+        # Same Tee-Object wait + $LASTEXITCODE idiom as Invoke-UnityLicenseActivate
+        # / Invoke-UnityEditor (a bare `&` would not wait for the GUI-subsystem
+        # binary). `-logFile -` puts the log on stdout; Tee-Object DOES persist it
+        # to $LogPath, but the caller keeps $LogPath under the NON-uploaded temp dir
+        # (RUNNER_TEMP / system temp), so it stays out of any UPLOADED ARTIFACT and
+        # the account fragments Unity may print cannot leak into uploads.
+        & $EditorPath @returnArgs 2>&1 | Tee-Object -FilePath $LogPath
+        $exitCode = $LASTEXITCODE
+        Write-Host "::endgroup::"
+
+        if ($exitCode -ne 0) {
+            Write-Host "::warning::Unity license return exited with code $exitCode; the workflow if:always() return step and the next run's return-at-start are the backstops for the leaked seat."
+        } else {
+            Write-CiNotice 'Returned the Unity license (serial).'
+        }
+    } catch {
+        Write-Host "::warning::Unity license return failed: $($_.Exception.Message). The workflow if:always() return step and the next run's return-at-start are the backstops."
+    }
 }
 
 function Invoke-UnityEditor {
     param(
         [Parameter(Mandatory = $true)][string]$EditorPath,
         [Parameter(Mandatory = $true)][string[]]$Arguments,
-        [Parameter(Mandatory = $true)][string]$Label
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$LogPath
     )
+
+    # Unity.exe is a Windows GUI-subsystem binary. PowerShell's `&` launches such
+    # executables ASYNCHRONOUSLY: it does NOT wait for them and does NOT set
+    # $LASTEXITCODE. Callers therefore pass `-logFile -` (Unity logs to stdout) so
+    # that consuming the process's stdout via the pipeline forces PowerShell to
+    # BLOCK until the process exits AND reliably sets $LASTEXITCODE. Tee-Object both
+    # streams the log live to the CI console and persists it to $LogPath. This is
+    # the proven idiom from scripts/unity/run-tests.ps1.
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path -LiteralPath $logDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
 
     Write-Host "::group::$Label"
     Write-Host "`"$EditorPath`" $($Arguments -join ' ')"
-    & $EditorPath @Arguments
+    & $EditorPath @Arguments 2>&1 | Tee-Object -FilePath $LogPath
     $exitCode = $LASTEXITCODE
     Write-Host "::endgroup::"
     if ($exitCode -ne 0) {
-        throw "$Label failed with exit code $exitCode."
+        throw "$Label failed with exit code $exitCode. See the streamed Unity log above (also saved to $LogPath)."
     }
 }
 
@@ -301,16 +407,42 @@ if (-not (Test-Path -LiteralPath $UnityEditorPath -PathType Leaf)) {
     throw "Unity editor not found: $UnityEditorPath"
 }
 
-Install-UnityLicenseFile
-# Array-wrap the captures so they are ALWAYS arrays under Set-StrictMode -Version
-# Latest. A function that `return @()` on its empty path emits ZERO objects, so a
-# bare `$x = Get-Foo` assigns AutomationNull (the empty array unwraps to nothing).
-# Then reading `$x.Count` THROWS "property 'Count' cannot be found on this object"
-# under StrictMode 2.0+ (verified on pwsh 7.6.1). @(...) forces Count 0 when empty
-# so the read is safe. (The later `... + $x` concat was fine either way: `+` DROPS
-# the empty/AutomationNull capture rather than adding it -- only a LITERAL $null
-# operand would add a spurious element.)
-$licenseArgs = @(Get-UnityLicenseArguments)
+# Export the resolved editor path so a workflow if:always() step (which runs in a
+# SEPARATE process after this one exits) can run `Unity.exe -returnlicense` to
+# return the seat as defense-in-depth.
+if ($env:GITHUB_ENV) {
+    Add-Content -LiteralPath $env:GITHUB_ENV -Value "UNITY_EDITOR_PATH=$UnityEditorPath"
+}
+
+# Classic SERIAL activation: the paid seat is activated from UNITY_SERIAL +
+# UNITY_EMAIL + UNITY_PASSWORD and explicitly returned on EVERY exit path so the
+# seat is never leaked. All three credentials are required together; we test each
+# with IsNullOrWhiteSpace so a blank-but-set secret counts as missing.
+$hasLicenseCreds = (
+    -not [string]::IsNullOrWhiteSpace($env:UNITY_SERIAL) -and
+    -not [string]::IsNullOrWhiteSpace($env:UNITY_EMAIL) -and
+    -not [string]::IsNullOrWhiteSpace($env:UNITY_PASSWORD)
+)
+# In CI all three credentials are MANDATORY: a missing one means the editor would
+# launch unlicensed and fail opaquely. The error names the missing VARS (never
+# their values). Locally, missing creds is fine -- we assume the machine is
+# already licensed (Hub sign-in / a local .ulf) and simply skip activate/return.
+if ($env:GITHUB_ACTIONS -eq 'true' -and -not $hasLicenseCreds) {
+    $missing = @()
+    if ([string]::IsNullOrWhiteSpace($env:UNITY_SERIAL)) { $missing += 'UNITY_SERIAL' }
+    if ([string]::IsNullOrWhiteSpace($env:UNITY_EMAIL)) { $missing += 'UNITY_EMAIL' }
+    if ([string]::IsNullOrWhiteSpace($env:UNITY_PASSWORD)) { $missing += 'UNITY_PASSWORD' }
+    throw "Serial Unity activation requires UNITY_SERIAL, UNITY_EMAIL, and UNITY_PASSWORD in CI. Missing or empty: $($missing -join ', ')."
+}
+
+# Array-wrap the capture so it is ALWAYS an array under Set-StrictMode -Version
+# Latest. Get-AcceleratorArguments `return @()` on its empty path emits ZERO
+# objects, so a bare `$x = Get-Foo` assigns AutomationNull (the empty array
+# unwraps to nothing). Then reading `$x.Count` THROWS "property 'Count' cannot be
+# found on this object" under StrictMode 2.0+ (verified on pwsh 7.6.1). @(...)
+# forces Count 0 when empty so the read is safe. (The later `... + $x` concat was
+# fine either way: `+` DROPS the empty/AutomationNull capture rather than adding
+# it -- only a LITERAL $null operand would add a spurious element.)
 $acceleratorArgs = @(Get-AcceleratorArguments -Endpoint $env:UNITY_ACCELERATOR_ENDPOINT -Version $UnityVersion -Mode $TestMode)
 if ($acceleratorArgs.Count -gt 0) {
     Write-CiNotice "Unity Accelerator enabled for namespace dxmessaging-$UnityVersion-$TestMode."
@@ -328,7 +460,32 @@ $resultsPath = Join-Path $ArtifactsPath 'results.xml'
 $logPath = Join-Path $ArtifactsPath 'unity.log'
 $configureLogPath = Join-Path $ArtifactsPath 'configure.log'
 
+# Activation/return carry the serial/email/password in their argument arrays and
+# Unity may echo account/serial fragments into the activation log, so these logs
+# MUST NOT live under $ArtifactsPath (the workflow uploads that as an artifact and
+# the credentials would leak). Write them to a NON-uploaded temp dir instead.
+$licenseLogDir = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+$activateLogPath = Join-Path $licenseLogDir "unity-activate-$UnityVersion-$TestMode.log"
+$returnLogPath = Join-Path $licenseLogDir "unity-return-$UnityVersion-$TestMode.log"
+
+# Return-at-start (defense-in-depth): reclaim a seat that a PRIOR force-killed run
+# on this persistent self-hosted runner may have leaked before its own finally /
+# the workflow if:always() step could run. Best-effort and never throws; if no
+# seat is held this is a harmless no-op. Done BEFORE the activate so we start each
+# run from a clean licensing state.
+if ($hasLicenseCreds) {
+    Invoke-UnityLicenseReturn -EditorPath $UnityEditorPath -Email $env:UNITY_EMAIL -Password $env:UNITY_PASSWORD -LogPath $returnLogPath
+}
+
 try {
+    # Activate the paid seat BEFORE configure/run so the test editor launches
+    # licensed. Activation THROWS on failure (caught by this try's finally, which
+    # still returns the seat). Skipped locally when creds are absent (the machine
+    # is assumed already licensed).
+    if ($hasLicenseCreds) {
+        Invoke-UnityLicenseActivate -EditorPath $UnityEditorPath -Serial $env:UNITY_SERIAL -Email $env:UNITY_EMAIL -Password $env:UNITY_PASSWORD -LogPath $activateLogPath
+    }
+
     if ($TestMode -eq 'standalone') {
         $configureArgs = @(
             '-quit',
@@ -337,9 +494,9 @@ try {
             '-projectPath', $ProjectPath,
             '-buildTarget', 'StandaloneWindows64',
             '-executeMethod', 'DxmCiTestConfigurator.Apply',
-            '-logFile', $configureLogPath
-        ) + $licenseArgs + $acceleratorArgs
-        Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $configureArgs -Label 'Configure standalone IL2CPP project'
+            '-logFile', '-'
+        ) + $acceleratorArgs
+        Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $configureArgs -Label 'Configure standalone IL2CPP project' -LogPath $configureLogPath
     }
 
     $testArgs = @(
@@ -351,22 +508,22 @@ try {
         '-testPlatform', $testPlatform,
         '-testResults', $resultsPath,
         '-assemblyNames', $AssemblyNames,
-        '-logFile', $logPath
-    ) + $licenseArgs + $acceleratorArgs
+        '-logFile', '-'
+    ) + $acceleratorArgs
 
     if ($TestMode -eq 'standalone') {
         $testArgs += @('-buildTarget', 'StandaloneWindows64')
     }
 
-    Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $testArgs -Label "Run Unity $UnityVersion $TestMode tests"
+    Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $testArgs -Label "Run Unity $UnityVersion $TestMode tests" -LogPath $logPath
     Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode"
 } finally {
-    if ($env:UNITY_SERIAL -and $env:UNITY_SERIAL.Trim().Length -gt 0 -and (Test-Path -LiteralPath $UnityEditorPath -PathType Leaf)) {
-        try {
-            $returnLog = Join-Path $ArtifactsPath 'return-license.log'
-            & $UnityEditorPath -quit -batchmode -nographics -returnlicense -logFile $returnLog | Out-Host
-        } catch {
-            Write-Host "::warning::Unity license return failed: $($_.Exception.Message)"
-        }
+    # Deterministic RETURN of the seat on EVERY exit path (clean exit, throw, or a
+    # kill that still unwinds this finally). The workflow if:always() step is the
+    # additional backstop for a hard-killed process that never reaches this finally,
+    # and the NEXT run's return-at-start reclaims anything still leaked. Best-effort
+    # and never throws, so it cannot mask a real test failure.
+    if ($hasLicenseCreds) {
+        Invoke-UnityLicenseReturn -EditorPath $UnityEditorPath -Email $env:UNITY_EMAIL -Password $env:UNITY_PASSWORD -LogPath $returnLogPath
     }
 }

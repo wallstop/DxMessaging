@@ -88,7 +88,7 @@ function getOnBlock(parsed) {
 }
 
 function expectUnityRunnerContract(job, expectation) {
-  // Unity Pro is a single-seat license shared across repositories. Native
+  // The Unity serial's activation seat is shared across repositories. Native
   // GitHub concurrency is repository-scoped and would serialize whole jobs, so
   // the licensed section is protected by the central organization lock actions
   // immediately around the direct Unity runner instead of a job-level
@@ -100,7 +100,8 @@ function expectUnityRunnerContract(job, expectation) {
   // serialized by the central lock action after the job starts.
   expect(job["runs-on"]).toEqual(["self-hosted", "Windows", "RAM-64GB"]);
 
-  // Two-layer serialization. The single Unity Pro seat is serialized ACROSS
+  // Two-layer serialization. The shared Unity activation seat is serialized
+  // to one-Unity-at-a-time ACROSS
   // runs/workflows/repos by the central organization lock action; WITHIN a run
   // the matrix is serialized by `strategy.max-parallel: 1` so the 9 (3 versions
   // x 3 modes) cells queue behind one another instead of spawning a thundering
@@ -212,11 +213,17 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   );
 
   test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresLicenseSecrets))(
-    "$workflow references Unity license + serial secrets",
+    "$workflow references the three serial-activation secrets and no retired licensing-server secret",
     ({ workflow }) => {
+      // The repo uses classic SERIAL activation (UNITY_SERIAL + UNITY_EMAIL +
+      // UNITY_PASSWORD). Native Unity workflows must wire all three and must NOT
+      // reference the retired floating-license-server secret. Scoped to the
+      // `secrets.` prefix so it does not false-fire on prose.
       const text = readWorkflow(workflow);
-      expect(text).toMatch(/secrets\.UNITY_LICENSE/);
-      expect(text).toMatch(/secrets\.UNITY_SERIAL/);
+      expect(text).toMatch(/secrets\.UNITY_SERIAL\b/);
+      expect(text).toMatch(/secrets\.UNITY_EMAIL\b/);
+      expect(text).toMatch(/secrets\.UNITY_PASSWORD\b/);
+      expect(text).not.toMatch(/secrets\.UNITY_LICENSING_SERVER\b/);
     }
   );
 
@@ -267,7 +274,7 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   // the job clock, so a job at the back of the serialized queue is killed
   // before its lock wait can finish unless
   //   job timeout-minutes >= acquire timeout-minutes + RUN_BUDGET(120).
-  // The step-level run timeout (>= 120) protects the single seat from a hung
+  // The step-level run timeout (>= 120) protects the in-use seat from a hung
   // editor (the stuck-job-watchdog ignores any in_progress job) and must stay
   // strictly below the job timeout so the step fails first and releases the
   // lock instead of the whole job being cancelled.
@@ -409,16 +416,76 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     expect(text).toMatch(/shell:\s*pwsh/);
   });
 
-  test("validate-unity-license composite distinguishes serial and ulf activation", () => {
+  test("validate-unity-license composite validates classic SERIAL activation (post-migration)", () => {
+    // The directory name is retained, but the action validates classic SERIAL
+    // activation: it requires UNITY_SERIAL/UNITY_EMAIL/UNITY_PASSWORD, ERRORS
+    // when the retired UNITY_LICENSING_SERVER is still set (no silent fallback),
+    // and prints a "preflight passed" notice. The OLD floating-server strings
+    // must be gone.
     const actionPath = path.join(ACTIONS_DIR, "validate-unity-license", "action.yml");
     expect(fs.existsSync(actionPath)).toBe(true);
     const text = fs.readFileSync(actionPath, "utf8");
-    expect(text).toContain("$hasLicense -and $hasSerial");
-    expect(text).toContain("-not $hasLicense -and -not $hasSerial");
-    expect(text).toContain("$hasSerial -and (-not $hasEmail -or -not $hasPassword)");
-    expect(text).toContain("Unity license preflight passed using UNITY_LICENSE.");
+    expect(text).toContain("UNITY_SERIAL");
+    expect(text).toContain("UNITY_EMAIL");
+    expect(text).toContain("UNITY_PASSWORD");
+    expect(text).toContain("Unity serial-activation preflight passed");
+    // The retired licensing-server hard-fail (no silent fallback to the server).
+    expect(text).toContain("UNITY_LICENSING_SERVER");
+    expect(text).toMatch(/UNITY_LICENSING_SERVER is set but retired/);
     expect(text).toMatch(/shell:\s*pwsh/);
+    // The OLD floating-license-server branch logic must NOT linger.
+    expect(text).not.toContain("URL shape");
+    expect(text).not.toContain("--acquire-floating");
+    expect(text).not.toContain("Unity licensing server preflight passed");
   });
+
+  test("return-unity-license composite exists and is a pwsh composite that runs -returnlicense", () => {
+    // Pin the seat-return backstop action so a refactor cannot hollow it out: it
+    // must be a composite running pwsh and actually return the seat via
+    // `Unity.exe -returnlicense` (classic serial activation).
+    const actionPath = path.join(ACTIONS_DIR, "return-unity-license", "action.yml");
+    expect(fs.existsSync(actionPath)).toBe(true);
+    const parsed = yaml.load(fs.readFileSync(actionPath, "utf8"));
+    expect(parsed.runs.using).toBe("composite");
+    const text = fs.readFileSync(actionPath, "utf8");
+    expect(text).toMatch(/shell:\s*pwsh/);
+    expect(text).toContain("-returnlicense");
+    // The old floating-license-client return surface must be GONE.
+    expect(text).not.toContain("--return-floating");
+  });
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow job '$jobId' returns the seat via an if: always() step after the run and before the org-lock release",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const steps = parsed.jobs[jobId].steps;
+
+      const runnerIndex = steps.findIndex(
+        (step) =>
+          step.name === "Run Unity Test Runner" &&
+          typeof step.run === "string" &&
+          step.run.includes("./scripts/unity/run-ci-tests.ps1")
+      );
+      const returnIndex = steps.findIndex(
+        (step) => step.uses === "./.github/actions/return-unity-license"
+      );
+      const releaseIndex = steps.findIndex(
+        (step) =>
+          step.uses ===
+          "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1"
+      );
+
+      expect(runnerIndex).toBeGreaterThanOrEqual(0);
+      expect(returnIndex).toBeGreaterThanOrEqual(0);
+      expect(releaseIndex).toBeGreaterThanOrEqual(0);
+
+      // The return step is the if:always() backstop for a killed editor; it must
+      // sit AFTER the Unity run and BEFORE the org-lock release.
+      expect(returnIndex).toBeGreaterThan(runnerIndex);
+      expect(returnIndex).toBeLessThan(releaseIndex);
+      expect(steps[returnIndex].if).toBe("always()");
+    }
+  );
 
   test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresProtectedBranchGuard))(
     "$workflow job '$jobId' guards same-repo + protected-branch execution",
@@ -551,7 +618,7 @@ describe(".github/workflows/unity-gameci-experiment.yml", () => {
   });
 
   test("job timeout covers acquire timeout + the 120m run budget on the GameCI run step", () => {
-    // The non-required GameCI experiment also acquires the single Unity seat,
+    // The non-required GameCI experiment also acquires the shared Unity seat,
     // so it obeys the same timeout invariant: job >= acquire + RUN_BUDGET(120)
     // and a step-level guard >= 120 and strictly below the job timeout.
     const job = parsed.jobs["game-ci-experiment"];

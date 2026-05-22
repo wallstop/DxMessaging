@@ -23,8 +23,10 @@ default runner group.
 - Speed marker applied only to `ELI-MACHINE`:
   - `fast`
 
-Unity Pro is a single-seat license: only one machine can be activated at
-a time. GitHub native `concurrency` is repository-scoped and serializes
+The Unity serial allows only a small activation-seat pool (typically ~2
+concurrent seats) and has no server-side reclaim, so the organization lock
+serializes Unity jobs to one-at-a-time as a safety margin against seat
+exhaustion. GitHub native `concurrency` is repository-scoped and serializes
 whole jobs, so it is not the organization-level lock. All
 Unity-credential-using jobs (`unity-tests`, `benchmarks`, and the
 `unity-checks` job in `release.yml`) validate Unity license secret shape,
@@ -210,16 +212,27 @@ code.
 
 Set secret names without documenting values:
 
-- `UNITY_LICENSE`
 - `UNITY_SERIAL`
 - `UNITY_EMAIL`
 - `UNITY_PASSWORD`
 
-Personal/GameCI license flow uses `UNITY_LICENSE` plus account credentials.
-Professional serial activation uses `UNITY_SERIAL` plus account credentials.
-Do not record secret existence, rotation status, or account credential state in
-tracked files or the local ignored runbook. Keep that security status in GitHub
-environment settings or the approved organization password manager.
+CI activates Unity with a classic serial: `UNITY_SERIAL` plus the account
+`UNITY_EMAIL` and `UNITY_PASSWORD` are the single CI activation path. A serial
+has no server-side reclaim and only a small activation-seat pool, so the license
+is returned on every exit path (defensive return-at-start, a PowerShell
+`try`/`finally` return, an `if: always()` workflow return step, and the next
+run's return-at-start on the persistent runner). The floating licensing server is
+RETIRED: `UNITY_LICENSING_SERVER` is removed from all workflows and the
+`validate-unity-license` action fails the run if it is still set. A `.ulf`
+(`UNITY_LICENSE` / `UNITY_LICENSE_B64`) is kept ONLY as a local development
+fallback for `scripts/unity/run-tests.sh` and `scripts/unity/run-tests.ps1`,
+never in CI. Never echo or log the serial or password; license logs go to
+`RUNNER_TEMP`, never to uploaded artifacts.
+
+Do not record secret existence, rotation status, the serial, or account
+credential state in tracked files or the local ignored runbook. Keep that
+security status in GitHub environment settings or the approved organization
+password manager.
 
 ## GitHub Environments
 

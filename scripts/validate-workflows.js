@@ -63,7 +63,7 @@ const DEFAULT_WORKFLOW_LINE_LENGTH = 200;
 // poll wait. A Unity-licensed job's `timeout-minutes` must cover BOTH the
 // acquire-build-lock poll budget (counted against the job clock) AND this
 // run budget; otherwise GitHub kills a job that is still waiting for the
-// shared single-seat Unity Pro license. Mirrors the step-level
+// shared Unity activation seat. Mirrors the step-level
 // `timeout-minutes: 120` guard on the Unity run step.
 const UNITY_LOCK_RUN_BUDGET_MINUTES = 120;
 
@@ -1782,7 +1782,7 @@ function isUnityRunStep(step) {
  *   job timeout-minutes >= acquire timeout-minutes + UNITY_LOCK_RUN_BUDGET_MINUTES.
  * The acquire input is the lock *poll* budget counted against the job clock, so
  * a job whose timeout cannot also cover the run budget is killed by GitHub while
- * still waiting for the single-seat Unity Pro license. A job that acquires the
+ * still waiting for the shared Unity activation seat. A job that acquires the
  * lock with no job-level timeout can squat the shared seat indefinitely, so the
  * missing-timeout case is its own error. A `${{ }}` acquire timeout cannot be
  * resolved statically, so the numeric comparison is skipped (job-timeout
@@ -2631,6 +2631,230 @@ function findUnityGameCiLockAndPreflightViolations(relativePath, lines) {
   return violations;
 }
 
+// Lowercased `uses` ref for the license seat-return backstop action.
+const RETURN_UNITY_LICENSE_USES = "./.github/actions/return-unity-license";
+
+// True when a relative workflow path lives under .github/workflows-disabled and
+// should therefore be skipped by the active-workflow-only license rules. The
+// retired UNITY_LICENSING_SERVER secret, the required serial secrets, and the
+// license return step only matter for ACTIVE workflows; disabled archives are
+// exempt.
+function isDisabledWorkflowPath(relativePath) {
+  return /(^|\/)workflows-disabled\//.test(relativePath);
+}
+
+// True when a step runs Unity natively: a `run:` block invoking run-ci-tests.ps1
+// OR `uses: game-ci/unity-test-runner@v4`. Mirrors isUnityRunStep in
+// unity-license-leak-safety.test.js.
+function stepRunsUnityNatively(step) {
+  if (!step) {
+    return false;
+  }
+  if (step.uses === "game-ci/unity-test-runner@v4") {
+    return true;
+  }
+  if (step.run && typeof step.run.text === "string" && /run-ci-tests\.ps1/.test(step.run.text)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * For any job that runs Unity natively (run-ci-tests.ps1 step) OR uses
+ * game-ci/unity-test-runner@v4, require a LATER step with `if: always()` that
+ * `uses: ./.github/actions/return-unity-license`. A killed/crashed editor cannot
+ * return its own activated seat, so this if:always() step is the workflow-level
+ * backstop; without it (or mis-ordered before the run) a failed Unity job leaks
+ * a seat from the serial's small (~2) shared activation pool until it is
+ * reclaimed.
+ *
+ * Scoped to ACTIVE workflow files (skips .github/workflows-disabled).
+ */
+function findUnityLicenseReturnViolations(relativePath, lines) {
+  const violations = [];
+  if (isDisabledWorkflowPath(relativePath)) {
+    return violations;
+  }
+
+  for (const job of extractJobs(lines)) {
+    const steps = extractJobSteps(lines, job);
+
+    // The LAST native Unity run step in the job (the return must come after it).
+    let lastRunStep = null;
+    for (const step of steps) {
+      if (stepRunsUnityNatively(step)) {
+        lastRunStep = step;
+      }
+    }
+    if (!lastRunStep) {
+      continue;
+    }
+
+    const returnStep = steps.find((step) => step.uses === RETURN_UNITY_LICENSE_USES);
+
+    if (!returnStep) {
+      violations.push(
+        new Violation(
+          relativePath,
+          lastRunStep.startIndex + 1,
+          RETURN_UNITY_LICENSE_USES,
+          `Job '${job.id}' runs Unity natively but has no license return step. Add an if: always() step that uses ${RETURN_UNITY_LICENSE_USES} after the Unity run so a killed editor cannot leak the shared Unity seat.`,
+          "error"
+        )
+      );
+      continue;
+    }
+
+    if (returnStep.startIndex < lastRunStep.startIndex) {
+      violations.push(
+        new Violation(
+          relativePath,
+          returnStep.startIndex + 1,
+          RETURN_UNITY_LICENSE_USES,
+          `Job '${job.id}' places the ${RETURN_UNITY_LICENSE_USES} step BEFORE the Unity run. Move it AFTER the run so it can return the seat the run activated.`,
+          "error"
+        )
+      );
+    }
+
+    if (returnStep.if !== "always()") {
+      violations.push(
+        new Violation(
+          relativePath,
+          returnStep.startIndex + 1,
+          "if:",
+          `Job '${job.id}' license return step must declare if: always() so a failed/killed Unity run still returns the shared seat.`,
+          "error"
+        )
+      );
+    }
+
+    // The return action runs `Unity.exe -returnlicense -username $env:UNITY_EMAIL
+    // -password $env:UNITY_PASSWORD`. With either credential absent from the
+    // step's env the action does NOT fail loudly: it warns and exits 0, so the
+    // shared Unity seat is SILENTLY never returned even though the step "passed".
+    // Presence/order/if-always above are necessary but not sufficient; the seat
+    // only comes back when BOTH creds are wired into the step env. Mirror the
+    // BUILD_LOCK_TOKEN env check (acquire/release) and read the parsed
+    // returnStep.env Map (populated by extractStepEnvMap). A `contains` check on
+    // the secrets reference is intentional: extractStepEnvMap preserves the raw
+    // `${{ ... }}` value, and we want to tolerate inner spacing variations while
+    // still binding the env to the correct secret.
+    for (const cred of ["UNITY_EMAIL", "UNITY_PASSWORD"]) {
+      const value = returnStep.env.get(cred);
+      if (typeof value !== "string" || !value.includes(`secrets.${cred}`)) {
+        violations.push(
+          new Violation(
+            relativePath,
+            returnStep.startIndex + 1,
+            `${cred}:`,
+            `Job '${job.id}' license return step must pass ${cred}: \${{ secrets.${cred} }} as env. Without both UNITY_EMAIL and UNITY_PASSWORD the return action silently no-ops (warns + exit 0) and the shared Unity seat is never returned.`,
+            "error"
+          )
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+// Retired Unity activation secret. The repo moved to classic serial activation
+// (UNITY_SERIAL/UNITY_EMAIL/UNITY_PASSWORD); referencing the floating-license
+// server secret in an ACTIVE workflow silently points CI back at the retired
+// licensing-server path that no longer exists.
+const FORBIDDEN_UNITY_LICENSE_SECRET_RE = /secrets\.UNITY_LICENSING_SERVER\b/;
+
+/**
+ * Errors on any line referencing the retired Unity floating-license server
+ * secret (secrets.UNITY_LICENSING_SERVER) in an ACTIVE workflow file (skips
+ * .github/workflows-disabled). Scoped to the `secrets.` prefix so it does not
+ * false-fire on remediation prose that names the bare env var.
+ */
+function findForbiddenUnityLicenseSecretViolations(relativePath, lines) {
+  const violations = [];
+  if (isDisabledWorkflowPath(relativePath)) {
+    return violations;
+  }
+
+  for (let index = 0; index < lines.length; index++) {
+    if (!FORBIDDEN_UNITY_LICENSE_SECRET_RE.test(lines[index])) {
+      continue;
+    }
+    violations.push(
+      new Violation(
+        relativePath,
+        index + 1,
+        lines[index].trim(),
+        `Retired secret 'secrets.UNITY_LICENSING_SERVER' is referenced. This repo moved to classic serial activation (UNITY_SERIAL/UNITY_EMAIL/UNITY_PASSWORD); remove it.`,
+        "error"
+      )
+    );
+  }
+
+  return violations;
+}
+
+// The three secrets that classic serial activation requires. A workflow with a
+// Unity-native job MUST plumb all three somewhere or activation fails at runtime
+// (validate-unity-license errors, then run-ci-tests.ps1 cannot activate -serial).
+const REQUIRED_UNITY_LICENSE_SECRETS = [
+  "secrets.UNITY_SERIAL",
+  "secrets.UNITY_EMAIL",
+  "secrets.UNITY_PASSWORD"
+];
+
+/**
+ * For any ACTIVE workflow file containing a Unity-native job (same detection as
+ * findUnityLicenseReturnViolations: run-ci-tests.ps1 OR
+ * game-ci/unity-test-runner@v4), require the file to reference ALL THREE serial
+ * activation secrets somewhere (secrets.UNITY_SERIAL / UNITY_EMAIL /
+ * UNITY_PASSWORD). Missing any one means classic activation cannot complete on
+ * the runner. Emits one error per missing secret, pointing at the first
+ * Unity-run step line. Returns [] for files with no Unity-native job.
+ *
+ * Scoped to ACTIVE workflow files (skips .github/workflows-disabled).
+ */
+function findRequiredUnityLicenseSecretViolations(relativePath, lines) {
+  const violations = [];
+  if (isDisabledWorkflowPath(relativePath)) {
+    return violations;
+  }
+
+  // Find the FIRST Unity-native run step across all jobs; its absence means the
+  // file has no Unity-licensed work and the serial secrets are not required.
+  let firstRunStep = null;
+  for (const job of extractJobs(lines)) {
+    for (const step of extractJobSteps(lines, job)) {
+      if (stepRunsUnityNatively(step)) {
+        if (!firstRunStep || step.startIndex < firstRunStep.startIndex) {
+          firstRunStep = step;
+        }
+      }
+    }
+  }
+  if (!firstRunStep) {
+    return violations;
+  }
+
+  const fileText = lines.join("\n");
+  for (const secret of REQUIRED_UNITY_LICENSE_SECRETS) {
+    if (!fileText.includes(secret)) {
+      violations.push(
+        new Violation(
+          relativePath,
+          firstRunStep.startIndex + 1,
+          secret,
+          `Workflow runs Unity natively but never references '${secret}'. Classic serial activation needs all of secrets.UNITY_SERIAL/UNITY_EMAIL/UNITY_PASSWORD; add '${secret}' to the validate/run/return steps.`,
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
+}
+
 /**
  * Checks every `runs-on:` value that references `self-hosted` against a
  * documented allowlist of valid label sets. Catches typos such as
@@ -3379,6 +3603,12 @@ function validateWorkflow(filePath, options = {}) {
 
     violations.push(...findUnityGameCiLockAndPreflightViolations(relativePath, lines));
 
+    violations.push(...findUnityLicenseReturnViolations(relativePath, lines));
+
+    violations.push(...findForbiddenUnityLicenseSecretViolations(relativePath, lines));
+
+    violations.push(...findRequiredUnityLicenseSecretViolations(relativePath, lines));
+
     violations.push(...findSelfHostedLabelAllowlistViolations(relativePath, lines));
 
     violations.push(...findDynamicRunsOnMissingNeedsViolations(relativePath, lines));
@@ -3500,6 +3730,9 @@ if (typeof module !== "undefined" && module.exports) {
     findMatrixConcurrencyEvictionViolations,
     findGameCiTestRunnerInputViolations,
     findUnityGameCiLockAndPreflightViolations,
+    findUnityLicenseReturnViolations,
+    findForbiddenUnityLicenseSecretViolations,
+    findRequiredUnityLicenseSecretViolations,
     findSelfHostedLabelAllowlistViolations,
     findDynamicRunsOnMissingNeedsViolations,
     extractJobConcurrencyGroup,

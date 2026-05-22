@@ -39,6 +39,9 @@ const {
   findMatrixConcurrencyEvictionViolations,
   findGameCiTestRunnerInputViolations,
   findUnityGameCiLockAndPreflightViolations,
+  findUnityLicenseReturnViolations,
+  findForbiddenUnityLicenseSecretViolations,
+  findRequiredUnityLicenseSecretViolations,
   findSelfHostedLabelAllowlistViolations,
   findDynamicRunsOnMissingNeedsViolations,
   extractEmittedLabelSetsFromBash,
@@ -423,6 +426,374 @@ jobs:
     expect(messages).toContain("after acquiring the organization lock");
     expect(messages).toContain("acquire step must pass BUILD_LOCK_TOKEN");
     expect(messages).toContain("release holder-id-suffix must match");
+  });
+});
+
+describe("findUnityLicenseReturnViolations", () => {
+  const cleanRunCiJob = `
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+      - name: Release organization Unity lock
+        if: always()
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1
+`;
+
+  const cleanGameCiJob = `
+jobs:
+  experiment:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run GameCI
+        uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: .unity-test-project
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+`;
+
+  test("clean run-ci-tests.ps1 job with an ordered if:always() return -> []", () => {
+    expect(findUnityLicenseReturnViolations("test.yml", asLines(cleanRunCiJob))).toEqual([]);
+  });
+
+  test("clean game-ci/unity-test-runner@v4 job with the return step -> []", () => {
+    expect(findUnityLicenseReturnViolations("test.yml", asLines(cleanGameCiJob))).toEqual([]);
+  });
+
+  test("missing return step -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Release organization Unity lock
+        if: always()
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1
+`);
+    const violations = findUnityLicenseReturnViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("no license return step");
+  });
+
+  test("return step ordered BEFORE the Unity run -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+    const violations = findUnityLicenseReturnViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("BEFORE the Unity run");
+  });
+
+  test("return step without if: always() -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Return Unity license
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+`);
+    const violations = findUnityLicenseReturnViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("if: always()");
+  });
+
+  // The return action runs Unity.exe -returnlicense -username $env:UNITY_EMAIL
+  // -password $env:UNITY_PASSWORD; without those creds in env it warns + exit 0
+  // (silent no-op) and the shared seat leaks. A correctly-ordered if:always()
+  // step that is MISSING both creds must still be flagged.
+  test("return step ordered + if:always() but MISSING the creds env -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+`);
+    const violations = findUnityLicenseReturnViolations("test.yml", lines);
+    // Both creds missing -> one violation per missing cred.
+    expect(violations).toHaveLength(2);
+    expect(violations[0].message).toContain("silently no-ops");
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "must pass UNITY_EMAIL"
+    );
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "must pass UNITY_PASSWORD"
+    );
+  });
+
+  test("return step missing only UNITY_PASSWORD -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+`);
+    const violations = findUnityLicenseReturnViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("must pass UNITY_PASSWORD");
+    expect(violations[0].message).toContain("silently no-ops");
+  });
+
+  test("return step WITH both creds env -> no violation from this rule", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Return Unity license
+        if: always()
+        uses: ./.github/actions/return-unity-license
+        env:
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+`);
+    expect(findUnityLicenseReturnViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("a job that does not run Unity natively -> []", () => {
+    const lines = asLines(`
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm test
+`);
+    expect(findUnityLicenseReturnViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("disabled workflow path is exempt -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+    expect(
+      findUnityLicenseReturnViolations(".github/workflows-disabled/unity-tests.yml", lines)
+    ).toEqual([]);
+  });
+});
+
+describe("findForbiddenUnityLicenseSecretViolations", () => {
+  test("clean workflow referencing only the serial-activation secrets -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    steps:
+      - name: Run Unity Test Runner
+        env:
+          UNITY_SERIAL: \${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    expect(findForbiddenUnityLicenseSecretViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("retired secrets.UNITY_LICENSING_SERVER reference -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    steps:
+      - name: Run Unity Test Runner
+        env:
+          UNITY_LICENSING_SERVER: \${{ secrets.UNITY_LICENSING_SERVER }}
+        run: ./scripts/unity/run-ci-tests.ps1
+`);
+    const violations = findForbiddenUnityLicenseSecretViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("secrets.UNITY_LICENSING_SERVER");
+  });
+
+  test("bare env-var name in prose (no secrets. prefix) -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    steps:
+      - run: echo "remove the retired UNITY_LICENSING_SERVER after migration"
+`);
+    expect(findForbiddenUnityLicenseSecretViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("disabled workflow path is exempt -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    steps:
+      - env:
+          UNITY_LICENSING_SERVER: \${{ secrets.UNITY_LICENSING_SERVER }}
+        run: echo hi
+`);
+    expect(
+      findForbiddenUnityLicenseSecretViolations(".github/workflows-disabled/unity-tests.yml", lines)
+    ).toEqual([]);
+  });
+});
+
+describe("findRequiredUnityLicenseSecretViolations", () => {
+  // A Unity-native job must plumb all three serial-activation secrets somewhere
+  // (secrets.UNITY_SERIAL / UNITY_EMAIL / UNITY_PASSWORD) or activation fails at
+  // runtime. Emits one Violation per missing secret.
+  const allThreeWired = `
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        env:
+          UNITY_SERIAL: \${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: \${{ secrets.UNITY_PASSWORD }}
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`;
+
+  test("Unity-native job referencing all three serial secrets -> []", () => {
+    expect(findRequiredUnityLicenseSecretViolations("test.yml", asLines(allThreeWired))).toEqual([]);
+  });
+
+  test("Unity-native job missing one serial secret -> 1 violation naming it", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        env:
+          UNITY_SERIAL: \${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: \${{ secrets.UNITY_EMAIL }}
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+    const violations = findRequiredUnityLicenseSecretViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("secrets.UNITY_PASSWORD");
+  });
+
+  test("Unity-native job missing all three serial secrets -> 3 violations", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+    const violations = findRequiredUnityLicenseSecretViolations("test.yml", lines);
+    expect(violations).toHaveLength(3);
+    const joined = violations.map((v) => v.message).join("\n");
+    expect(joined).toContain("secrets.UNITY_SERIAL");
+    expect(joined).toContain("secrets.UNITY_EMAIL");
+    expect(joined).toContain("secrets.UNITY_PASSWORD");
+  });
+
+  test("game-ci/unity-test-runner@v4 job is treated as Unity-native too", () => {
+    const lines = asLines(`
+jobs:
+  experiment:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run GameCI
+        uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: .unity-test-project
+`);
+    const violations = findRequiredUnityLicenseSecretViolations("test.yml", lines);
+    expect(violations).toHaveLength(3);
+  });
+
+  test("workflow with no Unity-native job -> [] (secrets not required)", () => {
+    const lines = asLines(`
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm test
+`);
+    expect(findRequiredUnityLicenseSecretViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("disabled workflow path is exempt even when secrets are missing -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+    expect(
+      findRequiredUnityLicenseSecretViolations(".github/workflows-disabled/unity-tests.yml", lines)
+    ).toEqual([]);
   });
 });
 
@@ -868,7 +1239,7 @@ jobs:
 
   // --- GameCI-form run step recognition (isUnityRunStep via `uses:`) ---
   // The GameCI experiment runs Unity via `uses: game-ci/unity-test-runner@v4`
-  // instead of `run: run-ci-tests.ps1`, but it acquires the same single seat,
+  // instead of `run: run-ci-tests.ps1`, but it acquires the same shared seat,
   // so the step-timeout rule must recognize the `uses:` form too.
   //
   // Builds a job whose post-acquire Unity step is the game-ci runner. Pass

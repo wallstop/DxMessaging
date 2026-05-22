@@ -96,15 +96,19 @@ Options:
   --help                     Show this help and exit 0
 
 Environment:
-  UNITY_LICENSE              Raw Unity .ulf contents. This is the same shape
-                             expected by game-ci/unity-test-runner@v4.
+  UNITY_SERIAL               Preferred. Paid Unity serial for Professional
+                             activation. Requires UNITY_EMAIL + UNITY_PASSWORD.
+                             When set, the editor is activated with -serial
+                             -username -password and the license is RETURNED on
+                             exit (the EXIT trap runs -returnlicense) so a local
+                             run never leaks the seat. Treated as a secret; never
+                             printed.
+  UNITY_EMAIL, UNITY_PASSWORD  Unity account credentials. Required with
+                             UNITY_SERIAL (and to return the seat afterwards).
+  UNITY_LICENSE              Raw Unity .ulf contents (fallback). This is the same
+                             shape expected by game-ci/unity-test-runner@v4.
   UNITY_LICENSE_B64          Base64-encoded Unity .ulf contents for local shell
                              profiles that cannot hold multiline secrets.
-  UNITY_SERIAL               Paid Unity serial for Professional activation.
-                             Requires UNITY_EMAIL + UNITY_PASSWORD.
-  UNITY_EMAIL, UNITY_PASSWORD  Unity account credentials. Required with
-                             UNITY_SERIAL and commonly required by GameCI when
-                             reactivating a UNITY_LICENSE .ulf.
   CI                         When "true", emits GitHub Actions ::error::
                              annotations on failure; the docker run still
                              executes normally.
@@ -289,12 +293,19 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# License activation: auto-detect ULF vs paid serial vs failure.
-# Current Unity/GameCI behavior does not support email/password-only Personal
-# headless activation in docker. Personal users need a .ulf in UNITY_LICENSE
-# (raw) or UNITY_LICENSE_B64 (local convenience). Paid users may use
-# UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD.
-if [[ -z "${UNITY_LICENSE:-}" ]] && [[ -z "${UNITY_LICENSE_B64:-}" ]]; then
+# ---------------------------------------------------------------------------
+# License activation: auto-detect paid serial vs ULF vs failure.
+# Serial is the PREFERRED path (UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD ->
+# -serial -username -password on the editor; the seat is RETURNED on exit, see
+# the trap below, so a local run never leaks it). Current Unity/GameCI behavior
+# does not support email/password-only Personal headless activation in docker,
+# so Personal users fall back to a .ulf in UNITY_LICENSE (raw) or
+# UNITY_LICENSE_B64 (local convenience).
+# ---------------------------------------------------------------------------
+# Only auto-load a local .ulf when neither a serial NOR an explicit .ulf is set:
+# a present serial is the preferred path and must not be shadowed by a stray
+# local .ulf on disk.
+if [[ -z "${UNITY_SERIAL:-}" ]] && [[ -z "${UNITY_LICENSE:-}" ]] && [[ -z "${UNITY_LICENSE_B64:-}" ]]; then
     UNITY_LICENSE_CANDIDATES=()
     if [[ -n "${UNITY_LICENSE_FILE:-}" ]]; then
         UNITY_LICENSE_CANDIDATES+=("${UNITY_LICENSE_FILE}")
@@ -320,18 +331,21 @@ if [[ -z "${UNITY_LICENSE:-}" ]] && [[ -z "${UNITY_LICENSE_B64:-}" ]]; then
 fi
 
 LICENSE_MODE=""
-if [[ -n "${UNITY_LICENSE:-}" ]]; then
+if [[ -n "${UNITY_SERIAL:-}" ]] && [[ -n "${UNITY_EMAIL:-}" ]] && [[ -n "${UNITY_PASSWORD:-}" ]]; then
+    LICENSE_MODE="serial"
+elif [[ -n "${UNITY_LICENSE:-}" ]]; then
     LICENSE_MODE="ulf"
 elif [[ -n "${UNITY_LICENSE_B64:-}" ]]; then
     LICENSE_MODE="ulf-b64"
-elif [[ -n "${UNITY_SERIAL:-}" ]] && [[ -n "${UNITY_EMAIL:-}" ]] && [[ -n "${UNITY_PASSWORD:-}" ]]; then
-    LICENSE_MODE="serial"
 else
     printf '%sError: No Unity license configured.%s\n' "${C_RED}" "${C_NC}" >&2
+    # Serial-first ordering: serial is the preferred/primary path, the .ulf vars
+    # are the fallback. Keep this list in the SAME order as the --help text and the
+    # PowerShell mirror so the recommended path is always shown first.
     printf 'Set EITHER:\n' >&2
+    printf '  UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD   (preferred paid serial activation)\n' >&2
     printf '  UNITY_LICENSE       (raw .ulf contents; GameCI-compatible)\n' >&2
     printf '  UNITY_LICENSE_B64   (base64 .ulf contents; local shell convenience)\n' >&2
-    printf '  UNITY_SERIAL + UNITY_EMAIL + UNITY_PASSWORD   (paid serial activation)\n' >&2
     printf '\nUNITY_EMAIL + UNITY_PASSWORD alone is not a supported headless container license path.\n' >&2
     printf "Run 'bash scripts/unity/activate-license.sh --check' for diagnostics.\n" >&2
     exit 2
@@ -432,6 +446,16 @@ build_editor_cmd_inner() {
     else
         test_platform="${PLATFORM}"
     fi
+    # `set -o pipefail` (part of `set -euo pipefail` below) is LOAD-BEARING for the
+    # editor test pipeline `Unity ... | tee log.txt`: without it the pipeline's exit
+    # status would be `tee`'s (always 0), masking a failing Unity behind a passing
+    # tee. With pipefail a non-zero Unity propagates as the script's exit code.
+    #
+    # EVERY command in the EXIT trap body below is suffixed `|| true` ON PURPOSE: the
+    # trap fires AFTER the editor pipeline has already set the script's exit code, so
+    # a license-return failure (or a chown failure) must NEVER overwrite the editor's
+    # non-zero exit code with its own. `|| true` forces each cleanup command to a 0
+    # status so the trap cannot clobber the real test result.
     cmd=$'set -euo pipefail\n'
     cmd+=$'cleanup_ownership() {\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.artifacts || true\n'
@@ -445,6 +469,18 @@ build_editor_cmd_inner() {
     cmd+=$'        fi\n'
     cmd+=$'    fi\n'
     cmd+=$'    chown -R "${USER_UID}:${USER_GID}" /workspace/.unity-test-project/Library || true\n'
+    if [[ "${LICENSE_MODE}" == "serial" ]]; then
+        # Serial activation consumes a seat, so we MUST return it on EVERY exit
+        # path -- clean exit, test failure, or Ctrl-C -- or a local run leaks the
+        # seat. The return runs INSIDE the same EXIT trap as the chown cleanup so
+        # it fires even when the editor (and the `tee` pipeline) failed. It is
+        # best-effort (|| true): a failed return must never mask the real test
+        # exit code. The return log goes to /tmp (NOT under /workspace/.artifacts,
+        # which is bind-mounted to the repo and would persist the creds Unity may
+        # echo). UNITY_EMAIL/UNITY_PASSWORD are forwarded into the container via
+        # -e; we never echo them.
+        cmd+=$'    /opt/unity/Editor/Unity -quit -batchmode -nographics -returnlicense -username "${UNITY_EMAIL}" -password "${UNITY_PASSWORD}" -logFile - > /tmp/unity-return-license.log 2>&1 || true\n'
+    fi
     cmd+=$'}\n'
     cmd+=$'trap cleanup_ownership EXIT\n'
     cmd+=$'mkdir -p /root/.cache/unity3d\n'
