@@ -18,7 +18,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const { stripJsCommentsAndStrings } = require("../source-stripping");
+const { stripJsCommentsAndStrings, extractCommentsOnly } = require("../source-stripping");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const RUN_MANAGED_JEST_PATH = path.join(REPO_ROOT, "scripts", "run-managed-jest.js");
@@ -256,5 +256,76 @@ describe("stripJsCommentsAndStrings", () => {
     ].join("\n");
     const stripped = stripJsCommentsAndStrings(source);
     expect(stripped.split("\n").length).toBe(source.split("\n").length);
+  });
+});
+
+describe("extractCommentsOnly (inverse projection)", () => {
+  const TOKEN = "@needle";
+  const inComment = (src) => extractCommentsOnly(src).includes(TOKEN);
+
+  test("non-string / empty input returns empty string", () => {
+    expect(extractCommentsOnly(undefined)).toBe("");
+    expect(extractCommentsOnly(null)).toBe("");
+    expect(extractCommentsOnly(42)).toBe("");
+    expect(extractCommentsOnly(Buffer.from("x"))).toBe("");
+    expect(extractCommentsOnly("")).toBe("");
+  });
+
+  test("keeps line-comment payloads, blanks code", () => {
+    const out = extractCommentsOnly("const x = 1; // " + TOKEN + "\n");
+    expect(out).toContain(TOKEN);
+    expect(out).not.toContain("const");
+  });
+
+  test("keeps block-comment payload on a plain continuation line (no leading star)", () => {
+    expect(inComment("/*\n   " + TOKEN + "\n*/\n")).toBe(true);
+  });
+
+  test("keeps indented block-comment text", () => {
+    expect(inComment("/*\n      text " + TOKEN + " here\n*/\n")).toBe(true);
+  });
+
+  test("keeps JSDoc star-prefixed body payload", () => {
+    expect(inComment("/**\n * " + TOKEN + "\n */\n")).toBe(true);
+  });
+
+  test("blanks single/double/template string payloads (token does NOT survive)", () => {
+    expect(inComment('const a = "' + TOKEN + '";\n')).toBe(false);
+    expect(inComment("const a = '" + TOKEN + "';\n")).toBe(false);
+    expect(inComment("const a = `" + TOKEN + "`;\n")).toBe(false);
+  });
+
+  test("a `//` or `/*` INSIDE a string does not open a comment", () => {
+    expect(inComment('const a = "x // y ' + TOKEN + '";\n')).toBe(false);
+    expect(inComment('const a = "x /* y ' + TOKEN + '";\n')).toBe(false);
+  });
+
+  test("bare code identifier does not survive", () => {
+    expect(inComment("const " + TOKEN.slice(1) + " = 1;\n")).toBe(false);
+  });
+
+  test("line breaks are preserved so line numbers stay aligned", () => {
+    const source = ["var a = 1;", "/* block", "   " + TOKEN, "   */", "var b = 2;"].join("\n");
+    const out = extractCommentsOnly(source);
+    expect(out.split("\n").length).toBe(source.split("\n").length);
+    expect(out).toContain(TOKEN);
+  });
+
+  test("comment inside a template ${} expression is preserved; surrounding template is blanked", () => {
+    const out = extractCommentsOnly("var a = `pre ${ /* " + TOKEN + " */ x } post`;\n");
+    expect(out).toContain(TOKEN);
+    expect(out).not.toContain("pre");
+    expect(out).not.toContain("post");
+  });
+
+  test("is the exact complement of strip mode for which-region-won a token", () => {
+    // A token in a comment survives extractCommentsOnly and is gone from strip.
+    const commented = "// " + TOKEN + "\n";
+    expect(extractCommentsOnly(commented)).toContain(TOKEN);
+    expect(stripJsCommentsAndStrings(commented)).not.toContain(TOKEN);
+    // A token in code survives strip and is gone from extractCommentsOnly.
+    const coded = "const a = " + TOKEN.slice(1) + ";\n";
+    expect(stripJsCommentsAndStrings(coded)).toContain(TOKEN.slice(1));
+    expect(extractCommentsOnly(coded)).not.toContain(TOKEN.slice(1));
   });
 });

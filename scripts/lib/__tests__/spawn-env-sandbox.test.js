@@ -14,6 +14,11 @@
  * These tests LOCK DOWN the fix with literal assertions, including the EXACT
  * failure mode (an ALL-CAPS / odd-cased input key) so a regression to the
  * case-sensitive delete is caught on any OS.
+ *
+ * @cross-platform-regression -- this marker requires the file to be gated on
+ * ubuntu/windows/macos via the targeted step in
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js.
  */
 
 "use strict";

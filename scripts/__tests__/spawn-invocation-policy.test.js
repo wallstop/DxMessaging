@@ -94,6 +94,11 @@
  *   If any mutation does NOT fail, the guard is inadequate and must be hardened.
  *   Self-tests below feed crafted source strings through the same detectors to
  *   prove they fire (and do not false-positive) without touching real files.
+ *
+ * @cross-platform-regression -- this marker requires the file to be gated on
+ * ubuntu/windows/macos via the targeted step in
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js.
  */
 
 "use strict";

@@ -8,6 +8,11 @@
  * `isPathInsideDirectory`) were previously defined inside
  * `scripts/run-managed-jest.js`; these tests now own them as the canonical
  * specification.
+ *
+ * @cross-platform-regression -- this marker requires the file to be gated on
+ * ubuntu/windows/macos via the targeted step in
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js.
  */
 
 "use strict";

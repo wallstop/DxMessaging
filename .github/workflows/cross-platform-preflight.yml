@@ -91,12 +91,16 @@ jobs:
       - name: Install pre-commit hooks
         run: pre-commit install --install-hooks
 
-      - name: Run path-separator + resolver-health regression suite
+      - name: Run cross-platform spawn + host-env hermeticity regression suite
         # Targeted Jest run: these are the tests that regression-proof the
-        # class of failures fixed in this branch. Keeping them as a first,
+        # classes of failures fixed in this branch -- path-separator /
+        # resolver-health PLUS npm/npx spawn-shape divergence and Unity
+        # ensure-editor host-env hermeticity. Keeping them as a first,
         # dedicated step makes a CI failure immediately point at the right
         # skill (integrity-gate-robustness) without hunting through a long
-        # combined log.
+        # combined log. The membership of this list is kept honest by
+        # scripts/__tests__/cross-platform-preflight-coverage.test.js: every
+        # test carrying the @cross-platform-regression marker must appear here.
         shell: bash
         run: |
           set -euo pipefail
@@ -104,7 +108,12 @@ jobs:
             scripts/__tests__/path-classifier.test.js \
             scripts/__tests__/cross-platform-path-handling.test.js \
             scripts/__tests__/node-modules-integrity.test.js \
-            scripts/__tests__/run-managed-jest.test.js
+            scripts/__tests__/run-managed-jest.test.js \
+            scripts/__tests__/spawn-invocation-policy.test.js \
+            scripts/__tests__/shell-command.test.js \
+            scripts/lib/__tests__/spawn-env-sandbox.test.js \
+            scripts/__tests__/hermetic-host-env-policy.test.js \
+            scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js
 
       - name: Run pre-push preflight
         shell: bash

@@ -104,6 +104,11 @@
  *      the policy test must FAIL, naming that file. Delete the scratch -> GREEN.
  *   Self-tests below feed crafted source strings through the detector so the
  *   guard is verified without mutating real files.
+ *
+ * @cross-platform-regression -- this marker requires the file to be gated on
+ * ubuntu/windows/macos via the targeted step in
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js.
  */
 
 "use strict";

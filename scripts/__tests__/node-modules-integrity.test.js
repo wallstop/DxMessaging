@@ -7,6 +7,11 @@
  * These tests pin INTEGRITY_TARGETS shape, the probe semantics, the
  * subprocess re-probe contract, and the Windows-only zero-byte native
  * scan.
+ *
+ * @cross-platform-regression -- this marker requires the file to be gated on
+ * ubuntu/windows/macos via the targeted step in
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js.
  */
 
 "use strict";

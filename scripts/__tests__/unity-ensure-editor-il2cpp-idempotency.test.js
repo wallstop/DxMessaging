@@ -31,6 +31,11 @@
  * pwsh is preinstalled on GitHub's runners; when it is absent locally the
  * behavioral assertions are skipped, but an always-on sanity assertion still runs
  * so a zero-coverage regression cannot hide.
+ *
+ * @cross-platform-regression -- this marker requires the file to be gated on
+ * ubuntu/windows/macos via the targeted step in
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js.
  */
 
 "use strict";

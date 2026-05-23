@@ -63,10 +63,36 @@
  *     it first; we deliberately do not auto-decode to keep the helper pure
  *     and to avoid accidentally swallowing binary payloads.
  *
+ * Two projections share ONE tokenizer pass (`projectSource`):
+ *   - `stripJsCommentsAndStrings(source)` keeps code, blanks comment payloads
+ *     entirely and string/template payloads (preserving quote/backtick markers
+ *     and `${...}` delimiters). This is the historical behavior; output is
+ *     byte-for-byte identical to the prior implementation.
+ *   - `extractCommentsOnly(source)` is its INVERSE: it preserves comment
+ *     payloads verbatim (line + block + JSDoc, with or without a leading `*`)
+ *     and blanks code + string/template payloads to whitespace, preserving line
+ *     breaks so offsets/line numbers stay aligned with the source. A token that
+ *     survives `extractCommentsOnly` lived in a real comment span -- never in a
+ *     string, template, or code -- which is exactly the discrimination a
+ *     marker-in-comment guard needs (a string such as `"a // b @marker"` blanks
+ *     to whitespace because `//` inside a string is string content, not a
+ *     comment opener). Sharing the state machine guarantees the two projections
+ *     can never disagree about what is a comment.
+ *
  * Pure: no `require`s with side effects, no top-level I/O, no globals.
  */
 
-function stripJsCommentsAndStrings(source) {
+/**
+ * Single-pass tokenizer shared by both projections.
+ *
+ * @param {string} source - Source text (any LF/CRLF; BOM-agnostic).
+ * @param {boolean} commentsOnly - When false (default), behaves as
+ *   `stripJsCommentsAndStrings` (keep code, blank comments + string payloads).
+ *   When true, behaves as `extractCommentsOnly` (keep comment payloads, blank
+ *   code + string payloads). Line breaks are preserved in BOTH modes.
+ * @returns {string}
+ */
+function projectSource(source, commentsOnly) {
   if (typeof source !== "string") {
     return "";
   }
@@ -75,6 +101,42 @@ function stripJsCommentsAndStrings(source) {
   }
 
   const out = [];
+  // In commentsOnly mode, code/string regions are blanked to spaces (so the
+  // marker token cannot survive there) while line breaks are preserved to keep
+  // offsets and line numbers aligned with the source.
+  const emitCode = (ch) => {
+    if (commentsOnly) {
+      if (ch === "\n") {
+        out.push("\n");
+      } else {
+        out.push(" ");
+      }
+    } else {
+      out.push(ch);
+    }
+  };
+  // Comment payload characters: kept verbatim in commentsOnly mode, erased in
+  // strip mode (only the line breaks they spanned are preserved -- handled by
+  // each comment state explicitly pushing "\n").
+  const emitCommentChar = (ch) => {
+    if (commentsOnly) {
+      out.push(ch);
+    }
+  };
+  // Erased-in-strip / blanked-in-commentsOnly characters. Covers two cases:
+  //   1. String/template payload chars and the escapes they contain -- strip
+  //      mode reduces `"abc"` to `""` (emits nothing), commentsOnly blanks them
+  //      to spaces so the marker token cannot survive inside a string literal.
+  //   2. Comment delimiters (`//`, `/*`, `*/`) -- strip mode drops them (emits
+  //      nothing, preserving the historical byte-for-byte output), commentsOnly
+  //      blanks them to spaces so offsets stay aligned with the source.
+  // The surrounding quote/backtick markers and `${`/`}` are emitted via
+  // `emitCode` instead, so they survive in strip mode exactly as before.
+  const emitBlank = () => {
+    if (commentsOnly) {
+      out.push(" ");
+    }
+  };
   // Stack permits templateExpr nesting (e.g. `a${`b${c}d`}e`). The top of
   // the stack is the active state.
   const stack = [{ kind: "code" }];
@@ -90,29 +152,35 @@ function stripJsCommentsAndStrings(source) {
     if (state === "code" || state === "templateExpr") {
       if (ch === "/" && next === "/") {
         stack.push({ kind: "lineComment" });
+        // Blank the `//` opener in commentsOnly mode to keep offsets aligned.
+        emitBlank();
+        emitBlank();
         i += 2;
         continue;
       }
       if (ch === "/" && next === "*") {
         stack.push({ kind: "blockComment" });
+        // Blank the `/*` opener in commentsOnly mode to keep offsets aligned.
+        emitBlank();
+        emitBlank();
         i += 2;
         continue;
       }
       if (ch === "'") {
         stack.push({ kind: "stringSingle" });
-        out.push("'");
+        emitCode("'");
         i++;
         continue;
       }
       if (ch === '"') {
         stack.push({ kind: "stringDouble" });
-        out.push('"');
+        emitCode('"');
         i++;
         continue;
       }
       if (ch === "`") {
         stack.push({ kind: "templateLiteral" });
-        out.push("`");
+        emitCode("`");
         i++;
         continue;
       }
@@ -120,7 +188,7 @@ function stripJsCommentsAndStrings(source) {
       if (state === "templateExpr") {
         if (ch === "{") {
           frame.depth = (frame.depth || 0) + 1;
-          out.push(ch);
+          emitCode(ch);
           i++;
           continue;
         }
@@ -129,18 +197,18 @@ function stripJsCommentsAndStrings(source) {
             // Closing brace of the `${...}` expression itself;
             // pop back to the surrounding template literal.
             stack.pop();
-            out.push("}");
+            emitCode("}");
             i++;
             continue;
           }
           frame.depth -= 1;
-          out.push(ch);
+          emitCode(ch);
           i++;
           continue;
         }
       }
 
-      out.push(ch);
+      emitCode(ch);
       i++;
       continue;
     }
@@ -153,8 +221,10 @@ function stripJsCommentsAndStrings(source) {
         continue;
       }
       // Defensive: a `\r` immediately before `\n` is part of CRLF; we
-      // preserve neither the `\r` nor the comment payload, only the
-      // `\n` (when we reach it on the next iteration).
+      // preserve neither the `\r` (strip mode) nor a redundant marker. In
+      // commentsOnly mode we keep the comment payload verbatim (a stray `\r`
+      // is harmless to substring checks); in strip mode it is erased.
+      emitCommentChar(ch);
       i++;
       continue;
     }
@@ -162,12 +232,18 @@ function stripJsCommentsAndStrings(source) {
     if (state === "blockComment") {
       if (ch === "*" && next === "/") {
         stack.pop();
+        // Blank the `*/` closer in commentsOnly mode to keep offsets aligned.
+        emitBlank();
+        emitBlank();
         i += 2;
         continue;
       }
       if (ch === "\n") {
         out.push("\n");
+        i++;
+        continue;
       }
+      emitCommentChar(ch);
       i++;
       continue;
     }
@@ -180,12 +256,14 @@ function stripJsCommentsAndStrings(source) {
         // the file as a whole is unaffected because such constructs
         // also remove a logical line from the source. The dominant
         // case (single-char escapes) is correct.
+        emitBlank();
+        emitBlank();
         i += 2;
         continue;
       }
       if (ch === "'") {
         stack.pop();
-        out.push("'");
+        emitCode("'");
         i++;
         continue;
       }
@@ -194,49 +272,63 @@ function stripJsCommentsAndStrings(source) {
         // legal in source only via an escape; preserve the newline
         // so line numbers remain stable.
         out.push("\n");
+        i++;
+        continue;
       }
+      emitBlank();
       i++;
       continue;
     }
 
     if (state === "stringDouble") {
       if (ch === "\\" && i + 1 < n) {
+        emitBlank();
+        emitBlank();
         i += 2;
         continue;
       }
       if (ch === '"') {
         stack.pop();
-        out.push('"');
+        emitCode('"');
         i++;
         continue;
       }
       if (ch === "\n") {
         out.push("\n");
+        i++;
+        continue;
       }
+      emitBlank();
       i++;
       continue;
     }
 
     if (state === "templateLiteral") {
       if (ch === "\\" && i + 1 < n) {
+        emitBlank();
+        emitBlank();
         i += 2;
         continue;
       }
       if (ch === "`") {
         stack.pop();
-        out.push("`");
+        emitCode("`");
         i++;
         continue;
       }
       if (ch === "$" && next === "{") {
         stack.push({ kind: "templateExpr", depth: 0 });
-        out.push("${");
+        emitCode("$");
+        emitCode("{");
         i += 2;
         continue;
       }
       if (ch === "\n") {
         out.push("\n");
+        i++;
+        continue;
       }
+      emitBlank();
       i++;
       continue;
     }
@@ -249,6 +341,34 @@ function stripJsCommentsAndStrings(source) {
   return out.join("");
 }
 
+/**
+ * Keep code, blank comment payloads and string/template payloads (preserving
+ * quote/backtick markers and `${...}` delimiters). See the file header for full
+ * semantics. Output is byte-for-byte identical to the historical implementation.
+ *
+ * @param {string} source
+ * @returns {string}
+ */
+function stripJsCommentsAndStrings(source) {
+  return projectSource(source, false);
+}
+
+/**
+ * INVERSE of `stripJsCommentsAndStrings`: keep comment payloads verbatim and
+ * blank everything else (code + string/template payloads) to spaces, preserving
+ * line breaks. A substring/token that appears in the result lived in a real
+ * comment span (line, block, or JSDoc, with or without a leading `*`) and never
+ * in a string, template literal, or code. This is the discriminator a
+ * marker-in-comment guard needs without re-implementing a tokenizer.
+ *
+ * @param {string} source
+ * @returns {string}
+ */
+function extractCommentsOnly(source) {
+  return projectSource(source, true);
+}
+
 module.exports = {
-  stripJsCommentsAndStrings
+  stripJsCommentsAndStrings,
+  extractCommentsOnly
 };
