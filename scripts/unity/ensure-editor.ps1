@@ -7,6 +7,8 @@ param(
 
     [string]$InstallRoot = $(if ($env:UNITY_EDITOR_INSTALL_ROOT) { $env:UNITY_EDITOR_INSTALL_ROOT } else { 'C:\Unity\Editors' }),
 
+    [switch]$CiManagedOnly = $($env:GITHUB_ACTIONS -eq 'true'),
+
     [switch]$WithWindowsIl2Cpp
 )
 
@@ -14,6 +16,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:UnityCliPath = 'unity'
+$script:UnityInstallLockDepth = 0
 
 # PowerShell 7.4 introduced $PSNativeCommandUseErrorActionPreference (stabilizing
 # the native-error experimental feature). Its default is $false on current builds,
@@ -77,21 +80,68 @@ function Invoke-WithRetry {
     throw "Invoke-WithRetry exhausted all attempts without capturing an error."
 }
 
+function Invoke-WithUnityInstallLock {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][scriptblock]$Action,
+        [int]$TimeoutMinutes = 180
+    )
+
+    if ($script:UnityInstallLockDepth -gt 0) {
+        return & $Action
+    }
+
+    $lockRoot = Join-Path $InstallRoot '_locks'
+    New-Item -ItemType Directory -Force -Path $lockRoot | Out-Null
+    $lockPath = Join-Path $lockRoot "$Version-ci-modules.lock"
+    $deadline = [DateTime]::UtcNow.AddMinutes($TimeoutMinutes)
+    $stream = $null
+
+    while ($null -eq $stream) {
+        try {
+            $stream = [System.IO.File]::Open(
+                $lockPath,
+                [System.IO.FileMode]::OpenOrCreate,
+                [System.IO.FileAccess]::ReadWrite,
+                [System.IO.FileShare]::None
+            )
+        } catch {
+            if ([DateTime]::UtcNow -ge $deadline) {
+                throw "Timed out waiting for Unity install lock '$lockPath' after $TimeoutMinutes minute(s)."
+            }
+            Write-Host "::notice::Waiting for Unity install lock: $lockPath"
+            Start-Sleep -Seconds 10
+        }
+    }
+
+    try {
+        $script:UnityInstallLockDepth++
+        return & $Action
+    } finally {
+        $script:UnityInstallLockDepth--
+        if ($stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
 function Get-UnityEditorCandidates {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
-        [Parameter(Mandatory = $true)][string]$Root
+        [Parameter(Mandatory = $true)][string]$Root,
+        [switch]$IncludeHostInstalls
     )
 
     $candidates = New-Object System.Collections.Generic.List[string]
     $candidates.Add((Join-Path $Root "$Version\Editor\Unity.exe"))
     $candidates.Add((Join-Path $Root "$Version\Unity.exe"))
 
-    if (${env:ProgramFiles} -and ${env:ProgramFiles}.Trim().Length -gt 0) {
+    if ($IncludeHostInstalls -and ${env:ProgramFiles} -and ${env:ProgramFiles}.Trim().Length -gt 0) {
         $candidates.Add((Join-Path ${env:ProgramFiles} "Unity\Hub\Editor\$Version\Editor\Unity.exe"))
         $candidates.Add((Join-Path ${env:ProgramFiles} "Unity\$Version\Editor\Unity.exe"))
     }
-    if (${env:ProgramFiles(x86)} -and ${env:ProgramFiles(x86)}.Trim().Length -gt 0) {
+    if ($IncludeHostInstalls -and ${env:ProgramFiles(x86)} -and ${env:ProgramFiles(x86)}.Trim().Length -gt 0) {
         $candidates.Add(
             (Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor\$Version\Editor\Unity.exe")
         )
@@ -103,10 +153,11 @@ function Get-UnityEditorCandidates {
 function Find-UnityEditor {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
-        [Parameter(Mandatory = $true)][string]$Root
+        [Parameter(Mandatory = $true)][string]$Root,
+        [switch]$IncludeHostInstalls
     )
 
-    foreach ($candidate in Get-UnityEditorCandidates -Version $Version -Root $Root) {
+    foreach ($candidate in Get-UnityEditorCandidates -Version $Version -Root $Root -IncludeHostInstalls:$IncludeHostInstalls) {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
@@ -307,6 +358,9 @@ function Test-LooksLikeAbsolutePath {
     if ($trimmed.StartsWith('\\')) {
         return $true
     }
+    if ($trimmed.StartsWith('/')) {
+        return $true
+    }
 
     return $false
 }
@@ -362,6 +416,19 @@ function Set-UnityCliInstallPath {
     }
 
     Write-CiNotice "Could not set the Unity CLI install path to '$Root' (best-effort; the standalone CLI set flag may differ). Continuing; discovery will use the CLI-reported install root."
+}
+
+function Confirm-UnityCliManagedInstallRoot {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $cliRoot = Get-UnityCliInstallRoot
+    if (-not $cliRoot) {
+        throw "CI-managed Unity provisioning cannot mutate editors because the Unity CLI did not report an install root after setting '$Root'."
+    }
+    if (-not (Test-IsPathInsideDirectory -Path $cliRoot -Directory $Root)) {
+        throw "CI-managed Unity provisioning cannot mutate editors because the Unity CLI install root is outside the managed root. CLI root: '$cliRoot'. Managed root: '$Root'."
+    }
+    return $cliRoot
 }
 
 function Resolve-EditorFromCliJson {
@@ -467,7 +534,8 @@ function Resolve-InstalledEditor {
     # Returns the absolute Unity.exe path, or $null if every strategy fails.
     param(
         [Parameter(Mandatory = $true)][string]$Version,
-        [Parameter(Mandatory = $true)][string]$Root
+        [Parameter(Mandatory = $true)][string]$Root,
+        [switch]$ManagedOnly
     )
 
     $cliRoot = Get-UnityCliInstallRoot
@@ -476,18 +544,26 @@ function Resolve-InstalledEditor {
                 (Join-Path $cliRoot "$Version\Editor\Unity.exe"),
                 (Join-Path $cliRoot "$Version\Unity.exe"))) {
             if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                if ($ManagedOnly -and -not (Test-IsPathInsideDirectory -Path $candidate -Directory $Root)) {
+                    Write-CiNotice "Ignoring Unity $Version from CLI install root because it is outside the managed install root: $candidate"
+                    continue
+                }
                 return (Resolve-Path -LiteralPath $candidate).Path
             }
         }
     }
 
-    $byCandidate = Find-UnityEditor -Version $Version -Root $Root
+    $byCandidate = Find-UnityEditor -Version $Version -Root $Root -IncludeHostInstalls:(-not $ManagedOnly)
     if ($byCandidate) {
         return $byCandidate
     }
 
     $byJson = Resolve-EditorFromCliJson -Version $Version
     if ($byJson) {
+        if ($ManagedOnly -and -not (Test-IsPathInsideDirectory -Path $byJson -Directory $Root)) {
+            Write-CiNotice "Ignoring Unity $Version from CLI editor inventory because it is outside the managed install root: $byJson"
+            return $null
+        }
         return $byJson
     }
 
@@ -501,16 +577,10 @@ function Test-Il2CppModulePresent {
     # evidence is the success proof we accept after a non-zero module install.
     #
     # IMPORTANT: the exact on-disk layout VARIES BY UNITY VERSION (and has shifted
-    # across the 2020->6000 lineage), so this probes two STANDALONE-SPECIFIC IL2CPP
-    # signals under the Windows standalone support module and returns true if
-    # EITHER exists: (a) the specific win64_player_development_il2cpp variation
-    # folder, and (b) any subdirectory of the standalone Variations folder whose
-    # name contains 'il2cpp'. It is best-effort CORROBORATION only -- a $false
-    # result does not prove the module is absent (the layout may be one we don't
-    # know), but CI must fail when a failed module install leaves no disk proof
-    # because standalone tests otherwise fail later with weaker diagnostics. Fully
-    # StrictMode-safe: every path read is guarded, missing paths yield $false, and
-    # nothing throws.
+    # across the 2020->6000 lineage), so this probes concrete STANDALONE-SPECIFIC
+    # player leaves under known Windows IL2CPP variations. Empty directories are
+    # not enough proof: failed or partial module installs have left folder shells
+    # behind without a usable player/toolchain payload.
     param([Parameter(Mandatory = $true)][string]$EditorPath)
 
     if (-not $EditorPath) {
@@ -527,26 +597,27 @@ function Test-Il2CppModulePresent {
         $dataRoot = Join-Path $editorDir 'Data'
         $standaloneVariations = Join-Path $dataRoot 'PlaybackEngines\windowsstandalonesupport\Variations'
 
-        # Strong, standalone-specific direct candidate: the development IL2CPP
-        # player variation under the Windows standalone support module. (We
-        # deliberately do NOT probe a bare Data\il2cpp folder: that il2cpp
-        # toolchain directory can exist on Mono-only editors too, so it is a
-        # false-positive risk for *Windows standalone* IL2CPP presence.)
-        $developmentVariation = Join-Path $standaloneVariations 'win64_player_development_il2cpp'
-        if (Test-Path -LiteralPath $developmentVariation) {
-            return $true
-        }
-
-        # Variations scan: true if the standalone Variations folder holds ANY
-        # subdirectory whose name contains 'il2cpp' (case-insensitive). This
-        # catches version-specific variation names (e.g. *_il2cpp suffixes) we
-        # have not enumerated explicitly above.
-        if (Test-Path -LiteralPath $standaloneVariations) {
-            $il2cppDirs = @(
-                Get-ChildItem -LiteralPath $standaloneVariations -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -match '(?i)il2cpp' }
+        $variationNames = @(
+            'win64_player_development_il2cpp',
+            'win64_player_nondevelopment_il2cpp'
+        )
+        foreach ($variationName in $variationNames) {
+            $variation = Join-Path $standaloneVariations $variationName
+            $leafCandidates = @(
+                (Join-Path $variation 'WindowsPlayer.exe'),
+                (Join-Path $variation 'UnityPlayer.dll'),
+                (Join-Path $variation 'GameAssembly.dll')
             )
-            if ($il2cppDirs.Count -gt 0) {
+            foreach ($candidate in $leafCandidates) {
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    return $true
+                }
+            }
+            $payloadLeaves = @(
+                Get-ChildItem -LiteralPath $variation -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -match '(?i)\.(dll|exe)$' }
+            )
+            if ($payloadLeaves.Count -gt 0) {
                 return $true
             }
         }
@@ -558,44 +629,509 @@ function Test-Il2CppModulePresent {
     return $false
 }
 
-function Add-WindowsIl2CppModule {
-    # IDEMPOTENT, disk-authoritative IL2CPP module install for standalone. The
-    # standalone beta CLI can return "No modules found to install." with exit code 6
-    # when the IL2CPP module is ALREADY present, so blindly treating any non-zero
-    # exit as fatal wrongly aborts healthy reruns. We instead attempt the install
-    # via the NON-throwing capturing path and CLASSIFY the result against the disk:
-    #   1. install succeeded (exit 0)                              -> done.
-    #   2. install failed BUT IL2CPP is present on disk            -> ::notice::, return.
-    #   3. install failed with benign nothing-to-do text but no
-    #      disk proof                                             -> THROW (fatal).
-    #   4. anything else                                          -> THROW (fatal),
-    #      including the captured CLI output tail + exit code.
+function Test-AnyUnityLeafPresent {
+    param([Parameter(Mandatory = $true)][string[]]$Paths)
+
+    foreach ($path in $Paths) {
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-IsPathInsideDirectory {
     param(
-        [Parameter(Mandatory = $true)][string]$Version,
-        [Parameter(Mandatory = $true)][string]$EditorPath
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Directory
     )
 
-    $moduleId = 'windows-il2cpp'
+    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $fullDirectory = [System.IO.Path]::GetFullPath($Directory).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $isWindowsHost = [System.IO.Path]::DirectorySeparatorChar -eq '\'
+    $comparison = if ($isWindowsHost -or $PSVersionTable.PSEdition -eq 'Desktop') {
+        [System.StringComparison]::OrdinalIgnoreCase
+    } else {
+        [System.StringComparison]::Ordinal
+    }
+
+    return $fullPath.Equals($fullDirectory, $comparison) -or
+        $fullPath.StartsWith($fullDirectory + [System.IO.Path]::DirectorySeparatorChar, $comparison) -or
+        $fullPath.StartsWith($fullDirectory + [System.IO.Path]::AltDirectorySeparatorChar, $comparison)
+}
+
+function Get-UnityEditorInstallDirectory {
+    param([Parameter(Mandatory = $true)][string]$EditorPath)
+
+    $editorDir = Split-Path -Parent $EditorPath
+    if (-not $editorDir) {
+        return $null
+    }
+
+    $leaf = Split-Path -Leaf $editorDir
+    if ($leaf -eq 'Editor') {
+        return (Split-Path -Parent $editorDir)
+    }
+
+    return $editorDir
+}
+
+function Get-UnityCiModuleIds {
+    return @(
+        'windows-il2cpp',
+        'webgl',
+        'android',
+        'android-sdk-ndk-tools',
+        'android-open-jdk',
+        'linux-mono',
+        'linux-il2cpp'
+    )
+}
+
+function Test-UnityCiModuleGroupPresent {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$Group
+    )
+
+    if (-not $EditorPath) {
+        return $false
+    }
+
+    try {
+        $editorDir = Split-Path -Parent $EditorPath
+        if (-not $editorDir) {
+            return $false
+        }
+
+        $dataRoot = Join-Path $editorDir 'Data'
+        switch ($Group) {
+            'windows-il2cpp' {
+                return Test-Il2CppModulePresent -EditorPath $EditorPath
+            }
+            'webgl' {
+                $webGlRoot = Join-Path $dataRoot 'PlaybackEngines\WebGLSupport'
+                $hasEditorExtension = Test-Path -LiteralPath (Join-Path $webGlRoot 'UnityEditor.WebGL.Extensions.dll') -PathType Leaf
+                $hasEmscriptenToolchain = Test-AnyUnityLeafPresent -Paths @(
+                    (Join-Path $webGlRoot 'BuildTools\Emscripten\emscripten\emscripten-version.txt'),
+                    (Join-Path $webGlRoot 'BuildTools\Emscripten\emscripten\emcc.py'),
+                    (Join-Path $webGlRoot 'BuildTools\Emscripten\emscripten-version.txt'),
+                    (Join-Path $webGlRoot 'BuildTools\Emscripten\emcc.py')
+                )
+                return $hasEditorExtension -and $hasEmscriptenToolchain
+            }
+            'android' {
+                $androidRoot = Join-Path $dataRoot 'PlaybackEngines\AndroidPlayer'
+                return Test-AnyUnityLeafPresent -Paths @(
+                    (Join-Path $androidRoot 'UnityEditor.Android.Extensions.dll'),
+                    (Join-Path $androidRoot 'Tools\Source.properties')
+                )
+            }
+            'android-sdk-ndk-tools' {
+                $androidRoot = Join-Path $dataRoot 'PlaybackEngines\AndroidPlayer'
+                $sdk = Join-Path $androidRoot 'SDK'
+                $ndk = Join-Path $androidRoot 'NDK'
+                $hasAdb = Test-AnyUnityLeafPresent -Paths @(
+                    (Join-Path $sdk 'platform-tools\adb.exe'),
+                    (Join-Path $sdk 'platform-tools\adb')
+                )
+                $hasNdkProperties = Test-Path -LiteralPath (Join-Path $ndk 'source.properties') -PathType Leaf
+                $llvmRoot = Join-Path $ndk 'toolchains\llvm\prebuilt'
+                $hasLlvmClang = $false
+                if (Test-Path -LiteralPath $llvmRoot -PathType Container) {
+                    $clangLeaves = @(
+                        Get-ChildItem -LiteralPath $llvmRoot -Recurse -File -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -in @('clang++', 'clang++.exe') } |
+                            Select-Object -First 1
+                    )
+                    $hasLlvmClang = $clangLeaves.Count -gt 0
+                }
+                return $hasAdb -and $hasNdkProperties -and $hasLlvmClang
+            }
+            'android-open-jdk' {
+                $androidRoot = Join-Path $dataRoot 'PlaybackEngines\AndroidPlayer'
+                return Test-AnyUnityLeafPresent -Paths @(
+                    (Join-Path $androidRoot 'OpenJDK\bin\java.exe'),
+                    (Join-Path $androidRoot 'OpenJDK\bin\java')
+                )
+            }
+            'linux-mono' {
+                $linuxRoot = Join-Path $dataRoot 'PlaybackEngines\LinuxStandaloneSupport'
+                $variationRoot = Join-Path $linuxRoot 'Variations'
+                return Test-AnyUnityLeafPresent -Paths @(
+                    (Join-Path $variationRoot 'linux64_player_development_mono\LinuxPlayer'),
+                    (Join-Path $variationRoot 'linux64_player_development_mono\UnityPlayer.so'),
+                    (Join-Path $variationRoot 'linux64_player_nondevelopment_mono\LinuxPlayer'),
+                    (Join-Path $variationRoot 'linux64_player_nondevelopment_mono\UnityPlayer.so')
+                )
+            }
+            'linux-il2cpp' {
+                $linuxRoot = Join-Path $dataRoot 'PlaybackEngines\LinuxStandaloneSupport'
+                $variationRoot = Join-Path $linuxRoot 'Variations'
+                return Test-AnyUnityLeafPresent -Paths @(
+                    (Join-Path $variationRoot 'linux64_player_development_il2cpp\LinuxPlayer'),
+                    (Join-Path $variationRoot 'linux64_player_development_il2cpp\UnityPlayer.so'),
+                    (Join-Path $variationRoot 'linux64_player_nondevelopment_il2cpp\LinuxPlayer'),
+                    (Join-Path $variationRoot 'linux64_player_nondevelopment_il2cpp\UnityPlayer.so')
+                )
+            }
+            default {
+                throw "Unknown Unity CI module group '$Group'."
+            }
+        }
+    } catch {
+        return $false
+    }
+}
+
+function Get-MissingUnityCiModuleGroups {
+    param([Parameter(Mandatory = $true)][string]$EditorPath)
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    foreach ($group in @(
+            'windows-il2cpp',
+            'webgl',
+            'android',
+            'android-sdk-ndk-tools',
+            'android-open-jdk',
+            'linux-mono',
+            'linux-il2cpp'
+        )) {
+        if (-not (Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group)) {
+            $missing.Add($group)
+        }
+    }
+
+    return @($missing.ToArray())
+}
+
+function Test-UnityCiModulesPresent {
+    param([Parameter(Mandatory = $true)][string]$EditorPath)
+
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    return ($missing.Count -eq 0)
+}
+
+function Move-UnityInstallDirectoryToQuarantine {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallDirectory,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    if (-not $InstallDirectory -or -not (Test-Path -LiteralPath $InstallDirectory -PathType Container)) {
+        return
+    }
+
+    if (-not (Test-IsPathInsideDirectory -Path $InstallDirectory -Directory $InstallRoot)) {
+        throw "Refusing to auto-repair Unity $Version because the resolved editor install '$InstallDirectory' is outside the configured managed install root '$InstallRoot'. Remove or reinstall that editor manually, or set UNITY_EDITOR_INSTALL_ROOT to a CI-owned directory."
+    }
+
+    $quarantineRoot = Join-Path $InstallRoot '_quarantine'
+    New-Item -ItemType Directory -Force -Path $quarantineRoot | Out-Null
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $destination = Join-Path $quarantineRoot "$Version-$stamp-$suffix"
+
+    Write-Host "::warning::Quarantining unmanaged or partial Unity $Version install before repair: $InstallDirectory -> $destination"
+    Move-Item -LiteralPath $InstallDirectory -Destination $destination -Force
+}
+
+function Move-UnityEditorInstallToQuarantine {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    $installDirectory = Get-UnityEditorInstallDirectory -EditorPath $EditorPath
+    if (-not $installDirectory) {
+        return
+    }
+
+    Move-UnityInstallDirectoryToQuarantine -InstallDirectory $installDirectory -InstallRoot $InstallRoot -Version $Version
+}
+
+function Move-UnityVersionInstallToQuarantine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$InstallRoot
+    )
+
+    $candidateRoots = New-Object System.Collections.Generic.List[string]
+    $candidateRoots.Add($InstallRoot)
+    try {
+        $cliRoot = Get-UnityCliInstallRoot
+        if ($cliRoot -and (Test-IsPathInsideDirectory -Path $cliRoot -Directory $InstallRoot)) {
+            $candidateRoots.Add($cliRoot)
+        }
+    } catch {
+        Write-Host "::notice::Could not query Unity CLI install root while quarantining Unity ${Version}: $($_.Exception.Message)"
+    }
+
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($root in @($candidateRoots.ToArray())) {
+        if (-not $root) {
+            continue
+        }
+        $installDirectory = Join-Path $root $Version
+        $full = [System.IO.Path]::GetFullPath($installDirectory)
+        if ($seen.Add($full)) {
+            Move-UnityInstallDirectoryToQuarantine -InstallDirectory $full -InstallRoot $InstallRoot -Version $Version
+        }
+    }
+}
+
+function Invoke-UnityVersionUninstallForRepair {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    $uninstallResult = Invoke-UnityCliCapture -Arguments @('uninstall', $Version)
+    if (-not $uninstallResult.Success) {
+        $uninstallLines = @($uninstallResult.Output)
+        $tailCount = [Math]::Min(12, $uninstallLines.Count)
+        $tail = if ($tailCount -gt 0) {
+            ($uninstallLines[($uninstallLines.Count - $tailCount)..($uninstallLines.Count - 1)] -join "`n")
+        } else {
+            '(no output captured)'
+        }
+        Write-CiNotice "Unity CLI uninstall for $Version did not complete cleanly before repair (exit code $($uninstallResult.ExitCode)); quarantining the install directory instead. Reason: $Reason Output tail:`n$tail"
+    }
+}
+
+function Install-UnityEditorWithCiModules {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$Reason,
+        [switch]$ManagedOnly
+    )
+
+    $moduleIds = @(Get-UnityCiModuleIds)
+    if ($ManagedOnly) {
+        Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+    }
+    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with CI modules ($($moduleIds -join ', ')). Reason: $Reason"
+
+    $resolved = $null
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        $installResult = Invoke-UnityCliCapture -Arguments (@('install', $Version, '-m') + $moduleIds)
+        if ($installResult.Success) {
+            $resolved = Resolve-InstalledEditor -Version $Version -Root $InstallRoot -ManagedOnly:$ManagedOnly
+            if ($resolved) {
+                break
+            }
+            if ($attempt -lt 2) {
+                Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install exited 0, but Unity.exe could not be resolved afterward."
+                Invoke-UnityVersionUninstallForRepair -Version $Version -Reason "Unity repair install exited 0, but Unity.exe could not be resolved afterward."
+                Move-UnityVersionInstallToQuarantine -Version $Version -InstallRoot $InstallRoot
+                Write-Host "::warning::Retrying Unity $Version repair install after successful CLI install left no resolvable Unity.exe."
+                continue
+            }
+            break
+        }
+
+        $installLines = @($installResult.Output)
+        $installText = ($installLines -join "`n")
+        $tailCount = [Math]::Min(40, $installLines.Count)
+        $tail = if ($tailCount -gt 0) {
+            ($installLines[($installLines.Count - $tailCount)..($installLines.Count - 1)] -join "`n")
+        } else {
+            '(no output captured)'
+        }
+        $resolvedAfterFailure = Resolve-InstalledEditor -Version $Version -Root $InstallRoot -ManagedOnly:$ManagedOnly
+        if ($installText -match '(?i)already installed|editor already installed|is already installed') {
+            if ($resolvedAfterFailure) {
+                Write-CiNotice "Unity repair install for $Version reported already-installed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; verifying modules against disk."
+                $resolved = $resolvedAfterFailure
+                break
+            }
+
+            if ($attempt -lt 2) {
+                Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install reported already-installed, but Unity.exe could not be resolved afterward."
+                Invoke-UnityVersionUninstallForRepair -Version $Version -Reason "Unity repair install reported already-installed, but Unity.exe could not be resolved."
+                Move-UnityVersionInstallToQuarantine -Version $Version -InstallRoot $InstallRoot
+                Write-Host "::warning::Retrying Unity $Version repair install after clearing stale CLI metadata and quarantining the managed version directory."
+                continue
+            }
+        }
+
+        Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install failed."
+        throw "Unity $Version repair install with CI modules failed with exit code $($installResult.ExitCode). CLI output tail:`n$tail"
+    }
+
+    if (-not $resolved) {
+        Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install completed, but Unity.exe could not be resolved afterward."
+        throw "Unity $Version repair install completed, but Unity.exe could not be found afterward."
+    }
+
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved)
+    if ($missing.Count -gt 0) {
+        throw "Unity $Version repair install completed at '$resolved', but required CI module groups are still missing on disk: $($missing -join ', ')."
+    }
+
+    return $resolved
+}
+
+function Repair-UnityEditorWithCiModules {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$Reason,
+        [switch]$ManagedOnly
+    )
+
+    return Invoke-WithUnityInstallLock -Version $Version -InstallRoot $InstallRoot -Action {
+        if ($ManagedOnly) {
+            Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+        }
+        Invoke-UnityVersionUninstallForRepair -Version $Version -Reason $Reason
+
+        if (Test-Path -LiteralPath $EditorPath -PathType Leaf) {
+            Move-UnityEditorInstallToQuarantine -EditorPath $EditorPath -InstallRoot $InstallRoot -Version $Version
+        }
+        Move-UnityVersionInstallToQuarantine -Version $Version -InstallRoot $InstallRoot
+
+        return Install-UnityEditorWithCiModules -Version $Version -InstallRoot $InstallRoot -Reason $Reason -ManagedOnly:$ManagedOnly
+    }
+}
+
+function Get-NativeExitCodeDescription {
+    param([Parameter(Mandatory = $true)][int]$ExitCode)
+
+    $normalized = if ($ExitCode -lt 0) {
+        [uint32]($ExitCode + 4294967296)
+    } else {
+        [uint32]$ExitCode
+    }
+    $hex = "0x$($normalized.ToString('X8'))"
+    if ($normalized -eq 0xC0000135) {
+        return "$hex / STATUS_DLL_NOT_FOUND"
+    }
+    if ($normalized -eq 0x8007007E) {
+        return "$hex / ERROR_MOD_NOT_FOUND"
+    }
+
+    return $hex
+}
+
+function Test-UnityNativeStartup {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$LogPath
+    )
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path -LiteralPath $logDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+
+    $probeArgs = @(
+        '-version',
+        '-batchmode',
+        '-nographics',
+        '-quit',
+        '-logFile', '-'
+    )
+
+    Write-Host "::group::Unity editor startup provisioning probe"
+    Write-Host "`"$EditorPath`" $($probeArgs -join ' ')"
+    & $EditorPath @probeArgs 2>&1 |
+        Tee-Object -FilePath $LogPath |
+        ForEach-Object { Write-Host ([string]$_) }
+    $exitCode = $LASTEXITCODE
+    $description = Get-NativeExitCodeDescription -ExitCode $exitCode
+    Write-Host "Unity startup provisioning probe exit code: $exitCode ($description)"
+    Write-Host "::endgroup::"
+
+    return [pscustomobject]@{
+        Success     = ($exitCode -eq 0)
+        ExitCode    = $exitCode
+        Description = $description
+    }
+}
+
+function Ensure-UnityNativeStartupHealthy {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [switch]$ManagedOnly
+    )
+
+    $probeRoot = Join-Path $InstallRoot '_probes'
+    $probeLog = Join-Path $probeRoot "$Version-startup-probe.log"
+    $result = Test-UnityNativeStartup -EditorPath $EditorPath -LogPath $probeLog
+    if ($result.Success) {
+        return $EditorPath
+    }
+
+    if ($env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1') {
+        throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) ($($result.Description)), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled auto-repair. Probe log: $probeLog"
+    }
+
+    Write-Host "::warning::Unity $Version native startup probe failed before the license lock; attempting one managed reinstall."
+    $repaired = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "native startup probe failed with exit code $($result.ExitCode) ($($result.Description)). Probe log: $probeLog" -ManagedOnly:$ManagedOnly
+    $repairProbe = Test-UnityNativeStartup -EditorPath $repaired -LogPath $probeLog
+    if (-not $repairProbe.Success) {
+        throw "Unity $Version native startup probe still failed after managed reinstall with exit code $($repairProbe.ExitCode) ($($repairProbe.Description)). This indicates host OS/runtime prerequisite damage rather than a package/test issue. Probe log: $probeLog"
+    }
+
+    return $repaired
+}
+
+function Ensure-UnityCiModules {
+    # IDEMPOTENT, disk-authoritative CI module install. The standalone beta CLI can
+    # return "No modules found to install." with exit code 6 when modules are
+    # already present, and it cannot add modules to manually installed editors.
+    # Classify the result against disk proof first; if required module groups are
+    # missing, repair by quarantining the managed editor and reinstalling through
+    # the CLI with the full CI module set.
+    #   1. install succeeded (exit 0)                              -> done.
+    #   2. install failed BUT every module group is present on disk -> notice, return.
+    #   3. modules are missing and repair is enabled                -> quarantine/reinstall.
+    #   4. repair disabled or impossible                            -> throw with diagnostics.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [string]$InstallRoot,
+        [switch]$ManagedOnly
+    )
+
+    $moduleIds = @(Get-UnityCiModuleIds)
+
+    if ($ManagedOnly) {
+        Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+    }
 
     # Best-effort listing diagnostic (unchanged): the beta listing format may not
-    # contain the literal module id, so a mismatch only warns and never aborts.
+    # contain every literal module id, so a mismatch only warns and never aborts.
     $listLines = @(Get-UnityCliOutput -Arguments @('install-modules', '-e', $Version, '-l'))
     if ($listLines.Count -gt 0) {
         $listText = ($listLines -join "`n")
-        if ($listText -notmatch [regex]::Escape($moduleId)) {
-            Write-Host "::warning::Unity $Version module listing did not contain the literal id '$moduleId' (the beta CLI may use a different listing format/display name). Proceeding; the install result below is classified against the on-disk module layout."
+        $missingFromList = @($moduleIds | Where-Object { $listText -notmatch [regex]::Escape($_) })
+        if ($missingFromList.Count -gt 0) {
+            Write-Host "::warning::Unity $Version module listing did not contain every required CI module id ($($missingFromList -join ', ')). Proceeding; the install result below is classified against the on-disk module layout."
         }
     } else {
-        Write-CiNotice "Could not list installable modules for Unity $Version (best-effort); proceeding with the standard module id '$moduleId'."
+        Write-CiNotice "Could not list installable modules for Unity $Version (best-effort); proceeding with required CI module ids: $($moduleIds -join ', ')."
     }
 
     # Attempt the install via the capturing (non-throwing) path so we can inspect
     # BOTH the exit code AND the output text before deciding whether it was fatal.
-    $result = Invoke-UnityCliCapture -Arguments @('install-modules', '-e', $Version, '-m', $moduleId)
+    $result = Invoke-UnityCliCapture -Arguments (@('install-modules', '-e', $Version, '-m') + $moduleIds)
 
     # Case 1: clean success.
     if ($result.Success) {
-        return
+        $missingAfterSuccess = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+        if ($missingAfterSuccess.Count -eq 0) {
+            return $EditorPath
+        }
+        Write-Host "::warning::Unity $Version 'install-modules' exited 0, but required CI module groups are still missing on disk: $($missingAfterSuccess -join ', ')."
     }
 
     $outputLines = @($result.Output)
@@ -605,20 +1141,37 @@ function Add-WindowsIl2CppModule {
     $tailCount = [Math]::Min(20, $outputLines.Count)
     $tail = if ($tailCount -gt 0) { ($outputLines[($outputLines.Count - $tailCount)..($outputLines.Count - 1)] -join "`n") } else { '(no output captured)' }
 
-    # Case 2: install failed but the module is demonstrably present on disk -> the
+    # Case 2: install failed but every module group is demonstrably present on disk -> the
     # CLI's non-zero exit was an idempotent no-op. Treat as success.
-    if (Test-Il2CppModulePresent -EditorPath $EditorPath) {
-        Write-CiNotice "Windows IL2CPP already present on disk; treating 'install-modules' no-op as success (CLI exit code $($result.ExitCode))."
-        return
+    $missingGroups = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    if ($missingGroups.Count -eq 0) {
+        Write-CiNotice "Required Unity CI modules already present on disk; treating 'install-modules' no-op as success (CLI exit code $($result.ExitCode))."
+        return $EditorPath
     }
 
-    if ($outputText -match '(?i)no modules found to install|already installed|is already installed') {
-        throw "Unity $Version 'install-modules -m $moduleId' reported nothing to install with exit code $($result.ExitCode), but Windows IL2CPP is not present on disk. Treating this as a partial or unmanaged editor install. CLI output tail:`n$tail"
+    $repairDisabled = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
+    if ($repairDisabled) {
+        throw "Unity $Version is missing required CI module groups ($($missingGroups -join ', ')), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled auto-repair. CLI output tail:`n$tail"
+    }
+
+    if ($InstallRoot) {
+        return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "required CI module groups missing ($($missingGroups -join ', ')). CLI output tail:`n$tail" -ManagedOnly:$ManagedOnly
     }
 
     # Case 3: genuine, non-benign failure. Fatal -- include the captured output
     # tail and exit code so CI logs show WHY the module install failed.
-    throw "Unity $Version 'install-modules -m $moduleId' failed with exit code $($result.ExitCode) and Windows IL2CPP is not present on disk. CLI output tail:`n$tail"
+    throw "Unity $Version 'install-modules' failed with exit code $($result.ExitCode), and required CI module groups are missing on disk ($($missingGroups -join ', ')). CLI output tail:`n$tail"
+}
+
+function Add-WindowsIl2CppModule {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [string]$InstallRoot,
+        [switch]$ManagedOnly
+    )
+
+    return Ensure-UnityCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
 }
 
 function Write-InstalledEditorDiagnostics {
@@ -713,16 +1266,16 @@ function Write-InstallDiagnostics {
 
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 
-$editor = Find-UnityEditor -Version $UnityVersion -Root $InstallRoot
+$editor = Find-UnityEditor -Version $UnityVersion -Root $InstallRoot -IncludeHostInstalls:(-not $CiManagedOnly)
 if (-not $editor) {
     Ensure-UnityCli | Out-Null
     Set-UnityCliInstallPath -Root $InstallRoot
+    if ($CiManagedOnly) {
+        Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+    }
 
     Write-CiNotice "Installing Unity Editor $UnityVersion on the self-hosted Windows runner."
-    $installArgs = @('install', $UnityVersion)
-    if ($WithWindowsIl2Cpp) {
-        $installArgs += @('-m', 'windows-il2cpp')
-    }
+    $installArgs = @('install', $UnityVersion, '-m') + @(Get-UnityCiModuleIds)
 
     # Emit diagnostics BEFORE the (potentially 30+ minute) install so the logs
     # carry the CLI path/version + disk headroom even if the install then stalls.
@@ -747,55 +1300,63 @@ if (-not $editor) {
         }
     }
 
-    $recoveredEditor = Invoke-WithRetry -MaxAttempts 2 -DelaySeconds $retryDelaySeconds -Action {
-        $installResult = Invoke-UnityCliCapture -Arguments $installArgs
-        if (-not $installResult.Success) {
-            $installLines = @($installResult.Output)
-            $installText = ($installLines -join "`n")
-            $installTailCount = [Math]::Min(40, $installLines.Count)
-            $installTail = if ($installTailCount -gt 0) {
-                ($installLines[($installLines.Count - $installTailCount)..($installLines.Count - 1)] -join "`n")
-            } else {
-                '(no output captured)'
-            }
-
-            $resolvedAfterFailure = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot
-            if ($resolvedAfterFailure) {
-                Write-CiNotice "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; treating the install as already present."
-                if ($WithWindowsIl2Cpp) {
-                    Write-CiNotice "Verifying Windows IL2CPP after recovered editor install."
-                    Add-WindowsIl2CppModule -Version $UnityVersion -EditorPath $resolvedAfterFailure
+    $recoveredEditor = Invoke-WithUnityInstallLock -Version $UnityVersion -InstallRoot $InstallRoot -Action {
+        Invoke-WithRetry -MaxAttempts 2 -DelaySeconds $retryDelaySeconds -Action {
+            $installResult = Invoke-UnityCliCapture -Arguments $installArgs
+            if (-not $installResult.Success) {
+                $installLines = @($installResult.Output)
+                $installText = ($installLines -join "`n")
+                $installTailCount = [Math]::Min(40, $installLines.Count)
+                $installTail = if ($installTailCount -gt 0) {
+                    ($installLines[($installLines.Count - $installTailCount)..($installLines.Count - 1)] -join "`n")
+                } else {
+                    '(no output captured)'
                 }
-                return $resolvedAfterFailure
+
+                $resolvedAfterFailure = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot -ManagedOnly:$CiManagedOnly
+                if ($resolvedAfterFailure) {
+                    Write-CiNotice "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; treating the install as already present."
+                    Write-CiNotice "Verifying required CI modules after recovered editor install."
+                    $resolvedAfterFailure = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $resolvedAfterFailure -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+                    return $resolvedAfterFailure
+                }
+
+                if ($installText -match '(?i)already installed|editor already installed|is already installed') {
+                    Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI reported the editor is already installed, but Unity.exe could not be resolved afterward."
+                    Invoke-UnityVersionUninstallForRepair -Version $UnityVersion -Reason "Unity CLI reported an already-installed editor, but Unity.exe could not be resolved."
+                    Move-UnityVersionInstallToQuarantine -Version $UnityVersion -InstallRoot $InstallRoot
+                    throw "Unity CLI '$($installArgs -join ' ')' reported an already-installed editor with exit code $($installResult.ExitCode), but Unity.exe could not be found. Uninstalled any CLI metadata and quarantined the managed version directory as partial or corrupt before retry. CLI output tail:`n$installTail"
+                }
+
+                Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install failed and Unity.exe could not be resolved afterward."
+                throw "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode). CLI output tail:`n$installTail"
             }
 
-            if ($installText -match '(?i)already installed|editor already installed|is already installed') {
-                Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI reported the editor is already installed, but Unity.exe could not be resolved afterward."
-                throw "Unity CLI '$($installArgs -join ' ')' reported an already-installed editor with exit code $($installResult.ExitCode), but Unity.exe could not be found. This looks like a partial or corrupt install. CLI output tail:`n$installTail"
-            }
-
-            Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install failed and Unity.exe could not be resolved afterward."
-            throw "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode). CLI output tail:`n$installTail"
+            return $null
         }
-
-        return $null
     }
 
     if ($recoveredEditor) {
         $editor = $recoveredEditor
     } else {
-        $editor = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot
+        $editor = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot -ManagedOnly:$CiManagedOnly
     }
     if (-not $editor) {
         Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward."
-        throw "Unity $UnityVersion was installed or already present, but Unity.exe could not be found in known locations. Set UNITY_EDITOR_INSTALL_ROOT or UNITY_EDITOR_PATH."
+        Move-UnityVersionInstallToQuarantine -Version $UnityVersion -InstallRoot $InstallRoot
+        $editor = Install-UnityEditorWithCiModules -Version $UnityVersion -InstallRoot $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward; quarantined the managed version directory and retrying with a fresh install." -ManagedOnly:$CiManagedOnly
     }
-} elseif ($WithWindowsIl2Cpp) {
+    $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+} else {
     Ensure-UnityCli | Out-Null
     Set-UnityCliInstallPath -Root $InstallRoot
-    Write-CiNotice "Ensuring Windows IL2CPP module is installed for Unity $UnityVersion."
-    Add-WindowsIl2CppModule -Version $UnityVersion -EditorPath $editor
+    if ($CiManagedOnly) {
+        Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+    }
+    Write-CiNotice "Ensuring required CI modules are installed for Unity $UnityVersion."
+    $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
 }
 
+$editor = Ensure-UnityNativeStartupHealthy -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
 Write-CiNotice "Unity editor resolved: $editor"
 Write-Output $editor

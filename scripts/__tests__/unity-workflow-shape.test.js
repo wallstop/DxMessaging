@@ -228,6 +228,23 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   );
 
   test.each(UNITY_LICENSED_JOBS)(
+    "$workflow job '$jobId' wires the optional Unity Accelerator from secrets, not vars",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const runnerStep = parsed.jobs[jobId].steps.find(
+        (step) => step.name === "Run Unity Test Runner"
+      );
+
+      expect(runnerStep).toBeDefined();
+      expect(runnerStep.env).toBeDefined();
+      expect(runnerStep.env.UNITY_ACCELERATOR_ENDPOINT).toBe(
+        "${{ secrets.UNITY_ACCELERATOR_ENDPOINT }}"
+      );
+      expect(readWorkflow(workflow)).not.toContain("vars.UNITY_ACCELERATOR_ENDPOINT");
+    }
+  );
+
+  test.each(UNITY_LICENSED_JOBS)(
     "$workflow job '$jobId' wraps direct Unity runner with org lock acquire/release and license preflight",
     ({ workflow, jobId }) => {
       const parsed = loadWorkflowYaml(workflow);
@@ -239,6 +256,16 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       );
       const preflightIndex = steps.findIndex(
         (step) => step.uses === "./.github/actions/validate-unity-license"
+      );
+      const provisionIndex = steps.findIndex(
+        (step) =>
+          step.name === "Provision Unity Editor" &&
+          step.shell === "pwsh" &&
+          typeof step.run === "string" &&
+          step.run.includes("./scripts/unity/ensure-editor.ps1") &&
+          step.run.includes("-CiManagedOnly") &&
+          step.run.includes("UNITY_EDITOR_PATH=$editor") &&
+          step.run.includes("$env:GITHUB_ENV")
       );
       const runnerIndex = steps.findIndex(
         (step) =>
@@ -255,7 +282,8 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
 
       expect(acquireIndex).toBeGreaterThanOrEqual(0);
       expect(preflightIndex).toBeGreaterThanOrEqual(0);
-      expect(acquireIndex).toBeGreaterThan(preflightIndex);
+      expect(provisionIndex).toBeGreaterThan(preflightIndex);
+      expect(acquireIndex).toBeGreaterThan(provisionIndex);
       expect(runnerIndex).toBeGreaterThan(acquireIndex);
       expect(releaseIndex).toBeGreaterThan(runnerIndex);
 
@@ -270,10 +298,10 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     }
   );
 
-  // Timeout invariant: GitHub charges the organization-lock poll wait against
-  // the job clock, so a job at the back of the serialized queue is killed
-  // before its lock wait can finish unless
-  //   job timeout-minutes >= acquire timeout-minutes + RUN_BUDGET(120).
+  // Timeout invariant: editor provisioning and the organization-lock poll wait
+  // both charge against the job clock, so a job at the back of the serialized
+  // queue is killed before its lock wait can finish unless
+  //   job timeout-minutes >= provision timeout + acquire timeout + RUN_BUDGET(120).
   // The step-level run timeout (>= 120) protects the in-use seat from a hung
   // editor (the stuck-job-watchdog ignores any in_progress job) and must stay
   // strictly below the job timeout so the step fails first and releases the
@@ -290,17 +318,23 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
           step.uses ===
           "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
       );
+      const provisionStep = steps.find((step) => step.name === "Provision Unity Editor");
       const runStep = steps.find((step) => step.name === "Run Unity Test Runner");
 
       expect(acquireStep).toBeDefined();
+      expect(provisionStep).toBeDefined();
       expect(runStep).toBeDefined();
 
       const acquireTimeout = Number.parseInt(acquireStep.with["timeout-minutes"], 10);
       expect(Number.isInteger(acquireTimeout)).toBe(true);
 
+      const provisionTimeout = provisionStep["timeout-minutes"];
+      expect(Number.isInteger(provisionTimeout)).toBe(true);
+      expect(provisionTimeout).toBeGreaterThanOrEqual(180);
+
       const jobTimeout = job["timeout-minutes"];
       expect(Number.isInteger(jobTimeout)).toBe(true);
-      expect(jobTimeout).toBeGreaterThanOrEqual(acquireTimeout + 120);
+      expect(jobTimeout).toBeGreaterThanOrEqual(provisionTimeout + acquireTimeout + 120);
 
       const runTimeout = runStep["timeout-minutes"];
       expect(Number.isInteger(runTimeout)).toBe(true);

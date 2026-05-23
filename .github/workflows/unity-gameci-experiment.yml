@@ -75,7 +75,7 @@ jobs:
     name: GameCI ${{ inputs.unity-version }} ${{ inputs.test-mode }}
     needs: runner-preflight
     runs-on: [self-hosted, Windows, RAM-64GB]
-    timeout-minutes: 420
+    timeout-minutes: 660
     continue-on-error: true
     steps:
       - name: Checkout
@@ -97,6 +97,15 @@ jobs:
         uses: ./.github/actions/compute-unity-assemblies
         with:
           runtime-only: "${{ inputs.test-mode == 'standalone' && 'true' || 'false' }}"
+
+      - name: Provision Unity Editor
+        timeout-minutes: 180
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 `
+            -UnityVersion '${{ inputs.unity-version }}' `
+            -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Generate ephemeral Unity project
         shell: pwsh

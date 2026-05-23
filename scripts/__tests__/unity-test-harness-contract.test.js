@@ -169,6 +169,11 @@ describe("generated Unity test harness contract", () => {
       expect(content).toContain("SelectSingleNode('//test-run')");
       expect(content).toContain("$total -lt 1");
       expect(content).toContain("$failed -gt 0");
+      expect(content).toContain("Write-UnityResultFailureDiagnostics");
+      expect(content).toContain("Invoke-UnityEditorWithFailureDiagnostics");
+      expect(content).toContain("Write-CscRspDiagnostics -Project $Project");
+      expect(content).toContain("warning CS8032");
+      expect(content).toContain("Unity exited with code 0 but did not write NUnit results");
     });
 
     test("wires Unity Accelerator and UPM caches without mutating package source", () => {
@@ -252,6 +257,16 @@ describe("generated Unity test harness contract", () => {
 
   describe("Unity 2021 compiler compatibility guards", () => {
     const tokenPath = path.join(REPO_ROOT, "Runtime", "Core", "MessageRegistrationToken.cs");
+    const compilerHostProjects = [
+      [
+        "source generator",
+        "SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.csproj"
+      ],
+      [
+        "analyzer",
+        "SourceGenerators/WallstopStudios.DxMessaging.Analyzer/WallstopStudios.DxMessaging.Analyzer.csproj"
+      ]
+    ];
 
     test("runtime sources avoid null-conditional out-var definite-assignment patterns", () => {
       const runtimeFiles = listTrackedRuntimeSources();
@@ -272,6 +287,24 @@ describe("generated Unity test harness contract", () => {
         "_deregistrations.Remove(handle, out Action deregistrationAction)"
       );
     });
+
+    test.each(compilerHostProjects)(
+      "%s production compiler host stays pinned to Roslyn 3.8 for Unity 2021",
+      (_label, relPath) => {
+        const source = fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
+
+        expect(source).toContain(
+          "<MicrosoftCodeAnalysisVersion>3.8.0</MicrosoftCodeAnalysisVersion>"
+        );
+        expect(source).toContain(
+          '<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.8.0">'
+        );
+        expect(source).not.toMatch(/<MicrosoftCodeAnalysisVersion>4\./);
+        expect(source).not.toMatch(
+          /<PackageReference Include="Microsoft\.CodeAnalysis\.CSharp" Version="4\./
+        );
+      }
+    );
   });
 });
 

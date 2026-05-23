@@ -138,10 +138,16 @@ const RUNTESTS_NO_RESULTS = ["  exit 0"].join("\n");
 // asserts the seat is STILL returned (the finally fires) even though the run
 // fails.
 const RUNTESTS_FAILING = ["  exit 1"].join("\n");
+const RUNTESTS_FAILING_CS8032 = [
+  "  Write-Output \"warning CS8032: An instance of analyzer WallstopStudios.DxMessaging.SourceGenerators.DxMessageIdGenerator cannot be created from Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll : Could not load file or assembly 'Microsoft.CodeAnalysis, Version=4.2.0.0'.\"",
+  "  Write-Output \"Tests/Runtime/Scripts/Messages/SimpleUntargetedMessage.cs(1,1): error CS0315: The type 'SimpleUntargetedMessage' cannot be used as type parameter 'T'.\"",
+  "  exit 1"
+].join("\n");
 
 const STUB_EDITOR = stubEditor(RUNTESTS_PASSING);
 const STUB_EDITOR_NO_RESULTS = stubEditor(RUNTESTS_NO_RESULTS);
 const STUB_EDITOR_FAILING = stubEditor(RUNTESTS_FAILING);
+const STUB_EDITOR_FAILING_CS8032 = stubEditor(RUNTESTS_FAILING_CS8032);
 
 function pwshAvailable() {
   const probe = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
@@ -202,6 +208,9 @@ function makeWorkspace() {
   const failingStubPath = path.join(base, "stub-editor-failing.ps1");
   fs.writeFileSync(failingStubPath, STUB_EDITOR_FAILING, "utf8");
 
+  const failingCs8032StubPath = path.join(base, "stub-editor-failing-cs8032.ps1");
+  fs.writeFileSync(failingCs8032StubPath, STUB_EDITOR_FAILING_CS8032, "utf8");
+
   const returnMarker = path.join(base, "returned.marker");
 
   return {
@@ -212,6 +221,7 @@ function makeWorkspace() {
     stubPath,
     noResultsStubPath,
     failingStubPath,
+    failingCs8032StubPath,
     returnMarker
   };
 }
@@ -346,6 +356,24 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
       expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
     }
   );
+
+  test("surfaces targeted diagnostics when the editor exits non-zero after CS8032", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const result = runScript("editmode", ws, ws.failingCs8032StubPath);
+    const combined = `${result.stdout || ""}\n${result.stderr || ""}`;
+
+    expect(result.status).not.toBe(0);
+    expect(combined).toContain("Unity result failure diagnostics");
+    expect(combined).toContain("Unity could not instantiate one or more DxMessaging");
+    expect(combined).toContain(
+      "Message fixture compile errors followed missing generated interfaces"
+    );
+    expect(fs.readFileSync(path.join(ws.artifacts, "unity.log"), "utf8")).toContain(
+      "warning CS8032"
+    );
+  });
 });
 
 // ===========================================================================

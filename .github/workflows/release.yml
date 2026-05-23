@@ -213,7 +213,7 @@ jobs:
     permissions:
       contents: read
       checks: write
-    timeout-minutes: 420
+    timeout-minutes: 660
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -252,6 +252,15 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
 
+      - name: Provision Unity Editor
+        timeout-minutes: 180
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 `
+            -UnityVersion '2022.3.45f1' `
+            -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Acquire organization Unity lock
         uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
         with:
@@ -268,7 +277,7 @@ jobs:
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_ACCELERATOR_ENDPOINT: ${{ vars.UNITY_ACCELERATOR_ENDPOINT }}
+          UNITY_ACCELERATOR_ENDPOINT: ${{ secrets.UNITY_ACCELERATOR_ENDPOINT }}
         run: |
           ./scripts/unity/run-ci-tests.ps1 `
             -UnityVersion '2022.3.45f1' `

@@ -155,6 +155,8 @@
     "ifne",
     "nographics",
     "batchmode",
+    "emcc",
+    "Emscripten",
     "shellcheck",
     "actionlint",
     "csharpier",

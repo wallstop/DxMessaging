@@ -24,6 +24,8 @@
  *   fail loudly but late; the static check surfaces typos at validation).
  * - Unity GameCI jobs that are not wrapped by the central organization lock
  *   acquire/release actions and the local Unity license preflight action.
+ * - Direct Unity test jobs that run scripts/unity/run-ci-tests.ps1 without
+ *   first provisioning a CI-managed Unity editor before the organization lock.
  * - Unsupported inputs on `game-ci/unity-test-runner@v4`.
  * - Workflow lines that exceed the yamllint line-length ceiling (loaded from
  *   .yamllint.yaml when available; defaults to 200). This provides earlier
@@ -1848,12 +1850,16 @@ function findAcquireTimeoutLine(lines, acquireStep) {
   return acquireStep.startIndex + 1;
 }
 
+function textReferencesUnityCiTests(text) {
+  return typeof text === "string" && /run-ci-tests\.ps1/i.test(text);
+}
+
 /**
  * Identifies the Unity execution step within a job: the step whose `run` text
  * invokes `run-ci-tests.ps1`, or whose `uses` is the game-ci test runner.
  */
 function isUnityRunStep(step) {
-  if (step.run && typeof step.run.text === "string" && /run-ci-tests\.ps1/.test(step.run.text)) {
+  if (step.run && textReferencesUnityCiTests(step.run.text)) {
     return true;
   }
   if (typeof step.uses === "string" && step.uses.includes(GAME_CI_UNITY_TEST_RUNNER_USES)) {
@@ -2739,10 +2745,143 @@ function stepRunsUnityNatively(step) {
   if (step.uses === "game-ci/unity-test-runner@v4") {
     return true;
   }
-  if (step.run && typeof step.run.text === "string" && /run-ci-tests\.ps1/.test(step.run.text)) {
+  if (stepRunsUnityCiTestsDirectly(step) && !stepRunsUnityGenerateOnly(step)) {
     return true;
   }
   return false;
+}
+
+function stepRunsUnityCiTestsDirectly(step) {
+  return Boolean(step?.run && textReferencesUnityCiTests(step.run.text));
+}
+
+function extractUnityCiTestCommandSegments(text) {
+  const starts = [...text.matchAll(/run-ci-tests\.ps1/gi)].map((match) => match.index);
+  return starts.map((start, index) => text.slice(start, starts[index + 1] ?? text.length));
+}
+
+function unityCiTestCommandSegmentIsGenerateOnly(segment) {
+  if (/-GenerateOnly(?:\s*:)?\s*(?:\$?false|0)\b/i.test(segment)) {
+    return false;
+  }
+  return (
+    /-GenerateOnly(?:\s|$|`)/i.test(segment) ||
+    /-GenerateOnly(?:\s*:)?\s*(?:\$?true|1)\b/i.test(segment)
+  );
+}
+
+function stepRunsUnityGenerateOnly(step) {
+  if (!step?.run || typeof step.run.text !== "string") {
+    return false;
+  }
+  const commandSegments = extractUnityCiTestCommandSegments(step.run.text);
+  if (commandSegments.length === 0) {
+    return false;
+  }
+  return commandSegments.every(unityCiTestCommandSegmentIsGenerateOnly);
+}
+
+function stepProvisionsUnityEditorForCi(step) {
+  if (!step?.run || typeof step.run.text !== "string") {
+    return false;
+  }
+  const text = step.run.text;
+  return (
+    /ensure-editor\.ps1/i.test(text) &&
+    /-CiManagedOnly\b/i.test(text) &&
+    /UNITY_EDITOR_PATH\s*=\s*\$editor/i.test(text) &&
+    /GITHUB_ENV/i.test(text)
+  );
+}
+
+function findUnityNativeProvisioningViolations(relativePath, lines) {
+  const violations = [];
+  if (isDisabledWorkflowPath(relativePath)) {
+    return violations;
+  }
+
+  for (const job of extractJobs(lines)) {
+    const steps = extractJobSteps(lines, job);
+    const runSteps = steps.filter(stepRunsUnityCiTestsDirectly);
+    if (runSteps.length === 0) {
+      continue;
+    }
+
+    const nonGenerateOnlyRunSteps = runSteps.filter((step) => !stepRunsUnityGenerateOnly(step));
+    const acquireStep = steps.find((step) => step.uses === ORGANIZATION_BUILD_LOCK_ACQUIRE_USES);
+    const provisionStep = steps.find(stepProvisionsUnityEditorForCi);
+    const firstRunStep = runSteps[0];
+    const firstNonGenerateOnlyRunStep = nonGenerateOnlyRunSteps[0];
+
+    if (!acquireStep && firstNonGenerateOnlyRunStep) {
+      violations.push(
+        new Violation(
+          relativePath,
+          firstNonGenerateOnlyRunStep.startIndex + 1,
+          "run-ci-tests.ps1",
+          `Job '${job.id}' runs Unity tests directly but has no organization lock acquire step. Add acquire-build-lock before non-GenerateOnly run-ci-tests.ps1 steps and provision the editor before that lock.`,
+          "error"
+        )
+      );
+    }
+
+    if (!provisionStep) {
+      violations.push(
+        new Violation(
+          relativePath,
+          firstRunStep.startIndex + 1,
+          "ensure-editor.ps1 -CiManagedOnly",
+          `Job '${job.id}' runs run-ci-tests.ps1 without a prior CI-managed editor provisioning step. Add a pre-lock step that runs scripts/unity/ensure-editor.ps1 -CiManagedOnly and writes UNITY_EDITOR_PATH=$editor to $GITHUB_ENV.`,
+          "error"
+        )
+      );
+      continue;
+    }
+
+    for (const runStep of runSteps) {
+      if (provisionStep.startIndex > runStep.startIndex) {
+        violations.push(
+          new Violation(
+            relativePath,
+            runStep.startIndex + 1,
+            "ensure-editor.ps1 -CiManagedOnly",
+            `Job '${job.id}' runs run-ci-tests.ps1 before the CI-managed editor is provisioned. Move ensure-editor.ps1 -CiManagedOnly before every direct run-ci-tests.ps1 step.`,
+            "error"
+          )
+        );
+      }
+    }
+
+    if (acquireStep) {
+      for (const runStep of nonGenerateOnlyRunSteps) {
+        if (acquireStep.startIndex > runStep.startIndex) {
+          violations.push(
+            new Violation(
+              relativePath,
+              runStep.startIndex + 1,
+              "acquire-build-lock",
+              `Job '${job.id}' runs Unity tests before acquiring the organization lock. Move acquire-build-lock before every non-GenerateOnly run-ci-tests.ps1 step.`,
+              "error"
+            )
+          );
+        }
+      }
+    }
+
+    if (acquireStep && provisionStep.startIndex > acquireStep.startIndex) {
+      violations.push(
+        new Violation(
+          relativePath,
+          provisionStep.startIndex + 1,
+          "ensure-editor.ps1 -CiManagedOnly",
+          `Job '${job.id}' provisions the Unity editor after acquiring the organization lock. Move ensure-editor.ps1 -CiManagedOnly before acquire-build-lock so install/repair never holds the licensed Unity seat.`,
+          "error"
+        )
+      );
+    }
+  }
+
+  return violations;
 }
 
 /**
@@ -3691,6 +3830,8 @@ function validateWorkflow(filePath, options = {}) {
 
     violations.push(...findUnityGameCiLockAndPreflightViolations(relativePath, lines));
 
+    violations.push(...findUnityNativeProvisioningViolations(relativePath, lines));
+
     violations.push(...findUnityLicenseReturnViolations(relativePath, lines));
 
     violations.push(...findForbiddenUnityLicenseSecretViolations(relativePath, lines));
@@ -3828,6 +3969,7 @@ if (typeof module !== "undefined" && module.exports) {
     findMatrixConcurrencyEvictionViolations,
     findGameCiTestRunnerInputViolations,
     findUnityGameCiLockAndPreflightViolations,
+    findUnityNativeProvisioningViolations,
     findUnityLicenseReturnViolations,
     findForbiddenUnityLicenseSecretViolations,
     findRequiredUnityLicenseSecretViolations,

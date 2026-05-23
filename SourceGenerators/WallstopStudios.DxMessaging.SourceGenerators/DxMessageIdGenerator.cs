@@ -11,8 +11,8 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
     using Microsoft.CodeAnalysis.CSharp.Syntax;
     using Microsoft.CodeAnalysis.Text;
 
-    [Generator(LanguageNames.CSharp)]
-    public sealed class DxMessageIdGenerator : IIncrementalGenerator
+    [Generator]
+    public sealed class DxMessageIdGenerator : ISourceGenerator
     {
         private static readonly DiagnosticDescriptor NonPartialContainerDiagnostic = new(
             id: "DXMSG003",
@@ -71,46 +71,34 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         );
 
         /// <summary>
-        /// Configures the incremental generator pipeline that assigns deterministic message identifiers.
+        /// Configures syntax collection for deterministic message identifier generation.
         /// </summary>
         /// <param name="context">Initialization context provided by Roslyn.</param>
-        public void Initialize(IncrementalGeneratorInitializationContext context)
+        public void Initialize(GeneratorInitializationContext context)
         {
-            // Find all class/struct/record declarations with attributes
-            IncrementalValuesProvider<TypeDeclarationSyntax> potentialTypeDeclarations =
-                context.SyntaxProvider.CreateSyntaxProvider(
-                    predicate: static (node, _) => IsSyntaxTargetForGeneration(node),
-                    transform: static (ctx, _) => (TypeDeclarationSyntax)ctx.Node
-                );
+            context.RegisterForSyntaxNotifications(static () => new TypeSyntaxReceiver());
+        }
 
-            // Get semantic info for potential types
-            IncrementalValuesProvider<MessageToGenerateInfo?> semanticTargets =
-                potentialTypeDeclarations
-                    .Combine(context.CompilationProvider)
-                    .Select(
-                        static (data, ct) =>
-                            GetSemanticTargetForGeneration(data.Left, data.Right, ct)
-                    );
+        public void Execute(GeneratorExecutionContext context)
+        {
+            if (context.SyntaxReceiver is not TypeSyntaxReceiver receiver)
+            {
+                return;
+            }
 
-            // Filter out nulls (types that aren't valid messages)
-            IncrementalValuesProvider<MessageToGenerateInfo> validSemanticTargets = semanticTargets
+            ImmutableArray<MessageToGenerateInfo> typesToGenerate = receiver
+                .Candidates.Select(typeDeclarationSyntax =>
+                    GetSemanticTargetForGeneration(
+                        typeDeclarationSyntax,
+                        context.Compilation,
+                        context.CancellationToken
+                    )
+                )
                 .Where(static target => target.HasValue)
-                .Select(static (target, _) => target!.Value);
+                .Select(static target => target!.Value)
+                .ToImmutableArray();
 
-            // Group by type symbol to handle partial classes correctly and check for multiple attributes
-            IncrementalValueProvider<ImmutableArray<MessageToGenerateInfo>> collectedTargets =
-                validSemanticTargets.Collect();
-
-            IncrementalValueProvider<(
-                Compilation,
-                ImmutableArray<MessageToGenerateInfo>
-            )> compilationAndTypes = context.CompilationProvider.Combine(collectedTargets);
-
-            // Register the source output step
-            context.RegisterSourceOutput(
-                compilationAndTypes,
-                static (spc, source) => Execute(source.Item1, source.Item2, spc)
-            );
+            Execute(typesToGenerate, context);
         }
 
         private static bool IsSyntaxTargetForGeneration(SyntaxNode node) =>
@@ -119,7 +107,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 typeDecl.IsKind(SyntaxKind.ClassDeclaration)
                 || typeDecl.IsKind(SyntaxKind.StructDeclaration)
                 || typeDecl.IsKind(SyntaxKind.RecordDeclaration)
-                || typeDecl.IsKind(SyntaxKind.RecordStructDeclaration)
+                || string.Equals(
+                    typeDecl.Kind().ToString(),
+                    "RecordStructDeclaration",
+                    StringComparison.Ordinal
+                )
             );
 
         private static MessageToGenerateInfo? GetSemanticTargetForGeneration(
@@ -204,9 +196,8 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
         }
 
         private static void Execute(
-            Compilation compilation,
             ImmutableArray<MessageToGenerateInfo> typesToGenerate,
-            SourceProductionContext context
+            GeneratorExecutionContext context
         )
         {
             if (typesToGenerate.IsDefaultOrEmpty)
@@ -378,6 +369,20 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
             }
         }
 
+        private sealed class TypeSyntaxReceiver : ISyntaxReceiver
+        {
+            public List<TypeDeclarationSyntax> Candidates { get; } =
+                new List<TypeDeclarationSyntax>();
+
+            public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
+            {
+                if (IsSyntaxTargetForGeneration(syntaxNode))
+                {
+                    Candidates.Add((TypeDeclarationSyntax)syntaxNode);
+                }
+            }
+        }
+
         // Generates the partial class/struct implementing IMessage
         private static string GenerateImplementationSource(
             string targetInterfaceFullName, // e.g., IBroadcastMessage
@@ -418,10 +423,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                     _ => "internal",
                 };
 
+                bool containerIsRecord = IsRecordDeclaration(container);
                 string containerKind = container.TypeKind switch
                 {
-                    TypeKind.Class => container.IsRecord ? "record class" : "class",
-                    TypeKind.Struct => container.IsRecord ? "record struct" : "struct",
+                    TypeKind.Class => containerIsRecord ? "record class" : "class",
+                    TypeKind.Struct => containerIsRecord ? "record struct" : "struct",
                     _ => "class",
                 };
 
@@ -454,10 +460,11 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 SymbolDisplayFormat.FullyQualifiedFormat
             );
 
+            bool typeIsRecord = IsRecordDeclaration(typeSymbol);
             string typeKind = typeSymbol.TypeKind switch
             {
-                TypeKind.Class => typeSymbol.IsRecord ? "record class" : "class",
-                TypeKind.Struct => typeSymbol.IsRecord ? "record struct" : "struct",
+                TypeKind.Class => typeIsRecord ? "record class" : "class",
+                TypeKind.Struct => typeIsRecord ? "record struct" : "struct",
                 _ => throw new InvalidOperationException("Unsupported type kind"),
             };
 
@@ -499,6 +506,23 @@ namespace WallstopStudios.DxMessaging.SourceGenerators
                 {{containersClose}}
                 {{namespaceBlockClose}}
                 """;
+        }
+
+        private static bool IsRecordDeclaration(INamedTypeSymbol symbol)
+        {
+            foreach (SyntaxReference syntaxReference in symbol.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax() is TypeDeclarationSyntax declaration)
+                {
+                    string kind = declaration.Kind().ToString();
+                    if (kind.IndexOf("Record", StringComparison.Ordinal) >= 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static List<INamedTypeSymbol> GetNonPartialContainers(INamedTypeSymbol typeSymbol)

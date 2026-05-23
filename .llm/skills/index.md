@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-22. Do not edit manually.
+> **Auto-generated** on 2026-05-23. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -226,7 +226,7 @@
 | [Headless Unity Test Runner](./unity/headless-test-runner.md)               | [ok] 228   | [intermediate] | [stable] | [risk: none] | unity, testing       |
 | [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md)   | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
 | [Unity CI Matrix](./unity/unity-ci-matrix.md)                               | [ok] 219   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
-| [Unity Editor CLI Bootstrap](./unity/unity-editor-cli-bootstrap.md)         | [ok] 172   | [intermediate] | [stable] | [risk: none] | unity, cli           |
+| [Unity Editor CLI Bootstrap](./unity/unity-editor-cli-bootstrap.md)         | [ok] 201   | [intermediate] | [stable] | [risk: none] | unity, cli           |
 | [Unity License Bootstrap](./unity/unity-license-bootstrap.md)               | [ok] 240   | [basic]        | [stable] | [risk: none] | unity, license       |
 | [Unity License Return Guarantee](./unity/unity-license-return-guarantee.md) | [warn] 290 | [intermediate] | [stable] | [risk: none] | unity, serial        |
 | [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)           | [ok] 219   | [intermediate] | [stable] | [risk: high] | unity, performance   |

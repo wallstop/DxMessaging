@@ -2,9 +2,9 @@
 title: "Unity Editor CLI Bootstrap"
 id: "unity-editor-cli-bootstrap"
 category: "unity"
-version: "1.1.1"
+version: "1.2.0"
 created: "2026-05-20"
-updated: "2026-05-21"
+updated: "2026-05-23"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -68,11 +68,13 @@ status: "stable"
 
 # Unity Editor CLI Bootstrap
 
-> **One-line summary**: `scripts/unity/ensure-editor.ps1` installs the standalone Unity CLI on a self-hosted Windows runner, refreshes the session `$env:PATH` from the registry, and discovers the installed editor through a best-effort SET plus a getter-based resolver so a beta CLI with uncertain flags cannot break the bootstrap.
+> **One-line summary**: `scripts/unity/ensure-editor.ps1` installs the standalone Unity CLI on a self-hosted Windows runner, refreshes the session `$env:PATH`, discovers the editor through layered CLI-aware resolution, and enforces the CI module bundle as a desired state with quarantine/reinstall repair.
 
 ## Overview
 
-The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then installs the requested editor version and (for standalone IL2CPP) the `windows-il2cpp` module.
+The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then installs the requested editor version with the full CI module bundle (`windows-il2cpp`, `webgl`, `android`, `android-sdk-ndk-tools`, `android-open-jdk`, `linux-mono`, `linux-il2cpp`).
+
+Editor provisioning runs before the organization Unity license lock. The locked section should only activate/return the serial license and run tests; editor install/repair can take tens of minutes and must not block other licensed Unity jobs.
 
 The standalone CLI is a moving beta surface (`v0.1.0-beta.x`). Some flags are undocumented and differ between releases, so the script treats every optional operation as best-effort and never lets an uncertain flag abort the install. Two failure modes drove the current design: the installer leaves `unity` off the current session PATH, and `unity install-path` was once called with a positional directory argument, which the CLI rejected.
 
@@ -95,16 +97,16 @@ The script initializes `$script:UnityCliPath = 'unity'` after `Set-StrictMode`, 
 
 VERIFIED (relied on directly by the script):
 
-- `unity install <version>` -- positional version; `-m <id>` adds a module (the editor install adds `-m windows-il2cpp` only under the `$WithWindowsIl2Cpp` switch).
+- `unity install <version>` -- positional version; `-m <id...>` adds one or more modules. CI installs all required module IDs for every Unity version, not only standalone cells.
 - `unity install-path` with NO arguments -- a 0-arg GETTER that prints the current editor install directory. Passing a positional directory is the root cause of the "Expected 0 arguments but got 1" failure.
 - `unity editors -i` (with `--format json` for parsing; bare `-i` for the diagnostic dump).
-- `unity install-modules -e <version> -m <id>` (authoritative, fatal on failure); the `-l` flag lists installable module ids (best-effort sanity check only).
+- `unity install-modules -e <version> -m <id...>` (captured, then classified against disk); the `-l` flag lists installable module ids (best-effort sanity check only).
 
 UNCERTAIN (treated best-effort; docs punt to `--help`):
 
 - The install-path SET flag. The Hub CLI uses `-s <dir>`; the standalone CLI likely mirrors `-s`/`--set`. The script tries `-s` then `--set`, then continues.
 - The `editors --format json` schema (field names are scanned, not assumed; a wrapper object such as `{"editors":[...]}` is flattened).
-- Whether the Windows IL2CPP module id is exactly `windows-il2cpp` (the standard Hub id, very likely). The `-l` listing is a best-effort sanity check; the throwing `-m` install is the source of truth.
+- The standalone CLI's exact output and whether every module id appears literally in `-l`. The `-l` listing is a best-effort sanity check; disk probes decide whether the desired module groups are present.
 - `-c <changeset>` (only meaningful for non-release builds). The script never passes it, so it is NOT exercised here.
 
 Sources: docs.unity.com/en-us/hub/unity-cli, docs.unity.com/en-us/hub/cli-overview.
@@ -136,26 +138,52 @@ Read BOTH Machine and User registry scopes, null-guard each, prepend the install
 
 ### Three invokers with distinct contracts
 
-- `Invoke-UnityCli` -- THROWING. Used only where failure is fatal (the editor install, the standalone module install). Echoes `$script:UnityCliPath` and throws on a non-zero `$LASTEXITCODE`.
 - `Invoke-UnityCliSafe` -- NON-throwing best-effort. Returns `$true`/`$false`, merges stderr into stdout (`2>&1`) so a beta CLI writing usage to stderr cannot trip `$ErrorActionPreference = 'Stop'`. Used for optional effects such as setting the install path.
 - `Get-UnityCliOutput` -- CAPTURING, non-throwing. Returns stdout lines or `$null`. It deliberately keeps getter output OFF this script's success stream because the caller (`run-ci-tests.ps1`) reads our LAST stdout line as the resolved editor path via `Select-Object -Last 1`; getter chatter must never leak there.
+- `Invoke-UnityCliCapture` -- CAPTURING, non-throwing, and live-streaming. Returns success, exit code, and output lines so editor installs and module installs can be classified against disk proof before deciding whether to repair or fail.
 
 ### Best-effort SET, getter-based authoritative discovery
 
-`Set-UnityCliInstallPath` calls `Invoke-UnityCliSafe -Arguments @('install-path', '-s', $Root)`, then `--set` on failure, then emits a `::notice::` (NOT an error) and continues. Setting the path is an optimization, never a requirement.
+`Set-UnityCliInstallPath` calls `Invoke-UnityCliSafe -Arguments @('install-path', '-s', $Root)`, then `--set` on failure, then emits a `::notice::` (NOT an error) and continues. Setting the path is an optimization for local discovery, but CI-managed mutation is stricter: before any `install`, `install-modules`, or `uninstall`, `Confirm-UnityCliManagedInstallRoot` verifies the getter-reported CLI install root is inside the configured managed root and fails before mutation if it is not.
 
 `Get-UnityCliInstallRoot` runs the 0-arg GETTER `Get-UnityCliOutput -Arguments @('install-path')` and takes the last path-like line (validated by `Test-LooksLikeAbsolutePath`, which accepts only `C:\...` or `\\...`). This reports the CLI's REAL install location whether or not the SET succeeded, so discovery never depends on the uncertain set flag.
 
-`Resolve-InstalledEditor` layers: (a) probe under the getter-reported root, (b) the candidate-path search under the configured `$InstallRoot`, (c) a defensive parse of `unity editors -i --format json`. `Resolve-EditorFromCliJson` wraps `ConvertFrom-Json` in try/catch -- malformed or banner-prefixed beta output returns `$null` instead of throwing -- and scans candidate version fields and path fields rather than assuming a schema.
+`Resolve-InstalledEditor` layers: (a) probe under the getter-reported root, (b) the candidate-path search under the configured `$InstallRoot`, (c) a defensive parse of `unity editors -i --format json`. In CI-managed mode, any discovered editor outside the configured install root is ignored so a manual `ProgramFiles` install cannot defeat repair. Version-scoped Unity CLI mutations are also blocked unless the CLI getter root is inside `$InstallRoot`, because the CLI's version-only commands otherwise target its current install root. `Resolve-EditorFromCliJson` wraps `ConvertFrom-Json` in try/catch -- malformed or banner-prefixed beta output returns `$null` instead of throwing -- and scans candidate version fields and path fields rather than assuming a schema.
 
-### Modules only for standalone, with id verification
+### CI module desired state and repair
 
-The editor install adds `-m windows-il2cpp` ONLY under the `$WithWindowsIl2Cpp` switch; editmode and playmode never install modules. `Add-WindowsIl2CppModule` runs `install-modules -e <version> -l` as a best-effort sanity check: if that listing is readable but omits the literal `windows-il2cpp`, it emits a `::warning::` and CONTINUES (a beta CLI may use a different listing format or display name, so a mismatch must not abort a standalone run on its own); if the listing is unavailable it proceeds optimistically with the standard id. Either way the throwing `install-modules -e <version> -m windows-il2cpp` is the authoritative source of truth and is fatal on real failure.
+Every CI Unity version is provisioned with the same module bundle:
+
+- `windows-il2cpp`
+- `webgl`
+- `android`
+- `android-sdk-ndk-tools`
+- `android-open-jdk`
+- `linux-mono`
+- `linux-il2cpp`
+
+`Ensure-UnityCiModules` treats `install-modules` output as diagnostic, not authoritative. It accepts a non-zero CLI result only when disk probes prove all required module groups are present:
+
+- Windows standalone IL2CPP: concrete player leaves such as `WindowsPlayer.exe`, `UnityPlayer.dll`, or `GameAssembly.dll` under known `win64_player_*_il2cpp` variations.
+- WebGL: `UnityEditor.WebGL.Extensions.dll` plus concrete Emscripten toolchain proof such as `BuildTools\Emscripten\emscripten\emcc.py` or `BuildTools\Emscripten\emscripten\emscripten-version.txt` (the canonical nested path Unity documents).
+- Android: concrete Android player leaves such as `UnityEditor.Android.Extensions.dll`.
+- Android SDK/NDK tools: `SDK\platform-tools\adb(.exe)`, `NDK\source.properties`, and an LLVM `clang++(.exe)` leaf under `NDK\toolchains\llvm\prebuilt`.
+- Android OpenJDK: `OpenJDK\bin\java(.exe)`.
+- Linux Mono support: concrete player leaves such as `LinuxPlayer` or `UnityPlayer.so` under known `linux64_player_*_mono` variations.
+- Linux IL2CPP support: concrete player leaves such as `LinuxPlayer` or `UnityPlayer.so` under known `linux64_player_*_il2cpp` variations.
+
+If required module groups are missing, repair is enabled by default. The script first tries `unity uninstall <version>` as a cleanup hint. It then quarantines any remaining managed version directory to `<install-root>\_quarantine\<version>-<timestamp>-<id>` and runs a fresh `unity install <version> -m <all-ci-modules>`. Repair install retries once when the CLI still reports "already installed" without a resolvable managed editor, clearing stale CLI metadata with another uninstall before retrying. Repair is deliberately bounded to the configured install root; the script refuses to move arbitrary `ProgramFiles` installs. In CI-managed mode, repair resolution also keeps `-ManagedOnly` so a host install cannot be selected after reinstall. The same uninstall-plus-version-directory quarantine path handles partial installs where the CLI reports "already installed" but no `Unity.exe` leaf exists, so stale CLI metadata cannot keep returning the same no-op state.
+
+Set `DXM_UNITY_DISABLE_EDITOR_REPAIR=1` only when debugging the installer itself. Normal CI should keep repair enabled so manually copied, partial, or non-Hub/non-CLI-managed editors converge to a known-good CLI-managed install.
+
+After module validation, `ensure-editor.ps1` runs a native startup probe before the license lock. If startup fails, the script performs one managed reinstall and probes again. A second startup failure is classified as host OS/runtime prerequisite damage (for example missing native DLLs such as `0xC0000135` / `STATUS_DLL_NOT_FOUND`), not a package/test failure.
 
 ## Verification
 
 - `scripts/__tests__/powershell-syntax.test.js` reparses the edited `.ps1`; keep it valid PowerShell 5.1.
-- `scripts/__tests__/unity-runner-script-contract.test.js` pins both the PATH fix (`$script:UnityCliPath`, `GetEnvironmentVariable`, `Update-SessionPathFromRegistry`, the absolute-path fallback) and the resilience design: `install-path` SET uses `-s` (never a positional `$Root`), `Invoke-UnityCliSafe` exists, `Get-UnityCliInstallRoot` reads `@('install-path')`, the defensive `--format json` / `ConvertFrom-Json` discovery, and standalone-only `-m windows-il2cpp` gating.
+- `scripts/__tests__/unity-runner-script-contract.test.js` pins both the PATH fix (`$script:UnityCliPath`, `GetEnvironmentVariable`, `Update-SessionPathFromRegistry`, the absolute-path fallback) and the resilience design: `install-path` SET uses `-s` (never a positional `$Root`), `Invoke-UnityCliSafe` exists, `Get-UnityCliInstallRoot` reads `@('install-path')`, the defensive `--format json` / `ConvertFrom-Json` discovery, the full CI module bundle, and quarantine/reinstall repair.
+- `scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js` covers disk-proof idempotency, managed-install quarantine/reinstall, and the `DXM_UNITY_DISABLE_EDITOR_REPAIR=1` refusal path.
+- `scripts/__tests__/unity-workflow-shape.test.js` requires the active Unity workflows to provision editors before acquiring the organization Unity lock and to export `UNITY_EDITOR_PATH` for the locked test step.
 
 ## See Also
 
@@ -166,6 +194,7 @@ The editor install adds `-m windows-il2cpp` ONLY under the `$WithWindowsIl2Cpp` 
 ## References
 
 - Unity CLI docs: https://docs.unity.com/en-us/hub/unity-cli
+- Unity Add Modules docs: https://docs.unity.com/en-us/hub/add-modules
 - Unity CLI overview: https://docs.unity.com/en-us/hub/cli-overview
 - Standalone CLI installer: https://public-cdn.cloud.unity3d.com/hub/prod/cli/install.ps1
 - Bootstrap script: `scripts/unity/ensure-editor.ps1`

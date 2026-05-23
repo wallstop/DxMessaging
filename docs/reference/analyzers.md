@@ -437,8 +437,8 @@ Manual edits to `csc.rsp` are rarely necessary; the setup helper detects existin
 
 DxMessaging ships **two** Roslyn DLLs because Unity 2021's analyzer loader has a hard requirement that Unity 2022+ does not:
 
-- `WallstopStudios.DxMessaging.Analyzer.dll` -- the base-call analyzer (DXMSG006/007/008/009/010). Pinned to **Roslyn 3.8.0**. Unity 2021 silently rejects analyzer DLLs built against Roslyn 4.x; Microsoft's `Microsoft.Unity.Analyzers` package pins 3.8.0 for the same reason.
-- `WallstopStudios.DxMessaging.SourceGenerators.dll` -- the source generators (DXMSG002/003/004/005). Stays at **Roslyn 4.2.0** because the generators use `IIncrementalGenerator`, which was introduced in Roslyn 4.0. Unity 2021 loads source generators through a different code path that tolerates the 4.x dependency.
+- `WallstopStudios.DxMessaging.Analyzer.dll` -- the base-call analyzer (DXMSG006/007/008/009/010). Pinned to **Roslyn 3.8.0**. Unity 2021 rejects analyzer DLLs built against Roslyn 4.x; Microsoft's `Microsoft.Unity.Analyzers` package pins 3.8.0 for the same reason.
+- `WallstopStudios.DxMessaging.SourceGenerators.dll` -- the source generators (DXMSG002/003/004/005). Also pinned to **Roslyn 3.8.0** and implemented with classic `ISourceGenerator` APIs so Unity 2021 can instantiate the generators.
 
 Both DLLs are tagged `RoslynAnalyzer` and registered in `csc.rsp`. They live side-by-side in `Editor/Analyzers/`.
 

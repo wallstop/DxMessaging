@@ -2,9 +2,13 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <MicrosoftCodeAnalysisVersion>4.2.0</MicrosoftCodeAnalysisVersion>
+    <!-- DO NOT bump this without verifying Unity 2021 still loads the source
+         generators. Unity 2021's analyzer/source-generator loader runs on
+         Roslyn 3.8.x and fails to instantiate generators compiled against
+         Roslyn 4.x. -->
+    <MicrosoftCodeAnalysisVersion>3.8.0</MicrosoftCodeAnalysisVersion>
     <SystemCollectionsImmutableVersion>5.0.0</SystemCollectionsImmutableVersion>
-    <SystemReflectionMetadataVersion>9.0.0</SystemReflectionMetadataVersion>
+    <SystemReflectionMetadataVersion>5.0.0</SystemReflectionMetadataVersion>
     <SystemRuntimeCompilerServicesUnsafeVersion>6.0.0</SystemRuntimeCompilerServicesUnsafeVersion>
     <SystemTextEncodingsWebVersion>6.0.0</SystemTextEncodingsWebVersion>
   </PropertyGroup>
@@ -13,7 +17,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.2.0">
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.8.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="System.Collections.Immutable" Version="5.0.0">

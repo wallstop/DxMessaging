@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Shipped source generators now compile against Unity 2021-compatible Roslyn 3.8 APIs and use the classic `ISourceGenerator` entry point, preventing Unity 2021.3 analyzer-host load failures (`CS8032`) while preserving the generated message-id and auto-constructor output for newer Unity editors.
+- Unity CI editor provisioning now self-heals managed partial or manually copied installs: every Unity version is provisioned before the license lock with Windows IL2CPP, WebGL, Android, and Linux build-support modules, and missing module groups trigger a quarantine plus fresh Unity CLI reinstall instead of failing later in standalone setup.
 - `MessageRegistrationToken.RemoveRegistration(handle)` now compiles cleanly on Unity 2021 while preserving the existing behavior of removing the active deregistration, staged registration, metadata, and diagnostic call-count entries.
 
 ## [3.0.1]

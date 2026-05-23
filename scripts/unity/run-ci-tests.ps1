@@ -492,18 +492,109 @@ function Invoke-UnityNativeStartupProbe {
     Write-Host "::endgroup::"
 
     if ($exitCode -ne 0) {
-        throw "Unity native startup probe failed with exit code $exitCode ($description). See the streamed probe log above (also saved to $LogPath)."
+        throw "Unity native startup probe failed with exit code $exitCode ($description) after pre-lock editor provisioning. ensure-editor.ps1 already attempted managed repair/reinstall before this job acquired the organization Unity license lock; this in-lock failure indicates host OS/runtime prerequisite damage rather than a Unity package/test issue. See the streamed probe log above (also saved to $LogPath)."
+    }
+}
+
+function Write-UnityResultFailureDiagnostics {
+    param(
+        [string]$LogPath,
+        [string]$Project,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    Write-Host "::group::Unity result failure diagnostics ($Label)"
+    try {
+        if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+            Write-Host "Unity log path: $LogPath"
+            $diagnosticPatterns = @(
+                'warning CS8032',
+                'error CS\d+',
+                'Aborting batchmode',
+                'Exiting batchmode successfully',
+                'No tests',
+                'TestRunner',
+                'results\.xml',
+                'assemblyNames'
+            )
+            $matches = @(
+                Select-String -LiteralPath $LogPath -Pattern $diagnosticPatterns -ErrorAction SilentlyContinue |
+                    Select-Object -First 80
+            )
+            if ($matches.Count -gt 0) {
+                Write-Host "Selected Unity log lines:"
+                foreach ($match in $matches) {
+                    Write-Host ("  line {0}: {1}" -f $match.LineNumber, $match.Line.Trim())
+                }
+            } else {
+                Write-Host "No targeted diagnostic lines matched in the Unity log."
+            }
+
+            $logText = Get-Content -LiteralPath $LogPath -Raw
+            if ($logText -match 'warning CS8032') {
+                Write-CiError "Unity could not instantiate one or more DxMessaging analyzers/source generators (CS8032). Check that Editor/Analyzers DLLs target the Roslyn version supported by this Unity editor."
+            }
+            if ($logText -match 'error CS0315' -and $logText -match 'Simple(?:Untargeted|Targeted|Broadcast)Message') {
+                Write-CiError "Message fixture compile errors followed missing generated interfaces. This usually means the DxMessaging source generator did not load."
+            }
+            if ($logText -match 'Exiting batchmode successfully') {
+                Write-CiError "Unity exited with code 0 but did not write NUnit results. Check the selected assembly list, test platform, and TestRunner log lines above."
+            }
+        } else {
+            Write-Host "Unity log path unavailable or missing: $LogPath"
+        }
+
+        if ($Project) {
+            $rspPath = Join-Path $Project 'Assets\csc.rsp'
+            Write-Host "Generated csc.rsp exists: $(Test-Path -LiteralPath $rspPath -PathType Leaf)"
+            $scriptAssemblies = Join-Path $Project 'Library\ScriptAssemblies'
+            if (Test-Path -LiteralPath $scriptAssemblies -PathType Container) {
+                Write-Host "Script assemblies present:"
+                Get-ChildItem -LiteralPath $scriptAssemblies -Filter '*.dll' -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Name |
+                    Sort-Object |
+                    ForEach-Object { Write-Host "  $_" }
+            } else {
+                Write-Host "Script assemblies directory missing: $scriptAssemblies"
+            }
+        }
+    } catch {
+        Write-Host "::warning::Could not collect Unity result failure diagnostics: $($_.Exception.Message)"
+    }
+    Write-Host "::endgroup::"
+}
+
+function Invoke-UnityEditorWithFailureDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)][string]$Project,
+        [Parameter(Mandatory = $true)][string]$CscLabel,
+        [Parameter(Mandatory = $true)][string]$DiagnosticsLabel
+    )
+
+    try {
+        Invoke-UnityEditor -EditorPath $EditorPath -Arguments $Arguments -Label $Label -LogPath $LogPath
+    } catch {
+        Write-CscRspDiagnostics -Project $Project -LogPath $LogPath -Label $CscLabel
+        Write-UnityResultFailureDiagnostics -LogPath $LogPath -Project $Project -Label $DiagnosticsLabel
+        throw
     }
 }
 
 function Test-NUnitResults {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Label
+        [Parameter(Mandatory = $true)][string]$Label,
+        [string]$LogPath,
+        [string]$Project
     )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         Write-CiError "No NUnit results XML exists at $Path for $Label."
+        Write-UnityResultFailureDiagnostics -LogPath $LogPath -Project $Project -Label $Label
         throw "Unity did not produce NUnit results for $Label."
     }
 
@@ -511,6 +602,7 @@ function Test-NUnitResults {
     $run = $xml.SelectSingleNode('//test-run')
     if (-not $run) {
         Write-CiError "NUnit results at $Path do not contain a <test-run> element."
+        Write-UnityResultFailureDiagnostics -LogPath $LogPath -Project $Project -Label $Label
         throw "Invalid NUnit results for $Label."
     }
 
@@ -667,7 +759,14 @@ try {
             '-executeMethod', 'DxmCiTestConfigurator.Apply',
             '-logFile', '-'
         ) + $acceleratorArgs
-        Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $configureArgs -Label 'Configure standalone IL2CPP project' -LogPath $configureLogPath
+        Invoke-UnityEditorWithFailureDiagnostics `
+            -EditorPath $UnityEditorPath `
+            -Arguments $configureArgs `
+            -Label 'Configure standalone IL2CPP project' `
+            -LogPath $configureLogPath `
+            -Project $ProjectPath `
+            -CscLabel 'standalone configure' `
+            -DiagnosticsLabel 'Unity standalone configure'
         Write-CscRspDiagnostics -Project $ProjectPath -LogPath $configureLogPath -Label 'standalone configure'
     }
 
@@ -687,9 +786,16 @@ try {
         $testArgs += @('-buildTarget', 'StandaloneWindows64')
     }
 
-    Invoke-UnityEditor -EditorPath $UnityEditorPath -Arguments $testArgs -Label "Run Unity $UnityVersion $TestMode tests" -LogPath $logPath
+    Invoke-UnityEditorWithFailureDiagnostics `
+        -EditorPath $UnityEditorPath `
+        -Arguments $testArgs `
+        -Label "Run Unity $UnityVersion $TestMode tests" `
+        -LogPath $logPath `
+        -Project $ProjectPath `
+        -CscLabel "$UnityVersion $TestMode test compile" `
+        -DiagnosticsLabel "Unity $UnityVersion $TestMode"
     Write-CscRspDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion $TestMode test compile"
-    Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode"
+    Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode" -LogPath $logPath -Project $ProjectPath
 } finally {
     # Deterministic RETURN of the seat on EVERY exit path (clean exit, throw, or a
     # kill that still unwinds this finally). The workflow if:always() step is the

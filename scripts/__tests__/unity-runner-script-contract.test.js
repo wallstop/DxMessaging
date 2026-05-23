@@ -379,7 +379,7 @@ describe("scripts/unity direct CI runner contract", () => {
     // matched both the old positional bug shape and the new getter/`-s` form, so
     // it was tautological. The form-specific `'install-path', '-s'` SET and
     // `@('install-path')` getter assertions below cover the surface precisely.
-    expect(ensureEditor).toContain("$installArgs = @('install', $UnityVersion)");
+    expect(ensureEditor).toContain("$installArgs = @('install', $UnityVersion, '-m')");
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
     expect(ensureEditor).toContain("Unity.exe");
@@ -411,7 +411,7 @@ describe("scripts/unity direct CI runner contract", () => {
     // with NO args is a GETTER, and the SET flag is undocumented. The script
     // must (a) never pass a positional dir to install-path, (b) set the path
     // best-effort via -s, (c) resolve the install root from the getter, (d)
-    // discover editors defensively, and (e) gate module installs to standalone.
+    // discover editors defensively, and (e) enforce the full CI module bundle.
     // ----------------------------------------------------------------------
 
     // (a) install-path SET must use the -s flag, NOT a positional directory.
@@ -488,19 +488,35 @@ describe("scripts/unity direct CI runner contract", () => {
       /try\s*\{[^}]*ConvertFrom-Json[\s\S]*?\}\s*catch\s*\{[^}]*?return/
     );
 
-    // (e) Module gating: the install `-m windows-il2cpp` and the install-modules
-    // path are reachable ONLY under the $WithWindowsIl2Cpp switch. editmode /
-    // playmode (the switch absent) must never install a module. Pin `-m
-    // windows-il2cpp` to the `$installArgs +=` line INSIDE the if block so a loose
-    // `[\s\S]*?` match cannot be satisfied by the literal appearing in an
-    // unrelated later function (e.g. Add-WindowsIl2CppModule's install call).
-    expect(ensureEditor).toMatch(
-      /if \(\$WithWindowsIl2Cpp\)\s*\{\s*\$installArgs \+= @\('-m', 'windows-il2cpp'\)/
-    );
-    expect(ensureEditor).toMatch(/elseif \(\$WithWindowsIl2Cpp\)/);
-    // IL2CPP module install verifies the id via the -l listing before installing.
+    // (e) CI module desired state: every Unity version is provisioned with the
+    // modules this repository may need across Windows standalone IL2CPP, WebGL,
+    // Android, and Linux build support. Module repair must classify against disk
+    // and reinstall a managed editor when module installation cannot modify it.
+    expect(ensureEditor).toContain("function Get-UnityCiModuleIds");
+    for (const moduleId of [
+      "windows-il2cpp",
+      "webgl",
+      "android",
+      "android-sdk-ndk-tools",
+      "android-open-jdk",
+      "linux-mono",
+      "linux-il2cpp"
+    ]) {
+      expect(ensureEditor).toContain(`'${moduleId}'`);
+    }
+    expect(ensureEditor).toContain("function Ensure-UnityCiModules");
+    expect(ensureEditor).toContain("function Repair-UnityEditorWithCiModules");
+    expect(ensureEditor).toContain("function Move-UnityEditorInstallToQuarantine");
+    expect(ensureEditor).toContain("function Move-UnityVersionInstallToQuarantine");
+    expect(ensureEditor).toContain("function Invoke-UnityVersionUninstallForRepair");
+    expect(ensureEditor).toContain("function Ensure-UnityNativeStartupHealthy");
+    expect(ensureEditor).toContain("function Test-UnityNativeStartup");
+    expect(ensureEditor).toContain("function Invoke-WithUnityInstallLock");
+    expect(ensureEditor).toContain("function Confirm-UnityCliManagedInstallRoot");
+    expect(ensureEditor).toContain("cannot mutate editors");
+    // Module install verifies the ids via the -l listing before installing.
     expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-l'");
-    expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-m'");
+    expect(ensureEditor).toContain("@('install-modules', '-e', $Version, '-m') + $moduleIds");
     // The -l listing is read non-throwing (best-effort verification). The module
     // install now runs through the CAPTURING (non-throwing) invoker so its exit
     // code AND output can be classified against the on-disk module layout: the
@@ -512,26 +528,41 @@ describe("scripts/unity direct CI runner contract", () => {
       /Get-UnityCliOutput -Arguments @\('install-modules', '-e', \$Version, '-l'\)/
     );
     expect(ensureEditor).toMatch(
-      /Invoke-UnityCliCapture -Arguments @\('install-modules', '-e', \$Version, '-m', \$moduleId\)/
+      /Invoke-UnityCliCapture -Arguments \(@\('install-modules', '-e', \$Version, '-m'\) \+ \$moduleIds\)/
     );
     // The OLD unconditional throwing install of the module must NOT reappear: it
     // wrongly aborted standalone on the idempotent "No modules found to install"
     // no-op. (Invoke-UnityCli is the throwing invoker; Invoke-UnityCliCapture is
     // its capturing, classify-then-decide replacement for the module install.)
     expect(ensureEditor).not.toMatch(
-      /Invoke-UnityCli -Arguments @\('install-modules', '-e', \$Version, '-m', \$moduleId\)/
+      /Invoke-UnityCli -Arguments @\('install-modules', '-e', \$Version, '-m'/
     );
     // Idempotency classification surface: a disk-authoritative IL2CPP probe gates
     // the "treat the CLI no-op as success" path, and a benign "nothing to
     // install / already installed" message is recognized. Both must be present so
     // the idempotent contract cannot silently regress to a hard failure.
     expect(ensureEditor).toContain("function Test-Il2CppModulePresent");
-    expect(ensureEditor).toMatch(/Test-Il2CppModulePresent -EditorPath/);
-    expect(ensureEditor).toMatch(/no modules found to install\|already installed/i);
-    // The module installer receives the resolved editor path so it can probe disk.
-    expect(ensureEditor).toMatch(
-      /Add-WindowsIl2CppModule -Version \$UnityVersion -EditorPath \$editor/
-    );
+    expect(ensureEditor).toContain("function Test-AnyUnityLeafPresent");
+    expect(ensureEditor).toContain("function Get-MissingUnityCiModuleGroups");
+    expect(ensureEditor).toMatch(/Test-UnityCiModuleGroupPresent -EditorPath/);
+    expect(ensureEditor).toContain("'android-sdk-ndk-tools'");
+    expect(ensureEditor).toContain("'android-open-jdk'");
+    expect(ensureEditor).toContain("'linux-il2cpp'");
+    expect(ensureEditor).toContain("'SDK'");
+    expect(ensureEditor).toContain("'NDK'");
+    expect(ensureEditor).toContain("'platform-tools\\adb.exe'");
+    expect(ensureEditor).toContain("'source.properties'");
+    expect(ensureEditor).toContain("'OpenJDK\\bin\\java.exe'");
+    expect(ensureEditor).toContain("'BuildTools\\Emscripten\\emscripten\\emcc.py'");
+    expect(ensureEditor).toContain("'BuildTools\\Emscripten\\emscripten\\emscripten-version.txt'");
+    expect(ensureEditor).toContain("'UnityEditor.Android.Extensions.dll'");
+    expect(ensureEditor).toContain("'UnityEditor.WebGL.Extensions.dll'");
+    expect(ensureEditor).toContain("return $hasEditorExtension -and $hasEmscriptenToolchain");
+    expect(ensureEditor).toContain("'linux64_player_development_mono\\LinuxPlayer'");
+    expect(ensureEditor).toContain("'linux64_player_development_il2cpp\\LinuxPlayer'");
+    expect(ensureEditor).toMatch(/LinuxStandaloneSupport[\s\S]*?Variations[\s\S]*?il2cpp/);
+    expect(ensureEditor).toContain("DXM_UNITY_DISABLE_EDITOR_REPAIR");
+    expect(ensureEditor).toMatch(/Quarantining unmanaged or partial Unity/);
     // The base editor install is RETRIED (it has failed flakily after a long run
     // with exit 6) and routed through the capturing invoker so a final failure
     // throws WITH the CLI output tail + exit code for diagnosis.
@@ -541,7 +572,7 @@ describe("scripts/unity direct CI runner contract", () => {
       /Invoke-WithRetry -MaxAttempts 2 -DelaySeconds \$retryDelaySeconds -Action \{\s*\$installResult = Invoke-UnityCliCapture -Arguments \$installArgs/
     );
     expect(ensureEditor).toMatch(
-      /if \(\$WithWindowsIl2Cpp\) \{\s*Write-CiNotice "Verifying Windows IL2CPP after recovered editor install\."\s*Add-WindowsIl2CppModule -Version \$UnityVersion -EditorPath \$resolvedAfterFailure/
+      /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*\$resolvedAfterFailure = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$resolvedAfterFailure -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
     );
 
     // Layered discovery wiring: install branch resolves through the layered
@@ -557,9 +588,41 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toMatch(
       /\$editor = Resolve-InstalledEditor -Version \$UnityVersion -Root \$InstallRoot/
     );
-    // Pin the module call site: the IL2CPP-only elseif branch must invoke the
-    // module installer with the requested version.
-    expect(ensureEditor).toMatch(/Add-WindowsIl2CppModule -Version \$UnityVersion/);
+    // Pin the module call site: existing editors must be pushed through the same
+    // desired-state module repair function with the requested version/root.
+    expect(ensureEditor).toMatch(
+      /\$editor = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+    );
+    expect(ensureEditor).toMatch(
+      /\$editor = Ensure-UnityNativeStartupHealthy -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+    );
+    expect(ensureEditor).toMatch(
+      /Install-UnityEditorWithCiModules[\s\S]*?Resolve-InstalledEditor -Version \$Version -Root \$InstallRoot -ManagedOnly:\$ManagedOnly/
+    );
+    expect(ensureEditor).toMatch(
+      /if \(\$ManagedOnly\) \{\s*Confirm-UnityCliManagedInstallRoot -Root \$InstallRoot \| Out-Null\s*\}/
+    );
+    expect(ensureEditor).toMatch(
+      /Repair-UnityEditorWithCiModules[\s\S]*?Install-UnityEditorWithCiModules -Version \$Version -InstallRoot \$InstallRoot -Reason \$Reason -ManagedOnly:\$ManagedOnly/
+    );
+    expect(ensureEditor).toMatch(
+      /Repair-UnityEditorWithCiModules[\s\S]*?Move-UnityVersionInstallToQuarantine -Version \$Version -InstallRoot \$InstallRoot/
+    );
+    expect(ensureEditor).toMatch(
+      /function Install-UnityEditorWithCiModules[\s\S]*?for \(\$attempt = 1; \$attempt -le 2; \$attempt\+\+\)[\s\S]*?Invoke-UnityVersionUninstallForRepair -Version \$Version[\s\S]*?Retrying Unity \$Version repair install/
+    );
+    expect(ensureEditor).toMatch(
+      /already installed[\s\S]*?Invoke-UnityVersionUninstallForRepair -Version \$UnityVersion[\s\S]*?Move-UnityVersionInstallToQuarantine -Version \$UnityVersion -InstallRoot \$InstallRoot/
+    );
+    expect(ensureEditor).toMatch(
+      /if \(\$CiManagedOnly\) \{\s*Confirm-UnityCliManagedInstallRoot -Root \$InstallRoot \| Out-Null\s*\}/
+    );
+    expect(ensureEditor).toMatch(
+      /Find-UnityEditor -Version \$UnityVersion -Root \$InstallRoot -IncludeHostInstalls:\(-not \$CiManagedOnly\)/
+    );
+    expect(ensureEditor).toMatch(
+      /Resolve-InstalledEditor -Version \$UnityVersion -Root \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+    );
   });
 
   test("run-ci-tests exposes the required CI surface", () => {
@@ -576,6 +639,9 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).toMatch(
       /\[ValidateSet\(\s*'editmode'\s*,\s*'playmode'\s*,\s*'standalone'\s*\)\]/
     );
+    expect(runCi).toContain("function Invoke-UnityNativeStartupProbe");
+    expect(runCi).toContain("after pre-lock editor provisioning");
+    expect(runCi).toContain("host OS/runtime prerequisite damage");
   });
 
   test("run-ci-tests creates an ephemeral package host project", () => {

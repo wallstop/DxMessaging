@@ -1,14 +1,49 @@
 using System.Linq;
+using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using NUnit.Framework;
+using WallstopStudios.DxMessaging.SourceGenerators;
+using WallstopStudios.DxMessaging.SourceGenerators.Analyzers;
 
 namespace WallstopStudios.DxMessaging.SourceGenerators.Tests;
 
 [TestFixture]
 public sealed class DxMessageIdGeneratorDiagnosticsTests
 {
+    [Test]
+    public void GeneratorsUseUnity2021CompatibleClassicSourceGeneratorApi()
+    {
+        Assert.That(new DxMessageIdGenerator(), Is.AssignableTo<ISourceGenerator>());
+        Assert.That(new DxAutoConstructorGenerator(), Is.AssignableTo<ISourceGenerator>());
+        Assert.That(new DxMessageIdGenerator(), Is.Not.AssignableTo<IIncrementalGenerator>());
+        Assert.That(new DxAutoConstructorGenerator(), Is.Not.AssignableTo<IIncrementalGenerator>());
+    }
+
+    [TestCase(typeof(DxMessageIdGenerator), "source generator")]
+    [TestCase(typeof(MessageAwareComponentBaseCallAnalyzer), "analyzer")]
+    public void ShippedCompilerHostAssembliesReferenceUnity2021CompatibleRoslyn(
+        Type compilerHostType,
+        string label
+    )
+    {
+        Version expectedVersion = new(3, 8, 0, 0);
+        AssemblyName[] references = compilerHostType.Assembly.GetReferencedAssemblies();
+        Version? codeAnalysisVersion = references
+            .Single(reference => reference.Name == "Microsoft.CodeAnalysis")
+            .Version;
+        Version? csharpVersion = references
+            .Single(reference => reference.Name == "Microsoft.CodeAnalysis.CSharp")
+            .Version;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codeAnalysisVersion, Is.EqualTo(expectedVersion), label);
+            Assert.That(csharpVersion, Is.EqualTo(expectedVersion), label);
+        });
+    }
+
     [Test]
     public void ReportsMultipleMessageAttributes()
     {

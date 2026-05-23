@@ -39,6 +39,7 @@ const {
   findMatrixConcurrencyEvictionViolations,
   findGameCiTestRunnerInputViolations,
   findUnityGameCiLockAndPreflightViolations,
+  findUnityNativeProvisioningViolations,
   findUnityLicenseReturnViolations,
   findForbiddenUnityLicenseSecretViolations,
   findRequiredUnityLicenseSecretViolations,
@@ -389,9 +390,7 @@ jobs:
     expect(violations.map((violation) => violation.message).join("\n")).toContain(
       "validating Unity license"
     );
-    expect(violations.map((violation) => violation.message).join("\n")).toContain(
-      "if: always()"
-    );
+    expect(violations.map((violation) => violation.message).join("\n")).toContain("if: always()");
   });
 
   test("flags lock preflight ordering, missing token env, and mismatched holder suffix", () => {
@@ -475,6 +474,19 @@ jobs:
     expect(findUnityLicenseReturnViolations("test.yml", asLines(cleanGameCiJob))).toEqual([]);
   });
 
+  test("GenerateOnly-only run-ci-tests job does not require license return", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Generate ephemeral Unity project
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode -GenerateOnly
+`);
+    expect(findUnityLicenseReturnViolations("test.yml", lines)).toEqual([]);
+  });
+
   test("missing return step -> violation", () => {
     const lines = asLines(`
 jobs:
@@ -488,6 +500,22 @@ jobs:
       - name: Release organization Unity lock
         if: always()
         uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/release-build-lock@v1
+`);
+    const violations = findUnityLicenseReturnViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("no license return step");
+  });
+
+  test("case-varied run-ci-tests path still requires a license return step", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/RUN-CI-TESTS.ps1 -TestMode editmode
 `);
     const violations = findUnityLicenseReturnViolations("test.yml", lines);
     expect(violations).toHaveLength(1);
@@ -559,12 +587,8 @@ jobs:
     // Both creds missing -> one violation per missing cred.
     expect(violations).toHaveLength(2);
     expect(violations[0].message).toContain("silently no-ops");
-    expect(violations.map((v) => v.message).join("\n")).toContain(
-      "must pass UNITY_EMAIL"
-    );
-    expect(violations.map((v) => v.message).join("\n")).toContain(
-      "must pass UNITY_PASSWORD"
-    );
+    expect(violations.map((v) => v.message).join("\n")).toContain("must pass UNITY_EMAIL");
+    expect(violations.map((v) => v.message).join("\n")).toContain("must pass UNITY_PASSWORD");
   });
 
   test("return step missing only UNITY_PASSWORD -> violation", () => {
@@ -633,6 +657,292 @@ jobs:
 `);
     expect(
       findUnityLicenseReturnViolations(".github/workflows-disabled/unity-tests.yml", lines)
+    ).toEqual([]);
+  });
+});
+
+describe("findUnityNativeProvisioningViolations", () => {
+  test("direct run-ci-tests job with pre-lock CiManagedOnly provisioning -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    expect(findUnityNativeProvisioningViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("case-varied provisioning command is accepted", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $Editor = ./scripts/unity/ENSURE-EDITOR.ps1 -UnityVersion '2022.3.45f1' -CIManagedOnly
+          "unity_editor_path=$Editor" | Out-File -FilePath $env:github_env -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    expect(findUnityNativeProvisioningViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("direct run-ci-tests job without provisioning -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("without a prior CI-managed editor provisioning");
+  });
+
+  test("direct run-ci-tests job with provisioning after acquire lock -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("after acquiring the organization lock");
+  });
+
+  test("direct run-ci-tests before provisioning -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(2);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "runs run-ci-tests.ps1 before the CI-managed editor is provisioned"
+    );
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "provisions the Unity editor after acquiring the organization lock"
+    );
+  });
+
+  test("non-GenerateOnly direct run-ci-tests before acquire lock -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("before acquiring the organization lock");
+  });
+
+  test("GenerateOnly run may happen before acquire lock when provisioned", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Generate ephemeral Unity project
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode -GenerateOnly
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+`);
+
+    expect(findUnityNativeProvisioningViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("lowercase GenerateOnly switch may happen before acquire lock when provisioned", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Generate ephemeral Unity project
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode -generateonly
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+`);
+
+    expect(findUnityNativeProvisioningViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("-GenerateOnly false still requires the organization lock", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode -GenerateOnly:$false
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("before acquiring the organization lock");
+  });
+
+  test("case-varied run-ci-tests path still requires the organization lock", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/RUN-CI-TESTS.ps1 -TestMode editmode
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("before acquiring the organization lock");
+  });
+
+  test("mixed GenerateOnly and real run in one step still requires the organization lock", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Generate then run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode -GenerateOnly
+          ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("before acquiring the organization lock");
+  });
+
+  test("provisioning without CiManagedOnly or UNITY_EDITOR_PATH export -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1'
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("ensure-editor.ps1 -CiManagedOnly");
+  });
+
+  test("disabled workflow path is exempt -> []", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    expect(
+      findUnityNativeProvisioningViolations(".github/workflows-disabled/unity-tests.yml", lines)
     ).toEqual([]);
   });
 });
@@ -713,7 +1023,22 @@ jobs:
 `;
 
   test("Unity-native job referencing all three serial secrets -> []", () => {
-    expect(findRequiredUnityLicenseSecretViolations("test.yml", asLines(allThreeWired))).toEqual([]);
+    expect(findRequiredUnityLicenseSecretViolations("test.yml", asLines(allThreeWired))).toEqual(
+      []
+    );
+  });
+
+  test("GenerateOnly-only run-ci-tests job does not require serial secrets", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Generate ephemeral Unity project
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode -GenerateOnly
+`);
+    expect(findRequiredUnityLicenseSecretViolations("test.yml", lines)).toEqual([]);
   });
 
   test("Unity-native job missing one serial secret -> 1 violation naming it", () => {
@@ -752,6 +1077,21 @@ jobs:
     expect(joined).toContain("secrets.UNITY_SERIAL");
     expect(joined).toContain("secrets.UNITY_EMAIL");
     expect(joined).toContain("secrets.UNITY_PASSWORD");
+  });
+
+  test("case-varied run-ci-tests path still requires serial secrets", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: |
+          ./scripts/unity/RUN-CI-TESTS.ps1 -TestMode editmode
+`);
+    const violations = findRequiredUnityLicenseSecretViolations("test.yml", lines);
+    expect(violations).toHaveLength(3);
   });
 
   test("game-ci/unity-test-runner@v4 job is treated as Unity-native too", () => {
@@ -1061,6 +1401,29 @@ jobs:
     // Mirrors the real workflows: job 420 / acquire "300" / run step 120.
     const lines = unityLockJob({ jobTimeout: 420, acquireTimeout: 300, runStepTimeout: 120 });
     expect(findUnityLockTimeoutViolations("test.yml", lines)).toEqual([]);
+  });
+
+  test("case-varied run-ci-tests path is recognized for the step timeout guard", () => {
+    const lines = asLines(`
+jobs:
+  unity-tests:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    timeout-minutes: 420
+    steps:
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+        with:
+          lock-name: wallstop-organization-builds
+          holder-id-suffix: editmode
+          timeout-minutes: "300"
+        env:
+          BUILD_LOCK_TOKEN: \${{ secrets.ORG_BUILD_LOCK_TOKEN }}
+      - name: Run Unity Test Runner
+        run: ./scripts/unity/RUN-CI-TESTS.ps1
+`);
+    const violations = findUnityLockTimeoutViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("step-level timeout-minutes");
   });
 
   test("flags a job whose timeout is below acquire + run budget", () => {

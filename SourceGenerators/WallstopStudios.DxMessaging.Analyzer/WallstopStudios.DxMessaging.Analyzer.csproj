@@ -3,13 +3,11 @@
     DxMessaging analyzer (Roslyn 3.8.0).
 
     Why a separate csproj? Unity 2021 ships its compiler with Roslyn 3.8.x and its
-    analyzer loader silently rejects analyzer DLLs built against Roslyn 4.x — the
+    analyzer loader rejects analyzer/source-generator DLLs built against Roslyn 4.x — the
     DXMSG006/007/008/009 warnings simply do not appear. Microsoft.Unity.Analyzers
-    pins 3.8.0 for the same reason. The companion source-generator project,
-    `WallstopStudios.DxMessaging.SourceGenerators.csproj`, must stay at Roslyn
-    4.2.0 because the generators use `IIncrementalGenerator` (introduced in 4.0).
-    Unity loads source generators through a different code path that tolerates
-    4.x, so the split is the only working configuration.
+    pins 3.8.0 for the same reason. The companion source-generator project also
+    pins 3.8.0 and uses classic `ISourceGenerator` instead of Roslyn 4.x-only
+    incremental generator APIs so Unity 2021 can instantiate it.
 
     Both DLLs ship to `Editor/Analyzers/` and are registered in `csc.rsp` via
     `SetupCscRsp.cs`.

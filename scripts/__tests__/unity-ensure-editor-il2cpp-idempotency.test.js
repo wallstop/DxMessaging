@@ -61,6 +61,94 @@ const IL2CPP_VARIATION_REL = path.join(
   "win64_player_development_il2cpp"
 );
 
+function writeFakeUnityEditor(editorExe) {
+  fs.mkdirSync(path.dirname(editorExe), { recursive: true });
+  fs.writeFileSync(
+    editorExe,
+    ["#!/usr/bin/env sh", 'echo "Unity fake version"', "exit 0", ""].join("\n"),
+    "utf8"
+  );
+  fs.chmodSync(editorExe, 0o755);
+}
+
+function createCiModuleLayout(editorExe) {
+  const dataRoot = path.join(path.dirname(editorExe), "Data");
+  const writeModuleLeaf = (leaf) => {
+    fs.mkdirSync(path.dirname(leaf), { recursive: true });
+    fs.writeFileSync(leaf, "");
+  };
+  writeModuleLeaf(
+    path.join(
+      dataRoot,
+      "PlaybackEngines",
+      "windowsstandalonesupport",
+      "Variations",
+      "win64_player_development_il2cpp",
+      "UnityPlayer.dll"
+    )
+  );
+  writeModuleLeaf(
+    path.join(dataRoot, "PlaybackEngines", "WebGLSupport", "UnityEditor.WebGL.Extensions.dll")
+  );
+  writeModuleLeaf(
+    path.join(
+      dataRoot,
+      "PlaybackEngines",
+      "WebGLSupport",
+      "BuildTools",
+      "Emscripten",
+      "emscripten",
+      "emcc.py"
+    )
+  );
+  writeModuleLeaf(
+    path.join(dataRoot, "PlaybackEngines", "AndroidPlayer", "UnityEditor.Android.Extensions.dll")
+  );
+  writeModuleLeaf(
+    path.join(dataRoot, "PlaybackEngines", "AndroidPlayer", "SDK", "platform-tools", "adb.exe")
+  );
+  writeModuleLeaf(
+    path.join(dataRoot, "PlaybackEngines", "AndroidPlayer", "NDK", "source.properties")
+  );
+  writeModuleLeaf(
+    path.join(
+      dataRoot,
+      "PlaybackEngines",
+      "AndroidPlayer",
+      "NDK",
+      "toolchains",
+      "llvm",
+      "prebuilt",
+      "windows-x86_64",
+      "bin",
+      "clang++.exe"
+    )
+  );
+  writeModuleLeaf(
+    path.join(dataRoot, "PlaybackEngines", "AndroidPlayer", "OpenJDK", "bin", "java.exe")
+  );
+  writeModuleLeaf(
+    path.join(
+      dataRoot,
+      "PlaybackEngines",
+      "LinuxStandaloneSupport",
+      "Variations",
+      "linux64_player_development_mono",
+      "LinuxPlayer"
+    )
+  );
+  writeModuleLeaf(
+    path.join(
+      dataRoot,
+      "PlaybackEngines",
+      "LinuxStandaloneSupport",
+      "Variations",
+      "linux64_player_development_il2cpp",
+      "LinuxPlayer"
+    )
+  );
+}
+
 function pwshAvailable() {
   const probe = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
     encoding: "utf8"
@@ -155,7 +243,15 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
       "  param([string[]]$Arguments)",
       `  return @{ Success = $false; ExitCode = 6; Output = @('${outputLiteral}') }`,
       "}",
-      extractEnsureEditorFunctions(["Test-Il2CppModulePresent", "Add-WindowsIl2CppModule"]),
+      extractEnsureEditorFunctions([
+        "Test-Il2CppModulePresent",
+        "Test-AnyUnityLeafPresent",
+        "Get-UnityCiModuleIds",
+        "Test-UnityCiModuleGroupPresent",
+        "Get-MissingUnityCiModuleGroups",
+        "Ensure-UnityCiModules",
+        "Add-WindowsIl2CppModule"
+      ]),
       "try {",
       `  Add-WindowsIl2CppModule -Version '6000.0.32f1' -EditorPath '${editorLiteral}'`,
       "  Write-Output 'SUCCESS'",
@@ -178,6 +274,7 @@ function makeFakeUnityCli(binDir, handlerLines) {
       "const args = process.argv.slice(2);",
       "function write(line) { process.stdout.write(`${line}\\n`); }",
       "function exit(code) { process.exit(code); }",
+      "if (args.includes('-version')) { write('Unity fake version'); exit(0); }",
       ...handlerLines,
       "exit(0);",
       ""
@@ -249,7 +346,8 @@ function runEnsureEditorWithFakeCli(handlerLines, installRoot, baseEnv = process
       "-UnityVersion",
       "6000.0.32f1",
       "-InstallRoot",
-      installRoot
+      installRoot,
+      "-CiManagedOnly"
     ],
     { env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }
   );
@@ -267,14 +365,14 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
   // the function MUST classify against Test-Il2CppModulePresent.
   test("Add-WindowsIl2CppModule classifies via Test-Il2CppModulePresent, not the throwing Invoke-UnityCli", () => {
     const text = fs.readFileSync(ENSURE_EDITOR, "utf8");
-    const start = text.indexOf("function Add-WindowsIl2CppModule");
+    const start = text.indexOf("function Ensure-UnityCiModules");
     expect(start).toBeGreaterThanOrEqual(0);
     // Bound the slice at the next top-level function definition.
     const after = text.indexOf("\nfunction ", start + 1);
     const body = after === -1 ? text.slice(start) : text.slice(start, after);
 
-    // It must consult the disk probe...
-    expect(body).toContain("Test-Il2CppModulePresent");
+    // It must consult the disk probe through the shared CI-module group checker...
+    expect(body).toContain("Get-MissingUnityCiModuleGroups");
     // ...attempt the install via the non-throwing capturing invoker...
     expect(body).toContain("Invoke-UnityCliCapture");
     // ...and NEVER route the module install through the throwing invoker.
@@ -307,7 +405,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(out.stdout).toBe("False");
   });
 
-  test("Test-Il2CppModulePresent returns $true for a fabricated IL2CPP variations tree", () => {
+  test("Test-Il2CppModulePresent requires a concrete IL2CPP player leaf", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-il2cpp-editor-"));
     workspaces.push(base);
 
@@ -318,11 +416,16 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const variationDir = path.join(base, "6000.0.32f1", IL2CPP_VARIATION_REL);
     fs.mkdirSync(variationDir, { recursive: true });
     const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
-    fs.writeFileSync(editorExe, "stub", "utf8");
+    writeFakeUnityEditor(editorExe);
 
-    const out = probeIl2Cpp(editorExe);
-    expect(out.status).toBe(0);
-    expect(out.stdout).toBe("True");
+    const emptyOut = probeIl2Cpp(editorExe);
+    expect(emptyOut.status).toBe(0);
+    expect(emptyOut.stdout).toBe("False");
+
+    fs.writeFileSync(path.join(variationDir, "UnityPlayer.dll"), "");
+    const populatedOut = probeIl2Cpp(editorExe);
+    expect(populatedOut.status).toBe(0);
+    expect(populatedOut.stdout).toBe("True");
   });
 
   test("Add-WindowsIl2CppModule treats No modules found as fatal when IL2CPP is not on disk", () => {
@@ -331,25 +434,248 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
 
     expect(out.status).toBe(7);
-    expect(combined).toContain("reported nothing to install");
-    expect(combined).toContain("Windows IL2CPP is not present on disk");
+    expect(combined).toContain("required CI module groups are missing");
+    expect(combined).toContain("windows-il2cpp");
     expect(combined).toContain("No modules found to install");
   });
 
-  test("Add-WindowsIl2CppModule accepts No modules found only when IL2CPP is on disk", () => {
+  test("Add-WindowsIl2CppModule accepts No modules found only when all CI module groups are on disk", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-il2cpp-editor-"));
     workspaces.push(base);
-    const variationDir = path.join(base, "6000.0.32f1", IL2CPP_VARIATION_REL);
-    fs.mkdirSync(variationDir, { recursive: true });
     const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
-    fs.writeFileSync(editorExe, "stub", "utf8");
+    writeFakeUnityEditor(editorExe);
+    createCiModuleLayout(editorExe);
 
     const out = runAddWindowsIl2CppModuleHarness(editorExe, "No modules found to install");
     const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
 
     expect(out.status).toBe(0);
-    expect(combined).toContain("Windows IL2CPP already present on disk");
+    expect(combined).toContain("Required Unity CI modules already present on disk");
     expect(combined).toContain("SUCCESS");
+  });
+
+  test("WebGL probe rejects extension-only leftovers without Emscripten toolchain proof", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-webgl-leftover-editor-"));
+    workspaces.push(base);
+    const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
+    writeFakeUnityEditor(editorExe);
+    fs.mkdirSync(path.join(path.dirname(editorExe), "Data", "PlaybackEngines", "WebGLSupport"), {
+      recursive: true
+    });
+    fs.writeFileSync(
+      path.join(
+        path.dirname(editorExe),
+        "Data",
+        "PlaybackEngines",
+        "WebGLSupport",
+        "UnityEditor.WebGL.Extensions.dll"
+      ),
+      ""
+    );
+
+    const out = runAddWindowsIl2CppModuleHarness(editorExe, "No modules found to install");
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    expect(out.status).toBe(7);
+    expect(combined).toContain("required CI module groups are missing");
+    expect(combined).toContain("webgl");
+  });
+
+  test("managed editor missing CI modules is quarantined and reinstalled with the full module set", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-repair-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    const repairInstallMarker = path.join(base, "repair-install-attempts.txt");
+    const repairUninstallMarker = path.join(base, "repair-uninstall-called.txt");
+    writeFakeUnityEditor(editorExe);
+
+    const cliBody = [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      `const installRoot = ${JSON.stringify(installRoot)};`,
+      `const repairInstallMarker = ${JSON.stringify(repairInstallMarker)};`,
+      `const repairUninstallMarker = ${JSON.stringify(repairUninstallMarker)};`,
+      "const editorRoot = path.join(installRoot, '6000.0.32f1');",
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function createModules() {",
+      "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+      "}",
+      "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('Module installation is only supported for editors installed with Unity Hub.'); exit(6); }",
+      "if (args[0] === 'uninstall') { fs.writeFileSync(repairUninstallMarker, '1'); write('uninstall could not remove unmanaged editor'); exit(6); }",
+      "if (args[0] === 'install') {",
+      "  const attempts = fs.existsSync(repairInstallMarker) ? Number(fs.readFileSync(repairInstallMarker, 'utf8')) : 0;",
+      "  fs.writeFileSync(repairInstallMarker, String(attempts + 1));",
+      "  if (!fs.existsSync(repairUninstallMarker) || attempts === 0) { write('Editor already installed'); exit(6); }",
+      "  createModules(); write('installed editor with CI modules'); exit(0);",
+      "}",
+      "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+    const stdout = out.stdout || "";
+    const combined = `${stdout}\n${out.stderr || ""}`;
+
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
+    expect(combined).toContain("Quarantining unmanaged or partial Unity 6000.0.32f1 install");
+    expect(combined).toContain(
+      "Repairing Unity 6000.0.32f1 by installing a fresh CLI-managed editor with CI modules"
+    );
+    expect(combined).toContain("Retrying Unity 6000.0.32f1 repair install");
+    expect(Number(fs.readFileSync(repairInstallMarker, "utf8"))).toBe(2);
+    expect(
+      fs.existsSync(
+        path.join(
+          editorRoot,
+          "Editor",
+          "Data",
+          "PlaybackEngines",
+          "WebGLSupport",
+          "BuildTools",
+          "Emscripten",
+          "emscripten",
+          "emcc.py"
+        )
+      )
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          editorRoot,
+          "Editor",
+          "Data",
+          "PlaybackEngines",
+          "AndroidPlayer",
+          "SDK",
+          "platform-tools",
+          "adb.exe"
+        )
+      )
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          editorRoot,
+          "Editor",
+          "Data",
+          "PlaybackEngines",
+          "LinuxStandaloneSupport",
+          "Variations",
+          "linux64_player_development_il2cpp",
+          "LinuxPlayer"
+        )
+      )
+    ).toBe(true);
+    expect(fs.readdirSync(path.join(installRoot, "_quarantine")).length).toBeGreaterThan(0);
+  });
+
+  test("repair install retries when a successful install leaves no Unity.exe", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-repair-no-editor-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    const repairInstallMarker = path.join(base, "repair-install-attempts.txt");
+    writeFakeUnityEditor(editorExe);
+
+    const cliBody = [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      `const installRoot = ${JSON.stringify(installRoot)};`,
+      `const repairInstallMarker = ${JSON.stringify(repairInstallMarker)};`,
+      "const editorRoot = path.join(installRoot, '6000.0.32f1');",
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function createModules() {",
+      "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+      "}",
+      "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('Module installation is only supported for editors installed with Unity Hub.'); exit(6); }",
+      "if (args[0] === 'uninstall') { write('metadata cleared'); exit(0); }",
+      "if (args[0] === 'install') {",
+      "  const attempts = fs.existsSync(repairInstallMarker) ? Number(fs.readFileSync(repairInstallMarker, 'utf8')) : 0;",
+      "  fs.writeFileSync(repairInstallMarker, String(attempts + 1));",
+      "  if (attempts === 0) { write('install succeeded without Unity.exe'); exit(0); }",
+      "  createModules(); write('fresh install after success-without-editor retry'); exit(0);",
+      "}",
+      "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+    const stdout = out.stdout || "";
+    const combined = `${stdout}\n${out.stderr || ""}`;
+
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
+    expect(combined).toContain("install succeeded without Unity.exe");
+    expect(combined).toContain(
+      "Retrying Unity 6000.0.32f1 repair install after successful CLI install left no resolvable Unity.exe"
+    );
+    expect(combined).toContain("fresh install after success-without-editor retry");
+    expect(Number(fs.readFileSync(repairInstallMarker, "utf8"))).toBe(2);
+  });
+
+  test("repair-disabled env var fails without quarantining a managed editor missing CI modules", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-no-repair-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    fs.mkdirSync(path.dirname(editorExe), { recursive: true });
+    writeFakeUnityEditor(editorExe);
+
+    const cliBody = [
+      `const installRoot = ${JSON.stringify(installRoot)};`,
+      "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('No modules found to install'); exit(6); }",
+      "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: installRoot + '/6000.0.32f1' }] })); exit(0); }"
+    ];
+    const env = { ...process.env, DXM_UNITY_DISABLE_EDITOR_REPAIR: "1" };
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot, env);
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    expect(out.status).not.toBe(0);
+    expect(combined).toContain("DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled");
+    expect(combined).toContain("auto-repair");
+    expect(fs.existsSync(path.join(installRoot, "_quarantine"))).toBe(false);
+    expect(fs.existsSync(editorExe)).toBe(true);
   });
 
   test("Invoke-UnityCliCapture captures spawn failures with exit code -1", () => {
@@ -377,50 +703,209 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-recover-"));
     workspaces.push(base);
     const installRoot = path.join(base, "configured-root");
-    const cliRoot = path.join(base, "cli-root");
+    const cliRoot = installRoot;
     const resolvedEditor = path.join(cliRoot, "6000.0.32f1", "Editor", "Unity.exe");
-    fs.mkdirSync(path.dirname(resolvedEditor), { recursive: true });
-    fs.writeFileSync(resolvedEditor, "stub", "utf8");
 
     const cliBody = [
+      "const fs = require('fs');",
+      "const path = require('path');",
       `const cliRoot = ${JSON.stringify(cliRoot)};`,
       `const editorRoot = ${JSON.stringify(path.dirname(path.dirname(resolvedEditor)))};`,
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function createModules() {",
+      "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+      "}",
       "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
       "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
-      "if (args.length >= 1 && args[0] === 'install') { write('Editor already installed'); exit(6); }",
+      "if (args.length >= 1 && args[0] === 'install') { createModules(); write('Editor already installed'); exit(6); }",
       "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
     ];
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const stdout = out.stdout || "";
 
-    expect(out.status).toBe(0);
+    if (out.status !== 0) {
+      throw new Error(`${out.stdout || ""}\n${out.stderr || ""}`);
+    }
     expect(stdout.trim().split(/\r?\n/).pop()).toBe(resolvedEditor);
     expect(stdout).toContain("Unity.exe is resolvable afterward");
   });
 
-  test("already-installed base editor failure without Unity.exe reports partial-install diagnostics", () => {
+  test("already-installed base editor failure without Unity.exe quarantines and retries", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-partial-"));
     workspaces.push(base);
     const installRoot = path.join(base, "configured-root");
-    const cliRoot = path.join(base, "cli-root");
+    const cliRoot = installRoot;
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const resolvedEditor = path.join(editorRoot, "Editor", "Unity.exe");
+    const attemptMarker = path.join(base, "install-attempts.txt");
+    const uninstallMarker = path.join(base, "uninstall-called.txt");
+    fs.mkdirSync(editorRoot, { recursive: true });
+    fs.writeFileSync(path.join(editorRoot, "partial-marker.txt"), "partial", "utf8");
 
     const cliBody = [
+      "const fs = require('fs');",
+      "const path = require('path');",
       `const cliRoot = ${JSON.stringify(cliRoot)};`,
+      `const editorRoot = ${JSON.stringify(editorRoot)};`,
+      `const attemptMarker = ${JSON.stringify(attemptMarker)};`,
+      `const uninstallMarker = ${JSON.stringify(uninstallMarker)};`,
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function createModules() {",
+      "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+      "}",
       "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
       "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
-      "if (args.length >= 1 && args[0] === 'install') { write('Editor already installed'); write('partial install marker'); exit(6); }",
-      "if (args.length >= 1 && args[0] === 'editors') { write('partial editor inventory'); exit(0); }"
+      "if (args.length >= 1 && args[0] === 'install') {",
+      "  const attempts = fs.existsSync(attemptMarker) ? Number(fs.readFileSync(attemptMarker, 'utf8')) : 0;",
+      "  fs.writeFileSync(attemptMarker, String(attempts + 1));",
+      "  if (!fs.existsSync(uninstallMarker)) { write('Editor already installed'); write('partial install marker'); exit(6); }",
+      "  createModules(); write('fresh install after quarantine'); exit(0);",
+      "}",
+      "if (args[0] === 'uninstall') { fs.writeFileSync(uninstallMarker, '1'); write('metadata cleared'); exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('No modules found to install'); exit(6); }",
+      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+    const stdout = out.stdout || "";
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(resolvedEditor);
+    expect(combined).toContain("Unity editor resolution diagnostics");
+    expect(combined).toContain("partial install marker");
+    expect(combined).toContain("metadata cleared");
+    expect(combined).toContain("Quarantining unmanaged or partial Unity 6000.0.32f1 install");
+    expect(combined).toContain("fresh install after quarantine");
+    expect(Number(fs.readFileSync(attemptMarker, "utf8"))).toBe(2);
+    expect(fs.readFileSync(uninstallMarker, "utf8")).toBe("1");
+    expect(fs.readdirSync(path.join(installRoot, "_quarantine")).length).toBeGreaterThan(0);
+  });
+
+  test("already-installed repair quarantines both configured and CLI getter roots", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-nested-cli-root-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const cliRoot = path.join(installRoot, "cli-root");
+    const configuredPartialRoot = path.join(installRoot, "6000.0.32f1");
+    const cliPartialRoot = path.join(cliRoot, "6000.0.32f1");
+    const editorRoot = cliPartialRoot;
+    const resolvedEditor = path.join(editorRoot, "Editor", "Unity.exe");
+    const attemptMarker = path.join(base, "install-attempts.txt");
+    const uninstallMarker = path.join(base, "uninstall-called.txt");
+    const configuredPartialMarker = path.join(configuredPartialRoot, "partial-marker.txt");
+    const cliPartialMarker = path.join(cliPartialRoot, "partial-marker.txt");
+    fs.mkdirSync(configuredPartialRoot, { recursive: true });
+    fs.mkdirSync(cliPartialRoot, { recursive: true });
+    fs.writeFileSync(configuredPartialMarker, "configured partial", "utf8");
+    fs.writeFileSync(cliPartialMarker, "cli partial", "utf8");
+
+    const cliBody = [
+      "const fs = require('fs');",
+      "const path = require('path');",
+      `const cliRoot = ${JSON.stringify(cliRoot)};`,
+      `const editorRoot = ${JSON.stringify(editorRoot)};`,
+      `const attemptMarker = ${JSON.stringify(attemptMarker)};`,
+      `const uninstallMarker = ${JSON.stringify(uninstallMarker)};`,
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function createModules() {",
+      "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+      "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+      "}",
+      "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install') {",
+      "  const attempts = fs.existsSync(attemptMarker) ? Number(fs.readFileSync(attemptMarker, 'utf8')) : 0;",
+      "  fs.writeFileSync(attemptMarker, String(attempts + 1));",
+      "  if (!fs.existsSync(uninstallMarker)) { write('Editor already installed'); write('nested partial install marker'); exit(6); }",
+      "  createModules(); write('fresh install into nested CLI root'); exit(0);",
+      "}",
+      "if (args[0] === 'uninstall') { fs.writeFileSync(uninstallMarker, '1'); write('metadata cleared'); exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('No modules found to install'); exit(6); }",
+      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+    const stdout = out.stdout || "";
+    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(resolvedEditor);
+    expect(combined).toContain("nested partial install marker");
+    expect(combined).toContain("fresh install into nested CLI root");
+    expect(fs.existsSync(configuredPartialMarker)).toBe(false);
+    expect(fs.existsSync(cliPartialMarker)).toBe(false);
+    expect(Number(fs.readFileSync(attemptMarker, "utf8"))).toBe(2);
+    expect(fs.readdirSync(path.join(installRoot, "_quarantine"))).toHaveLength(2);
+  });
+
+  test("managed-only mode refuses CLI mutations when the getter root is external", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-external-root-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const externalRoot = path.join(base, "external-cli-root");
+    const mutationMarker = path.join(base, "mutation-attempted.txt");
+
+    const cliBody = [
+      "const fs = require('fs');",
+      `const externalRoot = ${JSON.stringify(externalRoot)};`,
+      `const mutationMarker = ${JSON.stringify(mutationMarker)};`,
+      "if (args.length === 1 && args[0] === 'install-path') { write(externalRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (['install', 'install-modules', 'uninstall'].includes(args[0])) { fs.writeFileSync(mutationMarker, args.join(' ')); write('mutation attempted'); exit(9); }",
+      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [] })); exit(0); }"
     ];
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
 
     expect(out.status).not.toBe(0);
-    expect(combined).toContain("Unity editor resolution diagnostics");
-    expect(combined).toContain("partial install marker");
-    expect(combined).toContain("partial editor inventory");
-    expect(combined).toContain("partial or corrupt install");
+    expect(combined).toContain("cannot mutate editors");
+    expect(combined).toContain("outside the managed root");
+    expect(combined).toContain(externalRoot);
+    expect(fs.existsSync(mutationMarker)).toBe(false);
   });
 
   // END-TO-END leak regression. A real Unity Hub install at
@@ -450,24 +935,16 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-leak-"));
     workspaces.push(base);
 
-    // Configured install root and CLI-reported root are BOTH deliberately empty
-    // (no Unity.exe under them), so the two earlier discovery strategies --
-    // (a) the CLI-root probe and the InstallRoot half of (b) Find-UnityEditor --
-    // both miss. That forces resolution down to the ProgramFiles candidate (the
-    // SECOND half of (b)) and then the JSON strategy (c), which is exactly the
-    // ordering where a host install leaks.
     const installRoot = path.join(base, "configured-root");
-    const cliRoot = path.join(base, "cli-root");
+    const cliRoot = installRoot;
 
-    // The CONTROLLED editor we WANT resolution to land on. It is discoverable
-    // ONLY via the JSON strategy (c) -- it lives nowhere the CLI-root probe (a)
-    // or the InstallRoot/ProgramFiles candidate search (b) would find it -- so a
-    // correct hermetic run (ProgramFiles empty) reaches it, while a leaky run
-    // resolves the ProgramFiles install first and never gets here.
-    const jsonEditorRoot = path.join(base, "json-editor", "6000.0.32f1");
-    const controlledEditor = path.join(jsonEditorRoot, "Editor", "Unity.exe");
+    // The CONTROLLED editor we WANT resolution to land on. It lives under the
+    // managed install root, while a fake host install also exists under ProgramFiles.
+    const managedEditorRoot = path.join(installRoot, "6000.0.32f1");
+    const controlledEditor = path.join(managedEditorRoot, "Editor", "Unity.exe");
     fs.mkdirSync(path.dirname(controlledEditor), { recursive: true });
-    fs.writeFileSync(controlledEditor, "stub", "utf8");
+    writeFakeUnityEditor(controlledEditor);
+    createCiModuleLayout(controlledEditor);
 
     // The FAKE host Unity Hub install the script's ProgramFiles probe would find.
     // Built with OS-native separators because pwsh's Join-Path normalizes the
@@ -484,22 +961,15 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
       "Unity.exe"
     );
     fs.mkdirSync(path.dirname(leakEditor), { recursive: true });
-    fs.writeFileSync(leakEditor, "stub", "utf8");
+    writeFakeUnityEditor(leakEditor);
 
     const cliBody = [
       `const cliRoot = ${JSON.stringify(cliRoot)};`,
-      `const jsonEditorRoot = ${JSON.stringify(jsonEditorRoot)};`,
       "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
       "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
-      // The base editor install "fails" with exit 6; recovery then resolves the
-      // editor. Strategy (a) cli-root probe misses (cliRoot has no Unity.exe),
-      // so Resolve-InstalledEditor falls through to (b) Find-UnityEditor: the
-      // InstallRoot candidates miss too, leaving the ProgramFiles candidate --
-      // which a leaky env resolves to leakEditor BEFORE reaching the JSON path.
-      "if (args.length >= 1 && args[0] === 'install') { write('Editor already installed'); exit(6); }",
-      // Strategy (c): JSON reports the CONTROLLED editor root. Only reached when
-      // (b) found nothing -- i.e. when ProgramFiles is the empty sandbox dir.
-      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: jsonEditorRoot }] })); exit(0); }"
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('No modules found to install'); exit(6); }",
+      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [] })); exit(0); }"
     ];
 
     // Inject the leak-source var in BOTH the canonical and the ALL-CAPS casing.
@@ -518,7 +988,9 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const stdout = out.stdout || "";
     const combined = `${stdout}\n${out.stderr || ""}`;
 
-    expect(out.status).toBe(0);
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
     // Resolution lands on the controlled JSON-reported path...
     expect(stdout.trim().split(/\r?\n/).pop()).toBe(controlledEditor);
     // ...and the fake host install NEVER appears anywhere in the output.

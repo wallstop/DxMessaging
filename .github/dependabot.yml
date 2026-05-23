@@ -35,7 +35,7 @@ updates:
       - dependency-name: "System.Runtime.CompilerServices.Unsafe"
 
   # NuGet: SourceGenerator tests - uses newer Roslyn but ignores shared Roslyn dependencies
-  # Tests use newer Roslyn (4.14.0) than production (4.2.0), but ignoring shared Roslyn deps
+  # Tests use newer Roslyn (4.14.0) than production (3.8.0), but ignoring shared Roslyn deps
   # prevents Dependabot churn and keeps dependency versions aligned.
   - package-ecosystem: "nuget"
     directory: "/SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests"

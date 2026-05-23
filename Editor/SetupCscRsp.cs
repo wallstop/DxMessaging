@@ -31,9 +31,8 @@ namespace DxMessaging.Editor
         private static readonly string SourceGeneratorDllName =
             "WallstopStudios.DxMessaging.SourceGenerators.dll";
 
-        // The analyzer DLL is a SEPARATE assembly compiled against Roslyn 3.8.0 because Unity 2021's
-        // analyzer loader silently rejects analyzer DLLs built against Roslyn 4.x. The source-
-        // generator DLL above stays at Roslyn 4.x because it uses IIncrementalGenerator (4.0+).
+        // Both host DLLs are compiled against Roslyn 3.8.0 because Unity 2021's
+        // analyzer/source-generator loader cannot instantiate Roslyn 4.x assemblies.
         // Both DLLs ship side-by-side and both need the RoslynAnalyzer label.
         private static readonly string AnalyzerDllName = "WallstopStudios.DxMessaging.Analyzer.dll";
 
