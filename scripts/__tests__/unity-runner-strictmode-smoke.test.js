@@ -42,6 +42,8 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
+
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const RUN_CI_TESTS = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
 
@@ -49,20 +51,25 @@ const RUN_CI_TESTS = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1"
 // path. We delete the accelerator endpoint so the empty-array branch (the one
 // that triggered the StrictMode bug) is exercised. GITHUB_WORKSPACE is deleted
 // so the default -RepoRoot does not point at the real repo (we pass an explicit
-// temp RepoRoot). LOCALAPPDATA is deleted so Initialize-UnityCacheEnvironment
-// falls back to the temp cacheRoot on Windows too -- keeping the run hermetic.
-// GITHUB_ACTIONS is deleted so the in-CI creds gate cannot fire under the
-// Jest-in-CI harness (Jest itself runs with GITHUB_ACTIONS=true on the
+// temp RepoRoot). GITHUB_ACTIONS is deleted so the in-CI creds gate cannot fire
+// under the Jest-in-CI harness (Jest itself runs with GITHUB_ACTIONS=true on the
 // script-tests matrix); with the serial creds SET, $hasLicenseCreds is true and
 // activate/return run regardless. UNITY_LICENSING_SERVER is deleted because the
 // floating-server path was removed -- it must not exist in the test env.
+//
+// The host-default FOLDER vars (LOCALAPPDATA, ProgramFiles, ...) are NOT in this
+// list: run-ci-tests.ps1 probes `$env:LOCALAPPDATA` (Unity caches) and
+// `${env:ProgramFiles}` / `${env:ProgramFiles(x86)}` / `$env:LOCALAPPDATA` (the
+// Unity Licensing Client). They are neutralized hermetically via
+// sandboxHostFolderEnv (empty sandbox dirs) instead of a case-sensitive delete,
+// so a real install on a Windows host can never leak in -- the same Windows
+// case-insensitivity gotcha that bit ensure-editor.ps1's tests.
 const ENV_TO_DELETE = [
   "UNITY_ACCELERATOR_ENDPOINT",
   "UNITY_LICENSE",
   "UNITY_LICENSE_B64",
   "UNITY_LICENSE_FILE",
   "GITHUB_WORKSPACE",
-  "LOCALAPPDATA",
   "GITHUB_ACTIONS",
   "UNITY_LICENSING_SERVER"
 ];
@@ -146,10 +153,13 @@ function pwshAvailable() {
 const PWSH_PRESENT = pwshAvailable();
 
 // Build a clean env where the bug-triggering branches are hit AND the serial
-// creds are present (so activate/return run). cleanedEnv deletes the
-// path-diverging vars and then sets the three serial credentials.
-function cleanedEnv() {
-  const env = { ...process.env };
+// creds are present (so activate/return run). cleanedEnv neutralizes the
+// host-default FOLDER vars hermetically (sandboxHostFolderEnv -> empty sandbox
+// dirs under the per-run workspace, scrubbing every Windows case-variant),
+// deletes the remaining path-diverging vars, then sets the three serial
+// credentials.
+function cleanedEnv(sandboxRoot) {
+  const env = sandboxHostFolderEnv(process.env, sandboxRoot);
   for (const key of ENV_TO_DELETE) {
     delete env[key];
   }
@@ -211,7 +221,7 @@ function makeWorkspace() {
 // (set by cleanedEnv) make the script activate at start and return in the
 // finally; DXM_SMOKE_RETURN_MARKER is where the stub records each -returnlicense.
 function runScript(mode, ws, editorPath = ws.stubPath) {
-  const env = cleanedEnv();
+  const env = cleanedEnv(path.join(ws.base, "host-env-sandbox"));
   env.DXM_SMOKE_RETURN_MARKER = ws.returnMarker;
 
   return spawnSync(

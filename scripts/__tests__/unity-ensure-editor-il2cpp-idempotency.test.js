@@ -40,6 +40,8 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
+
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
 
@@ -214,16 +216,23 @@ function assertFakeUnityCliResolves(env, expectedPath) {
   );
 }
 
-function runEnsureEditorWithFakeCli(handlerLines, installRoot) {
+function runEnsureEditorWithFakeCli(handlerLines, installRoot, baseEnv = process.env) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-full-"));
   workspaces.push(base);
   const binDir = path.join(base, "bin");
   const unityPath = makeFakeUnityCli(binDir, handlerLines);
-  const env = { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ""}` };
+
+  // Hermetic host-discovery: ensure-editor.ps1 probes the host-default folder
+  // vars (`${env:ProgramFiles}\Unity\Hub\Editor\<ver>\Editor\Unity.exe`, ...).
+  // sandboxHostFolderEnv removes EVERY case-variant of those names (a plain
+  // `delete env.ProgramFiles` misses `PROGRAMFILES` on case-insensitive Windows)
+  // and points each at an EMPTY sandbox dir so a real Unity install on the host
+  // can never leak into resolution. The sandbox dirs live under this run's temp
+  // workspace.
+  const sandboxRoot = path.join(base, "host-env-sandbox");
+  const env = sandboxHostFolderEnv(baseEnv, sandboxRoot);
+  env.PATH = `${binDir}${path.delimiter}${baseEnv.PATH || ""}`;
   delete env.UNITY_EDITOR_INSTALL_ROOT;
-  delete env.ProgramFiles;
-  delete env["ProgramFiles(x86)"];
-  delete env.LOCALAPPDATA;
   env.DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS = "0";
   assertFakeUnityCliResolves(env, unityPath);
   return spawnSync(
@@ -273,6 +282,13 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     console.warn(
       "[il2cpp-idempotency] pwsh not found on PATH; skipping behavioral probe (CI runners have pwsh)."
     );
+    // A `test.skip` placeholder is registered ONLY for the two Test-Il2CppModulePresent
+    // probe cases (count parity for the parametrized .each above). Every behavioral
+    // test AFTER this `return` (the Add-WindowsIl2CppModule cases, the recover/partial
+    // cases, and the ProgramFiles leak regression) is intentionally left
+    // unregistered when pwsh is absent -- they are consistent with each other, and
+    // the always-on "the script under test exists" sanity test (above) guarantees a
+    // zero-coverage regression cannot hide.
     test.skip.each([
       ["non-existent editor path", false],
       ["fabricated IL2CPP variations tree", true]
@@ -401,5 +417,108 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(combined).toContain("partial install marker");
     expect(combined).toContain("partial editor inventory");
     expect(combined).toContain("partial or corrupt install");
+  });
+
+  // END-TO-END leak regression. A real Unity Hub install at
+  // `<fakePF>\Unity\Hub\Editor\<ver>\Editor\Unity.exe` is exactly what
+  // ensure-editor.ps1's host-default probe finds when `${env:ProgramFiles}` is
+  // populated. We inject ProgramFiles=<fakePF> and run through the sandbox helper;
+  // resolution MUST land on the controlled JSON-reported editor and NEVER on the
+  // fake install -- proving removal + sandboxing works through the REAL ps1.
+  //
+  // What this test does and does NOT prove (be precise about the casing claim):
+  //   - It proves the sandbox helper is actually wired and effective end-to-end:
+  //     a TOTAL bypass (e.g. passing process.env straight through, so ProgramFiles
+  //     is left populated) makes the fake install leak in and FAILS this test on
+  //     ANY OS.
+  //   - It does NOT, on Linux, distinguish the case-SENSITIVE-delete bug from the
+  //     correct fix. We inject a case-variant PROGRAMFILES=<fakePF> alongside the
+  //     canonical ProgramFiles, but Linux pwsh reads env-var names CASE-SENSITIVELY,
+  //     so a surviving PROGRAMFILES is invisible to `${env:ProgramFiles}` in the
+  //     child -- under a case-sensitive `delete env.ProgramFiles` simulation this
+  //     test stays GREEN on Linux. The case-INSENSITIVE-removal proof (the actual
+  //     crux of the fix) lives in the golden unit test
+  //     scripts/lib/__tests__/spawn-env-sandbox.test.js, which asserts directly
+  //     that every case-variant key is removed. The PROGRAMFILES injection is kept
+  //     because it is harmless here and MEANINGFUL on Windows (where it reproduces
+  //     the exact case-miss), but it does not strengthen the Linux assertion.
+  test("a host Unity install in ProgramFiles never leaks into resolution (hermetic sandbox)", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-leak-"));
+    workspaces.push(base);
+
+    // Configured install root and CLI-reported root are BOTH deliberately empty
+    // (no Unity.exe under them), so the two earlier discovery strategies --
+    // (a) the CLI-root probe and the InstallRoot half of (b) Find-UnityEditor --
+    // both miss. That forces resolution down to the ProgramFiles candidate (the
+    // SECOND half of (b)) and then the JSON strategy (c), which is exactly the
+    // ordering where a host install leaks.
+    const installRoot = path.join(base, "configured-root");
+    const cliRoot = path.join(base, "cli-root");
+
+    // The CONTROLLED editor we WANT resolution to land on. It is discoverable
+    // ONLY via the JSON strategy (c) -- it lives nowhere the CLI-root probe (a)
+    // or the InstallRoot/ProgramFiles candidate search (b) would find it -- so a
+    // correct hermetic run (ProgramFiles empty) reaches it, while a leaky run
+    // resolves the ProgramFiles install first and never gets here.
+    const jsonEditorRoot = path.join(base, "json-editor", "6000.0.32f1");
+    const controlledEditor = path.join(jsonEditorRoot, "Editor", "Unity.exe");
+    fs.mkdirSync(path.dirname(controlledEditor), { recursive: true });
+    fs.writeFileSync(controlledEditor, "stub", "utf8");
+
+    // The FAKE host Unity Hub install the script's ProgramFiles probe would find.
+    // Built with OS-native separators because pwsh's Join-Path normalizes the
+    // backslash segments to the native separator on every platform, so this is
+    // the literal path Test-Path -LiteralPath probes.
+    const fakeProgramFiles = path.join(base, "fake-program-files");
+    const leakEditor = path.join(
+      fakeProgramFiles,
+      "Unity",
+      "Hub",
+      "Editor",
+      "6000.0.32f1",
+      "Editor",
+      "Unity.exe"
+    );
+    fs.mkdirSync(path.dirname(leakEditor), { recursive: true });
+    fs.writeFileSync(leakEditor, "stub", "utf8");
+
+    const cliBody = [
+      `const cliRoot = ${JSON.stringify(cliRoot)};`,
+      `const jsonEditorRoot = ${JSON.stringify(jsonEditorRoot)};`,
+      "if (args.length === 1 && args[0] === 'install-path') { write(cliRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      // The base editor install "fails" with exit 6; recovery then resolves the
+      // editor. Strategy (a) cli-root probe misses (cliRoot has no Unity.exe),
+      // so Resolve-InstalledEditor falls through to (b) Find-UnityEditor: the
+      // InstallRoot candidates miss too, leaving the ProgramFiles candidate --
+      // which a leaky env resolves to leakEditor BEFORE reaching the JSON path.
+      "if (args.length >= 1 && args[0] === 'install') { write('Editor already installed'); exit(6); }",
+      // Strategy (c): JSON reports the CONTROLLED editor root. Only reached when
+      // (b) found nothing -- i.e. when ProgramFiles is the empty sandbox dir.
+      "if (args.length >= 1 && args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: jsonEditorRoot }] })); exit(0); }"
+    ];
+
+    // Inject the leak-source var in BOTH the canonical and the ALL-CAPS casing.
+    // The canonical ProgramFiles is what makes this test meaningful on every OS;
+    // the ALL-CAPS PROGRAMFILES reproduces the exact Windows case-insensitive miss
+    // (it is invisible to Linux pwsh, so it only adds discriminating power on
+    // Windows -- see the test's header comment). The sandbox helper inside
+    // runEnsureEditorWithFakeCli must scrub every casing.
+    const leakyBaseEnv = {
+      ...process.env,
+      ProgramFiles: fakeProgramFiles,
+      PROGRAMFILES: fakeProgramFiles
+    };
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot, leakyBaseEnv);
+    const stdout = out.stdout || "";
+    const combined = `${stdout}\n${out.stderr || ""}`;
+
+    expect(out.status).toBe(0);
+    // Resolution lands on the controlled JSON-reported path...
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(controlledEditor);
+    // ...and the fake host install NEVER appears anywhere in the output.
+    expect(combined).not.toContain(leakEditor);
+    expect(combined).not.toContain(fakeProgramFiles);
   });
 });

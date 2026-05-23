@@ -14,6 +14,8 @@ const path = require("path");
 const yaml = require("js-yaml");
 const { spawnSync } = require("child_process");
 
+const { sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
+
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const CI_RUNNER = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
 
@@ -109,6 +111,13 @@ describe("generated Unity test harness contract", () => {
           fs.writeFileSync(path.join(repoRoot, "Editor", "Analyzers", dllName), "stub", "utf8");
         }
 
+        // Hermetic by construction: run-ci-tests.ps1 probes host-default FOLDER
+        // vars (`$env:LOCALAPPDATA`, `${env:ProgramFiles}`, ...). Even though
+        // -GenerateOnly exits before those probes today, build the spawn env via
+        // sandboxHostFolderEnv (empty sandbox dirs under this run's temp base) so
+        // this spawn stays inside the hermetic discipline and a future code path
+        // that probes the host before -GenerateOnly cannot leak a real install.
+        const hostEnvSandbox = path.join(base, "host-env-sandbox");
         const run = spawnSync(
           "pwsh",
           [
@@ -130,7 +139,11 @@ describe("generated Unity test harness contract", () => {
             project,
             "-GenerateOnly"
           ],
-          { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }
+          {
+            env: sandboxHostFolderEnv(process.env, hostEnvSandbox),
+            encoding: "utf8",
+            maxBuffer: 16 * 1024 * 1024
+          }
         );
 
         expect(run.status).toBe(0);
