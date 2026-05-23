@@ -32,6 +32,8 @@
   "main": "README.md",
   "files": [
     "Editor/**",
+    "Editor/Analyzers/*.dll",
+    "Editor/Analyzers/*.dll.meta",
     "Runtime/**",
     "Samples~/**",
     "SourceGenerators/Directory.Build.props",

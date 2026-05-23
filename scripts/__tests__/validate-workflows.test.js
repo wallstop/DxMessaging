@@ -19,6 +19,8 @@ const {
   findIgnoredPathViolations,
   extractRunBlocks,
   findLockfileInstallViolations,
+  findPreCommitInstallHookWriterViolations,
+  findDxMessagingAnalyzerPackageViolations,
   detectBashSyntaxPattern,
   findWindowsBashPortabilityViolations,
   findForbiddenRunsOnGroupViolations,
@@ -431,6 +433,92 @@ describe("run block lockfile policy", () => {
     const optionalSuffixShorthand = `i(?:${"n" + "stall"})?`;
 
     expect(source).not.toContain(optionalSuffixShorthand);
+  });
+});
+
+describe("pre-commit hook environment policy", () => {
+  test.each([
+    {
+      name: "flags pre-commit install --install-hooks",
+      lines: ["steps:", "  - run: pre-commit install --install-hooks"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags multiline pre-commit install --install-hooks",
+      lines: [
+        "steps:",
+        "  - run: |",
+        "      python -m pip install pre-commit",
+        "      pre-commit install --install-hooks"
+      ],
+      expectedViolations: 1
+    },
+    {
+      name: "flags python module pre-commit install --install-hooks",
+      lines: ["steps:", "  - run: python -m pre_commit install --install-hooks"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags python3 module pre-commit install --install-hooks",
+      lines: ["steps:", "  - run: python3 -m pre_commit install --install-hooks"],
+      expectedViolations: 1
+    },
+    {
+      name: "allows pre-commit install-hooks",
+      lines: ["steps:", "  - run: pre-commit install-hooks"],
+      expectedViolations: 0
+    },
+    {
+      name: "allows pre-commit hook execution",
+      lines: ["steps:", "  - run: pre-commit run --hook-stage pre-push --all-files"],
+      expectedViolations: 0
+    }
+  ])("$name", ({ lines, expectedViolations }) => {
+    const violations = findPreCommitInstallHookWriterViolations("test.yml", lines);
+
+    expect(violations).toHaveLength(expectedViolations);
+  });
+});
+
+describe("DxMessaging analyzer package policy", () => {
+  test.each([
+    {
+      name: "allows explicit analyzer dll package entries",
+      packageJson: {
+        files: ["Editor/**", "Editor/Analyzers/*.dll", "Editor/Analyzers/*.dll.meta"]
+      },
+      expectedViolations: 0
+    },
+    {
+      name: "flags missing dll entry",
+      packageJson: {
+        files: ["Editor/**", "Editor/Analyzers/*.dll.meta"]
+      },
+      expectedViolations: 1
+    },
+    {
+      name: "flags missing dll meta entry",
+      packageJson: {
+        files: ["Editor/**", "Editor/Analyzers/*.dll"]
+      },
+      expectedViolations: 1
+    },
+    {
+      name: "flags missing files array",
+      packageJson: {},
+      expectedViolations: 2
+    }
+  ])("$name", ({ packageJson, expectedViolations }) => {
+    const lines = JSON.stringify(packageJson, null, 2).split("\n");
+    const violations = findDxMessagingAnalyzerPackageViolations("package.json", lines);
+
+    expect(violations).toHaveLength(expectedViolations);
+  });
+
+  test("ignores non-package files", () => {
+    const lines = JSON.stringify({ files: [] }, null, 2).split("\n");
+
+    expect(findDxMessagingAnalyzerPackageViolations("workflow.yml", lines)).toEqual([]);
   });
 });
 

@@ -45,7 +45,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const { sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
+const { prependPathEnv, sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
@@ -235,8 +235,7 @@ function runEnsureEditorWithFakeCli(handlerLines, installRoot, baseEnv = process
   // can never leak into resolution. The sandbox dirs live under this run's temp
   // workspace.
   const sandboxRoot = path.join(base, "host-env-sandbox");
-  const env = sandboxHostFolderEnv(baseEnv, sandboxRoot);
-  env.PATH = `${binDir}${path.delimiter}${baseEnv.PATH || ""}`;
+  const env = prependPathEnv(sandboxHostFolderEnv(baseEnv, sandboxRoot), binDir);
   delete env.UNITY_EDITOR_INSTALL_ROOT;
   env.DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS = "0";
   assertFakeUnityCliResolves(env, unityPath);

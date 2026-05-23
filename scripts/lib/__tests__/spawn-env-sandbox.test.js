@@ -31,7 +31,11 @@ const {
   sandboxHostFolderEnv,
   HOST_FOLDER_CANONICAL_VARS,
   HOST_FOLDER_DENYLIST,
-  sandboxDirNameFor
+  sandboxDirNameFor,
+  findPathEnvKey,
+  getPathDelimiterForPlatform,
+  getPathEnvValue,
+  prependPathEnv
 } = require("../spawn-env-sandbox");
 
 const workspaces = [];
@@ -186,5 +190,95 @@ describe("sandboxHostFolderEnv", () => {
     expect(sandboxDirNameFor("ProgramFiles(x86)")).toBe("ProgramFiles_x86_");
     // The (x86) variant must NOT collapse to the same leaf as the base var.
     expect(sandboxDirNameFor("ProgramFiles(x86)")).not.toBe(sandboxDirNameFor("ProgramFiles"));
+  });
+});
+
+describe("PATH environment helpers", () => {
+  test.each([
+    { platform: "win32", expected: ";" },
+    { platform: "linux", expected: ":" },
+    { platform: "darwin", expected: ":" }
+  ])("getPathDelimiterForPlatform($platform) -> $expected", ({ platform, expected }) => {
+    expect(getPathDelimiterForPlatform(platform)).toBe(expected);
+  });
+
+  test.each([
+    {
+      name: "canonical POSIX PATH",
+      env: { PATH: "/usr/bin" },
+      expectedKey: "PATH",
+      expectedValue: "/usr/bin"
+    },
+    {
+      name: "Windows Path casing",
+      env: { Path: "C:\\Windows\\System32" },
+      expectedKey: "Path",
+      expectedValue: "C:\\Windows\\System32"
+    },
+    {
+      name: "Windows all-caps PATH casing",
+      env: { PATH: "C:\\Windows\\System32" },
+      expectedKey: "PATH",
+      expectedValue: "C:\\Windows\\System32"
+    },
+    {
+      name: "missing PATH",
+      env: { HOME: "/tmp" },
+      expectedKey: null,
+      expectedValue: ""
+    }
+  ])("findPathEnvKey/getPathEnvValue handle $name", ({ env, expectedKey, expectedValue }) => {
+    expect(findPathEnvKey(env)).toBe(expectedKey);
+    expect(getPathEnvValue(env)).toBe(expectedValue);
+  });
+
+  test("prependPathEnv preserves Windows Path casing so child process lookup still works", () => {
+    const result = prependPathEnv(
+      {
+        Path: "C:\\Windows\\System32",
+        PATHEXT: ".COM;.EXE;.BAT;.CMD"
+      },
+      "C:\\fake-bin",
+      { platform: "win32" }
+    );
+
+    expect(result.Path).toBe("C:\\fake-bin;C:\\Windows\\System32");
+    expect(result.PATH).toBeUndefined();
+    expect(result.PATHEXT).toBe(".COM;.EXE;.BAT;.CMD");
+  });
+
+  test("prependPathEnv collapses duplicate PATH casings to one deterministic key", () => {
+    const result = prependPathEnv(
+      {
+        PATH: "/usr/bin",
+        Path: "C:\\Windows\\System32",
+        HOME: "/tmp"
+      },
+      "/fake-bin",
+      { delimiter: ":", platform: "linux" }
+    );
+
+    expect(result.PATH).toBe("/fake-bin:/usr/bin");
+    expect(result.Path).toBeUndefined();
+    expect(result.HOME).toBe("/tmp");
+  });
+
+  test("prependPathEnv creates a platform-appropriate PATH key when none exists", () => {
+    expect(prependPathEnv({ HOME: "/tmp" }, "/fake-bin", { platform: "linux" }).PATH).toBe(
+      "/fake-bin"
+    );
+    expect(prependPathEnv({ TEMP: "C:\\Temp" }, "C:\\fake-bin", { platform: "win32" }).Path).toBe(
+      "C:\\fake-bin"
+    );
+  });
+
+  test("prependPathEnv does not mutate the input env", () => {
+    const env = { Path: "C:\\Windows\\System32" };
+    const snapshot = JSON.stringify(env);
+
+    const result = prependPathEnv(env, "C:\\fake-bin", { delimiter: ";", platform: "win32" });
+
+    expect(JSON.stringify(env)).toBe(snapshot);
+    expect(result).not.toBe(env);
   });
 });

@@ -164,7 +164,8 @@ function New-CscRspContent {
     foreach ($dllName in $DxMessagingAnalyzerDllNames) {
         $sourcePath = Join-Path $Root "Editor\Analyzers\$dllName"
         if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
-            $lines.Add("-a:`"Packages/$PackageName/Editor/Analyzers/$dllName`"")
+            $analyzerPath = ConvertTo-UnityFileUriPath -Path (Resolve-FullPath -Path $sourcePath)
+            $lines.Add("-a:`"$analyzerPath`"")
         } elseif ($RequiredDxMessagingAnalyzerDllNames -contains $dllName) {
             $missingRequired.Add($sourcePath)
         }

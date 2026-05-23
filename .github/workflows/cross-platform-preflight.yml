@@ -88,8 +88,8 @@ jobs:
       - name: Install pre-commit
         run: python -m pip install pre-commit
 
-      - name: Install pre-commit hooks
-        run: pre-commit install --install-hooks
+      - name: Install pre-commit hook environments
+        run: pre-commit install-hooks
 
       - name: Run cross-platform spawn + host-env hermeticity regression suite
         # Targeted Jest run: these are the tests that regression-proof the

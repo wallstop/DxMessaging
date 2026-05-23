@@ -116,6 +116,16 @@ function parseYamlBoolean(rawValue) {
   return null;
 }
 
+function findLineNumberContaining(lines, needle) {
+  for (let index = 0; index < lines.length; index++) {
+    if (lines[index].includes(needle)) {
+      return index + 1;
+    }
+  }
+
+  return 0;
+}
+
 function resolveWorkflowLineLengthPolicy(repoRoot = REPO_ROOT) {
   const policy = {
     max: DEFAULT_WORKFLOW_LINE_LENGTH,
@@ -616,6 +626,81 @@ function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) 
         )
       );
     }
+  }
+
+  return violations;
+}
+
+function findPreCommitInstallHookWriterViolations(relativePath, lines) {
+  const violations = [];
+  const runBlocks = extractRunBlocks(lines);
+
+  for (const block of runBlocks) {
+    const invokesPreCommitInstall =
+      /\bpre-commit\s+install\b/.test(block.text) ||
+      /\b(?:python(?:\d+(?:\.\d+)?)?|py)\s+-m\s+pre_commit\s+install\b/.test(block.text);
+
+    if (!invokesPreCommitInstall) {
+      continue;
+    }
+    if (!/(^|\s)--install-hooks(?:\s|$)/.test(block.text)) {
+      continue;
+    }
+
+    violations.push(
+      new Violation(
+        relativePath,
+        block.startLine,
+        "pre-commit install --install-hooks",
+        "Do not run `pre-commit install --install-hooks` in CI. This repo owns native hooks through core.hooksPath=scripts/hooks, and pre-commit refuses to install hook scripts when core.hooksPath is set. Use `pre-commit install-hooks` to create hook environments only.",
+        "error"
+      )
+    );
+  }
+
+  return violations;
+}
+
+function findDxMessagingAnalyzerPackageViolations(relativePath, lines) {
+  const violations = [];
+
+  if (relativePath !== "package.json") {
+    return violations;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(lines.join("\n"));
+  } catch (error) {
+    violations.push(
+      new Violation(
+        relativePath,
+        0,
+        "package.json",
+        `Unable to parse package.json while validating analyzer packaging: ${error.message}`,
+        "error"
+      )
+    );
+    return violations;
+  }
+
+  const files = Array.isArray(parsed.files) ? parsed.files : [];
+  const requiredAnalyzerEntries = ["Editor/Analyzers/*.dll", "Editor/Analyzers/*.dll.meta"];
+
+  for (const requiredEntry of requiredAnalyzerEntries) {
+    if (files.includes(requiredEntry)) {
+      continue;
+    }
+
+    violations.push(
+      new Violation(
+        relativePath,
+        findLineNumberContaining(lines, `"files"`) || 1,
+        requiredEntry,
+        `package.json files must include '${requiredEntry}' so Unity CI and UPM consumers receive the analyzer DLLs referenced by csc.rsp.`,
+        "error"
+      )
+    );
   }
 
   return violations;
@@ -1801,9 +1886,7 @@ function findUnityLockTimeoutViolations(relativePath, lines) {
 
   for (const job of jobs) {
     const steps = extractJobSteps(lines, job);
-    const acquireStep = steps.find(
-      (step) => step.uses === ORGANIZATION_BUILD_LOCK_ACQUIRE_USES
-    );
+    const acquireStep = steps.find((step) => step.uses === ORGANIZATION_BUILD_LOCK_ACQUIRE_USES);
 
     if (!acquireStep) {
       continue;
@@ -2554,7 +2637,10 @@ function findUnityGameCiLockAndPreflightViolations(relativePath, lines) {
         );
       }
 
-      if (acquire && acquire.env.get("BUILD_LOCK_TOKEN") !== "${{ secrets.ORG_BUILD_LOCK_TOKEN }}") {
+      if (
+        acquire &&
+        acquire.env.get("BUILD_LOCK_TOKEN") !== "${{ secrets.ORG_BUILD_LOCK_TOKEN }}"
+      ) {
         violations.push(
           new Violation(
             relativePath,
@@ -3589,6 +3675,8 @@ function validateWorkflow(filePath, options = {}) {
     const packageLockIgnored = isIgnoredPathFn(repoRoot, "package-lock.json");
     violations.push(...findLockfileInstallViolations(relativePath, lines, packageLockIgnored));
 
+    violations.push(...findPreCommitInstallHookWriterViolations(relativePath, lines));
+
     violations.push(...findWindowsBashPortabilityViolations(relativePath, lines));
 
     violations.push(...findForbiddenRunsOnGroupViolations(relativePath, lines));
@@ -3670,6 +3758,14 @@ function main() {
     allViolations.push(...violations);
   });
 
+  const packageJsonPath = path.join(REPO_ROOT, "package.json");
+  if (fs.existsSync(packageJsonPath)) {
+    const packageJsonLines = normalizeToLf(fs.readFileSync(packageJsonPath, "utf8")).split("\n");
+    allViolations.push(
+      ...findDxMessagingAnalyzerPackageViolations("package.json", packageJsonLines)
+    );
+  }
+
   allViolations.push(...validatePreCommitConfigLineLengths());
 
   const errors = allViolations.filter((v) => v.severity === "error");
@@ -3717,6 +3813,8 @@ if (typeof module !== "undefined" && module.exports) {
     findIgnoredPathViolations,
     extractRunBlocks,
     findLockfileInstallViolations,
+    findPreCommitInstallHookWriterViolations,
+    findDxMessagingAnalyzerPackageViolations,
     extractJobs,
     extractWorkflowDefaultsShell,
     extractJobDefaultsShell,

@@ -78,7 +78,8 @@ describe("generated Unity test harness contract", () => {
       expect(content).toContain("WallstopStudios.DxMessaging.SourceGenerators.dll");
       expect(content).toContain("WallstopStudios.DxMessaging.Analyzer.dll");
       expect(content).toContain("Missing required DxMessaging analyzer DLL(s)");
-      expect(content).toContain('-a:`"Packages/$PackageName/Editor/Analyzers/$dllName`"');
+      expect(content).toContain("Resolve-FullPath -Path $sourcePath");
+      expect(content).toContain('-a:`"$analyzerPath`"');
       expect(content).toContain('-additionalfile:`"$ignoreSidecarRelativePath`"');
     });
 
@@ -150,12 +151,14 @@ describe("generated Unity test harness contract", () => {
         const rspPath = path.join(project, "Assets", "csc.rsp");
         expect(fs.existsSync(rspPath)).toBe(true);
         const rsp = fs.readFileSync(rspPath, "utf8");
-        expect(rsp).toContain(
-          '-a:"Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll"'
-        );
-        expect(rsp).toContain(
-          '-a:"Packages/com.wallstop-studios.dxmessaging/Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll"'
-        );
+        const sourceGeneratorPath = path
+          .join(repoRoot, "Editor", "Analyzers", "WallstopStudios.DxMessaging.SourceGenerators.dll")
+          .replace(/\\/g, "/");
+        const analyzerPath = path
+          .join(repoRoot, "Editor", "Analyzers", "WallstopStudios.DxMessaging.Analyzer.dll")
+          .replace(/\\/g, "/");
+        expect(rsp).toContain(`-a:"${sourceGeneratorPath}"`);
+        expect(rsp).toContain(`-a:"${analyzerPath}"`);
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }

@@ -71,8 +71,8 @@ jobs:
           dotnet --info
           dotnet tool list
 
-      - name: Install pre-commit hooks
-        run: pre-commit install --install-hooks
+      - name: Install pre-commit hook environments
+        run: pre-commit install-hooks
 
       - name: Warm up the hook caches (first run is always cold)
         run: |

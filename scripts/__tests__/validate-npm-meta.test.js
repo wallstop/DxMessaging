@@ -17,6 +17,22 @@ const { buildSpawnInvocation } = require("../lib/shell-command");
 // spawnPlatformCommandSync. Derive expectations from buildSpawnInvocation so
 // the assertion tracks production on every platform.
 const NPM_PACK_ARGS = ["pack", "--json", "--dry-run", "--ignore-scripts"];
+const REQUIRED_ANALYZER_FILES = [
+  "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll",
+  "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll.meta",
+  "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll",
+  "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll.meta",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.dll",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.dll.meta",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.CSharp.dll",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.CSharp.dll.meta",
+  "Editor/Analyzers/System.Reflection.Metadata.dll",
+  "Editor/Analyzers/System.Reflection.Metadata.dll.meta",
+  "Editor/Analyzers/System.Runtime.CompilerServices.Unsafe.dll",
+  "Editor/Analyzers/System.Runtime.CompilerServices.Unsafe.dll.meta",
+  "Editor/Analyzers/System.Collections.Immutable.dll",
+  "Editor/Analyzers/System.Collections.Immutable.dll.meta"
+];
 
 function withPlatform(platform, fn) {
   const original = Object.getOwnPropertyDescriptor(process, "platform");
@@ -41,6 +57,7 @@ const {
   validateFilesHaveMetaFiles,
   validateNoBuildArtifactsInTarball,
   validatePublishedFilesArePairedWithMetas,
+  validateRequiredAnalyzerFilesInTarball,
   validateNpmMeta
 } = require("../validate-npm-meta.js");
 
@@ -684,9 +701,12 @@ describe("validate-npm-meta", () => {
               { path: "Runtime/Core.meta" },
               { path: "Runtime/Core/MessageHandler.cs" },
               { path: "Runtime/Core/MessageHandler.cs.meta" },
+              { path: "Editor.meta" },
+              { path: "Editor/Analyzers.meta" },
               { path: ".unity-test-project.meta" },
               { path: ".unity-test-project/Packages/manifest.json" },
-              { path: ".unity-test-project/Packages/manifest.json.meta" }
+              { path: ".unity-test-project/Packages/manifest.json.meta" },
+              ...REQUIRED_ANALYZER_FILES.map((file) => ({ path: file }))
             ]
           }
         ]),
@@ -714,6 +734,31 @@ describe("validate-npm-meta", () => {
           file: ".unity-test-project/Packages/manifest.json.meta",
           message:
             "Development-only file '.unity-test-project/Packages/manifest.json.meta' must not be included in the npm package"
+        }
+      ]);
+    });
+  });
+
+  describe("required analyzer package files", () => {
+    test("accepts the required analyzer DLLs and meta files from the tarball list", () => {
+      const result = validateRequiredAnalyzerFilesInTarball(REQUIRED_ANALYZER_FILES);
+
+      expect(result).toEqual({ valid: true, errors: [] });
+    });
+
+    test("flags missing analyzer DLLs from the actual tarball file list", () => {
+      const files = REQUIRED_ANALYZER_FILES.filter(
+        (file) => file !== "Editor/Analyzers/Microsoft.CodeAnalysis.dll"
+      );
+
+      const result = validateRequiredAnalyzerFilesInTarball(files);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual([
+        {
+          type: "missing-required-analyzer-file",
+          file: "Editor/Analyzers/Microsoft.CodeAnalysis.dll",
+          message: expect.stringContaining("Tarball is missing required analyzer file")
         }
       ]);
     });

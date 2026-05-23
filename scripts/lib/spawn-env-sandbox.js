@@ -48,6 +48,59 @@ function sandboxDirNameFor(varName) {
   return varName.replace(/[^A-Za-z0-9]+/g, "_");
 }
 
+function findPathEnvKey(env) {
+  if (!env || typeof env !== "object") {
+    return null;
+  }
+
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "path") {
+      return key;
+    }
+  }
+
+  return null;
+}
+
+function getPathEnvValue(env) {
+  const key = findPathEnvKey(env);
+  return key ? env[key] || "" : "";
+}
+
+function getPathDelimiterForPlatform(platform) {
+  return platform === "win32" ? ";" : ":";
+}
+
+function prependPathEnv(baseEnv = process.env, pathSegment, options = {}) {
+  if (typeof pathSegment !== "string" || pathSegment.length === 0) {
+    throw new Error("prependPathEnv: pathSegment must be a non-empty string.");
+  }
+
+  const platform = typeof options.platform === "string" ? options.platform : process.platform;
+  const delimiter =
+    typeof options.delimiter === "string"
+      ? options.delimiter
+      : getPathDelimiterForPlatform(platform);
+  const existingPathKey = findPathEnvKey(baseEnv);
+  const targetPathKey = existingPathKey || (platform === "win32" ? "Path" : "PATH");
+  const existingPathValue = getPathEnvValue(baseEnv);
+
+  const result = {};
+  for (const [key, value] of Object.entries(baseEnv || {})) {
+    if (key.toLowerCase() === "path") {
+      continue;
+    }
+    result[key] = value;
+  }
+
+  result[targetPathKey] =
+    existingPathValue && existingPathValue.length > 0
+      ? `${pathSegment}${delimiter}${existingPathValue}`
+      : pathSegment;
+
+  return result;
+}
+
 /**
  * Build a hermetic spawn environment in which every host-default FOLDER variable
  * points at a DISTINCT EMPTY sandbox directory instead of a real machine path.
@@ -137,5 +190,9 @@ module.exports = {
   sandboxHostFolderEnv,
   HOST_FOLDER_CANONICAL_VARS,
   HOST_FOLDER_DENYLIST,
-  sandboxDirNameFor
+  sandboxDirNameFor,
+  findPathEnvKey,
+  getPathDelimiterForPlatform,
+  getPathEnvValue,
+  prependPathEnv
 };

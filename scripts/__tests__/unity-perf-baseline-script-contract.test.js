@@ -5,6 +5,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const { prependPathEnv } = require("../lib/spawn-env-sandbox");
+
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SCRIPT_PATH = path.join(REPO_ROOT, "scripts", "unity", "capture-perf-baseline.ps1");
 const BENCHMARK_PATH = path.join(
@@ -106,18 +108,22 @@ function makeTempToolDir() {
 }
 
 function runCapture(args, tools, extraEnv = {}) {
-  return childProcess.spawnSync(REAL_PWSH, ["-NoProfile", "-File", SCRIPT_PATH, ...args], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    env: {
+  const env = prependPathEnv(
+    {
       ...process.env,
       ...extraEnv,
       FAKE_NODE_MARKER: tools.nodeMarker,
       FAKE_PWSH_MARKER: tools.pwshMarker,
       FAKE_REAL_NODE: process.execPath,
-      PATH: `${tools.binDir}${path.delimiter}${process.env.PATH}`,
       PATHEXT: process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD"
-    }
+    },
+    tools.binDir
+  );
+
+  return childProcess.spawnSync(REAL_PWSH, ["-NoProfile", "-File", SCRIPT_PATH, ...args], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    env
   });
 }
 

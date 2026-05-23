@@ -397,6 +397,23 @@ const rootShippedFilesRequiringMeta = new Set([
 // allowlist entry (or vice versa) is the regression vector this validator is meant to catch.
 const sourceGeneratorTrackedNonCodeFiles = new Set(["SourceGenerators/Directory.Build.props"]);
 
+const requiredAnalyzerPackageFiles = [
+  "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll",
+  "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll.meta",
+  "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll",
+  "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll.meta",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.dll",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.dll.meta",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.CSharp.dll",
+  "Editor/Analyzers/Microsoft.CodeAnalysis.CSharp.dll.meta",
+  "Editor/Analyzers/System.Reflection.Metadata.dll",
+  "Editor/Analyzers/System.Reflection.Metadata.dll.meta",
+  "Editor/Analyzers/System.Runtime.CompilerServices.Unsafe.dll",
+  "Editor/Analyzers/System.Runtime.CompilerServices.Unsafe.dll.meta",
+  "Editor/Analyzers/System.Collections.Immutable.dll",
+  "Editor/Analyzers/System.Collections.Immutable.dll.meta"
+];
+
 /**
  * Determine whether a packaged path is "Unity-relevant" -- i.e. Unity will look
  * for a `.meta` partner for it during asset import. This intentionally mirrors
@@ -542,6 +559,27 @@ function validatePublishedFilesArePairedWithMetas(tarballFiles) {
   return { valid: errors.length === 0, errors };
 }
 
+function validateRequiredAnalyzerFilesInTarball(tarballFiles) {
+  const fileSet = new Set(tarballFiles.map((file) => normalizeTarballPath(file)));
+  const errors = [];
+
+  for (const file of requiredAnalyzerPackageFiles) {
+    if (fileSet.has(file)) {
+      continue;
+    }
+
+    errors.push({
+      type: "missing-required-analyzer-file",
+      file,
+      message:
+        `Tarball is missing required analyzer file '${file}'. ` +
+        "The generated Unity csc.rsp references DxMessaging analyzer DLLs directly; missing DLLs or .meta files break Unity package imports and CI compilation."
+    });
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 /**
  * Validate that development-only repository paths are not published.
  * @param {string[]} files - List of files in the package
@@ -648,13 +686,28 @@ function validateNpmMeta(options = {}) {
     console.log();
   }
 
+  console.log("Checking required analyzer DLLs are included in the tarball...");
+  const requiredAnalyzerResult = validateRequiredAnalyzerFilesInTarball(files);
+  if (requiredAnalyzerResult.valid) {
+    console.log("✓ Required analyzer DLLs and .meta files are included in the tarball\n");
+  } else {
+    console.log(
+      `✗ Found ${requiredAnalyzerResult.errors.length} missing analyzer file(s) in tarball:\n`
+    );
+    for (const error of requiredAnalyzerResult.errors) {
+      console.log(`  - ${error.message}`);
+    }
+    console.log();
+  }
+
   // Summary
   const allValid =
     orphanedResult.valid &&
     missingResult.valid &&
     developmentFilesResult.valid &&
     buildArtifactResult.valid &&
-    tarballMetaPairingResult.valid;
+    tarballMetaPairingResult.valid &&
+    requiredAnalyzerResult.valid;
   if (allValid) {
     console.log("✓ NPM package meta file validation passed!");
     return { valid: true, errors: [] };
@@ -665,7 +718,8 @@ function validateNpmMeta(options = {}) {
       ...missingResult.errors,
       ...developmentFilesResult.errors,
       ...buildArtifactResult.errors,
-      ...tarballMetaPairingResult.errors
+      ...tarballMetaPairingResult.errors,
+      ...requiredAnalyzerResult.errors
     ];
 
     if (options.check) {
@@ -699,5 +753,6 @@ module.exports = {
   validateFilesHaveMetaFiles,
   validateNoBuildArtifactsInTarball,
   validatePublishedFilesArePairedWithMetas,
+  validateRequiredAnalyzerFilesInTarball,
   validateNpmMeta
 };

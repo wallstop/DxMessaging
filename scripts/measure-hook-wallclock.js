@@ -240,7 +240,7 @@ function main(argv) {
 
   if (!checkPreCommitAvailable()) {
     process.stderr.write(
-      "pre-commit is not installed or not on PATH. Install pre-commit (https://pre-commit.com) and run `pre-commit install --install-hooks` first.\n"
+      "pre-commit is not installed or not on PATH. Install pre-commit (https://pre-commit.com), run `npm run repair:hooks`, then run `pre-commit install-hooks` first.\n"
     );
     return 2;
   }
