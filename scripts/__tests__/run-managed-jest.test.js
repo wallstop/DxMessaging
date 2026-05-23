@@ -7,6 +7,23 @@
 const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
+const { buildSpawnInvocation } = require("../lib/shell-command");
+
+// Override process.platform for the duration of fn, then restore. Lets the
+// win32 spawn branch be exercised on a Linux/macOS host (and vice versa).
+function withPlatform(platform, fn) {
+  const original = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: platform, configurable: true });
+  try {
+    return fn();
+  } finally {
+    if (original) {
+      Object.defineProperty(process, "platform", original);
+    } else {
+      delete process.platform;
+    }
+  }
+}
 const {
   REPO_ROOT,
   LOCAL_JEST_BIN,
@@ -748,25 +765,29 @@ describe("run-managed-jest", () => {
 
     const result = runManagedJest(["--runTestsByPath", "scripts/__tests__/alpha.test.js"]);
 
+    const npmVersionInv = buildSpawnInvocation("npm", ["--version"]);
+    const npmExecArgs = [
+      "exec",
+      "--yes",
+      `--package=${pinnedFallbackJestSpec}`,
+      "--",
+      "jest",
+      "--runTestsByPath",
+      "scripts/__tests__/alpha.test.js"
+    ];
+    const npmExecInv = buildSpawnInvocation("npm", npmExecArgs);
+
     expect(result).toEqual(expect.objectContaining({ status: 0, error: null, stderr: "" }));
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       1,
-      toShellCommand("npm"),
-      ["--version"],
+      npmVersionInv.command,
+      npmVersionInv.args,
       expect.objectContaining({ cwd: REPO_ROOT, encoding: "utf8" })
     );
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       2,
-      toShellCommand("npm"),
-      [
-        "exec",
-        "--yes",
-        `--package=${pinnedFallbackJestSpec}`,
-        "--",
-        "jest",
-        "--runTestsByPath",
-        "scripts/__tests__/alpha.test.js"
-      ],
+      npmExecInv.command,
+      npmExecInv.args,
       expect.objectContaining({
         cwd: REPO_ROOT,
         stdio: ["inherit", "inherit", "pipe"]
@@ -788,18 +809,28 @@ describe("run-managed-jest", () => {
       runIsolatedFallbackJestFn: () => null
     });
 
+    const npmVersionInv = buildSpawnInvocation("npm", ["--version"]);
+    const npmExecInv = buildSpawnInvocation("npm", [
+      "exec",
+      "--yes",
+      `--package=${pinnedFallbackJestSpec}`,
+      "--",
+      "jest",
+      "--version"
+    ]);
+
     expect(result).toEqual(expect.objectContaining({ status: 0, error: null, stderr: "" }));
     expect(fallbackWarningSpy).toHaveBeenCalledTimes(1);
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       1,
-      toShellCommand("npm"),
-      ["--version"],
+      npmVersionInv.command,
+      npmVersionInv.args,
       expect.objectContaining({ cwd: REPO_ROOT, encoding: "utf8" })
     );
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       2,
-      toShellCommand("npm"),
-      ["exec", "--yes", `--package=${pinnedFallbackJestSpec}`, "--", "jest", "--version"],
+      npmExecInv.command,
+      npmExecInv.args,
       expect.objectContaining({
         cwd: REPO_ROOT,
         stdio: ["inherit", "inherit", "pipe"]
@@ -833,11 +864,18 @@ describe("run-managed-jest", () => {
 
     const result = runManagedJest(["--version"]);
 
+    const npxInv = buildSpawnInvocation("npx", [
+      "--yes",
+      `--package=${pinnedFallbackJestSpec}`,
+      "jest",
+      "--version"
+    ]);
+
     expect(result).toEqual(expect.objectContaining({ status: 0, error: null, stderr: "" }));
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       2,
-      toShellCommand("npx"),
-      ["--yes", `--package=${pinnedFallbackJestSpec}`, "jest", "--version"],
+      npxInv.command,
+      npxInv.args,
       expect.objectContaining({
         cwd: REPO_ROOT,
         stdio: ["inherit", "inherit", "pipe"]
@@ -854,11 +892,18 @@ describe("run-managed-jest", () => {
 
     const result = runManagedJest(["--version"]);
 
+    const npxInv = buildSpawnInvocation("npx", [
+      "--yes",
+      `--package=${pinnedFallbackJestSpec}`,
+      "jest",
+      "--version"
+    ]);
+
     expect(result).toEqual(expect.objectContaining({ status: 0, error: null, stderr: "" }));
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       2,
-      toShellCommand("npx"),
-      ["--yes", `--package=${pinnedFallbackJestSpec}`, "jest", "--version"],
+      npxInv.command,
+      npxInv.args,
       expect.objectContaining({
         cwd: REPO_ROOT,
         stdio: ["inherit", "inherit", "pipe"]
@@ -876,11 +921,26 @@ describe("run-managed-jest", () => {
 
     const result = runManagedJest(["--version"]);
 
+    const npmExecInv = buildSpawnInvocation("npm", [
+      "exec",
+      "--yes",
+      `--package=${pinnedFallbackJestSpec}`,
+      "--",
+      "jest",
+      "--version"
+    ]);
+    const npxInv = buildSpawnInvocation("npx", [
+      "--yes",
+      `--package=${pinnedFallbackJestSpec}`,
+      "jest",
+      "--version"
+    ]);
+
     expect(result).toEqual(expect.objectContaining({ status: 0, error: null, stderr: "" }));
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       2,
-      toShellCommand("npm"),
-      ["exec", "--yes", `--package=${pinnedFallbackJestSpec}`, "--", "jest", "--version"],
+      npmExecInv.command,
+      npmExecInv.args,
       expect.objectContaining({
         cwd: REPO_ROOT,
         stdio: ["inherit", "inherit", "pipe"]
@@ -888,13 +948,77 @@ describe("run-managed-jest", () => {
     );
     expect(spawnSyncSpy).toHaveBeenNthCalledWith(
       3,
-      toShellCommand("npx"),
-      ["--yes", `--package=${pinnedFallbackJestSpec}`, "jest", "--version"],
+      npxInv.command,
+      npxInv.args,
       expect.objectContaining({
         cwd: REPO_ROOT,
         stdio: ["inherit", "inherit", "pipe"]
       })
     );
+  });
+
+  test("npm exec fallback wraps through cmd.exe on win32 (forced platform)", () => {
+    // Cross-platform exercise: force win32 so the cmd.exe-wrapped npm shape is
+    // verified on a Linux/macOS host. Without this, the divergence that broke
+    // the Windows pre-push hook would only surface when a hook ran on Windows.
+    withPlatform("win32", () => {
+      existsSyncSpy.mockReturnValue(false);
+      const pinnedFallbackJestSpec = getPinnedFallbackJestSpec();
+      spawnSyncSpy
+        .mockReturnValueOnce({ status: 0, stdout: "11.11.0\n", stderr: "" })
+        .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
+
+      runManagedJest(["--version"]);
+
+      const npmVersionInv = buildSpawnInvocation("npm", ["--version"], {}, "win32");
+      const npmExecInv = buildSpawnInvocation(
+        "npm",
+        ["exec", "--yes", `--package=${pinnedFallbackJestSpec}`, "--", "jest", "--version"],
+        {},
+        "win32"
+      );
+
+      // Sanity: the forced-win32 invocation really is the cmd.exe wrapper.
+      expect(npmExecInv.args.slice(0, 4)).toEqual(["/d", "/s", "/c", "npm.cmd"]);
+
+      expect(spawnSyncSpy).toHaveBeenNthCalledWith(
+        1,
+        npmVersionInv.command,
+        npmVersionInv.args,
+        expect.objectContaining({ cwd: REPO_ROOT, encoding: "utf8", shell: false })
+      );
+      expect(spawnSyncSpy).toHaveBeenNthCalledWith(
+        2,
+        npmExecInv.command,
+        npmExecInv.args,
+        expect.objectContaining({ cwd: REPO_ROOT, stdio: ["inherit", "inherit", "pipe"] })
+      );
+    });
+  });
+
+  test("npm exec fallback uses plain npm passthrough on linux (forced platform)", () => {
+    withPlatform("linux", () => {
+      existsSyncSpy.mockReturnValue(false);
+      const pinnedFallbackJestSpec = getPinnedFallbackJestSpec();
+      spawnSyncSpy
+        .mockReturnValueOnce({ status: 0, stdout: "11.11.0\n", stderr: "" })
+        .mockReturnValueOnce({ status: 0, stderr: Buffer.from("") });
+
+      runManagedJest(["--version"]);
+
+      expect(spawnSyncSpy).toHaveBeenNthCalledWith(
+        1,
+        "npm",
+        ["--version"],
+        expect.objectContaining({ cwd: REPO_ROOT, encoding: "utf8" })
+      );
+      expect(spawnSyncSpy).toHaveBeenNthCalledWith(
+        2,
+        "npm",
+        ["exec", "--yes", `--package=${pinnedFallbackJestSpec}`, "--", "jest", "--version"],
+        expect.objectContaining({ cwd: REPO_ROOT, stdio: ["inherit", "inherit", "pipe"] })
+      );
+    });
   });
 });
 

@@ -6,9 +6,14 @@ const childProcess = require("child_process");
  * Convert a command name to the platform-specific executable name.
  * npm/npx on Windows are exposed as .cmd shims.
  *
- * This helper only adjusts the command token. Use spawnPlatformCommandSync()
- * for child_process execution so Windows shell requirements are applied.
- * @deprecated For child_process calls, use spawnPlatformCommandSync().
+ * This helper only adjusts the command token; it does NOT model the win32
+ * `cmd.exe /d /s /c` wrapping that spawnPlatformCommandSync() applies. Using
+ * its return value as an expected spawn command in a test therefore drifts
+ * from production on Windows and silently passes on Linux/macOS.
+ *
+ * @deprecated For child_process calls, use spawnPlatformCommandSync(). For
+ *   computing expected spawn shapes in tests, use buildSpawnInvocation() so
+ *   the assertion tracks production on every platform.
  *
  * @param {string} command - Base command name (for example "npm")
  * @param {string} platform - Process platform string
@@ -69,7 +74,47 @@ function resolveSpawnOptions(command, options = {}, platform = process.platform)
 }
 
 /**
+ * Compute the exact `(command, args, options)` triple that
+ * spawnPlatformCommandSync() hands to `spawnSync` for a given command on a
+ * given platform.
+ *
+ * This is the SINGLE SOURCE OF TRUTH for spawn invocation shape. On win32 the
+ * npm/npx shims are batch files, so to avoid Node CVE-2024-27980 they are run
+ * through the command interpreter explicitly:
+ *   `<ComSpec> /d /s /c npm.cmd ...args` with `shell:false`, `windowsHide:true`.
+ * On non-win32 (or for non-shim commands like `git`) the call is a passthrough.
+ *
+ * Tests MUST derive their expected spawn assertions from this function rather
+ * than from raw command names (`"npm"`, `"npm.cmd"`, `toShellCommand(...)`).
+ * Because production (spawnPlatformCommandSync) and the test expectation both
+ * flow through this one function, the assertion can never drift from production
+ * across platforms, and forcing `platform="win32"` exercises the Windows branch
+ * on a Linux/macOS host (where a host-only assertion would silently rot).
+ *
+ * @param {string} command - Base command name (for example "npm")
+ * @param {string[]} args - Command arguments
+ * @param {object} options - spawnSync options
+ * @param {string} platform - Process platform string
+ * @returns {{command: string, args: string[], options: object}} Resolved spawn triple
+ */
+function buildSpawnInvocation(command, args = [], options = {}, platform = process.platform) {
+  let resolvedCommand = resolveSpawnCommand(command, platform);
+  let resolvedArgs = args;
+  const resolvedOptions = resolveSpawnOptions(command, options, platform);
+
+  if (platform === "win32" && isShellShimCommand(command)) {
+    resolvedArgs = ["/d", "/s", "/c", resolvedCommand, ...args];
+    resolvedCommand = process.env.ComSpec || "cmd.exe";
+  }
+
+  return { command: resolvedCommand, args: resolvedArgs, options: resolvedOptions };
+}
+
+/**
  * Spawn a platform-aware child process.
+ *
+ * The invocation shape is computed by buildSpawnInvocation() so production and
+ * test expectations share exactly one code path.
  *
  * @param {string} command - Base command name
  * @param {string[]} args - Command arguments
@@ -85,16 +130,9 @@ function spawnPlatformCommandSync(
   spawnSyncImpl = childProcess.spawnSync,
   platform = process.platform
 ) {
-  let resolvedCommand = resolveSpawnCommand(command, platform);
-  let resolvedArgs = args;
-  const resolvedOptions = resolveSpawnOptions(command, options, platform);
+  const invocation = buildSpawnInvocation(command, args, options, platform);
 
-  if (platform === "win32" && isShellShimCommand(command)) {
-    resolvedArgs = ["/d", "/s", "/c", resolvedCommand, ...args];
-    resolvedCommand = process.env.ComSpec || "cmd.exe";
-  }
-
-  return spawnSyncImpl(resolvedCommand, resolvedArgs, resolvedOptions);
+  return spawnSyncImpl(invocation.command, invocation.args, invocation.options);
 }
 
 module.exports = {
@@ -102,5 +140,6 @@ module.exports = {
   isShellShimCommand,
   resolveSpawnCommand,
   resolveSpawnOptions,
+  buildSpawnInvocation,
   spawnPlatformCommandSync
 };

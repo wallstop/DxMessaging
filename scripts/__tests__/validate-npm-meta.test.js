@@ -11,7 +11,26 @@
 "use strict";
 
 const childProcess = require("child_process");
-const { toShellCommand } = require("../lib/shell-command");
+const { buildSpawnInvocation } = require("../lib/shell-command");
+
+// Canonical npm pack invocation that production (getPackageFiles) hands to
+// spawnPlatformCommandSync. Derive expectations from buildSpawnInvocation so
+// the assertion tracks production on every platform.
+const NPM_PACK_ARGS = ["pack", "--json", "--dry-run", "--ignore-scripts"];
+
+function withPlatform(platform, fn) {
+  const original = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: platform, configurable: true });
+  try {
+    return fn();
+  } finally {
+    if (original) {
+      Object.defineProperty(process, "platform", original);
+    } else {
+      delete process.platform;
+    }
+  }
+}
 
 const {
   getPackageFiles,
@@ -114,10 +133,17 @@ describe("validate-npm-meta", () => {
 
       const files = getPackageFiles();
 
+      // Expectation tracks production on this host: buildSpawnInvocation uses
+      // the same code path spawnPlatformCommandSync does. Only command/args are
+      // host-divergent; the options shape is asserted separately below via
+      // expect.objectContaining (cwd is resolved by production to a real path,
+      // so it is matched with expect.any(String) rather than an exact value).
+      const inv = buildSpawnInvocation("npm", NPM_PACK_ARGS);
+
       expect(files).toEqual(["Runtime/File.cs", "Runtime/File.cs.meta"]);
       expect(spawnSyncSpy).toHaveBeenCalledWith(
-        toShellCommand("npm"),
-        ["pack", "--json", "--dry-run", "--ignore-scripts"],
+        inv.command,
+        inv.args,
         expect.objectContaining({
           cwd: expect.any(String),
           encoding: "utf8",
@@ -126,9 +152,50 @@ describe("validate-npm-meta", () => {
       );
     });
 
-    test("uses npm.cmd command name on win32", () => {
-      expect(toShellCommand("npm", "win32")).toBe("npm.cmd");
-      expect(toShellCommand("npx", "win32")).toBe("npx.cmd");
+    test("uses the cmd.exe wrapper for npm pack on win32 (forced platform)", () => {
+      // Exercise the Windows branch even on a Linux/macOS host so the divergence
+      // that broke the pre-push hook on Windows is caught everywhere.
+      withPlatform("win32", () => {
+        const spawnSyncSpy = jest.spyOn(childProcess, "spawnSync").mockReturnValue({
+          status: 0,
+          stdout: JSON.stringify([{ files: [{ path: "Runtime/File.cs" }] }]),
+          stderr: ""
+        });
+
+        getPackageFiles();
+
+        const inv = buildSpawnInvocation("npm", NPM_PACK_ARGS, {}, "win32");
+        expect(inv.command).toBe(buildSpawnInvocation("npm", [], {}, "win32").command);
+        expect(inv.args).toEqual(["/d", "/s", "/c", "npm.cmd", ...NPM_PACK_ARGS]);
+        expect(spawnSyncSpy).toHaveBeenCalledWith(
+          inv.command,
+          inv.args,
+          expect.objectContaining({
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+            shell: false,
+            windowsHide: true
+          })
+        );
+      });
+    });
+
+    test("uses plain npm passthrough on linux (forced platform)", () => {
+      withPlatform("linux", () => {
+        const spawnSyncSpy = jest.spyOn(childProcess, "spawnSync").mockReturnValue({
+          status: 0,
+          stdout: JSON.stringify([{ files: [{ path: "Runtime/File.cs" }] }]),
+          stderr: ""
+        });
+
+        getPackageFiles();
+
+        expect(spawnSyncSpy).toHaveBeenCalledWith(
+          "npm",
+          NPM_PACK_ARGS,
+          expect.objectContaining({ encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+        );
+      });
     });
 
     test("throws when npm pack exits with non-zero status", () => {
