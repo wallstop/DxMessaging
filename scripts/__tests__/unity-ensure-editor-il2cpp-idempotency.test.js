@@ -335,6 +335,14 @@ function runEnsureEditorWithFakeCli(handlerLines, installRoot, baseEnv = process
   const env = prependPathEnv(sandboxHostFolderEnv(baseEnv, sandboxRoot), binDir);
   delete env.UNITY_EDITOR_INSTALL_ROOT;
   env.DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS = "0";
+  // Stub Unity.exe binaries written here use a sh shebang body that Linux/macOS execute via kernel
+  // shebang dispatch, but Windows CreateProcess rejects as not a valid PE. Skip the native startup
+  // probe by default; a caller that needs the real probe can disable the default by passing a
+  // `baseEnv` that already defines `DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE` (set to anything other than
+  // `undefined`, including an empty string, to bypass the conditional below).
+  if (env.DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE === undefined) {
+    env.DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE = "1";
+  }
   assertFakeUnityCliResolves(env, unityPath);
   return spawnSync(
     "pwsh",

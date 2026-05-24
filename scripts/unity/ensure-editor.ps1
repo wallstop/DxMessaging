@@ -1063,6 +1063,12 @@ function Ensure-UnityNativeStartupHealthy {
         [switch]$ManagedOnly
     )
 
+    # Test harnesses spawn ensure-editor.ps1 against a stub Unity.exe; Windows CreateProcess refuses non-PE .exe, so opt-in skip the probe.
+    if ($env:DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE -eq '1') {
+        Write-CiNotice "Skipping Unity $Version native startup probe (DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE=1)."
+        return $EditorPath
+    }
+
     $probeRoot = Join-Path $InstallRoot '_probes'
     $probeLog = Join-Path $probeRoot "$Version-startup-probe.log"
     $result = Test-UnityNativeStartup -EditorPath $EditorPath -LogPath $probeLog

@@ -113,7 +113,8 @@ jobs:
             scripts/__tests__/shell-command.test.js \
             scripts/lib/__tests__/spawn-env-sandbox.test.js \
             scripts/__tests__/hermetic-host-env-policy.test.js \
-            scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js
+            scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js \
+            scripts/__tests__/unity-native-startup-probe-isolation.test.js
 
       - name: Run pre-push preflight
         shell: bash

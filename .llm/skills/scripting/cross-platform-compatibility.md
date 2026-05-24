@@ -195,6 +195,47 @@ wsl pwsh -File scripts/sync-banner-version.ps1
 # (requires disk utility to create APFS case-sensitive volume)
 ```
 
+## Stub executables on Windows: PE-binary requirement
+
+Linux and macOS execute scripts with a shebang via kernel `execve` dispatch
+regardless of file extension: a file named `Unity.exe` whose contents are
+`#!/usr/bin/env sh\n...` runs as a shell script when chmod-executable. Windows
+`CreateProcess()` does NOT honor shebangs and instead requires:
+
+- `.exe` / `.com` files to be valid PE binaries
+- `.bat` / `.cmd` files to be batch text
+- Anything else to be routed through an interpreter explicitly
+
+Spawning a shebang-bodied `Unity.exe` on Windows fails with
+_"The specified executable is not a valid application for this OS platform"_,
+and the surrounding script aborts. The class of failure is invisible on
+Linux/macOS CI and only surfaces on Windows runners.
+
+Two acceptable patterns in tests that need a fake Unity binary:
+
+1. **Bypass the native startup probe** by setting
+   `DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE=1` in the spawn env. This is the
+   preferred path when only the surrounding `ensure-editor.ps1` logic is under
+   test (module install/repair/quarantine/host-env hermeticity). The early-
+   return gate lives in `Ensure-UnityNativeStartupHealthy` in
+   `scripts/unity/ensure-editor.ps1`.
+1. **Use a real PE-shaped stub**: on Windows write a `.cmd` companion file and
+   reroute through it instead of writing a shebang `.exe`. See the
+   `unity.cmd` pattern in
+   `scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js`
+   (around the `makeFakeUnityCli` helper).
+
+The static guard `scripts/__tests__/unity-native-startup-probe-isolation.test.js`
+pins both halves of the contract (production gate + test-harness opt-in) and
+fans out to scan every other test under `scripts/__tests__/` that drives
+`ensure-editor.ps1` with a fake `Unity.exe`. Any such test must reference
+`DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE` or carry the comment escape hatch
+`// @allow-unity-native-probe`.
+
+Production CI never sets `DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE`; the probe and
+auto-repair behavior in `Ensure-UnityNativeStartupHealthy` is unchanged for real
+Unity editors.
+
 ## Validation Checklist
 
 Before merging scripts:
