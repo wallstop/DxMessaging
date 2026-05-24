@@ -269,6 +269,15 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
         "Get-UnityCliModuleInstallArguments",
         // Targeted failure annotation emitted on a genuine module-install failure.
         "Write-UnityCliInstallFailureAnnotation",
+        // Resilience+diagnostics helpers Ensure-UnityCiModules now calls on the
+        // failure path: the de-dup tail formatter, the wrap-immune failure
+        // summary, and the helpers that summary depends on (last-progress-message
+        // parser, install-drive free-space probe, install-timeout knob).
+        "Get-CollapsedCliOutputTail",
+        "Get-LastCliProgressMessage",
+        "Get-InstallDriveFreeSpaceText",
+        "Get-EnsureEditorInstallTimeoutSeconds",
+        "Write-ModuleInstallFailureDiagnostics",
         "Test-UnityCiModuleGroupPresent",
         "Get-MissingUnityCiModuleGroups",
         "Ensure-UnityCiModules",
@@ -732,7 +741,15 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
       [
         "Set-StrictMode -Version Latest",
         "$ErrorActionPreference = 'Stop'",
-        extractEnsureEditorFunctions(["Invoke-UnityCliCapture"]),
+        // Invoke-UnityCliCapture now delegates to the timeout-capable runner, so
+        // extract the delegate and the helpers it consults (the timeout-knob and
+        // the last-progress parser used in the timeout annotation).
+        extractEnsureEditorFunctions([
+          "Invoke-UnityCliCapture",
+          "Invoke-UnityCliCaptureWithTimeout",
+          "Get-EnsureEditorInstallTimeoutSeconds",
+          "Get-LastCliProgressMessage"
+        ]),
         "$script:UnityCliPath = '/definitely/not/a/unity-cli'",
         "$result = Invoke-UnityCliCapture -Arguments @('install', '6000.0.32f1')",
         "Write-Output ('SUCCESS=' + $result.Success)",

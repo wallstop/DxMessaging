@@ -647,13 +647,46 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("DXM_UNITY_DISABLE_EDITOR_REPAIR");
     expect(ensureEditor).toMatch(/Quarantining unmanaged or partial Unity/);
     // The base editor install is RETRIED (it has failed flakily after a long run
-    // with exit 6) and routed through the capturing invoker so a final failure
-    // throws WITH the CLI output tail + exit code for diagnosis.
+    // with exit 6, AND has HUNG until the job is cancelled) and routed through the
+    // capturing invoker so a final failure throws WITH the CLI output tail + exit
+    // code for diagnosis. The attempt count is now sourced from the override-aware
+    // helper (default 2, unchanged), and each attempt is bounded by the install
+    // timeout because Invoke-UnityCliCapture delegates to the timeout runner.
     expect(ensureEditor).toContain("function Invoke-WithRetry");
     expect(ensureEditor).toContain("DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS");
+    expect(ensureEditor).toContain("function Get-EnsureEditorInstallRetryAttempts");
+    expect(ensureEditor).toContain("DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS");
     expect(ensureEditor).toMatch(
-      /Invoke-WithRetry -MaxAttempts 2 -DelaySeconds \$retryDelaySeconds -Action \{\s*\$installResult = Invoke-UnityCliCapture -Arguments \$installArgs/
+      /Invoke-WithRetry -MaxAttempts \$installRetryAttempts -DelaySeconds \$retryDelaySeconds -Action \{\s*\$installResult = Invoke-UnityCliCapture -Arguments \$installArgs/
     );
+    // The install retry-attempts knob defaults to 2 (preserving the prior count).
+    expect(ensureEditor).toMatch(
+      /function Get-EnsureEditorInstallRetryAttempts[\s\S]*?param\(\[int\]\$Default = 2\)/
+    );
+
+    // RESILIENCE: a total wall-clock TIMEOUT bounds every captured CLI invocation
+    // so a hung module install (the Android NDK hang) is tree-killed and
+    // classified as a retryable failure instead of running until the GitHub job is
+    // cancelled. Invoke-UnityCliCapture DELEGATES to Invoke-UnityCliCaptureWithTimeout
+    // (so the module-install call sites are bounded without changing the arg
+    // vector), the timeout runner tree-kills (the bool Kill overload) and uses a
+    // non-zero sentinel exit, and the limit comes from the override-aware helper.
+    expect(ensureEditor).toContain("function Invoke-UnityCliCaptureWithTimeout");
+    expect(ensureEditor).toContain("function Get-EnsureEditorInstallTimeoutSeconds");
+    expect(ensureEditor).toContain("DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS");
+    // The capturing invoker delegates to the timeout runner.
+    expect(ensureEditor).toMatch(
+      /function Invoke-UnityCliCapture\b[\s\S]*?Invoke-UnityCliCaptureWithTimeout -Arguments \$Arguments -TimeoutSeconds \(Get-EnsureEditorInstallTimeoutSeconds\)/
+    );
+    // The timeout runner tree-kills the whole process tree on a hang.
+    expect(ensureEditor).toMatch(
+      /function Invoke-UnityCliCaptureWithTimeout[\s\S]*?\$proc\.Kill\(\$true\)/
+    );
+    // DIAGNOSTICS: the failure tail is de-duplicated (collapses identical lines),
+    // and a wrap-immune ::error:: summary names the last progress msg + disk space.
+    expect(ensureEditor).toContain("function Get-CollapsedCliOutputTail");
+    expect(ensureEditor).toContain("function Write-ModuleInstallFailureDiagnostics");
+    expect(ensureEditor).toMatch(/Get-CollapsedCliOutputTail -Output/);
     expect(ensureEditor).toMatch(
       /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*\$resolvedAfterFailure = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$resolvedAfterFailure -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
     );

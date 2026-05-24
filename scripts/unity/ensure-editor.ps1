@@ -101,6 +101,197 @@ function Get-EnsureEditorRetryDelaySeconds {
     return $Default
 }
 
+function Get-EnsureEditorInstallTimeoutSeconds {
+    # Single source of truth for the TOTAL wall-clock timeout applied to a
+    # module-install CLI invocation (see Invoke-UnityCliCaptureWithTimeout). The
+    # Android NDK module install has been observed to HANG so long the GitHub job
+    # is cancelled ("The operation was canceled") -- which means the retry never
+    # triggers and NO diagnostics are produced. A bounded timeout kills the hung
+    # install and lets the existing retry + classification flow run on a hang.
+    #
+    # Honors the DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS override following the
+    # EXACT convention of Get-EnsureEditorRetryDelaySeconds: tests set it small
+    # (e.g. 2) to force the timeout path; CI leaves it unset for the production
+    # default. A non-integer or NEGATIVE override is ignored with a ::warning::
+    # and the default is used. A value of 0 is the explicit OPT-OUT (no timeout):
+    # it returns 0 and the runner waits indefinitely, matching the prior
+    # behavior, for the rare case an operator must allow an unbounded install.
+    #
+    # Default rationale (2700s = 45 minutes): a healthy full CI module install
+    # (Windows IL2CPP + WebGL + Android SDK/NDK/OpenJDK + Linux Mono/IL2CPP) on a
+    # warm self-hosted runner completes in well under this; 45 minutes comfortably
+    # exceeds a slow-but-progressing install yet stays well under the Unity job's
+    # wall-clock budget, so a genuine HANG is killed (and retried) long before the
+    # GitHub job would be cancelled. StrictMode-safe: no collection reads.
+    param([int]$Default = 2700)
+
+    if ($env:DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS='$env:DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
+function Get-EnsureEditorInstallRetryAttempts {
+    # Single source of truth for the base-install Invoke-WithRetry attempt count.
+    # Honors DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS following the EXACT
+    # convention of Get-EnsureEditorRetryDelaySeconds. The DEFAULT is UNCHANGED at
+    # 2 (the documented "two attempts fit inside the 180-minute step budget even
+    # for a slow install"): now that a HANG is bounded by the install timeout and
+    # classified as a retryable failure, the existing 2-attempt retry already
+    # covers a transient hang, so the default is deliberately not bumped. This knob
+    # only gives an operator a low-risk lever (e.g. set to 3 for a flaky window)
+    # without destabilizing the default retry contract. A value below 1 is clamped
+    # to 1 by Invoke-WithRetry; a non-integer/negative override is ignored with a
+    # ::warning::. StrictMode-safe: no collection reads.
+    param([int]$Default = 2)
+
+    if ($env:DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS, [ref]$parsed) -and
+            $parsed -ge 1
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS='$env:DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS'; using $Default attempt(s)."
+    }
+    return $Default
+}
+
+function Get-CollapsedCliOutputTail {
+    # PURE, StrictMode-safe diagnostic formatter. Takes the captured CLI output
+    # lines and COLLAPSES consecutive identical lines into a single line annotated
+    # with a repeat count, then returns the LAST $MaxLines of the collapsed result
+    # joined with newlines. This is what makes a failed install READABLE: the
+    # Android NDK install can spam thousands of IDENTICAL progress lines
+    # (`{"type":"progress","pct":96,"msg":"Installing Android NDK..."}`), and the
+    # previous "last 20-40 raw lines" tail was therefore thousands of copies of
+    # the same line -- useless. Collapsing first means the tail shows DISTINCT
+    # recent activity, e.g. `{"...Installing Android NDK..."}  (x3847)`.
+    #
+    # Contract:
+    #   * A run of N (N >= 2) consecutive identical lines becomes ONE line with a
+    #     "  (xN)" suffix; a non-repeated line passes through UNCHANGED (no suffix).
+    #   * Only the LAST $MaxLines COLLAPSED entries are returned (cap respected
+    #     AFTER collapsing, so the cap counts distinct runs, not raw duplicates).
+    #   * Empty/whitespace-only input returns the literal '(no output captured)'.
+    # StrictMode-safe: @()-wraps the input so a 0/1/many capture never unwraps to
+    # AutomationNull, and never indexes a possibly-$null value.
+    param(
+        [string[]]$Output,
+        [int]$MaxLines = 40
+    )
+
+    # @()-wrap defends against the 0/1/many AutomationNull hazard, BUT note @($null)
+    # is a ONE-element array whose single element is $null -- so .Count is 1, not 0.
+    # Treat input that is empty OR carries no non-whitespace content (all $null /
+    # all-blank lines) as "nothing to report" and return the placeholder, exactly as
+    # the contract above promises. Casting each element via [string] makes $null ->
+    # '' so the Trim() probe is StrictMode-safe and never indexes a $null value.
+    $capturedLines = @($Output)
+    $hasContent = $false
+    foreach ($probe in $capturedLines) {
+        if (([string]$probe).Trim().Length -gt 0) {
+            $hasContent = $true
+            break
+        }
+    }
+    if (-not $hasContent) {
+        return '(no output captured)'
+    }
+
+    if ($MaxLines -lt 1) {
+        $MaxLines = 1
+    }
+
+    # Collapse consecutive identical lines into "<line>  (xN)" (N >= 2) or the
+    # bare line (N == 1). Build the collapsed list in order.
+    $collapsed = New-Object System.Collections.Generic.List[string]
+    $previous = $null
+    $havePrevious = $false
+    $runLength = 0
+    foreach ($rawLine in $capturedLines) {
+        $line = [string]$rawLine
+        if ($havePrevious -and $line -eq $previous) {
+            $runLength++
+            continue
+        }
+        if ($havePrevious) {
+            if ($runLength -gt 1) {
+                $collapsed.Add("$previous  (x$runLength)")
+            } else {
+                $collapsed.Add($previous)
+            }
+        }
+        $previous = $line
+        $havePrevious = $true
+        $runLength = 1
+    }
+    if ($havePrevious) {
+        if ($runLength -gt 1) {
+            $collapsed.Add("$previous  (x$runLength)")
+        } else {
+            $collapsed.Add($previous)
+        }
+    }
+
+    $collapsedArray = @($collapsed.ToArray())
+    if ($collapsedArray.Count -eq 0) {
+        return '(no output captured)'
+    }
+
+    $tailCount = [Math]::Min($MaxLines, $collapsedArray.Count)
+    $tailLines = @($collapsedArray[($collapsedArray.Count - $tailCount)..($collapsedArray.Count - 1)])
+    return ($tailLines -join "`n")
+}
+
+function Get-LastCliProgressMessage {
+    # PURE, StrictMode-safe extractor for the LAST meaningful progress message in
+    # the captured CLI output, for a wrap-immune one-line failure summary. The
+    # standalone Unity CLI emits JSON progress lines shaped like
+    # `{"type":"progress","pct":96,"msg":"Installing Android NDK..."}`; the most
+    # useful single datum on a failure is the LAST such `"msg"` value (it names
+    # what the installer was doing when it died). Falls back to the LAST non-empty
+    # captured line when no JSON `"msg"` field is present, and to a literal
+    # '(no output captured)' when there is nothing to report.
+    #
+    # Deliberately regex-based (no ConvertFrom-Json): the lines are interleaved
+    # progress spam, not a single JSON document, and a malformed/non-JSON beta
+    # line must never throw here. StrictMode-safe: @()-wraps the input.
+    param([string[]]$Output)
+
+    $capturedLines = @($Output)
+    if ($capturedLines.Count -eq 0) {
+        return '(no output captured)'
+    }
+
+    # Scan from the END for the last line carrying a JSON "msg":"..." field.
+    for ($i = $capturedLines.Count - 1; $i -ge 0; $i--) {
+        $line = [string]$capturedLines[$i]
+        $match = [regex]::Match($line, '"msg"\s*:\s*"((?:\\.|[^"\\])*)"')
+        if ($match.Success) {
+            return $match.Groups[1].Value
+        }
+    }
+
+    # No JSON progress message: fall back to the last non-empty captured line.
+    for ($i = $capturedLines.Count - 1; $i -ge 0; $i--) {
+        $line = ([string]$capturedLines[$i]).Trim()
+        if ($line.Length -gt 0) {
+            return $line
+        }
+    }
+
+    return '(no output captured)'
+}
+
 function Invoke-WithUnityInstallLock {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
@@ -330,33 +521,257 @@ function Invoke-UnityCliCapture {
     # index .Output without the 0/1/many AutomationNull hazard.
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
+    # DELEGATE to the timeout-capable runner so EVERY captured CLI invocation
+    # (install/repair/module-add/uninstall) is bounded by a total wall-clock
+    # timeout and cannot hang until the GitHub job is cancelled. The contract of
+    # this function is UNCHANGED: same per-line LIVE streaming (the timeout runner
+    # echoes each line the instant it arrives, exactly like this function's
+    # original `& $cli | ForEach-Object { Write-Host }` did), same 2>&1 merge
+    # semantics, same @{ Success; ExitCode; Output } shape, same exit code on normal
+    # completion, same catch-on-spawn-failure behavior (the timeout runner maps a
+    # spawn failure to ExitCode -1 with the message in Output, exactly as before).
+    # The timeout is sourced from the single override-aware helper so tests can
+    # force the timeout path (small value) or opt out (0) without changing callers.
+    return Invoke-UnityCliCaptureWithTimeout -Arguments $Arguments -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+}
+
+function Invoke-UnityCliCaptureWithTimeout {
+    # TIMEOUT-CAPABLE, CAPTURING, NON-THROWING invoker -- the resilience core. It
+    # is the implementation Invoke-UnityCliCapture delegates to, and it preserves
+    # that function's EXACT contract on the normal-completion path while adding a
+    # total wall-clock timeout that a hung install (the Android NDK hang that gets
+    # the GitHub job cancelled) cannot exceed.
+    #
+    # WHY System.Diagnostics.Process and NOT `& <cli>`: the call operator cannot
+    # be interrupted -- a hung child runs until the whole job is killed, so the
+    # retry never fires and no diagnostics are produced. A Process lets us enforce
+    # a wall-clock deadline in the poll loop below and Kill($true) (tree-kill) the
+    # whole tree, so a hang is bounded, killed, classified as a (retryable)
+    # failure, and annotated.
+    #
+    # WHY A MAIN-THREAD POLL LOOP OVER TWO ASYNC LINE READS: two invariants must
+    # hold AT ONCE -- (1) every line is echoed LIVE the instant it arrives, so a
+    # long (45-minute) install is never a silent, blank console where an observer
+    # cannot tell a slow install from a hang; and (2) the run is bounded by a total
+    # wall-clock deadline. A single ReadToEndAsync per stream satisfies (2) but
+    # VIOLATES (1): it yields nothing until the process EXITS, so the whole install
+    # streams as one burst at the end (empirically line 1 appeared at process exit,
+    # not within ~60ms of being printed). We instead keep ONE outstanding
+    # ReadLineAsync per stream and poll BOTH from the main thread: when a line is
+    # ready we Write-Host it immediately (live), buffer it, and issue the next
+    # ReadLineAsync; every iteration also checks the deadline. Both pipes are always
+    # being drained, so neither can fill and back-pressure the child (the classic
+    # full-pipe-buffer deadlock is impossible). The reads run on the MAIN thread on
+    # purpose: a PowerShell scriptblock has no runspace on an arbitrary threadpool
+    # thread, so Write-Host from a Task/Register-ObjectEvent -Action either has no
+    # console or (for eventing) delivers lines OUT OF ORDER -- the poll loop avoids
+    # both by doing all the I/O and echoing inline. On a deadline hit we tree-kill,
+    # which closes the pipes so the outstanding ReadLineAsync tasks complete; we then
+    # drain any already-finished line tasks so no pre-kill output is lost. The two
+    # streams are merged into a single arrival-order buffer: this reproduces a
+    # captured `2>&1` closely enough (the old code also did not interleave the two
+    # streams once captured) and ALL downstream consumers of .Output are order-
+    # independent (tail de-dup, last-progress parse, substring matches), so
+    # arrival-order is acceptable and, for live echo, strictly more faithful.
+    #
+    # Returns the SAME StrictMode-safe shape as Invoke-UnityCliCapture:
+    #   Success  [bool]     - $true when exit code is 0
+    #   ExitCode [int]      - native exit (-1 on spawn failure; the timeout
+    #                         sentinel on a kill -- see $timeoutExitCode)
+    #   Output   [string[]] - @()-wrapped merged stdout+stderr lines (never $null)
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [int]$TimeoutSeconds = 2700
+    )
+
     Write-Host "$script:UnityCliPath $($Arguments -join ' ')"
-    $lines = New-Object System.Collections.Generic.List[string]
-    $exit = -1
-    try {
-        # Merge stderr into stdout (2>&1) so a beta CLI that writes errors/usage
-        # to stderr is both echoed AND captured. Stream live (Write-Host) AND
-        # accumulate so a long install is never silently buffered with a blank
-        # console, yet the captured text remains available for diagnostics.
-        & $script:UnityCliPath @Arguments 2>&1 | ForEach-Object {
-            $line = [string]$_
-            Write-Host $line
-            $lines.Add($line)
+
+    # Sentinel exit code for a TIMEOUT kill. 124 mirrors GNU coreutils `timeout`
+    # (it exits 124 when the command times out), so the code is recognizable in
+    # logs; it is non-zero, so the standard non-zero-exit classification (a
+    # retryable failure) applies without any special-casing.
+    $timeoutExitCode = 124
+
+    # Ordered capture buffer. Appended ONLY from the main-thread poll loop (and the
+    # spawn-failure catch), so no synchronization is needed.
+    $buffer = New-Object System.Collections.Generic.List[string]
+
+    # A timeout of 0 (or negative) is the explicit OPT-OUT: wait indefinitely,
+    # matching the prior unbounded behavior. Otherwise convert seconds to the ms the
+    # deadline math uses, guarding against Int64 overflow on a very large value.
+    if ($TimeoutSeconds -le 0) {
+        $hasDeadline = $false
+        $timeoutMs = -1
+    } else {
+        $hasDeadline = $true
+        $timeoutMsLong = [int64]$TimeoutSeconds * 1000
+        if ($timeoutMsLong -gt [int64]::MaxValue - 1) {
+            $timeoutMs = [int64]::MaxValue - 1
+        } else {
+            $timeoutMs = $timeoutMsLong
         }
-        $exit = $LASTEXITCODE
+    }
+
+    $proc = $null
+    $exit = -1
+    $timedOut = $false
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $script:UnityCliPath
+        foreach ($arg in $Arguments) {
+            $psi.ArgumentList.Add([string]$arg)
+        }
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $psi
+
+        [void]$proc.Start()
+
+        # Keep ONE outstanding async line read per stream and poll both from the
+        # main thread. A completed read whose Result is $null means that stream
+        # reached EOF (the pipe closed); any other Result is a line we echo LIVE,
+        # buffer, and immediately re-arm with the next ReadLineAsync. Because both
+        # streams are continuously drained, neither pipe can fill and block the
+        # child (no full-pipe-buffer deadlock).
+        $outReader = $proc.StandardOutput
+        $errReader = $proc.StandardError
+        $oTask = $outReader.ReadLineAsync()
+        $eTask = $errReader.ReadLineAsync()
+
+        # Absolute deadline (UtcNow is monotonic-enough for a wall-clock budget and
+        # immune to the local-clock skew a relative subtraction would risk). When
+        # the timeout is opted out the deadline is DateTime.MaxValue (never fires).
+        if ($hasDeadline) {
+            $deadline = [DateTime]::UtcNow.AddMilliseconds([double]$timeoutMs)
+        } else {
+            $deadline = [DateTime]::MaxValue
+        }
+
+        $oDone = $false
+        $eDone = $false
+        while (-not ($oDone -and $eDone)) {
+            $progressed = $false
+
+            if (-not $oDone -and $oTask.Wait(0)) {
+                $line = $oTask.Result
+                if ($null -eq $line) {
+                    $oDone = $true
+                } else {
+                    Write-Host $line
+                    $buffer.Add([string]$line)
+                    $oTask = $outReader.ReadLineAsync()
+                }
+                $progressed = $true
+            }
+
+            if (-not $eDone -and $eTask.Wait(0)) {
+                $line = $eTask.Result
+                if ($null -eq $line) {
+                    $eDone = $true
+                } else {
+                    Write-Host $line
+                    $buffer.Add([string]$line)
+                    $eTask = $errReader.ReadLineAsync()
+                }
+                $progressed = $true
+            }
+
+            if ([DateTime]::UtcNow -ge $deadline) {
+                # HUNG (or a quick-exit child whose grandchild still holds the pipe
+                # open, so EOF never arrives): kill the WHOLE process tree. The bool
+                # overload Kill($true) terminates descendants on .NET Core / PS7 (the
+                # Android NDK installer spawns child processes, so a bare Kill() would
+                # orphan them); a descendant already reparented away from a
+                # quick-exiting child is OS-unreachable by any tree walk -- the
+                # CRITICAL fix here is that we no longer mistake that case for success.
+                $timedOut = $true
+                try {
+                    $proc.Kill($true)
+                } catch {
+                    # Best-effort: the process may have exited between the check and
+                    # the kill, or the platform may reject the descendant kill; fall
+                    # back to a plain kill so at least the direct child dies.
+                    try { $proc.Kill() } catch { }
+                }
+                break
+            }
+
+            # Only sleep when NEITHER stream produced a line this iteration, so a
+            # busy stream is drained at full speed while an idle wait does not
+            # burn a core spinning.
+            if (-not $progressed) {
+                Start-Sleep -Milliseconds 50
+            }
+        }
+
+        # The loop ended either at EOF on both streams (normal/early exit) or at a
+        # kill. Reap the process so ExitCode is valid (no-arg WaitForExit also
+        # flushes the async readers' completion), bounded so a stuck reap cannot
+        # hang the harness.
+        [void]$proc.WaitForExit(5000)
+        try { $proc.WaitForExit() } catch { }
+
+        # Drain any line reads that completed during/after the kill so no pre-kill
+        # output is dropped. A non-$null Result is a buffered line; $null is EOF.
+        foreach ($pending in @($oTask, $eTask)) {
+            try {
+                if ($pending.Wait(2000) -and $null -ne $pending.Result) {
+                    $line = $pending.Result
+                    Write-Host $line
+                    $buffer.Add([string]$line)
+                }
+            } catch {
+                # A faulted/cancelled read on a killed pipe carries nothing to add.
+            }
+        }
+
+        if ($timedOut) {
+            $exit = $timeoutExitCode
+        } else {
+            # ExitCode is only valid after a CONFIRMED exit; HasExited guards the
+            # rare case the bounded reap above did not catch a (non-killed) exit.
+            if ($proc.HasExited) {
+                $exit = $proc.ExitCode
+            } else {
+                $exit = $timeoutExitCode
+                $timedOut = $true
+            }
+        }
     } catch {
-        # Resolution/spawn failures (e.g. the CLI vanished). Surface the message
-        # in the captured output so a caller's diagnostic tail still shows it.
+        # Spawn/resolution failure (e.g. the CLI vanished or the path is bad).
+        # Mirror Invoke-UnityCliCapture's original catch: surface the message in the
+        # captured output AND emit it as a GitHub ::notice:: annotation (the prior
+        # implementation did both), and report exit -1.
         $message = "Unity CLI capture invoker threw: $($_.Exception.Message)"
         Write-Host "::notice::$message"
-        $lines.Add($message)
+        $buffer.Add($message)
         $exit = -1
+    } finally {
+        if ($proc) { $proc.Dispose() }
+    }
+
+    # Snapshot the captured lines (already streamed LIVE, in arrival order, by the
+    # poll loop above) to a plain string[] for classification and the return value.
+    $captured = @($buffer.ToArray())
+
+    if ($timedOut) {
+        # Wrap-immune timeout annotation (Write-Host "::error::" is NOT subject to
+        # ConciseView word-wrap): name the timeout, the configured limit, the env
+        # knob to raise it, and the LAST progress message seen so CI has a stable,
+        # greppable summary of WHAT hung. The normal throw/classification flow
+        # still runs on the returned (retryable) failure.
+        $lastProgress = Get-LastCliProgressMessage -Output $captured
+        Write-Host "::error::Unity CLI command '$($Arguments -join ' ')' TIMED OUT after $TimeoutSeconds second(s) and the process tree was killed (sentinel exit $timeoutExitCode). Raise the limit via DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS (0 disables the timeout). Last progress message: $lastProgress"
     }
 
     return @{
         Success  = ($exit -eq 0)
         ExitCode = $exit
-        Output   = @($lines.ToArray())
+        Output   = @($captured)
     }
 }
 
@@ -397,6 +812,63 @@ function Write-UnityCliInstallFailureAnnotation {
         # Get-UnityCiModuleIds.
         Write-Host "::warning::Unity $Version module install reported an unknown module id (exit $ExitCode). Check the 'Did you mean:' hint in the CLI output above and reconcile Get-UnityCiModuleIds. Args: $argLine"
     }
+}
+
+function Get-InstallDriveFreeSpaceText {
+    # PURE-ish, best-effort, StrictMode-safe disk-headroom probe shared by the
+    # pre-install diagnostic dump (Write-InstallDiagnostics) and the on-failure
+    # wrap-immune summary (Write-ModuleInstallFailureDiagnostics). A multi-GB
+    # module download that runs out of disk is a prime suspect for a slow/failed
+    # install, so the free/total space belongs in BOTH places. Returns a single
+    # human line (never throws, never $null) so callers can drop it straight into
+    # an annotation.
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    try {
+        $rootFull = [System.IO.Path]::GetFullPath($Root)
+        $drive = [System.IO.Path]::GetPathRoot($rootFull)
+        if (-not $drive) {
+            return "install drive for '$Root': (undeterminable)"
+        }
+        $driveInfo = New-Object System.IO.DriveInfo($drive)
+        $freeGb = [Math]::Round($driveInfo.AvailableFreeSpace / 1GB, 2)
+        $totalGb = [Math]::Round($driveInfo.TotalSize / 1GB, 2)
+        return "install drive $drive free space: $freeGb GB free of $totalGb GB total"
+    } catch {
+        return "install drive for '$Root': (query failed: $($_.Exception.Message))"
+    }
+}
+
+function Write-ModuleInstallFailureDiagnostics {
+    # WRAP-IMMUNE, single-line CI failure summary for ANY module-install failure
+    # (a TIMEOUT kill OR a non-zero exit). PowerShell's ConciseView formatter
+    # word-wraps a `throw` message at the console width, so the throw text alone is
+    # an unreliable single-line annotation; a `Write-Host "::error::..."` line is
+    # NOT wrapped, giving CI a stable, greppable failure summary AND a robust
+    # assertion target. Additive only -- the caller still throws its full message.
+    #
+    # The summary names: the version, the failing verb/args, the outcome (exit code
+    # OR "timed out after Ns"), the LAST meaningful progress message parsed from the
+    # captured output (the JSON "msg" of the last progress line, else the last
+    # non-empty line -- via Get-LastCliProgressMessage), and the install-drive free
+    # space (via the shared Get-InstallDriveFreeSpaceText). Best-effort and
+    # StrictMode-safe: never throws, @()-wraps the output capture.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string[]]$Output,
+        [int]$ExitCode = -1,
+        [string[]]$Arguments,
+        [string]$Root,
+        [switch]$TimedOut,
+        [int]$TimeoutSeconds = 0
+    )
+
+    $argLine = if ($Arguments) { ($Arguments -join ' ') } else { '(unavailable)' }
+    $lastProgress = Get-LastCliProgressMessage -Output $Output
+    $outcome = if ($TimedOut) { "timed out after $TimeoutSeconds second(s)" } else { "exit code $ExitCode" }
+    $diskText = if ($Root) { Get-InstallDriveFreeSpaceText -Root $Root } else { 'install drive: (unknown root)' }
+
+    Write-Host "::error::Unity $Version module install FAILED ($outcome). Verb/args: $argLine. Last progress message: $lastProgress. Disk: $diskText"
 }
 
 function Test-LooksLikeAbsolutePath {
@@ -1088,12 +1560,9 @@ function Install-UnityEditorWithCiModules {
 
         $installLines = @($installResult.Output)
         $installText = ($installLines -join "`n")
-        $tailCount = [Math]::Min(40, $installLines.Count)
-        $tail = if ($tailCount -gt 0) {
-            ($installLines[($installLines.Count - $tailCount)..($installLines.Count - 1)] -join "`n")
-        } else {
-            '(no output captured)'
-        }
+        # Collapse consecutive identical lines (the Android NDK install can spam
+        # thousands of identical progress lines) so the tail is READABLE.
+        $tail = Get-CollapsedCliOutputTail -Output $installResult.Output -MaxLines 40
         $resolvedAfterFailure = Resolve-InstalledEditor -Version $Version -Root $InstallRoot -ManagedOnly:$ManagedOnly
         if ($installText -match '(?i)already installed|editor already installed|is already installed') {
             if ($resolvedAfterFailure) {
@@ -1112,6 +1581,8 @@ function Install-UnityEditorWithCiModules {
         }
 
         Write-UnityCliInstallFailureAnnotation -Version $Version -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs
+        $installTimedOut = ($installResult.ExitCode -eq 124)
+        Write-ModuleInstallFailureDiagnostics -Version $Version -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$installTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
         Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install failed."
         throw "Unity $Version repair install with CI modules failed with exit code $($installResult.ExitCode). CLI output tail:`n$tail"
     }
@@ -1308,9 +1779,10 @@ function Ensure-UnityCiModules {
     $outputLines = @($result.Output)
     $outputText = ($outputLines -join "`n")
     # Tail of the captured output for diagnostics (last lines only, to keep the
-    # thrown message readable).
-    $tailCount = [Math]::Min(20, $outputLines.Count)
-    $tail = if ($tailCount -gt 0) { ($outputLines[($outputLines.Count - $tailCount)..($outputLines.Count - 1)] -join "`n") } else { '(no output captured)' }
+    # thrown message readable). Consecutive identical lines are COLLAPSED first
+    # (the Android NDK install can spam thousands of identical progress lines) so
+    # the tail shows distinct recent activity instead of thousands of copies.
+    $tail = Get-CollapsedCliOutputTail -Output $result.Output -MaxLines 20
 
     # Case 2: install failed but every module group is demonstrably present on disk -> the
     # CLI's non-zero exit was an idempotent no-op. Treat as success.
@@ -1325,6 +1797,8 @@ function Ensure-UnityCiModules {
     # (missing EULA / unknown module id) BEFORE we repair or throw, so the root
     # cause is obvious in the CI log.
     Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
+    $moduleAddTimedOut = ($result.ExitCode -eq 124)
+    Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$moduleAddTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
 
     $repairDisabled = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
     if ($repairDisabled) {
@@ -1422,22 +1896,10 @@ function Write-InstallDiagnostics {
         Write-Host "::notice::Could not query the Unity CLI version: $($_.Exception.Message)"
     }
 
-    try {
-        # Free space on the drive of the install root. A multi-GB editor download
-        # that runs out of disk would explain a long, output-starved failure.
-        $rootFull = [System.IO.Path]::GetFullPath($Root)
-        $drive = [System.IO.Path]::GetPathRoot($rootFull)
-        if ($drive) {
-            $driveInfo = New-Object System.IO.DriveInfo($drive)
-            $freeGb = [Math]::Round($driveInfo.AvailableFreeSpace / 1GB, 2)
-            $totalGb = [Math]::Round($driveInfo.TotalSize / 1GB, 2)
-            Write-Host "Install drive $drive free space: $freeGb GB free of $totalGb GB total."
-        } else {
-            Write-Host "::notice::Could not determine the install drive for '$Root'."
-        }
-    } catch {
-        Write-Host "::notice::Could not query install drive free space: $($_.Exception.Message)"
-    }
+    # Free space on the drive of the install root. A multi-GB editor download that
+    # runs out of disk would explain a long, output-starved failure. Reuses the
+    # shared probe so the pre-install dump and the on-failure summary agree.
+    Write-Host (Get-InstallDriveFreeSpaceText -Root $Root)
     Write-Host "::endgroup::"
 }
 
@@ -1463,25 +1925,27 @@ if (-not $editor) {
     Write-InstallDiagnostics -Root $InstallRoot
 
     # The base install has been observed to fail flakily (exit 6 after a long run
-    # with almost no output). Retry once via Invoke-WithRetry (two attempts fit
-    # inside the 120-minute step budget even for a slow install), and use the
-    # CAPTURING invoker so a final failure THROWS with the CLI output tail + exit
-    # code -- the previous failure surfaced no actionable diagnostics. Output is
-    # still streamed live by Invoke-UnityCliCapture, never silently buffered.
+    # with almost no output) AND to HANG until the job is cancelled. Each attempt
+    # is now bounded by the install timeout (Invoke-UnityCliCapture delegates to
+    # the timeout runner), so a hang is killed and classified as a retryable
+    # failure that Invoke-WithRetry can re-attempt. The attempt count is sourced
+    # from the override-aware helper (default 2 -- two attempts fit inside the
+    # 180-minute Provision-Unity-Editor step budget even for a slow install), and
+    # the CAPTURING invoker makes a final failure THROW with the CLI output tail +
+    # exit code. Output is streamed live, per line, by Invoke-UnityCliCapture (each
+    # line is echoed the instant it arrives), never silently buffered.
     $retryDelaySeconds = Get-EnsureEditorRetryDelaySeconds
+    $installRetryAttempts = Get-EnsureEditorInstallRetryAttempts
 
     $recoveredEditor = Invoke-WithUnityInstallLock -Version $UnityVersion -InstallRoot $InstallRoot -Action {
-        Invoke-WithRetry -MaxAttempts 2 -DelaySeconds $retryDelaySeconds -Action {
+        Invoke-WithRetry -MaxAttempts $installRetryAttempts -DelaySeconds $retryDelaySeconds -Action {
             $installResult = Invoke-UnityCliCapture -Arguments $installArgs
             if (-not $installResult.Success) {
                 $installLines = @($installResult.Output)
                 $installText = ($installLines -join "`n")
-                $installTailCount = [Math]::Min(40, $installLines.Count)
-                $installTail = if ($installTailCount -gt 0) {
-                    ($installLines[($installLines.Count - $installTailCount)..($installLines.Count - 1)] -join "`n")
-                } else {
-                    '(no output captured)'
-                }
+                # Collapse consecutive identical lines (the Android NDK install can
+                # spam thousands of identical progress lines) so the tail is READABLE.
+                $installTail = Get-CollapsedCliOutputTail -Output $installResult.Output -MaxLines 40
 
                 $resolvedAfterFailure = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot -ManagedOnly:$CiManagedOnly
                 if ($resolvedAfterFailure) {
@@ -1499,6 +1963,8 @@ if (-not $editor) {
                 }
 
                 Write-UnityCliInstallFailureAnnotation -Version $UnityVersion -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs
+                $baseInstallTimedOut = ($installResult.ExitCode -eq 124)
+                Write-ModuleInstallFailureDiagnostics -Version $UnityVersion -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$baseInstallTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
                 Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install failed and Unity.exe could not be resolved afterward."
                 throw "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode). CLI output tail:`n$installTail"
             }
