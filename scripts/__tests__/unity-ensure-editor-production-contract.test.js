@@ -6,11 +6,33 @@
  *
  * The three fixes (see the branch's CI triage):
  *
- *   2a. Module install passes `--accept-eula`. The standalone Unity CLI aborts
- *       `install-modules -m` with "One or more modules require license
- *       acceptance. Pass --accept-eula ..." when an EULA-bearing module (Android
- *       SDK/NDK/OpenJDK) is requested. The flag MUST be on the INSTALL (`-m`)
- *       call and MUST NOT be added to the `-l` listing call (which takes no EULA).
+ *   2a. EVERY module install passes `--accept-eula`, enforced by making a single
+ *       helper the SOLE PRODUCER of install args. The standalone Unity CLI aborts
+ *       a module install (`install -m ...` OR `install-modules -m ...`) with "One
+ *       or more modules require license acceptance. Pass --accept-eula ..." when
+ *       an EULA-bearing module (Android SDK/NDK/OpenJDK) is requested. The flag
+ *       MUST be on EVERY module-install (`-m`) invocation and MUST NOT be added to
+ *       the `-l` listing call (which takes no EULA).
+ *
+ *       The contract's PRIMARY guard is a pwsh-AST sole-producer invariant
+ *       (runSoleProducerAst): Get-UnityCliModuleInstallArguments is the ONLY place
+ *       in the script that constructs an `install`/`install-modules` ... `-m` ...
+ *       argument vector, and every live CLI invoker that performs a module install
+ *       resolves its `-Arguments` to that helper. Because the AST inspects PARSED
+ *       array nodes, a future bypass written multi-line, with reordered elements,
+ *       or routed through an inline-built variable is caught -- not just a
+ *       single-line literal. It is therefore structurally impossible for one site
+ *       to carry the flag while another omits it (the exact drift that broke every
+ *       CI cell). A cheap, always-on single-line text scan + helper-body
+ *       cross-check runs even when pwsh is absent; the AST guard `test.skip`s
+ *       cleanly when pwsh is unavailable (CI runners have pwsh).
+ *
+ *       This contract FAILS against the pre-fix code: the top-level `install`
+ *       (`@('install', $UnityVersion, '-m') + @(Get-UnityCiModuleIds)`) and the
+ *       repair-path `install` (`@('install', $Version, '-m') + $moduleIds`) both
+ *       built a `-m` vector WITHOUT `--accept-eula` AT THE CALL SITE (outside any
+ *       helper); the AST sole-producer guard flags an install vector outside the
+ *       helper, and the behavior check flags the missing flag.
  *
  *   2b. The quarantine `Move-Item` is wrapped in `Invoke-WithRetry`. Moving a
  *       Unity editor directory on Windows can fail transiently with "The process
@@ -65,6 +87,159 @@ function extractFunctionBody(scriptText, functionName) {
   return after === -1 ? scriptText.slice(start) : scriptText.slice(start, after);
 }
 
+/**
+ * Strip PowerShell line comments (and trailing inline comments) so a contract
+ * assertion targets CODE, not prose. The WHY/justification comments in
+ * Get-UnityCiModuleIds legitimately MENTION 'android-open-jdk' to explain why it
+ * is intentionally absent from the returned list; stripping comments lets us
+ * assert against the actual returned ids. Conservative: this does not parse
+ * strings, so a `#` inside a single-quoted string on a code line would be
+ * mis-stripped -- none of the lines we assert against contain one.
+ */
+function stripPwshComments(body) {
+  return body
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("#")) {
+        return "";
+      }
+      return line.replace(/#.*$/, "");
+    })
+    .join("\n");
+}
+
+/**
+ * FIX-2 sole-producer invariant, enforced via the PowerShell AST.
+ *
+ * Parses `scriptPath` and asserts:
+ *
+ *   (A) SOLE PRODUCER. Every array node (an array literal `@(...)` OR a bare
+ *       `a, b, c` comma list) whose STRING-CONSTANT elements include an install
+ *       verb (`install`/`install-modules`) AND the `-m` flag -- i.e. a Unity-CLI
+ *       module-install argument vector -- lies INSIDE the body of
+ *       Get-UnityCliModuleInstallArguments. Because the check is over PARSED
+ *       array nodes (not source lines), it catches a bypass written multi-line,
+ *       with reordered elements, or assigned to a variable -- any inline build of
+ *       an `-m` install vector at a call site fails it. There must be >= 2 such
+ *       vectors (the helper's own `install` + `install-modules` returns).
+ *
+ *   (B) ROUTING. Every live CLI invoker call (Invoke-UnityCliCapture /
+ *       Invoke-UnityCliSafe / Get-UnityCliOutput) that targets a module install
+ *       resolves its `-Arguments` to the helper -- either by calling the helper
+ *       inline, or by passing a variable that was assigned from the helper. A
+ *       call site whose `-Arguments` contains an inline `-m` install vector is a
+ *       bypass (also flagged by (A)). At least 3 invoker call sites must route
+ *       through the helper (primary install, repair install, install-modules add).
+ *
+ *   (C) BEHAVIOR. Executing the extracted helper produces an `--accept-eula` +
+ *       `-m` vector for BOTH verbs, so the contract pins behavior, not just text.
+ *
+ * Returns { ok, text } where `text` is the normalized pwsh stdout/stderr. The
+ * caller throws on !ok so the failing assertion names the offending line.
+ */
+function runSoleProducerAst(scriptPath) {
+  const harness = [
+    "Set-StrictMode -Version Latest",
+    "$ErrorActionPreference = 'Stop'",
+    `$src = '${scriptPath.replace(/'/g, "''")}'`,
+    "$tokens = $null; $errs = $null",
+    "$ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$tokens, [ref]$errs)",
+    "if ($errs -and $errs.Count -gt 0) { Write-Host 'FAIL parse errors'; exit 3 }",
+    "$helperName = 'Get-UnityCliModuleInstallArguments'",
+    "$helperHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $helperName }, $true))",
+    "if ($helperHits.Count -lt 1) { Write-Host 'FAIL no helper fn'; exit 4 }",
+    "$helper = $helperHits[0]",
+    "$hStart = $helper.Extent.StartOffset",
+    "$hEnd = $helper.Extent.EndOffset",
+    // Collect the string-constant element values of an array node (literal or @()).
+    "function Get-VectorStrings { param($node)",
+    "  $elements = @()",
+    "  if ($node -is [System.Management.Automation.Language.ArrayLiteralAst]) { $elements = $node.Elements }",
+    "  elseif ($node -is [System.Management.Automation.Language.ArrayExpressionAst]) {",
+    "    $inner = @($node.SubExpression.Statements | ForEach-Object {",
+    "      if ($_ -is [System.Management.Automation.Language.PipelineAst]) {",
+    "        $_.PipelineElements | ForEach-Object { if ($_ -is [System.Management.Automation.Language.CommandExpressionAst]) { $_.Expression } }",
+    "      } })",
+    "    $flat = @()",
+    "    foreach ($e in $inner) { if ($e -is [System.Management.Automation.Language.ArrayLiteralAst]) { $flat += $e.Elements } else { $flat += $e } }",
+    "    $elements = $flat",
+    "  }",
+    "  return @($elements | Where-Object { $_ -is [System.Management.Automation.Language.StringConstantExpressionAst] } | ForEach-Object { $_.Value })",
+    "}",
+    "function Test-IsInstallVector { param($node)",
+    "  $strs = @(Get-VectorStrings $node)",
+    "  $hasVerb = ($strs -contains 'install') -or ($strs -contains 'install-modules')",
+    "  $hasM = ($strs -contains '-m')",
+    "  return ($hasVerb -and $hasM)",
+    "}",
+    // (A) sole producer.
+    "$arrayNodes = @($ast.FindAll({ param($n) ($n -is [System.Management.Automation.Language.ArrayLiteralAst]) -or ($n -is [System.Management.Automation.Language.ArrayExpressionAst]) }, $true))",
+    "$installVectors = @($arrayNodes | Where-Object { Test-IsInstallVector $_ })",
+    "$outside = @($installVectors | Where-Object { -not ($_.Extent.StartOffset -ge $hStart -and $_.Extent.EndOffset -le $hEnd) })",
+    "$ok = $true",
+    "if ($installVectors.Count -lt 2) { Write-Host 'FAIL fewer than 2 install vectors (helper should hold install + install-modules)'; $ok = $false }",
+    "foreach ($o in $outside) { Write-Host ('FAIL install-vector OUTSIDE helper at line {0}: {1}' -f $o.Extent.StartLineNumber, ($o.Extent.Text -replace '\\s+', ' ')); $ok = $false }",
+    // (B) routing: build a var-name -> assigned-from-helper map, then inspect invoker calls.
+    "$invokerNames = @('Invoke-UnityCliCapture', 'Invoke-UnityCliSafe', 'Get-UnityCliOutput')",
+    "$cmds = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))",
+    "$helperVars = @{}",
+    "$assignments = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true))",
+    "foreach ($a in $assignments) {",
+    "  if ($a.Left -is [System.Management.Automation.Language.VariableExpressionAst]) {",
+    "    $varName = $a.Left.VariablePath.UserPath",
+    "    $rhsCalls = @($a.Right.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))",
+    "    foreach ($rc in $rhsCalls) { if ($rc.GetCommandName() -eq $helperName) { $helperVars[$varName] = $true } }",
+    "  }",
+    "}",
+    "function Get-ArgumentsValueAst { param($cmd)",
+    "  $els = $cmd.CommandElements",
+    "  for ($i = 0; $i -lt $els.Count; $i++) {",
+    "    $e = $els[$i]",
+    "    if ($e -is [System.Management.Automation.Language.CommandParameterAst] -and $e.ParameterName -eq 'Arguments') {",
+    "      if ($e.Argument) { return $e.Argument }",
+    "      if (($i + 1) -lt $els.Count) { return $els[$i + 1] }",
+    "    }",
+    "  }",
+    "  return $null",
+    "}",
+    "$routed = 0",
+    "foreach ($c in $cmds) {",
+    "  if ($invokerNames -notcontains $c.GetCommandName()) { continue }",
+    "  $argVal = Get-ArgumentsValueAst $c",
+    "  if (-not $argVal) { continue }",
+    "  $argArrays = @($argVal.FindAll({ param($n) ($n -is [System.Management.Automation.Language.ArrayLiteralAst]) -or ($n -is [System.Management.Automation.Language.ArrayExpressionAst]) }, $true))",
+    "  $hasInlineInstallVector = (@($argArrays | Where-Object { Test-IsInstallVector $_ }).Count -gt 0)",
+    "  $argCalls = @($argVal.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))",
+    "  $callsHelperInline = (@($argCalls | Where-Object { $_.GetCommandName() -eq $helperName }).Count -gt 0)",
+    "  $isHelperVar = $false",
+    "  if ($argVal -is [System.Management.Automation.Language.VariableExpressionAst]) { if ($helperVars.ContainsKey($argVal.VariablePath.UserPath)) { $isHelperVar = $true } }",
+    "  if ($hasInlineInstallVector) { Write-Host ('FAIL module-install invoker at line {0} builds an inline -m vector instead of routing through {1}' -f $c.Extent.StartLineNumber, $helperName); $ok = $false; continue }",
+    "  if ($callsHelperInline -or $isHelperVar) { $routed++ }",
+    "}",
+    "if ($routed -lt 3) { Write-Host ('FAIL fewer than 3 routed module-install invokers (got {0})' -f $routed); $ok = $false }",
+    // (C) behavior: execute the helper + ids fns and check both verbs.
+    "$idsHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleIds' }, $true))",
+    "if ($idsHits.Count -lt 1) { Write-Host 'FAIL no module-ids fn'; exit 9 }",
+    "Invoke-Expression $idsHits[0].Extent.Text",
+    "Invoke-Expression $helper.Extent.Text",
+    "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",
+    "$modArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version '6000.0.32f1')",
+    "if ($installArgs -notcontains '--accept-eula') { Write-Host 'FAIL install verb missing eula'; $ok = $false }",
+    "if ($modArgs -notcontains '--accept-eula') { Write-Host 'FAIL install-modules verb missing eula'; $ok = $false }",
+    "if ($installArgs -notcontains '-m') { Write-Host 'FAIL install verb missing -m'; $ok = $false }",
+    "if ($modArgs -notcontains '-m') { Write-Host 'FAIL install-modules verb missing -m'; $ok = $false }",
+    "if ($ok) { Write-Output 'FIX2-OK' } else { exit 7 }"
+  ].join("\n");
+
+  const run = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", harness], {
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024
+  });
+  const text = normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
+  return { ok: run.status === 0, text };
+}
+
 let scriptText;
 
 beforeAll(() => {
@@ -79,28 +254,186 @@ describe("ensure-editor.ps1 production contract", () => {
     expect(scriptText).toContain("Set-StrictMode -Version Latest");
   });
 
-  // --- 2a: --accept-eula on the module INSTALL call, not the listing call. ---
-  describe("2a: module install passes --accept-eula", () => {
-    test("the install-modules INSTALL (-m) call includes --accept-eula", () => {
-      // Find the single capturing install-modules call (the `-m` install, not the
-      // `-l` listing) and assert the EULA flag is present in that same invocation.
-      const installCall = /Invoke-UnityCliCapture[^\n]*install-modules[^\n]*-m[^\n]*/.exec(
-        scriptText
-      );
-      expect(installCall).not.toBeNull();
-      expect(installCall[0]).toContain("--accept-eula");
+  // --- 2a: --accept-eula on EVERY module INSTALL call, not the listing call. ---
+  describe("2a: every module install passes --accept-eula", () => {
+    // INVARIANT (the contract this block enforces):
+    //   Get-UnityCliModuleInstallArguments is the SOLE PRODUCER of a Unity-CLI
+    //   module-install argument vector (an `install`/`install-modules` ... `-m` ...
+    //   vector). Every live CLI invocation that performs a module install derives
+    //   its `-Arguments` from that helper. Because the flag is injected in exactly
+    //   one place, it is structurally impossible for one call site to carry
+    //   `--accept-eula` while another omits it -- the exact drift that broke every
+    //   CI cell.
+    //
+    // The PRIMARY guard is a pwsh-AST scan (below) that finds EVERY array node
+    // (literal `@(...)` or bare `a, b, c`) whose string elements include an
+    // install verb AND `-m`, and asserts they ALL live inside the helper's body.
+    // The AST sees the parsed vector regardless of how it is written, so a
+    // multi-line, reordered, or variable-assigned bypass at a future call site is
+    // caught -- not just a single-line literal.
+    //
+    // A complementary single-line TEXT scan (`enumerateModuleInstallLines`) drives
+    // a per-vector table for at-a-glance reporting. After the single-source-of-truth
+    // refactor the ONLY single-line install vectors in the file are the helper's own
+    // two `return` lines, so this scan is intentionally NARROW (single-line only);
+    // it does NOT claim to catch every bypass shape -- that is the AST guard's job.
+    // The `-l` LISTING call is deliberately excluded (it carries `-l`, never `-m`):
+    // it takes no license, so `--accept-eula` there would be wrong.
+    function enumerateModuleInstallLines(text) {
+      const out = [];
+      const lines = text.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        // Skip pure-comment lines so prose mentioning "-m" or "install" never
+        // counts as an invocation.
+        if (trimmed.startsWith("#")) {
+          continue;
+        }
+        // Strip a trailing inline comment so a `# ...` tail cannot smuggle tokens.
+        const code = line.replace(/#.*$/, "");
+        // Must construct an install/install-modules verb literal AND carry the `-m`
+        // module flag literal on the SAME line. NOTE: this single-line matcher is a
+        // reporting convenience only -- the AST guard below is the real invariant
+        // and covers multi-line / reordered / variable-routed shapes this misses.
+        const hasInstallVerb = /'install'|'install-modules'/.test(code);
+        const hasModuleFlag = /'-m'/.test(code);
+        if (hasInstallVerb && hasModuleFlag) {
+          out.push({ lineNumber: i + 1, code: code.trim() });
+        }
+      }
+      return out;
+    }
+
+    let moduleInstallLines;
+    beforeAll(() => {
+      moduleInstallLines = enumerateModuleInstallLines(scriptText);
     });
 
-    test("the install-modules LISTING (-l) call does NOT include --accept-eula", () => {
+    test("at least one single-line install vector exists to report against", () => {
+      // Guard against a scan that silently matches nothing (which would make the
+      // per-line assertions vacuously pass). After the single-source-of-truth
+      // refactor the helper alone contributes two (`install` + `install-modules`).
+      expect(moduleInstallLines.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test("EVERY single-line install (-m) vector includes --accept-eula", () => {
+      // If any single-line `-m` install vector lacks the flag, this fails and names
+      // the exact line. (The AST guard additionally covers non-single-line shapes.)
+      const offenders = moduleInstallLines.filter((entry) => !entry.code.includes("--accept-eula"));
+      const detail = offenders.map((o) => `  line ${o.lineNumber}: ${o.code}`).join("\n");
+      expect(offenders.length === 0 ? "" : detail).toBe("");
+    });
+
+    describe("each single-line install vector (table-driven, reporting only)", () => {
+      // Snapshot the table at module-load time so test.each has a static table;
+      // the always-on beforeAll re-derivation above guards the same source.
+      const table = enumerateModuleInstallLines(fs.readFileSync(ENSURE_EDITOR, "utf8"));
+      test.each(table)("line $lineNumber carries --accept-eula", ({ code }) => {
+        expect(code).toContain("--accept-eula");
+      });
+    });
+
+    test("every single-line install vector lives inside the helper body (text cross-check)", () => {
+      // A cheap, always-on text complement to the AST sole-producer guard: each
+      // single-line install vector text must be a substring of the helper body. This
+      // runs even when pwsh is absent; the AST guard below is the authoritative,
+      // shape-independent version.
+      const helperBody = extractFunctionBody(scriptText, "Get-UnityCliModuleInstallArguments");
+      expect(helperBody).not.toBe("");
+      const outside = moduleInstallLines.filter((entry) => !helperBody.includes(entry.code));
+      const detail = outside.map((o) => `  line ${o.lineNumber}: ${o.code}`).join("\n");
+      expect(outside.length === 0 ? "" : detail).toBe("");
+    });
+
+    test("the LISTING (-l) call does NOT include --accept-eula", () => {
       // The `-l` listing call takes no license; the flag there would be wrong.
       const listCall = /install-modules'[^\n]*'-l'[^\n]*/.exec(scriptText);
       expect(listCall).not.toBeNull();
       expect(listCall[0]).not.toContain("--accept-eula");
     });
 
-    test("exactly one install-modules invocation carries --accept-eula", () => {
-      const matches = scriptText.match(/install-modules[^\n]*--accept-eula/g) || [];
-      expect(matches).toHaveLength(1);
+    // --- single source of truth: the helper exists and every call site routes
+    // through it, so the EULA flag cannot drift between call sites. ---
+    test("the single source-of-truth helper Get-UnityCliModuleInstallArguments exists", () => {
+      expect(scriptText).toContain("function Get-UnityCliModuleInstallArguments");
+      const body = extractFunctionBody(scriptText, "Get-UnityCliModuleInstallArguments");
+      expect(body).not.toBe("");
+      // The helper is the one place the flag is injected; it must mention it for
+      // BOTH verbs it handles.
+      expect(body).toContain("--accept-eula");
+      expect(body).toContain("install-modules");
+      expect(body).toMatch(/ValidateSet\('install', 'install-modules'\)/);
+    });
+
+    test("all three module-install call sites route through the helper", () => {
+      // Top-level primary install, repair-path install, and the install-modules
+      // module-add must each call Get-UnityCliModuleInstallArguments rather than
+      // hand-building a `-m` vector. We require at least three routed call sites
+      // (the install-modules vector is captured once and reused, so it appears once).
+      const routed =
+        scriptText.match(
+          /Get-UnityCliModuleInstallArguments\s+-Verb\s+'(install|install-modules)'/g
+        ) || [];
+      expect(routed.length).toBeGreaterThanOrEqual(3);
+      // Both verbs are exercised (install for the two install paths; install-modules
+      // for the module-add path).
+      expect(routed.some((m) => /'install'/.test(m))).toBe(true);
+      expect(routed.some((m) => /'install-modules'/.test(m))).toBe(true);
+    });
+
+    // --- PRIMARY sole-producer invariant: pwsh-AST, shape-independent. ---
+    // This is the strong guard the single-line text scan cannot be: it parses the
+    // script and inspects PARSED array nodes, so it catches a future bypass written
+    // multi-line, reordered, or routed through an inline-built variable.
+    if (!PWSH_PRESENT) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[ensure-editor-production-contract] pwsh not found; skipping AST sole-producer guard (CI runners have pwsh)."
+      );
+      test.skip("pwsh AST: Get-UnityCliModuleInstallArguments is the SOLE PRODUCER of -m install vectors", () => {});
+    } else {
+      test("pwsh AST: Get-UnityCliModuleInstallArguments is the SOLE PRODUCER of -m install vectors", () => {
+        const result = runSoleProducerAst(ENSURE_EDITOR);
+        if (!result.ok) {
+          throw new Error(result.text);
+        }
+        expect(result.text).toContain("FIX2-OK");
+      });
+    }
+  });
+
+  // --- 2a-bis: requested ids vs verified disk groups are cleanly decoupled. ---
+  describe("2a-bis: android-open-jdk is verified on disk but not requested from the CLI", () => {
+    test("Get-UnityCiModuleIds (REQUESTED) does NOT include android-open-jdk", () => {
+      // The bare id is version-pinned/unknown to the beta CLI ("Couldn't find
+      // module"); OpenJDK arrives as an android-sdk-ndk-tools dependency, so we must
+      // not request it directly (that produced the silent warning). Assert against
+      // the CODE (comments may legitimately mention the id to explain its absence).
+      const body = extractFunctionBody(scriptText, "Get-UnityCiModuleIds");
+      expect(body).not.toBe("");
+      const code = stripPwshComments(body);
+      expect(code).not.toContain("'android-open-jdk'");
+      expect(code).toContain("'android-sdk-ndk-tools'");
+    });
+
+    test("Get-UnityCiVerifiedModuleGroups (VERIFIED) DOES include android-open-jdk", () => {
+      // We still PROVE OpenJDK landed on disk, decoupled from what we request.
+      const body = extractFunctionBody(scriptText, "Get-UnityCiVerifiedModuleGroups");
+      expect(body).not.toBe("");
+      expect(body).toContain("'android-open-jdk'");
+    });
+
+    test("the disk-verification iterator uses the VERIFIED groups, not the requested ids", () => {
+      const body = extractFunctionBody(scriptText, "Get-MissingUnityCiModuleGroups");
+      expect(body).not.toBe("");
+      expect(body).toContain("Get-UnityCiVerifiedModuleGroups");
+    });
+
+    test("the on-disk switch still verifies the android-open-jdk OpenJDK leaf", () => {
+      const body = extractFunctionBody(scriptText, "Test-UnityCiModuleGroupPresent");
+      expect(body).toContain("'android-open-jdk'");
+      expect(body).toContain("OpenJDK");
     });
   });
 
@@ -202,14 +535,33 @@ describe("ensure-editor.ps1 production contract", () => {
         "$quarantine = Get-Fn 'Move-UnityInstallDirectoryToQuarantine'",
         "$guard = Get-Fn 'Confirm-UnityCliManagedInstallRoot'",
         "$ensure = Get-Fn 'Ensure-UnityCiModules'",
+        "$helper = Get-Fn 'Get-UnityCliModuleInstallArguments'",
+        "$ids = Get-Fn 'Get-UnityCiModuleIds'",
         "if (-not $quarantine) { Write-Error 'no quarantine fn'; exit 4 }",
         "if (-not $guard) { Write-Error 'no guard fn'; exit 5 }",
         "if (-not $ensure) { Write-Error 'no ensure fn'; exit 6 }",
+        "if (-not $helper) { Write-Error 'no module-install helper fn'; exit 8 }",
+        "if (-not $ids) { Write-Error 'no module-ids fn'; exit 9 }",
         "$ok = $true",
         "if ($quarantine -notmatch 'Invoke-WithRetry') { Write-Host 'FAIL quarantine retry'; $ok = $false }",
         "if ($quarantine -notmatch 'Move-Item') { Write-Host 'FAIL quarantine move'; $ok = $false }",
         "if ($guard -notmatch '::error::') { Write-Host 'FAIL guard annotation'; $ok = $false }",
-        "if ($ensure -notmatch 'install-modules[^\\r\\n]*--accept-eula') { Write-Host 'FAIL ensure eula'; $ok = $false }",
+        // The install-modules call site routes through the single-source-of-truth
+        // helper (it no longer hand-builds the EULA flag inline).
+        "if ($ensure -notmatch 'Get-UnityCliModuleInstallArguments') { Write-Host 'FAIL ensure routes via helper'; $ok = $false }",
+        // STRONGEST check: actually EXECUTE the extracted helper + ids fn and assert
+        // the generated argument vectors carry --accept-eula for BOTH verbs (so the
+        // contract enforces behavior, not just text), and that the requested ids do
+        // NOT include the bare android-open-jdk id the beta CLI rejects.
+        "Invoke-Expression $ids",
+        "Invoke-Expression $helper",
+        "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",
+        "$modArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version '6000.0.32f1')",
+        "if ($installArgs -notcontains '--accept-eula') { Write-Host 'FAIL install verb eula'; $ok = $false }",
+        "if ($modArgs -notcontains '--accept-eula') { Write-Host 'FAIL install-modules verb eula'; $ok = $false }",
+        "if ($installArgs -notcontains '-m') { Write-Host 'FAIL install verb -m'; $ok = $false }",
+        "if ($modArgs -notcontains '-m') { Write-Host 'FAIL install-modules verb -m'; $ok = $false }",
+        "if ((Get-UnityCiModuleIds) -contains 'android-open-jdk') { Write-Host 'FAIL requested ids include android-open-jdk'; $ok = $false }",
         "if ($ok) { Write-Output 'CONTRACT-OK' } else { exit 7 }"
       ].join("\n");
 

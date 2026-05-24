@@ -261,6 +261,14 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
         "Test-Il2CppModulePresent",
         "Test-AnyUnityLeafPresent",
         "Get-UnityCiModuleIds",
+        // VERIFIED groups (decoupled from requested ids) -- iterated by
+        // Get-MissingUnityCiModuleGroups for on-disk verification.
+        "Get-UnityCiVerifiedModuleGroups",
+        // Single source-of-truth arg-vector builder used by Ensure-UnityCiModules
+        // (the install-modules call + the failure-annotation arg echo).
+        "Get-UnityCliModuleInstallArguments",
+        // Targeted failure annotation emitted on a genuine module-install failure.
+        "Write-UnityCliInstallFailureAnnotation",
         "Test-UnityCiModuleGroupPresent",
         "Get-MissingUnityCiModuleGroups",
         "Ensure-UnityCiModules",

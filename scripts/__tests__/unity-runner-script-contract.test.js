@@ -28,6 +28,26 @@ function readScript(relPath) {
   return fs.readFileSync(abs, "utf8");
 }
 
+/**
+ * Extract the source text of a top-level `function <name> { ... }` by bounding it
+ * at the next top-level `\nfunction ` definition. Mirrors the slicing used by the
+ * production-contract and idempotency tests. Returns "" when not found.
+ */
+function extractFunctionBody(scriptText, functionName) {
+  const start = scriptText.indexOf(`function ${functionName}`);
+  if (start < 0) {
+    return "";
+  }
+  const after = scriptText.indexOf("\nfunction ", start + 1);
+  return after === -1 ? scriptText.slice(start) : scriptText.slice(start, after);
+}
+
+/** Collapse all whitespace runs to single spaces so token-order assertions are
+ *  resilient to harmless reformatting (line breaks, re-indentation, alignment). */
+function normalizeWhitespace(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function hasExecutableBit(absPath) {
   const relativePath = path.relative(REPO_ROOT, absPath).split(path.sep).join("/");
   const result = childProcess.spawnSync("git", ["ls-files", "--stage", "--", relativePath], {
@@ -379,7 +399,15 @@ describe("scripts/unity direct CI runner contract", () => {
     // matched both the old positional bug shape and the new getter/`-s` form, so
     // it was tautological. The form-specific `'install-path', '-s'` SET and
     // `@('install-path')` getter assertions below cover the surface precisely.
-    expect(ensureEditor).toContain("$installArgs = @('install', $UnityVersion, '-m')");
+    // The primary install builds its arg vector through the single source-of-truth
+    // helper (which injects the mandatory --accept-eula), not a hand-built `-m`
+    // vector that previously omitted the flag and broke every CI cell. Asserted
+    // whitespace-tolerantly (token intent, not an exact line) so a harmless
+    // reformat of the assignment never breaks this contract; the deeper
+    // sole-producer invariant is pinned by the production-contract AST test.
+    expect(ensureEditor).toMatch(
+      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s*\)/
+    );
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
     expect(ensureEditor).toContain("Unity.exe");
@@ -492,7 +520,16 @@ describe("scripts/unity direct CI runner contract", () => {
     // modules this repository may need across Windows standalone IL2CPP, WebGL,
     // Android, and Linux build support. Module repair must classify against disk
     // and reinstall a managed editor when module installation cannot modify it.
+    //
+    // NOTE: the script keeps two DECOUPLED lists -- the REQUESTED ids passed to
+    // `-m` (Get-UnityCiModuleIds, which intentionally OMITS the version-pinned
+    // 'android-open-jdk') and the VERIFIED-on-disk groups (Get-UnityCiVerifiedModule
+    // Groups, which INCLUDES 'android-open-jdk' because it lands as an
+    // android-sdk-ndk-tools dependency). Each id below must therefore appear
+    // SOMEWHERE in the script (requested and/or verified); the requested-vs-verified
+    // split is pinned precisely by unity-ensure-editor-production-contract.test.js.
     expect(ensureEditor).toContain("function Get-UnityCiModuleIds");
+    expect(ensureEditor).toContain("function Get-UnityCiVerifiedModuleGroups");
     for (const moduleId of [
       "windows-il2cpp",
       "webgl",
@@ -518,11 +555,34 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-l'");
     // The module INSTALL passes --accept-eula: the standalone CLI aborts with
     // "One or more modules require license acceptance. Pass --accept-eula ..."
-    // for the Android SDK/NDK/OpenJDK modules otherwise. The flag is on the
-    // INSTALL (-m) call only, never the -l listing call above.
-    expect(ensureEditor).toContain(
-      "@('install-modules', '-e', $Version, '--accept-eula', '-m') + $moduleIds"
-    );
+    // for the Android SDK/NDK/OpenJDK modules otherwise. The flag is injected by
+    // the single source-of-truth helper Get-UnityCliModuleInstallArguments (for
+    // BOTH the `install` and `install-modules` verbs), never the -l listing call.
+    //
+    // INTENT-BASED contract (deliberately NOT an exact-literal pin): the helper's
+    // `install-modules` return shape now lives in only one place, so pinning the
+    // exact literal `@('install-modules', '-e', $Version, '--accept-eula', '-m') +
+    // $moduleIds` would break on any harmless reformat. Instead we extract the
+    // helper body, normalize whitespace, and require the tokens that ACTUALLY
+    // matter to be present (verb + `-e $Version` + `--accept-eula` + `-m`), in any
+    // formatting. The pwsh-AST production-contract test additionally EXECUTES the
+    // helper and asserts the generated vector contents.
+    {
+      const helperBody = normalizeWhitespace(
+        extractFunctionBody(ensureEditor, "Get-UnityCliModuleInstallArguments")
+      );
+      expect(helperBody).not.toBe("");
+      // install-modules verb branch: targets an existing editor (`-e $Version`),
+      // carries the mandatory EULA flag, and requests modules with `-m`.
+      expect(helperBody).toContain("'install-modules'");
+      expect(helperBody).toContain("'-e', $Version");
+      expect(helperBody).toContain("'--accept-eula'");
+      expect(helperBody).toContain("'-m'");
+      // install verb branch: positional version (no `-e`) plus the same EULA flag.
+      expect(helperBody).toContain("'install', $Version");
+      // The helper is the only place that owns these install-arg literals.
+      expect(helperBody).toMatch(/ValidateSet\('install', 'install-modules'\)/);
+    }
     // The -l listing is read non-throwing (best-effort verification). The module
     // install now runs through the CAPTURING (non-throwing) invoker so its exit
     // code AND output can be classified against the on-disk module layout: the
@@ -533,8 +593,25 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toMatch(
       /Get-UnityCliOutput -Arguments @\('install-modules', '-e', \$Version, '-l'\)/
     );
+    // The module-add call site routes the (EULA-bearing) arg vector through the
+    // single source-of-truth helper Get-UnityCliModuleInstallArguments rather than
+    // hand-building it, so the flag cannot drift between this and the `install`
+    // call sites. The helper itself owns the literal `'--accept-eula', '-m'` shape.
+    // The install-modules vector is captured ONCE into a variable and reused for
+    // both the install call and the failure-annotation arg echo (no duplicate
+    // helper call), so assert the helper-routed assignment + the variable-routed
+    // capturing invoke rather than an inline-call regex that a refactor would break.
     expect(ensureEditor).toMatch(
-      /Invoke-UnityCliCapture -Arguments \(@\('install-modules', '-e', \$Version, '--accept-eula', '-m'\) \+ \$moduleIds\)/
+      /\$installArgs = @\(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version \$Version\)/
+    );
+    expect(ensureEditor).toMatch(/Invoke-UnityCliCapture -Arguments \$installArgs/);
+    expect(ensureEditor).toContain("function Get-UnityCliModuleInstallArguments");
+    // Both `install` call sites (primary + repair) also route through the helper.
+    expect(ensureEditor).toMatch(
+      /Get-UnityCliModuleInstallArguments -Verb 'install' -Version \$UnityVersion/
+    );
+    expect(ensureEditor).toMatch(
+      /Get-UnityCliModuleInstallArguments -Verb 'install' -Version \$Version/
     );
     // The OLD unconditional throwing install of the module must NOT reappear: it
     // wrongly aborted standalone on the idempotent "No modules found to install"

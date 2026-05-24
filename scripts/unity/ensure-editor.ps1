@@ -360,6 +360,45 @@ function Invoke-UnityCliCapture {
     }
 }
 
+function Write-UnityCliInstallFailureAnnotation {
+    # HIGH-SIGNAL, additive CI annotation for a FAILED module install. Scans the
+    # captured CLI output for the two failure SIGNATURES this script has been bitten
+    # by and emits a targeted ::error::/::warning:: that NAMES the remediation, so a
+    # future regression of this exact class is obvious at a glance in the CI log
+    # instead of buried in a generic exit-code dump. Additive only: callers still
+    # throw/log their full message + arg vector + exit code separately. Best-effort
+    # and StrictMode-safe: never throws, @()-wraps the output capture.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string[]]$Output,
+        [int]$ExitCode = -1,
+        [string[]]$Arguments
+    )
+
+    $text = (@($Output) -join "`n")
+    $argLine = if ($Arguments) { ($Arguments -join ' ') } else { '(unavailable)' }
+
+    # Match only the ACTUAL EULA-rejection phrasing, never a bare `--accept-eula`.
+    # The real failing log line is "Error: One or more modules require license
+    # acceptance. Pass --accept-eula to accept all module license terms and
+    # proceed." -- matching the remediation phrase `Pass --accept-eula` (or the
+    # "require[s] license acceptance" cause) avoids a self-false-positive if the CLI
+    # ever echoes our own invoked args (which contain `--accept-eula`) back to stdout.
+    if ($text -match '(?i)require[s]? license acceptance|Pass\s+--accept-eula') {
+        # The fix is structural (Get-UnityCliModuleInstallArguments injects
+        # --accept-eula for every module install); if this still fires, the flag is
+        # no longer being honored by this CLI build for this verb.
+        Write-Host "::error::Unity $Version module install was rejected for missing EULA acceptance (exit $ExitCode). Every module install in this script must pass --accept-eula via Get-UnityCliModuleInstallArguments. Args: $argLine"
+    }
+    if ($text -match "(?i)couldn't find module|could not find module|missing module|did you mean") {
+        # A requested -m id is unknown to this CLI build (e.g. a version-pinned id
+        # drifted). OpenJDK is intentionally NOT requested (it arrives as an
+        # android-sdk-ndk-tools dependency); any other id here needs correcting in
+        # Get-UnityCiModuleIds.
+        Write-Host "::warning::Unity $Version module install reported an unknown module id (exit $ExitCode). Check the 'Did you mean:' hint in the CLI output above and reconcile Get-UnityCiModuleIds. Args: $argLine"
+    }
+}
+
 function Test-LooksLikeAbsolutePath {
     # True only for a Windows drive-letter path (C:\...) or a UNC path (\\...).
     # Guards the getter resolver against decorated/empty/relative output from a
@@ -710,6 +749,39 @@ function Get-UnityEditorInstallDirectory {
 }
 
 function Get-UnityCiModuleIds {
+    # REQUESTED module ids passed to the standalone Unity CLI's `-m` install list.
+    #
+    # NOTE: this is intentionally DECOUPLED from Get-UnityCiVerifiedModuleGroups
+    # (the on-disk verification switch). The two lists answer different questions:
+    # "what do we ASK the CLI to install" vs. "what must we PROVE is on disk".
+    #
+    # OpenJDK is deliberately ABSENT here even though we verify it on disk. The
+    # standalone beta CLI does not accept the bare id 'android-open-jdk' -- it
+    # emits "Couldn't find module \"android-open-jdk\". Did you mean:
+    # android-open-jdk-11.0.14.1+1" because its real id is VERSION-PINNED, and that
+    # exact suffix drifts across Unity versions (hardcoding it would be brittle and
+    # re-break on the next bump). OpenJDK is auto-added as a DEPENDENCY of
+    # 'android-sdk-ndk-tools', so requesting that group brings OpenJDK along; we
+    # then PROVE it landed via the 'android-open-jdk' disk group in
+    # Get-UnityCiVerifiedModuleGroups. This removes the silent "Couldn't find
+    # module" warning while keeping robust disk verification of OpenJDK.
+    return @(
+        'windows-il2cpp',
+        'webgl',
+        'android',
+        'android-sdk-ndk-tools',
+        'linux-mono',
+        'linux-il2cpp'
+    )
+}
+
+function Get-UnityCiVerifiedModuleGroups {
+    # VERIFIED-on-disk module groups (the on-disk truth we require after any
+    # install/repair). Iterated by Get-MissingUnityCiModuleGroups /
+    # Test-UnityCiModuleGroupPresent. Decoupled from Get-UnityCiModuleIds (see the
+    # note there): we verify 'android-open-jdk' on disk even though we never pass
+    # that id to the CLI, because OpenJDK arrives as a dependency of
+    # 'android-sdk-ndk-tools' and must be PROVEN present, not assumed.
     return @(
         'windows-il2cpp',
         'webgl',
@@ -719,6 +791,48 @@ function Get-UnityCiModuleIds {
         'linux-mono',
         'linux-il2cpp'
     )
+}
+
+function Get-UnityCliModuleInstallArguments {
+    # SINGLE SOURCE OF TRUTH for the Unity-CLI module-install argument vector.
+    # ALL THREE module-install call sites (top-level `install`, the repair-path
+    # `install`, and the `install-modules` module-add) route through this so it is
+    # structurally impossible for one to carry `--accept-eula` while another omits
+    # it -- the exact drift that broke every CI cell.
+    #
+    # `--accept-eula` is MANDATORY (never optional): the Android SDK/NDK/OpenJDK
+    # modules carry license terms, and without the flag the standalone CLI aborts
+    # the ENTIRE install with "One or more modules require license acceptance. Pass
+    # --accept-eula ...". The failing CI log proved the `install` verb emits that
+    # message too, so the flag is valid for BOTH verbs handled here.
+    #
+    # Verb handling (preserving the resilient beta-CLI arg shapes already in use):
+    #   install          -> @('install', <version>, '--accept-eula', '-m', <ids...>)
+    #   install-modules  -> @('install-modules', '-e', <version>, '--accept-eula', '-m', <ids...>)
+    # NOTE: this builder is for the EULA-bearing module INSTALL only. The `-l`
+    # listing diagnostic and `editors`/`install-path` getters are NOT module
+    # installs and must keep their own (EULA-free) shapes; do not route them here.
+    #
+    # StrictMode-safe: @()-wraps the module-id capture so an empty list never
+    # collapses to AutomationNull, and uses array `+` concatenation only.
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('install', 'install-modules')]
+        [string]$Verb,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Version
+    )
+
+    $moduleIds = @(Get-UnityCiModuleIds)
+
+    if ($Verb -eq 'install-modules') {
+        # `install-modules` targets an EXISTING editor, so it needs `-e <version>`.
+        return @('install-modules', '-e', $Version, '--accept-eula', '-m') + $moduleIds
+    }
+
+    # `install` provisions a fresh editor; the version is positional (no `-e`).
+    return @('install', $Version, '--accept-eula', '-m') + $moduleIds
 }
 
 function Test-UnityCiModuleGroupPresent {
@@ -821,15 +935,7 @@ function Get-MissingUnityCiModuleGroups {
     param([Parameter(Mandatory = $true)][string]$EditorPath)
 
     $missing = New-Object System.Collections.Generic.List[string]
-    foreach ($group in @(
-            'windows-il2cpp',
-            'webgl',
-            'android',
-            'android-sdk-ndk-tools',
-            'android-open-jdk',
-            'linux-mono',
-            'linux-il2cpp'
-        )) {
+    foreach ($group in @(Get-UnityCiVerifiedModuleGroups)) {
         if (-not (Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group)) {
             $missing.Add($group)
         }
@@ -959,9 +1065,12 @@ function Install-UnityEditorWithCiModules {
     }
     Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with CI modules ($($moduleIds -join ', ')). Reason: $Reason"
 
+    # Single source of truth for the (EULA-bearing) module-install arg vector.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $Version)
+
     $resolved = $null
     for ($attempt = 1; $attempt -le 2; $attempt++) {
-        $installResult = Invoke-UnityCliCapture -Arguments (@('install', $Version, '-m') + $moduleIds)
+        $installResult = Invoke-UnityCliCapture -Arguments $installArgs
         if ($installResult.Success) {
             $resolved = Resolve-InstalledEditor -Version $Version -Root $InstallRoot -ManagedOnly:$ManagedOnly
             if ($resolved) {
@@ -1002,6 +1111,7 @@ function Install-UnityEditorWithCiModules {
             }
         }
 
+        Write-UnityCliInstallFailureAnnotation -Version $Version -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs
         Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install failed."
         throw "Unity $Version repair install with CI modules failed with exit code $($installResult.ExitCode). CLI output tail:`n$tail"
     }
@@ -1170,15 +1280,21 @@ function Ensure-UnityCiModules {
         Write-CiNotice "Could not list installable modules for Unity $Version (best-effort); proceeding with required CI module ids: $($moduleIds -join ', ')."
     }
 
+    # Single source of truth for the (EULA-bearing) `install-modules` arg vector --
+    # captured ONCE here and reused for both the install call below and the failure
+    # annotation's arg echo, mirroring how the `install` paths capture $installArgs
+    # once. The vector (including the MANDATORY `--accept-eula`) comes from
+    # Get-UnityCliModuleInstallArguments, so this `install-modules` call can never
+    # drift from the `install` call sites. `--accept-eula` is REQUIRED: the Android
+    # SDK/NDK/OpenJDK modules carry license terms, and without the flag the
+    # standalone CLI aborts the whole install with "One or more modules require
+    # license acceptance. Pass --accept-eula ...". It applies only to this INSTALL
+    # (`-m`) call, never to the `-l` listing call above.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version)
+
     # Attempt the install via the capturing (non-throwing) path so we can inspect
     # BOTH the exit code AND the output text before deciding whether it was fatal.
-    # `--accept-eula` is REQUIRED: the Android SDK/NDK/OpenJDK modules carry
-    # license terms, and without the flag the standalone CLI aborts the whole
-    # install with "One or more modules require license acceptance. Pass
-    # --accept-eula ...". It applies only to this INSTALL (`-m`) call, never to the
-    # `-l` listing call above. (Order: keep the flag adjacent to the install verb
-    # so the resilient beta-CLI arg shape stays readable.)
-    $result = Invoke-UnityCliCapture -Arguments (@('install-modules', '-e', $Version, '--accept-eula', '-m') + $moduleIds)
+    $result = Invoke-UnityCliCapture -Arguments $installArgs
 
     # Case 1: clean success.
     if ($result.Success) {
@@ -1203,6 +1319,12 @@ function Ensure-UnityCiModules {
         Write-CiNotice "Required Unity CI modules already present on disk; treating 'install-modules' no-op as success (CLI exit code $($result.ExitCode))."
         return $EditorPath
     }
+
+    # The install genuinely did not deliver the required modules. Emit a targeted,
+    # high-signal annotation if the CLI output carries a known failure signature
+    # (missing EULA / unknown module id) BEFORE we repair or throw, so the root
+    # cause is obvious in the CI log.
+    Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
 
     $repairDisabled = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
     if ($repairDisabled) {
@@ -1330,7 +1452,11 @@ if (-not $editor) {
     }
 
     Write-CiNotice "Installing Unity Editor $UnityVersion on the self-hosted Windows runner."
-    $installArgs = @('install', $UnityVersion, '-m') + @(Get-UnityCiModuleIds)
+    # Single source of truth for the (EULA-bearing) module-install arg vector --
+    # the SAME builder the repair-path `install` and the `install-modules` add use,
+    # so this primary install can never silently drop `--accept-eula` again (the
+    # exact drift that broke every CI cell).
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion)
 
     # Emit diagnostics BEFORE the (potentially 30+ minute) install so the logs
     # carry the CLI path/version + disk headroom even if the install then stalls.
@@ -1372,6 +1498,7 @@ if (-not $editor) {
                     throw "Unity CLI '$($installArgs -join ' ')' reported an already-installed editor with exit code $($installResult.ExitCode), but Unity.exe could not be found. Uninstalled any CLI metadata and quarantined the managed version directory as partial or corrupt before retry. CLI output tail:`n$installTail"
                 }
 
+                Write-UnityCliInstallFailureAnnotation -Version $UnityVersion -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs
                 Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install failed and Unity.exe could not be resolved afterward."
                 throw "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode). CLI output tail:`n$installTail"
             }

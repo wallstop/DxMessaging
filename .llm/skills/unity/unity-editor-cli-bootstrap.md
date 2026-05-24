@@ -2,9 +2,9 @@
 title: "Unity Editor CLI Bootstrap"
 id: "unity-editor-cli-bootstrap"
 category: "unity"
-version: "1.2.0"
+version: "1.3.0"
 created: "2026-05-20"
-updated: "2026-05-23"
+updated: "2026-05-24"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -72,7 +72,7 @@ status: "stable"
 
 ## Overview
 
-The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then installs the requested editor version with the full CI module bundle (`windows-il2cpp`, `webgl`, `android`, `android-sdk-ndk-tools`, `android-open-jdk`, `linux-mono`, `linux-il2cpp`).
+The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then installs the requested editor version with the requested CI module ids passed to `-m` (`windows-il2cpp`, `webgl`, `android`, `android-sdk-ndk-tools`, `linux-mono`, `linux-il2cpp`). OpenJDK is NOT in that requested `-m` list -- it arrives as a dependency of `android-sdk-ndk-tools` and is only verified on disk afterward (see [CI module desired state and repair](#ci-module-desired-state-and-repair)).
 
 Editor provisioning runs before the organization Unity license lock. The locked section should only activate/return the serial license and run tests; editor install/repair can take tens of minutes and must not block other licensed Unity jobs.
 
@@ -97,10 +97,10 @@ The script initializes `$script:UnityCliPath = 'unity'` after `Set-StrictMode`, 
 
 VERIFIED (relied on directly by the script):
 
-- `unity install <version>` -- positional version; `-m <id...>` adds one or more modules. CI installs all required module IDs for every Unity version, not only standalone cells.
+- `unity install <version>` -- positional version; `-m <id...>` adds one or more modules. CI requests all required module ids (see [CI module desired state and repair](#ci-module-desired-state-and-repair)) for every Unity version, not only standalone cells. The module install MUST also pass `--accept-eula`; the EULA-bearing Android SDK/NDK modules otherwise abort the whole install with "One or more modules require license acceptance. Pass --accept-eula ...". A single source-of-truth builder (`Get-UnityCliModuleInstallArguments`) constructs the install arg vector so `--accept-eula` cannot drift between call sites.
 - `unity install-path` with NO arguments -- a 0-arg GETTER that prints the current editor install directory. Passing a positional directory is the root cause of the "Expected 0 arguments but got 1" failure.
 - `unity editors -i` (with `--format json` for parsing; bare `-i` for the diagnostic dump).
-- `unity install-modules -e <version> -m <id...>` (captured, then classified against disk); the `-l` flag lists installable module ids (best-effort sanity check only).
+- `unity install-modules -e <version> -m <id...>` (captured, then classified against disk); the install also carries `--accept-eula` (same EULA requirement as `install`). The `-l` flag lists installable module ids (best-effort sanity check only) and carries NO `--accept-eula`.
 
 UNCERTAIN (treated best-effort; docs punt to `--help`):
 
@@ -152,13 +152,26 @@ Read BOTH Machine and User registry scopes, null-guard each, prepend the install
 
 ### CI module desired state and repair
 
-Every CI Unity version is provisioned with the same module bundle:
+The bootstrap keeps two DELIBERATELY DECOUPLED lists, because "what we ASK the CLI to install" and "what we PROVE landed on disk" are different questions:
+
+**Requested module ids passed to `-m`** (`Get-UnityCiModuleIds`) -- the ids handed to `unity install -m`/`install-modules -m`:
 
 - `windows-il2cpp`
 - `webgl`
 - `android`
 - `android-sdk-ndk-tools`
-- `android-open-jdk`
+- `linux-mono`
+- `linux-il2cpp`
+
+`android-open-jdk` is intentionally ABSENT from the requested list. The standalone beta CLI rejects the bare id (`Couldn't find module "android-open-jdk". Did you mean: android-open-jdk-11.0.14.1+1`) because its real id is version-pinned and that suffix drifts across Unity versions; hardcoding it would re-break on the next bump. OpenJDK instead arrives automatically as a DEPENDENCY of `android-sdk-ndk-tools`, so requesting that group brings it along.
+
+**Module groups verified on disk** (`Get-UnityCiVerifiedModuleGroups`, iterated by `Get-MissingUnityCiModuleGroups`) -- the on-disk truth required after any install/repair:
+
+- `windows-il2cpp`
+- `webgl`
+- `android`
+- `android-sdk-ndk-tools`
+- `android-open-jdk` (verified-on-disk-only: never requested via `-m`, but PROVEN present because it arrives as an `android-sdk-ndk-tools` dependency)
 - `linux-mono`
 - `linux-il2cpp`
 
@@ -172,7 +185,7 @@ Every CI Unity version is provisioned with the same module bundle:
 - Linux Mono support: concrete player leaves such as `LinuxPlayer` or `UnityPlayer.so` under known `linux64_player_*_mono` variations.
 - Linux IL2CPP support: concrete player leaves such as `LinuxPlayer` or `UnityPlayer.so` under known `linux64_player_*_il2cpp` variations.
 
-If required module groups are missing, repair is enabled by default. The script first tries `unity uninstall <version>` as a cleanup hint. It then quarantines any remaining managed version directory to `<install-root>\_quarantine\<version>-<timestamp>-<id>` and runs a fresh `unity install <version> -m <all-ci-modules>`. Repair install retries once when the CLI still reports "already installed" without a resolvable managed editor, clearing stale CLI metadata with another uninstall before retrying. Repair is deliberately bounded to the configured install root; the script refuses to move arbitrary `ProgramFiles` installs. In CI-managed mode, repair resolution also keeps `-ManagedOnly` so a host install cannot be selected after reinstall. The same uninstall-plus-version-directory quarantine path handles partial installs where the CLI reports "already installed" but no `Unity.exe` leaf exists, so stale CLI metadata cannot keep returning the same no-op state.
+If required module groups are missing, repair is enabled by default. The script first tries `unity uninstall <version>` as a cleanup hint. It then quarantines any remaining managed version directory to `<install-root>\_quarantine\<version>-<timestamp>-<id>` and runs a fresh `unity install <version> --accept-eula -m <requested-ci-module-ids>` (the same single-source-of-truth arg vector as the primary install). Repair install retries once when the CLI still reports "already installed" without a resolvable managed editor, clearing stale CLI metadata with another uninstall before retrying. Repair is deliberately bounded to the configured install root; the script refuses to move arbitrary `ProgramFiles` installs. In CI-managed mode, repair resolution also keeps `-ManagedOnly` so a host install cannot be selected after reinstall. The same uninstall-plus-version-directory quarantine path handles partial installs where the CLI reports "already installed" but no `Unity.exe` leaf exists, so stale CLI metadata cannot keep returning the same no-op state.
 
 Set `DXM_UNITY_DISABLE_EDITOR_REPAIR=1` only when debugging the installer itself. Normal CI should keep repair enabled so manually copied, partial, or non-Hub/non-CLI-managed editors converge to a known-good CLI-managed install.
 
@@ -181,7 +194,8 @@ After module validation, `ensure-editor.ps1` runs a native startup probe before 
 ## Verification
 
 - `scripts/__tests__/powershell-syntax.test.js` reparses the edited `.ps1`; keep it valid PowerShell 5.1.
-- `scripts/__tests__/unity-runner-script-contract.test.js` pins both the PATH fix (`$script:UnityCliPath`, `GetEnvironmentVariable`, `Update-SessionPathFromRegistry`, the absolute-path fallback) and the resilience design: `install-path` SET uses `-s` (never a positional `$Root`), `Invoke-UnityCliSafe` exists, `Get-UnityCliInstallRoot` reads `@('install-path')`, the defensive `--format json` / `ConvertFrom-Json` discovery, the full CI module bundle, and quarantine/reinstall repair.
+- `scripts/__tests__/unity-runner-script-contract.test.js` pins both the PATH fix (`$script:UnityCliPath`, `GetEnvironmentVariable`, `Update-SessionPathFromRegistry`, the absolute-path fallback) and the resilience design: `install-path` SET uses `-s` (never a positional `$Root`), `Invoke-UnityCliSafe` exists, `Get-UnityCliInstallRoot` reads `@('install-path')`, the defensive `--format json` / `ConvertFrom-Json` discovery, the requested/verified CI module lists, and quarantine/reinstall repair.
+- `scripts/__tests__/unity-ensure-editor-production-contract.test.js` pins the `--accept-eula` contract: the single source-of-truth `Get-UnityCliModuleInstallArguments` is the ONLY place that builds a module-install (`install`/`install-modules` ... `-m` ...) arg vector, every live install call site routes through it, and the requested `-m` ids exclude `android-open-jdk` while the verified groups include it.
 - `scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js` covers disk-proof idempotency, managed-install quarantine/reinstall, and the `DXM_UNITY_DISABLE_EDITOR_REPAIR=1` refusal path.
 - `scripts/__tests__/unity-workflow-shape.test.js` requires the active Unity workflows to provision editors before acquiring the organization Unity lock and to export `UNITY_EDITOR_PATH` for the locked test step.
 
