@@ -110,6 +110,7 @@ jobs:
             scripts/__tests__/node-modules-integrity.test.js \
             scripts/__tests__/run-managed-jest.test.js \
             scripts/__tests__/spawn-invocation-policy.test.js \
+            scripts/__tests__/pwsh-output-assertion-policy.test.js \
             scripts/__tests__/shell-command.test.js \
             scripts/lib/__tests__/spawn-env-sandbox.test.js \
             scripts/__tests__/hermetic-host-env-policy.test.js \

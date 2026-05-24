@@ -43,9 +43,22 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
+const { normalizePwshText } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const RUN_CI_TESTS = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
+
+// Merge a pwsh run's stdout+stderr and NORMALIZE it for phrase assertions.
+// run-ci-tests.ps1 surfaces failures via both wrap-immune `::error::` annotations
+// AND unhandled `throw`s; the latter are word-wrapped by PowerShell's ConciseView
+// formatter at the host console width, which can split an asserted phrase across a
+// `\n     | ` gutter (intermittently, on the narrower Windows runner).
+// normalizePwshText rejoins that gutter and strips ANSI so the assertions are
+// width-independent. (StrictMode-failure substrings like "cannot be found on this
+// object" are asserted as ABSENT here; normalization only makes that stricter.)
+function combinedText(run) {
+  return normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
+}
 
 // Env vars whose presence would route the script DOWN a non-empty/divergent
 // path. We delete the accelerator endpoint so the empty-array branch (the one
@@ -319,7 +332,7 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
       workspaces.push(ws);
 
       const result = runScript(mode, ws);
-      const combined = `${result.stdout || ""}\n${result.stderr || ""}`;
+      const combined = combinedText(result);
 
       // The exact StrictMode failure string must NOT appear on any stream.
       expect(combined).not.toContain("cannot be found on this object");
@@ -344,7 +357,7 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
       workspaces.push(ws);
 
       const result = runScript(mode, ws, ws.noResultsStubPath);
-      const combined = `${result.stdout || ""}\n${result.stderr || ""}`;
+      const combined = combinedText(result);
 
       // Must NOT silently succeed: a missing results.xml is a hard failure.
       expect(result.status).not.toBe(0);
@@ -362,7 +375,7 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
     workspaces.push(ws);
 
     const result = runScript("editmode", ws, ws.failingCs8032StubPath);
-    const combined = `${result.stdout || ""}\n${result.stderr || ""}`;
+    const combined = combinedText(result);
 
     expect(result.status).not.toBe(0);
     expect(combined).toContain("Unity result failure diagnostics");
@@ -408,7 +421,7 @@ describe("run-ci-tests.ps1 serial seat is always returned (leak regression)", ()
     workspaces.push(ws);
 
     const result = runScript("editmode", ws, ws.failingStubPath);
-    const combined = `${result.stdout || ""}\n${result.stderr || ""}`;
+    const combined = combinedText(result);
 
     // (1) The run FAILS loudly: a failing editor must propagate a non-zero exit
     // (the finally returns the seat, then the failure re-throws). And StrictMode
@@ -432,7 +445,7 @@ describe("run-ci-tests.ps1 serial seat is always returned (leak regression)", ()
     workspaces.push(ws);
 
     const result = runScript("editmode", ws, ws.stubPath);
-    const combined = `${result.stdout || ""}\n${result.stderr || ""}`;
+    const combined = combinedText(result);
 
     // The passing editor stub wrote results.xml, so the run succeeds...
     expect(combined).not.toContain("cannot be found on this object");

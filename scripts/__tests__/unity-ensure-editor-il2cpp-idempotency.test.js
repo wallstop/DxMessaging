@@ -46,9 +46,23 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { prependPathEnv, sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
+const { normalizePwshText } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
+
+// Merge a pwsh run's stdout+stderr into one string and NORMALIZE it for phrase /
+// substring assertions. ensure-editor.ps1 surfaces failures both as wrap-immune
+// `::error::`/`::warning::` annotations AND as unhandled `throw`s; the latter are
+// rendered by PowerShell's ConciseView formatter, which WORD-WRAPS the message at
+// the host console width (splitting phrases like "outside the managed root" across
+// a `\n     | ` gutter on the narrower Windows runner). normalizePwshText rejoins
+// that gutter and strips ANSI so the assertions are width-independent. Use this
+// ONLY for phrase assertions; reads that depend on line structure (e.g. taking the
+// last stdout line to get the resolved editor path) MUST use the raw stream.
+function combinedText(run) {
+  return normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
+}
 
 // The IL2CPP variations leaf the probe treats as conclusive evidence (the exact
 // path called out in the task: a fabricated win64_player_development_il2cpp dir).
@@ -436,58 +450,77 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(populatedOut.stdout).toBe("True");
   });
 
-  test("Add-WindowsIl2CppModule treats No modules found as fatal when IL2CPP is not on disk", () => {
-    const fake = path.join(os.tmpdir(), "dxm-no-il2cpp", "Editor", "Unity.exe");
-    const out = runAddWindowsIl2CppModuleHarness(fake, "No modules found to install");
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+  // Data-driven classification of the `install-modules` "No modules found to
+  // install." (exit 6) no-op against the on-disk module layout. Each scenario
+  // sets up a distinct disk state, then asserts the resulting exit status and the
+  // (wrap-normalized) diagnostic phrases. Every row maps 1:1 to a former discrete
+  // assertion, so coverage is preserved exactly. All rows drive the SAME
+  // Add-WindowsIl2CppModule harness with the same CLI output ("No modules found
+  // to install").
+  test.each([
+    {
+      name: "fatal when IL2CPP is not on disk",
+      // No layout at all: the probe must classify the no-op as a real failure.
+      setup: () => path.join(os.tmpdir(), "dxm-no-il2cpp", "Editor", "Unity.exe"),
+      expectedStatus: 7,
+      expectedPhrases: [
+        "required CI module groups are missing",
+        "windows-il2cpp",
+        "No modules found to install"
+      ]
+    },
+    {
+      name: "success only when ALL CI module groups are on disk",
+      setup: () => {
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-il2cpp-editor-"));
+        workspaces.push(base);
+        const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
+        writeFakeUnityEditor(editorExe);
+        createCiModuleLayout(editorExe);
+        return editorExe;
+      },
+      expectedStatus: 0,
+      expectedPhrases: ["Required Unity CI modules already present on disk", "SUCCESS"]
+    },
+    {
+      name: "WebGL extension-only leftovers rejected without Emscripten toolchain proof",
+      setup: () => {
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-webgl-leftover-editor-"));
+        workspaces.push(base);
+        const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
+        writeFakeUnityEditor(editorExe);
+        fs.mkdirSync(
+          path.join(path.dirname(editorExe), "Data", "PlaybackEngines", "WebGLSupport"),
+          { recursive: true }
+        );
+        fs.writeFileSync(
+          path.join(
+            path.dirname(editorExe),
+            "Data",
+            "PlaybackEngines",
+            "WebGLSupport",
+            "UnityEditor.WebGL.Extensions.dll"
+          ),
+          ""
+        );
+        return editorExe;
+      },
+      expectedStatus: 7,
+      expectedPhrases: ["required CI module groups are missing", "webgl"]
+    }
+  ])(
+    "Add-WindowsIl2CppModule with 'No modules found': $name",
+    ({ setup, expectedStatus, expectedPhrases }) => {
+      const editorExe = setup();
+      const out = runAddWindowsIl2CppModuleHarness(editorExe, "No modules found to install");
+      const combined = combinedText(out);
 
-    expect(out.status).toBe(7);
-    expect(combined).toContain("required CI module groups are missing");
-    expect(combined).toContain("windows-il2cpp");
-    expect(combined).toContain("No modules found to install");
-  });
-
-  test("Add-WindowsIl2CppModule accepts No modules found only when all CI module groups are on disk", () => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-il2cpp-editor-"));
-    workspaces.push(base);
-    const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
-    writeFakeUnityEditor(editorExe);
-    createCiModuleLayout(editorExe);
-
-    const out = runAddWindowsIl2CppModuleHarness(editorExe, "No modules found to install");
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
-
-    expect(out.status).toBe(0);
-    expect(combined).toContain("Required Unity CI modules already present on disk");
-    expect(combined).toContain("SUCCESS");
-  });
-
-  test("WebGL probe rejects extension-only leftovers without Emscripten toolchain proof", () => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-webgl-leftover-editor-"));
-    workspaces.push(base);
-    const editorExe = path.join(base, "6000.0.32f1", "Editor", "Unity.exe");
-    writeFakeUnityEditor(editorExe);
-    fs.mkdirSync(path.join(path.dirname(editorExe), "Data", "PlaybackEngines", "WebGLSupport"), {
-      recursive: true
-    });
-    fs.writeFileSync(
-      path.join(
-        path.dirname(editorExe),
-        "Data",
-        "PlaybackEngines",
-        "WebGLSupport",
-        "UnityEditor.WebGL.Extensions.dll"
-      ),
-      ""
-    );
-
-    const out = runAddWindowsIl2CppModuleHarness(editorExe, "No modules found to install");
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
-
-    expect(out.status).toBe(7);
-    expect(combined).toContain("required CI module groups are missing");
-    expect(combined).toContain("webgl");
-  });
+      expect(out.status).toBe(expectedStatus);
+      for (const phrase of expectedPhrases) {
+        expect(combined).toContain(phrase);
+      }
+    }
+  );
 
   test("managed editor missing CI modules is quarantined and reinstalled with the full module set", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-repair-"));
@@ -538,7 +571,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const stdout = out.stdout || "";
-    const combined = `${stdout}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     if (out.status !== 0) {
       throw new Error(combined);
@@ -643,7 +676,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const stdout = out.stdout || "";
-    const combined = `${stdout}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     if (out.status !== 0) {
       throw new Error(combined);
@@ -677,7 +710,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const env = { ...process.env, DXM_UNITY_DISABLE_EDITOR_REPAIR: "1" };
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot, env);
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     expect(out.status).not.toBe(0);
     expect(combined).toContain("DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled");
@@ -699,7 +732,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
         "Write-Output ('OUTPUT=' + ($result.Output -join '|'))"
       ].join("\n")
     );
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     expect(out.status).toBe(0);
     expect(combined).toContain("SUCCESS=False");
@@ -743,12 +776,15 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const stdout = out.stdout || "";
+    const combined = combinedText(out);
 
     if (out.status !== 0) {
-      throw new Error(`${out.stdout || ""}\n${out.stderr || ""}`);
+      throw new Error(combined);
     }
+    // Structural read uses the RAW stream (last line = resolved editor path);
+    // the phrase assertion uses the wrap-normalized text.
     expect(stdout.trim().split(/\r?\n/).pop()).toBe(resolvedEditor);
-    expect(stdout).toContain("Unity.exe is resolvable afterward");
+    expect(combined).toContain("Unity.exe is resolvable afterward");
   });
 
   test("already-installed base editor failure without Unity.exe quarantines and retries", () => {
@@ -802,7 +838,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const stdout = out.stdout || "";
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     if (out.status !== 0) {
       throw new Error(combined);
@@ -875,7 +911,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
     const stdout = out.stdout || "";
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     if (out.status !== 0) {
       throw new Error(combined);
@@ -907,7 +943,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     ];
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
-    const combined = `${out.stdout || ""}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     expect(out.status).not.toBe(0);
     expect(combined).toContain("cannot mutate editors");
@@ -994,7 +1030,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot, leakyBaseEnv);
     const stdout = out.stdout || "";
-    const combined = `${stdout}\n${out.stderr || ""}`;
+    const combined = combinedText(out);
 
     if (out.status !== 0) {
       throw new Error(combined);

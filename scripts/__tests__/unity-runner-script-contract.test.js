@@ -516,7 +516,13 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("cannot mutate editors");
     // Module install verifies the ids via the -l listing before installing.
     expect(ensureEditor).toContain("'install-modules', '-e', $Version, '-l'");
-    expect(ensureEditor).toContain("@('install-modules', '-e', $Version, '-m') + $moduleIds");
+    // The module INSTALL passes --accept-eula: the standalone CLI aborts with
+    // "One or more modules require license acceptance. Pass --accept-eula ..."
+    // for the Android SDK/NDK/OpenJDK modules otherwise. The flag is on the
+    // INSTALL (-m) call only, never the -l listing call above.
+    expect(ensureEditor).toContain(
+      "@('install-modules', '-e', $Version, '--accept-eula', '-m') + $moduleIds"
+    );
     // The -l listing is read non-throwing (best-effort verification). The module
     // install now runs through the CAPTURING (non-throwing) invoker so its exit
     // code AND output can be classified against the on-disk module layout: the
@@ -528,7 +534,7 @@ describe("scripts/unity direct CI runner contract", () => {
       /Get-UnityCliOutput -Arguments @\('install-modules', '-e', \$Version, '-l'\)/
     );
     expect(ensureEditor).toMatch(
-      /Invoke-UnityCliCapture -Arguments \(@\('install-modules', '-e', \$Version, '-m'\) \+ \$moduleIds\)/
+      /Invoke-UnityCliCapture -Arguments \(@\('install-modules', '-e', \$Version, '--accept-eula', '-m'\) \+ \$moduleIds\)/
     );
     // The OLD unconditional throwing install of the module must NOT reappear: it
     // wrongly aborted standalone on the idempotent "No modules found to install"

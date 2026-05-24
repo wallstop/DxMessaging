@@ -93,7 +93,7 @@ status: "stable"
 
 | Axis            | Values                                      |
 | --------------- | ------------------------------------------- |
-| `unity-version` | `2021.3.45f1`, `2022.3.45f1`, `6000.0.32f1` |
+| `unity-version` | `2021.3.45f1`, `2022.3.45f1`, `6000.3.16f1` |
 | `test-mode`     | `editmode`, `playmode`, `standalone`        |
 
 Nine matrix cells. `editmode`/`playmode` run in-editor on Mono; `standalone` builds and runs a `StandaloneWindows64` IL2CPP player. The direct runner generates a temporary package host project under `.artifacts/unity/projects/<version>-<mode>/`, imports the repo package with a `file:` dependency, sets `testables`, and configures IL2CPP before running standalone tests. Workflow_dispatch inputs let you pin a single version or single mode for triage.
@@ -157,7 +157,7 @@ Add a version to `unity-tests.yml`'s `unity-versions` JSON array when one of the
 1. Edit the active `.github/workflows/unity-tests.yml`. The matrix is computed in the `matrix-config` job:
 
    ```yaml
-   versions='["2021.3.45f1","2022.3.45f1","6000.0.32f1"]'
+   versions='["2021.3.45f1","2022.3.45f1","6000.3.16f1"]'
    ```
 
    Append the new tag to the JSON array. Use the `unityci/editor` tag format (e.g., `2024.3.10f1`).

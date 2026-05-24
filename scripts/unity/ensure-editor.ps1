@@ -80,6 +80,27 @@ function Invoke-WithRetry {
     throw "Invoke-WithRetry exhausted all attempts without capturing an error."
 }
 
+function Get-EnsureEditorRetryDelaySeconds {
+    # Single source of truth for the Invoke-WithRetry backoff delay. Honors the
+    # DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS override (tests set it to 0 to avoid
+    # real sleeps; CI leaves it unset for the production 15s backoff). A
+    # non-integer or negative override is ignored with a ::warning:: and the
+    # default is used. StrictMode-safe: no collection reads.
+    param([int]$Default = 15)
+
+    if ($env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS='$env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
 function Invoke-WithUnityInstallLock {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
@@ -423,9 +444,20 @@ function Confirm-UnityCliManagedInstallRoot {
 
     $cliRoot = Get-UnityCliInstallRoot
     if (-not $cliRoot) {
+        # Emit a wrap-IMMUNE CI annotation BEFORE the throw. PowerShell's
+        # ConciseView formatter word-wraps a thrown message at the console width
+        # (splitting phrases across a `     | ` gutter), so the throw text alone is
+        # an unreliable single-line annotation; Write-Host output is never wrapped,
+        # giving CI a clean ::error:: line AND a stable assertion target. Additive
+        # only -- the throw below still aborts with identical semantics.
+        Write-Host "::error::CI-managed Unity provisioning cannot mutate editors because the Unity CLI did not report an install root after setting '$Root'."
         throw "CI-managed Unity provisioning cannot mutate editors because the Unity CLI did not report an install root after setting '$Root'."
     }
     if (-not (Test-IsPathInsideDirectory -Path $cliRoot -Directory $Root)) {
+        # Wrap-immune CI annotation before the throw (see the note above): the
+        # "outside the managed root" phrase is exactly the one PowerShell's
+        # word-wrap was observed to split on the narrower Windows runner.
+        Write-Host "::error::CI-managed Unity provisioning cannot mutate editors because the Unity CLI install root is outside the managed root. CLI root: '$cliRoot'. Managed root: '$Root'."
         throw "CI-managed Unity provisioning cannot mutate editors because the Unity CLI install root is outside the managed root. CLI root: '$cliRoot'. Managed root: '$Root'."
     }
     return $cliRoot
@@ -835,7 +867,18 @@ function Move-UnityInstallDirectoryToQuarantine {
     $destination = Join-Path $quarantineRoot "$Version-$stamp-$suffix"
 
     Write-Host "::warning::Quarantining unmanaged or partial Unity $Version install before repair: $InstallDirectory -> $destination"
-    Move-Item -LiteralPath $InstallDirectory -Destination $destination -Force
+    # Move-Item against a Unity editor directory can fail transiently on Windows
+    # with "The process cannot access the file '...' because it is being used by
+    # another process." when Unity, an antivirus scanner, or the Windows indexer
+    # still holds a handle on a file under the tree. Retry the move with backoff
+    # so a momentary lock does not abort the whole repair; Invoke-WithRetry emits
+    # a per-attempt ::warning:: and RETHROWS the last error if every attempt
+    # fails, so a genuinely stuck directory still aborts loudly. Class rule: any
+    # destructive dir op (Move/Remove/Rename) on a transiently-lockable Unity
+    # editor directory on Windows goes through this retry helper.
+    Invoke-WithRetry -MaxAttempts 3 -DelaySeconds (Get-EnsureEditorRetryDelaySeconds) -Action {
+        Move-Item -LiteralPath $InstallDirectory -Destination $destination -Force
+    } | Out-Null
 }
 
 function Move-UnityEditorInstallToQuarantine {
@@ -1129,7 +1172,13 @@ function Ensure-UnityCiModules {
 
     # Attempt the install via the capturing (non-throwing) path so we can inspect
     # BOTH the exit code AND the output text before deciding whether it was fatal.
-    $result = Invoke-UnityCliCapture -Arguments (@('install-modules', '-e', $Version, '-m') + $moduleIds)
+    # `--accept-eula` is REQUIRED: the Android SDK/NDK/OpenJDK modules carry
+    # license terms, and without the flag the standalone CLI aborts the whole
+    # install with "One or more modules require license acceptance. Pass
+    # --accept-eula ...". It applies only to this INSTALL (`-m`) call, never to the
+    # `-l` listing call above. (Order: keep the flag adjacent to the install verb
+    # so the resilient beta-CLI arg shape stays readable.)
+    $result = Invoke-UnityCliCapture -Arguments (@('install-modules', '-e', $Version, '--accept-eula', '-m') + $moduleIds)
 
     # Case 1: clean success.
     if ($result.Success) {
@@ -1293,18 +1342,7 @@ if (-not $editor) {
     # CAPTURING invoker so a final failure THROWS with the CLI output tail + exit
     # code -- the previous failure surfaced no actionable diagnostics. Output is
     # still streamed live by Invoke-UnityCliCapture, never silently buffered.
-    $retryDelaySeconds = 15
-    if ($env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS) {
-        $parsedDelay = 0
-        if (
-            [int]::TryParse($env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS, [ref]$parsedDelay) -and
-            $parsedDelay -ge 0
-        ) {
-            $retryDelaySeconds = $parsedDelay
-        } else {
-            Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS='$env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS'; using $retryDelaySeconds second(s)."
-        }
-    }
+    $retryDelaySeconds = Get-EnsureEditorRetryDelaySeconds
 
     $recoveredEditor = Invoke-WithUnityInstallLock -Version $UnityVersion -InstallRoot $InstallRoot -Action {
         Invoke-WithRetry -MaxAttempts 2 -DelaySeconds $retryDelaySeconds -Action {

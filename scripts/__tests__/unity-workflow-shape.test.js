@@ -34,7 +34,7 @@ const DIAGNOSTICS_ACTION = path.join(
 );
 const UNITY_WORKFLOWS = ["unity-tests.yml", "unity-benchmarks.yml"];
 const GAMECI_EXPERIMENT_WORKFLOW = "unity-gameci-experiment.yml";
-const UNITY_VERSIONS = ["2021.3.45f1", "2022.3.45f1", "6000.0.32f1"];
+const UNITY_VERSIONS = ["2021.3.45f1", "2022.3.45f1", "6000.3.16f1"];
 
 function readWorkflow(name) {
   const abs = path.join(WORKFLOWS_DIR, name);
