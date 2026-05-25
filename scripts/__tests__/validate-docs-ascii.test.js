@@ -31,6 +31,7 @@ const CURLY_SINGLE_RIGHT = String.fromCodePoint(0x2019);
 const WARNING_SIGN = String.fromCodePoint(0x26a0); // dingbat-range warning
 const ROCKET_EMOJI = String.fromCodePoint(0x1f680); // U+1F680 rocket
 const BOM = String.fromCodePoint(0xfeff);
+const RIGHT_ARROW = String.fromCodePoint(0x2192);
 
 function runValidator(filePath) {
   return childProcess.spawnSync(process.execPath, [VALIDATOR_SCRIPT_PATH, "--paths", filePath], {
@@ -117,6 +118,19 @@ describe("validate-docs-ascii", () => {
         const result = runValidator(filePath);
         expect(result.status).toBe(1);
         expect(result.stderr).toContain("dingbat");
+      });
+    });
+
+    test("right arrow (U+2192) is rejected with ASCII-only diagnostics", () => {
+      withFixture(".md", "Tools " + RIGHT_ARROW + " Settings\n", (filePath) => {
+        const result = runValidator(filePath);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("U+2192");
+        expect(result.stderr).toContain("\\u{2192}");
+        expect(result.stderr).not.toContain(RIGHT_ARROW);
+        for (const ch of result.stderr) {
+          expect(ch.codePointAt(0)).toBeLessThan(0x80);
+        }
       });
     });
   });

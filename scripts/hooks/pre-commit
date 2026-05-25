@@ -2,10 +2,10 @@
 "use strict";
 
 const path = require("path");
-const childProcess = require("child_process");
+const { spawnPlatformCommandSync } = require("../lib/shell-command");
 
 function resolveRepoRoot() {
-  const result = childProcess.spawnSync("git", ["rev-parse", "--show-toplevel"], {
+  const result = spawnPlatformCommandSync("git", ["rev-parse", "--show-toplevel"], {
     cwd: process.cwd(),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"]
@@ -19,60 +19,44 @@ function resolveRepoRoot() {
 const REPO_ROOT = resolveRepoRoot();
 
 function run(command, args) {
-  return childProcess.spawnSync(command, args, {
+  const result = spawnPlatformCommandSync(command, args, {
     cwd: REPO_ROOT,
     stdio: "inherit"
   });
-}
 
-function runOptional(command, args) {
-  const result = run(command, args);
   if (result.error && result.error.code === "ENOENT") {
+    process.stderr.write(`Unable to find required command '${command}'.\n`);
     return 127;
   }
+
   return typeof result.status === "number" ? result.status : 1;
 }
 
 function main() {
-  process.stdout.write("Syncing banner version...\n");
-  const bannerStatus = runOptional(process.execPath, ["scripts/sync-banner-version-hook.js"]);
-  if (bannerStatus !== 0) {
-    process.stdout.write("Banner version sync failed (cosmetic only, continuing).\n");
+  process.stdout.write("Repairing hook Node tooling if needed...\n");
+  const repairStatus = run(process.execPath, ["scripts/repair-node-tooling.js"]);
+  if (repairStatus !== 0) {
+    return repairStatus;
   }
 
-  const staged = childProcess.spawnSync(
-    "git",
-    ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-    {
-      cwd: REPO_ROOT,
-      encoding: "utf8"
-    }
-  );
-  if (staged.error || staged.status !== 0) {
-    return 0;
+  process.stdout.write("Running pre-commit stage hooks...\n");
+  const firstStatus = run(process.execPath, [
+    "scripts/ensure-pre-commit.js",
+    "run",
+    "--hook-stage",
+    "pre-commit"
+  ]);
+  if (firstStatus === 0 || firstStatus === 127) {
+    return firstStatus;
   }
 
-  const skillChanged = String(staged.stdout || "")
-    .split(/\r?\n/)
-    .some(
-      (file) =>
-        file.startsWith(".llm/skills/") &&
-        file !== ".llm/skills/index.md" &&
-        file !== ".llm/skills/specification.md" &&
-        !file.includes("/templates/")
-    );
-
-  if (!skillChanged) {
-    return 0;
-  }
-
-  process.stdout.write("Skill files modified, regenerating index...\n");
-  const indexStatus = runOptional(process.execPath, ["scripts/generate-skills-index.js"]);
-  if (indexStatus !== 0) {
-    return indexStatus;
-  }
-
-  return runOptional("git", ["add", ".llm/skills/index.md"]);
+  process.stdout.write("Pre-commit hooks changed files; retrying once after auto-fixes...\n");
+  return run(process.execPath, [
+    "scripts/ensure-pre-commit.js",
+    "run",
+    "--hook-stage",
+    "pre-commit"
+  ]);
 }
 
 if (require.main === module) {

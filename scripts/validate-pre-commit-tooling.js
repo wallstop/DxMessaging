@@ -6,7 +6,10 @@
  * - npx calls must explicitly set install policy via --yes/-y or --no.
  * - Jest-related hooks must use scripts/run-managed-jest.js for deterministic execution.
  * - yamllint must be configured as a non-optional hook (no conditional skip wrappers).
+ * - Preflight must auto-repair the pre-commit executable before hook parity checks.
+ * - Mutating pre-commit hooks must use run-and-restage / run-and-stage.
  * - YAML comment auto-wrap hook must use run-and-restage + require_serial.
+ * - Markdown auto-fix pipeline must use run-and-restage + require_serial.
  * - preflight:pre-commit must include YAML policy checks, including comment drift checks.
  */
 
@@ -26,8 +29,9 @@ const {
 const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
 const PACKAGE_JSON_PATH = path.join(__dirname, "..", "package.json");
 const REQUIRED_PRECHECK_PARSER_COMMAND =
-  "pre-commit run --hook-stage pre-push script-parser-tests --all-files";
+  "node scripts/ensure-pre-commit.js run --hook-stage pre-push script-parser-tests --all-files";
 const REQUIRED_NODE_REPAIR_COMMAND = "npm run repair:node-tooling";
+const REQUIRED_PRE_COMMIT_REPAIR_COMMAND = "npm run repair:pre-commit";
 const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
 const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
 const REQUIRED_CHANGED_DOCS_COMMAND = "npm run validate:changed-docs";
@@ -222,6 +226,16 @@ function hasNodeRepairBeforeNodeValidation(preflightScript) {
   );
 }
 
+function hasRequiredPreCommitRepairCommand(preflightScript) {
+  return hasRequiredPreflightCommand(preflightScript, REQUIRED_PRE_COMMIT_REPAIR_COMMAND);
+}
+
+function hasPreCommitRepairBeforeHookMarkdown(preflightScript) {
+  const repairIndex = preflightScript.indexOf(REQUIRED_PRE_COMMIT_REPAIR_COMMAND);
+  const hookIndex = preflightScript.indexOf(REQUIRED_HOOK_MARKDOWN_COMMAND);
+  return repairIndex >= 0 && hookIndex >= 0 && repairIndex < hookIndex;
+}
+
 function hasRequiredPackageJsonFormatCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
 }
@@ -409,6 +423,55 @@ function hasGuardedFixerRestagePattern(hookId, entry) {
   );
 }
 
+function hasGuardedCsharpierRestagePattern(hookId, entry) {
+  if (hookId !== "csharpier") {
+    return true;
+  }
+
+  return (
+    /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
+    /\bdotnet\b\s+tool\s+run\s+csharpier\s+format\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
+}
+
+function hasGuardedPrettierRestagePattern(hookId, entry) {
+  if (hookId !== "prettier") {
+    return true;
+  }
+
+  return (
+    /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
+    /\bnode\b\s+scripts\/run-managed-prettier\.js\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
+}
+
+function hasGuardedEolRestagePattern(hookId, entry) {
+  if (hookId !== "fix-eol") {
+    return true;
+  }
+
+  return (
+    /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
+    /\bnode\b\s+scripts\/fix-eol\.js\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
+}
+
+function hasGuardedBannerStagePattern(hookId, entry) {
+  if (hookId !== "sync-banner-version") {
+    return true;
+  }
+
+  return (
+    /\bnode\b\s+scripts\/run-and-stage\.js\b/.test(entry) &&
+    /\bnode\b\s+scripts\/sync-banner-version-hook\.js\b/.test(entry) &&
+    /\bdocs\/images\/DxMessaging-banner\.svg\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
+}
+
 function hasGuardedYamlCommentRestagePattern(hookId, entry) {
   if (hookId !== "fix-yaml-comments-line-length") {
     return true;
@@ -417,6 +480,18 @@ function hasGuardedYamlCommentRestagePattern(hookId, entry) {
   return (
     /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
     /\bnode\b\s+scripts\/fix-yaml-comments-line-length\.js\b/.test(entry) &&
+    /(?:^|\s)--(?:\s|$)/.test(entry)
+  );
+}
+
+function hasGuardedMarkdownPipelineRestagePattern(hookId, entry) {
+  if (hookId !== "run-staged-md-pipeline") {
+    return true;
+  }
+
+  return (
+    /\bnode\b\s+scripts\/run-and-restage\.js\b/.test(entry) &&
+    /\bnode\b\s+scripts\/run-staged-md-pipeline\.js\b/.test(entry) &&
     /(?:^|\s)--(?:\s|$)/.test(entry)
   );
 }
@@ -439,6 +514,22 @@ function hasRequiredSerialManagedRepairHook(hook) {
 
 function hasRequiredSerialYamlCommentFixerHook(hook) {
   if (hook.id !== "fix-yaml-comments-line-length") {
+    return true;
+  }
+
+  return hook.requireSerial === "true";
+}
+
+function hasRequiredSerialEolFixerHook(hook) {
+  if (hook.id !== "fix-eol") {
+    return true;
+  }
+
+  return hook.requireSerial === "true";
+}
+
+function hasRequiredSerialMarkdownPipelineHook(hook) {
+  if (hook.id !== "run-staged-md-pipeline") {
     return true;
   }
 
@@ -500,12 +591,67 @@ function validateHookEntries(entries, hookConfigs = []) {
       );
     }
 
+    if (!hasGuardedCsharpierRestagePattern(hook.id, hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "csharpier must use node scripts/run-and-restage.js with '--' so staged C# formatting is shell-neutral and diff-guarded.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasGuardedPrettierRestagePattern(hook.id, hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "prettier must use node scripts/run-and-restage.js with '--' so staged formatting is shell-neutral and diff-guarded.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasGuardedEolRestagePattern(hook.id, hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "fix-eol must use node scripts/run-and-restage.js with '--' so staged EOL fixes are shell-neutral and diff-guarded.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasGuardedBannerStagePattern(hook.id, hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "sync-banner-version must use node scripts/run-and-stage.js and stage docs/images/DxMessaging-banner.svg when the generated banner changes.",
+          hook.entry
+        )
+      );
+    }
+
     if (!hasGuardedYamlCommentRestagePattern(hook.id, hook.entry)) {
       violations.push(
         new Violation(
           hook.id,
           hook.line,
           "fix-yaml-comments-line-length must use node scripts/run-and-restage.js with '--' so staged YAML comment auto-wrap is shell-neutral and diff-guarded.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasGuardedMarkdownPipelineRestagePattern(hook.id, hook.entry)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "run-staged-md-pipeline must use node scripts/run-and-restage.js with '--' so staged Markdown auto-fixes are shell-neutral and diff-guarded.",
           hook.entry
         )
       );
@@ -539,6 +685,28 @@ function validateHookEntries(entries, hookConfigs = []) {
           hook.id,
           hook.line,
           "fix-yaml-comments-line-length must set require_serial: true so restage writes stay single-writer across filename partitions.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasRequiredSerialEolFixerHook(enrichedHook)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "fix-eol must set require_serial: true because it can restage files.",
+          hook.entry
+        )
+      );
+    }
+
+    if (!hasRequiredSerialMarkdownPipelineHook(enrichedHook)) {
+      violations.push(
+        new Violation(
+          hook.id,
+          hook.line,
+          "run-staged-md-pipeline must set require_serial: true because it can restage files.",
           hook.entry
         )
       );
@@ -688,12 +856,38 @@ function validatePreflightScriptPolicy(
     );
   }
 
+  if (
+    hasRequiredPreCommitRepairCommand(preflightScript) &&
+    hasRequiredHookMarkdownCommand(preflightScript) &&
+    !hasPreCommitRepairBeforeHookMarkdown(preflightScript)
+  ) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must run '${REQUIRED_PRE_COMMIT_REPAIR_COMMAND}' before '${REQUIRED_HOOK_MARKDOWN_COMMAND}' so a missing pre-commit executable is auto-installed before hook parity checks.`,
+        preflightScript
+      )
+    );
+  }
+
   if (!hasRequiredNodeToolingCommand(preflightScript)) {
     violations.push(
       new Violation(
         "preflight-script",
         1,
         `preflight:pre-commit must include '${REQUIRED_NODE_TOOLING_COMMAND}' so incomplete local node_modules installs are caught before hooks.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (!hasRequiredPreCommitRepairCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_PRE_COMMIT_REPAIR_COMMAND}' so missing pre-commit executables are auto-repaired before hooks.`,
         preflightScript
       )
     );
@@ -965,6 +1159,8 @@ module.exports = {
   hasRequiredParserPrecheckCommand,
   hasRequiredNodeRepairCommand,
   hasNodeRepairBeforeNodeValidation,
+  hasRequiredPreCommitRepairCommand,
+  hasPreCommitRepairBeforeHookMarkdown,
   hasRequiredPackageJsonFormatCommand,
   hasRequiredYamlValidationCommand,
   hasRequiredYamlCommentsCheckCommand,
@@ -984,11 +1180,18 @@ module.exports = {
   hasInlinedPrettierEntry,
   hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
+  hasGuardedCsharpierRestagePattern,
+  hasGuardedPrettierRestagePattern,
+  hasGuardedEolRestagePattern,
+  hasGuardedBannerStagePattern,
   hasGuardedYamlCommentRestagePattern,
+  hasGuardedMarkdownPipelineRestagePattern,
   hasPortableHookInvocation,
   usesManagedNodeRepair,
   hasRequiredSerialManagedRepairHook,
   hasRequiredSerialYamlCommentFixerHook,
+  hasRequiredSerialEolFixerHook,
+  hasRequiredSerialMarkdownPipelineHook,
   validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
@@ -997,6 +1200,7 @@ module.exports = {
   PACKAGE_JSON_PATH,
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_NODE_REPAIR_COMMAND,
+  REQUIRED_PRE_COMMIT_REPAIR_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_CHANGED_DOCS_COMMAND,

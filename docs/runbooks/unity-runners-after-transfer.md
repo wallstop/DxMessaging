@@ -153,6 +153,56 @@ time; until it is restarted it will keep reporting `pwsh: command not found`
 even though a fresh interactive shell can find `pwsh`. Re-run the queued
 Unity workflow once the agent is back online.
 
+## Android NDK install failures and Windows long-path (MAX_PATH) enablement
+
+The dedicated Android module install (`android` + `android-sdk-ndk-tools`) is a
+multi-GB Google download whose **NDK unpack** phase fails flakily on Windows.
+
+### Symptom
+
+- The base editor and all core modules provision fine, but the run fails on the
+  Android tier with a message like
+  `Unity <version> Android CI module install FAILED after N attempt(s)`.
+- The Unity CLI reaches roughly **93%** of the install and then dies, frequently
+  with **exit code 6**, while the NDK extraction is in progress.
+- `ensure-editor.ps1`'s post-mortem (printed automatically on Android exhaustion)
+  reports the **deepest NDK absolute path length** and the **`LongPathsEnabled`
+  state**, and emits a `::warning::` pointing here when the deepest NDK path is at
+  or beyond ~240 characters while Windows long-path support is not enabled. The
+  editor is deliberately **not** quarantined or re-downloaded in this case.
+
+### Root cause
+
+The Android NDK tree contains very deeply nested toolchain paths. When Windows
+long-path support is disabled, the NDK extraction hits the legacy **MAX_PATH
+(260-character)** limit mid-unpack and the install fails. Antivirus file-locking
+on the freshly written files can also interrupt the unpack.
+
+### Fix on the runner
+
+1. **Enable long paths** (`LongPathsEnabled = 1`). Via the registry:
+
+   ```powershell
+   New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+     -Name 'LongPathsEnabled' -Value 1 -PropertyType DWord -Force
+   ```
+
+   Or via Group Policy: **Computer Configuration -> Administrative Templates ->
+   System -> Filesystem -> Enable Win32 long paths -> Enabled**. Restart the
+   self-hosted runner agent (and ideally reboot) so the change takes effect.
+
+1. **(Optional) Add a Windows Defender exclusion** for the Unity install root
+   (`C:\Unity\Editors`) so Defender does not transiently lock NDK files during
+   extraction:
+
+   ```powershell
+   Add-MpPreference -ExclusionPath 'C:\Unity\Editors'
+   ```
+
+After enabling long paths, re-run the workflow. The post-mortem's
+`LongPathsEnabled` line should now read `True`, and the deep-path `::warning::`
+should no longer fire.
+
 ## Local documentation validation
 
 To reproduce the strict-mode mkdocs build that runs in CI:

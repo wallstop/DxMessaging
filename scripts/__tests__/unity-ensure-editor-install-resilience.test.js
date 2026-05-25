@@ -98,12 +98,13 @@ function extractEnsureEditorFunctions(functionNames) {
   ].join("\n");
 }
 
-function runPwshScript(scriptText) {
+function runPwshScript(scriptText, env = process.env) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-harness-"));
   workspaces.push(base);
   const harnessPath = path.join(base, "harness.ps1");
   fs.writeFileSync(harnessPath, scriptText, "utf8");
   return spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", harnessPath], {
+    env,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024
   });
@@ -498,6 +499,41 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
       expect(stdout).toContain("ZERO=2");
       expect(stdout).toContain("INVALID=2");
     });
+
+    // --- The DEDICATED Android-tier install-retry knob (parallels the base-install
+    //     attempts test above): defaults to 3 (one more than the base default of 2),
+    //     honors a valid override, and rejects a below-1/non-integer override with a
+    //     ::warning::, falling back to the default. ---
+    test("Get-EnsureEditorAndroidInstallRetryAttempts defaults to 3 and honors a valid override", () => {
+      const out = runPwshScript(
+        [
+          "Set-StrictMode -Version Latest",
+          "$ErrorActionPreference = 'Stop'",
+          extractEnsureEditorFunctions(["Get-EnsureEditorAndroidInstallRetryAttempts"]),
+          "$env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS = $null",
+          "Write-Output ('DEFAULT=' + (Get-EnsureEditorAndroidInstallRetryAttempts))",
+          "$env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS = '5'",
+          "Write-Output ('OVERRIDE=' + (Get-EnsureEditorAndroidInstallRetryAttempts))",
+          // Below 1 is invalid -> ::warning:: + fall back to the default (3).
+          "$env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS = '0'",
+          "Write-Output ('ZERO=' + (Get-EnsureEditorAndroidInstallRetryAttempts))",
+          // Non-integer is invalid -> ::warning:: + fall back to the default (3).
+          "$env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS = 'nope'",
+          "Write-Output ('INVALID=' + (Get-EnsureEditorAndroidInstallRetryAttempts))"
+        ].join("\n")
+      );
+      expect(out.status).toBe(0);
+      const stdout = out.stdout || "";
+      const combined = combinedText(out);
+      // The default is 3 (one more than the base-install default of 2).
+      expect(stdout).toContain("DEFAULT=3");
+      expect(stdout).toContain("OVERRIDE=5");
+      // Invalid overrides fall back to the default AND emit a ::warning::.
+      expect(stdout).toContain("ZERO=3");
+      expect(stdout).toContain("INVALID=3");
+      expect(combined).toContain("::warning::");
+      expect(combined).toContain("Ignoring invalid DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS");
+    });
   });
 
   // --- NORMAL COMPLETION IS UNAFFECTED: a fast fake CLI returns promptly with
@@ -615,7 +651,9 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
         "Set-StrictMode -Version Latest",
         "$ErrorActionPreference = 'Stop'",
         extractEnsureEditorFunctions(["Get-LastCliProgressMessage"]),
-        // Last JSON msg wins (even when a later line has no msg).
+        // Last JSON msg wins (even when a later line has no msg). NOTE: none of
+        // these lines carry "phase":"install", so the install-phase/max-pct
+        // preference does not fire -- this exercises the last-msg FALLBACK.
         '$a = @(\'{"msg":"first"}\', \'{"type":"progress","msg":"Installing Android NDK..."}\', \'trailing plain line\')',
         "Write-Output ('JSON=' + (Get-LastCliProgressMessage -Output $a))",
         // No JSON msg -> last non-empty line.
@@ -630,6 +668,282 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     expect(stdout).toContain("JSON=Installing Android NDK...");
     expect(stdout).toContain("PLAIN=plain two");
     expect(stdout).toContain("EMPTY=(no output captured)");
+  });
+
+  // --- INSTALL-PHASE/MAX-PCT preference (the fix): an out-of-order download
+  //     "Starting install..." line emitted AFTER the deepest install-phase line
+  //     must NOT mask the real failing module. The summary must report the
+  //     install-phase msg at the MAXIMUM pct seen, with the pct appended. ---
+  test("Get-LastCliProgressMessage prefers the install-phase msg at the highest pct over out-of-order trailing lines", () => {
+    const out = runPwshScript(
+      [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        extractEnsureEditorFunctions(["Get-LastCliProgressMessage"]),
+        // Interleaved: an install-phase NDK line at pct 93 (the real failing
+        // point), followed by an OUT-OF-ORDER download line "Starting install..."
+        // The preference must surface the NDK line with its pct, not the trailer.
+        '$a = @(',
+        '  \'{"type":"progress","phase":"download","pct":12,"msg":"Downloading Android NDK"}\',',
+        '  \'{"type":"progress","phase":"install","pct":40,"msg":"Installing Android SDK"}\',',
+        '  \'{"type":"progress","phase":"install","pct":93,"msg":"Installing Android NDK"}\',',
+        '  \'{"type":"progress","phase":"download","pct":5,"msg":"Starting install..."}\'',
+        ")",
+        "Write-Output ('INSTALL=' + (Get-LastCliProgressMessage -Output $a))",
+        // When NO install-phase line is present, the fallback (last msg) still applies.
+        '$b = @(\'{"phase":"download","pct":1,"msg":"only download"}\')',
+        "Write-Output ('FALLBACK=' + (Get-LastCliProgressMessage -Output $b))"
+      ].join("\n")
+    );
+    expect(out.status).toBe(0);
+    const stdout = out.stdout || "";
+    expect(stdout).toContain("INSTALL=Installing Android NDK (93%)");
+    expect(stdout).toContain("FALLBACK=only download");
+  });
+
+  // --- Clear-PartialAndroidModulePayload: removes NDK/SDK under the editor and
+  //     stays strictly inside the editor directory (never touches siblings). ---
+  test("Clear-PartialAndroidModulePayload removes NDK/SDK and stays inside the editor dir", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-clear-"));
+    workspaces.push(base);
+    const editorRoot = path.join(base, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    const androidRoot = path.join(
+      editorRoot,
+      "Editor",
+      "Data",
+      "PlaybackEngines",
+      "AndroidPlayer"
+    );
+    const ndkFile = path.join(androidRoot, "NDK", "toolchains", "deep", "source.properties");
+    const sdkFile = path.join(androidRoot, "SDK", "platform-tools", "adb.exe");
+    // A sibling OUTSIDE AndroidPlayer that must SURVIVE (proves we stay scoped).
+    const siblingFile = path.join(
+      editorRoot,
+      "Editor",
+      "Data",
+      "PlaybackEngines",
+      "WebGLSupport",
+      "UnityEditor.WebGL.Extensions.dll"
+    );
+    // A file OUTSIDE the editor dir entirely that must SURVIVE.
+    const outsideFile = path.join(base, "outside.txt");
+    for (const f of [editorExe, ndkFile, sdkFile, siblingFile, outsideFile]) {
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, "");
+    }
+
+    const out = runPwshScript(
+      [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        "$env:DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS = '0'",
+        extractEnsureEditorFunctions([
+          "Clear-PartialAndroidModulePayload",
+          "Invoke-WithRetry",
+          "Get-EnsureEditorRetryDelaySeconds"
+        ]),
+        `Clear-PartialAndroidModulePayload -EditorPath '${editorExe.replace(/'/g, "''")}'`,
+        "Write-Output 'CLEARED'"
+      ].join("\n")
+    );
+    expect(out.status).toBe(0);
+    expect(combinedText(out)).toContain("Cleared partial Android module payload");
+    // NDK + SDK heavy payload dirs are gone...
+    expect(fs.existsSync(path.join(androidRoot, "NDK"))).toBe(false);
+    expect(fs.existsSync(path.join(androidRoot, "SDK"))).toBe(false);
+    // ...while a sibling inside the editor and anything outside survive.
+    expect(fs.existsSync(siblingFile)).toBe(true);
+    expect(fs.existsSync(outsideFile)).toBe(true);
+    expect(fs.existsSync(editorExe)).toBe(true);
+  });
+
+  // --- Write-UnityModuleInstallPostMortem: per-group present/MISSING lines, and
+  //     the MAX_PATH warning when the deepest NDK path >= 240 and long paths are
+  //     NOT enabled.
+  //
+  // HERMETICITY (cross-platform): the production guard fires only when
+  // `deepestNdk >= 240 -and longPaths -ne $true`, and Test-WindowsLongPathSupport
+  // reads the REAL HKLM registry on Windows -- uncontrolled by the test and
+  // different per runner. So we FORCE the long-path side via the TEST-ONLY env
+  // override DXM_UNITY_FAKE_LONGPATHS_ENABLED instead of depending on the host.
+  // We ALSO avoid creating >260-char real paths on Windows (which can throw in
+  // setup when long paths are not enabled): the physical deep-path creation + the
+  // "hit the Windows MAX_PATH" assertion are gated to non-win32. On win32 we assert
+  // only the OS-safe parts (the per-group lines + the LongPathsEnabled state line).
+  // The @cross-platform-regression suite still exercises the full deep-path path on
+  // ubuntu + macos. ---
+  test("Write-UnityModuleInstallPostMortem emits per-group state and the long-path/MAX_PATH warning on a deep NDK path", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-postmortem-"));
+    workspaces.push(base);
+    const editorRoot = path.join(base, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    const androidRoot = path.join(
+      editorRoot,
+      "Editor",
+      "Data",
+      "PlaybackEngines",
+      "AndroidPlayer"
+    );
+    const isWin = process.platform === "win32";
+
+    // Always create the editor exe. On non-win32 also build a deliberately DEEP NDK
+    // path (>= 240 absolute chars) so the MAX_PATH warning can fire; on win32 we
+    // create only a shallow NDK leaf (a 260+ char path can throw at creation when
+    // long paths are not enabled, which is exactly the host state we must not
+    // depend on).
+    const filesToCreate = [editorExe];
+    if (isWin) {
+      filesToCreate.push(path.join(androidRoot, "NDK", "source.properties"));
+    } else {
+      const deepSegment = "x".repeat(50);
+      filesToCreate.push(
+        path.join(
+          androidRoot,
+          "NDK",
+          deepSegment,
+          deepSegment,
+          deepSegment,
+          deepSegment,
+          deepSegment,
+          "source.properties"
+        )
+      );
+    }
+    for (const f of filesToCreate) {
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, "");
+    }
+
+    // FORCE long paths to "not enabled" so the warning side of the guard is
+    // controlled (independent of the real HKLM value on a Windows runner).
+    const env = { ...process.env, DXM_UNITY_FAKE_LONGPATHS_ENABLED: "0" };
+    const out = runPwshScript(
+      [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        extractEnsureEditorFunctions([
+          "Write-UnityModuleInstallPostMortem",
+          "Get-UnityCiModuleSpec",
+          "Get-UnityCiVerifiedModuleGroups",
+          "Test-UnityCiModuleGroupPresent",
+          "Test-Il2CppModulePresent",
+          "Test-AnyUnityLeafPresent",
+          "Get-DeepestPathLengthUnder",
+          "Test-WindowsLongPathSupport",
+          "Get-InstallDriveFreeSpaceText"
+        ]),
+        `Write-UnityModuleInstallPostMortem -Version '6000.0.32f1' -EditorPath '${editorExe.replace(/'/g, "''")}' -Root '${base.replace(/'/g, "''")}'`,
+        "Write-Output 'POSTMORTEM-DONE'"
+      ].join("\n"),
+      env
+    );
+    expect(out.status).toBe(0);
+    const combined = combinedText(out);
+    expect(combined).toContain("module install post-mortem");
+    // Per-group MISSING lines (no module leaves were fabricated besides the NDK
+    // source.properties, so windows-il2cpp etc. are MISSING). OS-safe everywhere.
+    expect(combined).toContain("module group 'windows-il2cpp': MISSING");
+    expect(combined).toContain("AndroidPlayer\\NDK : exists");
+    // The forced long-path-disabled state is reflected in the post-mortem line on
+    // every OS (the override makes Test-WindowsLongPathSupport return $false).
+    expect(combined).toContain("Windows long-path support (LongPathsEnabled): False");
+    if (!isWin) {
+      // The MAX_PATH warning fires on the deep NDK path with long paths "not enabled".
+      expect(combined).toContain("hit the Windows MAX_PATH");
+      expect(combined).toContain("docs/runbooks/unity-runners-after-transfer.md");
+    }
+    expect(combined).toContain("POSTMORTEM-DONE");
+  });
+
+  // --- Complementary guard-condition proof (non-win32): with long paths FORCED
+  //     ENABLED via the TEST-ONLY override, the MAX_PATH warning does NOT fire even
+  //     at a deep NDK path -- proving the warning's `longPaths -ne $true` condition.
+  //     Gated to non-win32 for the same >260-char-path hermeticity reason above. ---
+  const itLongPathEnabled = process.platform === "win32" ? test.skip : test;
+  itLongPathEnabled(
+    "Write-UnityModuleInstallPostMortem suppresses the MAX_PATH warning when long paths are enabled",
+    () => {
+      const base = fs.mkdtempSync(
+        path.join(os.tmpdir(), "dxm-ensure-resilience-postmortem-longpaths-")
+      );
+      workspaces.push(base);
+      const editorRoot = path.join(base, "6000.0.32f1");
+      const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+      const androidRoot = path.join(editorRoot, "Editor", "Data", "PlaybackEngines", "AndroidPlayer");
+      const deepSegment = "x".repeat(50);
+      const deepNdkFile = path.join(
+        androidRoot,
+        "NDK",
+        deepSegment,
+        deepSegment,
+        deepSegment,
+        deepSegment,
+        deepSegment,
+        "source.properties"
+      );
+      for (const f of [editorExe, deepNdkFile]) {
+        fs.mkdirSync(path.dirname(f), { recursive: true });
+        fs.writeFileSync(f, "");
+      }
+
+      const env = { ...process.env, DXM_UNITY_FAKE_LONGPATHS_ENABLED: "1" };
+      const out = runPwshScript(
+        [
+          "Set-StrictMode -Version Latest",
+          "$ErrorActionPreference = 'Stop'",
+          extractEnsureEditorFunctions([
+            "Write-UnityModuleInstallPostMortem",
+            "Get-UnityCiModuleSpec",
+            "Get-UnityCiVerifiedModuleGroups",
+            "Test-UnityCiModuleGroupPresent",
+            "Test-Il2CppModulePresent",
+            "Test-AnyUnityLeafPresent",
+            "Get-DeepestPathLengthUnder",
+            "Test-WindowsLongPathSupport",
+            "Get-InstallDriveFreeSpaceText"
+          ]),
+          `Write-UnityModuleInstallPostMortem -Version '6000.0.32f1' -EditorPath '${editorExe.replace(/'/g, "''")}' -Root '${base.replace(/'/g, "''")}'`,
+          "Write-Output 'POSTMORTEM-DONE'"
+        ].join("\n"),
+        env
+      );
+      expect(out.status).toBe(0);
+      const combined = combinedText(out);
+      // The forced long-paths-enabled state is reflected...
+      expect(combined).toContain("Windows long-path support (LongPathsEnabled): True");
+      // ...and CRUCIALLY the MAX_PATH warning is suppressed despite the deep path.
+      expect(combined).not.toContain("hit the Windows MAX_PATH");
+      expect(combined).toContain("POSTMORTEM-DONE");
+    }
+  );
+
+  // --- Test-WindowsLongPathSupport / Get-DeepestPathLengthUnder are SAFE on
+  //     missing/unreadable paths (never throw, sensible sentinels). ---
+  test("Test-WindowsLongPathSupport and Get-DeepestPathLengthUnder are safe on missing paths", () => {
+    const out = runPwshScript(
+      [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        extractEnsureEditorFunctions([
+          "Test-WindowsLongPathSupport",
+          "Get-DeepestPathLengthUnder"
+        ]),
+        // Long-path probe never throws; on non-Windows it returns $null.
+        "$lp = Test-WindowsLongPathSupport",
+        "Write-Output ('LONGPATH=' + ($null -eq $lp))",
+        // Deepest-path on a non-existent dir returns 0 (never throws).
+        "Write-Output ('DEEPMISSING=' + (Get-DeepestPathLengthUnder -Directory '/definitely/not/a/real/dir/xyz'))",
+        "Write-Output ('DEEPEMPTY=' + (Get-DeepestPathLengthUnder -Directory ''))"
+      ].join("\n")
+    );
+    expect(out.status).toBe(0);
+    const stdout = out.stdout || "";
+    // On the Linux/macOS CI legs the long-path probe returns $null (-> True here);
+    // on Windows it returns a bool. Either way it must not have thrown (status 0).
+    expect(stdout).toMatch(/LONGPATH=(True|False)/);
+    expect(stdout).toContain("DEEPMISSING=0");
+    expect(stdout).toContain("DEEPEMPTY=0");
   });
 
   // --- LIVE PER-LINE STREAMING (BLOCKER-1): the timeout runner must echo each

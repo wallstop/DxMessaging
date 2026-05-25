@@ -165,6 +165,35 @@ function Get-EnsureEditorInstallRetryAttempts {
     return $Default
 }
 
+function Get-EnsureEditorAndroidInstallRetryAttempts {
+    # Single source of truth for the DEDICATED Android module-install retry count
+    # used by Install-UnityAndroidModules. The Android SDK/NDK is a multi-GB Google
+    # download whose NDK UNPACK phase (~93%) fails flakily on Windows (suspected
+    # MAX_PATH during extraction, or Defender file-locking), so the Android install
+    # is retried in ISOLATION -- WITHOUT ever quarantining/re-downloading the whole
+    # editor (the base editor + core modules are already on disk and are not the
+    # thing that flakes). Honors DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS
+    # following the EXACT convention of Get-EnsureEditorInstallRetryAttempts. The
+    # DEFAULT is 3 (one more than the base-install default of 2) because the Android
+    # unpack flake is the specific failure this loop targets and an extra bounded,
+    # editor-preserving attempt is cheap (no editor re-download). A value below 1 is
+    # invalid; a non-integer/negative override is ignored with a ::warning::.
+    # StrictMode-safe: no collection reads.
+    param([int]$Default = 3)
+
+    if ($env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS, [ref]$parsed) -and
+            $parsed -ge 1
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS='$env:DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS'; using $Default attempt(s)."
+    }
+    return $Default
+}
+
 function Get-CollapsedCliOutputTail {
     # PURE, StrictMode-safe diagnostic formatter. Takes the captured CLI output
     # lines and COLLAPSES consecutive identical lines into a single line annotated
@@ -253,14 +282,24 @@ function Get-CollapsedCliOutputTail {
 }
 
 function Get-LastCliProgressMessage {
-    # PURE, StrictMode-safe extractor for the LAST meaningful progress message in
+    # PURE, StrictMode-safe extractor for the MOST DIAGNOSTIC progress message in
     # the captured CLI output, for a wrap-immune one-line failure summary. The
     # standalone Unity CLI emits JSON progress lines shaped like
-    # `{"type":"progress","pct":96,"msg":"Installing Android NDK..."}`; the most
-    # useful single datum on a failure is the LAST such `"msg"` value (it names
-    # what the installer was doing when it died). Falls back to the LAST non-empty
-    # captured line when no JSON `"msg"` field is present, and to a literal
-    # '(no output captured)' when there is nothing to report.
+    # `{"type":"progress","phase":"install","pct":93,"msg":"Installing Android NDK"}`.
+    #
+    # WHY THE INSTALL-PHASE/MAX-PCT PREFERENCE (the fix): the CLI interleaves
+    # DOWNLOAD-phase and INSTALL-phase progress, and on a failure the LAST line
+    # carrying a `"msg"` is frequently an OUT-OF-ORDER download line (e.g. a late
+    # `"Starting install..."` for some other module) -- so naively reporting the
+    # last `"msg"` MASKED the true failing module (the Android NDK unpack at 93%).
+    # Instead we scan ALL lines and, among INSTALL-phase lines (`"phase":"install"`),
+    # track the `"msg"` seen at the MAXIMUM `"pct"`; that is the deepest the
+    # installer got before dying (e.g. `Installing Android NDK (93%)`), which is
+    # the actionable datum. We return it as `"<msg> (<maxpct>%)"`.
+    #
+    # Fallbacks (unchanged order): if no install-phase msg is found, the LAST line
+    # carrying ANY JSON `"msg"`; else the LAST non-empty captured line; else the
+    # literal '(no output captured)'.
     #
     # Deliberately regex-based (no ConvertFrom-Json): the lines are interleaved
     # progress spam, not a single JSON document, and a malformed/non-JSON beta
@@ -272,7 +311,38 @@ function Get-LastCliProgressMessage {
         return '(no output captured)'
     }
 
-    # Scan from the END for the last line carrying a JSON "msg":"..." field.
+    # PREFERRED: the install-phase message at the highest pct seen. Scan ALL lines;
+    # for any line that is in the install phase AND carries both a pct and a msg,
+    # remember the msg at the maximum pct. This is immune to out-of-order trailing
+    # download lines that would otherwise mask the real failing module.
+    $bestInstallMsg = $null
+    $bestInstallPct = -1
+    foreach ($raw in $capturedLines) {
+        $line = [string]$raw
+        # This phase test could in THEORY match the literal `"phase":"install"`
+        # appearing INSIDE a quoted "msg" value, but a real Unity progress message
+        # never embeds that token (the msg is human text like "Installing Android
+        # NDK"), so there is no realistic trigger; deliberately left as a simple
+        # substring match rather than a brittle full-JSON parse of interleaved spam.
+        if ($line -notmatch '"phase"\s*:\s*"install"') {
+            continue
+        }
+        $pctMatch = [regex]::Match($line, '"pct"\s*:\s*(\d+)')
+        $msgMatch = [regex]::Match($line, '"msg"\s*:\s*"((?:\\.|[^"\\])*)"')
+        if (-not ($pctMatch.Success -and $msgMatch.Success)) {
+            continue
+        }
+        $pct = [int]$pctMatch.Groups[1].Value
+        if ($pct -ge $bestInstallPct) {
+            $bestInstallPct = $pct
+            $bestInstallMsg = $msgMatch.Groups[1].Value
+        }
+    }
+    if ($null -ne $bestInstallMsg) {
+        return "$bestInstallMsg ($bestInstallPct%)"
+    }
+
+    # FALLBACK 1: scan from the END for the last line carrying a JSON "msg":"..." field.
     for ($i = $capturedLines.Count - 1; $i -ge 0; $i--) {
         $line = [string]$capturedLines[$i]
         $match = [regex]::Match($line, '"msg"\s*:\s*"((?:\\.|[^"\\])*)"')
@@ -281,7 +351,7 @@ function Get-LastCliProgressMessage {
         }
     }
 
-    # No JSON progress message: fall back to the last non-empty captured line.
+    # FALLBACK 2: no JSON progress message: fall back to the last non-empty captured line.
     for ($i = $capturedLines.Count - 1; $i -ge 0; $i--) {
         $line = ([string]$capturedLines[$i]).Trim()
         if ($line.Length -gt 0) {
@@ -1220,49 +1290,105 @@ function Get-UnityEditorInstallDirectory {
     return $editorDir
 }
 
+function Get-UnityCiModuleSpec {
+    # SINGLE SOURCE OF TRUTH for the CI Unity module set. Returns an ORDERED array
+    # of [pscustomobject] rows (core tier first), each describing one module group:
+    #   Id        - the module group identifier.
+    #   Requested - $true if the bare id is passed to the standalone CLI's `-m`
+    #               install list; $false if it is verified-on-disk ONLY (never
+    #               requested).
+    #   Verified  - $true if the group must be PROVEN present on disk after install.
+    #   Tier      - 'core' (provisions reliably with the base editor) or 'android'
+    #               (the heavy/flaky multi-GB Google download whose NDK unpack
+    #               deterministically fails at ~93% on Windows).
+    #
+    # WHY THIS EXISTS (and why everything DERIVES from it): the REQUESTED `-m` list,
+    # the VERIFIED-on-disk groups, and TIER membership all derive from these rows so
+    # they CANNOT DRIFT from one another -- the historical bug class where the
+    # requested list and the verified list silently diverged. Add/remove/retier a
+    # module HERE and every consumer follows.
+    #
+    # OpenJDK is Requested=$false (verified-only): the standalone beta CLI rejects
+    # the bare id 'android-open-jdk' (it emits "Couldn't find module ... Did you
+    # mean: android-open-jdk-11.0.14.1+1" because the real id is VERSION-PINNED and
+    # that suffix drifts across Unity versions). OpenJDK instead arrives as a
+    # DEPENDENCY of 'android-sdk-ndk-tools', so we PROVE it on disk but NEVER
+    # request it.
+    #
+    # The 'android' tier (android + android-sdk-ndk-tools, with android-open-jdk as
+    # its verified-only dependency) is installed in a DEDICATED, separately-retried
+    # step (Install-UnityAndroidModules) that NEVER quarantines the whole editor:
+    # the base editor + the 'core' tier provision reliably first, then Android is
+    # added afterward and any Android flake is isolated to that bounded retry.
+    return @(
+        [pscustomobject]@{ Id = 'windows-il2cpp';        Requested = $true;  Verified = $true; Tier = 'core' },
+        [pscustomobject]@{ Id = 'webgl';                 Requested = $true;  Verified = $true; Tier = 'core' },
+        [pscustomobject]@{ Id = 'linux-mono';            Requested = $true;  Verified = $true; Tier = 'core' },
+        [pscustomobject]@{ Id = 'linux-il2cpp';          Requested = $true;  Verified = $true; Tier = 'core' },
+        [pscustomobject]@{ Id = 'android';               Requested = $true;  Verified = $true; Tier = 'android' },
+        [pscustomobject]@{ Id = 'android-sdk-ndk-tools'; Requested = $true;  Verified = $true; Tier = 'android' },
+        [pscustomobject]@{ Id = 'android-open-jdk';      Requested = $false; Verified = $true; Tier = 'android' }
+    )
+}
+
 function Get-UnityCiModuleIds {
     # REQUESTED module ids passed to the standalone Unity CLI's `-m` install list.
+    # DERIVED from Get-UnityCiModuleSpec (the single source of truth) so it cannot
+    # drift from the verified-on-disk groups or the tier membership.
     #
     # NOTE: this is intentionally DECOUPLED from Get-UnityCiVerifiedModuleGroups
-    # (the on-disk verification switch). The two lists answer different questions:
-    # "what do we ASK the CLI to install" vs. "what must we PROVE is on disk".
-    #
-    # OpenJDK is deliberately ABSENT here even though we verify it on disk. The
-    # standalone beta CLI does not accept the bare id 'android-open-jdk' -- it
-    # emits "Couldn't find module \"android-open-jdk\". Did you mean:
-    # android-open-jdk-11.0.14.1+1" because its real id is VERSION-PINNED, and that
-    # exact suffix drifts across Unity versions (hardcoding it would be brittle and
-    # re-break on the next bump). OpenJDK is auto-added as a DEPENDENCY of
-    # 'android-sdk-ndk-tools', so requesting that group brings OpenJDK along; we
-    # then PROVE it landed via the 'android-open-jdk' disk group in
-    # Get-UnityCiVerifiedModuleGroups. This removes the silent "Couldn't find
-    # module" warning while keeping robust disk verification of OpenJDK.
-    return @(
-        'windows-il2cpp',
-        'webgl',
-        'android',
-        'android-sdk-ndk-tools',
-        'linux-mono',
-        'linux-il2cpp'
-    )
+    # (the on-disk verification list). The two answer different questions: "what do
+    # we ASK the CLI to install" vs. "what must we PROVE is on disk". OpenJDK is
+    # deliberately ABSENT here (Requested=$false in the spec) even though we verify
+    # it on disk: the beta CLI rejects the version-pinned bare id, and OpenJDK
+    # arrives as an 'android-sdk-ndk-tools' dependency instead. StrictMode-safe:
+    # @()-wraps the derived list.
+    return @(Get-UnityCiModuleSpec | Where-Object { $_.Requested } | ForEach-Object { $_.Id })
 }
 
 function Get-UnityCiVerifiedModuleGroups {
     # VERIFIED-on-disk module groups (the on-disk truth we require after any
-    # install/repair). Iterated by Get-MissingUnityCiModuleGroups /
-    # Test-UnityCiModuleGroupPresent. Decoupled from Get-UnityCiModuleIds (see the
-    # note there): we verify 'android-open-jdk' on disk even though we never pass
-    # that id to the CLI, because OpenJDK arrives as a dependency of
-    # 'android-sdk-ndk-tools' and must be PROVEN present, not assumed.
-    return @(
-        'windows-il2cpp',
-        'webgl',
-        'android',
-        'android-sdk-ndk-tools',
-        'android-open-jdk',
-        'linux-mono',
-        'linux-il2cpp'
-    )
+    # install/repair). DERIVED from Get-UnityCiModuleSpec so it cannot drift from
+    # the requested ids or the tiers. Iterated by Get-MissingUnityCiModuleGroups /
+    # Test-UnityCiModuleGroupPresent. Includes 'android-open-jdk' (Verified=$true,
+    # Requested=$false in the spec): OpenJDK arrives as an 'android-sdk-ndk-tools'
+    # dependency and must be PROVEN present, not assumed. StrictMode-safe: @()-wraps.
+    return @(Get-UnityCiModuleSpec | Where-Object { $_.Verified } | ForEach-Object { $_.Id })
+}
+
+function Get-UnityCiModuleIdsForTier {
+    # REQUESTED ids for a single tier ('core' or 'android'), derived from the spec.
+    # Used to scope the base/repair install to 'core' (provisions reliably with the
+    # base editor) and to drive the dedicated, separately-retried 'android' install
+    # (the heavy/flaky NDK download). Validates $Tier against the spec's known tiers
+    # and THROWS on an unknown one (mirroring the throw in Get-UnityCiModuleTier) so
+    # a bogus tier can never silently yield an empty -- and therefore malformed,
+    # id-less -- `-m` vector. StrictMode-safe: @()-wraps the derived list.
+    param([Parameter(Mandatory = $true)][string]$Tier)
+
+    $knownTiers = @(Get-UnityCiModuleSpec | ForEach-Object { $_.Tier } | Select-Object -Unique)
+    if ($knownTiers -notcontains $Tier) {
+        throw "Unknown Unity CI module tier '$Tier'."
+    }
+
+    return @(Get-UnityCiModuleSpec | Where-Object { $_.Requested -and $_.Tier -eq $Tier } | ForEach-Object { $_.Id })
+}
+
+function Get-UnityCiModuleTier {
+    # Look up the Tier ('core'/'android') for a module group id from the spec, so a
+    # missing-group list (which carries verified ids, including the verified-only
+    # 'android-open-jdk') can be partitioned by tier. Throws on an unknown id,
+    # mirroring the default-case error in Test-UnityCiModuleGroupPresent so the spec
+    # and the on-disk switch cannot silently diverge. StrictMode-safe: uses
+    # [pscustomobject] property access (not bare hashtable indexing).
+    param([Parameter(Mandatory = $true)][string]$Id)
+
+    foreach ($row in @(Get-UnityCiModuleSpec)) {
+        if ($row.Id -eq $Id) {
+            return $row.Tier
+        }
+    }
+    throw "Unknown Unity CI module group '$Id'."
 }
 
 function Get-UnityCliModuleInstallArguments {
@@ -1285,6 +1411,13 @@ function Get-UnityCliModuleInstallArguments {
     # listing diagnostic and `editors`/`install-path` getters are NOT module
     # installs and must keep their own (EULA-free) shapes; do not route them here.
     #
+    # Optional -ModuleIds scopes the vector to a SUBSET of ids (e.g. a single tier
+    # via Get-UnityCiModuleIdsForTier), so the base/repair install can request only
+    # 'core' and the dedicated Android step can request only the 'android' tier --
+    # WITHOUT bypassing this sole producer (the `--accept-eula` + `-m` shape is still
+    # owned here for both verbs). When -ModuleIds is omitted the behavior is
+    # UNCHANGED: the full requested-id list (Get-UnityCiModuleIds).
+    #
     # StrictMode-safe: @()-wraps the module-id capture so an empty list never
     # collapses to AutomationNull, and uses array `+` concatenation only.
     param(
@@ -1293,10 +1426,12 @@ function Get-UnityCliModuleInstallArguments {
         [string]$Verb,
 
         [Parameter(Mandatory = $true)]
-        [string]$Version
+        [string]$Version,
+
+        [string[]]$ModuleIds
     )
 
-    $moduleIds = @(Get-UnityCiModuleIds)
+    $moduleIds = if ($PSBoundParameters.ContainsKey('ModuleIds')) { @($ModuleIds) } else { @(Get-UnityCiModuleIds) }
 
     if ($Verb -eq 'install-modules') {
         # `install-modules` targets an EXISTING editor, so it needs `-e <version>`.
@@ -1531,14 +1666,19 @@ function Install-UnityEditorWithCiModules {
         [switch]$ManagedOnly
     )
 
-    $moduleIds = @(Get-UnityCiModuleIds)
+    # The fresh-editor install requests ONLY the CORE tier; the base editor + core
+    # modules provision reliably and fast. The heavy/flaky Android tier is added
+    # afterward by Ensure-UnityCiModules via the dedicated, separately-retried
+    # Install-UnityAndroidModules step (which NEVER quarantines the editor).
+    $moduleIds = @(Get-UnityCiModuleIdsForTier -Tier 'core')
     if ($ManagedOnly) {
         Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
     }
-    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with CI modules ($($moduleIds -join ', ')). Reason: $Reason"
+    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with core CI modules ($($moduleIds -join ', ')). Reason: $Reason"
 
-    # Single source of truth for the (EULA-bearing) module-install arg vector.
-    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $Version)
+    # Single source of truth for the (EULA-bearing) module-install arg vector,
+    # scoped to the core tier.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $Version -ModuleIds $moduleIds)
 
     $resolved = $null
     for ($attempt = 1; $attempt -le 2; $attempt++) {
@@ -1592,9 +1732,13 @@ function Install-UnityEditorWithCiModules {
         throw "Unity $Version repair install completed, but Unity.exe could not be found afterward."
     }
 
-    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved)
-    if ($missing.Count -gt 0) {
-        throw "Unity $Version repair install completed at '$resolved', but required CI module groups are still missing on disk: $($missing -join ', ')."
+    # The fresh install requested only the CORE tier, so verify only the CORE
+    # verified groups here; the heavy/flaky Android tier is added afterward by
+    # Ensure-UnityCiModules (Install-UnityAndroidModules), and requiring it present
+    # at THIS point would wrongly fail the (successful) core install.
+    $missingCore = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved | Where-Object { (Get-UnityCiModuleTier $_) -eq 'core' })
+    if ($missingCore.Count -gt 0) {
+        throw "Unity $Version repair install completed at '$resolved', but required CORE CI module groups are still missing on disk: $($missingCore -join ', ')."
     }
 
     return $resolved
@@ -1706,6 +1850,14 @@ function Ensure-UnityNativeStartupHealthy {
 
     Write-Host "::warning::Unity $Version native startup probe failed before the license lock; attempting one managed reinstall."
     $repaired = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "native startup probe failed with exit code $($result.ExitCode) ($($result.Description)). Probe log: $probeLog" -ManagedOnly:$ManagedOnly
+    # Repair-UnityEditorWithCiModules installs + verifies the CORE tier ONLY (the
+    # base editor + core modules provision reliably; the heavy/flaky Android tier is
+    # added afterward in a dedicated, separately-retried, NON-quarantining step).
+    # Because this is the script's LAST provisioning operation, returning $repaired
+    # directly would yield an editor with NO Android tier. Re-ensure ALL tiers after
+    # the repair so Android is re-added (mirrors Ensure-UnityCiModules: Step 3
+    # repairs core, Step 4 adds Android).
+    $repaired = Ensure-UnityCiModules -Version $Version -EditorPath $repaired -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
     $repairProbe = Test-UnityNativeStartup -EditorPath $repaired -LogPath $probeLog
     if (-not $repairProbe.Success) {
         throw "Unity $Version native startup probe still failed after managed reinstall with exit code $($repairProbe.ExitCode) ($($repairProbe.Description)). This indicates host OS/runtime prerequisite damage rather than a package/test issue. Probe log: $probeLog"
@@ -1714,17 +1866,276 @@ function Ensure-UnityNativeStartupHealthy {
     return $repaired
 }
 
+function Test-WindowsLongPathSupport {
+    # Best-effort probe of whether Windows long-path (>260 char) support is enabled.
+    # Reads HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem!LongPathsEnabled.
+    # Returns $true (enabled), $false (explicitly disabled), or $null (unknown /
+    # non-Windows / unreadable). NEVER throws. This is a prime suspect for the
+    # Android NDK unpack failure: NDK extraction produces very deep paths and a
+    # disabled MAX_PATH can break the unzip mid-way.
+    #
+    # TEST-ONLY hermeticity override (same spirit as the other DXM_UNITY_* test
+    # knobs): the real registry value is uncontrolled by a test and differs per
+    # runner, so honor DXM_UNITY_FAKE_LONGPATHS_ENABLED FIRST -- '1' => $true,
+    # '0' => $false -- before falling through to the real registry probe. This lets
+    # the post-mortem MAX_PATH-warning test deterministically exercise both sides of
+    # the guard on every OS without depending on the host registry.
+    if ($env:DXM_UNITY_FAKE_LONGPATHS_ENABLED -eq '1') {
+        return $true
+    }
+    if ($env:DXM_UNITY_FAKE_LONGPATHS_ENABLED -eq '0') {
+        return $false
+    }
+    if ([System.IO.Path]::DirectorySeparatorChar -ne '\') {
+        return $null
+    }
+    try {
+        $value = Get-ItemPropertyValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -ErrorAction Stop
+        if ($null -eq $value) {
+            return $null
+        }
+        return ([int]$value -ne 0)
+    } catch {
+        return $null
+    }
+}
+
+function Get-DeepestPathLengthUnder {
+    # Best-effort: the maximum full-path character length of any file/dir under
+    # $Directory (0 if none / unreadable / missing). NEVER throws. Used by the
+    # post-mortem to surface whether the Android NDK extraction produced paths at or
+    # beyond the Windows MAX_PATH (260) limit.
+    param([string]$Directory)
+
+    if (-not $Directory -or -not (Test-Path -LiteralPath $Directory)) {
+        return 0
+    }
+    try {
+        $max = 0
+        foreach ($item in @(Get-ChildItem -LiteralPath $Directory -Recurse -Force -ErrorAction SilentlyContinue)) {
+            if ($null -eq $item) {
+                continue
+            }
+            $len = ([string]$item.FullName).Length
+            if ($len -gt $max) {
+                $max = $len
+            }
+        }
+        return $max
+    } catch {
+        return 0
+    }
+}
+
+function Write-UnityModuleInstallPostMortem {
+    # WRAP-IMMUNE, best-effort post-mortem for a failed CI module install. Emits
+    # single-line `::notice::`/`::error::`/`::warning::` annotations (immune to
+    # ConciseView word-wrap) describing the on-disk state of every verified module
+    # group and, for the Android groups specifically, deep diagnostics about the
+    # NDK/SDK payload and the Windows long-path/MAX_PATH state. NEVER throws.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [string]$Root
+    )
+
+    try {
+        Write-Host "::notice::Unity $Version module install post-mortem (disk is the source of truth):"
+
+        foreach ($group in @(Get-UnityCiVerifiedModuleGroups)) {
+            $present = Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group
+            $state = if ($present) { 'present' } else { 'MISSING' }
+            Write-Host "::notice::  module group '$group': $state"
+        }
+
+        $editorDir = Split-Path -Parent $EditorPath
+        if ($editorDir) {
+            $androidRoot = Join-Path $editorDir 'Data\PlaybackEngines\AndroidPlayer'
+            foreach ($payload in @('NDK', 'SDK')) {
+                $payloadRoot = Join-Path $androidRoot $payload
+                if (Test-Path -LiteralPath $payloadRoot -PathType Container) {
+                    $fileCount = @(Get-ChildItem -LiteralPath $payloadRoot -Recurse -Force -File -ErrorAction SilentlyContinue).Count
+                    $deepest = Get-DeepestPathLengthUnder -Directory $payloadRoot
+                    Write-Host "::notice::  AndroidPlayer\$payload : exists, $fileCount file(s), deepest absolute path length $deepest"
+                } else {
+                    Write-Host "::notice::  AndroidPlayer\$payload : (absent)"
+                }
+            }
+
+            $ndkProps = Join-Path $androidRoot 'NDK\source.properties'
+            Write-Host "::notice::  NDK\source.properties present: $([bool](Test-Path -LiteralPath $ndkProps -PathType Leaf))"
+            $clang = Test-AnyUnityLeafPresent -Paths @(
+                (Join-Path $androidRoot 'NDK\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe'),
+                (Join-Path $androidRoot 'NDK\toolchains\llvm\prebuilt\linux-x86_64\bin\clang++')
+            )
+            # A loose recursive probe too (toolchain host-arch dir name varies).
+            if (-not $clang) {
+                $llvmRoot = Join-Path $androidRoot 'NDK\toolchains\llvm\prebuilt'
+                if (Test-Path -LiteralPath $llvmRoot -PathType Container) {
+                    $clangLeaves = @(
+                        Get-ChildItem -LiteralPath $llvmRoot -Recurse -File -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -in @('clang++', 'clang++.exe') } |
+                            Select-Object -First 1
+                    )
+                    $clang = $clangLeaves.Count -gt 0
+                }
+            }
+            Write-Host "::notice::  NDK clang++ present: $clang"
+            $java = Test-AnyUnityLeafPresent -Paths @(
+                (Join-Path $androidRoot 'OpenJDK\bin\java.exe'),
+                (Join-Path $androidRoot 'OpenJDK\bin\java')
+            )
+            Write-Host "::notice::  OpenJDK java present: $java"
+
+            $deepestNdk = Get-DeepestPathLengthUnder -Directory (Join-Path $androidRoot 'NDK')
+            $longPaths = Test-WindowsLongPathSupport
+            $longPathsText = if ($null -eq $longPaths) { 'unknown' } else { [string]$longPaths }
+            Write-Host "::notice::  Windows long-path support (LongPathsEnabled): $longPathsText"
+            if ($deepestNdk -ge 240 -and $longPaths -ne $true) {
+                Write-Host "::warning::Unity $Version Android NDK extraction reached a deep path (deepest NDK path length $deepestNdk >= 240) while Windows long-path support is not enabled. NDK extraction likely hit the Windows MAX_PATH (260) limit. See docs/runbooks/unity-runners-after-transfer.md."
+            }
+        }
+
+        if ($Root) {
+            Write-Host "::notice::  $(Get-InstallDriveFreeSpaceText -Root $Root)"
+        }
+    } catch {
+        Write-Host "::notice::Unity $Version module install post-mortem could not complete: $($_.Exception.Message)"
+    }
+}
+
+function Clear-PartialAndroidModulePayload {
+    # Best-effort removal of the partial heavy Android payload (the NDK and SDK
+    # directories under AndroidPlayer) before a RETRY of the Android module install.
+    # A failed NDK unpack can leave a half-written tree that confuses the next
+    # attempt; clearing only the NDK/SDK dirs (NOT the whole editor) lets the retry
+    # start clean WITHOUT a multi-GB editor re-download. SAFETY: operates ONLY
+    # inside the resolved editor directory; never touches anything outside it. The
+    # destructive Remove-Item is wrapped in Invoke-WithRetry for Windows lock
+    # resilience (the indexer/Defender can transiently hold a handle). NEVER throws
+    # (best-effort): a failed clear just means the retry runs against the partial
+    # tree, which is no worse than not clearing.
+    param([Parameter(Mandatory = $true)][string]$EditorPath)
+
+    try {
+        $editorDir = Split-Path -Parent $EditorPath
+        if (-not $editorDir) {
+            return
+        }
+        $androidRoot = Join-Path $editorDir 'Data\PlaybackEngines\AndroidPlayer'
+        $cleared = New-Object System.Collections.Generic.List[string]
+        foreach ($payload in @('NDK', 'SDK')) {
+            $payloadRoot = Join-Path $androidRoot $payload
+            if (Test-Path -LiteralPath $payloadRoot -PathType Container) {
+                try {
+                    Invoke-WithRetry -MaxAttempts 3 -DelaySeconds (Get-EnsureEditorRetryDelaySeconds) -Action {
+                        Remove-Item -LiteralPath $payloadRoot -Recurse -Force
+                    } | Out-Null
+                    $cleared.Add($payload)
+                } catch {
+                    Write-Host "::notice::Could not clear partial Android payload '$payloadRoot' before retry: $($_.Exception.Message)"
+                }
+            }
+        }
+        if ($cleared.Count -gt 0) {
+            Write-Host "::notice::Cleared partial Android module payload before retry under '$androidRoot': $($cleared.ToArray() -join ', ')."
+        }
+    } catch {
+        Write-Host "::notice::Clear-PartialAndroidModulePayload best-effort cleanup failed: $($_.Exception.Message)"
+    }
+}
+
+function Install-UnityAndroidModules {
+    # DEDICATED, BOUNDED Android module install -- the heavy/flaky tier (android +
+    # android-sdk-ndk-tools, multi-GB Google download whose NDK unpack fails
+    # deterministically at ~93% on Windows). Installed in ISOLATION so a failure
+    # NEVER quarantines/re-downloads the whole editor: the base editor + core
+    # modules are already present and are not the thing that flakes.
+    #
+    # Loop up to Get-EnsureEditorAndroidInstallRetryAttempts times: before a retry
+    # (attempt > 1), clear the partial NDK/SDK payload and back off (linear). Each
+    # attempt requests the android tier via the sole-producer helper and runs the
+    # capturing invoker. After each attempt, re-verify the android tier ON DISK
+    # (disk is the truth: exit 6 with everything present is success). On a failed
+    # attempt emit the targeted failure annotation + the wrap-immune summary. On
+    # exhaustion, emit the post-mortem and throw a CLEAR message that names the
+    # still-missing android groups, the attempt count, that the editor + core
+    # modules ARE present, that this is an Android SDK/NDK install failure, and that
+    # the editor was deliberately NOT re-downloaded.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [string]$InstallRoot,
+        [switch]$ManagedOnly
+    )
+
+    # Honor -ManagedOnly for consistency with every other install path (the base
+    # install, the repair, and Ensure-UnityCiModules): refuse to mutate editors
+    # outside the managed root before the install loop runs.
+    if ($ManagedOnly) {
+        Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+    }
+
+    $androidIds = @(Get-UnityCiModuleIdsForTier -Tier 'android')
+    $maxAttempts = Get-EnsureEditorAndroidInstallRetryAttempts
+    $retryDelaySeconds = Get-EnsureEditorRetryDelaySeconds
+    $installTimeout = Get-EnsureEditorInstallTimeoutSeconds
+
+    # The (EULA-bearing) android-tier install vector, routed through the sole
+    # producer (scoped to the android tier via -ModuleIds). Captured once and reused
+    # for both the install call and the failure-annotation arg echo.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version -ModuleIds $androidIds)
+
+    Write-CiNotice "Installing the Android CI module tier for Unity $Version in a dedicated, separately-retried step ($($androidIds -join ', ')); the editor + core modules are already present and will NOT be re-downloaded on a failure."
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        if ($attempt -gt 1) {
+            Clear-PartialAndroidModulePayload -EditorPath $EditorPath
+            $sleep = $retryDelaySeconds * $attempt
+            Write-Host "::warning::Android module install attempt $($attempt - 1) of $maxAttempts did not deliver the Android tier for Unity $Version. Retrying (attempt $attempt) in $sleep second(s) after clearing the partial payload."
+            Start-Sleep -Seconds $sleep
+        }
+
+        $result = Invoke-UnityCliCapture -Arguments $installArgs
+
+        # Disk is the source of truth: re-verify the android tier groups. If none
+        # are missing, the install succeeded regardless of the CLI exit code (an
+        # exit 6 with everything present is the idempotent no-op).
+        $missingAndroid = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
+        if ($missingAndroid.Count -eq 0) {
+            Write-CiNotice "Android CI module tier for Unity $Version present on disk after attempt $attempt (CLI exit code $($result.ExitCode))."
+            return $EditorPath
+        }
+
+        # This attempt did not deliver the android tier: emit the targeted
+        # annotation + the wrap-immune summary so each failed attempt is diagnosable.
+        Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
+        $androidTimedOut = ($result.ExitCode -eq 124)
+        Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$androidTimedOut -TimeoutSeconds $installTimeout
+    }
+
+    # Exhausted every attempt. The editor + core modules ARE present; only the
+    # heavy/flaky Android tier failed. Emit the deep post-mortem (long-path state,
+    # deepest NDK path) and throw a clear, actionable error -- but NEVER quarantine
+    # or re-download the editor here.
+    $stillMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
+    Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot
+    throw "Unity $Version Android CI module install FAILED after $maxAttempts attempt(s): the Android tier groups are still missing on disk ($($stillMissing -join ', ')). The editor and core CI modules ARE present at '$EditorPath' and were deliberately NOT re-downloaded. This is an Android SDK/NDK install failure (see the post-mortem above for the deepest NDK path length and the Windows long-path state)."
+}
+
 function Ensure-UnityCiModules {
-    # IDEMPOTENT, disk-authoritative CI module install. The standalone beta CLI can
-    # return "No modules found to install." with exit code 6 when modules are
-    # already present, and it cannot add modules to manually installed editors.
-    # Classify the result against disk proof first; if required module groups are
-    # missing, repair by quarantining the managed editor and reinstalling through
-    # the CLI with the full CI module set.
-    #   1. install succeeded (exit 0)                              -> done.
-    #   2. install failed BUT every module group is present on disk -> notice, return.
-    #   3. modules are missing and repair is enabled                -> quarantine/reinstall.
-    #   4. repair disabled or impossible                            -> throw with diagnostics.
+    # IDEMPOTENT, disk-authoritative, TIER-AWARE CI module install. The standalone
+    # beta CLI can return "No modules found to install." with exit code 6 when
+    # modules are already present, and it cannot add modules to manually installed
+    # editors. Classify the result against disk proof first; if required module
+    # groups are missing, handle the CORE tier and the ANDROID tier separately so an
+    # Android (NDK) flake never quarantines/re-downloads the whole editor.
+    #   1. all groups present on disk                  -> done.
+    #   2. core missing                                -> scoped install-modules; if
+    #      still missing and repair enabled            -> quarantine/reinstall (core).
+    #   3. android missing                             -> dedicated bounded retry
+    #      (Install-UnityAndroidModules), NO editor quarantine.
+    #   4. still missing after both                    -> throw with post-mortem.
     param(
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
@@ -1751,67 +2162,78 @@ function Ensure-UnityCiModules {
         Write-CiNotice "Could not list installable modules for Unity $Version (best-effort); proceeding with required CI module ids: $($moduleIds -join ', ')."
     }
 
-    # Single source of truth for the (EULA-bearing) `install-modules` arg vector --
-    # captured ONCE here and reused for both the install call below and the failure
-    # annotation's arg echo, mirroring how the `install` paths capture $installArgs
-    # once. The vector (including the MANDATORY `--accept-eula`) comes from
-    # Get-UnityCliModuleInstallArguments, so this `install-modules` call can never
-    # drift from the `install` call sites. `--accept-eula` is REQUIRED: the Android
-    # SDK/NDK/OpenJDK modules carry license terms, and without the flag the
-    # standalone CLI aborts the whole install with "One or more modules require
-    # license acceptance. Pass --accept-eula ...". It applies only to this INSTALL
-    # (`-m`) call, never to the `-l` listing call above.
-    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version)
-
-    # Attempt the install via the capturing (non-throwing) path so we can inspect
-    # BOTH the exit code AND the output text before deciding whether it was fatal.
-    $result = Invoke-UnityCliCapture -Arguments $installArgs
-
-    # Case 1: clean success.
-    if ($result.Success) {
-        $missingAfterSuccess = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
-        if ($missingAfterSuccess.Count -eq 0) {
-            return $EditorPath
-        }
-        Write-Host "::warning::Unity $Version 'install-modules' exited 0, but required CI module groups are still missing on disk: $($missingAfterSuccess -join ', ')."
-    }
-
-    $outputLines = @($result.Output)
-    $outputText = ($outputLines -join "`n")
-    # Tail of the captured output for diagnostics (last lines only, to keep the
-    # thrown message readable). Consecutive identical lines are COLLAPSED first
-    # (the Android NDK install can spam thousands of identical progress lines) so
-    # the tail shows distinct recent activity instead of thousands of copies.
-    $tail = Get-CollapsedCliOutputTail -Output $result.Output -MaxLines 20
-
-    # Case 2: install failed but every module group is demonstrably present on disk -> the
-    # CLI's non-zero exit was an idempotent no-op. Treat as success.
-    $missingGroups = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
-    if ($missingGroups.Count -eq 0) {
-        Write-CiNotice "Required Unity CI modules already present on disk; treating 'install-modules' no-op as success (CLI exit code $($result.ExitCode))."
+    # Step 1: verify everything. If all present, nothing to do.
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    if ($missing.Count -eq 0) {
+        Write-CiNotice "All required Unity CI module groups already present on disk for Unity $Version; nothing to install."
         return $EditorPath
     }
 
-    # The install genuinely did not deliver the required modules. Emit a targeted,
-    # high-signal annotation if the CLI output carries a known failure signature
-    # (missing EULA / unknown module id) BEFORE we repair or throw, so the root
-    # cause is obvious in the CI log.
-    Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
-    $moduleAddTimedOut = ($result.ExitCode -eq 124)
-    Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$moduleAddTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+    # Step 2: determine whether any CORE-tier group is missing so it can be handled
+    # with the heavy reinstall/repair strategy. The android-tier partition is
+    # deliberately NOT computed here: Step 4 re-derives it from disk AFTER the core
+    # repair (which can reinstall the whole editor), so a Step-2 snapshot would be
+    # stale -- disk is the source of truth.
+    $missingCore = @($missing | Where-Object { (Get-UnityCiModuleTier $_) -eq 'core' })
 
-    $repairDisabled = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
-    if ($repairDisabled) {
-        throw "Unity $Version is missing required CI module groups ($($missingGroups -join ', ')), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled auto-repair. CLI output tail:`n$tail"
+    # Step 3: install the CORE tier if any core group is missing. This runs the
+    # existing heavy/classify-then-decide path, but SCOPED to the core tier ids.
+    if ($missingCore.Count -gt 0) {
+        # Single source of truth for the (EULA-bearing) `install-modules` arg vector,
+        # scoped to the CORE tier. Captured ONCE and reused for the install call and
+        # the failure-annotation arg echo.
+        $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core'))
+
+        # Attempt the install via the capturing (non-throwing) path so we can inspect
+        # BOTH the exit code AND the output text before deciding whether it was fatal.
+        $result = Invoke-UnityCliCapture -Arguments $installArgs
+
+        # Re-verify the core tier on disk (disk is the source of truth; an exit 6
+        # with everything present is the idempotent no-op).
+        $missingCoreAfter = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'core' })
+        if ($missingCoreAfter.Count -gt 0) {
+            # Tail of the captured output for diagnostics (collapsed first so the
+            # Android NDK progress spam does not bury the tail).
+            $tail = Get-CollapsedCliOutputTail -Output $result.Output -MaxLines 20
+
+            # The install genuinely did not deliver the required core modules. Emit a
+            # targeted, high-signal annotation + the wrap-immune summary BEFORE we
+            # repair or throw, so the root cause is obvious in the CI log.
+            Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
+            $moduleAddTimedOut = ($result.ExitCode -eq 124)
+            Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$moduleAddTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+
+            $repairDisabled = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
+            if ($repairDisabled) {
+                throw "Unity $Version is missing required CORE CI module groups ($($missingCoreAfter -join ', ')), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled auto-repair. CLI output tail:`n$tail"
+            }
+
+            if ($InstallRoot) {
+                # Full quarantine + reinstall (core-scoped fresh install) -- unchanged.
+                $EditorPath = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "required CORE CI module groups missing ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail" -ManagedOnly:$ManagedOnly
+            } else {
+                throw "Unity $Version 'install-modules' failed with exit code $($result.ExitCode), and required CORE CI module groups are missing on disk ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail"
+            }
+        } else {
+            Write-CiNotice "Core Unity CI module tier present on disk for Unity $Version (CLI exit code $($result.ExitCode))."
+        }
     }
 
-    if ($InstallRoot) {
-        return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "required CI module groups missing ($($missingGroups -join ', ')). CLI output tail:`n$tail" -ManagedOnly:$ManagedOnly
+    # Step 4: re-verify and, if any ANDROID-tier group is still missing, install it
+    # via the dedicated, bounded, NON-quarantining Android step.
+    $missingAndroid = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
+    if ($missingAndroid.Count -gt 0) {
+        return Install-UnityAndroidModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
     }
 
-    # Case 3: genuine, non-benign failure. Fatal -- include the captured output
-    # tail and exit code so CI logs show WHY the module install failed.
-    throw "Unity $Version 'install-modules' failed with exit code $($result.ExitCode), and required CI module groups are missing on disk ($($missingGroups -join ', ')). CLI output tail:`n$tail"
+    # Step 5: final verification across all tiers.
+    $finalMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    if ($finalMissing.Count -gt 0) {
+        Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot
+        throw "Unity $Version CI module install completed, but required module groups are still missing on disk: $($finalMissing -join ', ') (see the post-mortem above)."
+    }
+
+    return $EditorPath
 }
 
 function Add-WindowsIl2CppModule {
@@ -1917,8 +2339,11 @@ if (-not $editor) {
     # Single source of truth for the (EULA-bearing) module-install arg vector --
     # the SAME builder the repair-path `install` and the `install-modules` add use,
     # so this primary install can never silently drop `--accept-eula` again (the
-    # exact drift that broke every CI cell).
-    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion)
+    # exact drift that broke every CI cell). Scoped to the CORE tier so the base
+    # editor + core modules provision reliably and fast; the heavy/flaky Android
+    # tier is added afterward by Ensure-UnityCiModules in a dedicated,
+    # separately-retried step that NEVER quarantines the whole editor.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core'))
 
     # Emit diagnostics BEFORE the (potentially 30+ minute) install so the logs
     # carry the CLI path/version + disk headroom even if the install then stalls.
@@ -1951,6 +2376,16 @@ if (-not $editor) {
                 if ($resolvedAfterFailure) {
                     Write-CiNotice "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; treating the install as already present."
                     Write-CiNotice "Verifying required CI modules after recovered editor install."
+                    # Ensure-UnityCiModules adds the Android tier here via its own
+                    # bounded Android retry. If that tier is exhausted it THROWS,
+                    # which re-triggers this whole outer base-install attempt -- so
+                    # the worst-case Android attempt count is amplified to
+                    # (outer install attempts x android attempts). This amplification
+                    # is BOUNDED (a small product) and now RARE: the base install is
+                    # CORE-only and reliably succeeds, so this recovered-editor branch
+                    # is itself an edge case. It is intentionally NOT special-cased
+                    # (e.g. by suppressing the outer retry on an Android-only throw)
+                    # to keep the retry semantics simple and the control flow flat.
                     $resolvedAfterFailure = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $resolvedAfterFailure -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
                     return $resolvedAfterFailure
                 }

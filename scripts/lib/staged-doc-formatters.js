@@ -23,10 +23,30 @@ function defaultToRepoRelative(absPath) {
   return absPath.split(path.sep).join("/");
 }
 
+function escapeAsciiChar(char) {
+  return String(char)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t");
+}
+
+function formatCodepointGlyph(char, codepoint) {
+  const cpHex = codepoint.toString(16).toUpperCase().padStart(4, "0");
+  if (codepoint >= 0x20 && codepoint <= 0x7e) {
+    return `'${escapeAsciiChar(char)}'`;
+  }
+  return `\\u{${cpHex}}`;
+}
+
 function formatAsciiViolation(v, toRepoRelative = defaultToRepoRelative) {
   const rel = toRepoRelative(v.file);
   const cpHex = v.codepoint.toString(16).toUpperCase().padStart(4, "0");
-  return `${rel}:${v.line}:${v.column}: U+${cpHex} '${v.char}' -- ${v.reason}`;
+  return `${rel}:${v.line}:${v.column}: U+${cpHex} ${formatCodepointGlyph(
+    v.char,
+    v.codepoint
+  )} -- ${v.reason}`;
 }
 
 function formatAsciiWarning(w, toRepoRelative = defaultToRepoRelative) {
@@ -50,6 +70,7 @@ function formatProseViolation(v, toRepoRelative = defaultToRepoRelative) {
 }
 
 module.exports = {
+  formatCodepointGlyph,
   formatAsciiViolation,
   formatAsciiWarning,
   formatCodePatternViolation,

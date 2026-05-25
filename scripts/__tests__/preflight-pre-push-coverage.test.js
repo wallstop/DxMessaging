@@ -42,7 +42,8 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 const CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
 
-const BULK_PRE_PUSH_TOKENS = [/\bpre-commit\s+run\b/, /--hook-stage\s+pre-push\b/, /--all-files\b/];
+const PRE_COMMIT_RUNNER_RE = /(?:\bpre-commit\b|\bnode\s+scripts\/ensure-pre-commit\.js)\s+run\b/;
+const BULK_PRE_PUSH_TOKENS = [PRE_COMMIT_RUNNER_RE, /--hook-stage\s+pre-push\b/, /--all-files\b/];
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -99,7 +100,7 @@ describe("preflight:pre-push static coverage", () => {
     expect(script).toContain("npm run preflight:pre-commit");
 
     const preCommitIndex = script.indexOf("npm run preflight:pre-commit");
-    const prePushIndex = script.indexOf("pre-commit run --hook-stage pre-push");
+    const prePushIndex = script.indexOf("run --hook-stage pre-push");
     expect(preCommitIndex).toBeGreaterThanOrEqual(0);
     expect(prePushIndex).toBeGreaterThan(preCommitIndex);
   });
@@ -112,8 +113,9 @@ describe("preflight:pre-push static coverage", () => {
     const pkg = loadPackageJson();
     const script = pkg.scripts["preflight:pre-push"];
 
-    // Bulk form: `pre-commit run --hook-stage pre-push --all-files` runs
-    // every hook whose stages: includes pre-push, so coverage is
+    // Bulk form: `pre-commit run --hook-stage pre-push --all-files`
+    // (or the auto-repair wrapper `node scripts/ensure-pre-commit.js run ...`)
+    // runs every hook whose stages: includes pre-push, so coverage is
     // automatic. This is the canonical shape today. The detector matches
     // the three required tokens independently so flag-order variations
     // (e.g., `--show-diff-on-failure` inserted anywhere) still resolve.
@@ -133,7 +135,9 @@ describe("preflight:pre-push static coverage", () => {
         continue;
       }
 
-      // Match `pre-commit run --hook-stage pre-push <hookId>` allowing
+      // Match `pre-commit run --hook-stage pre-push <hookId>` or
+      // `node scripts/ensure-pre-commit.js run --hook-stage pre-push <hookId>`,
+      // allowing
       // optional flags (e.g., --all-files, --files <paths>) between
       // the stage flag and the hook id, but the hook id must appear
       // as a whole token following the stage flag.
@@ -143,7 +147,7 @@ describe("preflight:pre-push static coverage", () => {
       // protection is the whole point of this audit fence.
       const escapedId = escapeRegex(hookId);
       const explicitPattern = new RegExp(
-        `pre-commit\\s+run\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*--hook-stage\\s+pre-push\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*${escapedId}(?:\\s|$|&|;)`
+        `(?:pre-commit|node\\s+scripts/ensure-pre-commit\\.js)\\s+run\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*--hook-stage\\s+pre-push\\s+(?:--[\\w-]+(?:\\s+\\S+)?\\s+)*${escapedId}(?:\\s|$|&|;)`
       );
       if (!explicitPattern.test(script)) {
         missing.push(hookId);

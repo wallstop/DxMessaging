@@ -40,6 +40,12 @@ function main() {
     return repairStatus;
   }
 
+  process.stdout.write("Ensuring pre-commit is available...\n");
+  const preCommitStatus = run(process.execPath, ["scripts/ensure-pre-commit.js"]);
+  if (preCommitStatus !== 0) {
+    return preCommitStatus;
+  }
+
   process.stdout.write("Running hook environment doctor...\n");
   const doctorStatus = run("npm", ["run", "doctor"]);
   if (doctorStatus !== 0) {

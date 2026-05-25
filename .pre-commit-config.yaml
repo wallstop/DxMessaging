@@ -32,7 +32,7 @@ repos:
         description: Auto-fix C# method names by removing underscores and fail if restaging fails.
       - id: csharpier
         name: Run CSharpier on C# files
-        entry: dotnet tool run csharpier format
+        entry: node scripts/run-and-restage.js dotnet tool run csharpier format --
         language: system
         types:
           - c#
@@ -44,7 +44,10 @@ repos:
       # perf-allow[scans-the-world-with-files]: gated to package metadata plus test-marker source files; the sync script scans test files by design to keep the banner badge count in sync
       - id: sync-banner-version
         name: Sync banner version from package.json
-        entry: node scripts/sync-banner-version-hook.js
+        entry: >-
+          node scripts/run-and-stage.js
+          node scripts/sync-banner-version-hook.js --
+          docs/images/DxMessaging-banner.svg
         language: system
         files: '^(package\.json|Tests/.*Tests?\.cs|SourceGenerators/.*Tests?\.cs|scripts/(sync-banner-version\.(ps1|js|sh)|sync-banner-version-hook\.js|.*\.(test|spec)\.js))$'
         pass_filenames: false
@@ -66,7 +69,9 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (JSON, asmdef, asmref, YAML)
-        entry: node scripts/run-managed-prettier.js --write
+        entry: >-
+          node scripts/run-and-restage.js
+          node scripts/run-managed-prettier.js --write --
         language: system
         files: '(?i)\.(json|asmdef|asmref|ya?ml)$'
         require_serial: true
@@ -121,18 +126,21 @@ repos:
     hooks:
       - id: run-staged-md-pipeline
         name: Markdown pipeline (fixers + prettier + markdownlint + validators)
-        entry: node scripts/run-staged-md-pipeline.js
+        entry: >-
+          node scripts/run-and-restage.js
+          node scripts/run-staged-md-pipeline.js --
         language: system
         files: '(?i)\.(md|markdown)$'
         exclude: "^(Library/|Temp/|node_modules/|obj/|bin/|.*/(bin|obj)/)"
         pass_filenames: true
+        require_serial: true
         stages:
           - pre-commit
         description: >-
-          Single Node process that runs fix-md036-headings, fix-md029-md051,
-          prettier --write, markdownlint-cli2 --fix, and the three doc
-          validators (ASCII / code-patterns / prose) against staged markdown.
-          Replaces five separate hooks to eliminate per-hook Node startup cost.
+          Single Node process that runs normalize-docs-ascii, fix-md036-headings,
+          fix-md029-md051, prettier --write, markdownlint-cli2 --fix, and the
+          three doc validators (ASCII / code-patterns / prose) against staged
+          markdown, then restages successful auto-fixes.
 
   - repo: local
     hooks:
@@ -171,8 +179,9 @@ repos:
     hooks:
       - id: fix-eol
         name: Normalize mixed EOL policy and strip BOM
-        entry: node scripts/fix-eol.js
+        entry: node scripts/run-and-restage.js node scripts/fix-eol.js --
         language: system
+        require_serial: true
         stages:
           - pre-commit
         pass_filenames: true
@@ -467,7 +476,7 @@ repos:
           scripts/__tests__/yaml-line-length-guard.test.js
         language: system
         pass_filenames: false
-        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.claude/settings\.json|\.llm/context\.md|\.pre-commit-config\.yaml|\.github/workflows/(llm-policy-check|pre-commit-tooling-check|yaml-format-lint|cross-platform-preflight)\.yml|scripts/check-eol\.ps1|scripts/hooks/(pre-commit|pre-push|yaml-line-length-guard\.js)|scripts/(check-conflict-markers|check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|fix-yaml-comments-line-length|fix-yaml-block-scalar-line-length|validate-changed-docs|validate-docs-out-of-tree-links|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|validate-changelog|run-actionlint-if-available|run-and-restage|run-and-stage|run-managed-jest|run-managed-prettier|run-managed-cspell|run-staged-validators|run-staged-md-pipeline|sync-banner-version-hook|verify-managed-jest-fallback|install-git-hooks|repair-node-tooling|postinstall|doctor)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version|precommit-yaml|precommit-perf-score|staged-doc-formatters|source-stripping|spawn-env-sandbox|jest-error-decoder|path-classifier|node-modules-integrity|integrity-gate-with-recovery|managed-prettier|devcontainer-jsonc|yaml-line-length)\.js|scripts/__tests__/(check-conflict-markers|check-eol|fix-md029-md051|fix-csharp-underscore-methods|fix-yaml-comments-line-length|yaml-line-length-prevention|yaml-line-length-guard|validate-changed-docs|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version-parity|prettier-version|run-managed-prettier|cspell-version-parity|validate-workflows-concurrency-and-labels|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|detect-shell-redirection-antipattern|spawn-invocation-policy|hermetic-host-env-policy|cross-platform-preflight-coverage|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback|run-staged-validators|run-staged-md-pipeline|hook-perf-budget|precommit-perf-score|precommit-yaml|run-managed-jest-no-injected-test-runner|no-testrunner-injection-policy|doctor|llm-skills-jest-robustness-coverage|preflight-pre-push-coverage|path-classifier|node-modules-integrity|run-managed-cspell|managed-prettier|jest-error-decoder|devcontainer-jsonc|docs-out-of-tree-link-guard|run-managed-jest-fallback-integrity-isolation|native-git-hooks)\.test\.js|scripts/lib/__tests__/(source-stripping|spawn-env-sandbox)\.test\.js)$'
+        files: '^(\.gitattributes|CONTRIBUTING\.md|\.vscode/settings\.json|\.claude/settings\.json|\.llm/context\.md|\.pre-commit-config\.yaml|\.github/workflows/(llm-policy-check|pre-commit-tooling-check|yaml-format-lint|cross-platform-preflight)\.yml|scripts/check-eol\.ps1|scripts/hooks/(pre-commit|pre-push|yaml-line-length-guard\.js)|scripts/(check-conflict-markers|check-eol|fix-eol|fix-md029-md051|fix-csharp-underscore-methods|fix-yaml-comments-line-length|fix-yaml-block-scalar-line-length|validate-changed-docs|validate-docs-out-of-tree-links|validate-lychee-config|validate-skills|generate-skills-index|validate-workflows|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|validate-changelog|run-actionlint-if-available|run-and-restage|run-and-stage|run-managed-jest|run-managed-prettier|run-managed-cspell|run-staged-validators|run-staged-md-pipeline|sync-banner-version-hook|verify-managed-jest-fallback|install-git-hooks|repair-node-tooling|ensure-pre-commit|postinstall|doctor)\.js|scripts/lib/(quote-parser|eol-policy|shell-command|prettier-version|precommit-yaml|precommit-perf-score|staged-doc-formatters|source-stripping|spawn-env-sandbox|jest-error-decoder|path-classifier|node-modules-integrity|integrity-gate-with-recovery|managed-prettier|devcontainer-jsonc|yaml-line-length)\.js|scripts/__tests__/(check-conflict-markers|check-eol|fix-md029-md051|fix-csharp-underscore-methods|fix-yaml-comments-line-length|yaml-line-length-prevention|yaml-line-length-guard|validate-changed-docs|validate-lychee-config|validate-skills-required-fields|validate-skills-llm-policy|generate-skills-index|prettier-version-parity|prettier-version|run-managed-prettier|cspell-version-parity|validate-workflows-concurrency-and-labels|validate-workflows|validate-changelog|quote-parser|shell-command|update-llms-txt|validate-vscode-settings|validate-pre-commit-tooling|validate-node-tooling|validate-npm-meta|detect-shell-redirection-antipattern|spawn-invocation-policy|hermetic-host-env-policy|cross-platform-preflight-coverage|pre-commit-hook-stage-policy|run-managed-jest|verify-managed-jest-fallback|run-staged-validators|run-staged-md-pipeline|hook-perf-budget|precommit-perf-score|precommit-yaml|run-managed-jest-no-injected-test-runner|no-testrunner-injection-policy|doctor|llm-skills-jest-robustness-coverage|preflight-pre-push-coverage|path-classifier|node-modules-integrity|run-managed-cspell|managed-prettier|jest-error-decoder|devcontainer-jsonc|docs-out-of-tree-link-guard|run-managed-jest-fallback-integrity-isolation|native-git-hooks)\.test\.js|scripts/lib/__tests__/(source-stripping|spawn-env-sandbox)\.test\.js)$'
         stages:
           - pre-push
         description: Fail fast on parser, npm-meta, and shell-safety regressions before push. Pre-push only; see .llm/skills/performance/git-hook-performance.md.

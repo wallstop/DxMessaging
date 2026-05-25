@@ -56,6 +56,7 @@ const { isTruthyEnv } = require("./lib/jest-error-decoder");
 const { ISOLATED_JEST_CACHE_ROOT } = require("./run-managed-jest");
 const { INTEGRITY_TARGETS, probeIntegrity } = require("./lib/node-modules-integrity");
 const { runChangedDocValidators } = require("./validate-changed-docs");
+const { findPython, probePreCommitModule } = require("./ensure-pre-commit");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
@@ -513,27 +514,33 @@ function checkPreCommitConfig(options = {}) {
       : runCommandFn("pre-commit", ["--version"]);
   if (versionResult && versionResult.status === 0 && typeof versionResult.stdout === "string") {
     lines.push(`          pre-commit --version: ${versionResult.stdout.trim()}`);
-  } else if (versionResult && versionResult.error && versionResult.error.code === "ENOENT") {
-    // Without pre-commit on PATH, `npm run preflight:pre-push` cannot run
-    // its final `pre-commit run --hook-stage pre-push --all-files` step.
-    // The doctor's purpose is to predict whether a push will succeed; a
-    // missing pre-commit binary makes that impossible, so this is FAIL.
-    lines.push(
-      "  FAIL  pre-commit --version: not on PATH (ENOENT). preflight:pre-push cannot run without it."
-    );
-    lines.push(
-      "          Install pre-commit via pip (e.g. `pip install pre-commit`) then re-run `npm run doctor`."
-    );
-    failed = true;
   } else {
-    const detail =
-      versionResult && versionResult.error && versionResult.error.message
-        ? versionResult.error.message
-        : `status=${versionResult ? versionResult.status : "null"}`;
-    lines.push(
-      `  FAIL  pre-commit --version: not available (${detail}). preflight:pre-push cannot run without it.`
-    );
-    failed = true;
+    const python = findPython({ runCommandFn });
+    const moduleResult = probePreCommitModule(python, { runCommandFn });
+    if (moduleResult) {
+      lines.push(`          python -m pre_commit --version: ${moduleResult.version}`);
+    } else if (versionResult && versionResult.error && versionResult.error.code === "ENOENT") {
+      // Without either pre-commit on PATH or the Python module,
+      // `npm run preflight:pre-push` cannot run its final pre-commit step.
+      // The doctor's purpose is to predict whether a push will succeed; a
+      // missing pre-commit runner makes that impossible, so this is FAIL.
+      lines.push(
+        "  FAIL  pre-commit --version: not on PATH (ENOENT), and python -m pre_commit is unavailable. preflight:pre-push cannot run without it."
+      );
+      lines.push(
+        "          Run `npm run repair:pre-commit` to auto-install the pinned pre-commit version, then re-run `npm run doctor`."
+      );
+      failed = true;
+    } else {
+      const detail =
+        versionResult && versionResult.error && versionResult.error.message
+          ? versionResult.error.message
+          : `status=${versionResult ? versionResult.status : "null"}`;
+      lines.push(
+        `  FAIL  pre-commit --version: not available (${detail}), and python -m pre_commit is unavailable. preflight:pre-push cannot run without it.`
+      );
+      failed = true;
+    }
   }
 
   let packageJsonContent;
@@ -561,14 +568,18 @@ function checkPreCommitConfig(options = {}) {
   const preflightPrePush = scripts["preflight:pre-push"];
   if (typeof preflightPrePush === "string" && preflightPrePush.length > 0) {
     lines.push(`          preflight:pre-push script present`);
-    if (!/pre-commit\s+run\s+--hook-stage\s+pre-push\s+--all-files/.test(preflightPrePush)) {
+    if (
+      !/(?:pre-commit|node\s+scripts\/ensure-pre-commit\.js)\s+run\s+--hook-stage\s+pre-push\s+--all-files/.test(
+        preflightPrePush
+      )
+    ) {
       lines.push(
-        `  FAIL  preflight:pre-push does not invoke 'pre-commit run --hook-stage pre-push --all-files'`
+        `  FAIL  preflight:pre-push does not invoke the full pre-push hook set through pre-commit`
       );
       failed = true;
     } else {
       lines.push(
-        `          coverage: invokes 'pre-commit run --hook-stage pre-push --all-files' (covers all ${prePushHookIds.length} pre-push hooks)`
+        `          coverage: invokes the full pre-push hook set (covers all ${prePushHookIds.length} pre-push hooks)`
       );
     }
   } else {

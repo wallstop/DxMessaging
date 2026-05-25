@@ -73,15 +73,18 @@ status: "stable"
 
 The repository uses `pre-commit` for hook orchestration, but the Git hook entrypoints themselves are versioned under `scripts/hooks`. `scripts/install-git-hooks.js` sets local `core.hooksPath` to that directory during `postinstall`, so contributors and agents do not need a manual hook install step.
 
-The native hook wrappers are intentionally small Node scripts. They avoid Bash, PowerShell, Husky, and shell-string composition at the Git boundary. Substantive cross-platform automation can still use PowerShell 7+ when that is the right tool, but the hook bootstrap must only require Git, Node, npm, and the repository files.
+The native hook wrappers are intentionally small Node scripts. They avoid Bash, PowerShell, Husky, and shell-string composition at the Git boundary. Substantive cross-platform automation can still use PowerShell 7+ when that is the right tool, but the hook bootstrap must only require Git, Node, npm, Python when `pre-commit` needs auto-installation, and the repository files.
 
 ## Rules
 
 1. Put native Git hook entrypoints in `scripts/hooks` with extensionless names (`pre-commit`, `pre-push`).
 1. Use `#!/usr/bin/env node` and argument-array process launches.
 1. Route npm and npx through `spawnPlatformCommandSync` so Windows shims do not depend on ad hoc shell behavior.
-1. Keep dependency repair automatic. Managed Node tools should run the integrity gate and recover with `npm ci` when safe.
-1. `pre-push` must run `node scripts/repair-node-tooling.js`, `npm run doctor`, then `npm run preflight:pre-push`.
+1. Keep dependency repair automatic. Managed Node tools should run the integrity gate and recover with `npm ci` when safe. The `pre-commit` executable is repaired by `scripts/ensure-pre-commit.js`, which uses an existing executable when available and otherwise installs pinned `pre-commit==4.6.0` with Python/pip.
+1. Every mutating pre-commit hook must restage inside the pre-commit process through `scripts/run-and-restage.js` or `scripts/run-and-stage.js`. Do not rely on a native hook retry to stage after pre-commit restores a user's unstaged changes.
+1. `pre-commit` must run `node scripts/repair-node-tooling.js`, then `node scripts/ensure-pre-commit.js`, then delegate to `pre-commit run --hook-stage pre-commit`, retrying the pre-commit stage once so successful restaged auto-fixes do not require a manual second commit attempt.
+1. `pre-push` must run `node scripts/repair-node-tooling.js`, `node scripts/ensure-pre-commit.js`, `npm run doctor`, then `npm run preflight:pre-push`.
+1. `scripts/install-git-hooks.js` must refuse to configure `core.hooksPath` unless every required native hook is present.
 1. `postinstall` may warn, but must not make `npm install` fatal when hook installation cannot run outside a Git worktree.
 
 ## Agent Workflow

@@ -3,6 +3,7 @@
 
 const path = require("path");
 const childProcess = require("child_process");
+const fs = require("fs");
 
 const HOOKS_PATH = "scripts/hooks";
 
@@ -48,10 +49,15 @@ function installGitHooks(options = {}) {
   }
 
   const hooksDir = path.join(repoRoot, HOOKS_PATH);
-  const prePush = path.join(hooksDir, "pre-push");
-  if (!require("fs").existsSync(prePush)) {
-    warn(`git hooks: ${HOOKS_PATH}/pre-push is missing; cannot configure native hooks.`);
-    return { ok: false, changed: false, skipped: false };
+  const requiredHooks = ["pre-commit", "pre-push"];
+  const missingHooks = requiredHooks.filter((hook) => !fs.existsSync(path.join(hooksDir, hook)));
+  if (missingHooks.length > 0) {
+    warn(
+      `git hooks: missing native hook(s): ${missingHooks
+        .map((hook) => `${HOOKS_PATH}/${hook}`)
+        .join(", ")}; cannot configure native hooks.`
+    );
+    return { ok: false, changed: false, skipped: false, missingHooks };
   }
 
   const current = getConfiguredHooksPath(repoRoot);

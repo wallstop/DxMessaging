@@ -477,7 +477,7 @@ describe("checkPreCommitConfig", () => {
     expect(text).toContain("pre-push hooks (2): beta, gamma");
     expect(text).toContain("pre-commit --version: pre-commit 4.0.0");
     expect(text).toContain("preflight:pre-push script present");
-    expect(text).toContain("invokes 'pre-commit run --hook-stage pre-push --all-files'");
+    expect(text).toContain("invokes the full pre-push hook set");
   });
 
   test("returns fail when preflight:pre-push is missing", () => {
@@ -517,9 +517,7 @@ describe("checkPreCommitConfig", () => {
     });
 
     expect(section.status).toBe("fail");
-    expect(section.lines.join("\n")).toContain(
-      "does not invoke 'pre-commit run --hook-stage pre-push --all-files'"
-    );
+    expect(section.lines.join("\n")).toContain("does not invoke the full pre-push hook set");
   });
 
   test("fails when pre-commit is not on PATH (ENOENT)", () => {
@@ -554,7 +552,7 @@ describe("checkPreCommitConfig", () => {
     const text = section.lines.join("\n");
     expect(text).toContain("pre-commit --version: not on PATH (ENOENT)");
     expect(text).toContain("preflight:pre-push cannot run");
-    expect(text).toContain("pip install pre-commit");
+    expect(text).toContain("npm run repair:pre-commit");
   });
 
   test("fails when pre-commit --version errors with a non-ENOENT reason", () => {

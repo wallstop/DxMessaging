@@ -51,13 +51,13 @@ describe("pre-commit hook stage policy", () => {
   });
 
   test("run-staged-md-pipeline hook owns the consolidated markdown path at pre-commit", () => {
-    // Round-4 consolidation: the previous five-hook .md path
-    // (markdown-structure-fix, markdown-link-fragment-list-fix, prettier
-    // for .md, markdownlint, and the shared run-staged-validators) was
-    // collapsed into one Node process to eliminate four cold Node starts
-    // per commit (~800-2000 ms on Windows). The new hook lives at
-    // pre-commit only because markdown is auto-fixed there; the .cs
-    // validator path keeps pre-push redundancy via run-staged-validators.
+    // Round-4 consolidation: the previous .md path (ASCII normalization,
+    // markdown-structure-fix, markdown-link-fragment-list-fix, prettier
+    // for .md, markdownlint, and the shared run-staged-validators) is kept
+    // inside one Node process to eliminate cold Node starts per commit.
+    // The hook lives at pre-commit only because markdown is auto-fixed
+    // there; the .cs validator path keeps pre-push redundancy via
+    // run-staged-validators.
     const block = findHookBlock(configLines, "run-staged-md-pipeline");
     expect(block).not.toBeNull();
 
@@ -65,8 +65,10 @@ describe("pre-commit hook stage policy", () => {
     expect(stages).toEqual(["pre-commit"]);
 
     const blockText = block.lines.join("\n");
-    expect(blockText).toContain("entry: node scripts/run-staged-md-pipeline.js");
+    expect(blockText).toContain("node scripts/run-and-restage.js");
+    expect(blockText).toContain("node scripts/run-staged-md-pipeline.js --");
     expect(blockText).toContain("pass_filenames: true");
+    expect(blockText).toContain("require_serial: true");
     expect(blockText).toContain("files: '(?i)\\.(md|markdown)$'");
     expect(blockText).toContain("exclude:");
   });

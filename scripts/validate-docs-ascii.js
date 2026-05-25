@@ -46,6 +46,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { formatCodepointGlyph } = require("./lib/staged-doc-formatters");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 
@@ -337,7 +338,12 @@ function main() {
   for (const v of allViolations) {
     const rel = path.relative(ROOT_DIR, v.file) || v.file;
     const cpHex = v.codepoint.toString(16).toUpperCase().padStart(4, "0");
-    process.stderr.write(`${rel}:${v.line}:${v.column}: U+${cpHex} '${v.char}' -- ${v.reason}\n`);
+    process.stderr.write(
+      `${rel}:${v.line}:${v.column}: U+${cpHex} ${formatCodepointGlyph(
+        v.char,
+        v.codepoint
+      )} -- ${v.reason}\n`
+    );
   }
   process.stderr.write(`\nvalidate-docs-ascii: ${allViolations.length} violation(s) found.\n`);
   return 1;

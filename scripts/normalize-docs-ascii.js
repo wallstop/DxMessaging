@@ -225,6 +225,9 @@ function chooseRightArrowReplacement(line, offset) {
   const menuLikeBefore = /[A-Za-z0-9_)\]"'`]/.test(lastBefore);
   const menuLikeAfter = /[A-Za-z0-9_(\["'`]/.test(firstAfter);
 
+  if (menuLikeBefore && afterTrim.length === 0) {
+    return /\s$/.test(before) ? "->" : " ->";
+  }
   if (menuLikeBefore && menuLikeAfter) {
     return " -> ";
   }
@@ -327,12 +330,12 @@ function rewriteLine(line, inFence, arrowAware) {
       out = substituteArrows(out);
       // Collapse the doubled-space artifacts that result when an em-dash
       // or other punctuation already left a space adjacent to the arrow
-      // chooser's added " > " / " < " / " <-> ". This is prose-only and
+      // chooser's added " -> " / " <- " / " <-> ". This is prose-only and
       // does not run inside fenced code blocks (where shifts/comparisons
       // need exact spacing).
-      out = out.replace(/  >  /g, " > ");
-      out = out.replace(/  <  /g, " < ");
-      out = out.replace(/  <->  /g, " <-> ");
+      out = out.replace(/\s{2,}->\s{2,}/g, " -> ");
+      out = out.replace(/\s{2,}<-\s{2,}/g, " <- ");
+      out = out.replace(/\s{2,}<->\s{2,}/g, " <-> ");
     }
     out = applyCheckCrossWarning(out);
   } else {

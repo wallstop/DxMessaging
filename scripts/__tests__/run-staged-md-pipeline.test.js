@@ -202,9 +202,46 @@ describe("run-staged-md-pipeline", () => {
       }
     });
 
-    test("pipeline surfaces ASCII validator violations for non-ASCII punctuation", async () => {
-      const emDash = String.fromCodePoint(0x2014);
-      const fixture = `# Title\n\nBad${emDash}dash.\n`;
+    test("pipeline auto-normalizes right-arrow menu paths before ASCII validation", async () => {
+      const rightArrow = String.fromCodePoint(0x2192);
+      const fixture = [
+        "# Title",
+        "",
+        `Menu path: Tools ${rightArrow} Wallstop Studios ${rightArrow}`,
+        `DxMessaging ${rightArrow} Settings.`,
+        ""
+      ].join("\n");
+      const { dir, target } = makeTempFile("ascii-normalized.md", fixture);
+      try {
+        const writeSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+        const stdoutSpy = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+        try {
+          const result = await runStagedMdPipeline([target], {
+            skipMarkdownlint: true,
+            skipPrettier: true
+          });
+          expect(result.modified).toContain(target);
+          expect(result.violations.ascii.violations).toEqual([]);
+
+          const written = fs.readFileSync(target, "utf8");
+          expect(written).not.toContain(rightArrow);
+          expect(written).toContain("Tools -> Wallstop Studios ->");
+          expect(written).toContain("DxMessaging -> Settings.");
+          for (const ch of written) {
+            expect(ch.codePointAt(0)).toBeLessThan(0x80);
+          }
+        } finally {
+          writeSpy.mockRestore();
+          stdoutSpy.mockRestore();
+        }
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test("pipeline surfaces ASCII validator violations for non-normalizable emoji", async () => {
+      const rocket = String.fromCodePoint(0x1f680);
+      const fixture = `# Title\n\nBad emoji ${rocket} in prose.\n`;
       const { dir, target } = makeTempFile("ascii-violation.md", fixture);
       try {
         const writeSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -215,7 +252,7 @@ describe("run-staged-md-pipeline", () => {
             skipPrettier: true
           });
           expect(result.violations.ascii.violations).toHaveLength(1);
-          expect(result.violations.ascii.violations[0].codepoint).toBe(0x2014);
+          expect(result.violations.ascii.violations[0].codepoint).toBe(0x1f680);
         } finally {
           writeSpy.mockRestore();
           stdoutSpy.mockRestore();

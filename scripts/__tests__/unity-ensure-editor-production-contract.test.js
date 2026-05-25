@@ -218,18 +218,100 @@ function runSoleProducerAst(scriptPath) {
     "  if ($callsHelperInline -or $isHelperVar) { $routed++ }",
     "}",
     "if ($routed -lt 3) { Write-Host ('FAIL fewer than 3 routed module-install invokers (got {0})' -f $routed); $ok = $false }",
-    // (C) behavior: execute the helper + ids fns and check both verbs.
+    // (C) behavior: execute the helper + ids fns (and the spec the ids derive from)
+    // and check both verbs, both default and a tier subset.
+    "$specHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleSpec' }, $true))",
+    "if ($specHits.Count -lt 1) { Write-Host 'FAIL no module-spec fn'; exit 9 }",
     "$idsHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleIds' }, $true))",
     "if ($idsHits.Count -lt 1) { Write-Host 'FAIL no module-ids fn'; exit 9 }",
+    "$tierHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleIdsForTier' }, $true))",
+    "if ($tierHits.Count -lt 1) { Write-Host 'FAIL no tier-ids fn'; exit 9 }",
+    "Invoke-Expression $specHits[0].Extent.Text",
     "Invoke-Expression $idsHits[0].Extent.Text",
+    "Invoke-Expression $tierHits[0].Extent.Text",
     "Invoke-Expression $helper.Extent.Text",
     "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",
     "$modArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version '6000.0.32f1')",
+    "$coreArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1' -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core'))",
     "if ($installArgs -notcontains '--accept-eula') { Write-Host 'FAIL install verb missing eula'; $ok = $false }",
     "if ($modArgs -notcontains '--accept-eula') { Write-Host 'FAIL install-modules verb missing eula'; $ok = $false }",
     "if ($installArgs -notcontains '-m') { Write-Host 'FAIL install verb missing -m'; $ok = $false }",
     "if ($modArgs -notcontains '-m') { Write-Host 'FAIL install-modules verb missing -m'; $ok = $false }",
+    // A tier-scoped subset STILL carries --accept-eula + -m (the sole producer owns the shape).
+    "if ($coreArgs -notcontains '--accept-eula') { Write-Host 'FAIL tier subset missing eula'; $ok = $false }",
+    "if ($coreArgs -notcontains '-m') { Write-Host 'FAIL tier subset missing -m'; $ok = $false }",
+    "if ($coreArgs -contains 'android') { Write-Host 'FAIL core subset contains android tier id'; $ok = $false }",
     "if ($ok) { Write-Output 'FIX2-OK' } else { exit 7 }"
+  ].join("\n");
+
+  const run = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", harness], {
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024
+  });
+  const text = normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
+  return { ok: run.status === 0, text };
+}
+
+/**
+ * SPEC-CONSISTENCY invariant, enforced by EXECUTING the spec + derived functions.
+ *
+ * AST-extracts Get-UnityCiModuleSpec and the functions derived from it
+ * (Get-UnityCiModuleIds, Get-UnityCiVerifiedModuleGroups, Get-UnityCiModuleIdsForTier,
+ * Get-UnityCiModuleTier) plus Test-UnityCiModuleGroupPresent, Invoke-Expression's
+ * them, and asserts (against the RETURNED values, not text):
+ *
+ *   - requested ids EXCLUDE 'android-open-jdk' and INCLUDE 'android-sdk-ndk-tools';
+ *   - verified groups INCLUDE 'android-open-jdk';
+ *   - verified == requested + verified-only (i.e. the spec rows are internally
+ *     consistent: every requested id is verified here too);
+ *   - the core/android tier ids partition the requested ids (no overlap, union ==
+ *     requested);
+ *   - every spec id is handled by the Test-UnityCiModuleGroupPresent switch and
+ *     every switch case maps to a spec id (no drift in EITHER direction).
+ *
+ * Returns { ok, text } where text is the normalized pwsh stdout/stderr.
+ */
+function runSpecConsistency(scriptPath) {
+  const harness = [
+    "Set-StrictMode -Version Latest",
+    "$ErrorActionPreference = 'Stop'",
+    `$src = '${scriptPath.replace(/'/g, "''")}'`,
+    "$tokens = $null; $errs = $null",
+    "$ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$tokens, [ref]$errs)",
+    "if ($errs -and $errs.Count -gt 0) { Write-Host 'FAIL parse errors'; exit 3 }",
+    "$wanted = @('Get-UnityCiModuleSpec','Get-UnityCiModuleIds','Get-UnityCiVerifiedModuleGroups','Get-UnityCiModuleIdsForTier','Get-UnityCiModuleTier','Test-UnityCiModuleGroupPresent')",
+    "$fns = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $n.Name }, $true))",
+    "foreach ($w in $wanted) { if (-not ($fns | Where-Object { $_.Name -eq $w })) { Write-Host ('FAIL missing fn ' + $w); exit 4 } }",
+    "foreach ($f in $fns) { Invoke-Expression $f.Extent.Text }",
+    "$ok = $true",
+    "$requested = @(Get-UnityCiModuleIds)",
+    "$verified = @(Get-UnityCiVerifiedModuleGroups)",
+    "$core = @(Get-UnityCiModuleIdsForTier -Tier 'core')",
+    "$android = @(Get-UnityCiModuleIdsForTier -Tier 'android')",
+    "$specIds = @(Get-UnityCiModuleSpec | ForEach-Object { $_.Id })",
+    "if ($requested -contains 'android-open-jdk') { Write-Host 'FAIL requested includes android-open-jdk'; $ok = $false }",
+    "if ($requested -notcontains 'android-sdk-ndk-tools') { Write-Host 'FAIL requested missing android-sdk-ndk-tools'; $ok = $false }",
+    "if ($verified -notcontains 'android-open-jdk') { Write-Host 'FAIL verified missing android-open-jdk'; $ok = $false }",
+    // verified == requested + verified-only (every requested id is also verified).
+    "foreach ($r in $requested) { if ($verified -notcontains $r) { Write-Host ('FAIL requested id not verified: ' + $r); $ok = $false } }",
+    // tier partition: core + android == requested, no overlap.
+    "$tierUnion = @($core + $android)",
+    "foreach ($r in $requested) { if ($tierUnion -notcontains $r) { Write-Host ('FAIL requested id in no tier: ' + $r); $ok = $false } }",
+    "foreach ($t in $tierUnion) { if ($requested -notcontains $t) { Write-Host ('FAIL tier id not requested: ' + $t); $ok = $false } }",
+    "foreach ($c in $core) { if ($android -contains $c) { Write-Host ('FAIL id in both tiers: ' + $c); $ok = $false } }",
+    // Get-UnityCiModuleTier round-trips for every spec id.
+    "foreach ($id in $specIds) { $tier = Get-UnityCiModuleTier $id; if ($tier -notin @('core','android')) { Write-Host ('FAIL bad tier for ' + $id + ': ' + $tier); $ok = $false } }",
+    // Switch <-> spec parity: every spec id is a switch case, and vice-versa. The
+    // switch clauses are string-constant labels inside Test-UnityCiModuleGroupPresent.
+    "$switchFn = ($fns | Where-Object { $_.Name -eq 'Test-UnityCiModuleGroupPresent' })[0]",
+    "$switchNodes = @($switchFn.FindAll({ param($n) $n -is [System.Management.Automation.Language.SwitchStatementAst] }, $true))",
+    "if ($switchNodes.Count -lt 1) { Write-Host 'FAIL no switch in Test-UnityCiModuleGroupPresent'; exit 5 }",
+    "$caseLabels = New-Object System.Collections.Generic.List[string]",
+    "foreach ($sw in $switchNodes) { foreach ($clause in $sw.Clauses) { if ($clause.Item1 -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $caseLabels.Add($clause.Item1.Value) } } }",
+    "$cases = @($caseLabels.ToArray())",
+    "foreach ($id in $specIds) { if ($cases -notcontains $id) { Write-Host ('FAIL spec id not handled by switch: ' + $id); $ok = $false } }",
+    "foreach ($c in $cases) { if ($specIds -notcontains $c) { Write-Host ('FAIL switch case not in spec: ' + $c); $ok = $false } }",
+    "if ($ok) { Write-Output 'SPEC-OK' } else { exit 7 }"
   ].join("\n");
 
   const run = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", harness], {
@@ -403,26 +485,93 @@ describe("ensure-editor.ps1 production contract", () => {
     }
   });
 
-  // --- 2a-bis: requested ids vs verified disk groups are cleanly decoupled. ---
+  // --- 2a-bis: requested ids vs verified disk groups are cleanly decoupled, and
+  //     both DERIVE from the single source of truth Get-UnityCiModuleSpec. ---
+  // These tests EXECUTE the spec/derived functions via pwsh (not a body-text scan)
+  // so the assertions pin the actual RETURNED ids, immune to how the spec is
+  // formatted. When pwsh is absent they skip cleanly (CI runners have pwsh); a
+  // cheap always-on text sanity check below guards the zero-coverage case.
   describe("2a-bis: android-open-jdk is verified on disk but not requested from the CLI", () => {
-    test("Get-UnityCiModuleIds (REQUESTED) does NOT include android-open-jdk", () => {
-      // The bare id is version-pinned/unknown to the beta CLI ("Couldn't find
-      // module"); OpenJDK arrives as an android-sdk-ndk-tools dependency, so we must
-      // not request it directly (that produced the silent warning). Assert against
-      // the CODE (comments may legitimately mention the id to explain its absence).
-      const body = extractFunctionBody(scriptText, "Get-UnityCiModuleIds");
-      expect(body).not.toBe("");
-      const code = stripPwshComments(body);
-      expect(code).not.toContain("'android-open-jdk'");
-      expect(code).toContain("'android-sdk-ndk-tools'");
+    // Always-on, pwsh-free sanity: the spec function and the derived list functions
+    // exist, and the spec carries the two id strings the split hinges on. The
+    // EXECUTION-based assertions below are the authoritative ones.
+    test("the single source of truth Get-UnityCiModuleSpec and the derived list functions exist", () => {
+      expect(scriptText).toContain("function Get-UnityCiModuleSpec");
+      expect(scriptText).toContain("function Get-UnityCiModuleIds");
+      expect(scriptText).toContain("function Get-UnityCiVerifiedModuleGroups");
+      const specBody = extractFunctionBody(scriptText, "Get-UnityCiModuleSpec");
+      const specCode = stripPwshComments(specBody);
+      expect(specCode).toContain("'android-sdk-ndk-tools'");
+      expect(specCode).toContain("'android-open-jdk'");
+      // The derived list functions must DERIVE from the spec (no hardcoded ids).
+      expect(extractFunctionBody(scriptText, "Get-UnityCiModuleIds")).toContain(
+        "Get-UnityCiModuleSpec"
+      );
+      expect(extractFunctionBody(scriptText, "Get-UnityCiVerifiedModuleGroups")).toContain(
+        "Get-UnityCiModuleSpec"
+      );
     });
 
-    test("Get-UnityCiVerifiedModuleGroups (VERIFIED) DOES include android-open-jdk", () => {
-      // We still PROVE OpenJDK landed on disk, decoupled from what we request.
-      const body = extractFunctionBody(scriptText, "Get-UnityCiVerifiedModuleGroups");
-      expect(body).not.toBe("");
-      expect(body).toContain("'android-open-jdk'");
-    });
+    if (!PWSH_PRESENT) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[ensure-editor-production-contract] pwsh not found; skipping spec-execution module-set guards (CI runners have pwsh)."
+      );
+      test.skip("pwsh: requested/verified ids and the switch derive consistently from the spec", () => {});
+    } else {
+      test("pwsh: requested/verified ids and the switch derive consistently from the spec", () => {
+        const result = runSpecConsistency(ENSURE_EDITOR);
+        if (!result.ok) {
+          throw new Error(result.text);
+        }
+        expect(result.text).toContain("SPEC-OK");
+      });
+    }
+
+    // Get-UnityCiModuleIdsForTier must return the right ids for the known tiers and
+    // THROW on an unknown one (so a bogus tier can never silently yield an empty,
+    // id-less `-m` vector). EXECUTION-based (AST-extract the spec + the tier helper).
+    if (!PWSH_PRESENT) {
+      test.skip("pwsh: Get-UnityCiModuleIdsForTier returns tier ids and throws on an unknown tier", () => {});
+    } else {
+      test("pwsh: Get-UnityCiModuleIdsForTier returns tier ids and throws on an unknown tier", () => {
+        const harness = [
+          "Set-StrictMode -Version Latest",
+          "$ErrorActionPreference = 'Stop'",
+          `$src = '${ENSURE_EDITOR.replace(/'/g, "''")}'`,
+          "$tokens = $null; $errs = $null",
+          "$ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$tokens, [ref]$errs)",
+          "if ($errs -and $errs.Count -gt 0) { Write-Host 'FAIL parse errors'; exit 3 }",
+          "$wanted = @('Get-UnityCiModuleSpec','Get-UnityCiModuleIdsForTier')",
+          "$fns = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $n.Name }, $true))",
+          "foreach ($w in $wanted) { if (-not ($fns | Where-Object { $_.Name -eq $w })) { Write-Host ('FAIL missing fn ' + $w); exit 4 } }",
+          "foreach ($f in $fns) { Invoke-Expression $f.Extent.Text }",
+          // Known tiers return the expected ids (joined for a stable assertion).
+          "Write-Output ('CORE=' + (@(Get-UnityCiModuleIdsForTier -Tier 'core') -join ','))",
+          "Write-Output ('ANDROID=' + (@(Get-UnityCiModuleIdsForTier -Tier 'android') -join ','))",
+          // An unknown tier MUST throw (never return an empty list).
+          "try { $null = Get-UnityCiModuleIdsForTier -Tier 'bogus'; Write-Output 'THREW=False' }",
+          "catch { Write-Output ('THREW=True; MSG=' + $_.Exception.Message) }"
+        ].join("\n");
+        const run = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", harness], {
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024
+        });
+        const text = normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
+        if (run.status !== 0) {
+          throw new Error(text);
+        }
+        // Core ids: the four reliable-provisioning groups, in spec order.
+        expect(text).toContain("CORE=windows-il2cpp,webgl,linux-mono,linux-il2cpp");
+        // Android ids: the requested android-tier groups (android-open-jdk is
+        // verified-only -> NOT requested, so it must be absent here).
+        expect(text).toContain("ANDROID=android,android-sdk-ndk-tools");
+        expect(text).not.toContain("android-open-jdk");
+        // The unknown tier threw with the documented message.
+        expect(text).toContain("THREW=True");
+        expect(text).toContain("Unknown Unity CI module tier 'bogus'.");
+      });
+    }
 
     test("the disk-verification iterator uses the VERIFIED groups, not the requested ids", () => {
       const body = extractFunctionBody(scriptText, "Get-MissingUnityCiModuleGroups");
@@ -537,6 +686,8 @@ describe("ensure-editor.ps1 production contract", () => {
         "$ensure = Get-Fn 'Ensure-UnityCiModules'",
         "$helper = Get-Fn 'Get-UnityCliModuleInstallArguments'",
         "$ids = Get-Fn 'Get-UnityCiModuleIds'",
+        "$spec = Get-Fn 'Get-UnityCiModuleSpec'",
+        "if (-not $spec) { Write-Error 'no module-spec fn'; exit 10 }",
         "if (-not $quarantine) { Write-Error 'no quarantine fn'; exit 4 }",
         "if (-not $guard) { Write-Error 'no guard fn'; exit 5 }",
         "if (-not $ensure) { Write-Error 'no ensure fn'; exit 6 }",
@@ -553,6 +704,7 @@ describe("ensure-editor.ps1 production contract", () => {
         // the generated argument vectors carry --accept-eula for BOTH verbs (so the
         // contract enforces behavior, not just text), and that the requested ids do
         // NOT include the bare android-open-jdk id the beta CLI rejects.
+        "Invoke-Expression $spec",
         "Invoke-Expression $ids",
         "Invoke-Expression $helper",
         "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",

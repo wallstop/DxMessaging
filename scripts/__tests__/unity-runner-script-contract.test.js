@@ -401,12 +401,15 @@ describe("scripts/unity direct CI runner contract", () => {
     // `@('install-path')` getter assertions below cover the surface precisely.
     // The primary install builds its arg vector through the single source-of-truth
     // helper (which injects the mandatory --accept-eula), not a hand-built `-m`
-    // vector that previously omitted the flag and broke every CI cell. Asserted
-    // whitespace-tolerantly (token intent, not an exact line) so a harmless
-    // reformat of the assignment never breaks this contract; the deeper
-    // sole-producer invariant is pinned by the production-contract AST test.
+    // vector that previously omitted the flag and broke every CI cell. The base
+    // install is now SCOPED to the core tier via -ModuleIds (the heavy/flaky Android
+    // tier is added afterward by Ensure-UnityCiModules in a dedicated step), so the
+    // assertion tolerates the trailing -ModuleIds (Get-UnityCiModuleIdsForTier ...)
+    // argument. Asserted whitespace-tolerantly (token intent, not an exact line) so
+    // a harmless reformat never breaks this contract; the deeper sole-producer
+    // invariant is pinned by the production-contract AST test.
     expect(ensureEditor).toMatch(
-      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s*\)/
+      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s+-ModuleIds\s+\(Get-UnityCiModuleIdsForTier\s+-Tier\s+'core'\)\s*\)/
     );
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
@@ -521,24 +524,36 @@ describe("scripts/unity direct CI runner contract", () => {
     // Android, and Linux build support. Module repair must classify against disk
     // and reinstall a managed editor when module installation cannot modify it.
     //
-    // NOTE: the script keeps two DECOUPLED lists -- the REQUESTED ids passed to
-    // `-m` (Get-UnityCiModuleIds, which intentionally OMITS the version-pinned
-    // 'android-open-jdk') and the VERIFIED-on-disk groups (Get-UnityCiVerifiedModule
-    // Groups, which INCLUDES 'android-open-jdk' because it lands as an
-    // android-sdk-ndk-tools dependency). Each id below must therefore appear
-    // SOMEWHERE in the script (requested and/or verified); the requested-vs-verified
-    // split is pinned precisely by unity-ensure-editor-production-contract.test.js.
+    // SINGLE SOURCE OF TRUTH: the script keeps ONE spec (Get-UnityCiModuleSpec) from
+    // which the REQUESTED ids passed to `-m` (Get-UnityCiModuleIds, which omits the
+    // version-pinned 'android-open-jdk'), the VERIFIED-on-disk groups
+    // (Get-UnityCiVerifiedModuleGroups, which INCLUDES 'android-open-jdk' because it
+    // lands as an android-sdk-ndk-tools dependency), and the tier membership all
+    // DERIVE. We assert this list DERIVED FROM the spec body (not a hardcoded copy)
+    // so the contract cannot drift from the script; the requested-vs-verified +
+    // tier split is pinned precisely by unity-ensure-editor-production-contract.test.js.
+    expect(ensureEditor).toContain("function Get-UnityCiModuleSpec");
     expect(ensureEditor).toContain("function Get-UnityCiModuleIds");
     expect(ensureEditor).toContain("function Get-UnityCiVerifiedModuleGroups");
-    for (const moduleId of [
-      "windows-il2cpp",
-      "webgl",
-      "android",
-      "android-sdk-ndk-tools",
-      "android-open-jdk",
-      "linux-mono",
-      "linux-il2cpp"
-    ]) {
+    // Derive the module ids from the spec function body's `Id = '<id>'` rows rather
+    // than hardcoding them here, so a spec change is automatically reflected.
+    const specBody = extractFunctionBody(ensureEditor, "Get-UnityCiModuleSpec");
+    expect(specBody).not.toBe("");
+    const specModuleIds = [...specBody.matchAll(/Id\s*=\s*'([^']+)'/g)].map((m) => m[1]);
+    // The spec must cover the full expected CI module surface (sanity on the count
+    // and the load-bearing ids) so a spec that silently drops a group is caught.
+    expect(specModuleIds).toEqual(
+      expect.arrayContaining([
+        "windows-il2cpp",
+        "webgl",
+        "android",
+        "android-sdk-ndk-tools",
+        "android-open-jdk",
+        "linux-mono",
+        "linux-il2cpp"
+      ])
+    );
+    for (const moduleId of specModuleIds) {
       expect(ensureEditor).toContain(`'${moduleId}'`);
     }
     expect(ensureEditor).toContain("function Ensure-UnityCiModules");
@@ -599,10 +614,18 @@ describe("scripts/unity direct CI runner contract", () => {
     // call sites. The helper itself owns the literal `'--accept-eula', '-m'` shape.
     // The install-modules vector is captured ONCE into a variable and reused for
     // both the install call and the failure-annotation arg echo (no duplicate
-    // helper call), so assert the helper-routed assignment + the variable-routed
-    // capturing invoke rather than an inline-call regex that a refactor would break.
+    // helper call). The CORE-tier module-add scopes the vector via -ModuleIds
+    // (Get-UnityCiModuleIdsForTier -Tier 'core'); the dedicated Android-tier step
+    // (Install-UnityAndroidModules) scopes its own via -ModuleIds $androidIds. Assert
+    // the helper-routed assignment(s) + the variable-routed capturing invoke rather
+    // than an inline-call regex that a refactor would break.
     expect(ensureEditor).toMatch(
-      /\$installArgs = @\(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version \$Version\)/
+      /\$installArgs = @\(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version \$Version -ModuleIds \(Get-UnityCiModuleIdsForTier -Tier 'core'\)\)/
+    );
+    // The dedicated Android tier step routes the android-scoped vector through the
+    // same sole producer.
+    expect(ensureEditor).toMatch(
+      /\$installArgs = @\(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version \$Version -ModuleIds \$androidIds\)/
     );
     expect(ensureEditor).toMatch(/Invoke-UnityCliCapture -Arguments \$installArgs/);
     expect(ensureEditor).toContain("function Get-UnityCliModuleInstallArguments");
@@ -663,6 +686,14 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toMatch(
       /function Get-EnsureEditorInstallRetryAttempts[\s\S]*?param\(\[int\]\$Default = 2\)/
     );
+    // The DEDICATED Android-tier install-retry knob defaults to 3 (one more than the
+    // base-install default of 2): the Android NDK unpack is the specific flake this
+    // editor-preserving loop targets, so an extra bounded attempt is cheap.
+    expect(ensureEditor).toContain("function Get-EnsureEditorAndroidInstallRetryAttempts");
+    expect(ensureEditor).toContain("DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS");
+    expect(ensureEditor).toMatch(
+      /function Get-EnsureEditorAndroidInstallRetryAttempts[\s\S]*?param\(\[int\]\$Default = 3\)/
+    );
 
     // RESILIENCE: a total wall-clock TIMEOUT bounds every captured CLI invocation
     // so a hung module install (the Android NDK hang) is tree-killed and
@@ -687,8 +718,12 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("function Get-CollapsedCliOutputTail");
     expect(ensureEditor).toContain("function Write-ModuleInstallFailureDiagnostics");
     expect(ensureEditor).toMatch(/Get-CollapsedCliOutputTail -Output/);
+    // The recovered-editor branch verifies CI modules (which adds the Android tier
+    // via Ensure-UnityCiModules). A clarifying comment documenting the bounded
+    // outer-retry x android-retry amplification may sit between the notice and the
+    // call, so tolerate intervening `#` comment lines (but not other code).
     expect(ensureEditor).toMatch(
-      /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*\$resolvedAfterFailure = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$resolvedAfterFailure -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+      /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*(?:#[^\n]*\n\s*)*\$resolvedAfterFailure = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$resolvedAfterFailure -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
     );
 
     // Layered discovery wiring: install branch resolves through the layered

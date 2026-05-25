@@ -3,15 +3,16 @@
  * run-staged-md-pipeline.js
  *
  * Single Node process that runs the full markdown pre-commit pipeline against
- * the staged markdown files passed via argv. Round-4 collapses these five
- * pre-commit hooks into one in-process pipeline:
+ * the staged markdown files passed via argv. Round-4 collapses the markdown
+ * pre-commit path into one in-process pipeline:
  *
- *   1. fix-md036-headings (in-process via processMarkdownContent)
- *   2. fix-md029-md051    (in-process)
- *   3. prettier --write   (in-process via the prettier programmatic API)
- *   4. markdownlint-cli2 --fix (in-process via dynamic import of the
+ *   1. normalize-docs-ascii (in-process)
+ *   2. fix-md036-headings (in-process via processMarkdownContent)
+ *   3. fix-md029-md051    (in-process)
+ *   4. prettier --write   (in-process via the prettier programmatic API)
+ *   5. markdownlint-cli2 --fix (in-process via dynamic import of the
  *      markdownlint-cli2 ESM module)
- *   5. The three doc validators (validate-docs-ascii,
+ *   6. The three doc validators (validate-docs-ascii,
  *      validate-doc-code-patterns, validate-docs-prose) -- each already
  *      exposes a programmatic scanContent API.
  *
@@ -51,6 +52,7 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 
 const fixMd036 = require("./fix-md036-headings");
 const fixMd029Md051 = require("./fix-md029-md051");
+const asciiNormalizer = require("./normalize-docs-ascii");
 const ascii = require("./validate-docs-ascii");
 const codePatterns = require("./validate-doc-code-patterns");
 const prose = require("./validate-docs-prose");
@@ -184,9 +186,13 @@ function writeIfChanged(filePath, originalContent, nextContent, modifiedSet) {
 
 function applyInProcessFixers(absPath, content, modifiedSet) {
   let next = content;
+  const normalized = asciiNormalizer.processMarkdown(next);
+  if (normalized.changed) {
+    next = writeIfChanged(absPath, next, normalized.content, modifiedSet);
+  }
   const md036 = fixMd036.processMarkdownContent(next);
   if (md036.changed) {
-    next = writeIfChanged(absPath, content, md036.content, modifiedSet);
+    next = writeIfChanged(absPath, next, md036.content, modifiedSet);
   }
   const md029Md051 = fixMd029Md051.processMarkdownContent(next);
   if (md029Md051.changed) {
@@ -450,10 +456,10 @@ async function runStagedMdPipeline(filePaths, options = {}) {
     if (original === null) continue;
     present.push(absPath);
 
-    // Stage 1+2: in-process structural fixers.
+    // Stage 1-3: in-process ASCII and structural fixers.
     let working = applyInProcessFixers(absPath, original, modifiedSet);
 
-    // Stage 3: prettier in-process.
+    // Stage 4: prettier in-process.
     if (!skipPrettier) {
       try {
         working = await runPrettierInProcess(absPath, working, modifiedSet);

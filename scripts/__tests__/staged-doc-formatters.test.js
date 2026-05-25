@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  formatCodepointGlyph,
   formatAsciiViolation,
   formatAsciiWarning,
   formatCodePatternViolation,
@@ -8,10 +9,17 @@ const {
 } = require("../lib/staged-doc-formatters");
 
 describe("staged-doc-formatters", () => {
+  const CHECK_MARK = String.fromCodePoint(0x2705);
+
   const toRepoRelative = (absPath) => {
     const segments = absPath.split("/");
     return `repo/${segments[segments.length - 1]}`;
   };
+
+  test("formatCodepointGlyph keeps diagnostics ASCII-only for non-ASCII characters", () => {
+    expect(formatCodepointGlyph(CHECK_MARK, 0x2705)).toBe("\\u{2705}");
+    expect(formatCodepointGlyph("'", 0x27)).toBe("'\\''");
+  });
 
   test("formatCodePatternViolation emits the intentional three-line block", () => {
     const formatted = formatCodePatternViolation(
@@ -43,7 +51,7 @@ describe("staged-doc-formatters", () => {
         line: 2,
         column: 5,
         codepoint: 0x2705,
-        char: "✅",
+        char: CHECK_MARK,
         reason: "non-ASCII character"
       },
       toRepoRelative
@@ -59,10 +67,13 @@ describe("staged-doc-formatters", () => {
       toRepoRelative
     );
 
-    expect(asciiLine).toBe("repo/ascii.md:2:5: U+2705 '✅' -- non-ASCII character");
+    expect(asciiLine).toBe("repo/ascii.md:2:5: U+2705 \\u{2705} -- non-ASCII character");
     expect(proseLine).toBe("repo/prose.md:7:1: [marketing-language] seamless");
     expect(asciiLine.includes("\n")).toBe(false);
     expect(proseLine.includes("\n")).toBe(false);
+    for (const ch of asciiLine) {
+      expect(ch.codePointAt(0)).toBeLessThan(0x80);
+    }
   });
 
   test("formatAsciiWarning uses WARN prefix and single-line shape", () => {

@@ -15,6 +15,8 @@ const {
   hasRequiredParserPrecheckCommand,
   hasRequiredNodeRepairCommand,
   hasNodeRepairBeforeNodeValidation,
+  hasRequiredPreCommitRepairCommand,
+  hasPreCommitRepairBeforeHookMarkdown,
   hasRequiredPackageJsonFormatCommand,
   hasRequiredYamlValidationCommand,
   hasRequiredYamlCommentsCheckCommand,
@@ -33,11 +35,18 @@ const {
   hasInlinedPrettierEntry,
   hasInlinedPrettierInvocation,
   hasGuardedFixerRestagePattern,
+  hasGuardedCsharpierRestagePattern,
+  hasGuardedPrettierRestagePattern,
+  hasGuardedEolRestagePattern,
+  hasGuardedBannerStagePattern,
   hasGuardedYamlCommentRestagePattern,
+  hasGuardedMarkdownPipelineRestagePattern,
   hasPortableHookInvocation,
   usesManagedNodeRepair,
   hasRequiredSerialManagedRepairHook,
   hasRequiredSerialYamlCommentFixerHook,
+  hasRequiredSerialEolFixerHook,
+  hasRequiredSerialMarkdownPipelineHook,
   validateHookEntries,
   validateYamllintPolicy,
   validatePrettierVersionResolution,
@@ -45,6 +54,7 @@ const {
   validatePerfBudget,
   REQUIRED_PRECHECK_PARSER_COMMAND,
   REQUIRED_NODE_REPAIR_COMMAND,
+  REQUIRED_PRE_COMMIT_REPAIR_COMMAND,
   REQUIRED_NODE_TOOLING_COMMAND,
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_CHANGED_DOCS_COMMAND,
@@ -66,6 +76,7 @@ const {
 function requiredPreflightScript({ remove = [] } = {}) {
   const requiredCommands = [
     REQUIRED_NODE_REPAIR_COMMAND,
+    REQUIRED_PRE_COMMIT_REPAIR_COMMAND,
     REQUIRED_NODE_TOOLING_COMMAND,
     REQUIRED_HOOK_MARKDOWN_COMMAND,
     REQUIRED_CHANGED_DOCS_COMMAND,
@@ -300,6 +311,19 @@ describe("validate-pre-commit-tooling", () => {
     expect(hasNodeRepairBeforeNodeValidation(reversed)).toBe(false);
   });
 
+  test("hasPreCommitRepairBeforeHookMarkdown requires executable repair before hook parity", () => {
+    const valid = [REQUIRED_PRE_COMMIT_REPAIR_COMMAND, REQUIRED_HOOK_MARKDOWN_COMMAND].join(
+      " && "
+    );
+    const reversed = [REQUIRED_HOOK_MARKDOWN_COMMAND, REQUIRED_PRE_COMMIT_REPAIR_COMMAND].join(
+      " && "
+    );
+
+    expect(hasRequiredPreCommitRepairCommand(valid)).toBe(true);
+    expect(hasPreCommitRepairBeforeHookMarkdown(valid)).toBe(true);
+    expect(hasPreCommitRepairBeforeHookMarkdown(reversed)).toBe(false);
+  });
+
   test("hasRequiredHookMarkdownCommand detects markdown hook parity precheck step", () => {
     const script = [
       REQUIRED_NODE_TOOLING_COMMAND,
@@ -523,7 +547,7 @@ describe("validate-pre-commit-tooling", () => {
   test("managed node-repair hooks require require_serial true", () => {
     const managedHook = {
       id: "prettier",
-      entry: "node scripts/run-managed-prettier.js --write",
+      entry: "node scripts/run-and-restage.js node scripts/run-managed-prettier.js --write --",
       requireSerial: "true"
     };
     const partitionedHook = {
@@ -541,6 +565,26 @@ describe("validate-pre-commit-tooling", () => {
       entry: "node scripts/run-and-restage.js node scripts/fix-yaml-comments-line-length.js --",
       requireSerial: undefined
     };
+    const markdownPipelineHook = {
+      id: "run-staged-md-pipeline",
+      entry: "node scripts/run-and-restage.js node scripts/run-staged-md-pipeline.js --",
+      requireSerial: "true"
+    };
+    const markdownPipelineMissingSerial = {
+      id: "run-staged-md-pipeline",
+      entry: "node scripts/run-and-restage.js node scripts/run-staged-md-pipeline.js --",
+      requireSerial: undefined
+    };
+    const eolFixerHook = {
+      id: "fix-eol",
+      entry: "node scripts/run-and-restage.js node scripts/fix-eol.js --",
+      requireSerial: "true"
+    };
+    const eolFixerMissingSerial = {
+      id: "fix-eol",
+      entry: "node scripts/run-and-restage.js node scripts/fix-eol.js --",
+      requireSerial: undefined
+    };
 
     expect(usesManagedNodeRepair(managedHook.entry)).toBe(true);
     expect(hasRequiredSerialManagedRepairHook(managedHook)).toBe(true);
@@ -549,9 +593,15 @@ describe("validate-pre-commit-tooling", () => {
     expect(hasRequiredSerialYamlCommentFixerHook(yamlCommentFixerHook)).toBe(true);
     expect(hasRequiredSerialYamlCommentFixerHook(yamlCommentFixerMissingSerial)).toBe(false);
     expect(hasRequiredSerialYamlCommentFixerHook({ id: "other" })).toBe(true);
+    expect(hasRequiredSerialMarkdownPipelineHook(markdownPipelineHook)).toBe(true);
+    expect(hasRequiredSerialMarkdownPipelineHook(markdownPipelineMissingSerial)).toBe(false);
+    expect(hasRequiredSerialMarkdownPipelineHook({ id: "other" })).toBe(true);
+    expect(hasRequiredSerialEolFixerHook(eolFixerHook)).toBe(true);
+    expect(hasRequiredSerialEolFixerHook(eolFixerMissingSerial)).toBe(false);
+    expect(hasRequiredSerialEolFixerHook({ id: "other" })).toBe(true);
   });
 
-  test("validateHookEntries rejects managed Prettier without require_serial", () => {
+  test("validateHookEntries rejects managed Prettier without guarded restage and require_serial", () => {
     const content = [
       "repos:",
       "  - repo: local",
@@ -563,12 +613,18 @@ describe("validate-pre-commit-tooling", () => {
 
     const violations = validateHookEntries(parseHookEntries(content), parseHookConfigs(content));
 
-    expect(violations).toEqual([
-      expect.objectContaining({
-        hookId: "prettier",
-        message: expect.stringContaining("require_serial: true")
-      })
-    ]);
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hookId: "prettier",
+          message: expect.stringContaining("run-and-restage")
+        }),
+        expect.objectContaining({
+          hookId: "prettier",
+          message: expect.stringContaining("require_serial: true")
+        })
+      ])
+    );
   });
 
   test("validateHookEntries rejects yaml comment fixer without guarded restage and require_serial", () => {
@@ -591,6 +647,32 @@ describe("validate-pre-commit-tooling", () => {
         }),
         expect.objectContaining({
           hookId: "fix-yaml-comments-line-length",
+          message: expect.stringContaining("require_serial: true")
+        })
+      ])
+    );
+  });
+
+  test("validateHookEntries rejects markdown pipeline without guarded restage and require_serial", () => {
+    const content = [
+      "repos:",
+      "  - repo: local",
+      "    hooks:",
+      "      - id: run-staged-md-pipeline",
+      "        entry: node scripts/run-staged-md-pipeline.js",
+      "        language: system"
+    ].join("\n");
+
+    const violations = validateHookEntries(parseHookEntries(content), parseHookConfigs(content));
+
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hookId: "run-staged-md-pipeline",
+          message: expect.stringContaining("run-and-restage")
+        }),
+        expect.objectContaining({
+          hookId: "run-staged-md-pipeline",
           message: expect.stringContaining("require_serial: true")
         })
       ])
@@ -650,6 +732,55 @@ describe("validate-pre-commit-tooling", () => {
     ).toBe(false);
   });
 
+  test("mutating formatter hooks require shell-neutral restage wrappers", () => {
+    expect(hasGuardedCsharpierRestagePattern("csharpier", "dotnet tool run csharpier format")).toBe(
+      false
+    );
+    expect(
+      hasGuardedCsharpierRestagePattern(
+        "csharpier",
+        "node scripts/run-and-restage.js dotnet tool run csharpier format --"
+      )
+    ).toBe(true);
+
+    expect(
+      hasGuardedPrettierRestagePattern(
+        "prettier",
+        "node scripts/run-managed-prettier.js --write"
+      )
+    ).toBe(false);
+    expect(
+      hasGuardedPrettierRestagePattern(
+        "prettier",
+        "node scripts/run-and-restage.js node scripts/run-managed-prettier.js --write --"
+      )
+    ).toBe(true);
+
+    expect(hasGuardedEolRestagePattern("fix-eol", "node scripts/fix-eol.js")).toBe(false);
+    expect(
+      hasGuardedEolRestagePattern(
+        "fix-eol",
+        "node scripts/run-and-restage.js node scripts/fix-eol.js --"
+      )
+    ).toBe(true);
+  });
+
+  test("sync-banner-version requires shell-neutral generated-file staging", () => {
+    expect(
+      hasGuardedBannerStagePattern(
+        "sync-banner-version",
+        "node scripts/sync-banner-version-hook.js"
+      )
+    ).toBe(false);
+    expect(
+      hasGuardedBannerStagePattern(
+        "sync-banner-version",
+        "node scripts/run-and-stage.js node scripts/sync-banner-version-hook.js -- docs/images/DxMessaging-banner.svg"
+      )
+    ).toBe(true);
+    expect(hasGuardedBannerStagePattern("other-hook", "node scripts/check-eol.js")).toBe(true);
+  });
+
   test("hasGuardedYamlCommentRestagePattern requires shell-neutral restage wrapper", () => {
     expect(
       hasGuardedYamlCommentRestagePattern(
@@ -668,6 +799,26 @@ describe("validate-pre-commit-tooling", () => {
     expect(hasGuardedYamlCommentRestagePattern("other-hook", "node scripts/check-eol.js")).toBe(
       true
     );
+  });
+
+  test("hasGuardedMarkdownPipelineRestagePattern requires shell-neutral restage wrapper", () => {
+    expect(
+      hasGuardedMarkdownPipelineRestagePattern(
+        "run-staged-md-pipeline",
+        "node scripts/run-staged-md-pipeline.js"
+      )
+    ).toBe(false);
+
+    expect(
+      hasGuardedMarkdownPipelineRestagePattern(
+        "run-staged-md-pipeline",
+        "node scripts/run-and-restage.js node scripts/run-staged-md-pipeline.js --"
+      )
+    ).toBe(true);
+
+    expect(
+      hasGuardedMarkdownPipelineRestagePattern("other-hook", "node scripts/check-eol.js")
+    ).toBe(true);
   });
 
   test("hasPortableHookInvocation rejects direct shell dependencies", () => {
@@ -950,9 +1101,18 @@ describe("validate-pre-commit-tooling", () => {
       getPinnedPrettierSpecFn: () => "prettier@3.8.3"
     });
 
-    expect(violations).toHaveLength(1);
-    expect(violations[0].hookId).toBe("prettier");
-    expect(violations[0].message).toContain("inline node_modules/prettier/bin/prettier.cjs");
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hookId: "prettier",
+          message: expect.stringContaining("inline node_modules/prettier/bin/prettier.cjs")
+        }),
+        expect.objectContaining({
+          hookId: "prettier",
+          message: expect.stringContaining("run-and-restage")
+        })
+      ])
+    );
     expect(violations[0].message).toContain("npx --yes --package=prettier@<version>");
   });
 
@@ -967,6 +1127,10 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain("npm run repair:node-tooling");
     expect(preflightScript.indexOf("npm run repair:node-tooling")).toBeLessThan(
       preflightScript.indexOf(REQUIRED_NODE_TOOLING_COMMAND)
+    );
+    expect(preflightScript).toContain(REQUIRED_PRE_COMMIT_REPAIR_COMMAND);
+    expect(preflightScript.indexOf(REQUIRED_PRE_COMMIT_REPAIR_COMMAND)).toBeLessThan(
+      preflightScript.indexOf(REQUIRED_HOOK_MARKDOWN_COMMAND)
     );
     expect(preflightScript).toContain(REQUIRED_NODE_TOOLING_COMMAND);
     expect(preflightScript).toContain("npm run validate:hook-markdown");
@@ -984,7 +1148,9 @@ describe("validate-pre-commit-tooling", () => {
     );
     expect(packageJson.scripts["check:banner-sync"]).toBe("node scripts/validate-banner.js");
     expect(packageJson.scripts["check:yaml"]).toContain(REQUIRED_YAML_COMMENTS_CHECK_COMMAND);
-    expect(packageJson.scripts["check:yaml"]).toContain("pre-commit run yamllint --all-files");
+    expect(packageJson.scripts["check:yaml"]).toContain(
+      "node scripts/ensure-pre-commit.js run yamllint --all-files"
+    );
     expect(preflightScript).toContain("npm run check:yaml");
     expect(preflightScript).toContain("node scripts/generate-skills-index.js --check");
     expect(preflightScript).toContain("npm run validate:npm-meta");
@@ -1207,6 +1373,92 @@ describe("validate-pre-commit-tooling", () => {
 
     expect(violations).toHaveLength(1);
     expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_HOOK_MARKDOWN_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports missing pre-commit executable repair command", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": requiredPreflightScript({
+              remove: [REQUIRED_PRE_COMMIT_REPAIR_COMMAND]
+            })
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_PRE_COMMIT_REPAIR_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports pre-commit repair after hook parity", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            "preflight:pre-commit": [
+              REQUIRED_NODE_REPAIR_COMMAND,
+              REQUIRED_NODE_TOOLING_COMMAND,
+              REQUIRED_HOOK_MARKDOWN_COMMAND,
+              REQUIRED_PRE_COMMIT_REPAIR_COMMAND,
+              REQUIRED_CHANGED_DOCS_COMMAND,
+              REQUIRED_LLM_MARKDOWN_COMMAND,
+              REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+              REQUIRED_YAML_VALIDATION_COMMAND,
+              REQUIRED_SCRIPTS_CSPELL_COMMAND,
+              REQUIRED_WORKFLOW_CSPELL_COMMAND,
+              REQUIRED_WORKFLOW_VALIDATION_COMMAND,
+              REQUIRED_BANNER_SYNC_COMMAND,
+              REQUIRED_CHANGELOG_VALIDATION_COMMAND,
+              REQUIRED_PRECHECK_PARSER_COMMAND
+            ].join(" && ")
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain("before");
     expect(violations[0].message).toContain(REQUIRED_HOOK_MARKDOWN_COMMAND);
   });
 
