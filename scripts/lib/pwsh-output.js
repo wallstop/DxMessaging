@@ -105,4 +105,156 @@ function normalizePwshText(value) {
     .trim();
 }
 
-module.exports = { normalizePwshText };
+/**
+ * Merge a pwsh run's stdout+stderr into one normalized string for phrase /
+ * substring assertions. The shared wrapper that test files use so a phrase
+ * assertion against pwsh output is width-immune (rejoins the ConciseView gutter,
+ * strips ANSI). Use ONLY for phrase assertions; reads that depend on line
+ * structure (e.g. taking the last stdout line to get a resolved path) MUST use
+ * the raw stream.
+ *
+ * @param {{stdout?: unknown, stderr?: unknown}} run - A child_process spawn result.
+ * @returns {string} The normalized, wrap-immune stdout+stderr text.
+ */
+function combinedText(run) {
+  return normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
+}
+
+/**
+ * Normalize a pwsh run's stdout alone for phrase / substring assertions. Same
+ * width-immunity as combinedText but for the stdout-only case (e.g. a script that
+ * routes its diagnostics through stdout). A no-op on already-clean single-line
+ * stdout.
+ *
+ * @param {{stdout?: unknown}} result - A child_process spawn result.
+ * @returns {string} The normalized, wrap-immune stdout text.
+ */
+function stdoutText(result) {
+  return normalizePwshText(result.stdout || "");
+}
+
+/**
+ * Produce a structured diagnostic that explains WHY a phrase assertion against
+ * raw pwsh output might pass on a wide host yet fail on the narrower Windows
+ * runner. Pure: it does not mutate global state, print, or change normalize's
+ * output -- it merely reports which width-dependent artifacts are present and
+ * whether normalization recovered the text. It is the data source for
+ * assertPwshContains's failure message (the real consumer).
+ *
+ * The detection reuses the SAME regexes normalizePwshText applies, so what it
+ * reports is exactly what normalization acts on:
+ *   - `hadAnsiEscapes`: a CSI/SGR, OSC, or lone Fe escape sequence is present.
+ *   - `hadContinuationGutter`: the ConciseView word-wrap gutter (`\n  | `) is
+ *     present, i.e. the message was split across console-width lines.
+ *   - `textChanged`: normalization changed the text (escapes stripped, gutter
+ *     rejoined, and/or whitespace collapsed) -- a raw `.toContain` would
+ *     therefore see different bytes than a normalized one.
+ *   - `normalized`: the recovered, wrap-immune text.
+ *
+ * @param {unknown} raw - Raw pwsh stdout/stderr (or any value; coerced to string).
+ * @returns {{hadAnsiEscapes: boolean, hadContinuationGutter: boolean,
+ *   textChanged: boolean, normalized: string}}
+ */
+function describePwshNormalization(raw) {
+  const rawText = String(raw);
+  const normalized = normalizePwshText(rawText);
+  // Use fresh, non-global copies so the global-flag `lastIndex` state on the shared
+  // module-level regexes is never observed or mutated across calls.
+  const hadAnsiEscapes =
+    new RegExp(CSI_ESCAPE.source).test(rawText) ||
+    new RegExp(OSC_ESCAPE.source).test(rawText) ||
+    new RegExp(LONE_FE_ESCAPE.source).test(rawText);
+  // Detect the gutter on the text AS normalizePwshText sees it just before the
+  // gutter rejoin: ANSI/OSC/Fe escapes stripped and CRLF/CR -> LF. The real
+  // captured output is CRLF-terminated and wraps each fragment in color escapes, so
+  // the `\n  | ` gutter only matches once both of those are removed first.
+  const preGutter = rawText
+    .replace(new RegExp(OSC_ESCAPE.source, "g"), "")
+    .replace(new RegExp(CSI_ESCAPE.source, "g"), "")
+    .replace(new RegExp(LONE_FE_ESCAPE.source, "g"), "")
+    .replace(/\r\n?/g, "\n");
+  const hadContinuationGutter = new RegExp(CONTINUATION_GUTTER.source).test(preGutter);
+  const textChanged = normalized !== rawText;
+  return {
+    hadAnsiEscapes,
+    hadContinuationGutter,
+    textChanged,
+    normalized
+  };
+}
+
+// Cap the normalized-text preview in a failure message so a huge stream cannot
+// swamp the diagnostic; the recovered phrase is the part a developer needs.
+const PREVIEW_LIMIT = 600;
+
+/**
+ * Select the RAW (un-normalized) stream text from a spawn result or string,
+ * matching how the combinedText/stdoutText wrappers pick their source. The
+ * "combined" stream merges stdout+stderr exactly as combinedText does before
+ * normalizing, so the diagnostic describes the same bytes the assertion checks.
+ *
+ * @param {{stdout?: unknown, stderr?: unknown}|string} run - A spawn result or a string.
+ * @param {"combined"|"stdout"|"stderr"} stream - Which stream to read.
+ * @returns {string} The raw stream text.
+ */
+function rawStreamText(run, stream) {
+  if (typeof run === "string") {
+    return run;
+  }
+  if (stream === "stdout") {
+    return String(run.stdout || "");
+  }
+  if (stream === "stderr") {
+    return String(run.stderr || "");
+  }
+  return `${run.stdout || ""}\n${run.stderr || ""}`;
+}
+
+/**
+ * Assert that the NORMALIZED form of a pwsh run contains `phrase`. This is the
+ * width-immune replacement for `expect(run.stdout).toContain(phrase)` on
+ * ConciseView-wrapped output: it normalizes first (rejoining the word-wrap gutter
+ * and stripping ANSI) so the assertion holds regardless of the host console
+ * width. On a miss it throws a multi-line diagnostic -- built from
+ * describePwshNormalization of the SAME raw stream -- that tells the developer
+ * whether a wrap gutter / ANSI escapes were present and shows the recovered text,
+ * which is exactly what is needed to understand a Windows-only wrap failure.
+ *
+ * @param {{stdout?: unknown, stderr?: unknown}|string} run - A spawn result or a string.
+ * @param {string} phrase - The expected substring.
+ * @param {{stream?: ("combined"|"stdout"|"stderr")}} [options] - Which stream to
+ *   read; defaults to "combined" (normalized stdout+stderr).
+ * @returns {void} Returns on a match; throws otherwise.
+ */
+function assertPwshContains(run, phrase, options = {}) {
+  // Derive `stream` defensively: the `options = {}` default only fires on
+  // `undefined`, so an explicit `null` would otherwise throw on `options.stream`.
+  const stream = (options && options.stream) || "combined";
+  const raw = rawStreamText(run, stream);
+  // describePwshNormalization is the single source of truth here: it both
+  // normalizes and reports the width-dependent artifacts of the RAW stream.
+  const report = describePwshNormalization(raw);
+  if (report.normalized.includes(phrase)) {
+    return;
+  }
+  const preview =
+    report.normalized.length > PREVIEW_LIMIT
+      ? `${report.normalized.slice(0, PREVIEW_LIMIT)}...`
+      : report.normalized;
+  throw new Error(
+    `assertPwshContains: phrase not found in normalized pwsh ${stream} output.\n` +
+      `  phrase:                ${JSON.stringify(phrase)}\n` +
+      `  hadAnsiEscapes:        ${report.hadAnsiEscapes}\n` +
+      `  hadContinuationGutter: ${report.hadContinuationGutter}\n` +
+      `  textChanged:           ${report.textChanged}\n` +
+      `  normalized (preview):  ${JSON.stringify(preview)}`
+  );
+}
+
+module.exports = {
+  normalizePwshText,
+  combinedText,
+  stdoutText,
+  describePwshNormalization,
+  assertPwshContains
+};

@@ -43,22 +43,10 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
-const { normalizePwshText } = require("../lib/pwsh-output");
+const { combinedText } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const RUN_CI_TESTS = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
-
-// Merge a pwsh run's stdout+stderr and NORMALIZE it for phrase assertions.
-// run-ci-tests.ps1 surfaces failures via both wrap-immune `::error::` annotations
-// AND unhandled `throw`s; the latter are word-wrapped by PowerShell's ConciseView
-// formatter at the host console width, which can split an asserted phrase across a
-// `\n     | ` gutter (intermittently, on the narrower Windows runner).
-// normalizePwshText rejoins that gutter and strips ANSI so the assertions are
-// width-independent. (StrictMode-failure substrings like "cannot be found on this
-// object" are asserted as ABSENT here; normalization only makes that stricter.)
-function combinedText(run) {
-  return normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
-}
 
 // Env vars whose presence would route the script DOWN a non-empty/divergent
 // path. We delete the accelerator endpoint so the empty-array branch (the one

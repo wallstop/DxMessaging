@@ -17,7 +17,11 @@
 
 "use strict";
 
-const { normalizePwshText } = require("../pwsh-output");
+const {
+  normalizePwshText,
+  describePwshNormalization,
+  assertPwshContains
+} = require("../pwsh-output");
 
 // === REAL width-110 ConciseView wrap of the managed-root guard throw ===
 // Captured via `python3 pty_run.py 110 throw-script.ps1`. The asserted phrase
@@ -140,6 +144,147 @@ describe("normalizePwshText", () => {
     test("does not eat a literal pipe that is not a wrap gutter", () => {
       // A `|` mid-line (not preceded by a newline + spaces) is real content.
       expect(normalizePwshText("a | b")).toBe("a | b");
+    });
+  });
+
+  // --- describePwshNormalization: a pure diagnostic for a Windows-only failure. ---
+  describe("describePwshNormalization", () => {
+    test.each([
+      {
+        name: "the CI-wrapped throw fixture: ANSI + gutter + change all detected",
+        raw: CI_WRAPPED_THROW,
+        hadAnsiEscapes: true,
+        hadContinuationGutter: true,
+        textChanged: true
+      },
+      {
+        name: "a bare continuation gutter (no ANSI) detects the gutter only",
+        raw: "outside the\n     | managed root.",
+        hadAnsiEscapes: false,
+        hadContinuationGutter: true,
+        textChanged: true
+      },
+      {
+        name: "an ANSI color run with no gutter: escapes stripped, textChanged is true",
+        raw: "\x1B[31;1mError:\x1B[0m boom",
+        hadAnsiEscapes: true,
+        hadContinuationGutter: false,
+        textChanged: true
+      },
+      {
+        name: "already-clean single-line stdout flags nothing",
+        raw: "::error::CI-managed Unity provisioning cannot mutate editors",
+        hadAnsiEscapes: false,
+        hadContinuationGutter: false,
+        textChanged: false
+      }
+    ])("$name", ({ raw, hadAnsiEscapes, hadContinuationGutter, textChanged }) => {
+      const report = describePwshNormalization(raw);
+      expect(report.hadAnsiEscapes).toBe(hadAnsiEscapes);
+      expect(report.hadContinuationGutter).toBe(hadContinuationGutter);
+      expect(report.textChanged).toBe(textChanged);
+      // The diagnostic carries the recovered, normalized text.
+      expect(report.normalized).toBe(normalizePwshText(raw));
+      // The trimmed shape carries exactly the four documented fields.
+      expect(Object.keys(report).sort()).toEqual(
+        ["hadAnsiEscapes", "hadContinuationGutter", "normalized", "textChanged"].sort()
+      );
+    });
+
+    test("is pure: it does not mutate state and returns a stable result", () => {
+      const once = describePwshNormalization(CI_WRAPPED_THROW);
+      const twice = describePwshNormalization(CI_WRAPPED_THROW);
+      expect(twice).toEqual(once);
+    });
+
+    test("coerces a non-string input without throwing", () => {
+      const report = describePwshNormalization(undefined);
+      expect(report.normalized).toBe("undefined");
+      expect(report.hadAnsiEscapes).toBe(false);
+      expect(report.hadContinuationGutter).toBe(false);
+    });
+  });
+
+  // --- assertPwshContains: the genuine consumer of describePwshNormalization. It
+  // is the width-immune replacement for `expect(run.stdout).toContain(phrase)`. ---
+  describe("assertPwshContains", () => {
+    // PASS rows: each selects a stream and feeds a run/string whose NORMALIZED
+    // form contains the phrase, so the call returns without throwing.
+    test.each([
+      {
+        name: "combined (default): merges stdout+stderr, recovers a wrapped phrase",
+        run: { stdout: "", stderr: CI_WRAPPED_THROW },
+        phrase: "outside the managed root",
+        options: undefined
+      },
+      {
+        name: "stdout stream: recovers a wrapped phrase from stdout only",
+        run: { stdout: CI_WRAPPED_THROW, stderr: "" },
+        phrase: "outside the managed root",
+        options: { stream: "stdout" }
+      },
+      {
+        name: "stderr stream: recovers a wrapped phrase from stderr only",
+        run: { stdout: "", stderr: CI_WRAPPED_THROW },
+        phrase: "cannot mutate editors",
+        options: { stream: "stderr" }
+      },
+      {
+        name: "string input: normalizes a bare gutter-wrapped string",
+        run: "outside the\n     | managed root.",
+        phrase: "outside the managed root",
+        options: undefined
+      },
+      {
+        // An explicit `null` options-bag must behave exactly like the default
+        // ("combined" stream) rather than throwing a TypeError on options.stream:
+        // the `options = {}` default only fires on `undefined`.
+        name: "null options-bag: falls back to the combined stream like the default",
+        run: { stdout: "", stderr: CI_WRAPPED_THROW },
+        phrase: "outside the managed root",
+        options: null
+      }
+    ])("passes: $name", ({ run, phrase, options }) => {
+      expect(() => assertPwshContains(run, phrase, options)).not.toThrow();
+    });
+
+    test("fails with a gutter diagnostic that names the gutter and recovered phrase", () => {
+      // A real ConciseView wrap: the RAW stream splits the phrase across the gutter,
+      // so an absent phrase trips the diagnostic. Picking a phrase that is NOT even in
+      // the message guarantees the throw, while the diagnostic still reports the
+      // gutter was present and previews the recovered text (which DOES contain the
+      // real phrase "outside the managed root").
+      const run = { stdout: "", stderr: CI_WRAPPED_THROW };
+      let error;
+      try {
+        assertPwshContains(run, "a phrase that is absent");
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("hadContinuationGutter: true");
+      expect(error.message).toContain("hadAnsiEscapes:        true");
+      // The recovered phrase shows up in the normalized preview, proving the
+      // diagnostic surfaces what normalization actually got back.
+      expect(error.message).toContain("outside the managed root");
+    });
+
+    test.each([
+      {
+        name: "string input missing the phrase throws",
+        run: "::error::some other message entirely",
+        phrase: "outside the managed root"
+      },
+      {
+        name: "stdout stream missing the phrase throws (stream named in message)",
+        run: { stdout: "nothing relevant here", stderr: "" },
+        phrase: "cannot mutate editors",
+        options: { stream: "stdout" }
+      }
+    ])("throws: $name", ({ run, phrase, options }) => {
+      expect(() => assertPwshContains(run, phrase, options)).toThrow(
+        /phrase not found in normalized pwsh/
+      );
     });
   });
 });

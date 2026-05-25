@@ -207,28 +207,65 @@ function listTestFiles() {
   return out;
 }
 
+// The child_process spawners (plus this repo's cross-platform helper from
+// scripts/lib/shell-command.js) whose FIRST string-literal argument is the command
+// to run. spawnPlatformCommandSync is included so a future test that spawns
+// PowerShell through the repo's own helper is still recognized.
+const SPAWNERS = "(?:spawnSync|spawn|execFileSync|execFile|spawnPlatformCommandSync)";
+
+// A command LITERAL that names a PowerShell executable: open-source `pwsh` /
+// `pwsh.exe`, or legacy Windows `powershell` / `powershell.exe` (case-insensitive).
+// Legacy Windows PowerShell's default error view ALSO word-wraps at the console
+// width, and normalizePwshText recovers both the gutter and plain wraps, so a
+// phrase assertion on either's raw output is the same regression. This stays
+// PRECISE: only a pwsh/powershell executable name matches, never `node`, `npm`, etc.
+const POWERSHELL_COMMAND = /^(?:pwsh|powershell)(?:\.exe)?$/i;
+
+// First string-literal argument of a spawn call, captured (group 1 is the literal
+// text inside the quotes). Tolerates whitespace/newlines after the `(`. GLOBAL so
+// matchAll can iterate every spawn call; matchAll seeds its internal clone from
+// this regex's `lastIndex` but never writes it back. Since nothing in this file
+// leaves `lastIndex` non-zero, there is no stale-state hazard and no manual reset
+// is needed.
+const SPAWN_FIRST_STRING_ARG = new RegExp(`\\b${SPAWNERS}\\s*\\(\\s*["'\`]([^"'\`]*)["'\`]`, "g");
+
+// A spawn whose command IDENTIFIER (not a string literal) is a pwsh-path variable
+// the harnesses bind from a pwsh probe (`(Get-Command pwsh).Source`). Built once
+// from SPAWNERS, like its siblings above.
+const SPAWN_PWSH_INDIRECTION = new RegExp(
+  `\\b${SPAWNERS}\\s*\\(\\s*(?:REAL_PWSH|PWSH|pwshPath|PWSH_PATH)\\b`
+);
+
 /**
- * True when the source SPAWNS pwsh via child_process (so its stdout/stderr is
- * real ConciseView-rendered output). Matches `spawnSync("pwsh"` / `spawn("pwsh"`
- * and the `REAL_PWSH` / `PWSH` indirection used by this repo's harnesses, in
- * single/double/backtick quoting and across whitespace/newlines.
+ * True when the source SPAWNS pwsh / PowerShell via child_process (so its
+ * stdout/stderr is real, console-width-wrapped error output). Recognizes:
+ *   - a DIRECT command literal that is a PowerShell executable -- `pwsh`,
+ *     `pwsh.exe`, legacy `powershell` / `powershell.exe` (case-insensitive) -- as
+ *     the first string-literal argument of `spawnSync` / `spawn` / `execFileSync` /
+ *     `execFile` / the repo's own `spawnPlatformCommandSync`, in single/double/
+ *     backtick quoting and across whitespace/newlines; AND
+ *   - the `REAL_PWSH` / `PWSH` / `pwshPath` / `PWSH_PATH` indirection used by this
+ *     repo's harnesses (a pwsh path resolved from a probe).
+ * It stays PRECISE: a spawn of an unrelated command (`spawnSync("node", ...)`,
+ * `spawnPlatformCommandSync("npm", ...)`) does NOT count.
  *
  * @param {string} source - Raw source (LF-normalized).
  * @returns {boolean}
  */
 function spawnsPwsh(source) {
-  // Direct literal: spawnSync("pwsh", ...) / spawn(`pwsh`, ...).
-  if (/\b(?:spawnSync|spawn|execFileSync|execFile)\s*\(\s*["'`]pwsh["'`]/.test(source)) {
-    return true;
+  // Direct literal: spawnSync("pwsh", ...) / spawnPlatformCommandSync("powershell", ...).
+  // matchAll seeds its internal clone from the global regex's `lastIndex` but never
+  // writes it back; since nothing in this file leaves `lastIndex` non-zero, there is
+  // no stale-state hazard and no manual reset needed.
+  for (const m of source.matchAll(SPAWN_FIRST_STRING_ARG)) {
+    if (POWERSHELL_COMMAND.test(m[1])) {
+      return true;
+    }
   }
   // Indirection through a pwsh-path variable resolved from a pwsh probe. The
   // harnesses bind REAL_PWSH / PWSH from `(Get-Command pwsh).Source`; treat a
   // spawn whose command identifier is one of those as a pwsh spawn.
-  if (
-    /\b(?:spawnSync|spawn|execFileSync|execFile)\s*\(\s*(?:REAL_PWSH|PWSH|pwshPath|PWSH_PATH)\b/.test(
-      source
-    )
-  ) {
+  if (SPAWN_PWSH_INDIRECTION.test(source)) {
     return true;
   }
   return false;
@@ -1483,6 +1520,54 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
       expect(findRawPwshPhraseAssertions(src)).toHaveLength(hits);
     });
 
+    // --- spawnsPwsh BREADTH end-to-end: prove the broadened spawn recognition
+    // actually gates findRawPwshPhraseAssertions. Each row carries its OWN spawn
+    // line (not the shared SPAWN constant) so the spawn form under test is exact: a
+    // file that spawns PowerShell through any recognized command literal must have its
+    // raw phrase assertion FLAGGED; a file that spawns an UNRELATED command must NOT.
+    const SPAWN_BREADTH_CASES = [
+      {
+        name: "FLAGGED: raw phrase assert in a spawnPlatformCommandSync(\"pwsh\", ...) file",
+        spawn: 'const r = spawnPlatformCommandSync("pwsh", ["-File", s], {});\n',
+        hits: 1
+      },
+      {
+        name: "FLAGGED: raw phrase assert with legacy spawnSync(\"powershell\", ...)",
+        spawn: 'const r = spawnSync("powershell", ["-File", s], {});\n',
+        hits: 1
+      },
+      {
+        name: "FLAGGED: raw phrase assert with spawnSync(\"pwsh.exe\", ...)",
+        spawn: 'const r = spawnSync("pwsh.exe", ["-File", s], {});\n',
+        hits: 1
+      },
+      {
+        name: "FLAGGED: raw phrase assert with spawnSync(\"powershell.exe\", ...)",
+        spawn: 'const r = spawnSync("powershell.exe", ["-File", s], {});\n',
+        hits: 1
+      },
+      {
+        name: "COMPLIANT: spawnPlatformCommandSync(\"npm\", ...) is not a PowerShell spawn",
+        spawn: 'const r = spawnPlatformCommandSync("npm", ["pack"], {});\n',
+        hits: 0
+      }
+    ];
+
+    test.each(SPAWN_BREADTH_CASES)(
+      "findRawPwshPhraseAssertions (spawn breadth): $name -> $hits",
+      ({ spawn, hits }) => {
+        // Raw receiver: a member-access phrase assert that is only flagged when the
+        // file is recognized as a PowerShell spawn.
+        const rawSrc = spawn + 'expect(result.stdout).toContain("outside the managed root");';
+        expect(findRawPwshPhraseAssertions(rawSrc)).toHaveLength(hits);
+        // Near-miss control: the SAME PowerShell spawn but a NORMALIZED receiver is
+        // never flagged (the receiver classification passes regardless of spawn form).
+        const normalizedSrc =
+          spawn + 'expect(combinedText(result)).toContain("outside the managed root");';
+        expect(findRawPwshPhraseAssertions(normalizedSrc)).toHaveLength(0);
+      }
+    );
+
     // B3 (kept standalone): asserts BOTH the hit count AND hits[0].line, so it does
     // not share the single-assertion shape of the RAW_PHRASE_CASES table. The comment
     // decoy is invisible; only the real-code assertion (on line 3) is flagged.
@@ -1497,7 +1582,10 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
     });
 
     // spawnsPwsh: a boolean-returning helper. Uniform shape -> its own data-driven
-    // table with a toBe assertion.
+    // table with a toBe assertion. Covers the original direct/indirection forms AND
+    // the broadened command-literal recognition (spawnPlatformCommandSync; legacy
+    // `powershell`; the `.exe` suffixes; case-insensitivity), plus the precision
+    // near-misses that must NOT count (`node`, `npm`).
     const SPAWNS_PWSH_CASES = [
       {
         name: "spawnsPwsh recognizes the REAL_PWSH indirection",
@@ -1508,6 +1596,41 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         name: "spawnsPwsh recognizes a direct pwsh literal across newlines",
         src: 'spawnSync(\n  "pwsh",\n  ["-File", s]\n);',
         expected: true
+      },
+      {
+        name: "spawnsPwsh recognizes spawnPlatformCommandSync(\"pwsh\", ...)",
+        src: 'spawnPlatformCommandSync("pwsh", ["-File", s], {});',
+        expected: true
+      },
+      {
+        name: "spawnsPwsh recognizes legacy spawnSync(\"powershell\", ...)",
+        src: 'spawnSync("powershell", ["-File", s], {});',
+        expected: true
+      },
+      {
+        name: "spawnsPwsh recognizes spawnSync(\"pwsh.exe\", ...)",
+        src: 'spawnSync("pwsh.exe", ["-File", s], {});',
+        expected: true
+      },
+      {
+        name: "spawnsPwsh recognizes spawnSync(\"powershell.exe\", ...)",
+        src: 'spawnSync("powershell.exe", ["-File", s], {});',
+        expected: true
+      },
+      {
+        name: "spawnsPwsh is case-insensitive on the command literal (PowerShell.EXE)",
+        src: 'spawnSync("PowerShell.EXE", ["-File", s], {});',
+        expected: true
+      },
+      {
+        name: "spawnsPwsh does NOT count spawnSync(\"node\", ...)",
+        src: 'spawnSync("node", ["script.js"], {});',
+        expected: false
+      },
+      {
+        name: "spawnsPwsh does NOT count spawnPlatformCommandSync(\"npm\", ...)",
+        src: 'spawnPlatformCommandSync("npm", ["pack"], {});',
+        expected: false
       }
     ];
 

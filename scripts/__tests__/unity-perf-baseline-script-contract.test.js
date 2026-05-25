@@ -6,20 +6,11 @@ const os = require("os");
 const path = require("path");
 
 const { prependPathEnv } = require("../lib/spawn-env-sandbox");
-const { normalizePwshText } = require("../lib/pwsh-output");
+const { stdoutText } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SCRIPT_PATH = path.join(REPO_ROOT, "scripts", "unity", "capture-perf-baseline.ps1");
 
-// Normalize a pwsh run's stdout for phrase/substring assertions. capture-perf-
-// baseline.ps1 emits its diagnostics via wrap-immune `Write-Host`, so today these
-// phrases are not word-wrapped; normalizePwshText keeps the assertions stable if a
-// future error path switches to a `throw` (which PowerShell's ConciseView
-// formatter WOULD word-wrap at the host console width) and strips any ANSI. It is
-// a no-op on already-clean single-line stdout, so coverage is unchanged.
-function stdoutText(result) {
-  return normalizePwshText(result.stdout || "");
-}
 const BENCHMARK_PATH = path.join(
   REPO_ROOT,
   "Tests",

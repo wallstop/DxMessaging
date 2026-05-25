@@ -46,23 +46,10 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { prependPathEnv, sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
-const { normalizePwshText } = require("../lib/pwsh-output");
+const { combinedText, assertPwshContains } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
-
-// Merge a pwsh run's stdout+stderr into one string and NORMALIZE it for phrase /
-// substring assertions. ensure-editor.ps1 surfaces failures both as wrap-immune
-// `::error::`/`::warning::` annotations AND as unhandled `throw`s; the latter are
-// rendered by PowerShell's ConciseView formatter, which WORD-WRAPS the message at
-// the host console width (splitting phrases like "outside the managed root" across
-// a `\n     | ` gutter on the narrower Windows runner). normalizePwshText rejoins
-// that gutter and strips ANSI so the assertions are width-independent. Use this
-// ONLY for phrase assertions; reads that depend on line structure (e.g. taking the
-// last stdout line to get the resolved editor path) MUST use the raw stream.
-function combinedText(run) {
-  return normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
-}
 
 // The IL2CPP variations leaf the probe treats as conclusive evidence (the exact
 // path called out in the task: a fabricated win64_player_development_il2cpp dir).
@@ -968,12 +955,17 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     ];
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
-    const combined = combinedText(out);
 
     expect(out.status).not.toBe(0);
-    expect(combined).toContain("cannot mutate editors");
-    expect(combined).toContain("outside the managed root");
-    expect(combined).toContain(externalRoot);
+    // The guard reason and the "outside the managed root" phrase are wrap-prone:
+    // PowerShell's ConciseView word-wraps the throw at the host console width, so a
+    // raw substring check flakes on the narrower Windows runner. assertPwshContains
+    // normalizes first (rejoins the gutter, strips ANSI) and, on a miss, prints a
+    // diagnostic that shows whether the gutter/ANSI were present. The externalRoot
+    // PATH is recovered via production's wrap-immune `Write-Host "::error::..."` line.
+    assertPwshContains(out, "cannot mutate editors");
+    assertPwshContains(out, "outside the managed root");
+    assertPwshContains(out, externalRoot);
     expect(fs.existsSync(mutationMarker)).toBe(false);
   });
 

@@ -55,17 +55,10 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { prependPathEnv, sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
-const { normalizePwshText } = require("../lib/pwsh-output");
+const { combinedText } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
-
-// Merge a pwsh run's stdout+stderr into one string and NORMALIZE it for phrase
-// assertions (rejoins the ConciseView word-wrap gutter + strips ANSI). Use ONLY
-// for phrase assertions; reads that depend on line structure use the raw stream.
-function combinedText(run) {
-  return normalizePwshText(`${run.stdout || ""}\n${run.stderr || ""}`);
-}
 
 function pwshAvailable() {
   const probe = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
