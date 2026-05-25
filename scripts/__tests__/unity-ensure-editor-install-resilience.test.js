@@ -55,7 +55,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { prependPathEnv, sandboxHostFolderEnv } = require("../lib/spawn-env-sandbox");
-const { combinedText } = require("../lib/pwsh-output");
+const { combinedText, normalizePwshText } = require("../lib/pwsh-output");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
@@ -821,9 +821,9 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     );
     expect(out.status).toBe(0);
     const stdout = out.stdout || "";
-    expect(stdout).toContain("JSON=Installing Android NDK...");
-    expect(stdout).toContain("PLAIN=plain two");
-    expect(stdout).toContain("EMPTY=(no output captured)");
+    expect(normalizePwshText(stdout)).toContain("JSON=Installing Android NDK...");
+    expect(normalizePwshText(stdout)).toContain("PLAIN=plain two");
+    expect(normalizePwshText(stdout)).toContain("EMPTY=(no output captured)");
   });
 
   // --- INSTALL-PHASE/MAX-PCT preference (the fix): an out-of-order download
@@ -853,8 +853,8 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     );
     expect(out.status).toBe(0);
     const stdout = out.stdout || "";
-    expect(stdout).toContain("INSTALL=Installing Android NDK (93%)");
-    expect(stdout).toContain("FALLBACK=only download");
+    expect(normalizePwshText(stdout)).toContain("INSTALL=Installing Android NDK (93%)");
+    expect(normalizePwshText(stdout)).toContain("FALLBACK=only download");
   });
 
   // --- Clear-PartialAndroidModulePayload: removes NDK/SDK under the editor and
@@ -1088,7 +1088,7 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     const stdout = out.stdout || "";
     // On the Linux/macOS CI legs the long-path probe returns $null (-> True here);
     // on Windows it returns a bool. Either way it must not have thrown (status 0).
-    expect(stdout).toMatch(/LONGPATH=(True|False)/);
+    expect(normalizePwshText(stdout)).toMatch(/LONGPATH=(True|False)/);
     expect(stdout).toContain("DEEPMISSING=0");
     expect(stdout).toContain("DEEPEMPTY=0");
   });

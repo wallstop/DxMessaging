@@ -122,6 +122,21 @@ describe("pre-commit hook stage policy", () => {
     expect(blockText).not.toContain("bash");
   });
 
+  test("PowerShell output assertion fixer runs as a pre-commit auto-repair hook", () => {
+    const block = findHookBlock(configLines, "fix-pwsh-output-assertions");
+    expect(block).not.toBeNull();
+
+    const stages = extractStagesFromHookBlock(block);
+    expect(stages).toEqual(["pre-commit"]);
+
+    const blockText = block.lines.join("\n");
+    expect(blockText).toContain("node scripts/run-and-restage.js");
+    expect(blockText).toContain("node scripts/fix-pwsh-output-assertions.js --");
+    expect(blockText).toContain("pass_filenames: true");
+    expect(blockText).toContain("require_serial: true");
+    expect(blockText).toContain("files: '^scripts/(?:__tests__|lib/__tests__)/.*\\.test\\.js$'");
+  });
+
   test("validate-npm-meta hook runs at pre-push only (perf budget)", () => {
     // Moved off pre-commit because npm pack --dry-run is too slow for the
     // single-file commit budget. Artifact-shape checks are the right
@@ -220,6 +235,8 @@ describe("pre-commit hook stage policy", () => {
     expect(blockText).toContain("scripts/__tests__/validate-changed-docs.test.js");
     expect(blockText).toContain("scripts/__tests__/check-conflict-markers.test.js");
     expect(blockText).toContain("scripts/__tests__/native-git-hooks.test.js");
+    expect(blockText).toContain("scripts/__tests__/fix-pwsh-output-assertions.test.js");
+    expect(blockText).toContain("scripts/__tests__/pwsh-output-assertion-policy.test.js");
   });
 
   test("native tracked hooks cover pre-commit and pre-push", () => {

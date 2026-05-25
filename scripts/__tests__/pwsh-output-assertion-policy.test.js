@@ -159,8 +159,16 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
+const {
+  collectPwshOutputContext,
+  findRenamedMergeHelpers: findRenamedMergeHelpersFromFixer,
+  hasPwshSpawn,
+  isPwshResultAt,
+  isRawMergeVariableAt
+} = require("../fix-pwsh-output-assertions");
 const { normalizeToLf } = require("../lib/quote-parser");
 const { stripJsCommentsAndStrings, maskCommentsAndStrings } = require("../lib/source-stripping");
 
@@ -195,13 +203,22 @@ function readUtf8(absolutePath) {
 function listTestFiles() {
   const out = [];
   for (const root of [TESTS_ROOT, LIB_TESTS_ROOT]) {
-    if (!fs.existsSync(root)) {
-      continue;
-    }
-    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-      if (entry.isFile() && entry.name.endsWith(".test.js")) {
-        out.push(path.join(root, entry.name));
-      }
+    out.push(...listTestFilesUnder(root));
+  }
+  return out;
+}
+
+function listTestFilesUnder(root) {
+  const out = [];
+  if (!fs.existsSync(root)) {
+    return out;
+  }
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...listTestFilesUnder(absolutePath));
+    } else if (entry.isFile() && entry.name.endsWith(".test.js")) {
+      out.push(absolutePath);
     }
   }
   return out;
@@ -253,22 +270,7 @@ const SPAWN_PWSH_INDIRECTION = new RegExp(
  * @returns {boolean}
  */
 function spawnsPwsh(source) {
-  // Direct literal: spawnSync("pwsh", ...) / spawnPlatformCommandSync("powershell", ...).
-  // matchAll seeds its internal clone from the global regex's `lastIndex` but never
-  // writes it back; since nothing in this file leaves `lastIndex` non-zero, there is
-  // no stale-state hazard and no manual reset needed.
-  for (const m of source.matchAll(SPAWN_FIRST_STRING_ARG)) {
-    if (POWERSHELL_COMMAND.test(m[1])) {
-      return true;
-    }
-  }
-  // Indirection through a pwsh-path variable resolved from a pwsh probe. The
-  // harnesses bind REAL_PWSH / PWSH from `(Get-Command pwsh).Source`; treat a
-  // spawn whose command identifier is one of those as a pwsh spawn.
-  if (SPAWN_PWSH_INDIRECTION.test(source)) {
-    return true;
-  }
-  return false;
+  return hasPwshSpawn(source);
 }
 
 /**
@@ -299,6 +301,22 @@ function matchParen(source, openIndex) {
     if (ch === "(") {
       depth++;
     } else if (ch === ")") {
+      depth--;
+      if (depth === 0) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+function matchBracket(source, openIndex, openChar, closeChar) {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === openChar) {
+      depth++;
+    } else if (ch === closeChar) {
       depth--;
       if (depth === 0) {
         return i;
@@ -406,7 +424,7 @@ function collectDeclaratorBindings(masked) {
       }
       break; // `;` / unmatched close / EOF ends this declaration
     }
-    keywordRe.lastIndex = Math.max(keywordRe.lastIndex, i);
+    keywordRe.lastIndex = Math.max(keywordRe.lastIndex, kw.index + kw[0].length);
     kw = keywordRe.exec(masked);
   }
   return bindings;
@@ -549,7 +567,53 @@ function collectPhraseVariables(source, maskedSource) {
  * @param {Set<string>} taintedVars - Names bound to raw pwsh-output merges.
  * @returns {{ flagged: boolean, reason?: string }}
  */
-function classifyReceiver(receiver, taintedVars) {
+function expressionHasRawPwshMember(expression, expressionStart, context) {
+  const receiverMask = maskCommentsAndStrings(expression);
+  const memberRe = /\b([A-Za-z_$][\w$]*)\s*\.\s*(?:stdout|stderr)\b/g;
+  let match;
+  while ((match = memberRe.exec(receiverMask)) !== null) {
+    if (isPwshResultAt(context.variableBindings, match[1], expressionStart + match.index)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function activeOutputBindingAt(bindings, name, index) {
+  let active = null;
+  for (const binding of bindings) {
+    if (binding.name !== name || binding.start > index || binding.end <= index) {
+      continue;
+    }
+    if (active === null || binding.start > active.start) {
+      active = binding;
+    }
+  }
+  return active;
+}
+
+function collectTaintedRawPwshBindings(masked, context) {
+  const raw = [];
+  for (const binding of collectDeclaratorBindings(masked)) {
+    if (
+      (isRawMergeExpression(binding.initializer) ||
+        isBareRawOutputMember(binding.initializer)) &&
+      expressionHasRawPwshMember(binding.initializer, binding.initializerStart, context)
+    ) {
+      const active = activeOutputBindingAt(
+        context.variableBindings,
+        binding.name,
+        binding.initializerStart
+      );
+      if (active) {
+        raw.push(active);
+      }
+    }
+  }
+  return raw;
+}
+
+function classifyReceiver(receiver, receiverStart, context) {
   // Compliant: the receiver is itself a normalizing-helper call.
   const callee = outermostCalleeName(receiver);
   if (callee !== null && NORMALIZING_HELPERS.has(callee)) {
@@ -557,14 +621,22 @@ function classifyReceiver(receiver, taintedVars) {
   }
 
   // Violation (b): a bare identifier that is a tainted raw-output variable.
-  if (/^[A-Za-z_$][\w$]*$/.test(receiver) && taintedVars.has(receiver)) {
+  if (
+    /^[A-Za-z_$][\w$]*$/.test(receiver) &&
+    isRawMergeVariableAt(
+      context.variableBindings,
+      context.rawMergeBindings,
+      receiver,
+      receiverStart
+    )
+  ) {
     return { flagged: true, reason: `raw pwsh-output variable '${receiver}'` };
   }
 
   // Violation (a): a member access / merge expression that touches .stdout or
   // .stderr without being wrapped by a normalizing helper. (A wrapped receiver
   // hit the compliant branch above because its outermost callee is the helper.)
-  if (STDOUT_STDERR_MEMBER.test(receiver)) {
+  if (expressionHasRawPwshMember(receiver, receiverStart, context)) {
     return { flagged: true, reason: `raw pwsh-output member access \`${receiver.trim()}\`` };
   }
 
@@ -720,7 +792,8 @@ function findRawPwshPhraseAssertions(source) {
   }
   // Compute each projection ONCE for this file and thread it through.
   const masked = maskCommentsAndStrings(source);
-  const taintedVars = collectTaintedRawVariables(source, masked);
+  const outputContext = collectPwshOutputContext(source, masked);
+  outputContext.rawMergeBindings = collectTaintedRawPwshBindings(masked, outputContext);
   const phraseVars = collectPhraseVariables(source, masked);
   const violations = [];
 
@@ -752,7 +825,7 @@ function findRawPwshPhraseAssertions(source) {
         const argList = source.slice(matcherOpen + 1, matcherClose);
         const firstArg = splitTopLevelArgs(argList)[0] || "";
         if (argumentIsPhrase(matcher, firstArg, phraseVars)) {
-          const verdict = classifyReceiver(receiver, taintedVars);
+          const verdict = classifyReceiver(receiver, openIndex + 1, outputContext);
           if (verdict.flagged) {
             violations.push({
               line: lineNumberAt(source, m.index),
@@ -865,12 +938,16 @@ function splitTopLevelArgs(argsText) {
  * @returns {string} The trimmed expression text.
  */
 function readReturnExpression(source, start) {
+  return readReturnExpressionInfo(source, start).expr;
+}
+
+function readReturnExpressionInfo(source, start) {
   let exprStart = start;
   while (exprStart < source.length && /\s/.test(source[exprStart])) {
     exprStart++;
   }
   const { end } = declaratorInitializerEnd(source, exprStart);
-  return source.slice(exprStart, end).trim();
+  return { expr: source.slice(exprStart, end).trim(), start: exprStart };
 }
 
 /**
@@ -961,6 +1038,7 @@ function isBareRawOutputMember(operand) {
   let o = stripEnclosingParens(operand);
   // Drop a `|| "<fallback>"` guard (the combinedText spelling `o.stdout || ""`).
   o = o.replace(/\|\|\s*(["'`])[\s\S]*?\1\s*$/, "").trim();
+  o = o.replace(/\?\?\s*(["'`])[\s\S]*?\1\s*$/, "").trim();
   o = stripEnclosingParens(o);
   return /\.\s*(?:stdout|stderr)\s*$/.test(o);
 }
@@ -1050,6 +1128,103 @@ function isRawMergeExpression(expr) {
   return hasRawOutputOperand && hasStringLiteral;
 }
 
+function parseParamNames(source, argsOpen, argsClose) {
+  return splitTopLevelArgs(source.slice(argsOpen + 1, argsClose)).map((param) => {
+    const match = /^([A-Za-z_$][\w$]*)\b/.exec(param.trim());
+    return match ? match[1] : "";
+  });
+}
+
+function rawMergeReceiverNames(expr) {
+  const names = new Set();
+  const memberRe = /\b([A-Za-z_$][\w$]*)\s*\.\s*(?:stdout|stderr)\b/g;
+  let match;
+  while ((match = memberRe.exec(expr)) !== null) {
+    names.add(match[1]);
+  }
+  return names;
+}
+
+function previousNonWhitespaceIndex(source, index) {
+  for (let i = index - 1; i >= 0; i--) {
+    if (!/\s/.test(source[i])) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function helperScopeForIndex(source, index) {
+  const stack = [];
+  for (let i = 0; i < index; i++) {
+    if (source[i] === "{") {
+      stack.push(i);
+    } else if (source[i] === "}" && stack.length > 0) {
+      stack.pop();
+    }
+  }
+  const open = stack.length > 0 ? stack[stack.length - 1] : -1;
+  if (open < 0) {
+    return { start: 0, end: source.length };
+  }
+  const close = matchBracket(source, open, "{", "}");
+  return { start: open + 1, end: close >= 0 ? close : source.length };
+}
+
+function helperCalledWithPwshResult(hit, source, masked, context) {
+  const receiverNames = rawMergeReceiverNames(hit.expr);
+  const parameterIndexes = [];
+  hit.params.forEach((param, index) => {
+    if (param && receiverNames.has(param)) {
+      parameterIndexes.push(index);
+    }
+  });
+  if (parameterIndexes.length === 0) {
+    return false;
+  }
+
+  const callRe = new RegExp(String.raw`\b${hit.name}\s*\(`, "g");
+  let match;
+  while ((match = callRe.exec(masked)) !== null) {
+    if (match.index < hit.scopeStart || match.index >= hit.scopeEnd) {
+      continue;
+    }
+    const prev = previousNonWhitespaceIndex(masked, match.index);
+    if (prev >= 0 && masked[prev] === ".") {
+      continue;
+    }
+    if (/\bfunction\s*$/.test(masked.slice(Math.max(0, match.index - 32), match.index))) {
+      continue;
+    }
+    const openIndex = match.index + match[0].lastIndexOf("(");
+    const closeIndex = matchParen(masked, openIndex);
+    if (closeIndex < 0) {
+      continue;
+    }
+    const args = splitTopLevelArgs(source.slice(openIndex + 1, closeIndex));
+    for (const parameterIndex of parameterIndexes) {
+      const arg = args[parameterIndex]?.trim() ?? "";
+      if (
+        /^[A-Za-z_$][\w$]*$/.test(arg) &&
+        isPwshResultAt(context.variableBindings, arg, match.index)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function rawMergeHelperTouchesPwshOutput(hit, source, masked, context) {
+  if (expressionHasRawPwshMember(hit.expr, hit.exprStart, context)) {
+    return true;
+  }
+  if (!hit.name) {
+    return false;
+  }
+  return helperCalledWithPwshResult(hit, source, masked, context);
+}
+
 /**
  * Find "renamed helper" raw-merge definitions in a pwsh-spawning test file: a
  * `return <template merge>` or an arrow implicit-return `=> <template merge>`
@@ -1062,42 +1237,7 @@ function isRawMergeExpression(expr) {
  * @returns {Array<{line:number, kind:string, expr:string}>}
  */
 function findRenamedMergeHelpers(rawSource) {
-  const normalized = normalizeToLf(rawSource);
-  if (!spawnsPwsh(normalized)) {
-    return [];
-  }
-  const source = stripJsCommentsAndStrings(normalized);
-  const hits = [];
-
-  const returnRe = /\breturn\b/g;
-  let m = returnRe.exec(source);
-  while (m !== null) {
-    const expr = readReturnExpression(source, m.index + "return".length);
-    if (isRawMergeExpression(expr)) {
-      hits.push({ line: lineNumberAt(source, m.index), kind: "return", expr });
-    }
-    m = returnRe.exec(source);
-  }
-
-  // Arrow implicit return: `=> <expr>` where the body is NOT a `{` block (block
-  // bodies use an explicit `return`, already covered above).
-  const arrowRe = /=>/g;
-  m = arrowRe.exec(source);
-  while (m !== null) {
-    let j = m.index + 2;
-    while (j < source.length && /\s/.test(source[j])) {
-      j++;
-    }
-    if (source[j] !== "{") {
-      const expr = readReturnExpression(source, j);
-      if (isRawMergeExpression(expr)) {
-        hits.push({ line: lineNumberAt(source, m.index), kind: "arrow", expr });
-      }
-    }
-    m = arrowRe.exec(source);
-  }
-
-  return hits;
+  return findRenamedMergeHelpersFromFixer(rawSource);
 }
 
 // ---------------------------------------------------------------------------
@@ -1178,6 +1318,25 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
     }
   });
 
+  test("test-file discovery includes nested test directories", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pwsh-policy-tests-"));
+    try {
+      const nested = path.join(root, "nested", "deeper");
+      fs.mkdirSync(nested, { recursive: true });
+      fs.writeFileSync(path.join(root, "top.test.js"), '"use strict";\n', "utf8");
+      fs.writeFileSync(path.join(nested, "child.test.js"), '"use strict";\n', "utf8");
+      fs.writeFileSync(path.join(nested, "not-a-test.js"), '"use strict";\n', "utf8");
+
+      const discovered = listTestFilesUnder(root)
+        .map((file) => path.relative(root, file).split(path.sep).join("/"))
+        .sort();
+
+      expect(discovered).toEqual(["nested/deeper/child.test.js", "top.test.js"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Self-tests: prove the detector fires on the exact anti-patterns and does
   // NOT false-positive on the compliant shapes, using crafted source strings.
@@ -1193,7 +1352,10 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
   // below, where tabulating would obscure them.
   // -------------------------------------------------------------------------
   describe("detector self-tests", () => {
-    const SPAWN = 'const r = spawnSync("pwsh", ["-File", s], {});\n';
+    const SPAWN =
+      'const result = spawnSync("pwsh", ["-File", s], {});\n' +
+      'const out = spawnSync("pwsh", ["-File", s], {});\n' +
+      'const r = spawnSync("pwsh", ["-File", s], {});\n';
 
     // Each row is one crafted source fed through findRawPwshPhraseAssertions.
     // `hits: 1` == FLAGGED (the anti-pattern fires); `hits: 0` == COMPLIANT
@@ -1219,6 +1381,14 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         hits: 1
       },
       {
+        name: "flags a tainted local variable bound to a raw stdout alias",
+        src:
+          SPAWN +
+          'const stdout = out.stdout || "";\n' +
+          'expect(stdout).toContain("JSON=Installing Android NDK...");',
+        hits: 1
+      },
+      {
         name: "flags a .not.toContain phrase on raw output",
         src: SPAWN + 'expect(result.stdout).not.toContain("cannot be found on this object");',
         hits: 1
@@ -1232,6 +1402,126 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         name: "flags a member access on a .stdout member nested in a merge",
         src: SPAWN + 'expect(`${result.stdout}`).toContain("multi word phrase");',
         hits: 1
+      },
+      {
+        name: "flags a parenthesized PowerShell spawn result binding",
+        src:
+          'const result = (spawnSync("pwsh", ["-File", s], {}));\n' +
+          'expect(result.stdout).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags a ternary PowerShell spawn result binding",
+        src:
+          'const result = usePwsh ? spawnSync("pwsh", ["-File", s], {}) : spawnSync("git", ["status"], {});\n' +
+          'expect(result.stderr).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags a helper result whose helper returns a parenthesized PowerShell spawn",
+        src:
+          "function run() {\n" +
+          '  return (spawnSync("pwsh", ["-File", s], {}));\n' +
+          "}\n" +
+          "const result = run();\n" +
+          'expect(result.stderr).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags a helper result when the helper returns pwsh inside control flow",
+        src:
+          "function run() {\n" +
+          "  if (process.env.USE_PWSH) {\n" +
+          '    return spawnSync("pwsh", ["-File", s], {});\n' +
+          "  }\n" +
+          '  return spawnSync("git", ["status"], {});\n' +
+          "}\n" +
+          "const result = run();\n" +
+          'expect(result.stderr).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags an object method helper result when the method returns pwsh",
+        src:
+          "const runner = {\n" +
+          '  run() { return spawnSync("pwsh", ["-File", s], {}); }\n' +
+          "};\n" +
+          "const result = runner.run();\n" +
+          'expect(result.stderr).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags nested object method helper results without flattening sibling method names",
+        src:
+          "const runner = {\n" +
+          '  nested: { run() { return spawnSync("pwsh", ["-File", s], {}); } },\n' +
+          '  run() { return spawnSync("git", ["status"], {}); }\n' +
+          "};\n" +
+          "const result = runner.nested.run();\n" +
+          'expect(result.stderr).toContain("outside the managed root");\n' +
+          "const git = runner.run();\n" +
+          'expect(git.stdout).toContain("working tree clean");',
+        hits: 1
+      },
+      {
+        name: "does NOT trust an expression-bodied nested arrow inside a non-PowerShell helper",
+        src:
+          "function runGit() {\n" +
+          '  return useCallback ? (() => spawnSync("pwsh", ["-Command", "exit 0"], {})) : spawnSync("git", ["status"], {});\n' +
+          "}\n" +
+          "const result = runGit();\n" +
+          'expect(result.stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT let function parameters inherit an outer PowerShell result binding",
+        src:
+          SPAWN +
+          "function assertGit(result) {\n" +
+          '  expect(result.stdout).toContain("working tree clean");\n' +
+          "}\n" +
+          'expect(result.stderr).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags a var pwsh result asserted after its nested block",
+        src:
+          'if (process.env.USE_PWSH) {\n  var result = spawnSync("pwsh", ["-File", s], {});\n}\n' +
+          'expect(result.stderr).toContain("outside the managed root");',
+        hits: 1
+      },
+      {
+        name: "flags a var pwsh result asserted after a nested block inside an object method",
+        src:
+          "const suite = {\n" +
+          "  run() {\n" +
+          '    if (ok) { var result = spawnSync("pwsh", ["-File", s], {}); }\n' +
+          '    expect(result.stderr).toContain("outside the managed root");\n' +
+          "  }\n" +
+          "};",
+        hits: 1
+      },
+      {
+        name: "flags var pwsh results inside quoted computed and numeric object methods only inside those methods",
+        src:
+          "const suite = {\n" +
+          '  "quoted"() {\n' +
+          '    var quotedResult = spawnSync("pwsh", ["-File", s], {});\n' +
+          '    expect(quotedResult.stderr).toContain("outside the managed root");\n' +
+          "  },\n" +
+          '  ["computed"]() {\n' +
+          '    var computedResult = spawnSync("pwsh", ["-File", s], {});\n' +
+          '    expect(computedResult.stderr).toContain("outside the managed root");\n' +
+          "  },\n" +
+          "  7() {\n" +
+          '    var numericResult = spawnSync("pwsh", ["-File", s], {});\n' +
+          '    expect(numericResult.stderr).toContain("outside the managed root");\n' +
+          "  }\n" +
+          "};\n" +
+          'expect(quotedResult.stderr).toContain("not in scope here");\n' +
+          'expect(computedResult.stderr).toContain("not in scope here");\n' +
+          'expect(numericResult.stderr).toContain("not in scope here");',
+        hits: 3
       },
       // --- Compliant receivers: normalizePwshText / combinedText / stdoutText ---
       {
@@ -1273,6 +1563,75 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
       {
         name: "does NOT flag a phrase assertion in a file that does not spawn pwsh",
         src: 'const text = render();\nexpect(result.stdout).toContain("multi word phrase");',
+        hits: 0
+      },
+      {
+        name: "does NOT trust object method returns inside a non-PowerShell helper",
+        src:
+          "function runGit() {\n" +
+          '  const probe = { run() { return spawnSync("pwsh", ["-Command", "exit 0"], {}); } };\n' +
+          "  probe.run();\n" +
+          '  return spawnSync("git", ["status"], {});\n' +
+          "}\n" +
+          "const result = runGit();\n" +
+          'expect(result.stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT trust quoted computed or numeric method returns inside a non-PowerShell helper",
+        src:
+          "function runGit() {\n" +
+          "  const probe = {\n" +
+          '    "quoted"() { return spawnSync("pwsh", ["-Command", "exit 0"], {}); },\n' +
+          '    ["computed"]() { return spawnSync("pwsh", ["-Command", "exit 0"], {}); },\n' +
+          '    7() { return spawnSync("pwsh", ["-Command", "exit 0"], {}); }\n' +
+          "  };\n" +
+          '  return spawnSync("git", ["status"], {});\n' +
+          "}\n" +
+          "const result = runGit();\n" +
+          'expect(result.stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT flag unrelated git output in a file that also probes pwsh",
+        src:
+          SPAWN +
+          'const git = spawnSync("git", ["status"], { encoding: "utf8" });\n' +
+          'expect(git.stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT flag a raw stdout alias for non-PowerShell output",
+        src:
+          SPAWN +
+          'const git = spawnSync("git", ["status"], { encoding: "utf8" });\n' +
+          'const stdout = git.stdout || "";\n' +
+          'expect(stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT treat a PowerShell probe in a ternary condition as the result",
+        src:
+          'const result = spawnSync("pwsh", ["-Command", "exit 0"], {}).status === 0 ?\n' +
+          '  spawnSync("git", ["status"], {}) :\n' +
+          '  spawnSync("git", ["rev-parse", "HEAD"], {});\n' +
+          'expect(result.stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT count a commented pwsh spawn as a real pwsh spawn",
+        src:
+          '// const r = spawnSync("pwsh", ["-File", s], {});\n' +
+          'const result = spawnSync("git", ["status"], { encoding: "utf8" });\n' +
+          'expect(result.stdout).toContain("working tree clean");',
+        hits: 0
+      },
+      {
+        name: "does NOT count a fixture-string pwsh spawn as a real pwsh spawn",
+        src:
+          'const fixture = \'const r = spawnSync("pwsh", ["-File", s], {});\';\n' +
+          'const result = spawnSync("git", ["status"], { encoding: "utf8" });\n' +
+          'expect(result.stdout).toContain("working tree clean");',
         hits: 0
       },
       {
@@ -1527,28 +1886,28 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
     // raw phrase assertion FLAGGED; a file that spawns an UNRELATED command must NOT.
     const SPAWN_BREADTH_CASES = [
       {
-        name: "FLAGGED: raw phrase assert in a spawnPlatformCommandSync(\"pwsh\", ...) file",
-        spawn: 'const r = spawnPlatformCommandSync("pwsh", ["-File", s], {});\n',
+        name: 'FLAGGED: raw phrase assert in a spawnPlatformCommandSync("pwsh", ...) file',
+        spawn: 'const result = spawnPlatformCommandSync("pwsh", ["-File", s], {});\n',
         hits: 1
       },
       {
-        name: "FLAGGED: raw phrase assert with legacy spawnSync(\"powershell\", ...)",
-        spawn: 'const r = spawnSync("powershell", ["-File", s], {});\n',
+        name: 'FLAGGED: raw phrase assert with legacy spawnSync("powershell", ...)',
+        spawn: 'const result = spawnSync("powershell", ["-File", s], {});\n',
         hits: 1
       },
       {
-        name: "FLAGGED: raw phrase assert with spawnSync(\"pwsh.exe\", ...)",
-        spawn: 'const r = spawnSync("pwsh.exe", ["-File", s], {});\n',
+        name: 'FLAGGED: raw phrase assert with spawnSync("pwsh.exe", ...)',
+        spawn: 'const result = spawnSync("pwsh.exe", ["-File", s], {});\n',
         hits: 1
       },
       {
-        name: "FLAGGED: raw phrase assert with spawnSync(\"powershell.exe\", ...)",
-        spawn: 'const r = spawnSync("powershell.exe", ["-File", s], {});\n',
+        name: 'FLAGGED: raw phrase assert with spawnSync("powershell.exe", ...)',
+        spawn: 'const result = spawnSync("powershell.exe", ["-File", s], {});\n',
         hits: 1
       },
       {
-        name: "COMPLIANT: spawnPlatformCommandSync(\"npm\", ...) is not a PowerShell spawn",
-        spawn: 'const r = spawnPlatformCommandSync("npm", ["pack"], {});\n',
+        name: 'COMPLIANT: spawnPlatformCommandSync("npm", ...) is not a PowerShell spawn',
+        spawn: 'const result = spawnPlatformCommandSync("npm", ["pack"], {});\n',
         hits: 0
       }
     ];
@@ -1578,7 +1937,7 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         'expect(out.stdout).toContain("outside the managed root");';
       const hits = findRawPwshPhraseAssertions(src);
       expect(hits).toHaveLength(1);
-      expect(hits[0].line).toBe(3);
+      expect(hits[0].line).toBe(5);
     });
 
     // spawnsPwsh: a boolean-returning helper. Uniform shape -> its own data-driven
@@ -1598,22 +1957,22 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         expected: true
       },
       {
-        name: "spawnsPwsh recognizes spawnPlatformCommandSync(\"pwsh\", ...)",
+        name: 'spawnsPwsh recognizes spawnPlatformCommandSync("pwsh", ...)',
         src: 'spawnPlatformCommandSync("pwsh", ["-File", s], {});',
         expected: true
       },
       {
-        name: "spawnsPwsh recognizes legacy spawnSync(\"powershell\", ...)",
+        name: 'spawnsPwsh recognizes legacy spawnSync("powershell", ...)',
         src: 'spawnSync("powershell", ["-File", s], {});',
         expected: true
       },
       {
-        name: "spawnsPwsh recognizes spawnSync(\"pwsh.exe\", ...)",
+        name: 'spawnsPwsh recognizes spawnSync("pwsh.exe", ...)',
         src: 'spawnSync("pwsh.exe", ["-File", s], {});',
         expected: true
       },
       {
-        name: "spawnsPwsh recognizes spawnSync(\"powershell.exe\", ...)",
+        name: 'spawnsPwsh recognizes spawnSync("powershell.exe", ...)',
         src: 'spawnSync("powershell.exe", ["-File", s], {});',
         expected: true
       },
@@ -1623,12 +1982,12 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         expected: true
       },
       {
-        name: "spawnsPwsh does NOT count spawnSync(\"node\", ...)",
+        name: 'spawnsPwsh does NOT count spawnSync("node", ...)',
         src: 'spawnSync("node", ["script.js"], {});',
         expected: false
       },
       {
-        name: "spawnsPwsh does NOT count spawnPlatformCommandSync(\"npm\", ...)",
+        name: 'spawnsPwsh does NOT count spawnPlatformCommandSync("npm", ...)',
         src: 'spawnPlatformCommandSync("npm", ["pack"], {});',
         expected: false
       }
@@ -1733,28 +2092,53 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         // --- FLAGGED raw-merge helper definitions (template + string-concat) ---
         {
           name: "flags a renamed function helper that returns a raw .stdout/.stderr merge",
-          src: SPAWN + "function merged(out) { return `${out.stdout}\\n${out.stderr}`; }",
+          src:
+            SPAWN +
+            "function merged(out) { return `${out.stdout}\\n${out.stderr}`; }\n" +
+            "merged(result);",
           hits: 1
         },
         {
           name: "flags a renamed ARROW helper with an implicit raw-merge return",
-          src: SPAWN + "const merged = (out) => `${out.stdout}\\n${out.stderr}`;",
+          src:
+            SPAWN +
+            "const merged = (out) => `${out.stdout}\\n${out.stderr}`;\n" +
+            "merged(result);",
+          hits: 1
+        },
+        {
+          name: "flags a renamed block-bodied ARROW helper with a raw-merge return",
+          src:
+            SPAWN +
+            "const merged = (out) => { return `${out.stdout}\\n${out.stderr}`; };\n" +
+            "merged(result);",
+          hits: 1
+        },
+        {
+          name: "flags a renamed object method helper with a raw-merge return",
+          src:
+            SPAWN +
+            "const helper = { merged(out) { return `${out.stdout}\\n${out.stderr}`; } };\n" +
+            "helper.merged(result);",
           hits: 1
         },
         {
           name: "flags a renamed helper that merges a single member into a template",
-          src: SPAWN + "function only(out) { return `prefix ${out.stderr}`; }",
+          src: SPAWN + "function only(out) { return `prefix ${out.stderr}`; }\n" + "only(result);",
           hits: 1
         },
         // CLOSED RESIDUAL 3 -- string-CONCATENATION raw merge in a renamed helper.
         {
           name: "flags a renamed function helper that returns a string-CONCAT raw merge",
-          src: SPAWN + 'function merged(o) { return o.stdout + "\\n" + o.stderr; }',
+          src:
+            SPAWN +
+            'function merged(o) { return o.stdout + "\\n" + o.stderr; }\n' +
+            "merged(result);",
           hits: 1
         },
         {
           name: "flags a renamed ARROW helper with an implicit string-CONCAT raw merge",
-          src: SPAWN + 'const merged = (o) => o.stdout + "\\n" + o.stderr;',
+          src: SPAWN + 'const merged = (o) => o.stdout + "\\n" + o.stderr;\n' + "merged(result);",
           hits: 1
         },
         // --- B1 -- ARITHMETIC `+` touching `.stdout`/`.stderr` is NOT a string raw
@@ -1851,6 +2235,50 @@ describe("pwsh-output-assertion-policy (repo-wide)", () => {
         {
           name: "does NOT flag a renamed raw merge in a file that does not spawn pwsh",
           src: "function merged(out) { return `${out.stdout}\\n${out.stderr}`; }",
+          hits: 0
+        },
+        {
+          name: "does NOT flag a raw merge helper used only for non-PowerShell output",
+          src:
+            SPAWN +
+            "function gitText(run) { return `${run.stdout}\\n${run.stderr}`; }\n" +
+            'const git = spawnSync("git", ["status"], {});\n' +
+            "gitText(git);",
+          hits: 0
+        },
+        {
+          name: "does NOT let helper parameters inherit an outer PowerShell result binding",
+          src:
+            SPAWN +
+            "function gitText(result) { return `${result.stdout}\\n${result.stderr}`; }\n" +
+            'const git = spawnSync("git", ["status"], {});\n' +
+            "gitText(git);",
+          hits: 0
+        },
+        {
+          name: "does NOT match a raw-merge helper call to a shadowed same-name helper",
+          src:
+            "{\n" +
+            '  const result = spawnSync("git", ["status"], {});\n' +
+            "  function merged(result) { return `${result.stdout}\\n${result.stderr}`; }\n" +
+            "  merged(result);\n" +
+            "}\n" +
+            "{\n" +
+            '  const result = spawnSync("pwsh", ["-File", s], {});\n' +
+            "  function merged(result) { return normalizePwshText(`${result.stdout}\\n${result.stderr}`); }\n" +
+            "  merged(result);\n" +
+            "}",
+          hits: 0
+        },
+        {
+          name: "does NOT let a nested shadowing helper call taint an outer raw helper",
+          src:
+            "function merged(result) { return `${result.stdout}\\n${result.stderr}`; }\n" +
+            "{\n" +
+            '  const result = spawnSync("pwsh", ["-File", s], {});\n' +
+            "  function merged(result) { return normalizePwshText(`${result.stdout}\\n${result.stderr}`); }\n" +
+            "  merged(result);\n" +
+            "}",
           hits: 0
         }
       ];

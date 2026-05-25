@@ -134,6 +134,7 @@ The agent runs from inside the slim devcontainer (.NET 9/10 base + docker-outsid
 - Reuse shared helpers in `scripts/lib/` before duplicating parsing logic.
 - Normalize multiline text handling before line-based parsing.
 - Keep JS and PowerShell behavior synchronized when dual implementations exist.
+- In Jest tests that spawn `pwsh` or `powershell`, never assert multi-word phrases against raw `stdout` / `stderr` or raw `${result.stdout}\n${result.stderr}` merges. Use `combinedText`, `stdoutText`, `normalizePwshText`, or `assertPwshContains` from `scripts/lib/pwsh-output.js` so PowerShell ConciseView wrapping on narrower Windows consoles cannot split phrases. Run `npm run fix:pwsh-output-assertions -- <changed-test-files...>` and then `node scripts/run-managed-jest.js --runTestsByPath <changed-test-files...> scripts/__tests__/pwsh-output-assertion-policy.test.js` before hook-time validation.
 - Add tests for parser changes and malformed input edge cases.
 - For path-exclusion logic in script CLIs, apply exclusion patterns only to repository-local paths and add paired tests for outside-repo explicit file args plus repo-internal excluded directories.
 - For pre-commit hooks that operate on staged files, remember pre-commit stashes unstaged changes and runs hooks against the staged snapshot on disk; reproduce failures through commit-equivalent hook runs when validating behavior.
