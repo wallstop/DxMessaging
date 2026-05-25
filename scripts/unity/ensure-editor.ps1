@@ -7,6 +7,8 @@ param(
 
     [string]$InstallRoot = $(if ($env:UNITY_EDITOR_INSTALL_ROOT) { $env:UNITY_EDITOR_INSTALL_ROOT } else { 'C:\Unity\Editors' }),
 
+    [string]$DiagnosticsPath = $(if ($env:DXM_UNITY_DIAGNOSTICS_PATH) { $env:DXM_UNITY_DIAGNOSTICS_PATH } else { '' }),
+
     [switch]$CiManagedOnly = $($env:GITHUB_ACTIONS -eq 'true'),
 
     [switch]$WithWindowsIl2Cpp
@@ -17,6 +19,14 @@ $ErrorActionPreference = 'Stop'
 
 $script:UnityCliPath = 'unity'
 $script:UnityInstallLockDepth = 0
+$script:ProvisioningDeadlineUtc = [DateTime]::MaxValue
+$script:ProvisioningBudgetSeconds = 0
+$script:ProvisioningEditorPath = ''
+$script:ProvisioningFinalClassification = 'not-finished'
+$script:ProvisioningTimeoutEvents = New-Object System.Collections.Generic.List[object]
+$script:ProvisioningProcessCleanupEvents = New-Object System.Collections.Generic.List[object]
+$script:ProvisioningCommandClasses = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+$script:UnityCliVersionText = ''
 
 # PowerShell 7.4 introduced $PSNativeCommandUseErrorActionPreference (stabilizing
 # the native-error experimental feature). Its default is $false on current builds,
@@ -33,6 +43,194 @@ $PSNativeCommandUseErrorActionPreference = $false
 function Write-CiNotice {
     param([Parameter(Mandatory = $true)][string]$Message)
     Write-Host "::notice::$Message"
+}
+
+function Register-UnityCliCommandAttempt {
+    param([string[]]$Arguments)
+
+    $args = @($Arguments)
+    if ($args.Count -eq 0) {
+        [void]$script:ProvisioningCommandClasses.Add('unknown')
+        return
+    }
+
+    $verb = [string]$args[0]
+    $class = $verb
+    if ($verb -in @('install', 'install-modules')) {
+        if ($args -contains '-m') {
+            $class = "$verb/modules"
+        }
+    }
+    [void]$script:ProvisioningCommandClasses.Add($class)
+}
+
+function Add-ProvisioningTimeoutEvent {
+    param(
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds
+    )
+
+    $script:ProvisioningTimeoutEvents.Add([pscustomobject]@{
+            utc            = [DateTime]::UtcNow.ToString('o')
+            command        = (@($Arguments) -join ' ')
+            timeoutSeconds = $TimeoutSeconds
+        }) | Out-Null
+}
+
+function Add-ProvisioningProcessCleanupEvent {
+    param(
+        [Parameter(Mandatory = $true)][string]$Reason,
+        [int]$Matched = 0,
+        [int]$Stopped = 0,
+        [string[]]$Details
+    )
+
+    $script:ProvisioningProcessCleanupEvents.Add([pscustomobject]@{
+            utc     = [DateTime]::UtcNow.ToString('o')
+            reason  = $Reason
+            matched = $Matched
+            stopped = $Stopped
+            details = @($Details)
+        }) | Out-Null
+}
+
+function ConvertTo-ProcessArgumentLine {
+    param([string[]]$Arguments)
+
+    $quoted = foreach ($arg in @($Arguments)) {
+        if ($null -eq $arg) {
+            '""'
+            continue
+        }
+
+        $value = [string]$arg
+        if ($value.Length -gt 0 -and $value -notmatch '[\s"]') {
+            $value
+            continue
+        }
+
+        $builder = New-Object System.Text.StringBuilder
+        [void]$builder.Append('"')
+        $backslashes = 0
+        foreach ($ch in $value.ToCharArray()) {
+            if ($ch -eq '\') {
+                $backslashes++
+                continue
+            }
+
+            if ($ch -eq '"') {
+                if ($backslashes -gt 0) {
+                    [void]$builder.Append('\' * ($backslashes * 2))
+                }
+                [void]$builder.Append('\"')
+                $backslashes = 0
+                continue
+            }
+
+            if ($backslashes -gt 0) {
+                [void]$builder.Append('\' * $backslashes)
+                $backslashes = 0
+            }
+            [void]$builder.Append($ch)
+        }
+
+        if ($backslashes -gt 0) {
+            [void]$builder.Append('\' * ($backslashes * 2))
+        }
+        [void]$builder.Append('"')
+        $builder.ToString()
+    }
+
+    return ($quoted -join ' ')
+}
+
+function Get-EnsureEditorProvisioningBudgetSeconds {
+    param([int]$Default = 9000)
+
+    if ($env:DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS='$env:DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
+function Get-EnsureEditorProbeTimeoutSeconds {
+    param([int]$Default = 120)
+
+    $raw = $env:DXM_ENSURE_EDITOR_PROBE_TIMEOUT_SECONDS
+    if ($raw) {
+        $parsed = 0
+        if ([int]::TryParse($raw, [ref]$parsed) -and $parsed -ge 0) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_PROBE_TIMEOUT_SECONDS='$raw'; using $Default."
+    }
+    return $Default
+}
+
+function Initialize-UnityProvisioningBudget {
+    $script:ProvisioningBudgetSeconds = Get-EnsureEditorProvisioningBudgetSeconds
+    if ($script:ProvisioningBudgetSeconds -le 0) {
+        $script:ProvisioningDeadlineUtc = [DateTime]::MaxValue
+        Write-CiNotice "Unity provisioning whole-run budget is disabled."
+        return
+    }
+
+    $script:ProvisioningDeadlineUtc = [DateTime]::UtcNow.AddSeconds($script:ProvisioningBudgetSeconds)
+    Write-CiNotice "Unity provisioning whole-run budget: $script:ProvisioningBudgetSeconds second(s)."
+}
+
+function Get-RemainingUnityProvisioningBudgetSeconds {
+    if ($script:ProvisioningDeadlineUtc -eq [DateTime]::MaxValue) {
+        return 0
+    }
+
+    $remaining = [int][Math]::Floor(($script:ProvisioningDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+    if ($remaining -lt 0) {
+        return 0
+    }
+    return $remaining
+}
+
+function Get-EffectiveUnityCliTimeoutSeconds {
+    param([int]$RequestedSeconds)
+
+    $remaining = Get-RemainingUnityProvisioningBudgetSeconds
+    if ($script:ProvisioningDeadlineUtc -ne [DateTime]::MaxValue) {
+        if ($remaining -le 0) {
+            Write-Host "::error::Unity provisioning budget of $script:ProvisioningBudgetSeconds second(s) is exhausted before the next Unity CLI command can start."
+            throw "Unity provisioning budget of $script:ProvisioningBudgetSeconds second(s) is exhausted before the next Unity CLI command can start."
+        }
+        if ($RequestedSeconds -le 0) {
+            return $remaining
+        }
+        return [Math]::Min($RequestedSeconds, $remaining)
+    }
+
+    return $RequestedSeconds
+}
+
+function Assert-UnityProvisioningBudgetCanFit {
+    param(
+        [Parameter(Mandatory = $true)][string]$Operation,
+        [int]$MinimumSeconds = 60
+    )
+
+    if ($script:ProvisioningDeadlineUtc -eq [DateTime]::MaxValue) {
+        return
+    }
+
+    $remaining = Get-RemainingUnityProvisioningBudgetSeconds
+    if ($remaining -lt $MinimumSeconds) {
+        Write-Host "::error::Unity provisioning budget cannot fit '$Operation': $remaining second(s) remain, but at least $MinimumSeconds second(s) are required."
+        throw "Unity provisioning budget cannot fit '$Operation': $remaining second(s) remain, but at least $MinimumSeconds second(s) are required. Increase DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS or avoid this recovery path."
+    }
 }
 
 function Invoke-WithRetry {
@@ -169,14 +367,13 @@ function Get-EnsureEditorAndroidInstallRetryAttempts {
     # Single source of truth for the DEDICATED Android module-install retry count
     # used by Install-UnityAndroidModules. The Android SDK/NDK is a multi-GB Google
     # download whose NDK UNPACK phase (~93%) fails flakily on Windows (suspected
-    # MAX_PATH during extraction, or Defender file-locking), so the Android install
-    # is retried in ISOLATION -- WITHOUT ever quarantining/re-downloading the whole
-    # editor (the base editor + core modules are already on disk and are not the
-    # thing that flakes). Honors DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS
+    # MAX_PATH during extraction, or Defender file-locking), so existing editors
+    # get a bounded Android-only repair before the script escalates to a full
+    # managed quarantine/reinstall. Honors DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS
     # following the EXACT convention of Get-EnsureEditorInstallRetryAttempts. The
     # DEFAULT is 3 (one more than the base-install default of 2) because the Android
     # unpack flake is the specific failure this loop targets and an extra bounded,
-    # editor-preserving attempt is cheap (no editor re-download). A value below 1 is
+    # editor-preserving attempt is cheaper than a full reinstall. A value below 1 is
     # invalid; a non-integer/negative override is ignored with a ::warning::.
     # StrictMode-safe: no collection reads.
     param([int]$Default = 3)
@@ -527,50 +724,50 @@ function Invoke-UnityCliSafe {
     # Get-UnityCliOutput instead; this one is for fire-and-forget effects.
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
-    Write-Host "$script:UnityCliPath $($Arguments -join ' ')"
-    try {
-        # Merge stderr into stdout (2>&1) so a beta CLI that writes usage/errors
-        # to stderr still gets echoed instead of vanishing, and so a native
-        # stderr write cannot trip $ErrorActionPreference = 'Stop'.
-        $output = & $script:UnityCliPath @Arguments 2>&1
-        $exit = $LASTEXITCODE
-    } catch {
-        # Resolution/spawn failures (e.g. the CLI vanished) are non-fatal here.
-        Write-Host "::notice::Unity CLI best-effort command threw and was ignored: $($_.Exception.Message)"
-        return $false
-    }
-
-    if ($output) {
-        $output | ForEach-Object { Write-Host $_ }
-    }
-
+    $requestedTimeout = Get-EnsureEditorProbeTimeoutSeconds
+    $effectiveTimeout = Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds $requestedTimeout
+    $result = Invoke-UnityCliCaptureWithTimeout -Arguments $Arguments -TimeoutSeconds $effectiveTimeout -TimeoutKnob 'DXM_ENSURE_EDITOR_PROBE_TIMEOUT_SECONDS'
+    $exit = [int]$result.ExitCode
     return ($exit -eq 0)
 }
 
 function Get-UnityCliOutput {
     # CAPTURING, NON-THROWING invoker for getter-style commands (install-path,
-    # editors -i --format json). Returns an array of stdout lines (strings) on
+    # editors -i --format json). Returns an array of output lines (strings) on
     # success, or $null on any failure. Does NOT echo to the success pipeline
     # of this script: the caller (run-ci-tests.ps1) reads our LAST stdout line
     # as the resolved editor path, so getter output must never leak there.
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
-    Write-Host "$script:UnityCliPath $($Arguments -join ' ')"
-    try {
-        $raw = & $script:UnityCliPath @Arguments 2>$null
-        $exit = $LASTEXITCODE
-    } catch {
-        Write-Host "::notice::Unity CLI getter command threw and was ignored: $($_.Exception.Message)"
-        return $null
-    }
-
-    if ($exit -ne 0) {
+    $requestedTimeout = Get-EnsureEditorProbeTimeoutSeconds
+    $effectiveTimeout = Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds $requestedTimeout
+    $result = Invoke-UnityCliCaptureWithTimeout -Arguments $Arguments -TimeoutSeconds $effectiveTimeout -TimeoutKnob 'DXM_ENSURE_EDITOR_PROBE_TIMEOUT_SECONDS'
+    if ($result.ExitCode -ne 0) {
         return $null
     }
 
     # Normalize to an array of strings regardless of whether 0/1/many lines came
     # back (a single line returns a scalar under the call operator).
-    return @($raw | ForEach-Object { [string]$_ })
+    return @($result.Output | ForEach-Object { [string]$_ })
+}
+
+function Get-UnityCliVersionText {
+    if ($script:UnityCliVersionText) {
+        return $script:UnityCliVersionText
+    }
+
+    try {
+        $versionLines = @(Get-UnityCliOutput -Arguments @('--version'))
+        if ($versionLines.Count -gt 0) {
+            $script:UnityCliVersionText = ($versionLines -join ' ')
+        } else {
+            $script:UnityCliVersionText = '(unavailable)'
+        }
+    } catch {
+        $script:UnityCliVersionText = "(query failed: $($_.Exception.Message))"
+    }
+
+    return $script:UnityCliVersionText
 }
 
 function Invoke-UnityCliCapture {
@@ -602,7 +799,17 @@ function Invoke-UnityCliCapture {
     # spawn failure to ExitCode -1 with the message in Output, exactly as before).
     # The timeout is sourced from the single override-aware helper so tests can
     # force the timeout path (small value) or opt out (0) without changing callers.
-    return Invoke-UnityCliCaptureWithTimeout -Arguments $Arguments -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+    $requestedTimeout = if (Get-Command Get-EnsureEditorInstallTimeoutSeconds -ErrorAction SilentlyContinue) {
+        Get-EnsureEditorInstallTimeoutSeconds
+    } else {
+        2700
+    }
+    $effectiveTimeout = if (Get-Command Get-EffectiveUnityCliTimeoutSeconds -ErrorAction SilentlyContinue) {
+        Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds $requestedTimeout
+    } else {
+        $requestedTimeout
+    }
+    return Invoke-UnityCliCaptureWithTimeout -Arguments $Arguments -TimeoutSeconds $effectiveTimeout
 }
 
 function Invoke-UnityCliCaptureWithTimeout {
@@ -651,9 +858,13 @@ function Invoke-UnityCliCaptureWithTimeout {
     #   Output   [string[]] - @()-wrapped merged stdout+stderr lines (never $null)
     param(
         [Parameter(Mandatory = $true)][string[]]$Arguments,
-        [int]$TimeoutSeconds = 2700
+        [int]$TimeoutSeconds = 2700,
+        [string]$TimeoutKnob = 'DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS'
     )
 
+    if (Get-Command Register-UnityCliCommandAttempt -ErrorAction SilentlyContinue) {
+        Register-UnityCliCommandAttempt -Arguments $Arguments
+    }
     Write-Host "$script:UnityCliPath $($Arguments -join ' ')"
 
     # Sentinel exit code for a TIMEOUT kill. 124 mirrors GNU coreutils `timeout`
@@ -685,12 +896,11 @@ function Invoke-UnityCliCaptureWithTimeout {
     $proc = $null
     $exit = -1
     $timedOut = $false
+    $reaped = $false
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $script:UnityCliPath
-        foreach ($arg in $Arguments) {
-            $psi.ArgumentList.Add([string]$arg)
-        }
+        $psi.Arguments = ConvertTo-ProcessArgumentLine -Arguments $Arguments
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.UseShellExecute = $false
@@ -779,11 +989,9 @@ function Invoke-UnityCliCaptureWithTimeout {
         }
 
         # The loop ended either at EOF on both streams (normal/early exit) or at a
-        # kill. Reap the process so ExitCode is valid (no-arg WaitForExit also
-        # flushes the async readers' completion), bounded so a stuck reap cannot
-        # hang the harness.
-        [void]$proc.WaitForExit(5000)
-        try { $proc.WaitForExit() } catch { }
+        # kill. Reap the process so ExitCode is valid, bounded so a stuck reap
+        # cannot hang the harness.
+        $reaped = $proc.WaitForExit(5000)
 
         # Drain any line reads that completed during/after the kill so no pre-kill
         # output is dropped. A non-$null Result is a buffered line; $null is EOF.
@@ -804,7 +1012,7 @@ function Invoke-UnityCliCaptureWithTimeout {
         } else {
             # ExitCode is only valid after a CONFIRMED exit; HasExited guards the
             # rare case the bounded reap above did not catch a (non-killed) exit.
-            if ($proc.HasExited) {
+            if ($reaped -and $proc.HasExited) {
                 $exit = $proc.ExitCode
             } else {
                 $exit = $timeoutExitCode
@@ -829,13 +1037,17 @@ function Invoke-UnityCliCaptureWithTimeout {
     $captured = @($buffer.ToArray())
 
     if ($timedOut) {
+        if (Get-Command Add-ProvisioningTimeoutEvent -ErrorAction SilentlyContinue) {
+            Add-ProvisioningTimeoutEvent -Arguments $Arguments -TimeoutSeconds $TimeoutSeconds
+        }
         # Wrap-immune timeout annotation (Write-Host "::error::" is NOT subject to
         # ConciseView word-wrap): name the timeout, the configured limit, the env
         # knob to raise it, and the LAST progress message seen so CI has a stable,
         # greppable summary of WHAT hung. The normal throw/classification flow
         # still runs on the returned (retryable) failure.
         $lastProgress = Get-LastCliProgressMessage -Output $captured
-        Write-Host "::error::Unity CLI command '$($Arguments -join ' ')' TIMED OUT after $TimeoutSeconds second(s) and the process tree was killed (sentinel exit $timeoutExitCode). Raise the limit via DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS (0 disables the timeout). Last progress message: $lastProgress"
+        $knob = if ($TimeoutKnob) { $TimeoutKnob } else { 'DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS' }
+        Write-Host "::error::Unity CLI command '$($Arguments -join ' ')' TIMED OUT after $TimeoutSeconds second(s) and the process tree was killed (sentinel exit $timeoutExitCode). Raise the limit via $knob (0 disables the timeout). Last progress message: $lastProgress"
     }
 
     return @{
@@ -1316,10 +1528,9 @@ function Get-UnityCiModuleSpec {
     # request it.
     #
     # The 'android' tier (android + android-sdk-ndk-tools, with android-open-jdk as
-    # its verified-only dependency) is installed in a DEDICATED, separately-retried
-    # step (Install-UnityAndroidModules) that NEVER quarantines the whole editor:
-    # the base editor + the 'core' tier provision reliably first, then Android is
-    # added afterward and any Android flake is isolated to that bounded retry.
+    # its verified-only dependency) is requested with fresh/full managed installs.
+    # Existing editors can still try a bounded Android-only repair first; exhaustion
+    # escalates to full managed quarantine/reinstall unless repair is disabled.
     return @(
         [pscustomobject]@{ Id = 'windows-il2cpp';        Requested = $true;  Verified = $true; Tier = 'core' },
         [pscustomobject]@{ Id = 'webgl';                 Requested = $true;  Verified = $true; Tier = 'core' },
@@ -1358,12 +1569,12 @@ function Get-UnityCiVerifiedModuleGroups {
 
 function Get-UnityCiModuleIdsForTier {
     # REQUESTED ids for a single tier ('core' or 'android'), derived from the spec.
-    # Used to scope the base/repair install to 'core' (provisions reliably with the
-    # base editor) and to drive the dedicated, separately-retried 'android' install
-    # (the heavy/flaky NDK download). Validates $Tier against the spec's known tiers
-    # and THROWS on an unknown one (mirroring the throw in Get-UnityCiModuleTier) so
-    # a bogus tier can never silently yield an empty -- and therefore malformed,
-    # id-less -- `-m` vector. StrictMode-safe: @()-wraps the derived list.
+    # Used to drive the dedicated, bounded Android-only repair for existing editors
+    # while fresh/full repair installs request Get-UnityCiModuleIds atomically.
+    # Validates $Tier against the spec's known tiers and THROWS on an unknown one
+    # (mirroring the throw in Get-UnityCiModuleTier) so a bogus tier can never
+    # silently yield an empty -- and therefore malformed, id-less -- `-m` vector.
+    # StrictMode-safe: @()-wraps the derived list.
     param([Parameter(Mandatory = $true)][string]$Tier)
 
     $knownTiers = @(Get-UnityCiModuleSpec | ForEach-Object { $_.Tier } | Select-Object -Unique)
@@ -1405,18 +1616,19 @@ function Get-UnityCliModuleInstallArguments {
     # message too, so the flag is valid for BOTH verbs handled here.
     #
     # Verb handling (preserving the resilient beta-CLI arg shapes already in use):
-    #   install          -> @('install', <version>, '--accept-eula', '-m', <ids...>)
-    #   install-modules  -> @('install-modules', '-e', <version>, '--accept-eula', '-m', <ids...>)
+    #   install          -> @('install', <version>, '--accept-eula', [--childModules], '-m', <ids...>)
+    #   install-modules  -> @('install-modules', '-e', <version>, '--accept-eula', [--childModules], '-m', <ids...>)
+    # --childModules is included whenever the requested ids include Android so the
+    # CLI resolves SDK/NDK/OpenJDK dependencies under AndroidPlayer atomically.
     # NOTE: this builder is for the EULA-bearing module INSTALL only. The `-l`
     # listing diagnostic and `editors`/`install-path` getters are NOT module
     # installs and must keep their own (EULA-free) shapes; do not route them here.
     #
-    # Optional -ModuleIds scopes the vector to a SUBSET of ids (e.g. a single tier
-    # via Get-UnityCiModuleIdsForTier), so the base/repair install can request only
-    # 'core' and the dedicated Android step can request only the 'android' tier --
-    # WITHOUT bypassing this sole producer (the `--accept-eula` + `-m` shape is still
-    # owned here for both verbs). When -ModuleIds is omitted the behavior is
-    # UNCHANGED: the full requested-id list (Get-UnityCiModuleIds).
+    # Optional -ModuleIds scopes the vector to a SUBSET of ids (e.g. the bounded
+    # Android-only repair) WITHOUT bypassing this sole producer (the
+    # `--accept-eula` + child-module + `-m` shape is still owned here for both
+    # verbs). When -ModuleIds is omitted the behavior is UNCHANGED: the full
+    # requested-id list (Get-UnityCiModuleIds).
     #
     # StrictMode-safe: @()-wraps the module-id capture so an empty list never
     # collapses to AutomationNull, and uses array `+` concatenation only.
@@ -1433,12 +1645,20 @@ function Get-UnityCliModuleInstallArguments {
 
     $moduleIds = if ($PSBoundParameters.ContainsKey('ModuleIds')) { @($ModuleIds) } else { @(Get-UnityCiModuleIds) }
 
+    $includeChildModules = ($moduleIds -contains 'android' -or $moduleIds -contains 'android-sdk-ndk-tools')
+
     if ($Verb -eq 'install-modules') {
         # `install-modules` targets an EXISTING editor, so it needs `-e <version>`.
+        if ($includeChildModules) {
+            return @('install-modules', '-e', $Version, '--accept-eula', '--childModules', '-m') + $moduleIds
+        }
         return @('install-modules', '-e', $Version, '--accept-eula', '-m') + $moduleIds
     }
 
     # `install` provisions a fresh editor; the version is positional (no `-e`).
+    if ($includeChildModules) {
+        return @('install', $Version, '--accept-eula', '--childModules', '-m') + $moduleIds
+    }
     return @('install', $Version, '--accept-eula', '-m') + $moduleIds
 }
 
@@ -1558,6 +1778,75 @@ function Test-UnityCiModulesPresent {
     return ($missing.Count -eq 0)
 }
 
+function Stop-StaleUnityProvisioningProcesses {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    $matched = 0
+    $stopped = 0
+    $details = New-Object System.Collections.Generic.List[string]
+    try {
+        $rootFull = [System.IO.Path]::GetFullPath($InstallRoot)
+        $processes = @()
+        try {
+            $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+        } catch {
+            $processes = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
+                    [pscustomobject]@{
+                        ProcessId   = $_.Id
+                        Name        = $_.ProcessName
+                        CommandLine = ''
+                    }
+                })
+        }
+
+        foreach ($proc in $processes) {
+            if ($null -eq $proc) {
+                continue
+            }
+            $name = ''
+            $processId = 0
+            $commandLine = ''
+            try { $name = [string]$proc.Name } catch { $name = '' }
+            try { $processId = [int]$proc.ProcessId } catch { $processId = 0 }
+            try { $commandLine = [string]$proc.CommandLine } catch { $commandLine = '' }
+            if ($processId -le 0 -or $processId -eq $PID) {
+                continue
+            }
+            $looksUnity = $name -match '(?i)^(unity|unity\.exe|unity hub|unity hub\.exe|unitycli|unitycli\.exe)$'
+            if (-not $looksUnity) {
+                continue
+            }
+            $scopeText = "$commandLine $name"
+            $isScoped = ($scopeText.IndexOf($Version, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+                ($commandLine.IndexOf($rootFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+                ($commandLine.IndexOf($InstallRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+            if (-not $isScoped) {
+                continue
+            }
+
+            $matched++
+            $details.Add("pid=$processId name=$name command=$commandLine")
+            try {
+                Stop-Process -Id $processId -Force -ErrorAction Stop
+                $stopped++
+            } catch {
+                $details.Add("pid=$processId stop failed: $($_.Exception.Message)")
+            }
+        }
+
+        Write-CiNotice "Stale Unity provisioning process cleanup for Unity $Version ($Reason): matched $matched, stopped $stopped."
+    } catch {
+        $details.Add("cleanup failed: $($_.Exception.Message)")
+        Write-Host "::notice::Stale Unity provisioning process cleanup failed for Unity ${Version}: $($_.Exception.Message)"
+    } finally {
+        Add-ProvisioningProcessCleanupEvent -Reason $Reason -Matched $matched -Stopped $stopped -Details @($details.ToArray())
+    }
+}
+
 function Move-UnityInstallDirectoryToQuarantine {
     param(
         [Parameter(Mandatory = $true)][string]$InstallDirectory,
@@ -1580,6 +1869,7 @@ function Move-UnityInstallDirectoryToQuarantine {
     $destination = Join-Path $quarantineRoot "$Version-$stamp-$suffix"
 
     Write-Host "::warning::Quarantining unmanaged or partial Unity $Version install before repair: $InstallDirectory -> $destination"
+    Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $Version -Reason "before quarantining $InstallDirectory"
     # Move-Item against a Unity editor directory can fail transiently on Windows
     # with "The process cannot access the file '...' because it is being used by
     # another process." when Unity, an antivirus scanner, or the Windows indexer
@@ -1642,7 +1932,8 @@ function Move-UnityVersionInstallToQuarantine {
 function Invoke-UnityVersionUninstallForRepair {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
-        [Parameter(Mandatory = $true)][string]$Reason
+        [Parameter(Mandatory = $true)][string]$Reason,
+        [string]$InstallRoot
     )
 
     $uninstallResult = Invoke-UnityCliCapture -Arguments @('uninstall', $Version)
@@ -1655,7 +1946,12 @@ function Invoke-UnityVersionUninstallForRepair {
             '(no output captured)'
         }
         Write-CiNotice "Unity CLI uninstall for $Version did not complete cleanly before repair (exit code $($uninstallResult.ExitCode)); quarantining the install directory instead. Reason: $Reason Output tail:`n$tail"
+        if ($InstallRoot) {
+            Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $Version -Reason "failed uninstall before repair: $Reason"
+        }
     }
+
+    return $uninstallResult
 }
 
 function Install-UnityEditorWithCiModules {
@@ -1666,18 +1962,15 @@ function Install-UnityEditorWithCiModules {
         [switch]$ManagedOnly
     )
 
-    # The fresh-editor install requests ONLY the CORE tier; the base editor + core
-    # modules provision reliably and fast. The heavy/flaky Android tier is added
-    # afterward by Ensure-UnityCiModules via the dedicated, separately-retried
-    # Install-UnityAndroidModules step (which NEVER quarantines the editor).
-    $moduleIds = @(Get-UnityCiModuleIdsForTier -Tier 'core')
+    Assert-UnityProvisioningBudgetCanFit -Operation "fresh Unity $Version managed install" -MinimumSeconds 60
+    $moduleIds = @(Get-UnityCiModuleIds)
     if ($ManagedOnly) {
         Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
     }
-    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with core CI modules ($($moduleIds -join ', ')). Reason: $Reason"
+    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with the full CI module set ($($moduleIds -join ', ')). Reason: $Reason"
 
     # Single source of truth for the (EULA-bearing) module-install arg vector,
-    # scoped to the core tier.
+    # scoped to the full requested module set.
     $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $Version -ModuleIds $moduleIds)
 
     $resolved = $null
@@ -1686,11 +1979,12 @@ function Install-UnityEditorWithCiModules {
         if ($installResult.Success) {
             $resolved = Resolve-InstalledEditor -Version $Version -Root $InstallRoot -ManagedOnly:$ManagedOnly
             if ($resolved) {
+                $script:ProvisioningEditorPath = $resolved
                 break
             }
             if ($attempt -lt 2) {
                 Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install exited 0, but Unity.exe could not be resolved afterward."
-                Invoke-UnityVersionUninstallForRepair -Version $Version -Reason "Unity repair install exited 0, but Unity.exe could not be resolved afterward."
+                Invoke-UnityVersionUninstallForRepair -Version $Version -Reason "Unity repair install exited 0, but Unity.exe could not be resolved afterward." -InstallRoot $InstallRoot | Out-Null
                 Move-UnityVersionInstallToQuarantine -Version $Version -InstallRoot $InstallRoot
                 Write-Host "::warning::Retrying Unity $Version repair install after successful CLI install left no resolvable Unity.exe."
                 continue
@@ -1708,12 +2002,13 @@ function Install-UnityEditorWithCiModules {
             if ($resolvedAfterFailure) {
                 Write-CiNotice "Unity repair install for $Version reported already-installed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; verifying modules against disk."
                 $resolved = $resolvedAfterFailure
+                $script:ProvisioningEditorPath = $resolved
                 break
             }
 
             if ($attempt -lt 2) {
                 Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install reported already-installed, but Unity.exe could not be resolved afterward."
-                Invoke-UnityVersionUninstallForRepair -Version $Version -Reason "Unity repair install reported already-installed, but Unity.exe could not be resolved."
+                Invoke-UnityVersionUninstallForRepair -Version $Version -Reason "Unity repair install reported already-installed, but Unity.exe could not be resolved." -InstallRoot $InstallRoot | Out-Null
                 Move-UnityVersionInstallToQuarantine -Version $Version -InstallRoot $InstallRoot
                 Write-Host "::warning::Retrying Unity $Version repair install after clearing stale CLI metadata and quarantining the managed version directory."
                 continue
@@ -1732,13 +2027,9 @@ function Install-UnityEditorWithCiModules {
         throw "Unity $Version repair install completed, but Unity.exe could not be found afterward."
     }
 
-    # The fresh install requested only the CORE tier, so verify only the CORE
-    # verified groups here; the heavy/flaky Android tier is added afterward by
-    # Ensure-UnityCiModules (Install-UnityAndroidModules), and requiring it present
-    # at THIS point would wrongly fail the (successful) core install.
-    $missingCore = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved | Where-Object { (Get-UnityCiModuleTier $_) -eq 'core' })
-    if ($missingCore.Count -gt 0) {
-        throw "Unity $Version repair install completed at '$resolved', but required CORE CI module groups are still missing on disk: $($missingCore -join ', ')."
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved)
+    if ($missing.Count -gt 0) {
+        throw "Unity $Version repair install completed at '$resolved', but required CI module groups are still missing on disk after the full atomic install: $($missing -join ', ')."
     }
 
     return $resolved
@@ -1754,10 +2045,11 @@ function Repair-UnityEditorWithCiModules {
     )
 
     return Invoke-WithUnityInstallLock -Version $Version -InstallRoot $InstallRoot -Action {
+        Assert-UnityProvisioningBudgetCanFit -Operation "managed quarantine/reinstall for Unity $Version" -MinimumSeconds 60
         if ($ManagedOnly) {
             Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
         }
-        Invoke-UnityVersionUninstallForRepair -Version $Version -Reason $Reason
+        Invoke-UnityVersionUninstallForRepair -Version $Version -Reason $Reason -InstallRoot $InstallRoot | Out-Null
 
         if (Test-Path -LiteralPath $EditorPath -PathType Leaf) {
             Move-UnityEditorInstallToQuarantine -EditorPath $EditorPath -InstallRoot $InstallRoot -Version $Version
@@ -1850,13 +2142,9 @@ function Ensure-UnityNativeStartupHealthy {
 
     Write-Host "::warning::Unity $Version native startup probe failed before the license lock; attempting one managed reinstall."
     $repaired = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "native startup probe failed with exit code $($result.ExitCode) ($($result.Description)). Probe log: $probeLog" -ManagedOnly:$ManagedOnly
-    # Repair-UnityEditorWithCiModules installs + verifies the CORE tier ONLY (the
-    # base editor + core modules provision reliably; the heavy/flaky Android tier is
-    # added afterward in a dedicated, separately-retried, NON-quarantining step).
-    # Because this is the script's LAST provisioning operation, returning $repaired
-    # directly would yield an editor with NO Android tier. Re-ensure ALL tiers after
-    # the repair so Android is re-added (mirrors Ensure-UnityCiModules: Step 3
-    # repairs core, Step 4 adds Android).
+    # Repair-UnityEditorWithCiModules requests the full desired module set, then we
+    # re-run the disk-authoritative module check so a CLI success with missing
+    # children is still caught before the final native startup probe.
     $repaired = Ensure-UnityCiModules -Version $Version -EditorPath $repaired -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
     $repairProbe = Test-UnityNativeStartup -EditorPath $repaired -LogPath $probeLog
     if (-not $repairProbe.Success) {
@@ -2046,11 +2334,10 @@ function Clear-PartialAndroidModulePayload {
 }
 
 function Install-UnityAndroidModules {
-    # DEDICATED, BOUNDED Android module install -- the heavy/flaky tier (android +
-    # android-sdk-ndk-tools, multi-GB Google download whose NDK unpack fails
-    # deterministically at ~93% on Windows). Installed in ISOLATION so a failure
-    # NEVER quarantines/re-downloads the whole editor: the base editor + core
-    # modules are already present and are not the thing that flakes.
+    # DEDICATED, BOUNDED Android module install for existing editors -- the
+    # heavy/flaky tier (android + android-sdk-ndk-tools, multi-GB Google download
+    # whose NDK unpack fails deterministically at ~93% on Windows). This cheap
+    # repair runs before the script escalates to a full managed reinstall.
     #
     # Loop up to Get-EnsureEditorAndroidInstallRetryAttempts times: before a retry
     # (attempt > 1), clear the partial NDK/SDK payload and back off (linear). Each
@@ -2058,10 +2345,8 @@ function Install-UnityAndroidModules {
     # capturing invoker. After each attempt, re-verify the android tier ON DISK
     # (disk is the truth: exit 6 with everything present is success). On a failed
     # attempt emit the targeted failure annotation + the wrap-immune summary. On
-    # exhaustion, emit the post-mortem and throw a CLEAR message that names the
-    # still-missing android groups, the attempt count, that the editor + core
-    # modules ARE present, that this is an Android SDK/NDK install failure, and that
-    # the editor was deliberately NOT re-downloaded.
+    # exhaustion, emit the post-mortem and escalate to quarantine/reinstall unless
+    # DXM_UNITY_DISABLE_EDITOR_REPAIR=1.
     param(
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
@@ -2086,7 +2371,7 @@ function Install-UnityAndroidModules {
     # for both the install call and the failure-annotation arg echo.
     $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version -ModuleIds $androidIds)
 
-    Write-CiNotice "Installing the Android CI module tier for Unity $Version in a dedicated, separately-retried step ($($androidIds -join ', ')); the editor + core modules are already present and will NOT be re-downloaded on a failure."
+    Write-CiNotice "Installing the Android CI module tier for Unity $Version in a dedicated, separately-retried step ($($androidIds -join ', ')); exhaustion escalates to managed quarantine/reinstall unless repair is disabled."
 
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         if ($attempt -gt 1) {
@@ -2114,13 +2399,22 @@ function Install-UnityAndroidModules {
         Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$androidTimedOut -TimeoutSeconds $installTimeout
     }
 
-    # Exhausted every attempt. The editor + core modules ARE present; only the
-    # heavy/flaky Android tier failed. Emit the deep post-mortem (long-path state,
-    # deepest NDK path) and throw a clear, actionable error -- but NEVER quarantine
-    # or re-download the editor here.
+    # Exhausted every bounded Android-only attempt. Existing editors get this
+    # cheap repair first, but Android exhaustion is now treated as evidence that
+    # the editor tree may be internally inconsistent. Unless the operator disabled
+    # editor repair, escalate to the managed quarantine + full reinstall path.
     $stillMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
     Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot
-    throw "Unity $Version Android CI module install FAILED after $maxAttempts attempt(s): the Android tier groups are still missing on disk ($($stillMissing -join ', ')). The editor and core CI modules ARE present at '$EditorPath' and were deliberately NOT re-downloaded. This is an Android SDK/NDK install failure (see the post-mortem above for the deepest NDK path length and the Windows long-path state)."
+    if ($env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1') {
+        throw "Unity $Version Android CI module install FAILED after $maxAttempts attempt(s): the Android tier groups are still missing on disk ($($stillMissing -join ', ')), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled escalation to managed quarantine/reinstall."
+    }
+    if (-not $InstallRoot) {
+        throw "Unity $Version Android CI module install FAILED after $maxAttempts attempt(s): the Android tier groups are still missing on disk ($($stillMissing -join ', ')), and no managed install root was supplied for quarantine/reinstall."
+    }
+
+    Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $Version -Reason "Android-only repair exhausted before managed reinstall"
+    Write-Host "::warning::Unity $Version Android-only repair exhausted after $maxAttempts attempt(s); escalating to managed quarantine/reinstall with the full CI module set."
+    return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "Android-only repair exhausted after $maxAttempts attempt(s); missing Android groups: $($stillMissing -join ', ')." -ManagedOnly:$ManagedOnly
 }
 
 function Ensure-UnityCiModules {
@@ -2128,14 +2422,13 @@ function Ensure-UnityCiModules {
     # beta CLI can return "No modules found to install." with exit code 6 when
     # modules are already present, and it cannot add modules to manually installed
     # editors. Classify the result against disk proof first; if required module
-    # groups are missing, handle the CORE tier and the ANDROID tier separately so an
-    # Android (NDK) flake never quarantines/re-downloads the whole editor.
+    # groups are missing, handle the CORE tier and the ANDROID tier separately.
     #   1. all groups present on disk                  -> done.
     #   2. core missing                                -> scoped install-modules; if
     #      still missing and repair enabled            -> quarantine/reinstall (core).
-    #   3. android missing                             -> dedicated bounded retry
-    #      (Install-UnityAndroidModules), NO editor quarantine.
-    #   4. still missing after both                    -> throw with post-mortem.
+    #   3. android missing                             -> dedicated bounded retry;
+    #      exhaustion escalates to managed quarantine/reinstall unless disabled.
+    #   4. still missing after repair is disabled       -> throw with post-mortem.
     param(
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
@@ -2209,7 +2502,7 @@ function Ensure-UnityCiModules {
             }
 
             if ($InstallRoot) {
-                # Full quarantine + reinstall (core-scoped fresh install) -- unchanged.
+                # Full quarantine + reinstall with the full desired module set.
                 $EditorPath = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "required CORE CI module groups missing ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail" -ManagedOnly:$ManagedOnly
             } else {
                 throw "Unity $Version 'install-modules' failed with exit code $($result.ExitCode), and required CORE CI module groups are missing on disk ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail"
@@ -2308,12 +2601,7 @@ function Write-InstallDiagnostics {
     }
 
     try {
-        $versionLines = @(Get-UnityCliOutput -Arguments @('--version'))
-        if ($versionLines.Count -gt 0) {
-            Write-Host "Unity CLI version: $($versionLines -join ' ')"
-        } else {
-            Write-Host "::notice::Unity CLI version was not reported by '--version' (best-effort)."
-        }
+        Write-Host "Unity CLI version: $(Get-UnityCliVersionText)"
     } catch {
         Write-Host "::notice::Could not query the Unity CLI version: $($_.Exception.Message)"
     }
@@ -2325,6 +2613,91 @@ function Write-InstallDiagnostics {
     Write-Host "::endgroup::"
 }
 
+function Get-ProvisioningDiagnosticsPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string]$Path
+    )
+
+    if ($Path -and $Path.Trim().Length -gt 0) {
+        if ((Test-Path -LiteralPath $Path -PathType Container) -or [string]::IsNullOrEmpty([System.IO.Path]::GetExtension($Path))) {
+            return (Join-Path $Path 'ensure-editor-summary.json')
+        }
+        return $Path
+    }
+    return (Join-Path (Join-Path $Root '_diagnostics') "$Version-provisioning-summary.json")
+}
+
+function Write-UnityProvisioningSummary {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string]$Path,
+        [string]$EditorPath
+    )
+
+    $jsonPath = Get-ProvisioningDiagnosticsPath -Root $Root -Version $Version -Path $Path
+    $textPath = [System.IO.Path]::ChangeExtension($jsonPath, '.txt')
+    try {
+        $dir = Split-Path -Parent $jsonPath
+        if ($dir -and -not (Test-Path -LiteralPath $dir -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+
+        $modulePresence = [ordered]@{}
+        foreach ($group in @(Get-UnityCiVerifiedModuleGroups)) {
+            $present = $false
+            if ($EditorPath -and (Test-Path -LiteralPath $EditorPath -PathType Leaf)) {
+                $present = Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group
+            }
+            $modulePresence[$group] = $present
+        }
+
+        $commandClasses = @($script:ProvisioningCommandClasses | Sort-Object)
+        $summary = [ordered]@{
+            generatedUtc              = [DateTime]::UtcNow.ToString('o')
+            unityVersion              = $Version
+            cliPath                   = $script:UnityCliPath
+            cliVersion                = $(if ($script:UnityCliVersionText) { $script:UnityCliVersionText } else { '(not queried)' })
+            installRoot               = $Root
+            editorPath                = $EditorPath
+            ciManagedOnly             = [bool]$CiManagedOnly
+            attemptedCommandClasses   = $commandClasses
+            desiredModules            = @(Get-UnityCiModuleIds)
+            verifiedModules           = @(Get-UnityCiVerifiedModuleGroups)
+            modulePresence            = $modulePresence
+            provisioningBudgetSeconds = $script:ProvisioningBudgetSeconds
+            remainingBudgetSeconds    = Get-RemainingUnityProvisioningBudgetSeconds
+            timeoutEvents             = @($script:ProvisioningTimeoutEvents.ToArray())
+            processCleanupEvents      = @($script:ProvisioningProcessCleanupEvents.ToArray())
+            finalClassification       = $script:ProvisioningFinalClassification
+        }
+
+        $summary | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $jsonPath -Encoding UTF8
+        $moduleText = ($modulePresence.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', '
+        $textLines = @(
+            "Unity provisioning summary",
+            "classification=$script:ProvisioningFinalClassification",
+            "unityVersion=$Version",
+            "cliPath=$script:UnityCliPath",
+            "cliVersion=$($summary.cliVersion)",
+            "installRoot=$Root",
+            "editorPath=$EditorPath",
+            "attemptedCommandClasses=$($commandClasses -join ',')",
+            "modulePresence=$moduleText",
+            "timeoutEvents=$($script:ProvisioningTimeoutEvents.Count)",
+            "processCleanupEvents=$($script:ProvisioningProcessCleanupEvents.Count)"
+        )
+        $textLines | Set-Content -LiteralPath $textPath -Encoding UTF8
+    } catch {
+        Write-Host "::warning::Failed to write Unity provisioning diagnostics summary: $($_.Exception.Message)"
+    }
+}
+
+Initialize-UnityProvisioningBudget
+
+try {
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 
 $editor = Find-UnityEditor -Version $UnityVersion -Root $InstallRoot -IncludeHostInstalls:(-not $CiManagedOnly)
@@ -2336,14 +2709,11 @@ if (-not $editor) {
     }
 
     Write-CiNotice "Installing Unity Editor $UnityVersion on the self-hosted Windows runner."
-    # Single source of truth for the (EULA-bearing) module-install arg vector --
-    # the SAME builder the repair-path `install` and the `install-modules` add use,
-    # so this primary install can never silently drop `--accept-eula` again (the
-    # exact drift that broke every CI cell). Scoped to the CORE tier so the base
-    # editor + core modules provision reliably and fast; the heavy/flaky Android
-    # tier is added afterward by Ensure-UnityCiModules in a dedicated,
-    # separately-retried step that NEVER quarantines the whole editor.
-    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core'))
+    # Single source of truth for the (EULA-bearing) module-install arg vector.
+    # Fresh installs request the full desired module set atomically so Android
+    # dependencies are resolved with the editor install instead of through an
+    # amplified outer retry.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion -ModuleIds (Get-UnityCiModuleIds))
 
     # Emit diagnostics BEFORE the (potentially 30+ minute) install so the logs
     # carry the CLI path/version + disk headroom even if the install then stalls.
@@ -2376,23 +2746,15 @@ if (-not $editor) {
                 if ($resolvedAfterFailure) {
                     Write-CiNotice "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode), but Unity.exe is resolvable afterward; treating the install as already present."
                     Write-CiNotice "Verifying required CI modules after recovered editor install."
-                    # Ensure-UnityCiModules adds the Android tier here via its own
-                    # bounded Android retry. If that tier is exhausted it THROWS,
-                    # which re-triggers this whole outer base-install attempt -- so
-                    # the worst-case Android attempt count is amplified to
-                    # (outer install attempts x android attempts). This amplification
-                    # is BOUNDED (a small product) and now RARE: the base install is
-                    # CORE-only and reliably succeeds, so this recovered-editor branch
-                    # is itself an edge case. It is intentionally NOT special-cased
-                    # (e.g. by suppressing the outer retry on an Android-only throw)
-                    # to keep the retry semantics simple and the control flow flat.
-                    $resolvedAfterFailure = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $resolvedAfterFailure -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
                     return $resolvedAfterFailure
                 }
 
                 if ($installText -match '(?i)already installed|editor already installed|is already installed') {
                     Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI reported the editor is already installed, but Unity.exe could not be resolved afterward."
-                    Invoke-UnityVersionUninstallForRepair -Version $UnityVersion -Reason "Unity CLI reported an already-installed editor, but Unity.exe could not be resolved."
+                    Invoke-UnityVersionUninstallForRepair -Version $UnityVersion -Reason "Unity CLI reported an already-installed editor, but Unity.exe could not be resolved." -InstallRoot $InstallRoot | Out-Null
+                    if ($installResult.ExitCode -eq 124) {
+                        Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $UnityVersion -Reason "timed out already-installed install before quarantine"
+                    }
                     Move-UnityVersionInstallToQuarantine -Version $UnityVersion -InstallRoot $InstallRoot
                     throw "Unity CLI '$($installArgs -join ' ')' reported an already-installed editor with exit code $($installResult.ExitCode), but Unity.exe could not be found. Uninstalled any CLI metadata and quarantined the managed version directory as partial or corrupt before retry. CLI output tail:`n$installTail"
                 }
@@ -2413,12 +2775,17 @@ if (-not $editor) {
     } else {
         $editor = Resolve-InstalledEditor -Version $UnityVersion -Root $InstallRoot -ManagedOnly:$CiManagedOnly
     }
+    if ($editor) {
+        $script:ProvisioningEditorPath = $editor
+    }
     if (-not $editor) {
         Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward."
         Move-UnityVersionInstallToQuarantine -Version $UnityVersion -InstallRoot $InstallRoot
         $editor = Install-UnityEditorWithCiModules -Version $UnityVersion -InstallRoot $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward; quarantined the managed version directory and retrying with a fresh install." -ManagedOnly:$CiManagedOnly
+        $script:ProvisioningEditorPath = $editor
     }
     $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+    $script:ProvisioningEditorPath = $editor
 } else {
     Ensure-UnityCli | Out-Null
     Set-UnityCliInstallPath -Root $InstallRoot
@@ -2426,9 +2793,25 @@ if (-not $editor) {
         Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
     }
     Write-CiNotice "Ensuring required CI modules are installed for Unity $UnityVersion."
+    $script:ProvisioningEditorPath = $editor
     $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+    $script:ProvisioningEditorPath = $editor
 }
 
 $editor = Ensure-UnityNativeStartupHealthy -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+$script:ProvisioningEditorPath = $editor
+$script:ProvisioningFinalClassification = 'success'
 Write-CiNotice "Unity editor resolved: $editor"
 Write-Output $editor
+} catch {
+    try {
+        $editorVar = Get-Variable -Name editor -Scope Local -ErrorAction SilentlyContinue
+        if ($editorVar -and $editorVar.Value) {
+            $script:ProvisioningEditorPath = [string]$editorVar.Value
+        }
+    } catch { }
+    $script:ProvisioningFinalClassification = "failed: $($_.Exception.Message)"
+    throw
+} finally {
+    Write-UnityProvisioningSummary -Root $InstallRoot -Version $UnityVersion -Path $DiagnosticsPath -EditorPath $script:ProvisioningEditorPath
+}

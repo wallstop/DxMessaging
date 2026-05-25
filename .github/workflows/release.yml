@@ -256,10 +256,24 @@ jobs:
         timeout-minutes: 180
         shell: pwsh
         run: |
+          $artifactsPath = '.artifacts/unity/release-editmode'
+          $diagnosticsPath = Join-Path $artifactsPath 'provisioning'
+          $diagnosticsFile = Join-Path $diagnosticsPath 'ensure-editor-summary.json'
+          New-Item -ItemType Directory -Force -Path $diagnosticsPath | Out-Null
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '2022.3.45f1' `
-            -CiManagedOnly
+            -CiManagedOnly `
+            -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload Unity provisioning diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unity-release-provisioning-editmode
+          path: .artifacts/unity/release-editmode/provisioning
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Acquire organization Unity lock
         uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1

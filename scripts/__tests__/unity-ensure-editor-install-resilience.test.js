@@ -158,7 +158,7 @@ function makeFakeUnityCli(binDir, bodyLines) {
 // Run the WHOLE ensure-editor.ps1 against a fake CLI built from `bodyLines`,
 // hermetically (host-folder vars sandboxed; node stub-startup probe skipped).
 // `extraEnv` lets a test set DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS etc.
-function runEnsureEditorWithFakeCli(bodyLines, installRoot, extraEnv = {}) {
+function runEnsureEditorWithFakeCli(bodyLines, installRoot, extraEnv = {}, extraArgs = []) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-full-"));
   workspaces.push(base);
   const binDir = path.join(base, "bin");
@@ -184,7 +184,8 @@ function runEnsureEditorWithFakeCli(bodyLines, installRoot, extraEnv = {}) {
       "6000.0.32f1",
       "-InstallRoot",
       installRoot,
-      "-CiManagedOnly"
+      "-CiManagedOnly",
+      ...extraArgs
     ],
     { env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
   );
@@ -221,6 +222,10 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     const timeoutBody = text.slice(timeoutStart, timeoutAfter);
     expect(timeoutBody).toContain("Kill($true)");
     expect(timeoutBody).toContain("124");
+    expect(timeoutBody).toContain("TimeoutKnob");
+    expect(timeoutBody).toContain("ConvertTo-ProcessArgumentLine");
+    expect(timeoutBody).not.toContain(".ArgumentList");
+    expect(timeoutBody).not.toMatch(/WaitForExit\(\)/);
   });
 
   if (!PWSH_PRESENT) {
@@ -500,6 +505,38 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
       expect(stdout).toContain("INVALID=2");
     });
 
+    test("whole-run provisioning budget clamps CLI timeouts and can fail early", () => {
+      const out = runPwshScript(
+        [
+          "Set-StrictMode -Version Latest",
+          "$ErrorActionPreference = 'Stop'",
+          extractEnsureEditorFunctions([
+            "Write-CiNotice",
+            "Get-EnsureEditorProvisioningBudgetSeconds",
+            "Initialize-UnityProvisioningBudget",
+            "Get-RemainingUnityProvisioningBudgetSeconds",
+            "Get-EffectiveUnityCliTimeoutSeconds",
+            "Assert-UnityProvisioningBudgetCanFit"
+          ]),
+          "$env:DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS = '5'",
+          "Initialize-UnityProvisioningBudget",
+          "$effective = Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds 120",
+          "Write-Output ('EFFECTIVE=' + $effective)",
+          "try { Assert-UnityProvisioningBudgetCanFit -Operation 'large repair' -MinimumSeconds 60; Write-Output 'EARLY=False' }",
+          "catch { Write-Output ('EARLY=True; MSG=' + $_.Exception.Message) }",
+          "$env:DXM_ENSURE_EDITOR_PROVISIONING_BUDGET_SECONDS = '0'",
+          "Initialize-UnityProvisioningBudget",
+          "Write-Output ('OPTOUT=' + (Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds 120))"
+        ].join("\n")
+      );
+      const combined = combinedText(out);
+      expect(out.status).toBe(0);
+      expect(combined).toMatch(/EFFECTIVE=[1-5]\b/);
+      expect(combined).toContain("EARLY=True");
+      expect(combined).toContain("cannot fit 'large repair'");
+      expect(combined).toContain("OPTOUT=120");
+    });
+
     // --- The DEDICATED Android-tier install-retry knob (parallels the base-install
     //     attempts test above): defaults to 3 (one more than the base default of 2),
     //     honors a valid override, and rejects a below-1/non-integer override with a
@@ -532,16 +569,64 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
       expect(stdout).toContain("ZERO=3");
       expect(stdout).toContain("INVALID=3");
       expect(combined).toContain("::warning::");
-      expect(combined).toContain("Ignoring invalid DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS");
+      expect(combined).toContain(
+        "Ignoring invalid DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS"
+      );
     });
   });
 
   // --- NORMAL COMPLETION IS UNAFFECTED: a fast fake CLI returns promptly with
   //     the correct exit code + full streamed output through the timeout runner. ---
+  test("PowerShell 5.1-compatible process quoting preserves paths and args with spaces", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm ensure args "));
+    workspaces.push(base);
+    const cliScript = path.join(base, "fake unity cli.js");
+    fs.writeFileSync(
+      cliScript,
+      [
+        '"use strict";',
+        'process.stdout.write(JSON.stringify(process.argv.slice(2)) + "\\n");',
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const cliScriptLiteral = cliScript.replace(/'/g, "''");
+    const out = runPwshScript(
+      [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        extractEnsureEditorFunctions([
+          "ConvertTo-ProcessArgumentLine",
+          "Invoke-UnityCliCaptureWithTimeout",
+          "Get-LastCliProgressMessage"
+        ]),
+        "$script:UnityCliPath = 'node'",
+        `$result = Invoke-UnityCliCaptureWithTimeout -Arguments @('${cliScriptLiteral}', 'arg with spaces', 'quote \" inside', 'backslash\\tail') -TimeoutSeconds 30`,
+        'Write-Output ("EXIT=$($result.ExitCode)")',
+        'Write-Output ("CAPTURE=" + ($result.Output | Select-Object -Last 1))'
+      ].join("\n")
+    );
+
+    const combined = combinedText(out);
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(out.stdout).toContain("EXIT=0");
+    const capture = /^CAPTURE=(.*)$/m.exec(out.stdout || "");
+    expect(capture).not.toBeNull();
+    expect(JSON.parse(capture[1])).toEqual([
+      "arg with spaces",
+      'quote " inside',
+      "backslash\\tail"
+    ]);
+  });
+
   test("#1 normal completion is unaffected: a fast install streams full output and resolves the editor", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-fast-"));
     workspaces.push(base);
     const installRoot = path.join(base, "configured-root");
+    const diagnosticsPath = path.join(base, "custom-diagnostics", "provisioning.json");
     const editorRoot = path.join(installRoot, "6000.0.32f1");
     const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
 
@@ -582,10 +667,15 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
       "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
     ];
 
-    const out = runEnsureEditorWithFakeCli(bodyLines, installRoot, {
-      // A generous timeout that a fast install never approaches.
-      DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS: "120"
-    });
+    const out = runEnsureEditorWithFakeCli(
+      bodyLines,
+      installRoot,
+      {
+        // A generous timeout that a fast install never approaches.
+        DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS: "120"
+      },
+      ["-DiagnosticsPath", diagnosticsPath]
+    );
     const stdout = out.stdout || "";
     const combined = combinedText(out);
 
@@ -600,6 +690,72 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     expect(combined).toContain("Editor installed successfully");
     // ...and NO timeout annotation fired on the healthy path.
     expect(combined).not.toContain("TIMED OUT");
+
+    const summary = JSON.parse(fs.readFileSync(diagnosticsPath, "utf8"));
+    const textSummary = fs.readFileSync(
+      path.join(path.dirname(diagnosticsPath), "provisioning.txt"),
+      "utf8"
+    );
+    expect(summary.finalClassification).toBe("success");
+    expect(summary.cliPath).toContain("unity");
+    expect(summary.installRoot).toBe(installRoot);
+    expect(summary.editorPath).toBe(editorExe);
+    expect(summary.attemptedCommandClasses).toContain("install/modules");
+    expect(summary.modulePresence["android-open-jdk"]).toBe(true);
+    expect(summary.desiredModules).not.toContain("android-open-jdk");
+    expect(summary.desiredModules).toContain("android-sdk-ndk-tools");
+    expect(textSummary).toContain("classification=success");
+  }, 60000);
+
+  test("failed full repair summary preserves the resolved partial editor path", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-repair-summary-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const diagnosticsPath = path.join(base, "diagnostics", "ensure-editor-summary.json");
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    fs.mkdirSync(path.dirname(editorExe), { recursive: true });
+    fs.writeFileSync(editorExe, ["#!/usr/bin/env sh", 'echo "Unity fake version"', "exit 0", ""].join("\n"));
+    fs.chmodSync(editorExe, 0o755);
+
+    const bodyLines = [
+      "const path = require('path');",
+      `const installRoot = ${JSON.stringify(installRoot)};`,
+      "const editorRoot = path.join(installRoot, '6000.0.32f1');",
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeEditorOnly() {",
+      "  mkdirp(path.dirname(editorExe));",
+      "  fs.writeFileSync(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  fs.chmodSync(editorExe, 0o755);",
+      "}",
+      "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { write('Module installation is only supported for editors installed with Unity Hub.'); exit(6); }",
+      "if (args[0] === 'uninstall') { write('metadata cleared'); exit(0); }",
+      "if (args[0] === 'install') { writeEditorOnly(); write('repair install left modules missing'); exit(0); }",
+      "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(bodyLines, installRoot, {}, [
+      "-DiagnosticsPath",
+      diagnosticsPath
+    ]);
+    const combined = combinedText(out);
+
+    expect(out.status).not.toBe(0);
+    expect(combined).toContain("repair install completed at");
+    const summary = JSON.parse(fs.readFileSync(diagnosticsPath, "utf8"));
+    const textSummary = fs.readFileSync(
+      path.join(path.dirname(diagnosticsPath), "ensure-editor-summary.txt"),
+      "utf8"
+    );
+    expect(summary.finalClassification).toContain("failed:");
+    expect(summary.editorPath).toBe(editorExe);
+    expect(summary.modulePresence["windows-il2cpp"]).toBe(false);
+    expect(summary.modulePresence["android-sdk-ndk-tools"]).toBe(false);
+    expect(textSummary).toContain(`editorPath=${editorExe}`);
   }, 60000);
 
   // --- #3 WRAP-IMMUNE DIAGNOSTICS: a failing fake CLI (exit 6 with JSON progress
@@ -683,7 +839,7 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
         // Interleaved: an install-phase NDK line at pct 93 (the real failing
         // point), followed by an OUT-OF-ORDER download line "Starting install..."
         // The preference must surface the NDK line with its pct, not the trailer.
-        '$a = @(',
+        "$a = @(",
         '  \'{"type":"progress","phase":"download","pct":12,"msg":"Downloading Android NDK"}\',',
         '  \'{"type":"progress","phase":"install","pct":40,"msg":"Installing Android SDK"}\',',
         '  \'{"type":"progress","phase":"install","pct":93,"msg":"Installing Android NDK"}\',',
@@ -708,13 +864,7 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     workspaces.push(base);
     const editorRoot = path.join(base, "6000.0.32f1");
     const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
-    const androidRoot = path.join(
-      editorRoot,
-      "Editor",
-      "Data",
-      "PlaybackEngines",
-      "AndroidPlayer"
-    );
+    const androidRoot = path.join(editorRoot, "Editor", "Data", "PlaybackEngines", "AndroidPlayer");
     const ndkFile = path.join(androidRoot, "NDK", "toolchains", "deep", "source.properties");
     const sdkFile = path.join(androidRoot, "SDK", "platform-tools", "adb.exe");
     // A sibling OUTSIDE AndroidPlayer that must SURVIVE (proves we stay scoped).
@@ -778,13 +928,7 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     workspaces.push(base);
     const editorRoot = path.join(base, "6000.0.32f1");
     const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
-    const androidRoot = path.join(
-      editorRoot,
-      "Editor",
-      "Data",
-      "PlaybackEngines",
-      "AndroidPlayer"
-    );
+    const androidRoot = path.join(editorRoot, "Editor", "Data", "PlaybackEngines", "AndroidPlayer");
     const isWin = process.platform === "win32";
 
     // Always create the editor exe. On non-win32 also build a deliberately DEEP NDK
@@ -870,7 +1014,13 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
       workspaces.push(base);
       const editorRoot = path.join(base, "6000.0.32f1");
       const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
-      const androidRoot = path.join(editorRoot, "Editor", "Data", "PlaybackEngines", "AndroidPlayer");
+      const androidRoot = path.join(
+        editorRoot,
+        "Editor",
+        "Data",
+        "PlaybackEngines",
+        "AndroidPlayer"
+      );
       const deepSegment = "x".repeat(50);
       const deepNdkFile = path.join(
         androidRoot,
@@ -925,10 +1075,7 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
       [
         "Set-StrictMode -Version Latest",
         "$ErrorActionPreference = 'Stop'",
-        extractEnsureEditorFunctions([
-          "Test-WindowsLongPathSupport",
-          "Get-DeepestPathLengthUnder"
-        ]),
+        extractEnsureEditorFunctions(["Test-WindowsLongPathSupport", "Get-DeepestPathLengthUnder"]),
         // Long-path probe never throws; on non-Windows it returns $null.
         "$lp = Test-WindowsLongPathSupport",
         "Write-Output ('LONGPATH=' + ($null -eq $lp))",
@@ -990,6 +1137,7 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
           "Set-StrictMode -Version Latest",
           "$ErrorActionPreference = 'Stop'",
           extractEnsureEditorFunctions([
+            "ConvertTo-ProcessArgumentLine",
             "Invoke-UnityCliCaptureWithTimeout",
             "Get-LastCliProgressMessage"
           ]),
@@ -1200,6 +1348,7 @@ function runCaptureViaAst(cliScript, timeoutSeconds) {
       "Set-StrictMode -Version Latest",
       "$ErrorActionPreference = 'Stop'",
       extractEnsureEditorFunctions([
+        "ConvertTo-ProcessArgumentLine",
         "Invoke-UnityCliCaptureWithTimeout",
         "Get-LastCliProgressMessage"
       ]),

@@ -233,6 +233,7 @@ function runSoleProducerAst(scriptPath) {
     "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",
     "$modArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version '6000.0.32f1')",
     "$coreArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1' -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core'))",
+    "$androidArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version '6000.0.32f1' -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'android'))",
     "if ($installArgs -notcontains '--accept-eula') { Write-Host 'FAIL install verb missing eula'; $ok = $false }",
     "if ($modArgs -notcontains '--accept-eula') { Write-Host 'FAIL install-modules verb missing eula'; $ok = $false }",
     "if ($installArgs -notcontains '-m') { Write-Host 'FAIL install verb missing -m'; $ok = $false }",
@@ -241,6 +242,10 @@ function runSoleProducerAst(scriptPath) {
     "if ($coreArgs -notcontains '--accept-eula') { Write-Host 'FAIL tier subset missing eula'; $ok = $false }",
     "if ($coreArgs -notcontains '-m') { Write-Host 'FAIL tier subset missing -m'; $ok = $false }",
     "if ($coreArgs -contains 'android') { Write-Host 'FAIL core subset contains android tier id'; $ok = $false }",
+    "if ($installArgs -notcontains '--childModules') { Write-Host 'FAIL full install missing childModules'; $ok = $false }",
+    "if ($androidArgs -notcontains '--childModules') { Write-Host 'FAIL android install-modules missing childModules'; $ok = $false }",
+    "if ($coreArgs -contains '--childModules') { Write-Host 'FAIL core subset should not include childModules'; $ok = $false }",
+    "if ($androidArgs -contains 'android-open-jdk') { Write-Host 'FAIL android subset requests android-open-jdk'; $ok = $false }",
     "if ($ok) { Write-Output 'FIX2-OK' } else { exit 7 }"
   ].join("\n");
 
@@ -334,6 +339,8 @@ describe("ensure-editor.ps1 production contract", () => {
     // The fixes must remain compatible with the script's declared baseline.
     expect(scriptText).toContain("#Requires -Version 5.1");
     expect(scriptText).toContain("Set-StrictMode -Version Latest");
+    expect(scriptText).toContain("function ConvertTo-ProcessArgumentLine");
+    expect(scriptText).not.toContain(".ArgumentList");
   });
 
   // --- 2a: --accept-eula on EVERY module INSTALL call, not the listing call. ---
@@ -589,9 +596,11 @@ describe("ensure-editor.ps1 production contract", () => {
   // --- 2b: the quarantine Move-Item is wrapped in Invoke-WithRetry. ---
   describe("2b: quarantine Move-Item is retried", () => {
     let quarantineBody;
+    let cleanupBody;
 
     beforeAll(() => {
       quarantineBody = extractFunctionBody(scriptText, "Move-UnityInstallDirectoryToQuarantine");
+      cleanupBody = extractFunctionBody(scriptText, "Stop-StaleUnityProvisioningProcesses");
     });
 
     test("the quarantine helper exists and performs the Move-Item", () => {
@@ -615,6 +624,17 @@ describe("ensure-editor.ps1 production contract", () => {
       // So tests can zero the backoff via DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS
       // and CI keeps the production default.
       expect(quarantineBody).toContain("Get-EnsureEditorRetryDelaySeconds");
+    });
+
+    test("stale Unity process cleanup runs before managed quarantine", () => {
+      expect(cleanupBody).not.toBe("");
+      expect(cleanupBody).toContain("Get-CimInstance Win32_Process");
+      expect(cleanupBody).toContain("Stop-Process");
+      expect(cleanupBody).toContain("Add-ProvisioningProcessCleanupEvent");
+      const cleanupIndex = quarantineBody.indexOf("Stop-StaleUnityProvisioningProcesses");
+      const moveIndex = quarantineBody.indexOf("Move-Item -LiteralPath $InstallDirectory");
+      expect(cleanupIndex).toBeGreaterThanOrEqual(0);
+      expect(moveIndex).toBeGreaterThan(cleanupIndex);
     });
   });
 

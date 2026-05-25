@@ -605,7 +605,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
     expect(combined).toContain("Quarantining unmanaged or partial Unity 6000.0.32f1 install");
     expect(combined).toContain(
-      "Repairing Unity 6000.0.32f1 by installing a fresh CLI-managed editor with core CI modules"
+      "Repairing Unity 6000.0.32f1 by installing a fresh CLI-managed editor with the full CI module set"
     );
     expect(combined).toContain("Retrying Unity 6000.0.32f1 repair install");
     expect(Number(fs.readFileSync(repairInstallMarker, "utf8"))).toBe(2);
@@ -747,20 +747,21 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
   // TIERING REGRESSION: when ONLY the Android tier is missing (core modules are
   // all present on disk) and the Android install keeps failing, the dedicated,
-  // bounded Android step must throw an Android-specific error WITH the post-mortem
-  // and must NEVER quarantine/re-download the editor (no `_quarantine` dir created,
-  // the editor + core modules survive untouched).
-  test("an Android-tier-only failure surfaces the Android error + post-mortem and does NOT quarantine the editor", () => {
+  // bounded Android step emits an Android-specific post-mortem, then escalates to
+  // a full managed quarantine/reinstall.
+  test("an Android-tier-only failure escalates to managed quarantine and a full reinstall", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-android-only-"));
     workspaces.push(base);
     const installRoot = path.join(base, "configured-root");
     const editorRoot = path.join(installRoot, "6000.0.32f1");
     const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    const argsLog = path.join(base, "unity-cli-args.tsv");
     writeFakeUnityEditor(editorExe);
 
     // Fabricate ONLY the CORE tier on disk (windows-il2cpp, webgl, linux-mono,
-    // linux-il2cpp). The Android tier (android, android-sdk-ndk-tools,
-    // android-open-jdk) is deliberately absent, and the fake CLI never delivers it.
+    // linux-il2cpp). The Android tier is deliberately absent, the bounded
+    // Android-only repair never delivers it, and the subsequent full reinstall
+    // does.
     const dataRoot = path.join(editorRoot, "Editor", "Data");
     const writeLeaf = (rel) => {
       const p = path.join(dataRoot, rel);
@@ -778,7 +779,14 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     );
     writeLeaf(path.join("PlaybackEngines", "WebGLSupport", "UnityEditor.WebGL.Extensions.dll"));
     writeLeaf(
-      path.join("PlaybackEngines", "WebGLSupport", "BuildTools", "Emscripten", "emscripten", "emcc.py")
+      path.join(
+        "PlaybackEngines",
+        "WebGLSupport",
+        "BuildTools",
+        "Emscripten",
+        "emscripten",
+        "emcc.py"
+      )
     );
     writeLeaf(
       path.join(
@@ -800,14 +808,36 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     );
 
     const cliBody = [
+      "const fs = require('fs');",
       "const path2 = require('path');",
       `const installRoot = ${JSON.stringify(installRoot)};`,
+      `const argsLog = ${JSON.stringify(argsLog)};`,
       "const editorRoot = path2.join(installRoot, '6000.0.32f1');",
+      "const editorExe = path2.join(editorRoot, 'Editor', 'Unity.exe');",
+      "const dataRoot = path2.join(editorRoot, 'Editor', 'Data');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path2.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function logArgs() { fs.appendFileSync(argsLog, args.join('\\t') + '\\n'); }",
+      "function createFullModules() {",
+      "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+      "  writeFile(path2.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+      "}",
       "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
       "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
       "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
       // The Android module install always fails (exit 6) and never writes the NDK/SDK.
-      "if (args[0] === 'install-modules') { write('{\"type\":\"progress\",\"phase\":\"install\",\"pct\":93,\"msg\":\"Installing Android NDK\"}'); write('INSTALL_FAILED'); exit(6); }",
+      'if (args[0] === \'install-modules\') { logArgs(); write(\'{"type":"progress","phase":"install","pct":93,"msg":"Installing Android NDK"}\'); write(\'INSTALL_FAILED\'); exit(6); }',
+      "if (args[0] === 'uninstall') { write('metadata cleared'); exit(0); }",
+      "if (args[0] === 'install') { logArgs(); createFullModules(); write('full reinstall completed'); exit(0); }",
       "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
     ];
     // Two bounded Android attempts with zero retry delay keeps the test fast.
@@ -818,19 +848,34 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     };
 
     const out = runEnsureEditorWithFakeCli(cliBody, installRoot, env);
+    const stdout = out.stdout || "";
     const combined = combinedText(out);
 
-    // The run fails on the Android tier...
-    expect(out.status).not.toBe(0);
-    expect(combined).toContain("Android CI module install FAILED after 2 attempt(s)");
-    expect(combined).toContain("deliberately NOT re-downloaded");
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
+    expect(combined).toContain("Android-only repair exhausted after 2 attempt(s)");
+    expect(combined).toContain("escalating to managed quarantine/reinstall");
+    expect(combined).toContain("full CI module set");
     expect(combined).toContain("android-sdk-ndk-tools");
-    // ...the post-mortem ran (per-group state lines), reporting core present.
+    expect(combined).toContain("--childModules");
+    const moduleCommandArgs = fs
+      .readFileSync(argsLog, "utf8")
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.split("\t"))
+      .filter((args) => args.includes("-m"));
+    expect(moduleCommandArgs.length).toBeGreaterThanOrEqual(1);
+    expect(moduleCommandArgs.some((args) => args.includes("android-open-jdk"))).toBe(false);
+    // The post-mortem ran before escalation, reporting core present and Android missing.
     expect(combined).toContain("module install post-mortem");
     expect(combined).toContain("module group 'windows-il2cpp': present");
     expect(combined).toContain("module group 'android-sdk-ndk-tools': MISSING");
-    // ...and CRUCIALLY: the editor was NOT quarantined and survives intact.
-    expect(fs.existsSync(path.join(installRoot, "_quarantine"))).toBe(false);
+    // The stale process cleanup hook ran, the partial editor was quarantined, and
+    // the replacement full install delivered Android.
+    expect(combined).toContain("Stale Unity provisioning process cleanup");
+    expect(fs.existsSync(path.join(installRoot, "_quarantine"))).toBe(true);
     expect(fs.existsSync(editorExe)).toBe(true);
     expect(
       fs.existsSync(
@@ -844,15 +889,71 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
         )
       )
     ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(dataRoot, "PlaybackEngines", "AndroidPlayer", "OpenJDK", "bin", "java.exe")
+      )
+    ).toBe(true);
   });
 
-  // MAJOR-1 REGRESSION (native-startup repair re-adds the Android tier). When the
-  // FINAL native-startup probe fails it triggers a managed reinstall via
-  // Repair-UnityEditorWithCiModules, which was rescoped to install + verify the
-  // CORE tier ONLY. Because the probe is the script's LAST provisioning step,
-  // returning the repaired (core-only) editor directly would yield an editor with
-  // NO Android tier. The fix re-ensures ALL tiers (Ensure-UnityCiModules) after the
-  // repair, so the Android payload is re-installed before the re-probe.
+  test("an Android-tier-only failure with repair disabled does not quarantine or reinstall", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-android-no-repair-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+    const installMarker = path.join(base, "unexpected-full-install.txt");
+    const argsLog = path.join(base, "unity-cli-args.tsv");
+    writeFakeUnityEditor(editorExe);
+    createCiModuleLayout(editorExe);
+    fs.rmSync(path.join(editorRoot, "Editor", "Data", "PlaybackEngines", "AndroidPlayer"), {
+      recursive: true,
+      force: true
+    });
+
+    const cliBody = [
+      "const fs = require('fs');",
+      `const installRoot = ${JSON.stringify(installRoot)};`,
+      `const installMarker = ${JSON.stringify(installMarker)};`,
+      `const argsLog = ${JSON.stringify(argsLog)};`,
+      "function logArgs() { fs.appendFileSync(argsLog, args.join('\\t') + '\\n'); }",
+      "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
+      "if (args[0] === 'install-modules') { logArgs(); write('android install failed'); exit(6); }",
+      "if (args[0] === 'install') { logArgs(); fs.writeFileSync(installMarker, args.join(' ')); write('unexpected full install'); exit(0); }",
+      "if (args[0] === 'uninstall') { write('unexpected uninstall'); exit(0); }",
+      "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: installRoot + '/6000.0.32f1' }] })); exit(0); }"
+    ];
+    const env = {
+      ...process.env,
+      DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS: "2",
+      DXM_ENSURE_EDITOR_RETRY_DELAY_SECONDS: "0",
+      DXM_UNITY_DISABLE_EDITOR_REPAIR: "1"
+    };
+
+    const out = runEnsureEditorWithFakeCli(cliBody, installRoot, env);
+    const combined = combinedText(out);
+
+    expect(out.status).not.toBe(0);
+    expect(combined).toContain("Android CI module install FAILED after 2 attempt(s)");
+    expect(combined).toContain("DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled escalation");
+    const moduleCommandArgs = fs
+      .readFileSync(argsLog, "utf8")
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.split("\t"))
+      .filter((args) => args.includes("-m"));
+    expect(moduleCommandArgs.length).toBe(2);
+    expect(moduleCommandArgs.some((args) => args.includes("android-open-jdk"))).toBe(false);
+    expect(fs.existsSync(path.join(installRoot, "_quarantine"))).toBe(false);
+    expect(fs.existsSync(installMarker)).toBe(false);
+    expect(fs.existsSync(editorExe)).toBe(true);
+  });
+
+  // Native-startup repair must preserve Android coverage. Full managed repair now
+  // requests the full desired module set atomically, so the repaired editor should
+  // already contain Android before the re-probe.
   //
   // STATIC corroboration (always-on, OS-independent): the production
   // Ensure-UnityNativeStartupHealthy must call Ensure-UnityCiModules AFTER the
@@ -875,7 +976,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
   // default). The @cross-platform-regression suite still runs this on ubuntu+macos.
   const itNativeRepair = process.platform === "win32" ? test.skip : test;
   itNativeRepair(
-    "a failed final native-startup probe repairs core then re-installs the Android tier (Android present after repair)",
+    "a failed final native-startup probe repairs with the full module set atomically",
     () => {
       const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-native-repair-"));
       workspaces.push(base);
@@ -883,9 +984,9 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
       const editorRoot = path.join(installRoot, "6000.0.32f1");
       const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
       // Markers: distinguish the pre-repair editor (probe fails) from the
-      // post-repair editor (probe succeeds), and prove the Android add ran.
+      // post-repair editor (probe succeeds), and prove the full install args.
       const repairedMarker = path.join(base, "repaired.txt");
-      const androidInstallMarker = path.join(base, "android-install-called.txt");
+      const repairInstallMarker = path.join(base, "repair-install-args.txt");
 
       // The PRE-EXISTING editor + the FULL CI layout already on disk, so
       // Ensure-UnityCiModules returns early (nothing to install) and the run
@@ -917,7 +1018,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
         "const path = require('path');",
         `const installRoot = ${JSON.stringify(installRoot)};`,
         `const repairedMarker = ${JSON.stringify(repairedMarker)};`,
-        `const androidInstallMarker = ${JSON.stringify(androidInstallMarker)};`,
+        `const repairInstallMarker = ${JSON.stringify(repairInstallMarker)};`,
         "const editorRoot = path.join(installRoot, '6000.0.32f1');",
         "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
         "const dataRoot = path.join(editorRoot, 'Editor', 'Data');",
@@ -925,18 +1026,14 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
         "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
         // After repair, the editor stub PASSES the probe (marker present).
         "function writeRepairedEditor() {",
-        "  writeFile(editorExe, '#!/usr/bin/env node\\n\"use strict\";\\nprocess.stdout.write(\"Unity fake version\\\\n\");\\nprocess.exit(0);\\n');",
+        '  writeFile(editorExe, \'#!/usr/bin/env node\\n"use strict";\\nprocess.stdout.write("Unity fake version\\\\n");\\nprocess.exit(0);\\n\');',
         "}",
-        // The CORE tier only (what the repair fresh-install delivers).
-        "function writeCoreModules() {",
+        "function writeFullModules() {",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
-        "}",
-        // The ANDROID tier payload (what the dedicated Android add must deliver).
-        "function writeAndroidModules() {",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
         "  writeFile(path.join(dataRoot, 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
@@ -946,14 +1043,9 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
         "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
         "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
         "if (args[0] === 'install-modules' && args.includes('-l')) { write('windows-il2cpp webgl android android-sdk-ndk-tools android-open-jdk linux-mono linux-il2cpp'); exit(0); }",
-        // The Android-tier add (install-modules -m android android-sdk-ndk-tools):
-        // record it and deliver the Android payload on disk.
-        "if (args[0] === 'install-modules' && args.includes('android')) { fs.writeFileSync(androidInstallMarker, args.join(' ')); writeAndroidModules(); write('android modules installed'); exit(0); }",
         "if (args[0] === 'install-modules') { write('No modules found to install'); exit(6); }",
         "if (args[0] === 'uninstall') { write('metadata cleared'); exit(0); }",
-        // The repair fresh-install: write the repaired (probe-passing) editor + the
-        // marker + the CORE tier ONLY (Android is added afterward by the script).
-        "if (args[0] === 'install') { fs.writeFileSync(repairedMarker, '1'); writeRepairedEditor(); writeCoreModules(); write('repaired editor with core modules'); exit(0); }",
+        "if (args[0] === 'install') { fs.writeFileSync(repairedMarker, '1'); fs.writeFileSync(repairInstallMarker, args.join(' ')); writeRepairedEditor(); writeFullModules(); write('repaired editor with full modules'); exit(0); }",
         "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
       ];
 
@@ -977,12 +1069,13 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
       expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
       // The native-startup probe failed before the lock and triggered a managed reinstall.
       expect(combined).toContain("native startup probe failed before the license lock");
-      // The dedicated Android tier add ran AFTER the (core-only) repair...
-      expect(fs.existsSync(androidInstallMarker)).toBe(true);
-      expect(fs.readFileSync(androidInstallMarker, "utf8")).toContain("android-sdk-ndk-tools");
-      // ...and CRUCIALLY the Android payload ends up on disk (the regression: a
-      // core-only repair would leave these MISSING). Without the fix line the
-      // Android add never runs, so this marker file + these leaves are absent.
+      // The full repair install requested Android through the single helper.
+      expect(fs.existsSync(repairInstallMarker)).toBe(true);
+      const repairArgs = fs.readFileSync(repairInstallMarker, "utf8");
+      expect(repairArgs).toContain("--childModules");
+      expect(repairArgs).toContain("android-sdk-ndk-tools");
+      expect(repairArgs).not.toContain("android-open-jdk");
+      // Android payload is present immediately after the full repair.
       expect(
         fs.existsSync(
           path.join(

@@ -402,14 +402,14 @@ describe("scripts/unity direct CI runner contract", () => {
     // The primary install builds its arg vector through the single source-of-truth
     // helper (which injects the mandatory --accept-eula), not a hand-built `-m`
     // vector that previously omitted the flag and broke every CI cell. The base
-    // install is now SCOPED to the core tier via -ModuleIds (the heavy/flaky Android
-    // tier is added afterward by Ensure-UnityCiModules in a dedicated step), so the
-    // assertion tolerates the trailing -ModuleIds (Get-UnityCiModuleIdsForTier ...)
+    // install now requests the full desired module set atomically, including
+    // Android, so Unity resolves child dependencies during the managed install
+    // instead of multiplying Android-only retry loops outside the install retry.
     // argument. Asserted whitespace-tolerantly (token intent, not an exact line) so
     // a harmless reformat never breaks this contract; the deeper sole-producer
     // invariant is pinned by the production-contract AST test.
     expect(ensureEditor).toMatch(
-      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s+-ModuleIds\s+\(Get-UnityCiModuleIdsForTier\s+-Tier\s+'core'\)\s*\)/
+      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s+-ModuleIds\s+\(Get-UnityCiModuleIds\)\s*\)/
     );
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
@@ -470,10 +470,13 @@ describe("scripts/unity direct CI runner contract", () => {
     // run-ci-tests.ps1 reads via `Select-Object -Last 1`.
     expect(ensureEditor).toContain("function Invoke-UnityCliSafe");
     expect(ensureEditor).toContain("function Get-UnityCliOutput");
-    // Invoke-UnityCliSafe is non-throwing: it returns a boolean and swallows
-    // non-zero exits (it never re-throws on $LASTEXITCODE). Pin the boolean
-    // return contract so a refactor cannot quietly make it throw.
+    // Invoke-UnityCliSafe is non-throwing: it returns a boolean and delegates to
+    // the timeout-capable process runner so optional probes cannot hang forever.
     expect(ensureEditor).toMatch(/function Invoke-UnityCliSafe[\s\S]*?return \(\$exit -eq 0\)/);
+    expect(ensureEditor).toMatch(
+      /function Invoke-UnityCliSafe[\s\S]*?Get-EnsureEditorProbeTimeoutSeconds[\s\S]*?Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds \$requestedTimeout[\s\S]*?Invoke-UnityCliCaptureWithTimeout -Arguments \$Arguments -TimeoutSeconds \$effectiveTimeout/
+    );
+    expect(ensureEditor).toContain("-TimeoutKnob 'DXM_ENSURE_EDITOR_PROBE_TIMEOUT_SECONDS'");
     // Set-UnityCliInstallPath routes through the best-effort invoker. Constrain
     // the gap with `[^}]*?` (no brace, so the match cannot cross out of the
     // function body) so a stray `Invoke-UnityCliSafe ... '-s' ...` in an unrelated
@@ -497,6 +500,9 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("function Get-UnityCliInstallRoot");
     expect(ensureEditor).toContain("Get-UnityCliOutput -Arguments @('install-path')");
     expect(ensureEditor).not.toMatch(/Invoke-UnityCli(Safe)?\s+-Arguments\s+@\('install-path'\)/);
+    expect(ensureEditor).toMatch(
+      /function Get-UnityCliOutput[\s\S]*?Get-EnsureEditorProbeTimeoutSeconds[\s\S]*?Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds \$requestedTimeout[\s\S]*?Invoke-UnityCliCaptureWithTimeout -Arguments \$Arguments -TimeoutSeconds \$effectiveTimeout/
+    );
     expect(ensureEditor).toContain("Test-LooksLikeAbsolutePath");
     // The path-like guard accepts a Windows drive-letter or UNC path only, so a
     // beta banner line cannot be mistaken for the install root.
@@ -592,6 +598,7 @@ describe("scripts/unity direct CI runner contract", () => {
       expect(helperBody).toContain("'install-modules'");
       expect(helperBody).toContain("'-e', $Version");
       expect(helperBody).toContain("'--accept-eula'");
+      expect(helperBody).toContain("'--childModules'");
       expect(helperBody).toContain("'-m'");
       // install verb branch: positional version (no `-e`) plus the same EULA flag.
       expect(helperBody).toContain("'install', $Version");
@@ -615,8 +622,9 @@ describe("scripts/unity direct CI runner contract", () => {
     // The install-modules vector is captured ONCE into a variable and reused for
     // both the install call and the failure-annotation arg echo (no duplicate
     // helper call). The CORE-tier module-add scopes the vector via -ModuleIds
-    // (Get-UnityCiModuleIdsForTier -Tier 'core'); the dedicated Android-tier step
-    // (Install-UnityAndroidModules) scopes its own via -ModuleIds $androidIds. Assert
+    // (Get-UnityCiModuleIdsForTier -Tier 'core') for existing editors; fresh and
+    // full-repair installs request Get-UnityCiModuleIds. The dedicated Android-tier
+    // step (Install-UnityAndroidModules) scopes its own via -ModuleIds $androidIds. Assert
     // the helper-routed assignment(s) + the variable-routed capturing invoke rather
     // than an inline-call regex that a refactor would break.
     expect(ensureEditor).toMatch(
@@ -636,6 +644,7 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toMatch(
       /Get-UnityCliModuleInstallArguments -Verb 'install' -Version \$Version/
     );
+    expect(ensureEditor).toContain("Get-EffectiveUnityCliTimeoutSeconds");
     // The OLD unconditional throwing install of the module must NOT reappear: it
     // wrongly aborted standalone on the idempotent "No modules found to install"
     // no-op. (Invoke-UnityCli is the throwing invoker; Invoke-UnityCliCapture is
@@ -707,23 +716,28 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(ensureEditor).toContain("DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS");
     // The capturing invoker delegates to the timeout runner.
     expect(ensureEditor).toMatch(
-      /function Invoke-UnityCliCapture\b[\s\S]*?Invoke-UnityCliCaptureWithTimeout -Arguments \$Arguments -TimeoutSeconds \(Get-EnsureEditorInstallTimeoutSeconds\)/
+      /function Invoke-UnityCliCapture\b[\s\S]*?Get-EnsureEditorInstallTimeoutSeconds[\s\S]*?Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds \$requestedTimeout[\s\S]*?Invoke-UnityCliCaptureWithTimeout -Arguments \$Arguments -TimeoutSeconds \$effectiveTimeout/
     );
     // The timeout runner tree-kills the whole process tree on a hang.
     expect(ensureEditor).toMatch(
       /function Invoke-UnityCliCaptureWithTimeout[\s\S]*?\$proc\.Kill\(\$true\)/
     );
+    expect(ensureEditor).toContain("function ConvertTo-ProcessArgumentLine");
+    expect(ensureEditor).not.toContain(".ArgumentList");
+    expect(ensureEditor).not.toMatch(/WaitForExit\(\)/);
     // DIAGNOSTICS: the failure tail is de-duplicated (collapses identical lines),
     // and a wrap-immune ::error:: summary names the last progress msg + disk space.
     expect(ensureEditor).toContain("function Get-CollapsedCliOutputTail");
     expect(ensureEditor).toContain("function Write-ModuleInstallFailureDiagnostics");
     expect(ensureEditor).toMatch(/Get-CollapsedCliOutputTail -Output/);
-    // The recovered-editor branch verifies CI modules (which adds the Android tier
-    // via Ensure-UnityCiModules). A clarifying comment documenting the bounded
-    // outer-retry x android-retry amplification may sit between the notice and the
-    // call, so tolerate intervening `#` comment lines (but not other code).
+    // The recovered-editor branch returns the resolved editor to the outer flow;
+    // module verification runs after the install retry wrapper, so an Android-only
+    // failure cannot multiply by the outer install retry count.
     expect(ensureEditor).toMatch(
-      /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*(?:#[^\n]*\n\s*)*\$resolvedAfterFailure = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$resolvedAfterFailure -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+      /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*return \$resolvedAfterFailure/
+    );
+    expect(ensureEditor).toMatch(
+      /\$editor = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
     );
 
     // Layered discovery wiring: install branch resolves through the layered

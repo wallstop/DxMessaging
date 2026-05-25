@@ -1,10 +1,10 @@
 name: Verify Unity tests actually ran
 description: >-
-  Fail unless an NUnit results.xml under results-dir reports total > 0. Closes
-  the game-ci "passes with zero tests" silent-green gap.
+  Fail unless an NUnit results.xml under results-dir reports total > 0 and
+  failed = 0. When XML is absent, list provisioning diagnostics.
 inputs:
   results-dir:
-    description: "Directory game-ci wrote the NUnit results XML into."
+    description: "Directory the Unity runner wrote the NUnit results XML into."
     required: true
   label:
     description: "Human label used in log lines and annotations."
@@ -18,7 +18,74 @@ runs:
       run: |
         $dir = "${{ inputs.results-dir }}"
         $label = "${{ inputs.label }}"
+        function Write-ProvisioningDiagnosticsHint {
+          param([Parameter(Mandatory = $true)][string]$ResultsDir)
+
+          $roots = New-Object System.Collections.Generic.List[string]
+          foreach ($candidate in @($ResultsDir, '.artifacts', 'artifact')) {
+            if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+              $full = (Resolve-Path -LiteralPath $candidate).Path
+              if (-not $roots.Contains($full)) {
+                $roots.Add($full)
+              }
+            }
+          }
+
+          $dirs = New-Object System.Collections.Generic.List[string]
+          foreach ($root in $roots) {
+            if ((Split-Path -Leaf $root) -ieq 'provisioning') {
+              if (-not $dirs.Contains($root)) {
+                $dirs.Add($root)
+              }
+            }
+
+            $direct = Join-Path $root 'provisioning'
+            if ((Test-Path -LiteralPath $direct) -and -not $dirs.Contains($direct)) {
+              $dirs.Add((Resolve-Path -LiteralPath $direct).Path)
+            }
+
+            Get-ChildItem -LiteralPath $root -Directory -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -ieq 'provisioning' } |
+              ForEach-Object {
+                if (-not $dirs.Contains($_.FullName)) {
+                  $dirs.Add($_.FullName)
+                }
+              }
+          }
+
+          if ($dirs.Count -lt 1) {
+            Write-Host "::warning::No provisioning diagnostics directory found under $ResultsDir, .artifacts, or artifact."
+            return
+          }
+
+          Write-Host "::group::Provisioning diagnostics files"
+          foreach ($diagnosticsDir in $dirs) {
+            Write-Host "Provisioning diagnostics directory: $diagnosticsDir"
+            $files = @(
+              Get-ChildItem -LiteralPath $diagnosticsDir -File -Recurse -ErrorAction SilentlyContinue |
+                Sort-Object FullName
+            )
+            if ($files.Count -lt 1) {
+              Write-Host "- (empty)"
+              continue
+            }
+
+            foreach ($file in $files) {
+              Write-Host "- $($file.FullName)"
+            }
+
+            $summary = $files |
+              Where-Object { $_.Name -match '(?i)summary' } |
+              Select-Object -First 1
+            if ($summary) {
+              Write-Host "::notice::Provisioning summary: $($summary.FullName)"
+            }
+          }
+          Write-Host "::endgroup::"
+        }
+
         if (-not (Test-Path $dir)) {
+          Write-ProvisioningDiagnosticsHint -ResultsDir $dir
           Write-Host "::error::No artifacts directory ($dir) -- Unity Test Runner did not produce results for $label"
           exit 1
         }
@@ -26,6 +93,7 @@ runs:
           Where-Object { Select-String -Path $_.FullName -Pattern '<test-run' -Quiet } |
           Select-Object -First 1
         if (-not $xml) {
+          Write-ProvisioningDiagnosticsHint -ResultsDir $dir
           Write-Host "::error::No NUnit results.xml (with a <test-run> element) under $dir -- tests did not run for $label"
           exit 1
         }
@@ -38,6 +106,10 @@ runs:
         Write-Host "Results: total=$total passed=$passed failed=$failed skipped=$skipped ($($xml.Name))"
         if ($total -lt 1) {
           Write-Host "::error::0 tests ran for $label -- check the assembly list / filter"
+          exit 1
+        }
+        if ($failed -gt 0) {
+          Write-Host "::error::$label reported $failed failed test(s); see $($xml.FullName)"
           exit 1
         }
         Write-Host "::notice::${label}: total=$total passed=$passed failed=$failed skipped=$skipped"

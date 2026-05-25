@@ -27,6 +27,7 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows");
 const ACTIONS_DIR = path.join(REPO_ROOT, ".github", "actions");
 const DISABLED_WORKFLOWS_DIR = path.join(REPO_ROOT, ".github", "workflows-disabled");
+const ENSURE_EDITOR_SCRIPT = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
 const DIAGNOSTICS_ACTION = path.join(
   ACTIONS_DIR,
   "print-self-hosted-runner-diagnostics",
@@ -63,6 +64,21 @@ function loadDisabledWorkflowYaml(name) {
 function loadDiagnosticsAction() {
   expect(fs.existsSync(DIAGNOSTICS_ACTION)).toBe(true);
   return yaml.load(fs.readFileSync(DIAGNOSTICS_ACTION, "utf8"));
+}
+
+function readEnsureEditorScript() {
+  expect(fs.existsSync(ENSURE_EDITOR_SCRIPT)).toBe(true);
+  return fs.readFileSync(ENSURE_EDITOR_SCRIPT, "utf8");
+}
+
+function extractEnsureEditorDefault(functionName) {
+  const escaped = functionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `function\\s+${escaped}\\s*\\{[\\s\\S]*?param\\(\\[int\\]\\$Default\\s*=\\s*([0-9]+)\\)`
+  );
+  const match = pattern.exec(readEnsureEditorScript());
+  expect(match).not.toBeNull();
+  return Number.parseInt(match[1], 10);
 }
 
 function collectSteps(parsed) {
@@ -177,6 +193,55 @@ const UNITY_LICENSED_JOBS = [
     runnerScript: "scripts/unity/run-ci-tests.ps1"
   }
 ];
+const UNITY_PROVISIONED_JOBS = [
+  ...UNITY_LICENSED_JOBS,
+  {
+    workflow: GAMECI_EXPERIMENT_WORKFLOW,
+    jobId: "game-ci-experiment",
+    hasMatrix: false,
+    runStepName: "Run GameCI normal project mode"
+  }
+];
+
+function findProvisionStep(steps) {
+  return steps.find(
+    (step) =>
+      step.name === "Provision Unity Editor" &&
+      step.shell === "pwsh" &&
+      typeof step.run === "string" &&
+      step.run.includes("./scripts/unity/ensure-editor.ps1")
+  );
+}
+
+function expectProvisioningDiagnosticsContract(steps) {
+  const provisionStep = findProvisionStep(steps);
+  expect(provisionStep).toBeDefined();
+  expect(provisionStep.run).toContain(
+    "$diagnosticsFile = Join-Path $diagnosticsPath 'ensure-editor-summary.json'"
+  );
+  expect(provisionStep.run).toContain("-DiagnosticsPath $diagnosticsFile");
+  expect(provisionStep.run).toContain("New-Item -ItemType Directory -Force -Path $diagnosticsPath");
+
+  const provisionIndex = steps.indexOf(provisionStep);
+  const acquireIndex = steps.findIndex(
+    (step) =>
+      step.uses ===
+      "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
+  );
+  const uploadIndex = steps.findIndex((step) => step.name === "Upload Unity provisioning diagnostics");
+
+  expect(uploadIndex).toBeGreaterThan(provisionIndex);
+  if (acquireIndex >= 0) {
+    expect(uploadIndex).toBeLessThan(acquireIndex);
+  }
+
+  const uploadStep = steps[uploadIndex];
+  expect(uploadStep.if).toBe("always()");
+  expect(uploadStep.uses).toBe("actions/upload-artifact@v7");
+  expect(uploadStep.with["if-no-files-found"]).toBe("warn");
+  expect(uploadStep.with.path).toContain("/provisioning");
+  expect(uploadStep.with.name).toContain("provisioning");
+}
 
 describe("Unity-credential-using jobs share the same runner + concurrency contract", () => {
   test.each(UNITY_LICENSED_JOBS)(
@@ -244,6 +309,32 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     }
   );
 
+  test.each(UNITY_PROVISIONED_JOBS)(
+    "$workflow job '$jobId' has ensure-editor provisioning diagnostics coverage",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      expectProvisioningDiagnosticsContract(parsed.jobs[jobId].steps);
+    }
+  );
+
+  test("every active ensure-editor workflow job is covered by provisioning diagnostics shape tests", () => {
+    const covered = new Set(UNITY_PROVISIONED_JOBS.map(({ workflow, jobId }) => `${workflow}:${jobId}`));
+    const uncovered = [];
+    for (const workflow of fs.readdirSync(WORKFLOWS_DIR).filter((name) => /\.ya?ml$/i.test(name))) {
+      const parsed = loadWorkflowYaml(workflow);
+      for (const [jobId, job] of Object.entries(parsed.jobs || {})) {
+        const hasEnsureEditor = (job.steps || []).some(
+          (step) =>
+            typeof step.run === "string" && step.run.includes("./scripts/unity/ensure-editor.ps1")
+        );
+        if (hasEnsureEditor && !covered.has(`${workflow}:${jobId}`)) {
+          uncovered.push(`${workflow}:${jobId}`);
+        }
+      }
+    }
+    expect(uncovered).toEqual([]);
+  });
+
   test.each(UNITY_LICENSED_JOBS)(
     "$workflow job '$jobId' wraps direct Unity runner with org lock acquire/release and license preflight",
     ({ workflow, jobId }) => {
@@ -264,6 +355,11 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
           typeof step.run === "string" &&
           step.run.includes("./scripts/unity/ensure-editor.ps1") &&
           step.run.includes("-CiManagedOnly") &&
+          step.run.includes(
+            "$diagnosticsFile = Join-Path $diagnosticsPath 'ensure-editor-summary.json'"
+          ) &&
+          step.run.includes("-DiagnosticsPath $diagnosticsFile") &&
+          step.run.includes("New-Item -ItemType Directory -Force -Path $diagnosticsPath") &&
           step.run.includes("UNITY_EDITOR_PATH=$editor") &&
           step.run.includes("$env:GITHUB_ENV")
       );
@@ -340,6 +436,28 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       expect(Number.isInteger(runTimeout)).toBe(true);
       expect(runTimeout).toBeGreaterThanOrEqual(120);
       expect(runTimeout).toBeLessThan(jobTimeout);
+    }
+  );
+
+  test.each(UNITY_PROVISIONED_JOBS)(
+    "$workflow job '$jobId' provisioning timeout exceeds ensure-editor recovery budget",
+    ({ workflow, jobId }) => {
+      const installTimeoutSeconds = extractEnsureEditorDefault(
+        "Get-EnsureEditorInstallTimeoutSeconds"
+      );
+      const retryAttempts = extractEnsureEditorDefault("Get-EnsureEditorInstallRetryAttempts");
+      const retryDelaySeconds = extractEnsureEditorDefault("Get-EnsureEditorRetryDelaySeconds");
+      const scriptRecoveryBudgetMinutes = Math.ceil(
+        (installTimeoutSeconds * retryAttempts + retryDelaySeconds * (retryAttempts - 1)) / 60
+      );
+
+      const parsed = loadWorkflowYaml(workflow);
+      const provisionStep = parsed.jobs[jobId].steps.find(
+        (step) => step.name === "Provision Unity Editor"
+      );
+
+      expect(scriptRecoveryBudgetMinutes).toBeGreaterThan(0);
+      expect(provisionStep["timeout-minutes"]).toBeGreaterThan(scriptRecoveryBudgetMinutes);
     }
   );
 
@@ -434,7 +552,10 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     const text = fs.readFileSync(actionPath, "utf8");
     expect(text).toContain("<test-run");
     expect(text).toMatch(/\$total\s*=\s*\[int\]/);
+    expect(text).toMatch(/\$failed\s*=\s*\[int\]/);
     expect(text).toContain("$total -lt 1");
+    expect(text).toContain("$failed -gt 0");
+    expect(text).toContain("Provisioning diagnostics files");
     // Composite run: steps on self-hosted Windows MUST set shell: pwsh.
     expect(text).toMatch(/shell:\s*pwsh/);
   });
@@ -678,7 +799,7 @@ describe(".github/workflows/unity-gameci-experiment.yml", () => {
     expect(text).not.toContain("projectPath: .unity-test-project");
   });
 
-  test("job timeout covers acquire timeout + the 120m run budget on the GameCI run step", () => {
+  test("job timeout covers provision + acquire timeout + the 120m run budget on the GameCI run step", () => {
     // The non-required GameCI experiment also acquires the shared Unity seat,
     // so it obeys the same timeout invariant: job >= acquire + RUN_BUDGET(120)
     // and a step-level guard >= 120 and strictly below the job timeout.
@@ -690,17 +811,23 @@ describe(".github/workflows/unity-gameci-experiment.yml", () => {
         step.uses ===
         "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
     );
+    const provisionStep = steps.find((step) => step.name === "Provision Unity Editor");
     const runStep = steps.find((step) => step.name === "Run GameCI normal project mode");
 
     expect(acquireStep).toBeDefined();
+    expect(provisionStep).toBeDefined();
     expect(runStep).toBeDefined();
 
     const acquireTimeout = Number.parseInt(acquireStep.with["timeout-minutes"], 10);
     expect(Number.isInteger(acquireTimeout)).toBe(true);
 
+    const provisionTimeout = provisionStep["timeout-minutes"];
+    expect(Number.isInteger(provisionTimeout)).toBe(true);
+    expect(provisionTimeout).toBeGreaterThanOrEqual(180);
+
     const jobTimeout = job["timeout-minutes"];
     expect(Number.isInteger(jobTimeout)).toBe(true);
-    expect(jobTimeout).toBeGreaterThanOrEqual(acquireTimeout + 120);
+    expect(jobTimeout).toBeGreaterThanOrEqual(provisionTimeout + acquireTimeout + 120);
 
     const runTimeout = runStep["timeout-minutes"];
     expect(Number.isInteger(runTimeout)).toBe(true);
