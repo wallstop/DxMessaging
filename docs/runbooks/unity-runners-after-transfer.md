@@ -384,6 +384,110 @@ Common failure modes and the remediation for each:
   `::error::` pointing at the KB2999226 download page. Install the MSU
   manually, reboot, and re-trigger. Modern runners should not hit this path.
 
+### Persistent 0xC0000135 after VC++ + long-paths are confirmed installed
+
+The per-job preflight (`assert-unity-host-prereqs`) has already exported
+`DXM_RUNNER_PREREQ_INSTALLED=1` (`vcredist=ok long-paths=ok`), yet Unity
+itself still exits `0xC0000135` from the startup probe. The DLL that the
+Windows loader cannot resolve is therefore **NOT** in the VC++
+Redistributable bundle. `ensure-editor.ps1` now resolves every Unity.exe
+import against the Windows loader search path (KnownDLLs / Unity install
+dir / System32 / Windows / PATH, both regular and delay-loaded imports)
+and emits an annotation that NAMES the specific missing DLL(s) instead
+of a truncated list. The annotation lives on a single line and looks
+roughly like:
+
+```text
+::error title=Unity <version> host prerequisite missing::Unity <version> native startup failed with exit -1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND). The Windows loader could not resolve a DLL Unity.exe imports. Preflight ran successfully at job start (VC++/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Re-running the bootstrap script will NOT help. MISSING DLL(s): <names>. ... Resolved: <S> system + <U> editor + <W> Windows + <P> PATH + <K> KnownDLLs out of <N> total imports. Probe log: ...
+```
+
+#### If the missing DLL is a SYSTEM library (`CRYPT32.dll`, `bcrypt.dll`, `KERNEL32.dll`, `ucrtbase.dll`, `api-ms-win-*.dll`, etc.)
+
+The host's Windows install is damaged or incomplete. Bootstrap cannot
+fix this; the system component itself is gone. Repair on the host:
+
+1. From an elevated PowerShell on the host:
+
+   ```powershell
+   sfc /scannow
+   DISM /Online /Cleanup-Image /RestoreHealth
+   ```
+
+   `sfc` repairs a known-bad system file from the local component store;
+   `DISM` repairs the component store itself from Windows Update if it
+   has been corrupted. Both are idempotent.
+
+1. If `sfc`/`DISM` cannot repair the file, reimage the runner. A
+   Windows install that has lost a core system DLL has had something
+   destructive happen to it (failed Windows Update, manual DLL
+   deletion, malware cleanup); reimaging is faster and safer than
+   patching the running install.
+
+#### If the missing DLL is UNITY-SHIPPED (`libfbxsdk.dll`, `optix.*.dll`, `OpenImageDenoise.dll`, `umbraoptimizer64.dll`, `*compress*.dll`, `FreeImage.dll`, `WinPixEventRuntime.dll`, etc.)
+
+The Unity install is partial or corrupt. The annotation includes the
+`partial or corrupt` hint when it detects any Unity-shipped DLL in the
+missing list. Quarantine and reinstall:
+
+1. Stop the runner agent so it does not hold files open:
+
+   ```powershell
+   Stop-Service actions.runner.*
+   ```
+
+1. Move the corrupt install to a quarantine directory (timestamp so
+   re-runs do not clobber prior quarantines):
+
+   ```powershell
+   $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+   New-Item -ItemType Directory -Force -Path 'C:\Unity\Editors\_quarantine' | Out-Null
+   Move-Item 'C:\Unity\Editors\<version>' "C:\Unity\Editors\_quarantine\<version>-$ts"
+   Start-Service actions.runner.*
+   ```
+
+1. On the next CI run, `ensure-editor.ps1`'s auto-install path will
+   re-download Unity into the now-empty managed root.
+
+Alternatively, force `ensure-editor.ps1` to perform the managed
+reinstall in-line from CI without a host-side operation. Set
+`DXM_UNITY_FORCE_REINSTALL=1` on the re-trigger (workflow-dispatch env,
+matrix env, or step-level env): the env var **bypasses the 0xC0000135
+short-circuit** and falls through to the existing repair pipeline. The
+bypass exists exactly for this case (operator has confirmed the missing
+DLL is Unity-shipped, not OS). Do NOT set this env var when the missing
+DLL is a system library; the reinstall will not help and will burn ~6
+minutes per matrix cell.
+
+#### If ALL imports resolve but Unity still fails 0xC0000135
+
+The annotation says `All Unity.exe imports resolve on the loader search
+path, yet the OS loader still failed`. This is rare; the loader is
+failing on a **transitive** dependency (one of Unity's direct imports
+has its own unresolved import) or a loader-init-time security policy
+block (EDR / AppLocker / Code Integrity Guard).
+
+1. Install the Windows SDK debug tools on the host
+   (`gflags.exe` ships with the Debugging Tools for Windows / Windows
+   SDK), then enable loader snaps for `Unity.exe`:
+
+   ```powershell
+   gflags.exe -i Unity.exe +sls
+   ```
+
+   The next CI run will surface the loader-init failure in the
+   **Application** event log (`eventvwr.msc` -> Windows Logs ->
+   Application) with the specific missing transitive dependency.
+
+1. Disable loader snaps after diagnosing (gflags settings persist):
+
+   ```powershell
+   gflags.exe -i Unity.exe -sls
+   ```
+
+1. If the failure is an EDR / AppLocker / CIG block, the event-log
+   entry will name the policy. Add `Unity.exe` and the Unity install
+   dir to the relevant allowlist on the host.
+
 ### Cross-references
 
 - Bootstrap script: [`scripts/unity/bootstrap-windows-runner.ps1`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/scripts/unity/bootstrap-windows-runner.ps1).

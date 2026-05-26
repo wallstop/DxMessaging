@@ -258,6 +258,98 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
     // Both throws MUST reference the runbook.
     expect(body).toMatch(/throw\s+"[^"]*unity-runners-after-transfer\.md/);
   });
+
+  test("Test-UnityImportResolution function exists with the expected param shape", () => {
+    // The resolver MUST accept -EditorPath and -Imports (the two pieces of
+    // state the caller funnels in). A regression that renamed either
+    // parameter would silently break the annotation pipeline; the AST guard
+    // anchors the contract.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-UnityImportResolution");
+    expect(body).not.toBeNull();
+    // -EditorPath MUST be mandatory but accept empty strings (the resolver
+    // is best-effort and must not throw when the caller has no path).
+    expect(body).toMatch(/\[Parameter\(Mandatory\s*=\s*\$true\)\]\[AllowEmptyString\(\)\]\[string\]\$EditorPath/);
+    // -Imports MUST accept empty collections (a partial PE walk may return
+    // zero imports; the resolver should still return its empty-bucket
+    // hashtable without throwing).
+    expect(body).toMatch(/\[AllowEmptyCollection\(\)\]\[string\[\]\]\$Imports/);
+    // The result hashtable MUST carry the documented buckets (the annotation
+    // pulls each key by name; renaming any of them would silently drop a
+    // resolved-count column).
+    expect(body).toMatch(/missing\s*=\s*@\(\)/);
+    expect(body).toMatch(/systemResolved\s*=\s*@\{\}/);
+    expect(body).toMatch(/windowsResolved\s*=\s*@\{\}/);
+    expect(body).toMatch(/unityResolved\s*=\s*@\{\}/);
+    expect(body).toMatch(/pathResolved\s*=\s*@\{\}/);
+    expect(body).toMatch(/knownDllsResolved\s*=\s*@\{\}/);
+    // DXM_UNITY_FAKE_MISSING_IMPORTS test override MUST be honored.
+    expect(body).toContain("DXM_UNITY_FAKE_MISSING_IMPORTS");
+    // KnownDLLs lookup must be Windows-gated (DirectorySeparatorChar branch)
+    // to keep the helper safe on Linux/macOS pwsh.
+    expect(body).toMatch(/HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\KnownDLLs/);
+  });
+
+  test("Test-UnityImportLooksUnityShipped exists and DOES NOT match OS-prereq DLLs", () => {
+    // The Unity-shipped heuristic MUST exist (the annotation uses it to
+    // route the "install corrupt" hint). The AST guard pins the patterns
+    // for libfbxsdk / optix / OpenImageDenoise so a refactor that removes
+    // them cannot silently regress the "set DXM_UNITY_FORCE_REINSTALL=1"
+    // operator-actionable hint.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-UnityImportLooksUnityShipped");
+    expect(body).not.toBeNull();
+    expect(body).toContain("libfbxsdk");
+    expect(body).toMatch(/optix/i);
+    expect(body).toMatch(/openimagedenoise/i);
+    // The heuristic must NOT match OS prereqs (those should still go to the
+    // bootstrap-script remediation). We anchor on the absence of explicit
+    // VCRUNTIME / MSVCP entries in the patterns array.
+    expect(body).not.toMatch(/'\^vcruntime/i);
+    expect(body).not.toMatch(/'\^msvcp/i);
+  });
+
+  test("Ensure-UnityNativeStartupHealthy short-circuit honors DXM_UNITY_FORCE_REINSTALL=1", () => {
+    // Operator-opt-out: when the named-missing-DLL annotation has identified a
+    // Unity-shipped DLL as the missing import, the operator can set
+    // DXM_UNITY_FORCE_REINSTALL=1 to bypass the 0xC0000135 short-circuit and
+    // re-trigger the managed reinstall. The bypass MUST be inside the
+    // Test-IsNativeDllNotFound branch (no value when the failure is something
+    // else), MUST be guarded by the literal "1" string (so a stray value
+    // cannot accidentally bypass), and MUST emit a CI notice so the override
+    // is visible in the log.
+    const body = extractPowerShellFunction(
+      SCRIPT_TEXT,
+      "Ensure-UnityNativeStartupHealthy"
+    );
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/\$env:DXM_UNITY_FORCE_REINSTALL\s*-eq\s*'1'/);
+    // The bypass must NOT short-circuit -- it falls through to the existing
+    // repair pipeline. Anchor that the throw is in the `else` branch of the
+    // bypass check (i.e. when the env var is NOT '1').
+    const bypassPattern =
+      /if\s*\(\$env:DXM_UNITY_FORCE_REINSTALL\s*-eq\s*'1'\)\s*\{[\s\S]*?Write-CiNotice[\s\S]*?\}\s*else\s*\{[\s\S]*?Write-UnityHostPrereqAnnotation[\s\S]*?throw\s+"[\s\S]*?\}/;
+    expect(body).toMatch(bypassPattern);
+    // The first-probe throw must mention DXM_UNITY_FORCE_REINSTALL so the
+    // operator sees the override hint at the moment the short-circuit fires.
+    const firstThrowMatch = bypassPattern.exec(body);
+    expect(firstThrowMatch).not.toBeNull();
+    expect(firstThrowMatch[0]).toContain("DXM_UNITY_FORCE_REINSTALL");
+  });
+
+  test("Get-UnityNativeImports walks BOTH the import and delay-import directories", () => {
+    // Delay-loaded imports surface 0xC0000135 the same as regular imports
+    // when the OS loader cannot resolve them at module-init time. The walk
+    // MUST inspect IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT (the
+    // DelayImportTableDirectory accessor on PEHeader); a regression that
+    // dropped the delay-import pass would silently hide a category of
+    // missing DLLs from the annotation.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Get-UnityNativeImports");
+    expect(body).not.toBeNull();
+    expect(body).toContain("ImportTableDirectory");
+    expect(body).toContain("DelayImportTableDirectory");
+    // The descriptor walk must be 32 bytes per entry for the delay-import
+    // directory (8 uint32 fields).
+    expect(body).toMatch(/RemainingBytes\s*-ge\s*32/);
+  });
 });
 
 // ===========================================================================
@@ -271,6 +363,12 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
     test.skip("Write-UnityHostPrereqAnnotation emits the canonical tokens", () => {});
     test.skip("Write-UnityHostPrereqAnnotation honors DXM_RUNNER_PREREQ_INSTALLED for cause phrasing", () => {});
     test.skip("Write-UnityHostPrereqAnnotation injects DXM_UNITY_FAKE_IMPORTS into the imports list", () => {});
+    test.skip("Test-UnityImportResolution honors DXM_UNITY_FAKE_MISSING_IMPORTS", () => {});
+    test.skip("Test-UnityImportResolution returns hashtable with every documented bucket", () => {});
+    test.skip("Test-UnityImportResolution NEVER throws on a bogus editor path or empty imports", () => {});
+    test.skip("Annotation: Unity-shipped missing DLL surfaces 'corrupt install' hint + DXM_UNITY_FORCE_REINSTALL", () => {});
+    test.skip("Annotation: when ALL imports resolve, switches to transitive-dependency hint", () => {});
+    test.skip("Annotation: 'Resolved: ...' diagnostic is always present and well-formed", () => {});
     return;
   }
 
@@ -284,6 +382,8 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
       "Test-IsNativeDllNotFound",
       "Get-NativeExitCodeDescription",
       "Get-UnityNativeImports",
+      "Test-UnityImportResolution",
+      "Test-UnityImportLooksUnityShipped",
       "Write-UnityHostPrereqAnnotation",
       "Write-CiNotice"
     ];
@@ -440,6 +540,14 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
     // The test override (documented in Get-UnityNativeImports) lets a
     // hermetic Linux/macOS test prove the annotation surfaces the import
     // list WITHOUT smuggling a real PE binary into the repo.
+    //
+    // On Linux (no Windows loader search path), Test-UnityImportResolution
+    // routes every injected name into the .missing bucket because the candidate
+    // dirs (System32, Windows, PATH) do not resolve. The annotation therefore
+    // phrases them as "MISSING DLL(s): <names>" rather than the truncated
+    // "Unity.exe imports:" list the previous implementation emitted. We assert
+    // on the new "MISSING DLL(s):" segment AND that every injected name is
+    // listed.
     const result = runHarness(
       [
         "$out = & {",
@@ -456,11 +564,232 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
       throw new Error(combined(result));
     }
     const out = combined(result);
-    // The "Unity.exe imports:" segment must list every injected name.
-    expect(out).toMatch(/Unity\.exe imports:/);
+    // The "MISSING DLL(s):" segment must name every injected import (on Linux
+    // all of them resolve as missing because System32/Windows/PATH are absent).
+    expect(out).toMatch(/MISSING DLL\(s\):/);
     expect(out).toContain("VCRUNTIME140.dll");
     expect(out).toContain("VCRUNTIME140_1.dll");
     expect(out).toContain("MSVCP140.dll");
     expect(out).toContain("KERNEL32.dll");
+    // The "Resolved:" diagnostic must always appear with the total import count.
+    expect(out).toMatch(/Resolved:.*out of 4 total imports/);
+  });
+
+  test("Test-UnityImportResolution honors DXM_UNITY_FAKE_MISSING_IMPORTS", () => {
+    // R3 (round-3 review minor) STRENGTHENED: the previous version of this
+    // test set the override and asserted alpha+gamma appear in .missing -- but
+    // on Linux ALL imports route to .missing via the real probe (no System32 /
+    // Windows / Unity install dir), so the assertion passed for the wrong
+    // reason (a mutation that removed the override entirely still passed).
+    //
+    // This version uses a synthetic editor workspace where alpha.dll and
+    // gamma.dll EXIST on disk alongside the editor binary, so the real probe
+    // would route them to .unityResolved. The override has to be active for
+    // them to land in .missing -- which is exactly what we want to assert.
+    const workspace = makeWorkspace();
+    const editorPath = path.join(workspace, "editor.bin");
+    fs.writeFileSync(editorPath, "stub", "utf8");
+    // alpha.dll and gamma.dll exist in the editor dir, so the real loader
+    // probe would resolve them. beta.dll does NOT exist; on Linux it would
+    // route to .missing via the real probe regardless of the override.
+    fs.writeFileSync(path.join(workspace, "alpha.dll"), "stub", "utf8");
+    fs.writeFileSync(path.join(workspace, "gamma.dll"), "stub", "utf8");
+
+    const escapedPath = editorPath.replace(/'/g, "''");
+
+    // Baseline run: NO override. alpha + gamma must resolve via the editor
+    // dir; only beta should be missing. Validates the real probe works.
+    const baseline = runHarness([
+      `$res = Test-UnityImportResolution -EditorPath '${escapedPath}' -Imports @('alpha.dll', 'beta.dll', 'gamma.dll')`,
+      "Write-Output ('missing=' + (($res.missing) -join ','))",
+      "Write-Output ('unityResolved=' + ([string[]]($res.unityResolved.Keys) -join ','))"
+    ]);
+    if (baseline.status !== 0) {
+      throw new Error(combined(baseline));
+    }
+    const baselineOut = (baseline.stdout || "").trim();
+    expect(baselineOut).toContain("missing=beta.dll");
+    expect(baselineOut).toContain("alpha.dll");
+    expect(baselineOut).toContain("gamma.dll");
+    expect(baselineOut).not.toMatch(/missing=[^\n]*alpha\.dll/);
+    expect(baselineOut).not.toMatch(/missing=[^\n]*gamma\.dll/);
+
+    // Override run: alpha.dll and gamma.dll are EXPLICITLY forced into
+    // .missing. The override must fire BEFORE the real probe -- so even
+    // though both files exist on disk, they land in .missing not
+    // .unityResolved. Mutation-safe: a future regression that removes the
+    // override entirely makes this case fail because the real probe would
+    // resolve alpha + gamma via the editor dir.
+    const overridden = runHarness(
+      [
+        `$res = Test-UnityImportResolution -EditorPath '${escapedPath}' -Imports @('alpha.dll', 'beta.dll', 'gamma.dll')`,
+        "Write-Output ('missing=' + (($res.missing) -join ','))",
+        "Write-Output ('unityResolved=' + ([string[]]($res.unityResolved.Keys) -join ','))"
+      ],
+      { DXM_UNITY_FAKE_MISSING_IMPORTS: "alpha.dll,gamma.dll" }
+    );
+    if (overridden.status !== 0) {
+      throw new Error(combined(overridden));
+    }
+    const overriddenOut = (overridden.stdout || "").trim();
+    expect(overriddenOut).toContain("alpha.dll");
+    expect(overriddenOut).toContain("gamma.dll");
+    // Critical: alpha + gamma must NOT appear in unityResolved (the override
+    // short-circuited the real probe).
+    expect(overriddenOut).not.toMatch(/unityResolved=[^\n]*alpha\.dll/);
+    expect(overriddenOut).not.toMatch(/unityResolved=[^\n]*gamma\.dll/);
+  });
+
+  test("Test-UnityImportResolution returns hashtable with every documented bucket", () => {
+    // The result shape MUST include every key the annotation reads
+    // (.missing, .systemResolved, .windowsResolved, .unityResolved,
+    // .pathResolved, .knownDllsResolved). Under StrictMode (Set-StrictMode
+    // -Version Latest), reading an undefined property throws; the helper
+    // therefore must pre-initialize ALL keys.
+    const result = runHarness([
+      "$res = Test-UnityImportResolution -EditorPath '/tmp/Unity.exe' -Imports @()",
+      "Write-Output ('keys=' + (($res.Keys | Sort-Object) -join ','))"
+    ]);
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = (result.stdout || "").trim();
+    // Sorted alphabetically: knownDllsResolved, missing, pathResolved,
+    // systemResolved, unityResolved, windowsResolved.
+    expect(out).toContain("knownDllsResolved");
+    expect(out).toContain("missing");
+    expect(out).toContain("pathResolved");
+    expect(out).toContain("systemResolved");
+    expect(out).toContain("unityResolved");
+    expect(out).toContain("windowsResolved");
+  });
+
+  test("Test-UnityImportResolution NEVER throws on a bogus editor path or empty imports", () => {
+    // Best-effort contract: any failure inside the resolver must NOT throw.
+    // A pwsh failure here would mask the underlying 0xC0000135 throw the
+    // caller is about to raise. Probe three paths:
+    //   (a) empty EditorPath + empty Imports list -> resolver must
+    //       short-circuit with empty missing.
+    //   (b) bogus editor path + one import -> the import doesn't resolve
+    //       anywhere, so it lands in .missing.
+    //   (c) empty EditorPath + one import -> same as (b); the resolver MUST
+    //       NOT throw when -EditorPath is the empty string (the parameter
+    //       is declared with [AllowEmptyString()] for exactly this reason).
+    const result = runHarness([
+      "$res = Test-UnityImportResolution -EditorPath '' -Imports @()",
+      "$res2 = Test-UnityImportResolution -EditorPath '/no/such/path/Unity.exe' -Imports @('foo.dll')",
+      "$res3 = Test-UnityImportResolution -EditorPath '' -Imports @('alpha.dll')",
+      "Write-Output ('a=' + $res.missing.Count)",
+      "Write-Output ('b=' + $res2.missing.Count)",
+      "Write-Output ('c=' + $res3.missing.Count)"
+    ]);
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const lines = (result.stdout || "").trim().split(/\r?\n/);
+    // Empty imports -> .missing is empty; bogus path + one import -> .missing
+    // has the one entry (it doesn't resolve anywhere); empty path + one
+    // import -> same (the resolver doesn't crash on missing $editorDir).
+    expect(lines).toContain("a=0");
+    expect(lines).toContain("b=1");
+    expect(lines).toContain("c=1");
+  });
+
+  test("Annotation: Unity-shipped missing DLL surfaces 'corrupt install' hint + DXM_UNITY_FORCE_REINSTALL", () => {
+    // When a missing DLL matches the Unity-shipped heuristic (libfbxsdk,
+    // optix, etc.), the annotation MUST suggest the install is corrupt AND
+    // name DXM_UNITY_FORCE_REINSTALL as the override. This pins the
+    // operator-actionable bypass for the 0xC0000135 short-circuit.
+    const result = runHarness(
+      [
+        "$out = & {",
+        "  Write-UnityHostPrereqAnnotation -Version '6000.0.32f1' -ExitCode -1073741515 -Description '0xC0000135 / STATUS_DLL_NOT_FOUND' -EditorPath '/nonexistent/Unity.exe'",
+        "} *>&1 | Out-String",
+        "Write-Output $out"
+      ],
+      {
+        DXM_UNITY_FAKE_IMPORTS: "libfbxsdk.dll,VCRUNTIME140.dll,KERNEL32.dll",
+        DXM_RUNNER_PREREQ_INSTALLED: ""
+      }
+    );
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = combined(result);
+    // "MISSING DLL(s):" segment present with the Unity-shipped name.
+    expect(out).toMatch(/MISSING DLL\(s\):/);
+    expect(out).toContain("libfbxsdk.dll");
+    // Unity-shipped sub-hint: corrupt install + reinstall guidance.
+    expect(out).toMatch(/Unity-shipped third-party libraries/);
+    expect(out).toMatch(/partial or corrupt/);
+    // The override env var MUST be surfaced in the annotation so the
+    // operator can copy-paste it.
+    expect(out).toContain("DXM_UNITY_FORCE_REINSTALL=1");
+  });
+
+  test("Annotation: when ALL imports resolve, switches to transitive-dependency hint", () => {
+    // When every import resolves on the loader search path yet the OS loader
+    // still failed, the annotation MUST point at transitive deps / EDR /
+    // malformed binary. We synthesize the all-resolve state by dropping a
+    // file with the import name next to a synthetic editor binary so the
+    // unityResolved bucket catches it. The synthetic editor file is named
+    // `editor.bin` so the unity-native-startup-probe-isolation guard does
+    // not flag this test as a fake-stub harness -- the test dot-sources the
+    // diagnostic helpers and never executes the editor; the resolver only
+    // takes Split-Path -Parent of the path string.
+    const workspace = makeWorkspace();
+    fs.writeFileSync(path.join(workspace, "alpha.dll"), "fake", "utf8");
+    fs.writeFileSync(path.join(workspace, "editor.bin"), "fake", "utf8");
+    const editorPath = path.join(workspace, "editor.bin");
+    const editorPathLiteral = editorPath.replace(/'/g, "''");
+    const result = runHarness(
+      [
+        "$out = & {",
+        `  Write-UnityHostPrereqAnnotation -Version '6000.0.32f1' -ExitCode -1073741515 -Description '0xC0000135 / STATUS_DLL_NOT_FOUND' -EditorPath '${editorPathLiteral}'`,
+        "} *>&1 | Out-String",
+        "Write-Output $out"
+      ],
+      {
+        // alpha.dll lives next to Unity.exe -> resolves via the
+        // unityResolved bucket. No missing entries -> annotation flips to
+        // the all-resolve phrasing.
+        DXM_UNITY_FAKE_IMPORTS: "alpha.dll",
+        DXM_RUNNER_PREREQ_INSTALLED: ""
+      }
+    );
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = combined(result);
+    expect(out).toMatch(/All Unity\.exe imports resolve on the loader search path/);
+    expect(out).toMatch(/transitive dependency/);
+    expect(out).toMatch(/gflags\.exe -i Unity\.exe \+sls/);
+    // No "MISSING DLL(s):" on this path.
+    expect(out).not.toMatch(/MISSING DLL\(s\):/);
+  });
+
+  test("Annotation: 'Resolved: ...' diagnostic is always present and well-formed", () => {
+    // The "Resolved:" segment is a load-bearing single-line tally the
+    // operator uses to validate "how much of the import list resolved" at
+    // a glance. Pin its shape: must contain "Resolved:" + the per-bucket
+    // counts (system/editor/Windows/PATH/KnownDLLs) + "out of N total
+    // imports".
+    const result = runHarness(
+      [
+        "$out = & {",
+        "  Write-UnityHostPrereqAnnotation -Version '6000.0.32f1' -ExitCode -1073741515 -Description '0xC0000135 / STATUS_DLL_NOT_FOUND' -EditorPath '/nonexistent/Unity.exe'",
+        "} *>&1 | Out-String",
+        "Write-Output $out"
+      ],
+      {
+        DXM_UNITY_FAKE_IMPORTS: "foo.dll,bar.dll,baz.dll",
+        DXM_RUNNER_PREREQ_INSTALLED: ""
+      }
+    );
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = combined(result);
+    expect(out).toMatch(/Resolved:.*system.*editor.*Windows.*PATH.*KnownDLLs.*out of 3 total imports/);
   });
 });

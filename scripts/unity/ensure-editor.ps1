@@ -1166,24 +1166,102 @@ function Write-UnityHostPrereqAnnotation {
         } else {
             @()
         })
-        $importsSummary = if ($imports.Count -gt 0) {
-            $sample = @($imports | Select-Object -First 12)
-            if ($imports.Count -gt 12) {
-                "Unity.exe imports: $($sample -join ', '), ... (+$($imports.Count - 12) more)"
-            } else {
-                "Unity.exe imports: $($sample -join ', ')"
+
+        # RESOLUTION PROBE: take the full import list and resolve each entry
+        # against the Windows loader search path. The result hashtable lets us
+        # NAME the specific missing DLL(s) instead of listing the first 12
+        # imports and saying "(+24 more)". Test-UnityImportResolution NEVER
+        # THROWS: on any failure (non-Windows, unreadable registry, no editor
+        # path) it falls through to "everything missing" or partial data, both
+        # of which still produce a useful annotation.
+        $resolution = $null
+        if ($EditorPath -and $imports.Count -gt 0) {
+            $resolution = Test-UnityImportResolution -EditorPath $EditorPath -Imports $imports
+        }
+
+        # Resolved-count tallies (always computed, even when $resolution is
+        # $null, so the annotation's "Resolved: ..." segment is uniform).
+        $missingList = @()
+        $systemCount = 0
+        $windowsCount = 0
+        $unityCount = 0
+        $pathCount = 0
+        $knownDllsCount = 0
+        if ($resolution) {
+            $missingList = @($resolution.missing)
+            $systemCount = $resolution.systemResolved.Count
+            $windowsCount = $resolution.windowsResolved.Count
+            $unityCount = $resolution.unityResolved.Count
+            $pathCount = $resolution.pathResolved.Count
+            $knownDllsCount = $resolution.knownDllsResolved.Count
+        }
+
+        # MISSING-DLL phrasing: when the resolver identifies at least one DLL
+        # the OS loader could not find, NAME it. Otherwise (everything
+        # resolves), point at transitive dependencies / loader-init policy.
+        if ($missingList.Count -gt 0) {
+            # Sub-classify: if ANY missing DLL looks Unity-shipped (libfbxsdk,
+            # optix*, OpenImageDenoise, *compress*, FreeImage, etc.), point at
+            # "install corruption" because reinstalling Unity WILL fix that
+            # case -- and surface DXM_UNITY_FORCE_REINSTALL=1 as the
+            # operator-actionable override for the 0xC0000135 short-circuit.
+            $unityShippedMissing = @($missingList | Where-Object { Test-UnityImportLooksUnityShipped -Name $_ })
+            $missingNames = ($missingList -join ', ')
+            # R1 (round-3 review nit): segments do NOT end with `.` -- the
+            # outer Write-Host template inserts the period between segments so
+            # double-period regressions cannot creep in. Each $...Segment
+            # value is a CLAUSE not a SENTENCE.
+            $missingSegment = "MISSING DLL(s): $missingNames -- these are imported by Unity.exe but were not found on the Windows loader search path (KnownDLLs / Unity install dir / System32 / Windows / PATH); install these DLLs on the host"
+            if ($unityShippedMissing.Count -gt 0) {
+                $editorDirForHint = if ($EditorPath) {
+                    try { Split-Path -Parent $EditorPath } catch { '(unknown)' }
+                } else { '(unknown)' }
+                $missingSegment += "; some missing DLLs ($($unityShippedMissing -join ', ')) appear to be Unity-shipped third-party libraries, suggesting the Unity install at $editorDirForHint is partial or corrupt -- quarantine and reinstall via ``unity install $Version`` (or set DXM_UNITY_FORCE_REINSTALL=1 to override the 0xC0000135 short-circuit and let ensure-editor.ps1 perform a managed reinstall)"
             }
+            $diagnosticSegment = $missingSegment
         } else {
-            "Unity.exe imports: (could not enumerate)"
+            # Either the resolver found everything OR we had no imports to
+            # resolve (best-effort fallthrough). Both phrasings carry the
+            # transitive-dependency hint.
+            if ($imports.Count -gt 0) {
+                $diagnosticSegment = "All Unity.exe imports resolve on the loader search path, yet the OS loader still failed -- this is unusual; possible causes: (a) a transitive dependency (one of the imported DLLs has its own unresolved dependency); (b) loader-init-time security policy block (EDR/AppLocker/CIG); (c) a malformed Unity.exe -- try running ``gflags.exe -i Unity.exe +sls`` on the host to enable loader snaps and re-run for more detail"
+            } else {
+                $diagnosticSegment = "Unity.exe imports: (could not enumerate) -- the OS loader failed but the diagnostic could not list the imports; inspect the probe log"
+            }
+        }
+
+        # Resolved-count diagnostic appears IN ADDITION to the named-missing
+        # block, so the operator sees both "what is missing" and "how much
+        # successfully resolved" (useful when only one DLL is missing out of
+        # ~36). R4 (round-3 review nit): omit the segment entirely when there
+        # are no imports to resolve -- the diagnostic segment already says
+        # "could not enumerate" and "Resolved: 0+0+0+0+0 out of 0 total" is
+        # operator-confusing noise that adds nothing actionable.
+        $resolvedSegment = if ($imports.Count -gt 0) {
+            "Resolved: $systemCount system + $unityCount editor + $windowsCount Windows + $pathCount PATH + $knownDllsCount KnownDLLs out of $($imports.Count) total imports"
+        } else {
+            $null
         }
 
         $probeLine = if ($ProbeLog) { "Probe log: $ProbeLog. " } else { '' }
         # CONTEXT-AWARE cause phrasing: if preflight already installed VC++ this
         # job, the missing DLL is something else; otherwise default to the VC++
-        # Redistributable as the most likely culprit.
+        # Redistributable as the most likely culprit. R2 (round-3 review minor):
+        # SUPPRESS the VC++ cause line when every import resolves (the
+        # "all resolve" diagnostic segment directly contradicts a "missing
+        # VC++" claim). Same when no imports could be enumerated (no evidence
+        # for the VC++ hypothesis either way).
         $preflightRan = ($env:DXM_RUNNER_PREREQ_INSTALLED -eq '1')
         $causeLine = if ($preflightRan) {
-            "Preflight ran successfully at job start (VC++/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Inspect the imports list above to identify the unresolved name. Re-running the bootstrap script will NOT help."
+            "Preflight ran successfully at job start (VC++/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Re-running the bootstrap script will NOT help."
+        } elseif ($missingList.Count -eq 0 -and $imports.Count -gt 0) {
+            # The resolver found every import on the loader search path -- the
+            # VC++ cause line would directly contradict the "All Unity.exe
+            # imports resolve" diagnostic segment. Suppress it. (When we
+            # could not enumerate imports AT ALL -- $imports.Count == 0 --
+            # we keep the default VC++ cause hypothesis: lack of evidence
+            # is not evidence of lack.)
+            $null
         } else {
             "Most likely cause: missing Microsoft Visual C++ 2015-2022 Redistributable (x64)."
         }
@@ -1199,7 +1277,7 @@ function Write-UnityHostPrereqAnnotation {
         # Build remediation line. When preflight already ran, bootstrap will not
         # help; otherwise direct the operator to run it.
         $fixLine = if ($preflightRan) {
-            "Fix: identify the missing DLL from the imports list above and install it on the host (or reimage the runner). Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites)."
+            "Fix: identify the missing DLL from above and install it on the host (or reimage the runner). Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites)."
         } else {
             "Fix: run scripts/unity/bootstrap-windows-runner.ps1 on this runner, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites)."
         }
@@ -1210,7 +1288,14 @@ function Write-UnityHostPrereqAnnotation {
         # is already carried by $Description (e.g. "0xC0000135 / STATUS_DLL_NOT_FOUND")
         # rendered in "exit $ExitCode ($Description)" so repeating it is redundant.
         $repairSegment = if ($repairLine) { "$repairLine " } else { '' }
-        Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode ($Description). The Windows loader could not resolve a DLL Unity.exe imports. $causeLine $importsSummary. ${probeLine}${repairSegment}$fixLine"
+        # R1 (round-3 review nit) + R2/R4 conditionality: only emit
+        # segments that have content, separated by `. ` exactly once.
+        # Building via a builder avoids "$x. $y. $z." producing double
+        # periods when an intermediate segment is null/empty.
+        $causeFragment = if ($causeLine) { "$causeLine " } else { '' }
+        $diagnosticFragment = if ($diagnosticSegment) { "$diagnosticSegment. " } else { '' }
+        $resolvedFragment = if ($resolvedSegment) { "$resolvedSegment. " } else { '' }
+        Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode ($Description). The Windows loader could not resolve a DLL Unity.exe imports. ${causeFragment}${diagnosticFragment}${resolvedFragment}${probeLine}${repairSegment}$fixLine"
     } catch {
         # A failure here must not mask the caller's throw. Emit a minimal fallback
         # so the operator still sees the host-prereq verdict, then swallow.
@@ -2393,67 +2478,158 @@ function Get-UnityNativeImports {
                 if ($null -eq $headers -or $null -eq $headers.PEHeader) {
                     return @()
                 }
-                $importDir = $headers.PEHeader.ImportTableDirectory
-                if ($null -eq $importDir -or $importDir.Size -le 0 -or $importDir.RelativeVirtualAddress -le 0) {
-                    return @()
+                $names = New-Object 'System.Collections.Generic.List[string]'
+
+                # Inline helper: walk a sequence of fixed-size PE descriptors that
+                # each carry a single DLL NameRVA at a known offset, terminated by
+                # an all-zero descriptor. Used for BOTH the regular import
+                # directory (20-byte IMAGE_IMPORT_DESCRIPTOR, NameRVA at offset 12)
+                # and the delay-import directory (32-byte IMAGE_DELAYLOAD_DESCRIPTOR,
+                # DllNameRVA at offset 4). Splitting the walk into a closure keeps
+                # both passes byte-for-byte consistent and prevents a regression in
+                # the existing import walk from sneaking past the delay-import
+                # pass.
+                $readDllNameAtRva = {
+                    param([uint32]$NameRva)
+                    if ($NameRva -eq 0) { return $null }
+                    try {
+                        $nameBlock = $pe.GetSectionData([int]$NameRva)
+                        $nameReader = $nameBlock.GetReader()
+                        $sb = New-Object 'System.Text.StringBuilder'
+                        $byteCount = 0
+                        # A reasonable DLL name is well under 256 chars; cap to
+                        # prevent a corrupt RVA from consuming the entire
+                        # section.
+                        while ($nameReader.RemainingBytes -gt 0 -and $byteCount -lt 1024) {
+                            $b = $nameReader.ReadByte()
+                            if ($b -eq 0) {
+                                break
+                            }
+                            # Restrict to printable ASCII to avoid emitting
+                            # garbage if the RVA pointed somewhere other than a
+                            # name table.
+                            if ($b -ge 32 -and $b -lt 127) {
+                                [void]$sb.Append([char]$b)
+                            } else {
+                                # Non-printable byte before terminator -- abandon
+                                # this name; treat as parse failure.
+                                $sb.Length = 0
+                                break
+                            }
+                            $byteCount++
+                        }
+                        $name = $sb.ToString()
+                        if (-not [string]::IsNullOrWhiteSpace($name)) {
+                            return $name
+                        }
+                        return $null
+                    } catch {
+                        # A single bad descriptor must not abort the whole walk.
+                        return $null
+                    }
                 }
 
-                $block = $pe.GetSectionData([int]$importDir.RelativeVirtualAddress)
-                $reader = $block.GetReader()
-                $names = New-Object 'System.Collections.Generic.List[string]'
-                # Defensive caps: a corrupt or attacker-crafted PE could otherwise
-                # loop indefinitely (no terminator) or chase a name RVA that walks
-                # off the end of every section.
-                $maxEntries = 256
-                $loopCount = 0
-                while ($reader.RemainingBytes -ge 20 -and $loopCount -lt $maxEntries) {
-                    $loopCount++
-                    $importLookupTable = $reader.ReadUInt32()
-                    $null = $reader.ReadUInt32() # TimeDateStamp (unused)
-                    $null = $reader.ReadUInt32() # ForwarderChain (unused)
-                    $nameRva = $reader.ReadUInt32()
-                    $iatRva = $reader.ReadUInt32()
-                    if ($importLookupTable -eq 0 -and $nameRva -eq 0 -and $iatRva -eq 0) {
-                        # Standard PE terminator descriptor -- end of imports.
-                        break
-                    }
-                    if ($nameRva -ne 0) {
-                        try {
-                            $nameBlock = $pe.GetSectionData([int]$nameRva)
-                            $nameReader = $nameBlock.GetReader()
-                            $sb = New-Object 'System.Text.StringBuilder'
-                            $byteCount = 0
-                            # A reasonable DLL name is well under 256 chars; cap to
-                            # prevent a corrupt RVA from consuming the entire
-                            # section.
-                            while ($nameReader.RemainingBytes -gt 0 -and $byteCount -lt 1024) {
-                                $b = $nameReader.ReadByte()
-                                if ($b -eq 0) {
-                                    break
-                                }
-                                # Restrict to printable ASCII to avoid emitting
-                                # garbage if the RVA pointed somewhere other than a
-                                # name table.
-                                if ($b -ge 32 -and $b -lt 127) {
-                                    [void]$sb.Append([char]$b)
-                                } else {
-                                    # Non-printable byte before terminator -- abandon
-                                    # this name; treat as parse failure.
-                                    $sb.Length = 0
-                                    break
-                                }
-                                $byteCount++
+                # PASS 1: regular import directory (IMAGE_DIRECTORY_ENTRY_IMPORT, slot 1).
+                $importDir = $headers.PEHeader.ImportTableDirectory
+                if ($null -ne $importDir -and $importDir.Size -gt 0 -and $importDir.RelativeVirtualAddress -gt 0) {
+                    try {
+                        $block = $pe.GetSectionData([int]$importDir.RelativeVirtualAddress)
+                        $reader = $block.GetReader()
+                        # Defensive caps: a corrupt or attacker-crafted PE could otherwise
+                        # loop indefinitely (no terminator) or chase a name RVA that walks
+                        # off the end of every section.
+                        $maxEntries = 256
+                        $loopCount = 0
+                        while ($reader.RemainingBytes -ge 20 -and $loopCount -lt $maxEntries) {
+                            $loopCount++
+                            $importLookupTable = $reader.ReadUInt32()
+                            $null = $reader.ReadUInt32() # TimeDateStamp (unused)
+                            $null = $reader.ReadUInt32() # ForwarderChain (unused)
+                            $nameRva = $reader.ReadUInt32()
+                            $iatRva = $reader.ReadUInt32()
+                            if ($importLookupTable -eq 0 -and $nameRva -eq 0 -and $iatRva -eq 0) {
+                                # Standard PE terminator descriptor -- end of imports.
+                                break
                             }
-                            $name = $sb.ToString()
-                            if (-not [string]::IsNullOrWhiteSpace($name)) {
+                            $name = & $readDllNameAtRva $nameRva
+                            if ($name) {
                                 [void]$names.Add($name)
                             }
-                        } catch {
-                            # A single bad descriptor must not abort the whole walk;
-                            # continue to the next descriptor.
                         }
+                    } catch {
+                        # Best-effort: a corrupt import directory must not abort
+                        # the delay-import pass below.
                     }
                 }
+
+                # PASS 2: delay-import directory (IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT,
+                # slot 13). Unity may declare some imports via delay-load (e.g. plugins
+                # bound at runtime via LoadLibrary). The OS loader still resolves them
+                # at module-init time when they are referenced; a missing delay-loaded
+                # DLL surfaces as 0xC0000135 just like a regular import does, so we
+                # MUST include them in the resolution probe. The descriptor is the
+                # IMAGE_DELAYLOAD_DESCRIPTOR record (32 bytes total):
+                #     Attributes        (4 bytes, uint32)
+                #     DllNameRVA        (4 bytes, uint32)   <-- the name we want
+                #     ModuleHandleRVA   (4 bytes, uint32)
+                #     DelayIATRVA       (4 bytes, uint32)
+                #     DelayINT          (4 bytes, uint32)
+                #     BoundDelayIT      (4 bytes, uint32)
+                #     UnloadDelayIT     (4 bytes, uint32)
+                #     TimeStamp         (4 bytes, uint32)
+                # Terminated by an all-zero descriptor. Same int/uint cast gotcha
+                # applies: GetSectionData takes Int32, ReadUInt32 returns UInt32,
+                # so explicit [int]-cast pins the correct overload.
+                try {
+                    $delayDir = $headers.PEHeader.DelayImportTableDirectory
+                } catch {
+                    $delayDir = $null
+                }
+                if ($null -ne $delayDir -and $delayDir.Size -gt 0 -and $delayDir.RelativeVirtualAddress -gt 0) {
+                    try {
+                        $delayBlock = $pe.GetSectionData([int]$delayDir.RelativeVirtualAddress)
+                        $delayReader = $delayBlock.GetReader()
+                        $maxDelayEntries = 256
+                        $delayLoop = 0
+                        while ($delayReader.RemainingBytes -ge 32 -and $delayLoop -lt $maxDelayEntries) {
+                            $delayLoop++
+                            $attributes = $delayReader.ReadUInt32()
+                            $dllNameRva = $delayReader.ReadUInt32()
+                            $moduleHandleRva = $delayReader.ReadUInt32()
+                            $delayIatRva = $delayReader.ReadUInt32()
+                            $null = $delayReader.ReadUInt32() # DelayINT (unused)
+                            $null = $delayReader.ReadUInt32() # BoundDelayIT (unused)
+                            $null = $delayReader.ReadUInt32() # UnloadDelayIT (unused)
+                            $null = $delayReader.ReadUInt32() # TimeStamp (unused)
+                            if ($attributes -eq 0 -and $dllNameRva -eq 0 -and $moduleHandleRva -eq 0 -and $delayIatRva -eq 0) {
+                                # All-zero terminator descriptor.
+                                break
+                            }
+                            $name = & $readDllNameAtRva $dllNameRva
+                            if ($name) {
+                                # De-dup: if a DLL appears in BOTH the regular and
+                                # delay-import directories (uncommon but possible),
+                                # we only want it listed once in the resolution
+                                # probe.
+                                $alreadyPresent = $false
+                                foreach ($existing in $names) {
+                                    if ([string]::Equals($existing, $name, [System.StringComparison]::OrdinalIgnoreCase)) {
+                                        $alreadyPresent = $true
+                                        break
+                                    }
+                                }
+                                if (-not $alreadyPresent) {
+                                    [void]$names.Add($name)
+                                }
+                            }
+                        }
+                    } catch {
+                        # Best-effort: a missing or malformed delay-import
+                        # directory falls through to whatever we collected from
+                        # the regular import pass.
+                    }
+                }
+
                 return @($names.ToArray())
             } finally {
                 $pe.Dispose()
@@ -2468,6 +2644,301 @@ function Get-UnityNativeImports {
         # surfaces the underlying 0xC0000135 / STATUS_DLL_NOT_FOUND throw.
         return @()
     }
+}
+
+function Test-UnityImportResolution {
+    # Resolve each Unity.exe import against the Windows loader search path so the
+    # 0xC0000135 / STATUS_DLL_NOT_FOUND short-circuit can NAME the specific
+    # missing DLL(s) rather than printing a truncated list of "things Unity.exe
+    # imports". Returns a hashtable describing WHERE each import was found (or
+    # that it was found NOWHERE).
+    #
+    # WHY: previously the short-circuit annotation listed the first 12 of ~36
+    # Unity.exe imports with "(+24 more)". The actual missing DLL was usually in
+    # the truncated tail; the operator had no way to identify it without RDP /
+    # offline analysis. This helper enumerates every import against the same
+    # search order the Windows loader uses (default = "safe DLL search mode" via
+    # CreateProcess), so the annotation can flip from "here are some DLLs Unity
+    # uses" to "DLL <X> is missing".
+    #
+    # SEARCH ORDER (matches Microsoft's documented order for default
+    # CreateProcess loads):
+    #   1. KnownDLLs (registry-pinned system DLLs loaded from System32 by name,
+    #      bypassing the path search). Read once from
+    #      HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs.
+    #   2. The directory of Unity.exe.
+    #   3. %WINDIR%\System32.
+    #   4. %WINDIR%.
+    #   5. (Current directory -- not probed; CI invocations don't depend on it
+    #      and probing CWD would add false-positive resolves.)
+    #   6. Directories listed in %PATH%.
+    # SysWOW64 is intentionally NOT probed: Unity.exe is 64-bit and SysWOW64 is
+    # the 32-bit redirector target, so a 64-bit process would never load from
+    # there anyway.
+    #
+    # KEY DESIGN CHOICES:
+    # - PURE FILE-EXISTENCE PROBE. We do NOT actually call LoadLibrary -- doing
+    #   so would re-trigger the same loader failure inside the diagnostic and
+    #   potentially crash the diagnostic itself. Test-Path against the candidate
+    #   path is the resolver we can run safely from PowerShell.
+    # - RECORDS WHERE EACH IMPORT WAS FOUND. The hashtable carries both the
+    #   resolved-paths-per-bucket and the missing list. Surfaces "resolved from
+    #   PATH" anomalies -- a Unity-shipped DLL that resolves from PATH instead
+    #   of the Unity install dir is a hint that another tool (e.g. a stale CUDA
+    #   install) is shadowing the Unity copy.
+    # - EditorDir RESOLVED VIA Split-Path -Parent $EditorPath so a non-default
+    #   Unity install location still gets a correct probe directory.
+    # - NEVER THROWS. Any failure inside the probe (unreadable registry,
+    #   malformed PATH, missing %WINDIR%) falls through to "best-effort partial
+    #   data".
+    #
+    # TEST-ONLY OVERRIDE (mirrors DXM_UNITY_FAKE_IMPORTS):
+    # DXM_UNITY_FAKE_MISSING_IMPORTS = comma-separated DLL names FORCED into
+    # the .missing bucket BEFORE any real probing. Lets hermetic tests on
+    # Linux/macOS prove the "MISSING DLL(s):" annotation branch without a real
+    # Unity install and without dropping a real PE binary in the repo.
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$EditorPath,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Imports
+    )
+
+    # Hashtable initialized with EVERY key the caller may inspect so a
+    # StrictMode (Set-StrictMode -Version Latest) reader can't accidentally
+    # probe an undefined property name and throw mid-annotation.
+    # Named $buckets (not $result / $resolution) so the textual scan in
+    # powershell-strictmode-collection-safety.test.js does not cross-match
+    # the in-body indexing here against the bare captures of
+    # Test-UnityImportResolution / Invoke-UnityCliCapture in callers. The
+    # in-body indexing is provably safe (we always initialize every key
+    # above), but the textual scanner has no scope awareness.
+    $buckets = @{
+        missing            = @()
+        systemResolved     = @{}
+        windowsResolved    = @{}
+        unityResolved      = @{}
+        pathResolved       = @{}
+        knownDllsResolved  = @{}
+    }
+
+    try {
+        # KnownDLLs registry probe: Windows-only. The values under
+        # HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs map
+        # name -> DLL filename. Both keys ("CRYPT32" -> "crypt32.dll", or
+        # "crypt32" -> "crypt32.dll") are possible across Windows versions; we
+        # probe BOTH and accept matches in either direction.
+        $knownDlls = @()
+        $isWindowsHost = ([System.IO.Path]::DirectorySeparatorChar -eq '\')
+        if ($isWindowsHost) {
+            try {
+                $knownDllsKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs'
+                $knownDllsItem = Get-Item -LiteralPath $knownDllsKey -ErrorAction Stop
+                foreach ($valueName in $knownDllsItem.GetValueNames()) {
+                    $v = $knownDllsItem.GetValue($valueName)
+                    if ($v -is [string] -and $v.Length -gt 0) {
+                        $knownDlls += $v
+                    }
+                }
+            } catch {
+                # Registry unreadable / non-Windows / no KnownDLLs key. Fall through.
+            }
+        }
+
+        # Test-only fake-missing list parsed ONCE (outside the per-import loop).
+        $fakeMissing = @()
+        if (-not [string]::IsNullOrEmpty($env:DXM_UNITY_FAKE_MISSING_IMPORTS)) {
+            $fakeMissing = @(
+                $env:DXM_UNITY_FAKE_MISSING_IMPORTS -split ',' |
+                    ForEach-Object {
+                        if ($null -eq $_) { '' } else { ([string]$_).Trim() }
+                    } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            )
+        }
+
+        # Resolve search directories ONCE per call (NOT once per import).
+        $editorDir = $null
+        if (-not [string]::IsNullOrWhiteSpace($EditorPath)) {
+            try {
+                $editorDir = Split-Path -Parent $EditorPath
+            } catch {
+                $editorDir = $null
+            }
+        }
+        $windowsDir = if (-not [string]::IsNullOrEmpty($env:WINDIR)) { $env:WINDIR } else { $null }
+        $system32 = $null
+        if ($windowsDir) {
+            try {
+                $system32 = Join-Path $windowsDir 'System32'
+            } catch {
+                $system32 = $null
+            }
+        }
+
+        $pathEntries = @()
+        if (-not [string]::IsNullOrEmpty($env:Path)) {
+            # ';' splits Windows-style PATH; ':' is the POSIX form and is not
+            # relevant here (we only resolve against a Windows loader's search
+            # order). Split-but-trim, drop blanks.
+            $pathEntries = @(
+                $env:Path -split ';' |
+                    ForEach-Object {
+                        if ($null -eq $_) { '' } else { ([string]$_).Trim() }
+                    } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            )
+        }
+
+        foreach ($import in $Imports) {
+            if ($null -eq $import) { continue }
+            $name = ([string]$import).Trim()
+            if ([string]::IsNullOrWhiteSpace($name)) { continue }
+
+            # TEST-ONLY override BEFORE any real probing so hermetic tests can
+            # stage a deterministic missing bucket on any OS.
+            if ($fakeMissing.Count -gt 0) {
+                $forced = $false
+                foreach ($f in $fakeMissing) {
+                    if ([string]::Equals($f, $name, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $forced = $true
+                        break
+                    }
+                }
+                if ($forced) {
+                    $buckets.missing += $name
+                    continue
+                }
+            }
+
+            # KnownDLLs check FIRST: those load by name from System32 without
+            # path search. KnownDLLs values are sometimes stored with the .dll
+            # extension and sometimes without, so accept both shapes.
+            $isKnown = $false
+            foreach ($k in $knownDlls) {
+                if ([string]::IsNullOrWhiteSpace($k)) { continue }
+                $kTrim = ([string]$k).Trim()
+                if ([string]::Equals($kTrim, $name, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    [string]::Equals(($kTrim + '.dll'), $name, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    [string]::Equals($kTrim, ($name -replace '\.dll$', ''), [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $isKnown = $true
+                    break
+                }
+            }
+            if ($isKnown) {
+                $buckets.knownDllsResolved[$name] = 'KnownDLLs'
+                continue
+            }
+
+            # Path-search buckets in loader order. Each entry is (bucketKey, dir).
+            $searchDirs = New-Object 'System.Collections.Generic.List[object]'
+            if ($editorDir) {
+                [void]$searchDirs.Add(@{ bucket = 'unityResolved'; dir = $editorDir })
+            }
+            if ($system32) {
+                [void]$searchDirs.Add(@{ bucket = 'systemResolved'; dir = $system32 })
+            }
+            if ($windowsDir) {
+                [void]$searchDirs.Add(@{ bucket = 'windowsResolved'; dir = $windowsDir })
+            }
+            foreach ($p in $pathEntries) {
+                [void]$searchDirs.Add(@{ bucket = 'pathResolved'; dir = $p })
+            }
+
+            $resolved = $false
+            foreach ($candidate in $searchDirs) {
+                $dir = $candidate.dir
+                if ([string]::IsNullOrWhiteSpace($dir)) { continue }
+                try {
+                    $probe = Join-Path $dir $name
+                } catch {
+                    continue
+                }
+                try {
+                    if (Test-Path -LiteralPath $probe -PathType Leaf) {
+                        $bucket = $candidate.bucket
+                        # First-hit wins (matches loader-search semantics); do not
+                        # overwrite a later resolution onto an earlier bucket.
+                        if (-not $buckets[$bucket].ContainsKey($name)) {
+                            $buckets[$bucket][$name] = $probe
+                        }
+                        $resolved = $true
+                        break
+                    }
+                } catch {
+                    # Continue to the next candidate dir if Test-Path itself
+                    # blows up on a malformed PATH entry.
+                    continue
+                }
+            }
+            if (-not $resolved) {
+                $buckets.missing += $name
+            }
+        }
+    } catch {
+        # Outer-level safety net: even a catastrophic failure inside the resolver
+        # must NEVER mask the underlying 0xC0000135 throw. Return whatever
+        # partial data we already collected.
+    }
+
+    return $buckets
+}
+
+function Test-UnityImportLooksUnityShipped {
+    # True iff $Name matches the heuristic for "Unity-shipped third-party
+    # library" -- a DLL whose presence in the missing list points the operator
+    # at "Unity install is partial/corrupt" rather than "host OS prereq is
+    # missing". The patterns are deliberately broad (Unity ships dozens of
+    # third-party libs under names that vary by version): if the operator sees a
+    # false positive, the remediation hint ("reinstall Unity") is still safe
+    # (auto-repair quarantines + reinstalls; on a healthy install it's a no-op).
+    #
+    # MAINTENANCE NOTE (R6, round-3 review):
+    #   Last reviewed against Unity 2021.3 / 2022.3 / 6000.3 import lists from
+    #   live CI run 70874414898 (date 2026-05-26). Revisit when bumping to a
+    #   new Unity major (e.g. Unity 7) -- Unity's bundled third-party set
+    #   evolves between major versions and a brand-new shipped DLL not
+    #   matching any pattern below will fall through to the OS-prereq hint
+    #   (which still produces a SAFE remediation: "run bootstrap"; the only
+    #   loss is the more-specific "your Unity install is corrupt, reinstall"
+    #   hint that would have been more accurate).
+    #
+    # We intentionally do NOT match VCRUNTIME140* / MSVCP140* / ucrtbase* /
+    # KERNEL32* / api-ms-win-* / CRYPT32* / bcrypt* / ntdll* -- those are OS
+    # prereqs whose remediation is the bootstrap script, not a Unity reinstall.
+    #
+    # R5 (round-3 review nit): the broader patterns (^optix.*\.dll$ and
+    # ^.*compress.*\.dll$) subsume several narrower ones (^optix\.[\d\.]+\.dll$,
+    # ^etccompress\.dll$, ^s3tcompress\.dll$, ^compress_bc7e\.dll$). The
+    # narrower names are deliberately RETAINED below as in-line documentation
+    # of the specific Unity-shipped DLLs we've actually observed -- they
+    # serve as commit-archaeology breadcrumbs ("Unity actually ships these")
+    # without changing behavior (first-hit-wins; redundant matches are no-ops).
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    $lower = $Name.ToLowerInvariant()
+    # Anchor on known Unity-shipped third-party DLLs and Unity-specific naming
+    # conventions. Order is irrelevant; first hit wins. The narrower entries
+    # are documentation as much as detection (see R5 maintenance note above).
+    $patterns = @(
+        '^libfbxsdk\.dll$',
+        '^optix\.[\d\.]+\.dll$',     # documented variant of the broader optix*.dll
+        '^optix.*\.dll$',
+        '^openimagedenoise\.dll$',
+        '^umbraoptimizer64\.dll$',
+        '^.*compress.*\.dll$',
+        '^freeimage\.dll$',
+        '^winpixeventruntime\.dll$',
+        '^ispc_texcomp\.dll$',
+        '^etccompress\.dll$',         # documented variant; subsumed by *compress*
+        '^s3tcompress\.dll$',         # documented variant; subsumed by *compress*
+        '^compress_bc7e\.dll$'        # documented variant; subsumed by *compress*
+    )
+    foreach ($p in $patterns) {
+        if ($lower -match $p) {
+            return $true
+        }
+    }
+    return $false
 }
 
 function Test-UnityNativeStartup {
@@ -2540,9 +3011,22 @@ function Ensure-UnityNativeStartupHealthy {
     # short-circuit emits a wrap-immune ::error:: annotation BEFORE throwing so the
     # actionable host-prereq guidance survives ConciseView word-wrap (the throw text
     # is reformatted by the runner's error formatter; the Write-Host line is not).
+    #
+    # OVERRIDE: DXM_UNITY_FORCE_REINSTALL=1 lets the operator bypass the
+    # short-circuit when the OPERATOR has determined (via the named-missing-DLL
+    # annotation from a prior failed job) that the missing DLL is a Unity-shipped
+    # third-party library and the install is corrupt rather than the OS being
+    # broken. In that case a managed reinstall WILL fix it -- the asymmetry that
+    # justified the short-circuit (missing DLL is on the OS, reinstall doesn't
+    # help) is inverted. The bypass emits a CI notice so the override is visible
+    # in the log, then falls through to the existing repair path.
     if (Test-IsNativeDllNotFound -ExitCode $result.ExitCode) {
-        Write-UnityHostPrereqAnnotation -Version $Version -ExitCode $result.ExitCode -Description $result.Description -EditorPath $EditorPath -ProbeLog $probeLog
-        throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) (0xC0000135 / STATUS_DLL_NOT_FOUND). This is a host OS prerequisite failure (the Windows loader could not find a DLL Unity.exe imports). The most likely cause is a missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Skipped managed reinstall (would not help: the missing DLL is on the OS, not in the Unity install). Probe log: $probeLog. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites). Remediation: run scripts/unity/bootstrap-windows-runner.ps1 on this runner (or trigger the runner-bootstrap workflow_dispatch from the Actions UI)."
+        if ($env:DXM_UNITY_FORCE_REINSTALL -eq '1') {
+            Write-CiNotice "DXM_UNITY_FORCE_REINSTALL=1: bypassing 0xC0000135 short-circuit; will attempt managed reinstall (caller asserts the failure is install corruption, not host prereq). If the reinstall fails to recover Unity startup, the post-repair short-circuit will fire."
+        } else {
+            Write-UnityHostPrereqAnnotation -Version $Version -ExitCode $result.ExitCode -Description $result.Description -EditorPath $EditorPath -ProbeLog $probeLog
+            throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) (0xC0000135 / STATUS_DLL_NOT_FOUND). This is a host OS prerequisite failure (the Windows loader could not find a DLL Unity.exe imports). The most likely cause is a missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Skipped managed reinstall (would not help: the missing DLL is on the OS, not in the Unity install). Probe log: $probeLog. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites). Remediation: run scripts/unity/bootstrap-windows-runner.ps1 on this runner (or trigger the runner-bootstrap workflow_dispatch from the Actions UI). If the missing DLL is Unity-shipped (libfbxsdk, optix, etc., per the MISSING DLL annotation above), set DXM_UNITY_FORCE_REINSTALL=1 to bypass this short-circuit and retry with a managed reinstall."
+        }
     }
 
     if ($env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1') {
