@@ -155,21 +155,24 @@ Unity workflow once the agent is back online.
 
 ## Android NDK install failures and Windows long-path (MAX_PATH) enablement
 
-The dedicated Android module install (`android` + `android-sdk-ndk-tools`) is a
-multi-GB Google download whose **NDK unpack** phase fails flakily on Windows.
+The Android provisioning profile installs `android` plus
+`android-sdk-ndk-tools`, a multi-GB Google download whose **NDK unpack** phase
+fails flakily on Windows. Non-Android Unity CI jobs should use `EditorOnly` or
+`StandaloneWindowsIl2Cpp` and should not enter this path.
 
 ### Symptom
 
-- The base editor and all core modules provision fine, but the run fails on the
-  Android tier with a message like
+- The base editor and any profile-selected non-Android modules provision fine,
+  but an Android-profile run fails on the Android tier with a message like
   `Unity <version> Android CI module install FAILED after N attempt(s)`.
 - The Unity CLI reaches roughly **93%** of the install and then dies, frequently
   with **exit code 6**, while the NDK extraction is in progress.
 - `ensure-editor.ps1`'s post-mortem (printed automatically on Android exhaustion)
   reports the **deepest NDK absolute path length** and the **`LongPathsEnabled`
   state**, and emits a `::warning::` pointing here when the deepest NDK path is at
-  or beyond ~240 characters while Windows long-path support is not enabled. The
-  editor is deliberately **not** quarantined or re-downloaded in this case.
+  or beyond ~240 characters while Windows long-path support is not enabled. After
+  bounded Android-only retries, the script may escalate to managed
+  quarantine/reinstall unless editor repair is disabled.
 
 ### Root cause
 

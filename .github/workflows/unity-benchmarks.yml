@@ -196,6 +196,7 @@ jobs:
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '${{ matrix.unity-version }}' `
             -CiManagedOnly `
+            -ProvisioningProfile EditorOnly `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
 

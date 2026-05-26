@@ -220,15 +220,10 @@ function runSoleProducerAst(scriptPath) {
     "if ($routed -lt 3) { Write-Host ('FAIL fewer than 3 routed module-install invokers (got {0})' -f $routed); $ok = $false }",
     // (C) behavior: execute the helper + ids fns (and the spec the ids derive from)
     // and check both verbs, both default and a tier subset.
-    "$specHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleSpec' }, $true))",
-    "if ($specHits.Count -lt 1) { Write-Host 'FAIL no module-spec fn'; exit 9 }",
-    "$idsHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleIds' }, $true))",
-    "if ($idsHits.Count -lt 1) { Write-Host 'FAIL no module-ids fn'; exit 9 }",
-    "$tierHits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-UnityCiModuleIdsForTier' }, $true))",
-    "if ($tierHits.Count -lt 1) { Write-Host 'FAIL no tier-ids fn'; exit 9 }",
-    "Invoke-Expression $specHits[0].Extent.Text",
-    "Invoke-Expression $idsHits[0].Extent.Text",
-    "Invoke-Expression $tierHits[0].Extent.Text",
+    "$dependencyNames = @('Get-UnityProvisioningProfile','Assert-UnityProvisioningProfile','Get-UnityCiModuleSpec','Get-UnityCiModuleSpecForProfile','Get-UnityCiModuleIds','Get-UnityCiModuleIdsForTier')",
+    "$dependencyFns = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $dependencyNames -contains $n.Name }, $true))",
+    "foreach ($name in $dependencyNames) { if (-not ($dependencyFns | Where-Object { $_.Name -eq $name })) { Write-Host ('FAIL missing dependency fn ' + $name); exit 9 } }",
+    "foreach ($name in $dependencyNames) { $fn = ($dependencyFns | Where-Object { $_.Name -eq $name })[0]; Invoke-Expression $fn.Extent.Text }",
     "Invoke-Expression $helper.Extent.Text",
     "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",
     "$modArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version '6000.0.32f1')",
@@ -284,7 +279,7 @@ function runSpecConsistency(scriptPath) {
     "$tokens = $null; $errs = $null",
     "$ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$tokens, [ref]$errs)",
     "if ($errs -and $errs.Count -gt 0) { Write-Host 'FAIL parse errors'; exit 3 }",
-    "$wanted = @('Get-UnityCiModuleSpec','Get-UnityCiModuleIds','Get-UnityCiVerifiedModuleGroups','Get-UnityCiModuleIdsForTier','Get-UnityCiModuleTier','Test-UnityCiModuleGroupPresent')",
+    "$wanted = @('Get-UnityProvisioningProfile','Assert-UnityProvisioningProfile','Get-UnityCiModuleSpec','Get-UnityCiModuleSpecForProfile','Get-UnityCiModuleIds','Get-UnityCiVerifiedModuleGroups','Get-UnityCiModuleIdsForTier','Get-UnityCiModuleTier','Test-UnityCiModuleGroupPresent')",
     "$fns = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $n.Name }, $true))",
     "foreach ($w in $wanted) { if (-not ($fns | Where-Object { $_.Name -eq $w })) { Write-Host ('FAIL missing fn ' + $w); exit 4 } }",
     "foreach ($f in $fns) { Invoke-Expression $f.Extent.Text }",
@@ -293,6 +288,9 @@ function runSpecConsistency(scriptPath) {
     "$verified = @(Get-UnityCiVerifiedModuleGroups)",
     "$core = @(Get-UnityCiModuleIdsForTier -Tier 'core')",
     "$android = @(Get-UnityCiModuleIdsForTier -Tier 'android')",
+    "$editorOnly = @(Get-UnityCiVerifiedModuleGroups -Profile 'EditorOnly')",
+    "$standalone = @(Get-UnityCiVerifiedModuleGroups -Profile 'StandaloneWindowsIl2Cpp')",
+    "$androidProfile = @(Get-UnityCiVerifiedModuleGroups -Profile 'Android')",
     "$specIds = @(Get-UnityCiModuleSpec | ForEach-Object { $_.Id })",
     "if ($requested -contains 'android-open-jdk') { Write-Host 'FAIL requested includes android-open-jdk'; $ok = $false }",
     "if ($requested -notcontains 'android-sdk-ndk-tools') { Write-Host 'FAIL requested missing android-sdk-ndk-tools'; $ok = $false }",
@@ -304,6 +302,10 @@ function runSpecConsistency(scriptPath) {
     "foreach ($r in $requested) { if ($tierUnion -notcontains $r) { Write-Host ('FAIL requested id in no tier: ' + $r); $ok = $false } }",
     "foreach ($t in $tierUnion) { if ($requested -notcontains $t) { Write-Host ('FAIL tier id not requested: ' + $t); $ok = $false } }",
     "foreach ($c in $core) { if ($android -contains $c) { Write-Host ('FAIL id in both tiers: ' + $c); $ok = $false } }",
+    "if ($editorOnly.Count -ne 0) { Write-Host 'FAIL EditorOnly should verify no module groups'; $ok = $false }",
+    "if ($standalone.Count -ne 1 -or $standalone[0] -ne 'windows-il2cpp') { Write-Host ('FAIL standalone profile groups: ' + ($standalone -join ',')); $ok = $false }",
+    "foreach ($id in @('android','android-sdk-ndk-tools','android-open-jdk')) { if ($androidProfile -notcontains $id) { Write-Host ('FAIL Android profile missing ' + $id); $ok = $false } }",
+    "foreach ($id in @('windows-il2cpp','webgl','linux-mono','linux-il2cpp')) { if ($androidProfile -contains $id) { Write-Host ('FAIL Android profile includes non-Android group ' + $id); $ok = $false } }",
     // Get-UnityCiModuleTier round-trips for every spec id.
     "foreach ($id in $specIds) { $tier = Get-UnityCiModuleTier $id; if ($tier -notin @('core','android')) { Write-Host ('FAIL bad tier for ' + $id + ': ' + $tier); $ok = $false } }",
     // Switch <-> spec parity: every spec id is a switch case, and vice-versa. The
@@ -504,6 +506,7 @@ describe("ensure-editor.ps1 production contract", () => {
     // EXECUTION-based assertions below are the authoritative ones.
     test("the single source of truth Get-UnityCiModuleSpec and the derived list functions exist", () => {
       expect(scriptText).toContain("function Get-UnityCiModuleSpec");
+      expect(scriptText).toContain("function Get-UnityCiModuleSpecForProfile");
       expect(scriptText).toContain("function Get-UnityCiModuleIds");
       expect(scriptText).toContain("function Get-UnityCiVerifiedModuleGroups");
       const specBody = extractFunctionBody(scriptText, "Get-UnityCiModuleSpec");
@@ -512,10 +515,10 @@ describe("ensure-editor.ps1 production contract", () => {
       expect(specCode).toContain("'android-open-jdk'");
       // The derived list functions must DERIVE from the spec (no hardcoded ids).
       expect(extractFunctionBody(scriptText, "Get-UnityCiModuleIds")).toContain(
-        "Get-UnityCiModuleSpec"
+        "Get-UnityCiModuleSpecForProfile"
       );
       expect(extractFunctionBody(scriptText, "Get-UnityCiVerifiedModuleGroups")).toContain(
-        "Get-UnityCiModuleSpec"
+        "Get-UnityCiModuleSpecForProfile"
       );
     });
 
@@ -549,7 +552,7 @@ describe("ensure-editor.ps1 production contract", () => {
           "$tokens = $null; $errs = $null",
           "$ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$tokens, [ref]$errs)",
           "if ($errs -and $errs.Count -gt 0) { Write-Host 'FAIL parse errors'; exit 3 }",
-          "$wanted = @('Get-UnityCiModuleSpec','Get-UnityCiModuleIdsForTier')",
+          "$wanted = @('Get-UnityProvisioningProfile','Assert-UnityProvisioningProfile','Get-UnityCiModuleSpec','Get-UnityCiModuleSpecForProfile','Get-UnityCiModuleIdsForTier')",
           "$fns = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $n.Name }, $true))",
           "foreach ($w in $wanted) { if (-not ($fns | Where-Object { $_.Name -eq $w })) { Write-Host ('FAIL missing fn ' + $w); exit 4 } }",
           "foreach ($f in $fns) { Invoke-Expression $f.Extent.Text }",
@@ -707,7 +710,13 @@ describe("ensure-editor.ps1 production contract", () => {
         "$helper = Get-Fn 'Get-UnityCliModuleInstallArguments'",
         "$ids = Get-Fn 'Get-UnityCiModuleIds'",
         "$spec = Get-Fn 'Get-UnityCiModuleSpec'",
+        "$profile = Get-Fn 'Get-UnityProvisioningProfile'",
+        "$assertProfile = Get-Fn 'Assert-UnityProvisioningProfile'",
+        "$profileSpec = Get-Fn 'Get-UnityCiModuleSpecForProfile'",
         "if (-not $spec) { Write-Error 'no module-spec fn'; exit 10 }",
+        "if (-not $profile) { Write-Error 'no provisioning-profile fn'; exit 11 }",
+        "if (-not $assertProfile) { Write-Error 'no profile assert fn'; exit 12 }",
+        "if (-not $profileSpec) { Write-Error 'no profile-spec fn'; exit 13 }",
         "if (-not $quarantine) { Write-Error 'no quarantine fn'; exit 4 }",
         "if (-not $guard) { Write-Error 'no guard fn'; exit 5 }",
         "if (-not $ensure) { Write-Error 'no ensure fn'; exit 6 }",
@@ -724,7 +733,10 @@ describe("ensure-editor.ps1 production contract", () => {
         // the generated argument vectors carry --accept-eula for BOTH verbs (so the
         // contract enforces behavior, not just text), and that the requested ids do
         // NOT include the bare android-open-jdk id the beta CLI rejects.
+        "Invoke-Expression $profile",
+        "Invoke-Expression $assertProfile",
         "Invoke-Expression $spec",
+        "Invoke-Expression $profileSpec",
         "Invoke-Expression $ids",
         "Invoke-Expression $helper",
         "$installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version '6000.0.32f1')",

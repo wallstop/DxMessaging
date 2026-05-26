@@ -96,7 +96,14 @@ describe("verify-unity-results composite action", () => {
     const workspace = makeWorkspace();
     const summaryDir = path.join(workspace, ".artifacts", "unity", "missing", "provisioning");
     fs.mkdirSync(summaryDir, { recursive: true });
-    fs.writeFileSync(path.join(summaryDir, "ensure-editor-summary.json"), "{}", "utf8");
+    fs.writeFileSync(
+      path.join(summaryDir, "ensure-editor-summary.json"),
+      JSON.stringify({
+        finalClassification: "failed: provisioning",
+        provisioningProfile: "EditorOnly"
+      }),
+      "utf8"
+    );
 
     const result = runActionScript(
       path.join(workspace, ".artifacts", "unity", "does-not-exist"),
@@ -109,6 +116,7 @@ describe("verify-unity-results composite action", () => {
     expect(text).toContain("No artifacts directory");
     expect(text).toContain("Provisioning diagnostics files");
     expect(text).toContain("ensure-editor-summary.json");
+    expect(text).toContain("classification=failed: provisioning profile=EditorOnly");
   });
 
   test("directory with provisioning diagnostics but no XML points at the summary", () => {
@@ -116,7 +124,14 @@ describe("verify-unity-results composite action", () => {
     const resultsDir = path.join(workspace, ".artifacts", "unity", "cell");
     const summaryDir = path.join(resultsDir, "provisioning");
     fs.mkdirSync(summaryDir, { recursive: true });
-    fs.writeFileSync(path.join(summaryDir, "ensure-editor-summary.json"), "{}", "utf8");
+    fs.writeFileSync(
+      path.join(summaryDir, "ensure-editor-summary.json"),
+      JSON.stringify({
+        finalClassification: "failed: Android NDK",
+        provisioningProfile: "StandaloneWindowsIl2Cpp"
+      }),
+      "utf8"
+    );
 
     const result = runActionScript(resultsDir, "No XML", workspace);
 
@@ -125,6 +140,7 @@ describe("verify-unity-results composite action", () => {
     expect(text).toContain("No NUnit results.xml");
     expect(text).toContain("Provisioning summary:");
     expect(text).toContain("ensure-editor-summary.json");
+    expect(text).toContain("classification=failed: Android NDK profile=StandaloneWindowsIl2Cpp");
   });
 
   test("zero-test XML fails with an explicit annotation", () => {

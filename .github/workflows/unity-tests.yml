@@ -251,9 +251,15 @@ jobs:
           $diagnosticsPath = Join-Path $artifactsPath 'provisioning'
           $diagnosticsFile = Join-Path $diagnosticsPath 'ensure-editor-summary.json'
           New-Item -ItemType Directory -Force -Path $diagnosticsPath | Out-Null
+          $provisioningProfile = if ('${{ matrix.test-mode }}' -eq 'standalone') {
+            'StandaloneWindowsIl2Cpp'
+          } else {
+            'EditorOnly'
+          }
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '${{ matrix.unity-version }}' `
             -CiManagedOnly `
+            -ProvisioningProfile $provisioningProfile `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
 

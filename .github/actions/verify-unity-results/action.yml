@@ -79,6 +79,22 @@ runs:
               Select-Object -First 1
             if ($summary) {
               Write-Host "::notice::Provisioning summary: $($summary.FullName)"
+              try {
+                $summaryJson = Get-Content -LiteralPath $summary.FullName -Raw | ConvertFrom-Json
+                $classification = if ($summaryJson.finalClassification) {
+                  [string]$summaryJson.finalClassification
+                } else {
+                  '(missing)'
+                }
+                $profile = if ($summaryJson.provisioningProfile) {
+                  [string]$summaryJson.provisioningProfile
+                } else {
+                  '(missing)'
+                }
+                Write-Host "::notice::Provisioning summary classification=$classification profile=$profile"
+              } catch {
+                Write-Host "::notice::Provisioning summary metadata could not be parsed: $($_.Exception.Message)"
+              }
             }
           }
           Write-Host "::endgroup::"

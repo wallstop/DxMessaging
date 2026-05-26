@@ -220,6 +220,7 @@ function expectProvisioningDiagnosticsContract(steps) {
     "$diagnosticsFile = Join-Path $diagnosticsPath 'ensure-editor-summary.json'"
   );
   expect(provisionStep.run).toContain("-DiagnosticsPath $diagnosticsFile");
+  expect(provisionStep.run).toContain("-ProvisioningProfile");
   expect(provisionStep.run).toContain("New-Item -ItemType Directory -Force -Path $diagnosticsPath");
 
   const provisionIndex = steps.indexOf(provisionStep);
@@ -228,7 +229,9 @@ function expectProvisioningDiagnosticsContract(steps) {
       step.uses ===
       "Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1"
   );
-  const uploadIndex = steps.findIndex((step) => step.name === "Upload Unity provisioning diagnostics");
+  const uploadIndex = steps.findIndex(
+    (step) => step.name === "Upload Unity provisioning diagnostics"
+  );
 
   expect(uploadIndex).toBeGreaterThan(provisionIndex);
   if (acquireIndex >= 0) {
@@ -241,6 +244,17 @@ function expectProvisioningDiagnosticsContract(steps) {
   expect(uploadStep.with["if-no-files-found"]).toBe("warn");
   expect(uploadStep.with.path).toContain("/provisioning");
   expect(uploadStep.with.name).toContain("provisioning");
+}
+
+function expectProvisioningProfileForJob(workflow, jobId, expected) {
+  const parsed = loadWorkflowYaml(workflow);
+  const provisionStep = findProvisionStep(parsed.jobs[jobId].steps);
+  expect(provisionStep).toBeDefined();
+  if (expected instanceof RegExp) {
+    expect(provisionStep.run).toMatch(expected);
+  } else {
+    expect(provisionStep.run).toContain(`-ProvisioningProfile ${expected}`);
+  }
 }
 
 describe("Unity-credential-using jobs share the same runner + concurrency contract", () => {
@@ -318,7 +332,9 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
   );
 
   test("every active ensure-editor workflow job is covered by provisioning diagnostics shape tests", () => {
-    const covered = new Set(UNITY_PROVISIONED_JOBS.map(({ workflow, jobId }) => `${workflow}:${jobId}`));
+    const covered = new Set(
+      UNITY_PROVISIONED_JOBS.map(({ workflow, jobId }) => `${workflow}:${jobId}`)
+    );
     const uncovered = [];
     for (const workflow of fs.readdirSync(WORKFLOWS_DIR).filter((name) => /\.ya?ml$/i.test(name))) {
       const parsed = loadWorkflowYaml(workflow);
@@ -355,6 +371,7 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
           typeof step.run === "string" &&
           step.run.includes("./scripts/unity/ensure-editor.ps1") &&
           step.run.includes("-CiManagedOnly") &&
+          step.run.includes("-ProvisioningProfile") &&
           step.run.includes(
             "$diagnosticsFile = Join-Path $diagnosticsPath 'ensure-editor-summary.json'"
           ) &&
@@ -460,6 +477,29 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
       expect(provisionStep["timeout-minutes"]).toBeGreaterThan(scriptRecoveryBudgetMinutes);
     }
   );
+
+  test("unity-tests scopes editor provisioning by test mode", () => {
+    expectProvisioningProfileForJob(
+      "unity-tests.yml",
+      "unity-tests",
+      /if \('\$\{\{ matrix\.test-mode \}\}' -eq 'standalone'\)[\s\S]*StandaloneWindowsIl2Cpp[\s\S]*EditorOnly[\s\S]*-ProvisioningProfile \$provisioningProfile/
+    );
+  });
+
+  test.each([
+    ["unity-benchmarks.yml", "benchmarks"],
+    ["release.yml", "unity-checks"]
+  ])("%s job '%s' uses EditorOnly provisioning", (workflow, jobId) => {
+    expectProvisioningProfileForJob(workflow, jobId, "EditorOnly");
+  });
+
+  test("GameCI experiment scopes editor provisioning by test mode", () => {
+    expectProvisioningProfileForJob(
+      GAMECI_EXPERIMENT_WORKFLOW,
+      "game-ci-experiment",
+      /if \('\$\{\{ inputs\.test-mode \}\}' -eq 'standalone'\)[\s\S]*StandaloneWindowsIl2Cpp[\s\S]*EditorOnly[\s\S]*-ProvisioningProfile \$provisioningProfile/
+    );
+  });
 
   test.each(UNITY_LICENSED_JOBS.filter((job) => job.requiresLibraryCache))(
     "$workflow declares an exact Library cache key with no broad restore-keys",

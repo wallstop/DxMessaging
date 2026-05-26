@@ -263,6 +263,7 @@ jobs:
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '2022.3.45f1' `
             -CiManagedOnly `
+            -ProvisioningProfile EditorOnly `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
 

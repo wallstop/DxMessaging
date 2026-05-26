@@ -402,15 +402,18 @@ describe("scripts/unity direct CI runner contract", () => {
     // The primary install builds its arg vector through the single source-of-truth
     // helper (which injects the mandatory --accept-eula), not a hand-built `-m`
     // vector that previously omitted the flag and broke every CI cell. The base
-    // install now requests the full desired module set atomically, including
-    // Android, so Unity resolves child dependencies during the managed install
-    // instead of multiplying Android-only retry loops outside the install retry.
+    // install now requests the selected provisioning profile atomically, so
+    // Android dependencies are only resolved when the selected profile needs
+    // Android.
     // argument. Asserted whitespace-tolerantly (token intent, not an exact line) so
     // a harmless reformat never breaks this contract; the deeper sole-producer
     // invariant is pinned by the production-contract AST test.
     expect(ensureEditor).toMatch(
-      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s+-ModuleIds\s+\(Get-UnityCiModuleIds\)\s*\)/
+      /\$installArgs\s*=\s*@\(\s*Get-UnityCliModuleInstallArguments\s+-Verb\s+'install'\s+-Version\s+\$UnityVersion\s+-ModuleIds\s+\(Get-UnityCiModuleIds -Profile \$ProvisioningProfile\)\s*\)/
     );
+    expect(ensureEditor).toContain("ProvisioningProfile");
+    expect(ensureEditor).toContain("StandaloneWindowsIl2Cpp");
+    expect(ensureEditor).toContain("EditorOnly");
     expect(ensureEditor).toContain("install-modules");
     expect(ensureEditor).toContain("windows-il2cpp");
     expect(ensureEditor).toContain("Unity.exe");
@@ -442,7 +445,7 @@ describe("scripts/unity direct CI runner contract", () => {
     // with NO args is a GETTER, and the SET flag is undocumented. The script
     // must (a) never pass a positional dir to install-path, (b) set the path
     // best-effort via -s, (c) resolve the install root from the getter, (d)
-    // discover editors defensively, and (e) enforce the full CI module bundle.
+    // discover editors defensively, and (e) enforce profile-scoped provisioning.
     // ----------------------------------------------------------------------
 
     // (a) install-path SET must use the -s flag, NOT a positional directory.
@@ -525,10 +528,9 @@ describe("scripts/unity direct CI runner contract", () => {
       /try\s*\{[^}]*ConvertFrom-Json[\s\S]*?\}\s*catch\s*\{[^}]*?return/
     );
 
-    // (e) CI module desired state: every Unity version is provisioned with the
-    // modules this repository may need across Windows standalone IL2CPP, WebGL,
-    // Android, and Linux build support. Module repair must classify against disk
-    // and reinstall a managed editor when module installation cannot modify it.
+    // (e) CI module desired state: each provisioning profile is mapped to the
+    // exact modules that workflow mode needs. Module repair must classify against
+    // disk and reinstall a managed editor when module installation cannot modify it.
     //
     // SINGLE SOURCE OF TRUTH: the script keeps ONE spec (Get-UnityCiModuleSpec) from
     // which the REQUESTED ids passed to `-m` (Get-UnityCiModuleIds, which omits the
@@ -622,13 +624,14 @@ describe("scripts/unity direct CI runner contract", () => {
     // The install-modules vector is captured ONCE into a variable and reused for
     // both the install call and the failure-annotation arg echo (no duplicate
     // helper call). The CORE-tier module-add scopes the vector via -ModuleIds
-    // (Get-UnityCiModuleIdsForTier -Tier 'core') for existing editors; fresh and
-    // full-repair installs request Get-UnityCiModuleIds. The dedicated Android-tier
-    // step (Install-UnityAndroidModules) scopes its own via -ModuleIds $androidIds. Assert
+    // (Get-UnityCiModuleIdsForTier -Tier 'core' -Profile $Profile) for existing
+    // editors; fresh and full-repair installs request Get-UnityCiModuleIds for
+    // the selected profile. The dedicated Android-tier step
+    // (Install-UnityAndroidModules) scopes its own via -ModuleIds $androidIds. Assert
     // the helper-routed assignment(s) + the variable-routed capturing invoke rather
     // than an inline-call regex that a refactor would break.
     expect(ensureEditor).toMatch(
-      /\$installArgs = @\(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version \$Version -ModuleIds \(Get-UnityCiModuleIdsForTier -Tier 'core'\)\)/
+      /\$installArgs = @\(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version \$Version -ModuleIds \(Get-UnityCiModuleIdsForTier -Tier 'core' -Profile \$Profile\)\)/
     );
     // The dedicated Android tier step routes the android-scoped vector through the
     // same sole producer.
@@ -737,7 +740,7 @@ describe("scripts/unity direct CI runner contract", () => {
       /Write-CiNotice "Verifying required CI modules after recovered editor install\."\s*return \$resolvedAfterFailure/
     );
     expect(ensureEditor).toMatch(
-      /\$editor = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+      /\$editor = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -Profile \$ProvisioningProfile -ManagedOnly:\$CiManagedOnly/
     );
 
     // Layered discovery wiring: install branch resolves through the layered
@@ -756,10 +759,10 @@ describe("scripts/unity direct CI runner contract", () => {
     // Pin the module call site: existing editors must be pushed through the same
     // desired-state module repair function with the requested version/root.
     expect(ensureEditor).toMatch(
-      /\$editor = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+      /\$editor = Ensure-UnityCiModules -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -Profile \$ProvisioningProfile -ManagedOnly:\$CiManagedOnly/
     );
     expect(ensureEditor).toMatch(
-      /\$editor = Ensure-UnityNativeStartupHealthy -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -ManagedOnly:\$CiManagedOnly/
+      /\$editor = Ensure-UnityNativeStartupHealthy -Version \$UnityVersion -EditorPath \$editor -InstallRoot \$InstallRoot -Profile \$ProvisioningProfile -ManagedOnly:\$CiManagedOnly/
     );
     expect(ensureEditor).toMatch(
       /Install-UnityEditorWithCiModules[\s\S]*?Resolve-InstalledEditor -Version \$Version -Root \$InstallRoot -ManagedOnly:\$ManagedOnly/
@@ -768,7 +771,7 @@ describe("scripts/unity direct CI runner contract", () => {
       /if \(\$ManagedOnly\) \{\s*Confirm-UnityCliManagedInstallRoot -Root \$InstallRoot \| Out-Null\s*\}/
     );
     expect(ensureEditor).toMatch(
-      /Repair-UnityEditorWithCiModules[\s\S]*?Install-UnityEditorWithCiModules -Version \$Version -InstallRoot \$InstallRoot -Reason \$Reason -ManagedOnly:\$ManagedOnly/
+      /Repair-UnityEditorWithCiModules[\s\S]*?Install-UnityEditorWithCiModules -Version \$Version -InstallRoot \$InstallRoot -Reason \$Reason -Profile \$Profile -ManagedOnly:\$ManagedOnly/
     );
     expect(ensureEditor).toMatch(
       /Repair-UnityEditorWithCiModules[\s\S]*?Move-UnityVersionInstallToQuarantine -Version \$Version -InstallRoot \$InstallRoot/
@@ -807,6 +810,11 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).toContain("function Invoke-UnityNativeStartupProbe");
     expect(runCi).toContain("after pre-lock editor provisioning");
     expect(runCi).toContain("host OS/runtime prerequisite damage");
+    expect(runCi).toContain("$provisioningProfile = if ($TestMode -eq 'standalone')");
+    expect(runCi).toContain("'StandaloneWindowsIl2Cpp'");
+    expect(runCi).toContain("'EditorOnly'");
+    expect(runCi).toContain("ProvisioningProfile = $provisioningProfile");
+    expect(runCi).not.toContain("WithWindowsIl2Cpp = $true");
   });
 
   test("run-ci-tests creates an ephemeral package host project", () => {

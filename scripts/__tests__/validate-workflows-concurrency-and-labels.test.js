@@ -671,7 +671,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Acquire organization Unity lock
         uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
@@ -692,7 +692,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $Editor = ./scripts/unity/ENSURE-EDITOR.ps1 -UnityVersion '2022.3.45f1' -CIManagedOnly
+          $Editor = ./scripts/unity/ENSURE-EDITOR.ps1 -UnityVersion '2022.3.45f1' -CIManagedOnly -ProvisioningProfile EditorOnly
           "unity_editor_path=$Editor" | Out-File -FilePath $env:github_env -Append
       - name: Acquire organization Unity lock
         uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
@@ -722,6 +722,347 @@ jobs:
     expect(violations[0].message).toContain("without a prior CI-managed editor provisioning");
   });
 
+  test("CiManagedOnly provisioning without an explicit profile -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "without an explicit provisioning profile"
+    );
+  });
+
+  test("bare CiManagedOnly ensure-editor step without profile -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Warm Unity editor
+        shell: pwsh
+        run: ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("without an explicit provisioning profile");
+  });
+
+  test("commented provisioning profile argument does not satisfy explicit profile contract", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          # TODO: pass -ProvisioningProfile EditorOnly once scoped provisioning lands.
+          Write-Host '-ProvisioningProfile EditorOnly is still pending'
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "without an explicit provisioning profile"
+    );
+  });
+
+  test("same-line loose profile text does not satisfy explicit profile contract", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          Write-Host '-ProvisioningProfile EditorOnly is still pending'; $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "without an explicit provisioning profile"
+    );
+  });
+
+  test("each CiManagedOnly ensure-editor invocation must pass its own profile", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          ./scripts/unity/ensure-editor.ps1 -UnityVersion '2021.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "without an explicit provisioning profile"
+    );
+  });
+
+  test("comment after backtick prevents profile line from joining ensure-editor invocation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 \`
+            -UnityVersion '2022.3.45f1' \`
+            -CiManagedOnly \` # this is not a PowerShell line continuation
+            -ProvisioningProfile EditorOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode editmode
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "without an explicit provisioning profile"
+    );
+  });
+
+  test("standalone run without StandaloneWindowsIl2Cpp profile -> violation", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode standalone
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "does not provide StandaloneWindowsIl2Cpp"
+    );
+  });
+
+  test("dynamic test-mode provisioning must provide standalone when matrix values are unknown", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode '\${{ matrix.test-mode }}'
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations.map((v) => v.message).join("\n")).toContain(
+      "does not provide StandaloneWindowsIl2Cpp"
+    );
+  });
+
+  test("dynamic test-mode provisioning rejects reversed profile mapping", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    strategy:
+      matrix:
+        test-mode:
+          - editmode
+          - standalone
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $provisioningProfile = if ('\${{ matrix.test-mode }}' -eq 'standalone') {
+            'EditorOnly'
+          } else {
+            'StandaloneWindowsIl2Cpp'
+          }
+          $editor = ./scripts/unity/ensure-editor.ps1 \`
+            -UnityVersion '2022.3.45f1' \`
+            -CiManagedOnly \`
+            -ProvisioningProfile $provisioningProfile
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode '\${{ matrix.test-mode }}'
+`);
+
+    const messages = findUnityNativeProvisioningViolations("test.yml", lines)
+      .map((v) => v.message)
+      .join("\n");
+    expect(messages).toContain("does not provide EditorOnly");
+    expect(messages).toContain("does not provide StandaloneWindowsIl2Cpp");
+  });
+
+  test("dynamic test-mode provisioning rejects profile variable overwritten after correct mapping", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    strategy:
+      matrix:
+        test-mode:
+          - editmode
+          - standalone
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $provisioningProfile = if ('\${{ matrix.test-mode }}' -eq 'standalone') {
+            'StandaloneWindowsIl2Cpp'
+          } else {
+            'EditorOnly'
+          }
+          $provisioningProfile = if ('\${{ matrix.test-mode }}' -eq 'standalone') {
+            'EditorOnly'
+          } else {
+            'StandaloneWindowsIl2Cpp'
+          }
+          $editor = ./scripts/unity/ensure-editor.ps1 \`
+            -UnityVersion '2022.3.45f1' \`
+            -CiManagedOnly \`
+            -ProvisioningProfile $provisioningProfile
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode '\${{ matrix.test-mode }}'
+`);
+
+    const messages = findUnityNativeProvisioningViolations("test.yml", lines)
+      .map((v) => v.message)
+      .join("\n");
+    expect(messages).toContain("does not provide EditorOnly");
+    expect(messages).toContain("does not provide StandaloneWindowsIl2Cpp");
+  });
+
+  test("dynamic test-mode provisioning rejects profile variable overwritten by unknown value", () => {
+    const lines = asLines(`
+jobs:
+  unity:
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    strategy:
+      matrix:
+        test-mode:
+          - editmode
+          - standalone
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $provisioningProfile = if ('\${{ matrix.test-mode }}' -eq 'standalone') {
+            'StandaloneWindowsIl2Cpp'
+          } else {
+            'EditorOnly'
+          }
+          $provisioningProfile = Get-Content profile.txt
+          $editor = ./scripts/unity/ensure-editor.ps1 \`
+            -UnityVersion '2022.3.45f1' \`
+            -CiManagedOnly \`
+            -ProvisioningProfile $provisioningProfile
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode '\${{ matrix.test-mode }}'
+`);
+
+    const messages = findUnityNativeProvisioningViolations("test.yml", lines)
+      .map((v) => v.message)
+      .join("\n");
+    expect(messages).toContain("does not provide EditorOnly");
+    expect(messages).toContain("does not provide StandaloneWindowsIl2Cpp");
+  });
+
+  test("benchmark edit/play-only test-mode matrix allows EditorOnly provisioning", () => {
+    const lines = asLines(`
+jobs:
+  benchmarks:
+    name: Benchmarks \${{ matrix.unity-version }} \${{ matrix.test-mode }}
+    runs-on: [self-hosted, Windows, RAM-64GB]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        unity-version: \${{ fromJSON(needs.matrix-config.outputs.unity-versions) }}
+        test-mode:
+          - editmode
+          - playmode
+    steps:
+      - name: Provision Unity Editor
+        shell: pwsh
+        run: |
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
+          "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Acquire organization Unity lock
+        uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
+      - name: Run Unity Test Runner
+        shell: pwsh
+        run: ./scripts/unity/run-ci-tests.ps1 -TestMode '\${{ matrix.test-mode }}'
+`);
+
+    const violations = findUnityNativeProvisioningViolations("test.yml", lines);
+    expect(violations).toHaveLength(0);
+  });
+
   test("direct run-ci-tests job with provisioning after acquire lock -> violation", () => {
     const lines = asLines(`
 jobs:
@@ -733,7 +1074,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Run Unity Test Runner
         shell: pwsh
@@ -759,7 +1100,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
 `);
 
@@ -782,7 +1123,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Run Unity Test Runner
         shell: pwsh
@@ -805,7 +1146,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Generate ephemeral Unity project
         shell: pwsh
@@ -826,7 +1167,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Generate ephemeral Unity project
         shell: pwsh
@@ -847,7 +1188,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Run Unity Test Runner
         shell: pwsh
@@ -870,7 +1211,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Run Unity Test Runner
         shell: pwsh
@@ -893,7 +1234,7 @@ jobs:
       - name: Provision Unity Editor
         shell: pwsh
         run: |
-          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly
+          $editor = ./scripts/unity/ensure-editor.ps1 -UnityVersion '2022.3.45f1' -CiManagedOnly -ProvisioningProfile EditorOnly
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Generate then run Unity Test Runner
         shell: pwsh

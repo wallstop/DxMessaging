@@ -249,7 +249,10 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
         "Test-AnyUnityLeafPresent",
         // Single source of truth for the CI module set; every list/tier function
         // derives from it.
+        "Get-UnityProvisioningProfile",
+        "Assert-UnityProvisioningProfile",
         "Get-UnityCiModuleSpec",
+        "Get-UnityCiModuleSpecForProfile",
         "Get-UnityCiModuleIds",
         // Tier helpers (core/android partition + per-id tier lookup) the tier-aware
         // Ensure-UnityCiModules uses to scope installs and partition missing groups.
@@ -272,8 +275,8 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
         "Get-InstallDriveFreeSpaceText",
         "Get-EnsureEditorInstallTimeoutSeconds",
         "Write-ModuleInstallFailureDiagnostics",
-        // Dedicated, bounded, NON-quarantining Android tier install + its helpers,
-        // reached when only the android tier is missing.
+        // Dedicated, bounded Android tier install + its helpers, reached when only
+        // the android tier is missing before any managed repair escalation.
         "Get-EnsureEditorRetryDelaySeconds",
         "Get-EnsureEditorAndroidInstallRetryAttempts",
         "Invoke-WithRetry",
@@ -505,7 +508,10 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
       expectedStatus: 0,
       // With every group already on disk, the tier-aware Ensure-UnityCiModules
       // returns early (nothing to install) without invoking the CLI at all.
-      expectedPhrases: ["All required Unity CI module groups already present on disk", "SUCCESS"]
+      expectedPhrases: [
+        "All required Unity CI module groups for provisioning profile 'Full' already present on disk",
+        "SUCCESS"
+      ]
     },
     {
       name: "WebGL extension-only leftovers rejected without Emscripten toolchain proof",
@@ -605,7 +611,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
     expect(combined).toContain("Quarantining unmanaged or partial Unity 6000.0.32f1 install");
     expect(combined).toContain(
-      "Repairing Unity 6000.0.32f1 by installing a fresh CLI-managed editor with the full CI module set"
+      "Repairing Unity 6000.0.32f1 by installing a fresh CLI-managed editor with provisioning profile 'Full' modules"
     );
     expect(combined).toContain("Retrying Unity 6000.0.32f1 repair install");
     expect(Number(fs.readFileSync(repairInstallMarker, "utf8"))).toBe(2);
@@ -748,8 +754,8 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
   // TIERING REGRESSION: when ONLY the Android tier is missing (core modules are
   // all present on disk) and the Android install keeps failing, the dedicated,
   // bounded Android step emits an Android-specific post-mortem, then escalates to
-  // a full managed quarantine/reinstall.
-  test("an Android-tier-only failure escalates to managed quarantine and a full reinstall", () => {
+  // a managed quarantine/reinstall with the selected provisioning profile.
+  test("an Android-tier-only failure escalates to managed quarantine and profile reinstall", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-android-only-"));
     workspaces.push(base);
     const installRoot = path.join(base, "configured-root");
@@ -760,8 +766,8 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
 
     // Fabricate ONLY the CORE tier on disk (windows-il2cpp, webgl, linux-mono,
     // linux-il2cpp). The Android tier is deliberately absent, the bounded
-    // Android-only repair never delivers it, and the subsequent full reinstall
-    // does.
+    // Android-only repair never delivers it, and the subsequent profile-scoped
+    // reinstall does.
     const dataRoot = path.join(editorRoot, "Editor", "Data");
     const writeLeaf = (rel) => {
       const p = path.join(dataRoot, rel);
@@ -857,7 +863,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
     expect(combined).toContain("Android-only repair exhausted after 2 attempt(s)");
     expect(combined).toContain("escalating to managed quarantine/reinstall");
-    expect(combined).toContain("full CI module set");
+    expect(combined).toContain("provisioning profile 'Full'");
     expect(combined).toContain("android-sdk-ndk-tools");
     expect(combined).toContain("--childModules");
     const moduleCommandArgs = fs
@@ -951,9 +957,9 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(fs.existsSync(editorExe)).toBe(true);
   });
 
-  // Native-startup repair must preserve Android coverage. Full managed repair now
-  // requests the full desired module set atomically, so the repaired editor should
-  // already contain Android before the re-probe.
+  // Native-startup repair must preserve Android coverage. Managed repair now
+  // requests the selected profile atomically, so a Full-profile repaired editor
+  // should already contain Android before the re-probe.
   //
   // STATIC corroboration (always-on, OS-independent): the production
   // Ensure-UnityNativeStartupHealthy must call Ensure-UnityCiModules AFTER the
@@ -967,7 +973,7 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     const body = after === -1 ? text.slice(start) : text.slice(start, after);
     // The repair, THEN a re-ensure-all-tiers, THEN the re-probe -- in that order.
     expect(body).toMatch(
-      /\$repaired = Repair-UnityEditorWithCiModules[\s\S]*?\$repaired = Ensure-UnityCiModules -Version \$Version -EditorPath \$repaired -InstallRoot \$InstallRoot -ManagedOnly:\$ManagedOnly[\s\S]*?Test-UnityNativeStartup -EditorPath \$repaired/
+      /\$repaired = Repair-UnityEditorWithCiModules[\s\S]*?\$repaired = Ensure-UnityCiModules -Version \$Version -EditorPath \$repaired -InstallRoot \$InstallRoot -Profile \$Profile -ManagedOnly:\$ManagedOnly[\s\S]*?Test-UnityNativeStartup -EditorPath \$repaired/
     );
   });
 

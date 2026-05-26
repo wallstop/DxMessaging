@@ -2781,16 +2781,434 @@ function stepRunsUnityGenerateOnly(step) {
   return commandSegments.every(unityCiTestCommandSegmentIsGenerateOnly);
 }
 
-function stepProvisionsUnityEditorForCi(step) {
+function stripPowerShellLineComments(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      let inSingleQuote = false;
+      let inDoubleQuote = false;
+
+      for (let index = 0; index < line.length; index++) {
+        const char = line[index];
+        const nextChar = line[index + 1];
+
+        if (char === "`") {
+          index++;
+          continue;
+        }
+
+        if (char === "'" && !inDoubleQuote) {
+          if (inSingleQuote && nextChar === "'") {
+            index++;
+            continue;
+          }
+          inSingleQuote = !inSingleQuote;
+          continue;
+        }
+
+        if (char === '"' && !inSingleQuote) {
+          inDoubleQuote = !inDoubleQuote;
+          continue;
+        }
+
+        if (char === "#" && !inSingleQuote && !inDoubleQuote) {
+          return line.slice(0, index);
+        }
+      }
+
+      return line;
+    })
+    .join("\n");
+}
+
+function stripPowerShellLineComment(line) {
+  return stripPowerShellLineComments(line);
+}
+
+function splitPowerShellStatements(text) {
+  const statements = [];
+  let current = "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === "`") {
+      current += char;
+      if (index + 1 < text.length) {
+        current += nextChar;
+        index++;
+      }
+      continue;
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      current += char;
+      if (inSingleQuote && nextChar === "'") {
+        current += nextChar;
+        index++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      current += char;
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (char === ";" && !inSingleQuote && !inDoubleQuote) {
+      if (current.trim().length > 0) {
+        statements.push(current.trim());
+      }
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim().length > 0) {
+    statements.push(current.trim());
+  }
+
+  return statements;
+}
+
+function extractLogicalPowerShellCommandRecords(text) {
+  const commands = [];
+  let current = "";
+
+  const flushCurrent = () => {
+    for (const statement of splitPowerShellStatements(current)) {
+      commands.push({
+        text: statement,
+        beforeText: commands.map((command) => command.text).join("\n")
+      });
+    }
+    current = "";
+  };
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const continues = /`\s*$/.test(rawLine.trimEnd());
+    const strippedLine = stripPowerShellLineComment(rawLine).trimEnd();
+    const withoutContinuation = continues ? strippedLine.replace(/`\s*$/, "") : strippedLine;
+    current = current ? `${current} ${withoutContinuation.trim()}` : withoutContinuation.trim();
+    if (!continues && current.length > 0) {
+      flushCurrent();
+    }
+  }
+
+  if (current.length > 0) {
+    flushCurrent();
+  }
+
+  return commands;
+}
+
+function extractLogicalPowerShellCommands(text) {
+  return extractLogicalPowerShellCommandRecords(text).map((command) => command.text);
+}
+
+function extractCiManagedEnsureEditorCommands(step) {
+  if (!step?.run || typeof step.run.text !== "string") {
+    return [];
+  }
+  return extractLogicalPowerShellCommandRecords(step.run.text).filter(
+    (command) => /ensure-editor\.ps1/i.test(command.text) && /-CiManagedOnly\b/i.test(command.text)
+  );
+}
+
+function extractCiManagedEnsureEditorCommandTexts(step) {
+  return extractCiManagedEnsureEditorCommands(step).map((command) => command.text);
+}
+
+function stepRunsCiManagedEnsureEditor(step) {
+  return extractCiManagedEnsureEditorCommandTexts(step).length > 0;
+}
+
+function stepExportsUnityEditorPath(step) {
   if (!step?.run || typeof step.run.text !== "string") {
     return false;
   }
-  const text = step.run.text;
+  const text = stripPowerShellLineComments(step.run.text);
+  return /UNITY_EDITOR_PATH\s*=\s*\$editor/i.test(text) && /GITHUB_ENV/i.test(text);
+}
+
+function normalizePowerShellArgumentValue(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().replace(/^(["'])(.*)\1$/, "$2");
+}
+
+function extractUnityProvisioningProfileArguments(step) {
+  return extractCiManagedEnsureEditorCommands(step).flatMap((command) =>
+    extractUnityProvisioningProfileArgumentsFromCommand(command.text)
+  );
+}
+
+function extractUnityProvisioningProfileArgumentsFromCommand(commandText) {
+  const args = [];
+  const profileArgPattern =
+    /-ProvisioningProfile\b(?:\s*[:=]\s*|\s+)(?:"([^"]+)"|'([^']+)'|([^\s`]+))/gi;
+  let match;
+  while ((match = profileArgPattern.exec(commandText)) !== null) {
+    args.push(normalizePowerShellArgumentValue(match[1] ?? match[2] ?? match[3]));
+  }
+  return args.filter((arg) => arg.length > 0);
+}
+
+function stepHasExplicitUnityProvisioningProfile(step) {
+  return extractUnityProvisioningProfileArguments(step).length > 0;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function profileVariableAssignmentMatches(beforeText, variableName) {
+  const escapedVariableName = escapeRegExp(variableName.replace(/^\$/, ""));
+  const testModeExpression = String.raw`['"]?\$\{\{\s*(?:matrix|inputs)\.test-mode\s*\}\}['"]?`;
+  const assignments = [];
+  const dynamicPattern = new RegExp(
+    String.raw`\$${escapedVariableName}\s*=\s*if\s*\(\s*${testModeExpression}\s*-eq\s*['"]standalone['"]\s*\)\s*\{\s*['"](EditorOnly|StandaloneWindowsIl2Cpp)['"]\s*\}\s*else\s*\{\s*['"](EditorOnly|StandaloneWindowsIl2Cpp)['"]\s*\}`,
+    "gi"
+  );
+  let dynamicMatch;
+  while ((dynamicMatch = dynamicPattern.exec(beforeText)) !== null) {
+    assignments.push({
+      index: dynamicMatch.index,
+      type: "dynamic",
+      standalone: dynamicMatch[1],
+      nonStandalone: dynamicMatch[2]
+    });
+  }
+
+  const staticPattern = new RegExp(
+    String.raw`\$${escapedVariableName}\s*=\s*['"](EditorOnly|StandaloneWindowsIl2Cpp|Android|Full)['"]`,
+    "gi"
+  );
+  let staticMatch;
+  while ((staticMatch = staticPattern.exec(beforeText)) !== null) {
+    assignments.push({
+      index: staticMatch.index,
+      type: "static",
+      profile: staticMatch[1]
+    });
+  }
+
+  const anyAssignmentPattern = new RegExp(String.raw`\$${escapedVariableName}\s*=`, "gi");
+  let lastAssignmentIndex = -1;
+  let anyAssignmentMatch;
+  while ((anyAssignmentMatch = anyAssignmentPattern.exec(beforeText)) !== null) {
+    lastAssignmentIndex = anyAssignmentMatch.index;
+  }
+
+  if (lastAssignmentIndex === -1) {
+    return null;
+  }
+
+  const recognizedLastAssignment = assignments.find(
+    (assignment) => assignment.index === lastAssignmentIndex
+  );
+  return recognizedLastAssignment || { index: lastAssignmentIndex, type: "unknown" };
+}
+
+function stepProvidesUnityProvisioningProfile(step, profile) {
+  return extractCiManagedEnsureEditorCommands(step).some((command) => {
+    const profileArgs = extractUnityProvisioningProfileArgumentsFromCommand(command.text);
+
+    return profileArgs.some((arg) => {
+      if (arg.toLowerCase() === profile.toLowerCase()) {
+        return true;
+      }
+      if (!arg.startsWith("$")) {
+        return false;
+      }
+
+      const assignment = profileVariableAssignmentMatches(command.beforeText, arg);
+      if (!assignment) {
+        return false;
+      }
+      if (assignment.type === "static") {
+        return assignment.profile.toLowerCase() === profile.toLowerCase();
+      }
+      if (assignment.type !== "dynamic") {
+        return false;
+      }
+      return (
+        assignment.standalone === "StandaloneWindowsIl2Cpp" &&
+        assignment.nonStandalone === "EditorOnly" &&
+        (profile === "StandaloneWindowsIl2Cpp" || profile === "EditorOnly")
+      );
+    });
+  });
+}
+
+function directUnityRunRequiresStandaloneProfile(runSteps) {
+  return runSteps.some((step) => /-TestMode\s+['"]?standalone\b/i.test(step.run.text));
+}
+
+function directUnityRunUsesDynamicTestMode(runSteps) {
+  return runSteps.some((step) => /\b(matrix|inputs)\.test-mode\b/i.test(step.run.text));
+}
+
+function directUnityRunRequiresEditorOnlyProfile(runSteps) {
+  return runSteps.some((step) => /-TestMode\s+['"]?(editmode|playmode)\b/i.test(step.run.text));
+}
+
+function stripYamlScalarQuotes(value) {
+  return value.trim().replace(/^(["'])(.*)\1$/, "$2");
+}
+
+function parseInlineYamlList(value) {
+  const trimmed = value.trim().replace(/\s+#.*$/, "");
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    return null;
+  }
+
+  return trimmed
+    .slice(1, -1)
+    .split(",")
+    .map((entry) => stripYamlScalarQuotes(entry))
+    .filter((entry) => entry.length > 0);
+}
+
+function parseLiteralMatrixScalar(value) {
+  const trimmed = value.trim().replace(/\s+#.*$/, "");
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (/\$\{\{/.test(trimmed) || trimmed.startsWith("{") || trimmed.startsWith("|")) {
+    return null;
+  }
+  if (trimmed.startsWith("[")) {
+    return parseInlineYamlList(trimmed);
+  }
+  return [stripYamlScalarQuotes(trimmed)];
+}
+
+function extractJobMatrixValues(lines, job, matrixKey) {
+  const startIndex = job.startLine - 1;
+  const endIndex = job.endLine - 1;
+  const escapedKey = matrixKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const keyPattern = new RegExp(`^\\s*${escapedKey}\\s*:\\s*(.*?)\\s*(?:#.*)?$`);
+
+  let inStrategy = false;
+  let strategyIndent = -1;
+  let inMatrix = false;
+  let matrixIndent = -1;
+
+  for (let i = startIndex + 1; i <= endIndex; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = getIndent(line);
+
+    if (trimmed.length === 0 || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (indent <= job.indent) {
+      break;
+    }
+
+    if (!inStrategy) {
+      if (indent === job.indent + 2 && /^\s*strategy:\s*(?:#.*)?$/.test(line)) {
+        inStrategy = true;
+        strategyIndent = indent;
+      }
+      continue;
+    }
+
+    if (indent <= strategyIndent) {
+      break;
+    }
+
+    if (!inMatrix) {
+      if (indent === strategyIndent + 2 && /^\s*matrix:\s*(?:#.*)?$/.test(line)) {
+        inMatrix = true;
+        matrixIndent = indent;
+      }
+      continue;
+    }
+
+    if (indent <= matrixIndent) {
+      break;
+    }
+
+    const keyMatch = keyPattern.exec(line);
+    if (!keyMatch || indent !== matrixIndent + 2) {
+      continue;
+    }
+
+    const inlineValues = parseLiteralMatrixScalar(keyMatch[1]);
+    if (inlineValues !== null) {
+      return inlineValues;
+    }
+
+    const values = [];
+    for (let j = i + 1; j <= endIndex; j++) {
+      const childLine = lines[j];
+      const childTrimmed = childLine.trim();
+      const childIndent = getIndent(childLine);
+      if (childTrimmed.length === 0 || childTrimmed.startsWith("#")) {
+        continue;
+      }
+      if (childIndent <= indent) {
+        break;
+      }
+      const listMatch = /^\s*-\s+(.+?)\s*(?:#.*)?$/.exec(childLine);
+      if (listMatch) {
+        const parsed = parseLiteralMatrixScalar(listMatch[1]);
+        if (parsed === null || parsed.length !== 1) {
+          return null;
+        }
+        values.push(parsed[0]);
+      }
+    }
+    return values.length > 0 ? values : null;
+  }
+
+  return null;
+}
+
+function dynamicUnityTestModeRequiresStandaloneProfile(lines, job, runSteps) {
+  if (!directUnityRunUsesDynamicTestMode(runSteps)) {
+    return false;
+  }
+  if (runSteps.some((step) => /\binputs\.test-mode\b/i.test(step.run.text))) {
+    return true;
+  }
+  const values = extractJobMatrixValues(lines, job, "test-mode");
+  if (!values) {
+    return true;
+  }
+  return values.some((value) => value.toLowerCase() === "standalone");
+}
+
+function dynamicUnityTestModeRequiresEditorOnlyProfile(lines, job, runSteps) {
+  if (!directUnityRunUsesDynamicTestMode(runSteps)) {
+    return false;
+  }
+  if (runSteps.some((step) => /\binputs\.test-mode\b/i.test(step.run.text))) {
+    return true;
+  }
+  const values = extractJobMatrixValues(lines, job, "test-mode");
+  if (!values) {
+    return true;
+  }
+  return values.some((value) => /^(editmode|playmode)$/i.test(value));
+}
+
+function stepProvisionsUnityEditorForCi(step) {
   return (
-    /ensure-editor\.ps1/i.test(text) &&
-    /-CiManagedOnly\b/i.test(text) &&
-    /UNITY_EDITOR_PATH\s*=\s*\$editor/i.test(text) &&
-    /GITHUB_ENV/i.test(text)
+    stepRunsCiManagedEnsureEditor(step) &&
+    stepHasExplicitUnityProvisioningProfile(step) &&
+    stepExportsUnityEditorPath(step)
   );
 }
 
@@ -2802,6 +3220,24 @@ function findUnityNativeProvisioningViolations(relativePath, lines) {
 
   for (const job of extractJobs(lines)) {
     const steps = extractJobSteps(lines, job);
+    const ciManagedEnsureSteps = steps.filter(stepRunsCiManagedEnsureEditor);
+    for (const step of ciManagedEnsureSteps) {
+      for (const command of extractCiManagedEnsureEditorCommands(step)) {
+        if (extractUnityProvisioningProfileArgumentsFromCommand(command.text).length > 0) {
+          continue;
+        }
+        violations.push(
+          new Violation(
+            relativePath,
+            step.startIndex + 1,
+            "ensure-editor.ps1 -ProvisioningProfile",
+            `Job '${job.id}' runs ensure-editor.ps1 -CiManagedOnly without an explicit provisioning profile. Pass -ProvisioningProfile EditorOnly, StandaloneWindowsIl2Cpp, Android, or Full so CI provisioning cannot accidentally install unrelated Unity modules.`,
+            "error"
+          )
+        );
+      }
+    }
+
     const runSteps = steps.filter(stepRunsUnityCiTestsDirectly);
     if (runSteps.length === 0) {
       continue;
@@ -2830,8 +3266,8 @@ function findUnityNativeProvisioningViolations(relativePath, lines) {
         new Violation(
           relativePath,
           firstRunStep.startIndex + 1,
-          "ensure-editor.ps1 -CiManagedOnly",
-          `Job '${job.id}' runs run-ci-tests.ps1 without a prior CI-managed editor provisioning step. Add a pre-lock step that runs scripts/unity/ensure-editor.ps1 -CiManagedOnly and writes UNITY_EDITOR_PATH=$editor to $GITHUB_ENV.`,
+          "ensure-editor.ps1 -CiManagedOnly -ProvisioningProfile",
+          `Job '${job.id}' runs run-ci-tests.ps1 without a prior CI-managed editor provisioning step. Add a pre-lock step that runs scripts/unity/ensure-editor.ps1 -CiManagedOnly -ProvisioningProfile <profile> and writes UNITY_EDITOR_PATH=$editor to $GITHUB_ENV.`,
           "error"
         )
       );
@@ -2844,8 +3280,8 @@ function findUnityNativeProvisioningViolations(relativePath, lines) {
           new Violation(
             relativePath,
             runStep.startIndex + 1,
-            "ensure-editor.ps1 -CiManagedOnly",
-            `Job '${job.id}' runs run-ci-tests.ps1 before the CI-managed editor is provisioned. Move ensure-editor.ps1 -CiManagedOnly before every direct run-ci-tests.ps1 step.`,
+            "ensure-editor.ps1 -CiManagedOnly -ProvisioningProfile",
+            `Job '${job.id}' runs run-ci-tests.ps1 before the CI-managed editor is provisioned. Move ensure-editor.ps1 -CiManagedOnly -ProvisioningProfile <profile> before every direct run-ci-tests.ps1 step.`,
             "error"
           )
         );
@@ -2873,11 +3309,71 @@ function findUnityNativeProvisioningViolations(relativePath, lines) {
         new Violation(
           relativePath,
           provisionStep.startIndex + 1,
-          "ensure-editor.ps1 -CiManagedOnly",
-          `Job '${job.id}' provisions the Unity editor after acquiring the organization lock. Move ensure-editor.ps1 -CiManagedOnly before acquire-build-lock so install/repair never holds the licensed Unity seat.`,
+          "ensure-editor.ps1 -CiManagedOnly -ProvisioningProfile",
+          `Job '${job.id}' provisions the Unity editor after acquiring the organization lock. Move ensure-editor.ps1 -CiManagedOnly -ProvisioningProfile <profile> before acquire-build-lock so install/repair never holds the licensed Unity seat.`,
           "error"
         )
       );
+    }
+
+    if (directUnityRunUsesDynamicTestMode(runSteps)) {
+      if (
+        dynamicUnityTestModeRequiresEditorOnlyProfile(lines, job, runSteps) &&
+        !stepProvidesUnityProvisioningProfile(provisionStep, "EditorOnly")
+      ) {
+        violations.push(
+          new Violation(
+            relativePath,
+            provisionStep.startIndex + 1,
+            "-ProvisioningProfile",
+            `Job '${job.id}' provisions Unity for a dynamic editmode/playmode test-mode matrix/input but does not provide EditorOnly.`,
+            "error"
+          )
+        );
+      }
+      if (
+        dynamicUnityTestModeRequiresStandaloneProfile(lines, job, runSteps) &&
+        !stepProvidesUnityProvisioningProfile(provisionStep, "StandaloneWindowsIl2Cpp")
+      ) {
+        violations.push(
+          new Violation(
+            relativePath,
+            provisionStep.startIndex + 1,
+            "-ProvisioningProfile",
+            `Job '${job.id}' provisions Unity for a dynamic standalone-capable test-mode matrix/input but does not provide StandaloneWindowsIl2Cpp.`,
+            "error"
+          )
+        );
+      }
+    } else {
+      if (
+        directUnityRunRequiresStandaloneProfile(runSteps) &&
+        !stepProvidesUnityProvisioningProfile(provisionStep, "StandaloneWindowsIl2Cpp")
+      ) {
+        violations.push(
+          new Violation(
+            relativePath,
+            provisionStep.startIndex + 1,
+            "StandaloneWindowsIl2Cpp",
+            `Job '${job.id}' runs standalone Unity tests but its provisioning step does not provide StandaloneWindowsIl2Cpp.`,
+            "error"
+          )
+        );
+      }
+      if (
+        directUnityRunRequiresEditorOnlyProfile(runSteps) &&
+        !stepProvidesUnityProvisioningProfile(provisionStep, "EditorOnly")
+      ) {
+        violations.push(
+          new Violation(
+            relativePath,
+            provisionStep.startIndex + 1,
+            "EditorOnly",
+            `Job '${job.id}' runs editmode/playmode Unity tests but its provisioning step does not provide EditorOnly.`,
+            "error"
+          )
+        );
+      }
     }
   }
 

@@ -701,10 +701,70 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     expect(summary.installRoot).toBe(installRoot);
     expect(summary.editorPath).toBe(editorExe);
     expect(summary.attemptedCommandClasses).toContain("install/modules");
+    expect(summary.provisioningProfile).toBe("Full");
     expect(summary.modulePresence["android-open-jdk"]).toBe(true);
     expect(summary.desiredModules).not.toContain("android-open-jdk");
     expect(summary.desiredModules).toContain("android-sdk-ndk-tools");
     expect(textSummary).toContain("classification=success");
+    expect(textSummary).toContain("provisioningProfile=Full");
+  }, 60000);
+
+  test("EditorOnly fresh install never requests module installation or Android", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editoronly-"));
+    workspaces.push(base);
+    const installRoot = path.join(base, "configured-root");
+    const diagnosticsPath = path.join(base, "diagnostics", "ensure-editor-summary.json");
+    const argsLog = path.join(base, "unity-cli-args.tsv");
+    const editorRoot = path.join(installRoot, "6000.0.32f1");
+    const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+
+    const bodyLines = [
+      "const path = require('path');",
+      `const installRoot = ${JSON.stringify(installRoot)};`,
+      `const argsLog = ${JSON.stringify(argsLog)};`,
+      "const editorRoot = path.join(installRoot, '6000.0.32f1');",
+      "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+      "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+      "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+      "function logArgs() { fs.appendFileSync(argsLog, args.join('\\t') + '\\n'); }",
+      "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+      "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+      "if (args[0] === 'install') { logArgs(); writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n'); write('editor-only install completed'); exit(0); }",
+      "if (args[0] === 'install-modules') { logArgs(); write('unexpected module install'); exit(9); }",
+      "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+    ];
+
+    const out = runEnsureEditorWithFakeCli(bodyLines, installRoot, {}, [
+      "-ProvisioningProfile",
+      "EditorOnly",
+      "-DiagnosticsPath",
+      diagnosticsPath
+    ]);
+    const stdout = out.stdout || "";
+    const combined = combinedText(out);
+
+    if (out.status !== 0) {
+      throw new Error(combined);
+    }
+    expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
+    expect(combined).toContain("editor-only install completed");
+    expect(combined).toContain("requires the Unity editor only");
+    const loggedArgs = fs.readFileSync(argsLog, "utf8").trim().split(/\r?\n/);
+    expect(loggedArgs).toEqual(["install\t6000.0.32f1"]);
+    const summary = JSON.parse(fs.readFileSync(diagnosticsPath, "utf8"));
+    expect(summary.provisioningProfile).toBe("EditorOnly");
+    expect(summary.desiredModules).toEqual([]);
+    expect(summary.verifiedModules).toEqual([]);
+    expect(summary.skippedModuleGroups).toEqual(
+      expect.arrayContaining([
+        "windows-il2cpp",
+        "android",
+        "android-sdk-ndk-tools",
+        "android-open-jdk"
+      ])
+    );
+    expect(Object.keys(summary.requiredModulePresence)).toEqual([]);
+    expect(summary.modulePresence["android-sdk-ndk-tools"]).toBe(false);
   }, 60000);
 
   test("failed full repair summary preserves the resolved partial editor path", () => {
@@ -715,7 +775,10 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     const editorRoot = path.join(installRoot, "6000.0.32f1");
     const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
     fs.mkdirSync(path.dirname(editorExe), { recursive: true });
-    fs.writeFileSync(editorExe, ["#!/usr/bin/env sh", 'echo "Unity fake version"', "exit 0", ""].join("\n"));
+    fs.writeFileSync(
+      editorExe,
+      ["#!/usr/bin/env sh", 'echo "Unity fake version"', "exit 0", ""].join("\n")
+    );
     fs.chmodSync(editorExe, 0o755);
 
     const bodyLines = [
@@ -968,8 +1031,12 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
         "$ErrorActionPreference = 'Stop'",
         extractEnsureEditorFunctions([
           "Write-UnityModuleInstallPostMortem",
+          "Get-UnityProvisioningProfile",
+          "Assert-UnityProvisioningProfile",
           "Get-UnityCiModuleSpec",
+          "Get-UnityCiModuleSpecForProfile",
           "Get-UnityCiVerifiedModuleGroups",
+          "Test-UnityProvisioningProfileIncludesAndroid",
           "Test-UnityCiModuleGroupPresent",
           "Test-Il2CppModulePresent",
           "Test-AnyUnityLeafPresent",
@@ -1044,8 +1111,12 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
           "$ErrorActionPreference = 'Stop'",
           extractEnsureEditorFunctions([
             "Write-UnityModuleInstallPostMortem",
+            "Get-UnityProvisioningProfile",
+            "Assert-UnityProvisioningProfile",
             "Get-UnityCiModuleSpec",
+            "Get-UnityCiModuleSpecForProfile",
             "Get-UnityCiVerifiedModuleGroups",
+            "Test-UnityProvisioningProfileIncludesAndroid",
             "Test-UnityCiModuleGroupPresent",
             "Test-Il2CppModulePresent",
             "Test-AnyUnityLeafPresent",

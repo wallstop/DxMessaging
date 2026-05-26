@@ -653,12 +653,11 @@ if ($GenerateOnly) {
 
 if (-not $UnityEditorPath -or $UnityEditorPath.Trim().Length -eq 0) {
     $ensureEditor = Join-Path $PSScriptRoot 'ensure-editor.ps1'
+    $provisioningProfile = if ($TestMode -eq 'standalone') { 'StandaloneWindowsIl2Cpp' } else { 'EditorOnly' }
     $ensureArgs = @{
-        UnityVersion = $UnityVersion
-        InstallRoot = $UnityInstallRoot
-    }
-    if ($TestMode -eq 'standalone') {
-        $ensureArgs.WithWindowsIl2Cpp = $true
+        UnityVersion         = $UnityVersion
+        InstallRoot          = $UnityInstallRoot
+        ProvisioningProfile = $provisioningProfile
     }
     $UnityEditorPath = (& $ensureEditor @ensureArgs | Select-Object -Last 1)
 }

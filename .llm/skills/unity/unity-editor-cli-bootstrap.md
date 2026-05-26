@@ -68,11 +68,11 @@ status: "stable"
 
 # Unity Editor CLI Bootstrap
 
-> **One-line summary**: `scripts/unity/ensure-editor.ps1` installs the standalone Unity CLI on a self-hosted Windows runner, refreshes the session `$env:PATH`, discovers the editor through layered CLI-aware resolution, and enforces the CI module bundle as a desired state with quarantine/reinstall repair.
+> **One-line summary**: `scripts/unity/ensure-editor.ps1` installs the standalone Unity CLI on a self-hosted Windows runner, refreshes the session `$env:PATH`, discovers the editor through layered CLI-aware resolution, and enforces a profile-scoped Unity editor desired state with quarantine/reinstall repair.
 
 ## Overview
 
-The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then provisions the editor in TIERS. The base editor install requests only the `core` tier (`windows-il2cpp`, `webgl`, `linux-mono`, `linux-il2cpp`), which provisions reliably and fast. The heavy/flaky `android` tier (`android`, `android-sdk-ndk-tools`) is added afterward in a dedicated, separately-retried step that NEVER quarantines or re-downloads the editor, because the Android SDK/NDK is a multi-GB Google download whose NDK unpack deterministically fails (~93%, exit 6) on Windows runners without long-path support. OpenJDK is NOT in any requested `-m` list -- it arrives as a dependency of `android-sdk-ndk-tools` and is only verified on disk afterward (see [CI module desired state and repair](#ci-module-desired-state-and-repair)).
+The active Unity workflows run directly on self-hosted Windows runners and use the standalone Unity CLI (`unity`) to install editors and modules on demand. `scripts/unity/ensure-editor.ps1` is the bootstrap: if `unity` is not already on PATH it downloads and runs the official installer, then provisions the editor according to `-ProvisioningProfile`. CI must pass the profile explicitly. `EditorOnly` installs/verifies only the editor, `StandaloneWindowsIl2Cpp` adds only `windows-il2cpp`, `Android` adds Android player support plus SDK/NDK/OpenJDK disk proof, and `Full` preserves the historical broad module set for manual compatibility. The heavy/flaky Android SDK/NDK payload is scoped to `Android` or `Full`, because the NDK unpack can fail (~93%, exit 6) on Windows runners without long-path support. OpenJDK is NOT in any requested `-m` list -- it arrives as a dependency of `android-sdk-ndk-tools` and is only verified on disk afterward (see [CI module desired state and repair](#ci-module-desired-state-and-repair)).
 
 Editor provisioning runs before the organization Unity license lock. The locked section should only activate/return the serial license and run tests; editor install/repair can take tens of minutes and must not block other licensed Unity jobs.
 
@@ -97,7 +97,7 @@ The script initializes `$script:UnityCliPath = 'unity'` after `Set-StrictMode`, 
 
 VERIFIED (relied on directly by the script):
 
-- `unity install <version>` -- positional version; `-m <id...>` adds one or more modules. CI requests all required module ids (see [CI module desired state and repair](#ci-module-desired-state-and-repair)) for every Unity version, not only standalone cells. The module install MUST also pass `--accept-eula`; the EULA-bearing Android SDK/NDK modules otherwise abort the whole install with "One or more modules require license acceptance. Pass --accept-eula ...". A single source-of-truth builder (`Get-UnityCliModuleInstallArguments`) constructs the install arg vector so `--accept-eula` cannot drift between call sites.
+- `unity install <version>` -- positional version; `-m <id...>` adds one or more modules. CI requests only the module ids selected by `-ProvisioningProfile` (see [CI module desired state and repair](#ci-module-desired-state-and-repair)); `EditorOnly` sends no `-m` list. Any module install MUST also pass `--accept-eula`; the EULA-bearing Android SDK/NDK modules otherwise abort the whole install with "One or more modules require license acceptance. Pass --accept-eula ...". A single source-of-truth builder (`Get-UnityCliModuleInstallArguments`) constructs the install arg vector so `--accept-eula` cannot drift between call sites.
 - `unity install-path` with NO arguments -- a 0-arg GETTER that prints the current editor install directory. Passing a positional directory is the root cause of the "Expected 0 arguments but got 1" failure.
 - `unity editors -i` (with `--format json` for parsing; bare `-i` for the diagnostic dump).
 - `unity install-modules -e <version> -m <id...>` (captured, then classified against disk); the install also carries `--accept-eula` (same EULA requirement as `install`). The `-l` flag lists installable module ids (best-effort sanity check only) and carries NO `--accept-eula`.
@@ -152,30 +152,25 @@ Read BOTH Machine and User registry scopes, null-guard each, prepend the install
 
 ### CI module desired state and repair
 
-A single source of truth, `Get-UnityCiModuleSpec`, defines every module group once as ordered rows of `Id` / `Requested` / `Verified` / `Tier`. Everything else DERIVES from it -- the requested `-m` ids (`Get-UnityCiModuleIds` = rows where `Requested`), the verified-on-disk groups (`Get-UnityCiVerifiedModuleGroups` = rows where `Verified`), per-tier id subsets (`Get-UnityCiModuleIdsForTier`), and the per-id tier lookup (`Get-UnityCiModuleTier`) -- so the lists can never silently drift from one another (the historical bug class). The `core` tier installs reliably with the base/repair editor; the `android` tier is the heavy/flaky multi-GB download installed in isolation.
+A single source of truth, `Get-UnityCiModuleSpec`, defines every module group once as ordered rows of `Id` / `Requested` / `Verified` / `Tier` / `Profiles`. Everything else DERIVES from the selected profile's rows -- the requested `-m` ids (`Get-UnityCiModuleIds` = rows where `Requested`), the verified-on-disk groups (`Get-UnityCiVerifiedModuleGroups` = rows where `Verified`), skipped module groups (`Get-UnityCiSkippedModuleGroups`), per-tier id subsets (`Get-UnityCiModuleIdsForTier`), and the per-id tier lookup (`Get-UnityCiModuleTier`) -- so the lists can never silently drift from one another (the historical bug class). The `core` tier contains desktop/web/Linux build-support modules; the `android` tier is the heavy/flaky multi-GB download installed in isolation when selected.
 
 The bootstrap keeps two DELIBERATELY DECOUPLED lists, because "what we ASK the CLI to install" and "what we PROVE landed on disk" are different questions:
 
-**Requested module ids passed to `-m`** (`Get-UnityCiModuleIds`, derived from the spec) -- the ids handed to `unity install -m`/`install-modules -m`:
+**Requested module ids passed to `-m`** (`Get-UnityCiModuleIds`, derived from the selected profile) -- the ids handed to `unity install -m`/`install-modules -m`:
 
-- `windows-il2cpp`
-- `webgl`
-- `android`
-- `android-sdk-ndk-tools`
-- `linux-mono`
-- `linux-il2cpp`
+- `EditorOnly`: none.
+- `StandaloneWindowsIl2Cpp`: `windows-il2cpp`.
+- `Android`: `android`, `android-sdk-ndk-tools`.
+- `Full`: `windows-il2cpp`, `webgl`, `android`, `android-sdk-ndk-tools`, `linux-mono`, `linux-il2cpp`.
 
 `android-open-jdk` is intentionally ABSENT from the requested list. The standalone beta CLI rejects the bare id (`Couldn't find module "android-open-jdk". Did you mean: android-open-jdk-11.0.14.1+1`) because its real id is version-pinned and that suffix drifts across Unity versions; hardcoding it would re-break on the next bump. OpenJDK instead arrives automatically as a DEPENDENCY of `android-sdk-ndk-tools`, so requesting that group brings it along.
 
-**Module groups verified on disk** (`Get-UnityCiVerifiedModuleGroups`, iterated by `Get-MissingUnityCiModuleGroups`) -- the on-disk truth required after any install/repair:
+**Module groups verified on disk** (`Get-UnityCiVerifiedModuleGroups`, iterated by `Get-MissingUnityCiModuleGroups`) -- the selected profile's on-disk truth required after any install/repair:
 
-- `windows-il2cpp`
-- `webgl`
-- `android`
-- `android-sdk-ndk-tools`
-- `android-open-jdk` (verified-on-disk-only: never requested via `-m`, but PROVEN present because it arrives as an `android-sdk-ndk-tools` dependency)
-- `linux-mono`
-- `linux-il2cpp`
+- `EditorOnly`: none.
+- `StandaloneWindowsIl2Cpp`: `windows-il2cpp`.
+- `Android`: `android`, `android-sdk-ndk-tools`, `android-open-jdk`.
+- `Full`: `windows-il2cpp`, `webgl`, `android`, `android-sdk-ndk-tools`, `android-open-jdk`, `linux-mono`, `linux-il2cpp`.
 
 `Ensure-UnityCiModules` treats `install-modules` output as diagnostic, not authoritative. It accepts a non-zero CLI result only when disk probes prove all required module groups are present:
 
@@ -187,15 +182,15 @@ The bootstrap keeps two DELIBERATELY DECOUPLED lists, because "what we ASK the C
 - Linux Mono support: concrete player leaves such as `LinuxPlayer` or `UnityPlayer.so` under known `linux64_player_*_mono` variations.
 - Linux IL2CPP support: concrete player leaves such as `LinuxPlayer` or `UnityPlayer.so` under known `linux64_player_*_il2cpp` variations.
 
-`Ensure-UnityCiModules` is TIER-AWARE: it verifies all groups, partitions the missing ones by tier, and handles each with the right strategy. A missing `core` group is serious (the editor itself is broken) and uses the heavy quarantine/reinstall repair below. A missing `android` group is expected flakiness and is handled by the dedicated, bounded `Install-UnityAndroidModules` step, which NEVER quarantines or re-downloads the editor.
+`Ensure-UnityCiModules` is PROFILE- AND TIER-AWARE: `EditorOnly` skips module work entirely; other profiles verify only their selected groups, partition missing groups by tier, and handle each with the right strategy. A missing selected `core` group is serious and uses the heavy quarantine/reinstall repair below. A missing selected `android` group is expected flakiness and is handled first by the dedicated, bounded `Install-UnityAndroidModules` step.
 
-`Install-UnityAndroidModules` retries the Android `install-modules` up to `DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS` times (default 3), clearing only the partial `AndroidPlayer\NDK` / `SDK` payload (`Clear-PartialAndroidModulePayload`, scoped strictly inside the editor dir) between attempts so a half-written NDK tree cannot poison the next try -- all WITHOUT a multi-GB editor re-download. Disk is the source of truth, so an exit 6 with the Android groups present on disk is treated as success. On exhaustion it emits `Write-UnityModuleInstallPostMortem` (per-group present/MISSING, NDK/SDK file counts, the deepest NDK absolute path length, and the Windows long-path state via `Test-WindowsLongPathSupport`; it raises a MAX_PATH `::warning::` when the deepest path is >= 240 chars and long paths are disabled -- the prime suspect for the NDK unpack failure, remediated per `docs/runbooks/unity-runners-after-transfer.md`) and throws a clear Android-specific error WITHOUT touching the editor.
+`Install-UnityAndroidModules` retries the Android `install-modules` up to `DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS` times (default 3), clearing only the partial `AndroidPlayer\NDK` / `SDK` payload (`Clear-PartialAndroidModulePayload`, scoped strictly inside the editor dir) between attempts so a half-written NDK tree cannot poison the next try. Disk is the source of truth, so an exit 6 with the Android groups present on disk is treated as success. On exhaustion it emits `Write-UnityModuleInstallPostMortem` (per-group present/MISSING, NDK/SDK file counts, the deepest NDK absolute path length, and the Windows long-path state via `Test-WindowsLongPathSupport`; it raises a MAX_PATH `::warning::` when the deepest path is >= 240 chars and long paths are disabled -- the prime suspect for the NDK unpack failure, remediated per `docs/runbooks/unity-runners-after-transfer.md`) and then escalates to managed quarantine/reinstall with the selected profile unless repair is disabled.
 
-For a missing `core` group, repair is enabled by default. The script first tries `unity uninstall <version>` as a cleanup hint. It then quarantines any remaining managed version directory to `<install-root>\_quarantine\<version>-<timestamp>-<id>` and runs a fresh `unity install <version> --accept-eula -m <core-tier-ids>` (the same single-source-of-truth arg vector as the primary install, scoped to the core tier; the Android tier is re-added afterward by `Ensure-UnityCiModules`). Repair install retries once when the CLI still reports "already installed" without a resolvable managed editor, clearing stale CLI metadata with another uninstall before retrying. Repair is deliberately bounded to the configured install root; the script refuses to move arbitrary `ProgramFiles` installs. In CI-managed mode, repair resolution also keeps `-ManagedOnly` so a host install cannot be selected after reinstall. The same uninstall-plus-version-directory quarantine path handles partial installs where the CLI reports "already installed" but no `Unity.exe` leaf exists, so stale CLI metadata cannot keep returning the same no-op state.
+For a missing selected `core` group, repair is enabled by default. The script first tries `unity uninstall <version>` as a cleanup hint. It then quarantines any remaining managed version directory to `<install-root>\_quarantine\<version>-<timestamp>-<id>` and runs a fresh `unity install <version>` with the selected profile's requested module ids (the same single-source-of-truth arg vector as the primary install). Repair install retries once when the CLI still reports "already installed" without a resolvable managed editor, clearing stale CLI metadata with another uninstall before retrying. Repair is deliberately bounded to the configured install root; the script refuses to move arbitrary `ProgramFiles` installs. In CI-managed mode, repair resolution also keeps `-ManagedOnly` so a host install cannot be selected after reinstall. The same uninstall-plus-version-directory quarantine path handles partial installs where the CLI reports "already installed" but no `Unity.exe` leaf exists, so stale CLI metadata cannot keep returning the same no-op state.
 
 Set `DXM_UNITY_DISABLE_EDITOR_REPAIR=1` only when debugging the installer itself. Normal CI should keep repair enabled so manually copied, partial, or non-Hub/non-CLI-managed editors converge to a known-good CLI-managed install.
 
-After module validation, `ensure-editor.ps1` runs a native startup probe before the license lock. If startup fails, the script performs one managed reinstall AND re-runs `Ensure-UnityCiModules` so the Android tier is re-added after the core-only repair (the repair install itself is core-scoped), then probes again. A second startup failure is classified as host OS/runtime prerequisite damage (for example missing native DLLs such as `0xC0000135` / `STATUS_DLL_NOT_FOUND`), not a package/test failure.
+After module validation, `ensure-editor.ps1` runs a native startup probe before the license lock. If startup fails, the script performs one managed reinstall AND re-runs `Ensure-UnityCiModules` with the selected profile, then probes again. A second startup failure is classified as host OS/runtime prerequisite damage (for example missing native DLLs such as `0xC0000135` / `STATUS_DLL_NOT_FOUND`), not a package/test failure.
 
 ## Verification
 

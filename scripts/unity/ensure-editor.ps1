@@ -11,13 +11,24 @@ param(
 
     [switch]$CiManagedOnly = $($env:GITHUB_ACTIONS -eq 'true'),
 
+    [ValidateSet('EditorOnly', 'StandaloneWindowsIl2Cpp', 'Android', 'Full')]
+    [string]$ProvisioningProfile = 'Full',
+
     [switch]$WithWindowsIl2Cpp
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if ($WithWindowsIl2Cpp) {
+    if ($PSBoundParameters.ContainsKey('ProvisioningProfile') -and $ProvisioningProfile -ne 'StandaloneWindowsIl2Cpp') {
+        throw "-WithWindowsIl2Cpp is an alias for -ProvisioningProfile StandaloneWindowsIl2Cpp and cannot be combined with -ProvisioningProfile $ProvisioningProfile."
+    }
+    $ProvisioningProfile = 'StandaloneWindowsIl2Cpp'
+}
+
 $script:UnityCliPath = 'unity'
+$script:UnityProvisioningProfile = $ProvisioningProfile
 $script:UnityInstallLockDepth = 0
 $script:ProvisioningDeadlineUtc = [DateTime]::MaxValue
 $script:ProvisioningBudgetSeconds = 0
@@ -368,12 +379,13 @@ function Get-EnsureEditorAndroidInstallRetryAttempts {
     # used by Install-UnityAndroidModules. The Android SDK/NDK is a multi-GB Google
     # download whose NDK UNPACK phase (~93%) fails flakily on Windows (suspected
     # MAX_PATH during extraction, or Defender file-locking), so existing editors
-    # get a bounded Android-only repair before the script escalates to a full
-    # managed quarantine/reinstall. Honors DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS
+    # get a bounded Android-only repair before the script escalates to a
+    # profile-scoped managed quarantine/reinstall with the selected
+    # Android-capable provisioning profile. Honors DXM_ENSURE_EDITOR_ANDROID_INSTALL_RETRY_ATTEMPTS
     # following the EXACT convention of Get-EnsureEditorInstallRetryAttempts. The
     # DEFAULT is 3 (one more than the base-install default of 2) because the Android
     # unpack flake is the specific failure this loop targets and an extra bounded,
-    # editor-preserving attempt is cheaper than a full reinstall. A value below 1 is
+    # editor-preserving attempt is cheaper than managed quarantine/reinstall. A value below 1 is
     # invalid; a non-integer/negative override is ignored with a ::warning::.
     # StrictMode-safe: no collection reads.
     param([int]$Default = 3)
@@ -1502,6 +1514,22 @@ function Get-UnityEditorInstallDirectory {
     return $editorDir
 }
 
+function Get-UnityProvisioningProfile {
+    $profileVar = Get-Variable -Name UnityProvisioningProfile -Scope Script -ErrorAction SilentlyContinue
+    if ($profileVar -and $profileVar.Value) {
+        return [string]$profileVar.Value
+    }
+    return 'Full'
+}
+
+function Assert-UnityProvisioningProfile {
+    param([Parameter(Mandatory = $true)][string]$Profile)
+
+    if ($Profile -notin @('EditorOnly', 'StandaloneWindowsIl2Cpp', 'Android', 'Full')) {
+        throw "Unknown Unity provisioning profile '$Profile'."
+    }
+}
+
 function Get-UnityCiModuleSpec {
     # SINGLE SOURCE OF TRUTH for the CI Unity module set. Returns an ORDERED array
     # of [pscustomobject] rows (core tier first), each describing one module group:
@@ -1513,6 +1541,7 @@ function Get-UnityCiModuleSpec {
     #   Tier      - 'core' (provisions reliably with the base editor) or 'android'
     #               (the heavy/flaky multi-GB Google download whose NDK unpack
     #               deterministically fails at ~93% on Windows).
+    #   Profiles  - provisioning profiles that require this module group.
     #
     # WHY THIS EXISTS (and why everything DERIVES from it): the REQUESTED `-m` list,
     # the VERIFIED-on-disk groups, and TIER membership all derive from these rows so
@@ -1528,18 +1557,26 @@ function Get-UnityCiModuleSpec {
     # request it.
     #
     # The 'android' tier (android + android-sdk-ndk-tools, with android-open-jdk as
-    # its verified-only dependency) is requested with fresh/full managed installs.
+    # its verified-only dependency) is requested only for Android/Full profiles.
     # Existing editors can still try a bounded Android-only repair first; exhaustion
-    # escalates to full managed quarantine/reinstall unless repair is disabled.
+    # escalates to profile-scoped managed quarantine/reinstall unless repair is
+    # disabled.
     return @(
-        [pscustomobject]@{ Id = 'windows-il2cpp';        Requested = $true;  Verified = $true; Tier = 'core' },
-        [pscustomobject]@{ Id = 'webgl';                 Requested = $true;  Verified = $true; Tier = 'core' },
-        [pscustomobject]@{ Id = 'linux-mono';            Requested = $true;  Verified = $true; Tier = 'core' },
-        [pscustomobject]@{ Id = 'linux-il2cpp';          Requested = $true;  Verified = $true; Tier = 'core' },
-        [pscustomobject]@{ Id = 'android';               Requested = $true;  Verified = $true; Tier = 'android' },
-        [pscustomobject]@{ Id = 'android-sdk-ndk-tools'; Requested = $true;  Verified = $true; Tier = 'android' },
-        [pscustomobject]@{ Id = 'android-open-jdk';      Requested = $false; Verified = $true; Tier = 'android' }
+        [pscustomobject]@{ Id = 'windows-il2cpp';        Requested = $true;  Verified = $true; Tier = 'core';    Profiles = @('StandaloneWindowsIl2Cpp', 'Full') },
+        [pscustomobject]@{ Id = 'webgl';                 Requested = $true;  Verified = $true; Tier = 'core';    Profiles = @('Full') },
+        [pscustomobject]@{ Id = 'linux-mono';            Requested = $true;  Verified = $true; Tier = 'core';    Profiles = @('Full') },
+        [pscustomobject]@{ Id = 'linux-il2cpp';          Requested = $true;  Verified = $true; Tier = 'core';    Profiles = @('Full') },
+        [pscustomobject]@{ Id = 'android';               Requested = $true;  Verified = $true; Tier = 'android'; Profiles = @('Android', 'Full') },
+        [pscustomobject]@{ Id = 'android-sdk-ndk-tools'; Requested = $true;  Verified = $true; Tier = 'android'; Profiles = @('Android', 'Full') },
+        [pscustomobject]@{ Id = 'android-open-jdk';      Requested = $false; Verified = $true; Tier = 'android'; Profiles = @('Android', 'Full') }
     )
+}
+
+function Get-UnityCiModuleSpecForProfile {
+    param([string]$Profile = $(Get-UnityProvisioningProfile))
+
+    Assert-UnityProvisioningProfile -Profile $Profile
+    return @(Get-UnityCiModuleSpec | Where-Object { $_.Profiles -contains $Profile })
 }
 
 function Get-UnityCiModuleIds {
@@ -1554,7 +1591,9 @@ function Get-UnityCiModuleIds {
     # it on disk: the beta CLI rejects the version-pinned bare id, and OpenJDK
     # arrives as an 'android-sdk-ndk-tools' dependency instead. StrictMode-safe:
     # @()-wraps the derived list.
-    return @(Get-UnityCiModuleSpec | Where-Object { $_.Requested } | ForEach-Object { $_.Id })
+    param([string]$Profile = $(Get-UnityProvisioningProfile))
+
+    return @(Get-UnityCiModuleSpecForProfile -Profile $Profile | Where-Object { $_.Requested } | ForEach-Object { $_.Id })
 }
 
 function Get-UnityCiVerifiedModuleGroups {
@@ -1564,7 +1603,23 @@ function Get-UnityCiVerifiedModuleGroups {
     # Test-UnityCiModuleGroupPresent. Includes 'android-open-jdk' (Verified=$true,
     # Requested=$false in the spec): OpenJDK arrives as an 'android-sdk-ndk-tools'
     # dependency and must be PROVEN present, not assumed. StrictMode-safe: @()-wraps.
-    return @(Get-UnityCiModuleSpec | Where-Object { $_.Verified } | ForEach-Object { $_.Id })
+    param([string]$Profile = $(Get-UnityProvisioningProfile))
+
+    return @(Get-UnityCiModuleSpecForProfile -Profile $Profile | Where-Object { $_.Verified } | ForEach-Object { $_.Id })
+}
+
+function Get-UnityCiSkippedModuleGroups {
+    param([string]$Profile = $(Get-UnityProvisioningProfile))
+
+    Assert-UnityProvisioningProfile -Profile $Profile
+    $selected = @(Get-UnityCiVerifiedModuleGroups -Profile $Profile)
+    return @(Get-UnityCiModuleSpec | Where-Object { $_.Verified -and $selected -notcontains $_.Id } | ForEach-Object { $_.Id })
+}
+
+function Test-UnityProvisioningProfileIncludesAndroid {
+    param([string]$Profile = $(Get-UnityProvisioningProfile))
+
+    return (@(Get-UnityCiModuleSpecForProfile -Profile $Profile | Where-Object { $_.Tier -eq 'android' }).Count -gt 0)
 }
 
 function Get-UnityCiModuleIdsForTier {
@@ -1575,14 +1630,17 @@ function Get-UnityCiModuleIdsForTier {
     # (mirroring the throw in Get-UnityCiModuleTier) so a bogus tier can never
     # silently yield an empty -- and therefore malformed, id-less -- `-m` vector.
     # StrictMode-safe: @()-wraps the derived list.
-    param([Parameter(Mandatory = $true)][string]$Tier)
+    param(
+        [Parameter(Mandatory = $true)][string]$Tier,
+        [string]$Profile = $(Get-UnityProvisioningProfile)
+    )
 
     $knownTiers = @(Get-UnityCiModuleSpec | ForEach-Object { $_.Tier } | Select-Object -Unique)
     if ($knownTiers -notcontains $Tier) {
         throw "Unknown Unity CI module tier '$Tier'."
     }
 
-    return @(Get-UnityCiModuleSpec | Where-Object { $_.Requested -and $_.Tier -eq $Tier } | ForEach-Object { $_.Id })
+    return @(Get-UnityCiModuleSpecForProfile -Profile $Profile | Where-Object { $_.Requested -and $_.Tier -eq $Tier } | ForEach-Object { $_.Id })
 }
 
 function Get-UnityCiModuleTier {
@@ -1643,7 +1701,21 @@ function Get-UnityCliModuleInstallArguments {
         [string[]]$ModuleIds
     )
 
-    $moduleIds = if ($PSBoundParameters.ContainsKey('ModuleIds')) { @($ModuleIds) } else { @(Get-UnityCiModuleIds) }
+    [string[]]$moduleIds = if ($PSBoundParameters.ContainsKey('ModuleIds')) {
+        @($ModuleIds | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    } else {
+        @(Get-UnityCiModuleIds)
+    }
+    if ($null -eq $moduleIds) {
+        $moduleIds = [string[]]@()
+    }
+
+    if ($moduleIds.Count -eq 0) {
+        if ($Verb -eq 'install') {
+            return @('install', $Version)
+        }
+        throw "Cannot build a Unity install-modules command for profile '$(Get-UnityProvisioningProfile)' because no module ids are selected."
+    }
 
     $includeChildModules = ($moduleIds -contains 'android' -or $moduleIds -contains 'android-sdk-ndk-tools')
 
@@ -1759,10 +1831,13 @@ function Test-UnityCiModuleGroupPresent {
 }
 
 function Get-MissingUnityCiModuleGroups {
-    param([Parameter(Mandatory = $true)][string]$EditorPath)
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [string]$Profile = $(Get-UnityProvisioningProfile)
+    )
 
     $missing = New-Object System.Collections.Generic.List[string]
-    foreach ($group in @(Get-UnityCiVerifiedModuleGroups)) {
+    foreach ($group in @(Get-UnityCiVerifiedModuleGroups -Profile $Profile)) {
         if (-not (Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group)) {
             $missing.Add($group)
         }
@@ -1772,9 +1847,12 @@ function Get-MissingUnityCiModuleGroups {
 }
 
 function Test-UnityCiModulesPresent {
-    param([Parameter(Mandatory = $true)][string]$EditorPath)
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [string]$Profile = $(Get-UnityProvisioningProfile)
+    )
 
-    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile)
     return ($missing.Count -eq 0)
 }
 
@@ -1959,18 +2037,20 @@ function Install-UnityEditorWithCiModules {
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$Reason,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
         [switch]$ManagedOnly
     )
 
     Assert-UnityProvisioningBudgetCanFit -Operation "fresh Unity $Version managed install" -MinimumSeconds 60
-    $moduleIds = @(Get-UnityCiModuleIds)
+    $moduleIds = @(Get-UnityCiModuleIds -Profile $Profile)
     if ($ManagedOnly) {
         Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
     }
-    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with the full CI module set ($($moduleIds -join ', ')). Reason: $Reason"
+    $moduleText = if ($moduleIds.Count -gt 0) { $moduleIds -join ', ' } else { '(editor only)' }
+    Write-CiNotice "Repairing Unity $Version by installing a fresh CLI-managed editor with provisioning profile '$Profile' modules ($moduleText). Reason: $Reason"
 
     # Single source of truth for the (EULA-bearing) module-install arg vector,
-    # scoped to the full requested module set.
+    # scoped to the selected provisioning profile.
     $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $Version -ModuleIds $moduleIds)
 
     $resolved = $null
@@ -2027,9 +2107,9 @@ function Install-UnityEditorWithCiModules {
         throw "Unity $Version repair install completed, but Unity.exe could not be found afterward."
     }
 
-    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved)
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $resolved -Profile $Profile)
     if ($missing.Count -gt 0) {
-        throw "Unity $Version repair install completed at '$resolved', but required CI module groups are still missing on disk after the full atomic install: $($missing -join ', ')."
+        throw "Unity $Version repair install completed at '$resolved', but required CI module groups for provisioning profile '$Profile' are still missing on disk after the atomic install: $($missing -join ', ')."
     }
 
     return $resolved
@@ -2041,6 +2121,7 @@ function Repair-UnityEditorWithCiModules {
         [Parameter(Mandatory = $true)][string]$EditorPath,
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [Parameter(Mandatory = $true)][string]$Reason,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
         [switch]$ManagedOnly
     )
 
@@ -2056,7 +2137,7 @@ function Repair-UnityEditorWithCiModules {
         }
         Move-UnityVersionInstallToQuarantine -Version $Version -InstallRoot $InstallRoot
 
-        return Install-UnityEditorWithCiModules -Version $Version -InstallRoot $InstallRoot -Reason $Reason -ManagedOnly:$ManagedOnly
+        return Install-UnityEditorWithCiModules -Version $Version -InstallRoot $InstallRoot -Reason $Reason -Profile $Profile -ManagedOnly:$ManagedOnly
     }
 }
 
@@ -2120,6 +2201,7 @@ function Ensure-UnityNativeStartupHealthy {
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
         [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
         [switch]$ManagedOnly
     )
 
@@ -2141,11 +2223,12 @@ function Ensure-UnityNativeStartupHealthy {
     }
 
     Write-Host "::warning::Unity $Version native startup probe failed before the license lock; attempting one managed reinstall."
-    $repaired = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "native startup probe failed with exit code $($result.ExitCode) ($($result.Description)). Probe log: $probeLog" -ManagedOnly:$ManagedOnly
-    # Repair-UnityEditorWithCiModules requests the full desired module set, then we
-    # re-run the disk-authoritative module check so a CLI success with missing
-    # children is still caught before the final native startup probe.
-    $repaired = Ensure-UnityCiModules -Version $Version -EditorPath $repaired -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
+    $repaired = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "native startup probe failed with exit code $($result.ExitCode) ($($result.Description)). Probe log: $probeLog" -Profile $Profile -ManagedOnly:$ManagedOnly
+    # Repair-UnityEditorWithCiModules requests the selected provisioning profile,
+    # then we re-run the disk-authoritative module check so a CLI success with
+    # missing selected-profile children is still caught before the final native
+    # startup probe.
+    $repaired = Ensure-UnityCiModules -Version $Version -EditorPath $repaired -InstallRoot $InstallRoot -Profile $Profile -ManagedOnly:$ManagedOnly
     $repairProbe = Test-UnityNativeStartup -EditorPath $repaired -LogPath $probeLog
     if (-not $repairProbe.Success) {
         throw "Unity $Version native startup probe still failed after managed reinstall with exit code $($repairProbe.ExitCode) ($($repairProbe.Description)). This indicates host OS/runtime prerequisite damage rather than a package/test issue. Probe log: $probeLog"
@@ -2224,20 +2307,21 @@ function Write-UnityModuleInstallPostMortem {
     param(
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
-        [string]$Root
+        [string]$Root,
+        [string]$Profile = $(Get-UnityProvisioningProfile)
     )
 
     try {
-        Write-Host "::notice::Unity $Version module install post-mortem (disk is the source of truth):"
+        Write-Host "::notice::Unity $Version module install post-mortem for provisioning profile '$Profile' (disk is the source of truth):"
 
-        foreach ($group in @(Get-UnityCiVerifiedModuleGroups)) {
+        foreach ($group in @(Get-UnityCiVerifiedModuleGroups -Profile $Profile)) {
             $present = Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group
             $state = if ($present) { 'present' } else { 'MISSING' }
             Write-Host "::notice::  module group '$group': $state"
         }
 
         $editorDir = Split-Path -Parent $EditorPath
-        if ($editorDir) {
+        if ($editorDir -and (Test-UnityProvisioningProfileIncludesAndroid -Profile $Profile)) {
             $androidRoot = Join-Path $editorDir 'Data\PlaybackEngines\AndroidPlayer'
             foreach ($payload in @('NDK', 'SDK')) {
                 $payloadRoot = Join-Path $androidRoot $payload
@@ -2337,7 +2421,8 @@ function Install-UnityAndroidModules {
     # DEDICATED, BOUNDED Android module install for existing editors -- the
     # heavy/flaky tier (android + android-sdk-ndk-tools, multi-GB Google download
     # whose NDK unpack fails deterministically at ~93% on Windows). This cheap
-    # repair runs before the script escalates to a full managed reinstall.
+    # repair runs before the script escalates to a profile-scoped managed
+    # reinstall.
     #
     # Loop up to Get-EnsureEditorAndroidInstallRetryAttempts times: before a retry
     # (attempt > 1), clear the partial NDK/SDK payload and back off (linear). Each
@@ -2351,8 +2436,13 @@ function Install-UnityAndroidModules {
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
         [string]$InstallRoot,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
         [switch]$ManagedOnly
     )
+
+    if (-not (Test-UnityProvisioningProfileIncludesAndroid -Profile $Profile)) {
+        throw "Provisioning profile '$Profile' does not include the Android module tier."
+    }
 
     # Honor -ManagedOnly for consistency with every other install path (the base
     # install, the repair, and Ensure-UnityCiModules): refuse to mutate editors
@@ -2361,7 +2451,7 @@ function Install-UnityAndroidModules {
         Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
     }
 
-    $androidIds = @(Get-UnityCiModuleIdsForTier -Tier 'android')
+    $androidIds = @(Get-UnityCiModuleIdsForTier -Tier 'android' -Profile $Profile)
     $maxAttempts = Get-EnsureEditorAndroidInstallRetryAttempts
     $retryDelaySeconds = Get-EnsureEditorRetryDelaySeconds
     $installTimeout = Get-EnsureEditorInstallTimeoutSeconds
@@ -2386,7 +2476,7 @@ function Install-UnityAndroidModules {
         # Disk is the source of truth: re-verify the android tier groups. If none
         # are missing, the install succeeded regardless of the CLI exit code (an
         # exit 6 with everything present is the idempotent no-op).
-        $missingAndroid = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
+        $missingAndroid = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
         if ($missingAndroid.Count -eq 0) {
             Write-CiNotice "Android CI module tier for Unity $Version present on disk after attempt $attempt (CLI exit code $($result.ExitCode))."
             return $EditorPath
@@ -2402,9 +2492,9 @@ function Install-UnityAndroidModules {
     # Exhausted every bounded Android-only attempt. Existing editors get this
     # cheap repair first, but Android exhaustion is now treated as evidence that
     # the editor tree may be internally inconsistent. Unless the operator disabled
-    # editor repair, escalate to the managed quarantine + full reinstall path.
-    $stillMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
-    Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot
+    # editor repair, escalate to the profile-scoped managed quarantine/reinstall path.
+    $stillMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
+    Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot -Profile $Profile
     if ($env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1') {
         throw "Unity $Version Android CI module install FAILED after $maxAttempts attempt(s): the Android tier groups are still missing on disk ($($stillMissing -join ', ')), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled escalation to managed quarantine/reinstall."
     }
@@ -2413,8 +2503,8 @@ function Install-UnityAndroidModules {
     }
 
     Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $Version -Reason "Android-only repair exhausted before managed reinstall"
-    Write-Host "::warning::Unity $Version Android-only repair exhausted after $maxAttempts attempt(s); escalating to managed quarantine/reinstall with the full CI module set."
-    return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "Android-only repair exhausted after $maxAttempts attempt(s); missing Android groups: $($stillMissing -join ', ')." -ManagedOnly:$ManagedOnly
+    Write-Host "::warning::Unity $Version Android-only repair exhausted after $maxAttempts attempt(s); escalating to managed quarantine/reinstall with provisioning profile '$Profile'."
+    return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "Android-only repair exhausted after $maxAttempts attempt(s); missing Android groups: $($stillMissing -join ', ')." -Profile $Profile -ManagedOnly:$ManagedOnly
 }
 
 function Ensure-UnityCiModules {
@@ -2433,13 +2523,20 @@ function Ensure-UnityCiModules {
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
         [string]$InstallRoot,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
         [switch]$ManagedOnly
     )
 
-    $moduleIds = @(Get-UnityCiModuleIds)
+    $moduleIds = @(Get-UnityCiModuleIds -Profile $Profile)
+    $verifiedGroups = @(Get-UnityCiVerifiedModuleGroups -Profile $Profile)
 
     if ($ManagedOnly) {
         Confirm-UnityCliManagedInstallRoot -Root $InstallRoot | Out-Null
+    }
+
+    if ($moduleIds.Count -eq 0 -and $verifiedGroups.Count -eq 0) {
+        Write-CiNotice "Provisioning profile '$Profile' requires the Unity editor only; skipping Unity module install and verification."
+        return $EditorPath
     }
 
     # Best-effort listing diagnostic (unchanged): the beta listing format may not
@@ -2455,10 +2552,11 @@ function Ensure-UnityCiModules {
         Write-CiNotice "Could not list installable modules for Unity $Version (best-effort); proceeding with required CI module ids: $($moduleIds -join ', ')."
     }
 
-    # Step 1: verify everything. If all present, nothing to do.
-    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    # Step 1: verify everything in the selected profile. If all present, nothing
+    # to do.
+    $missing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile)
     if ($missing.Count -eq 0) {
-        Write-CiNotice "All required Unity CI module groups already present on disk for Unity $Version; nothing to install."
+        Write-CiNotice "All required Unity CI module groups for provisioning profile '$Profile' already present on disk for Unity $Version; nothing to install."
         return $EditorPath
     }
 
@@ -2475,7 +2573,7 @@ function Ensure-UnityCiModules {
         # Single source of truth for the (EULA-bearing) `install-modules` arg vector,
         # scoped to the CORE tier. Captured ONCE and reused for the install call and
         # the failure-annotation arg echo.
-        $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core'))
+        $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install-modules' -Version $Version -ModuleIds (Get-UnityCiModuleIdsForTier -Tier 'core' -Profile $Profile))
 
         # Attempt the install via the capturing (non-throwing) path so we can inspect
         # BOTH the exit code AND the output text before deciding whether it was fatal.
@@ -2483,7 +2581,7 @@ function Ensure-UnityCiModules {
 
         # Re-verify the core tier on disk (disk is the source of truth; an exit 6
         # with everything present is the idempotent no-op).
-        $missingCoreAfter = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'core' })
+        $missingCoreAfter = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile | Where-Object { (Get-UnityCiModuleTier $_) -eq 'core' })
         if ($missingCoreAfter.Count -gt 0) {
             # Tail of the captured output for diagnostics (collapsed first so the
             # Android NDK progress spam does not bury the tail).
@@ -2502,8 +2600,8 @@ function Ensure-UnityCiModules {
             }
 
             if ($InstallRoot) {
-                # Full quarantine + reinstall with the full desired module set.
-                $EditorPath = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "required CORE CI module groups missing ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail" -ManagedOnly:$ManagedOnly
+                # Quarantine + reinstall with the selected provisioning profile.
+                $EditorPath = Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "required CORE CI module groups missing ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail" -Profile $Profile -ManagedOnly:$ManagedOnly
             } else {
                 throw "Unity $Version 'install-modules' failed with exit code $($result.ExitCode), and required CORE CI module groups are missing on disk ($($missingCoreAfter -join ', ')). CLI output tail:`n$tail"
             }
@@ -2513,17 +2611,18 @@ function Ensure-UnityCiModules {
     }
 
     # Step 4: re-verify and, if any ANDROID-tier group is still missing, install it
-    # via the dedicated, bounded, NON-quarantining Android step.
-    $missingAndroid = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
+    # via the dedicated, bounded Android step. That step can escalate to managed
+    # quarantine/reinstall only after its editor-preserving attempts are exhausted.
+    $missingAndroid = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile | Where-Object { (Get-UnityCiModuleTier $_) -eq 'android' })
     if ($missingAndroid.Count -gt 0) {
-        return Install-UnityAndroidModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
+        return Install-UnityAndroidModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Profile $Profile -ManagedOnly:$ManagedOnly
     }
 
     # Step 5: final verification across all tiers.
-    $finalMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath)
+    $finalMissing = @(Get-MissingUnityCiModuleGroups -EditorPath $EditorPath -Profile $Profile)
     if ($finalMissing.Count -gt 0) {
-        Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot
-        throw "Unity $Version CI module install completed, but required module groups are still missing on disk: $($finalMissing -join ', ') (see the post-mortem above)."
+        Write-UnityModuleInstallPostMortem -Version $Version -EditorPath $EditorPath -Root $InstallRoot -Profile $Profile
+        throw "Unity $Version CI module install completed, but required module groups for provisioning profile '$Profile' are still missing on disk: $($finalMissing -join ', ') (see the post-mortem above)."
     }
 
     return $EditorPath
@@ -2534,10 +2633,11 @@ function Add-WindowsIl2CppModule {
         [Parameter(Mandatory = $true)][string]$Version,
         [Parameter(Mandatory = $true)][string]$EditorPath,
         [string]$InstallRoot,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
         [switch]$ManagedOnly
     )
 
-    return Ensure-UnityCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -ManagedOnly:$ManagedOnly
+    return Ensure-UnityCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Profile $Profile -ManagedOnly:$ManagedOnly
 }
 
 function Write-InstalledEditorDiagnostics {
@@ -2645,28 +2745,36 @@ function Write-UnityProvisioningSummary {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
         }
 
+        $profile = Get-UnityProvisioningProfile
         $modulePresence = [ordered]@{}
-        foreach ($group in @(Get-UnityCiVerifiedModuleGroups)) {
+        foreach ($group in @(Get-UnityCiModuleSpec | Where-Object { $_.Verified } | ForEach-Object { $_.Id })) {
             $present = $false
             if ($EditorPath -and (Test-Path -LiteralPath $EditorPath -PathType Leaf)) {
                 $present = Test-UnityCiModuleGroupPresent -EditorPath $EditorPath -Group $group
             }
             $modulePresence[$group] = $present
         }
+        $requiredModulePresence = [ordered]@{}
+        foreach ($group in @(Get-UnityCiVerifiedModuleGroups -Profile $profile)) {
+            $requiredModulePresence[$group] = $modulePresence[$group]
+        }
 
         $commandClasses = @($script:ProvisioningCommandClasses | Sort-Object)
         $summary = [ordered]@{
             generatedUtc              = [DateTime]::UtcNow.ToString('o')
             unityVersion              = $Version
+            provisioningProfile       = $profile
             cliPath                   = $script:UnityCliPath
             cliVersion                = $(if ($script:UnityCliVersionText) { $script:UnityCliVersionText } else { '(not queried)' })
             installRoot               = $Root
             editorPath                = $EditorPath
             ciManagedOnly             = [bool]$CiManagedOnly
             attemptedCommandClasses   = $commandClasses
-            desiredModules            = @(Get-UnityCiModuleIds)
-            verifiedModules           = @(Get-UnityCiVerifiedModuleGroups)
+            desiredModules            = @(Get-UnityCiModuleIds -Profile $profile)
+            verifiedModules           = @(Get-UnityCiVerifiedModuleGroups -Profile $profile)
+            skippedModuleGroups       = @(Get-UnityCiSkippedModuleGroups -Profile $profile)
             modulePresence            = $modulePresence
+            requiredModulePresence    = $requiredModulePresence
             provisioningBudgetSeconds = $script:ProvisioningBudgetSeconds
             remainingBudgetSeconds    = Get-RemainingUnityProvisioningBudgetSeconds
             timeoutEvents             = @($script:ProvisioningTimeoutEvents.ToArray())
@@ -2679,12 +2787,16 @@ function Write-UnityProvisioningSummary {
         $textLines = @(
             "Unity provisioning summary",
             "classification=$script:ProvisioningFinalClassification",
+            "provisioningProfile=$profile",
             "unityVersion=$Version",
             "cliPath=$script:UnityCliPath",
             "cliVersion=$($summary.cliVersion)",
             "installRoot=$Root",
             "editorPath=$EditorPath",
             "attemptedCommandClasses=$($commandClasses -join ',')",
+            "desiredModules=$($summary.desiredModules -join ',')",
+            "verifiedModules=$($summary.verifiedModules -join ',')",
+            "skippedModuleGroups=$($summary.skippedModuleGroups -join ',')",
             "modulePresence=$moduleText",
             "timeoutEvents=$($script:ProvisioningTimeoutEvents.Count)",
             "processCleanupEvents=$($script:ProvisioningProcessCleanupEvents.Count)"
@@ -2696,6 +2808,7 @@ function Write-UnityProvisioningSummary {
 }
 
 Initialize-UnityProvisioningBudget
+Write-CiNotice "Unity editor provisioning profile: $ProvisioningProfile."
 
 try {
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
@@ -2710,10 +2823,10 @@ if (-not $editor) {
 
     Write-CiNotice "Installing Unity Editor $UnityVersion on the self-hosted Windows runner."
     # Single source of truth for the (EULA-bearing) module-install arg vector.
-    # Fresh installs request the full desired module set atomically so Android
-    # dependencies are resolved with the editor install instead of through an
-    # amplified outer retry.
-    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion -ModuleIds (Get-UnityCiModuleIds))
+    # Fresh installs request the selected profile's desired modules atomically so
+    # Android dependencies are resolved with the editor install when Android is in
+    # scope, instead of through an amplified outer retry.
+    $installArgs = @(Get-UnityCliModuleInstallArguments -Verb 'install' -Version $UnityVersion -ModuleIds (Get-UnityCiModuleIds -Profile $ProvisioningProfile))
 
     # Emit diagnostics BEFORE the (potentially 30+ minute) install so the logs
     # carry the CLI path/version + disk headroom even if the install then stalls.
@@ -2781,10 +2894,10 @@ if (-not $editor) {
     if (-not $editor) {
         Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward."
         Move-UnityVersionInstallToQuarantine -Version $UnityVersion -InstallRoot $InstallRoot
-        $editor = Install-UnityEditorWithCiModules -Version $UnityVersion -InstallRoot $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward; quarantined the managed version directory and retrying with a fresh install." -ManagedOnly:$CiManagedOnly
+        $editor = Install-UnityEditorWithCiModules -Version $UnityVersion -InstallRoot $InstallRoot -Reason "Unity CLI install completed, but Unity.exe could not be resolved afterward; quarantined the managed version directory and retrying with a fresh install." -Profile $ProvisioningProfile -ManagedOnly:$CiManagedOnly
         $script:ProvisioningEditorPath = $editor
     }
-    $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+    $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -Profile $ProvisioningProfile -ManagedOnly:$CiManagedOnly
     $script:ProvisioningEditorPath = $editor
 } else {
     Ensure-UnityCli | Out-Null
@@ -2794,11 +2907,11 @@ if (-not $editor) {
     }
     Write-CiNotice "Ensuring required CI modules are installed for Unity $UnityVersion."
     $script:ProvisioningEditorPath = $editor
-    $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+    $editor = Ensure-UnityCiModules -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -Profile $ProvisioningProfile -ManagedOnly:$CiManagedOnly
     $script:ProvisioningEditorPath = $editor
 }
 
-$editor = Ensure-UnityNativeStartupHealthy -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -ManagedOnly:$CiManagedOnly
+$editor = Ensure-UnityNativeStartupHealthy -Version $UnityVersion -EditorPath $editor -InstallRoot $InstallRoot -Profile $ProvisioningProfile -ManagedOnly:$CiManagedOnly
 $script:ProvisioningEditorPath = $editor
 $script:ProvisioningFinalClassification = 'success'
 Write-CiNotice "Unity editor resolved: $editor"
