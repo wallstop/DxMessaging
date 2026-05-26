@@ -202,6 +202,19 @@ cannot help; `ensure-editor.ps1` short-circuits as soon as it sees
 annotation rather than burning ~13 minutes per matrix cell on a futile editor
 reinstall.
 
+> **WHICH PATH TO USE.** Two operator paths follow.
+>
+> - **First-time fix (or any time the workflow does not yet live on the
+>   default branch)**: jump to **Local recovery: bootstrap script on the
+>   host** below. The script lives in the repo, so any local clone of any
+>   branch works. No GitHub Actions involvement.
+> - **Every subsequent regression after the bootstrap workflow is on the
+>   default branch**: use **Auto-recovery: workflow_dispatch** below.
+>   `workflow_dispatch` triggers only register from the default branch, so
+>   the **Run workflow** button (and `gh workflow run`) only become
+>   available after this PR (or any future PR carrying
+>   `.github/workflows/runner-bootstrap.yml`) is merged.
+
 `bootstrap-windows-runner.ps1` addresses three other foundational host
 concerns in the same pass: Windows long-path support (the prerequisite that
 unblocks the Android NDK 93% unpack failure described in the next section),
@@ -213,6 +226,17 @@ workspace, and PowerShell 7 (`pwsh`).
 Use this path when you can read the Actions UI but cannot RDP/SSH to the
 runner host. The workflow installs every prereq idempotently and uploads a
 transcript artifact.
+
+> **HARD PREREQUISITE: `runner-bootstrap.yml` must be on the default
+> branch (`master`) before this path works at all.** GitHub Actions only
+> registers `workflow_dispatch` triggers from workflow files that exist on
+> the default branch; until this PR is merged, the **Run workflow** button
+> does NOT appear in the Actions UI and `gh workflow run runner-bootstrap.yml`
+> fails with `could not find any workflows named runner-bootstrap.yml`.
+> Use the **Local recovery** path below for the FIRST-TIME runner repair
+> (it has no merge dependency: the script lives in the repo and runs from
+> any branch's checkout). Once merged, this Actions-UI path becomes the
+> low-friction option for every subsequent regression.
 
 1. (HARD-FAIL prerequisite) Take the OTHER runner offline first. Both
    self-hosted Windows runners share the labels `self-hosted, Windows,
@@ -278,8 +302,15 @@ final exit code reflects the worst outcome across all of them.
   Resolves the Android NDK 93% unpack failure at the legacy MAX_PATH boundary
   (see the next section for the underlying root cause).
 - **Windows Defender exclusions** for `C:\Unity\Editors` and the active
-  runner workspace. Prevents Defender from transient-locking NDK files during
-  unpack. Skipped gracefully when Defender is absent.
+  runner workspace (**best-effort, perf optimization**). Prevents Defender
+  from transient-locking NDK files during unpack. Skipped gracefully when
+  Defender is absent. Also **skipped on non-admin per-job preflight runs**
+  (the runner agent service typically runs as `NETWORK SERVICE`, which
+  cannot call `Add-MpPreference`); Defender management is not a correctness
+  requirement for Unity startup, so a non-admin runner does not attempt it.
+  To install or refresh exclusions, run the bootstrap from an elevated
+  shell on the host (see Local recovery above) or trigger
+  `runner-bootstrap.yml`.
 - **PowerShell 7 (`pwsh`)** via `winget install --id Microsoft.PowerShell
 --scope user`. The `--scope user` install means Administrator is not
   required for `pwsh` itself.

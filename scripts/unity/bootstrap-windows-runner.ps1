@@ -187,6 +187,21 @@ function Test-IsWindowsHost {
 function Test-IsAdministrator {
     # Safe to call on Linux (returns $false). On Windows, returns $true iff
     # the current process holds the Administrator role.
+    #
+    # TEST-ONLY hermeticity override (same spirit as DXM_UNITY_FAKE_LONGPATHS_ENABLED
+    # in ensure-editor.ps1): when DXM_RUNNER_FAKE_IS_ADMIN is set to '1' or '0',
+    # honor that BEFORE the real probe. This lets the helper-mutation suite
+    # behaviorally test the admin / non-admin tier paths from a single
+    # invocation on any OS -- without it, a Linux test of the dispatcher's
+    # non-admin Defender-skip path requires manual shell-launching tricks.
+    # Real-world admin/non-admin detection is unaffected (the env var is never
+    # set in production / CI).
+    if ($env:DXM_RUNNER_FAKE_IS_ADMIN -eq '1') {
+        return $true
+    }
+    if ($env:DXM_RUNNER_FAKE_IS_ADMIN -eq '0') {
+        return $false
+    }
     if (-not (Test-IsWindowsHost)) {
         return $false
     }
@@ -1027,7 +1042,7 @@ function Test-UcrtPresent {
 function Invoke-BootstrapStep {
     # Generic recording/orchestration wrapper for a single prereq. Always
     # runs Detect; if missing AND not DetectOnly, runs Install + re-Detect.
-    # Returns hashtable @{ name; finalState; detail }. NEVER throws.
+    # Returns hashtable @{ name; finalState; detail; critical }. NEVER throws.
     #
     #   finalState options:
     #     'ok'             -- present (no install needed) OR install succeeded
@@ -1036,11 +1051,20 @@ function Invoke-BootstrapStep {
     #                         download failure, installer exit, etc.)
     #     'missing'        -- DetectOnly mode + detect returned $false
     #     'skipped'        -- intentionally not applicable (e.g. Defender absent)
+    #
+    # The `critical` flag (default $true) classifies the prereq as either
+    # LOAD-BEARING for Unity correctness (Unity won't start without it -- the
+    # dispatcher exits 1 on failure) or BEST-EFFORT (perf optimization only;
+    # the dispatcher warns but does not fail). Defender exclusions are the
+    # canonical best-effort case: they speed up the Android NDK unpack but
+    # Unity runs without them. See Invoke-WindowsRunnerBootstrap's exit-code
+    # resolution for how this propagates.
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][scriptblock]$DetectFn,
         [Parameter(Mandatory = $true)][scriptblock]$InstallFn,
-        [bool]$DetectOnly = $false
+        [bool]$DetectOnly = $false,
+        [bool]$Critical = $true
     )
 
     Write-Host "::group::bootstrap step: $Name"
@@ -1050,17 +1074,17 @@ function Invoke-BootstrapStep {
             $present = [bool](& $DetectFn)
         } catch {
             Write-CiError "$Name detection threw: $($_.Exception.Message)"
-            return @{ name = $Name; finalState = 'install-failed'; detail = "detect threw: $($_.Exception.Message)" }
+            return @{ name = $Name; finalState = 'install-failed'; detail = "detect threw: $($_.Exception.Message)"; critical = $Critical }
         }
 
         if ($present) {
             Write-CiNotice "$Name already present (no action needed)"
-            return @{ name = $Name; finalState = 'ok'; detail = 'already present' }
+            return @{ name = $Name; finalState = 'ok'; detail = 'already present'; critical = $Critical }
         }
 
         if ($DetectOnly) {
             Write-CiWarning "$Name is MISSING (DetectOnly mode; not installing)"
-            return @{ name = $Name; finalState = 'missing'; detail = 'missing in DetectOnly mode' }
+            return @{ name = $Name; finalState = 'missing'; detail = 'missing in DetectOnly mode'; critical = $Critical }
         }
 
         Write-Host "$Name is missing -- attempting install"
@@ -1069,12 +1093,12 @@ function Invoke-BootstrapStep {
             $result = & $InstallFn
         } catch {
             Write-CiError "$Name install threw: $($_.Exception.Message)"
-            return @{ name = $Name; finalState = 'install-failed'; detail = "install threw: $($_.Exception.Message)" }
+            return @{ name = $Name; finalState = 'install-failed'; detail = "install threw: $($_.Exception.Message)"; critical = $Critical }
         }
 
         if ($null -eq $result -or -not ($result -is [hashtable])) {
             Write-CiError "$Name install function returned unexpected payload (expected hashtable); treating as failure"
-            return @{ name = $Name; finalState = 'install-failed'; detail = 'install returned non-hashtable' }
+            return @{ name = $Name; finalState = 'install-failed'; detail = 'install returned non-hashtable'; critical = $Critical }
         }
 
         $success = $false
@@ -1084,7 +1108,7 @@ function Invoke-BootstrapStep {
 
         if (-not $success) {
             Write-CiError "$Name install FAILED: $reason"
-            return @{ name = $Name; finalState = 'install-failed'; detail = "install failed: $reason" }
+            return @{ name = $Name; finalState = 'install-failed'; detail = "install failed: $reason"; critical = $Critical }
         }
 
         # Re-probe to confirm install actually fixed the detection.
@@ -1093,15 +1117,15 @@ function Invoke-BootstrapStep {
             $postPresent = [bool](& $DetectFn)
         } catch {
             Write-CiError "$Name post-install re-detect threw: $($_.Exception.Message)"
-            return @{ name = $Name; finalState = 'install-failed'; detail = "post-install detect threw: $($_.Exception.Message)" }
+            return @{ name = $Name; finalState = 'install-failed'; detail = "post-install detect threw: $($_.Exception.Message)"; critical = $Critical }
         }
         if (-not $postPresent) {
             Write-CiError "$Name install reported success but post-install detection still says missing: $reason"
-            return @{ name = $Name; finalState = 'install-failed'; detail = "install ok but re-detect failed; reason: $reason" }
+            return @{ name = $Name; finalState = 'install-failed'; detail = "install ok but re-detect failed; reason: $reason"; critical = $Critical }
         }
 
         Write-CiNotice "$Name installed: $reason"
-        return @{ name = $Name; finalState = 'installed'; detail = $reason }
+        return @{ name = $Name; finalState = 'installed'; detail = $reason; critical = $Critical }
     } finally {
         Write-Host "::endgroup::"
     }
@@ -1114,6 +1138,26 @@ function Invoke-DefenderBootstrap {
     # be missing entirely on hosts without Defender (Server Core, Defender
     # disabled). We handle those branches inline so the per-path failures
     # roll up into a single summary entry.
+    #
+    # IMPORTANT: this prereq is BEST-EFFORT (critical = $false). Defender
+    # exclusions are a perf optimization (faster Android NDK unpack); Unity
+    # itself runs fine without them. EVERY return hashtable from this
+    # function MUST declare `critical = $false` so the dispatcher's
+    # tier-aware exit-code logic treats a Defender failure as a non-gating
+    # warning rather than a hard fail. The 2026-05-26 production regression
+    # that motivated this: per-job preflight ran as NETWORK SERVICE
+    # (non-admin) and Add-MpPreference threw access-denied; the bootstrap
+    # treated that as a critical failure and exited 1, failing every Unity
+    # cell even though every load-bearing prereq (VC++, long-paths, pwsh,
+    # UCRT) was already installed by an operator's manual elevated run.
+    #
+    # WHY skip-on-non-admin (the first branch below): a non-admin shell
+    # cannot manage Defender exclusions at all (Add-MpPreference requires
+    # admin on every Windows SKU; Get-MpPreference may report a stale or
+    # empty exclusion list to the unprivileged caller). Calling either is
+    # pointless and noisy. We short-circuit with a single ::notice:: and
+    # return a 'skipped-non-admin' state that the dispatcher recognises as
+    # non-failure.
     #
     # WHY [AllowEmptyCollection]: callers @()-wrap an array that may be
     # empty (e.g. when every candidate path was rejected by the allow-list).
@@ -1130,14 +1174,23 @@ function Invoke-DefenderBootstrap {
 
     Write-Host "::group::bootstrap step: defender-exclusion"
     try {
+        # Non-admin short-circuit: Defender management is admin-only. Bail
+        # out BEFORE we touch Test-DefenderAvailable / Test-DefenderExclusion
+        # so we never hit a partial/misleading state. This is a notice, not
+        # an error -- Defender exclusion is best-effort (critical = $false).
+        if (-not (Test-IsAdministrator)) {
+            Write-CiNotice "Skipping Defender exclusion: running as non-admin. Defender exclusions are a perf optimization (faster Android NDK unpack) and NOT a correctness requirement for Unity startup. Run the bootstrap from an elevated shell on the host to manage exclusions."
+            return @{ name = 'defender-exclusion'; finalState = 'skipped-non-admin'; detail = 'non-admin shell cannot manage Defender exclusions; skipped (best-effort prereq)'; critical = $false }
+        }
+
         if (-not (Test-DefenderAvailable)) {
             Write-CiNotice "Defender not present (Get-MpPreference unavailable); skipping exclusion configuration."
-            return @{ name = 'defender-exclusion'; finalState = 'skipped'; detail = 'Defender not available' }
+            return @{ name = 'defender-exclusion'; finalState = 'skipped'; detail = 'Defender not available'; critical = $false }
         }
 
         if ($null -eq $Paths -or $Paths.Length -eq 0) {
             Write-CiNotice "No Defender exclusion paths configured; skipping."
-            return @{ name = 'defender-exclusion'; finalState = 'skipped'; detail = 'no paths configured' }
+            return @{ name = 'defender-exclusion'; finalState = 'skipped'; detail = 'no paths configured'; critical = $false }
         }
 
         $missing = New-Object 'System.Collections.Generic.List[string]'
@@ -1150,13 +1203,13 @@ function Invoke-DefenderBootstrap {
         }
 
         if ($missing.Count -eq 0) {
-            return @{ name = 'defender-exclusion'; finalState = 'ok'; detail = "all $($Paths.Length) path(s) already excluded" }
+            return @{ name = 'defender-exclusion'; finalState = 'ok'; detail = "all $($Paths.Length) path(s) already excluded"; critical = $false }
         }
 
         if ($DetectOnly) {
             $list = ($missing -join ', ')
             Write-CiWarning "Defender exclusion(s) MISSING (DetectOnly mode): $list"
-            return @{ name = 'defender-exclusion'; finalState = 'missing'; detail = "missing in DetectOnly mode: $list" }
+            return @{ name = 'defender-exclusion'; finalState = 'missing'; detail = "missing in DetectOnly mode: $list"; critical = $false }
         }
 
         $failures = New-Object 'System.Collections.Generic.List[string]'
@@ -1173,9 +1226,9 @@ function Invoke-DefenderBootstrap {
         }
 
         if ($failures.Count -gt 0) {
-            return @{ name = 'defender-exclusion'; finalState = 'install-failed'; detail = "failed for $($failures.Count): $($failures -join '; ')" }
+            return @{ name = 'defender-exclusion'; finalState = 'install-failed'; detail = "failed for $($failures.Count): $($failures -join '; ')"; critical = $false }
         }
-        return @{ name = 'defender-exclusion'; finalState = 'installed'; detail = "added: $($installed -join ', ')" }
+        return @{ name = 'defender-exclusion'; finalState = 'installed'; detail = "added: $($installed -join ', ')"; critical = $false }
     } finally {
         Write-Host "::endgroup::"
     }
@@ -1186,22 +1239,29 @@ function Invoke-UcrtBootstrap {
     # manual-install link on downlevel hosts missing KB2999226. We do NOT
     # auto-install KB2999226 because the MSU URL is host-architecture-specific
     # and the operator action is one-time.
+    #
+    # UCRT is CRITICAL (critical = $true) on the hosts that need it: Unity
+    # links against the Universal C Runtime and will fail to start without
+    # it. On modern Windows (Win10+/Server2019+) UCRT is part of the OS
+    # image so this step is a silent no-op there; the `critical = $true`
+    # flag is propagated either way so the dispatcher's tier-aware exit-code
+    # logic treats a downlevel-host miss as a gating failure.
     param([bool]$DetectOnly = $false)
 
     Write-Host "::group::bootstrap step: ucrt"
     try {
         if (-not (Test-IsWindowsHost)) {
             Write-CiNotice "UCRT step skipped (not Windows)"
-            return @{ name = 'ucrt'; finalState = 'skipped'; detail = 'not Windows' }
+            return @{ name = 'ucrt'; finalState = 'skipped'; detail = 'not Windows'; critical = $true }
         }
         $os = [Environment]::OSVersion.Version
         if ($os.Major -ge 10) {
             Write-CiNotice "UCRT shipped with Windows $($os) (Win10+/Server2019+ has UCRT built in); no action needed."
-            return @{ name = 'ucrt'; finalState = 'ok'; detail = "Windows $os has UCRT built in" }
+            return @{ name = 'ucrt'; finalState = 'ok'; detail = "Windows $os has UCRT built in"; critical = $true }
         }
         if (Test-UcrtPresent) {
             Write-CiNotice "UCRT (KB2999226) detected on downlevel Windows $os"
-            return @{ name = 'ucrt'; finalState = 'ok'; detail = "KB2999226 present on $os" }
+            return @{ name = 'ucrt'; finalState = 'ok'; detail = "KB2999226 present on $os"; critical = $true }
         }
         # Downlevel + KB missing -- this is an operator action; emit a
         # clear ::error:: with the manual-install link. Do not try to
@@ -1209,9 +1269,9 @@ function Invoke-UcrtBootstrap {
         $link = 'https://support.microsoft.com/help/2999226'
         Write-CiError "UCRT (KB2999226) is missing on downlevel Windows $os. Unity may fail to start without it. Install KB2999226 manually from $link (operator action; this bootstrap does NOT auto-install MSU files)."
         if ($DetectOnly) {
-            return @{ name = 'ucrt'; finalState = 'missing'; detail = "KB2999226 missing on $os (DetectOnly)" }
+            return @{ name = 'ucrt'; finalState = 'missing'; detail = "KB2999226 missing on $os (DetectOnly)"; critical = $true }
         }
-        return @{ name = 'ucrt'; finalState = 'install-failed'; detail = "KB2999226 missing on $os (manual install required)" }
+        return @{ name = 'ucrt'; finalState = 'install-failed'; detail = "KB2999226 missing on $os (manual install required)"; critical = $true }
     } finally {
         Write-Host "::endgroup::"
     }
@@ -1220,7 +1280,12 @@ function Invoke-UcrtBootstrap {
 function Format-BootstrapSummary {
     # Produces the single-line ::notice:: summary expected by the
     # workflow/composite. Each entry is "name=state"; states are short
-    # ('ok', 'installed', 'install-failed', 'missing', 'skipped').
+    # ('ok', 'installed', 'install-failed', 'missing', 'skipped',
+    # 'skipped-non-admin'). Best-effort (non-critical) prereqs are
+    # suffixed with `*` so the operator can immediately distinguish a
+    # load-bearing failure from a perf-optimization miss. A separate
+    # ::notice:: legend line explains the suffix; the dispatcher emits
+    # that legend immediately after the summary.
     # WHY Write-CiWarning on the catch path (F22): silently swallowing
     # malformed results made debugging "summary shows no entries" hard.
     # Surface the malformed object so the operator can see it.
@@ -1231,9 +1296,19 @@ function Format-BootstrapSummary {
         if ($null -eq $r) { continue }
         $name = ''
         $state = ''
+        # Default to critical=$true for any result lacking the flag --
+        # safest default if a future caller forgets to propagate it.
+        $isCritical = $true
         try {
             $name = [string]$r.name
             $state = [string]$r.finalState
+            try {
+                if ($null -ne $r.critical) {
+                    $isCritical = [bool]$r.critical
+                }
+            } catch {
+                $isCritical = $true
+            }
         } catch {
             Write-CiWarning "Format-BootstrapSummary: malformed result entry: $r ($($_.Exception.Message))"
             $name = '<unknown>'
@@ -1241,7 +1316,8 @@ function Format-BootstrapSummary {
         }
         if ([string]::IsNullOrWhiteSpace($name)) { $name = '<unknown>' }
         if ([string]::IsNullOrWhiteSpace($state)) { $state = '<unknown>' }
-        $parts.Add("$name=$state") | Out-Null
+        $suffix = if ($isCritical) { '' } else { '*' }
+        $parts.Add("$name=$state$suffix") | Out-Null
     }
     return ($parts -join ' ')
 }
@@ -1279,72 +1355,137 @@ function Invoke-WindowsRunnerBootstrap {
     $isAdmin = Test-IsAdministrator
     Write-CiNotice "bootstrap-windows-runner.ps1 mode=$mode admin=$isAdmin UnityInstallRoot=$UnityInstallRoot"
     if (-not $isAdmin -and -not $DetectOnly) {
-        # Not a hard-fail (Defender exclusion + Defender preference itself may
-        # work in some configurations; PowerShell 7 install via winget per-user
-        # works without admin), but flag explicitly so any subsequent
-        # 'access denied' has context.
-        Write-CiWarning "bootstrap-windows-runner.ps1 running NON-admin. Prereqs that require HKLM writes (VC++ redist install, LongPathsEnabled) will fail with Access Denied. To remediate: run this script from an elevated PowerShell, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
+        # Not a hard-fail in itself (PowerShell 7 install via winget per-user
+        # works without admin; vcredist/long-paths/Defender each emit their
+        # own specific access-denied diagnostic when applicable), but flag
+        # explicitly so any subsequent 'access denied' has context. List
+        # ALL admin-requiring prereqs: critical (VC++ + LongPathsEnabled,
+        # HKLM writes) AND best-effort (Defender, which is now SKIPPED on
+        # non-admin per the 2026-05-26 tiering fix -- prior code treated
+        # Defender's non-admin failure as a critical failure and exited 1).
+        Write-CiWarning "bootstrap-windows-runner.ps1 running NON-admin. Critical prereqs that require HKLM writes (VC++ redist install, LongPathsEnabled) will fail with Access Denied; best-effort prereqs that require admin (Defender exclusions) are SKIPPED with a notice. To install missing critical prereqs, run from an elevated shell, OR trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
     }
 
     $results = New-Object 'System.Collections.Generic.List[object]'
 
     # Step 1: VC++ redist (THE root cause of the DAD-MACHINE failure).
+    # CRITICAL: Unity won't start without VCRUNTIME140*.dll on the OS.
     $results.Add((
-            Invoke-BootstrapStep -Name 'vcredist' -DetectOnly $DetectOnly `
+            Invoke-BootstrapStep -Name 'vcredist' -DetectOnly $DetectOnly -Critical $true `
                 -DetectFn { Test-VcRedistInstalled } `
                 -InstallFn { Install-VcRedist -Url $VcRedistUrl -DownloadTimeoutSeconds $DownloadTimeoutSeconds -InstallTimeoutSeconds $InstallTimeoutSeconds }
         )) | Out-Null
 
     # Step 2: Long-paths.
+    # CRITICAL: the Android NDK unpack hits MAX_PATH at ~240 chars without it.
     $results.Add((
-            Invoke-BootstrapStep -Name 'long-paths' -DetectOnly $DetectOnly `
+            Invoke-BootstrapStep -Name 'long-paths' -DetectOnly $DetectOnly -Critical $true `
                 -DetectFn { Test-LongPathsEnabled } `
                 -InstallFn { Enable-LongPaths }
         )) | Out-Null
 
-    # Step 3: Defender exclusion (N paths -> 1 step). The @()-wrap is
-    # REQUIRED: Get-DefenderExclusionPaths returns ToArray() on a
-    # List[string], which unwraps to AutomationNull when empty. Without
-    # the @() splat, Invoke-DefenderBootstrap's Mandatory [string[]]$Paths
-    # would fail to bind on the empty-array path (F1).
+    # Step 3: Defender exclusion (N paths -> 1 step).
+    # BEST-EFFORT (critical = $false, set inside Invoke-DefenderBootstrap):
+    # Defender exclusions are a perf optimization (faster Android NDK unpack)
+    # and NOT a correctness requirement for Unity startup. The dispatcher's
+    # tier-aware exit-code logic treats a failure here as a non-gating
+    # warning. The @()-wrap is REQUIRED: Get-DefenderExclusionPaths returns
+    # ToArray() on a List[string], which unwraps to AutomationNull when
+    # empty. Without the @() splat, Invoke-DefenderBootstrap's Mandatory
+    # [string[]]$Paths would fail to bind on the empty-array path (F1).
     $paths = @(Get-DefenderExclusionPaths -UnityInstallRoot $UnityInstallRoot)
     $results.Add((Invoke-DefenderBootstrap -Paths $paths -DetectOnly $DetectOnly)) | Out-Null
 
     # Step 4: PowerShell 7.
+    # CRITICAL: many CI composites use `shell: pwsh` -- without it the very
+    # next step would fail with `pwsh: command not found`.
     $results.Add((
-            Invoke-BootstrapStep -Name 'pwsh' -DetectOnly $DetectOnly `
+            Invoke-BootstrapStep -Name 'pwsh' -DetectOnly $DetectOnly -Critical $true `
                 -DetectFn { Test-PowerShell7Installed } `
                 -InstallFn { Install-PowerShell7 }
         )) | Out-Null
 
     # Step 5: UCRT (modern Windows: silent OK; downlevel: ::error:: + manual link).
+    # CRITICAL on the hosts that need it (downlevel Win/Server); silent
+    # no-op on Win10+/Server2019+ which ship UCRT preinstalled.
     $results.Add((Invoke-UcrtBootstrap -DetectOnly $DetectOnly)) | Out-Null
 
-    # Summary line + exit-code resolution.
+    # Summary line + exit-code resolution. Best-effort prereqs are suffixed
+    # with `*` in the summary; emit a legend so the operator immediately
+    # understands the distinction without grepping the script.
     $summary = Format-BootstrapSummary -Results $results
     Write-CiNotice "bootstrap-windows-runner summary: $summary"
+    # WHY a separate legend line: the summary is already long; splicing the
+    # explanation inline would push the readable name=state pairs off-screen
+    # on a narrow CI log view. A dedicated ::notice:: keeps both lines short.
+    Write-CiNotice "(* = best-effort prereq; not load-bearing for Unity correctness)"
 
-    $anyFailed = $false
+    # Tier-aware exit-code resolution. Failures are partitioned into:
+    #   - CRITICAL: load-bearing for Unity correctness (vcredist, long-paths,
+    #     pwsh, ucrt). A critical failure exits 1 and the operator MUST
+    #     remediate (elevated re-run or workflow_dispatch) before the next
+    #     Unity job can pass.
+    #   - BEST-EFFORT: perf optimizations or convenience (defender-exclusion).
+    #     A best-effort failure produces a ::warning:: and the dispatcher
+    #     continues -- Unity correctness is unaffected. This is the
+    #     2026-05-26 fix that unblocks the per-job preflight when it runs
+    #     as NETWORK SERVICE (non-admin) on the self-hosted runner.
+    # Default unset `critical` to $true (safest: a future maintainer who
+    # forgets to set the flag gets the gating behaviour, NOT the silent-pass).
+    $criticalFailed = New-Object 'System.Collections.Generic.List[object]'
+    $bestEffortFailed = New-Object 'System.Collections.Generic.List[object]'
     $anyMissing = $false
     foreach ($r in $results) {
         # F16: guard against $null in the result list. Format-BootstrapSummary
         # already skips $null but the exit-code resolution did not.
         if ($null -eq $r) { continue }
+        $state = ''
+        $isCritical = $true
         try {
             $state = [string]$r.finalState
-            if ($state -eq 'install-failed') { $anyFailed = $true }
-            elseif ($state -eq 'missing') { $anyMissing = $true }
+            try {
+                if ($null -ne $r.critical) {
+                    $isCritical = [bool]$r.critical
+                }
+            } catch {
+                # Treat a missing/unreadable critical flag as critical -- the
+                # safest default (it preserves the pre-tiering behaviour for
+                # any caller that hasn't been migrated yet).
+                $isCritical = $true
+            }
         } catch {
-            # Treat a malformed entry as a missing prereq under DetectOnly
-            # and a hard failure otherwise. Surface a warning so the operator
-            # sees we recovered from a malformed entry.
-            Write-CiWarning "bootstrap-windows-runner: malformed result entry while computing exit code; treating as failure: $($_.Exception.Message)"
-            $anyFailed = $true
+            # Treat a malformed entry as a critical failure regardless of mode.
+            # Surface a warning so the operator sees we recovered from it.
+            Write-CiWarning "bootstrap-windows-runner: malformed result entry while computing exit code; treating as critical failure: $($_.Exception.Message)"
+            $criticalFailed.Add($r) | Out-Null
+            continue
+        }
+        if ($state -eq 'install-failed' -or $state -like '*failed') {
+            if ($isCritical -ne $false) {
+                $criticalFailed.Add($r) | Out-Null
+            } else {
+                $bestEffortFailed.Add($r) | Out-Null
+            }
+        } elseif ($state -eq 'missing') {
+            $anyMissing = $true
         }
     }
 
-    if ($anyFailed) {
-        Write-CiError "bootstrap-windows-runner: one or more prereqs failed to install. See individual ::error:: lines above. To remediate: run this script from an elevated PowerShell, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
+    if ($bestEffortFailed.Count -gt 0) {
+        # Non-gating warning: log each best-effort failure so the operator
+        # has a paper trail, but do NOT trigger exit 1. The summary line
+        # already marks these with `*` so a quick scan reveals the tier.
+        foreach ($f in $bestEffortFailed) {
+            $fName = '<unknown>'
+            $fState = '<unknown>'
+            try { $fName = [string]$f.name } catch { }
+            try { $fState = [string]$f.finalState } catch { }
+            Write-CiWarning "best-effort prereq '$fName' did not complete ($fState); continuing because it is not load-bearing for Unity correctness."
+        }
+    }
+
+    if ($criticalFailed.Count -gt 0) {
+        Write-CiError "bootstrap-windows-runner: one or more CRITICAL prereqs failed to install. See individual ::error:: lines above. To remediate: run this script from an elevated PowerShell, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
         return 1
     }
     if ($DetectOnly -and $anyMissing) {

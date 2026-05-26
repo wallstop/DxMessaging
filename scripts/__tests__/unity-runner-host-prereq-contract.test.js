@@ -613,3 +613,222 @@ describe("bootstrap-windows-runner.ps1 PowerShell automatic-variable hygiene (ro
     expect(body).toMatch(/\$wingetArgs/);
   });
 });
+
+describe("bootstrap-windows-runner.ps1 best-effort tiering (Defender is non-load-bearing)", () => {
+  // The 2026-05-26 production regression: per-job preflight ran as
+  // NETWORK SERVICE (non-admin). Add-MpPreference requires admin; the
+  // bootstrap treated this as a critical failure and exited 1, failing
+  // every Unity cell even though every load-bearing prereq (VC++,
+  // long-paths, pwsh, UCRT) was already installed by an operator's
+  // manual elevated run. Defender exclusion is a perf optimization
+  // (faster Android NDK unpack) NOT a correctness requirement for Unity
+  // startup. The tests below pin the tier-aware exit-code logic so
+  // a future refactor cannot regress to "Defender failure exits 1".
+  test("Invoke-DefenderBootstrap skips entirely when non-admin", () => {
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-DefenderBootstrap");
+    expect(body).not.toBeNull();
+    // The function must check Test-IsAdministrator at the TOP and
+    // return early with finalState='skipped-non-admin' + critical=$false.
+    expect(body).toMatch(/Test-IsAdministrator/);
+    expect(body).toMatch(/skipped-non-admin/);
+    expect(body).toMatch(/critical\s*=\s*\$false/);
+
+    // The Test-IsAdministrator check must precede the Test-DefenderAvailable
+    // function CALL (we must short-circuit BEFORE touching Get-MpPreference).
+    // Anchor on the actual call site `(Test-DefenderAvailable)` (a comment
+    // referencing the function name does NOT count -- the bootstrap script
+    // contains an explanatory comment naming both helpers above the call).
+    const adminCallIdx = body.search(/\(\s*Test-IsAdministrator\s*\)/);
+    const availableCallIdx = body.search(/\(\s*Test-DefenderAvailable\s*\)/);
+    expect(adminCallIdx).toBeGreaterThan(-1);
+    expect(availableCallIdx).toBeGreaterThan(-1);
+    expect(adminCallIdx).toBeLessThan(availableCallIdx);
+
+    // Must NOT emit ::error:: on the non-admin path (it's a notice, not
+    // an error -- Defender is best-effort). We scope this check to the
+    // region BEFORE the Test-DefenderAvailable CALL, which is the
+    // non-admin short-circuit branch.
+    const nonAdminBranch = body.slice(0, availableCallIdx);
+    expect(nonAdminBranch).not.toMatch(/Write-CiError/);
+    expect(nonAdminBranch).not.toMatch(/::error::/);
+    // ...and the short-circuit must use Write-CiNotice (informational).
+    expect(nonAdminBranch).toMatch(/Write-CiNotice/);
+  });
+
+  test("Invoke-DefenderBootstrap result hashtables all carry critical=$false", () => {
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-DefenderBootstrap");
+    expect(body).not.toBeNull();
+    // EVERY return hashtable from this function must declare critical=$false.
+    // A mutation that dropped the flag from one branch (e.g. install-failed)
+    // would silently reintroduce the 2026-05-26 production regression.
+    const returnHashes = [...body.matchAll(/return\s+@\{[\s\S]*?\}/g)].map((m) => m[0]);
+    expect(returnHashes.length).toBeGreaterThan(0);
+    for (const h of returnHashes) {
+      expect(h).toMatch(/critical\s*=\s*\$false/);
+      // And NEVER critical=$true on any branch (would change tiering).
+      expect(h).not.toMatch(/critical\s*=\s*\$true/);
+    }
+  });
+
+  test("Invoke-WindowsRunnerBootstrap exit-code logic distinguishes critical from best-effort", () => {
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-WindowsRunnerBootstrap");
+    expect(body).not.toBeNull();
+    // Critical-failure detection must reference `critical -ne $false`
+    // (treat unset/missing as critical -- the safest default; a future
+    // prereq that forgets to declare `critical` defaults to gating).
+    // The current dispatcher uses an if/else around `-ne $false` so the
+    // best-effort branch is implicitly the inverse -- we don't separately
+    // assert `-eq $false` because the AST only needs to express the
+    // condition once. The behavioral coverage that the partition actually
+    // works lives in unity-runner-host-prereq-helper-mutation.test.js.
+    expect(body).toMatch(/critical[\s\S]{0,200}-ne[\s\S]{0,30}\$false/);
+    const matchedNe = body.match(/critical[\s\S]{0,200}-ne[\s\S]{0,30}\$false/);
+    expect(matchedNe).not.toBeNull();
+    // Best-effort failures must emit Write-CiWarning (not error) AND the
+    // warning text must mention "best-effort" so the operator sees the tier.
+    expect(body).toMatch(/Write-CiWarning[\s\S]{0,600}best-effort/);
+    // Best-effort failures must NOT trigger a `return 1`. We assert this by
+    // locating the PER-PREREQ loop warning (anchored on "did not complete"
+    // -- the distinctive phrase used by the per-prereq emit, NOT the
+    // non-admin top-of-dispatcher warning which uses different wording),
+    // then checking the body region between THAT warning and the next
+    // `return 1` is gated by `criticalFailed.Count -gt 0` ALONE (not
+    // `bestEffortFailed.Count -gt 0 -or criticalFailed.Count -gt 0`, which
+    // would re-introduce the production regression).
+    const perPrereqWarningIdx = body.search(/Write-CiWarning\s+"best-effort prereq[^"]*did not complete/);
+    expect(perPrereqWarningIdx).toBeGreaterThan(-1);
+    const afterWarning = body.slice(perPrereqWarningIdx);
+    // The next `return 1` follows the per-prereq warning, and it MUST be
+    // guarded by `criticalFailed.Count -gt 0`.
+    const nextReturn1Idx = afterWarning.search(/return\s+1/);
+    expect(nextReturn1Idx).toBeGreaterThan(-1);
+    // The text between the per-prereq warning and the next `return 1`
+    // must include the critical-failed gating token (so the return 1 is
+    // gated on critical only)...
+    const betweenWarningAndReturn1 = afterWarning.slice(0, nextReturn1Idx);
+    expect(betweenWarningAndReturn1).toMatch(/\$criticalFailed\.Count/);
+    // ...and must NOT reference $bestEffortFailed.Count anywhere in the
+    // gate region -- a mutation that ORed it into the gate would re-
+    // introduce the production regression. Per-prereq emit's enclosing
+    // `if ($bestEffortFailed.Count -gt 0)` ABOVE this anchor is fine
+    // (it's outside the slice we examine).
+    expect(betweenWarningAndReturn1).not.toMatch(/\$bestEffortFailed\.Count/);
+  });
+
+  test("Invoke-BootstrapStep accepts a -Critical parameter (default $true)", () => {
+    // The generic wrapper must declare `[bool]$Critical = $true` so callers
+    // can opt-OUT to best-effort by passing -Critical $false. A default of
+    // $true is the safest behavior: a refactor that adds a new prereq but
+    // forgets to set the flag gets the gating (critical) behavior.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-BootstrapStep");
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/\[bool\]\s*\$Critical\s*=\s*\$true/);
+    // Every return hashtable in the body must propagate $Critical.
+    const returnHashes = [...body.matchAll(/return\s+@\{[\s\S]*?\}/g)].map((m) => m[0]);
+    expect(returnHashes.length).toBeGreaterThan(0);
+    for (const h of returnHashes) {
+      expect(h).toMatch(/critical\s*=\s*\$Critical/);
+    }
+  });
+
+  test("Invoke-UcrtBootstrap result hashtables declare critical=$true (load-bearing)", () => {
+    // UCRT is critical on every host that needs it (downlevel Win/Server);
+    // on Win10+/Server2019+ it's a silent no-op but still carries the flag
+    // for consistency. Pin the tier so a future refactor doesn't accidentally
+    // demote it to best-effort.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-UcrtBootstrap");
+    expect(body).not.toBeNull();
+    const returnHashes = [...body.matchAll(/return\s+@\{[\s\S]*?\}/g)].map((m) => m[0]);
+    expect(returnHashes.length).toBeGreaterThan(0);
+    for (const h of returnHashes) {
+      expect(h).toMatch(/critical\s*=\s*\$true/);
+      // And NEVER critical=$false on any branch.
+      expect(h).not.toMatch(/critical\s*=\s*\$false/);
+    }
+  });
+
+  test("Invoke-WindowsRunnerBootstrap explicitly tiers each prereq", () => {
+    // Make the contract explicit so a future maintainer reading this test
+    // sees exactly which prereqs are load-bearing vs best-effort.
+    //   vcredist     -- critical=$true (Unity won't start)
+    //   long-paths   -- critical=$true (Android NDK won't unpack)
+    //   pwsh         -- critical=$true (CI composites use `shell: pwsh`)
+    //   ucrt         -- critical=$true (Unity needs it on downlevel Windows)
+    //   defender     -- critical=$false (perf optimization only)
+    //
+    // The vcredist, long-paths, pwsh call sites all go through
+    // Invoke-BootstrapStep -- assert each one passes `-Critical $true`
+    // explicitly so an audit immediately sees the load-bearing intent.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-WindowsRunnerBootstrap");
+    expect(body).not.toBeNull();
+    // vcredist call site must declare -Critical $true.
+    expect(body).toMatch(
+      /Invoke-BootstrapStep[\s\S]{0,400}-Name\s+'vcredist'[\s\S]{0,400}-Critical\s+\$true/
+    );
+    // long-paths call site must declare -Critical $true.
+    expect(body).toMatch(
+      /Invoke-BootstrapStep[\s\S]{0,400}-Name\s+'long-paths'[\s\S]{0,400}-Critical\s+\$true/
+    );
+    // pwsh call site must declare -Critical $true.
+    expect(body).toMatch(
+      /Invoke-BootstrapStep[\s\S]{0,400}-Name\s+'pwsh'[\s\S]{0,400}-Critical\s+\$true/
+    );
+    // The defender call site goes through Invoke-DefenderBootstrap (which
+    // hard-codes critical=$false in every return); it MUST NOT pass any
+    // -Critical flag (the function lacks the parameter, and the inner
+    // returns drive the tier).
+    const defenderCallMatch = body.match(/Invoke-DefenderBootstrap[\s\S]{0,200}/);
+    expect(defenderCallMatch).not.toBeNull();
+    expect(defenderCallMatch[0]).not.toMatch(/-Critical/);
+  });
+
+  test("Format-BootstrapSummary suffixes best-effort outcomes with `*`", () => {
+    // The single-line summary must visually distinguish best-effort entries.
+    // Anchoring on the literal '*' suffix logic ensures a future refactor
+    // can't drop the marker silently. The legend ::notice:: lives in
+    // Invoke-WindowsRunnerBootstrap (asserted in the next test).
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Format-BootstrapSummary");
+    expect(body).not.toBeNull();
+    // The body must reference $r.critical so it can read the tier off
+    // each result.
+    expect(body).toMatch(/\$r\.critical/);
+    // And the `*` suffix must be conditionally appended for the non-critical
+    // path. We assert the literal `'*'` string is present in the body.
+    expect(body).toContain("'*'");
+  });
+
+  test("Invoke-WindowsRunnerBootstrap emits the best-effort legend after the summary", () => {
+    // After the summary line, a separate ::notice:: must explain the `*`
+    // suffix so an operator scanning the log immediately understands the
+    // tier distinction without grepping the script.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-WindowsRunnerBootstrap");
+    expect(body).not.toBeNull();
+    // The legend text must mention "best-effort".
+    expect(body).toMatch(/best-effort prereq/i);
+    // The legend ::notice:: must follow the summary ::notice::. Anchor on
+    // the order: the summary's `Write-CiNotice ... summary:` must precede
+    // the legend's `Write-CiNotice` referencing `best-effort`.
+    const summaryIdx = body.search(/Write-CiNotice\s+"bootstrap-windows-runner summary:/);
+    const legendIdx = body.search(/Write-CiNotice\s+"\([^"]*best-effort/);
+    expect(summaryIdx).toBeGreaterThan(-1);
+    expect(legendIdx).toBeGreaterThan(-1);
+    expect(summaryIdx).toBeLessThan(legendIdx);
+  });
+
+  test("non-admin warning at the top of the dispatcher mentions Defender (now skipped)", () => {
+    // The pre-existing non-admin warning forgot Defender; the fix updates
+    // it to list both critical (HKLM writes) AND best-effort (Defender)
+    // admin-requiring prereqs, and clarifies that Defender is now SKIPPED
+    // rather than failing. Pin the updated text so a future refactor can't
+    // drop the Defender mention.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-WindowsRunnerBootstrap");
+    expect(body).not.toBeNull();
+    // The warning still flags HKLM writes...
+    expect(body).toMatch(/HKLM writes[^"']*VC\+\+[^"']*LongPathsEnabled/);
+    // ...AND now also flags Defender being SKIPPED on non-admin.
+    expect(body).toMatch(/best-effort prereqs[^"']*Defender exclusions[^"']*SKIPPED/);
+    // The remediation hint (elevated shell OR workflow_dispatch) must remain.
+    expect(body).toMatch(/elevated shell/);
+    expect(body).toMatch(/runner-bootstrap\.yml/);
+  });
+});

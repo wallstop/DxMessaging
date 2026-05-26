@@ -320,3 +320,132 @@ describe("scripts/unity/bootstrap-windows-runner.ps1 helper mutation resistance"
     expect((falseResult.stdout || "").trim()).toBe("False");
   });
 });
+
+// Helper: dot-source the bootstrap, run `body`, with arbitrary extra env. Mirrors
+// `runHarness` but threads through env-var overrides (the LongPaths test does
+// this inline; centralizing keeps the new tiering assertions terse).
+function runHarnessWithEnv(body, extraEnv) {
+  const escapedScript = BOOTSTRAP_SCRIPT.replace(/'/g, "''");
+  const workspace = makeWorkspace();
+  const harness = path.join(workspace, "harness.ps1");
+  fs.writeFileSync(harness, [`. '${escapedScript}'`, body].join("\n"), "utf8");
+  return spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", harness], {
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, ...extraEnv }
+  });
+}
+
+describe("bootstrap-windows-runner.ps1 best-effort tiering (Defender skip on non-admin)", () => {
+  // Behavioral coverage of the 2026-05-26 production regression (run
+  // 70852733615). Static surface assertions live in unity-runner-host-prereq-
+  // contract.test.js; THIS suite exercises the helpers via dot-source-and-call
+  // so a future refactor that keeps the static tokens intact but inverts the
+  // runtime branch (e.g. accidentally returning $true from Test-IsAdministrator
+  // when DXM_RUNNER_FAKE_IS_ADMIN='0') still fails loudly. Mutation-tested
+  // during the round-2 adversarial review (D1).
+  //
+  // EVERY assertion here relies on DXM_RUNNER_FAKE_IS_ADMIN, the same-spirit
+  // hermeticity override as DXM_UNITY_FAKE_LONGPATHS_ENABLED -- a test-only
+  // knob that lets the non-admin branch be exercised deterministically on
+  // any OS without a real admin / non-admin shell.
+
+  test("Test-IsAdministrator honors DXM_RUNNER_FAKE_IS_ADMIN=0 (returns $false)", () => {
+    if (!PWSH_PRESENT) {
+      return;
+    }
+    const result = runHarnessWithEnv(
+      "Write-Output ([bool](Test-IsAdministrator))",
+      { DXM_RUNNER_FAKE_IS_ADMIN: "0" }
+    );
+    expect(result.status).toBe(0);
+    expect((result.stdout || "").trim()).toBe("False");
+  });
+
+  test("Test-IsAdministrator honors DXM_RUNNER_FAKE_IS_ADMIN=1 (returns $true)", () => {
+    if (!PWSH_PRESENT) {
+      return;
+    }
+    const result = runHarnessWithEnv(
+      "Write-Output ([bool](Test-IsAdministrator))",
+      { DXM_RUNNER_FAKE_IS_ADMIN: "1" }
+    );
+    expect(result.status).toBe(0);
+    expect((result.stdout || "").trim()).toBe("True");
+  });
+
+  test("Invoke-DefenderBootstrap short-circuits to skipped-non-admin when non-admin", () => {
+    // The exact production scenario from run 70852733615: bootstrap runs as
+    // NETWORK SERVICE (non-admin). Before the fix, Invoke-DefenderBootstrap
+    // attempted Add-MpPreference, failed the admin pre-check, and returned
+    // finalState='install-failed' -- which the dispatcher (incorrectly)
+    // treated as a critical failure. After the fix, this branch returns
+    // skipped-non-admin + critical=$false BEFORE any state mutation is
+    // attempted.
+    if (!PWSH_PRESENT) {
+      return;
+    }
+    const body = [
+      "$result = Invoke-DefenderBootstrap -Paths @('C:\\Unity\\Editors')",
+      "Write-Output \"name=$($result.name)\"",
+      "Write-Output \"finalState=$($result.finalState)\"",
+      "Write-Output \"critical=$($result.critical)\""
+    ].join("\n");
+    const result = runHarnessWithEnv(body, { DXM_RUNNER_FAKE_IS_ADMIN: "0" });
+    expect(result.status).toBe(0);
+    const stdout = (result.stdout || "").trim();
+    expect(stdout).toContain("name=defender-exclusion");
+    expect(stdout).toContain("finalState=skipped-non-admin");
+    expect(stdout).toContain("critical=False");
+  });
+
+  test("Invoke-BootstrapStep -Critical $false propagates the flag to its result", () => {
+    // Pins the contract surface for future prereqs added via the generic
+    // wrapper. A future maintainer who adds a new best-effort prereq must
+    // be able to pass -Critical $false and trust that the dispatcher sees
+    // it. Mutation-tested: flipping the default to $false would still pass
+    // an explicit $false test, so we also need the implicit-$true test
+    // below for full coverage.
+    if (!PWSH_PRESENT) {
+      return;
+    }
+    const body = [
+      "$r1 = Invoke-BootstrapStep -Name 'fake-best-effort' -DetectFn { $true } -InstallFn { @{} } -Critical $false",
+      "$r2 = Invoke-BootstrapStep -Name 'fake-critical-explicit' -DetectFn { $true } -InstallFn { @{} } -Critical $true",
+      "$r3 = Invoke-BootstrapStep -Name 'fake-critical-default' -DetectFn { $true } -InstallFn { @{} }",
+      "Write-Output \"r1.critical=$($r1.critical)\"",
+      "Write-Output \"r2.critical=$($r2.critical)\"",
+      "Write-Output \"r3.critical=$($r3.critical)\""
+    ].join("\n");
+    const result = runHarnessWithEnv(body, {});
+    expect(result.status).toBe(0);
+    const stdout = (result.stdout || "").trim();
+    expect(stdout).toContain("r1.critical=False");
+    expect(stdout).toContain("r2.critical=True");
+    expect(stdout).toContain("r3.critical=True");
+  });
+
+  test("Format-BootstrapSummary marks non-critical entries with '*' suffix", () => {
+    // The summary-line legend is the operator-visible signal that a
+    // best-effort prereq failed without gating the cell. Mutation-tested:
+    // dropping the suffix logic produces a summary line indistinguishable
+    // from a critical-failure scenario, which would defeat the operator UX
+    // benefit of the tier flag.
+    if (!PWSH_PRESENT) {
+      return;
+    }
+    const body = [
+      "$mixed = @(",
+      "  @{ name = 'critical-ok'; finalState = 'ok'; critical = $true },",
+      "  @{ name = 'best-effort-skipped'; finalState = 'skipped-non-admin'; critical = $false }",
+      ")",
+      "Format-BootstrapSummary -Results $mixed"
+    ].join("\n");
+    const result = runHarnessWithEnv(body, {});
+    expect(result.status).toBe(0);
+    const out = combined(result);
+    // Critical entries have NO suffix; best-effort entries have '*'.
+    expect(out).toMatch(/critical-ok=ok(?!\*)/);
+    expect(out).toMatch(/best-effort-skipped=skipped-non-admin\*/);
+  });
+});
