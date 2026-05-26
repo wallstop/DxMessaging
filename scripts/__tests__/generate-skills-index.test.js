@@ -14,12 +14,26 @@ const {
   applyBrandCapitalization,
   categoryToTitle,
   formatWithPrettier,
+  getLineSizeIndicator,
   parseFrontmatter,
   BRAND_NAMES
 } = require("../generate-skills-index.js");
 const { normalizeToLf } = require("../lib/quote-parser");
 
 describe("generate-skills-index", () => {
+  describe("getLineSizeIndicator", () => {
+    test.each([
+      [119, "[draft]"],
+      [120, "[ok]"],
+      [260, "[ok]"],
+      [261, "[warn]"],
+      [300, "[warn]"],
+      [301, "[over]"]
+    ])("maps %i lines to %s", (lineCount, expected) => {
+      expect(getLineSizeIndicator(lineCount)).toBe(expected);
+    });
+  });
+
   describe("BRAND_NAMES mapping", () => {
     test("should contain expected number of brand entries", () => {
       const brandCount = Object.keys(BRAND_NAMES).length;

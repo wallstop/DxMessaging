@@ -26,7 +26,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Never commit repository settings that auto-approve chat-invoked terminal commands.
 - Ensure fenced markdown examples are closed and do not swallow real sections (for example `## See Also`).
 - Run file-scoped validation during editing; do not treat git hooks as the first signal of quality issues.
-- When editing `.llm/context.md` or `.llm/skills/**/*.md`, run `npm run validate:llm-markdown` before finishing.
+- When editing `.llm/context.md` or `.llm/skills/**/*.md`, run `npm run repair:llm-policy` and `npm run validate:llm-policy` before finishing so skill size/schema, index freshness, and markdown policy fail before hook-time.
 - For user-visible code edits (`Runtime/`, `Samples~/`, user-facing `Editor/`, or shipped `SourceGenerators/` code), run `npm run validate:changelog:coverage` before finishing and resolve any `W002` warnings by rewriting entries around user impact.
 - When editing `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, or `.js` files, run file-scoped cspell on touched files with `node scripts/run-managed-cspell.js --no-progress --no-summary <changed-files...>` and update `.cspell.json` in the same change for legitimate domain terms.
 - Before invoking git hooks or reporting completion after documentation edits, run `npm run validate:changed-docs` so changed Markdown and C# XML doc comments hit the ASCII/code-pattern/prose validators before hook-time.
@@ -58,7 +58,8 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - Validate local Node tool dependency health: `npm run validate:node-tooling`
 - Run Unity/devcontainer contract tests: `npm run test:unity-contracts`
 - Run markdown hook parity check: `npm run validate:hook-markdown`
-- Validate `.llm` markdown policy bundle: `npm run validate:llm-markdown`
+- Repair generated `.llm` index: `npm run repair:llm-policy`
+- Validate `.llm` skills, index, and markdown policy: `npm run validate:llm-policy`
 - Run parser hook suite exactly as pre-push executes it: `pre-commit run --hook-stage pre-push script-parser-tests --all-files`
 - Check package.json format explicitly: `npm run check:package-json-format`
 - Check hook-managed Prettier targets: `npm run check:prettier:hooks`
@@ -76,9 +77,7 @@ This file is intentionally concise. It contains only critical, high-signal guida
 - For `.github/workflows/*.yml` `run:` blocks, keep shell statements multiline (`run: |` plus line breaks) instead of single long lines; `validate:workflows` enforces the same line-length ceiling early to keep hooks as a last-resort check.
 - Auto-fix markdown fragments/lists: `node scripts/fix-md029-md051.js <changed-docs.md ...>`
 - Lint markdown: `npx markdownlint-cli2 <changed-docs.md ...>`
-- Validate skills + context: `node scripts/validate-skills.js`
-- Regenerate skills index: `node scripts/generate-skills-index.js`
-- Verify index is current: `node scripts/generate-skills-index.js --check`
+- Validate skills + context only: `node scripts/validate-skills.js`
 
 ## Running Unity Tests
 
@@ -217,7 +216,8 @@ Use the index above and then select the most relevant skill pages. Frequently us
 ## Split File Maintenance
 
 - Split files (for example `*-part-1.md`) are regular human-maintained docs, not generated artifacts.
-- If a base file grows above 300 lines, extract focused sections into linked companion files.
+- Keep `.llm/**/*.md` files in the 120-260 line target range; 261-300 is a warning, and above 300 is a hard failure.
+- If a base file approaches the warning range, extract focused sections into linked companion files before the hook becomes the first signal.
 - Keep base files as the canonical overview and cross-link companions via `## See Also`.
 
 ## See Also

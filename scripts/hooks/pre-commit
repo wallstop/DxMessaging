@@ -32,6 +32,20 @@ function run(command, args) {
   return typeof result.status === "number" ? result.status : 1;
 }
 
+function captureGitState() {
+  const result = spawnPlatformCommandSync("git", ["status", "--porcelain=v1", "-z"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+
+  if (result.error || result.status !== 0) {
+    return null;
+  }
+
+  return result.stdout;
+}
+
 function main() {
   process.stdout.write("Repairing hook Node tooling if needed...\n");
   const repairStatus = run(process.execPath, ["scripts/repair-node-tooling.js"]);
@@ -40,6 +54,7 @@ function main() {
   }
 
   process.stdout.write("Running pre-commit stage hooks...\n");
+  const beforeState = captureGitState();
   const firstStatus = run(process.execPath, [
     "scripts/ensure-pre-commit.js",
     "run",
@@ -50,7 +65,13 @@ function main() {
     return firstStatus;
   }
 
-  process.stdout.write("Pre-commit hooks changed files; retrying once after auto-fixes...\n");
+  const afterState = captureGitState();
+  if (beforeState !== null && afterState !== null && beforeState === afterState) {
+    process.stdout.write("Pre-commit hooks failed without detected file changes; retrying once...\n");
+  } else {
+    process.stdout.write("Pre-commit hooks changed files; retrying once after auto-fixes...\n");
+  }
+
   return run(process.execPath, [
     "scripts/ensure-pre-commit.js",
     "run",

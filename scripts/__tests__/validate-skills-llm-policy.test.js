@@ -12,6 +12,8 @@ const {
   validateDuplicateSeeAlsoHeadings,
   validateBalancedMarkdownFences,
   validateSeeAlsoHeadingPlacement,
+  shouldUseAsciiOutput,
+  logSymbol,
   LINE_LIMIT_HARD_MAX,
   LINE_LIMIT_IDEAL_MAX,
   LINE_LIMIT_IDEAL_MIN,
@@ -59,6 +61,14 @@ describe("validate-skills .llm markdown policy", () => {
     expect(LINE_LIMIT_HARD_MAX).toBe(300);
   });
 
+  test("uses ASCII log markers on Windows or explicit opt-in", () => {
+    expect(shouldUseAsciiOutput(["node", "script"], {}, "linux")).toBe(false);
+    expect(shouldUseAsciiOutput(["node", "script"], {}, "win32")).toBe(true);
+    expect(shouldUseAsciiOutput(["node", "script", "--ascii"], {}, "linux")).toBe(true);
+    expect(shouldUseAsciiOutput(["node", "script"], { DXM_ASCII_LOGS: "1" }, "linux")).toBe(true);
+    expect(logSymbol("error", { argv: [], env: {}, platform: "win32" })).toBe("[error]");
+  });
+
   test("reports error when markdown file exceeds hard max lines", () => {
     const oversizedLines = new Array(LINE_LIMIT_HARD_MAX + 2).fill("line").join("\n");
     writeFile(path.join(tempDir, "skills", "testing", "too-long.md"), oversizedLines);
@@ -95,6 +105,14 @@ describe("validate-skills .llm markdown policy", () => {
     const result = validateAllLlmMarkdownFiles(tempDir);
 
     expect(result.errors).toHaveLength(0);
+  });
+
+  test("repository .llm markdown files stay under the hard line limit", () => {
+    const repoRoot = path.resolve(__dirname, "..", "..");
+    const result = validateAllLlmMarkdownFiles(path.join(repoRoot, ".llm"));
+    const sizeErrors = result.errors.filter((error) => error.field === "size");
+
+    expect(sizeErrors).toHaveLength(0);
   });
 
   test.each([

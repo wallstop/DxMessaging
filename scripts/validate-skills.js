@@ -47,6 +47,30 @@ const LINE_LIMIT_HARD_MAX = 300;
 
 const CONTEXT_INDEX_LINK_FRAGMENT = "./skills/index.md";
 
+const LOG_SYMBOLS = {
+  folder: { unicode: "📁", ascii: "[llm]" },
+  doc: { unicode: "📄", ascii: "[file]" },
+  size: { unicode: "📊", ascii: "[size]" },
+  error: { unicode: "❌", ascii: "[error]" },
+  warn: { unicode: "⚠️", ascii: "[warn]" },
+  ok: { unicode: "✅", ascii: "[ok]" },
+  draft: { unicode: "📝", ascii: "[draft]" }
+};
+
+function shouldUseAsciiOutput(argv = process.argv, env = process.env, platform = process.platform) {
+  return argv.includes("--ascii") || env.DXM_ASCII_LOGS === "1" || platform === "win32";
+}
+
+function logSymbol(name, options = {}) {
+  const { argv = process.argv, env = process.env, platform = process.platform } = options;
+  const symbol = LOG_SYMBOLS[name];
+  if (!symbol) {
+    return "";
+  }
+
+  return shouldUseAsciiOutput(argv, env, platform) ? symbol.ascii : symbol.unicode;
+}
+
 const VALID_CATEGORIES = [
   "performance",
   "testing",
@@ -871,12 +895,12 @@ function main() {
   const fileSizeReport = llmFilesResult.fileSizeReport.slice();
 
   if (llmFilesResult.errors.length > 0 || llmFilesResult.warnings.length > 0) {
-    console.log("📁 .llm markdown policy checks");
+    console.log(`${logSymbol("folder")} .llm markdown policy checks`);
     for (const error of llmFilesResult.errors) {
-      console.log(`  ❌ [${error.file}] ${error.field}: ${error.message}`);
+      console.log(`  ${logSymbol("error")} [${error.file}] ${error.field}: ${error.message}`);
     }
     for (const warning of llmFilesResult.warnings) {
-      console.log(`  ⚠️  [${warning.file}] ${warning.field}: ${warning.message}`);
+      console.log(`  ${logSymbol("warn")} [${warning.file}] ${warning.field}: ${warning.message}`);
     }
     console.log();
   }
@@ -888,13 +912,13 @@ function main() {
   // Validate context.md
   const contextResult = validateContextFile();
   for (const error of contextResult.errors) {
-    console.log(`📄 context.md`);
-    console.log(`  ❌ ${error.field}: ${error.message}`);
+    console.log(`${logSymbol("doc")} context.md`);
+    console.log(`  ${logSymbol("error")} ${error.field}: ${error.message}`);
     console.log();
   }
   for (const warning of contextResult.warnings) {
-    console.log(`📄 context.md`);
-    console.log(`  ⚠️  ${warning.field}: ${warning.message}`);
+    console.log(`${logSymbol("doc")} context.md`);
+    console.log(`  ${logSymbol("warn")} ${warning.field}: ${warning.message}`);
     console.log();
   }
   totalErrors += contextResult.errors.length;
@@ -905,14 +929,14 @@ function main() {
     const { errors, warnings, lineCount } = validateSkill(skillFile);
 
     if (errors.length > 0 || warnings.length > 0) {
-      console.log(`📄 ${skillFile.relativePath}`);
+      console.log(`${logSymbol("doc")} ${skillFile.relativePath}`);
 
       for (const error of errors) {
-        console.log(`  ❌ ${error.field}: ${error.message}`);
+        console.log(`  ${logSymbol("error")} ${error.field}: ${error.message}`);
       }
 
       for (const warning of warnings) {
-        console.log(`  ⚠️  ${warning.field}: ${warning.message}`);
+        console.log(`  ${logSymbol("warn")} ${warning.field}: ${warning.message}`);
       }
 
       console.log();
@@ -924,7 +948,7 @@ function main() {
 
   // Print file size summary
   console.log("---");
-  console.log("📊 File Size Report:");
+  console.log(`${logSymbol("size")} File Size Report:`);
   console.log();
 
   // Sort by line count descending
@@ -932,21 +956,23 @@ function main() {
 
   const maxFileLen = Math.max(...fileSizeReport.map((f) => f.file.length));
   for (const { file, lines } of fileSizeReport) {
-    let indicator = "✅";
+    let indicator = logSymbol("ok");
     if (lines > LINE_LIMIT_HARD_MAX) {
-      indicator = "❌";
+      indicator = logSymbol("error");
     } else if (lines > LINE_LIMIT_IDEAL_MAX) {
-      indicator = "⚠️ ";
+      indicator = logSymbol("warn");
     } else if (lines < LINE_LIMIT_IDEAL_MIN && !SHORT_FILE_EXCLUDES.includes(file)) {
-      indicator = "📝";
+      indicator = logSymbol("draft");
     }
     console.log(`  ${indicator} ${file.padEnd(maxFileLen)} : ${lines} lines`);
   }
 
   console.log();
   console.log(
-    `  Legend: ✅ Ideal (${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}) | ` +
-      `⚠️  Warning (${LINE_LIMIT_IDEAL_MAX + 1}-${LINE_LIMIT_HARD_MAX}) | ❌ Error (>${LINE_LIMIT_HARD_MAX}) | 📝 Short (<${LINE_LIMIT_IDEAL_MIN})`
+    `  Legend: ${logSymbol("ok")} Ideal (${LINE_LIMIT_IDEAL_MIN}-${LINE_LIMIT_IDEAL_MAX}) | ` +
+      `${logSymbol("warn")} Warning (${LINE_LIMIT_IDEAL_MAX + 1}-${LINE_LIMIT_HARD_MAX}) | ` +
+      `${logSymbol("error")} Error (>${LINE_LIMIT_HARD_MAX}) | ` +
+      `${logSymbol("draft")} Short (<${LINE_LIMIT_IDEAL_MIN})`
   );
 
   console.log();
@@ -954,14 +980,14 @@ function main() {
   console.log(`Validation complete: ${totalErrors} errors, ${totalWarnings} warnings`);
 
   if (totalErrors > 0) {
-    console.log("\n❌ Validation failed");
+    console.log(`\n${logSymbol("error")} Validation failed`);
     return 1;
   }
 
   if (totalWarnings > 0) {
-    console.log("\n⚠️  Validation passed with warnings");
+    console.log(`\n${logSymbol("warn")} Validation passed with warnings`);
   } else {
-    console.log("\n✅ All skills valid");
+    console.log(`\n${logSymbol("ok")} All skills valid`);
   }
 
   return 0;
@@ -1005,6 +1031,8 @@ if (typeof module !== "undefined" && module.exports) {
     analyzeMarkdownFenceState,
     validateBalancedMarkdownFences,
     validateSeeAlsoHeadingPlacement,
+    shouldUseAsciiOutput,
+    logSymbol,
     LINE_LIMIT_HARD_MAX,
     LINE_LIMIT_IDEAL_MAX,
     LINE_LIMIT_IDEAL_MIN,

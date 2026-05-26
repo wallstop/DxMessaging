@@ -425,8 +425,15 @@ function Get-NativeExitCodeDescription {
     } else {
         [uint32]$ExitCode
     }
-    $hex = "0x$($normalized.ToString('X8'))"
-    if ($normalized -eq 0xC0000135) {
+    $hexBare = $normalized.ToString('X8')
+    $hex = "0x$hexBare"
+    # Compare against the hex STRING form (not the literal 0xC0000135 token) because
+    # PowerShell parses `0xC0000135` as Int32 -1073741515 and `$normalized -eq
+    # 0xC0000135` therefore coerces to Int32 -- $normalized (the unsigned value
+    # 3221225781) and -1073741515 are NOT -eq. String compare on the canonical 8-char
+    # hex avoids the int/uint conflation entirely (mirrors the same fix applied to
+    # ensure-editor.ps1's Get-NativeExitCodeDescription / Test-IsNativeDllNotFound).
+    if ($hexBare -eq 'C0000135') {
         return "$hex / STATUS_DLL_NOT_FOUND"
     }
 

@@ -24,6 +24,12 @@ const {
   hasRequiredHookMarkdownCommand,
   hasRequiredChangedDocsCommand,
   hasRequiredLlmMarkdownCommand,
+  hasRequiredSkillsValidationCommand,
+  hasRequiredLlmPolicyRepairCommand,
+  hasRequiredLlmPolicyCommand,
+  hasLlmPolicyRepairBeforeValidation,
+  hasRequiredSkillsIndexRepairCommand,
+  hasRequiredSkillsIndexCheckCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
   hasRequiredWorkflowValidationCommand,
@@ -59,6 +65,11 @@ const {
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_CHANGED_DOCS_COMMAND,
   REQUIRED_LLM_MARKDOWN_COMMAND,
+  REQUIRED_SKILLS_VALIDATION_COMMAND,
+  REQUIRED_LLM_POLICY_REPAIR_COMMAND,
+  REQUIRED_LLM_POLICY_COMMAND,
+  REQUIRED_SKILLS_INDEX_REPAIR_COMMAND,
+  REQUIRED_SKILLS_INDEX_CHECK_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_YAML_VALIDATION_COMMAND,
   REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
@@ -80,7 +91,8 @@ function requiredPreflightScript({ remove = [] } = {}) {
     REQUIRED_NODE_TOOLING_COMMAND,
     REQUIRED_HOOK_MARKDOWN_COMMAND,
     REQUIRED_CHANGED_DOCS_COMMAND,
-    REQUIRED_LLM_MARKDOWN_COMMAND,
+    REQUIRED_LLM_POLICY_REPAIR_COMMAND,
+    REQUIRED_LLM_POLICY_COMMAND,
     REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
     REQUIRED_YAML_VALIDATION_COMMAND,
     "npm run validate:pre-commit-tooling",
@@ -94,6 +106,24 @@ function requiredPreflightScript({ remove = [] } = {}) {
 
   const removedCommands = new Set(remove);
   return requiredCommands.filter((command) => !removedCommands.has(command)).join(" && ");
+}
+
+function requiredLlmPolicyScript({ remove = [] } = {}) {
+  const requiredCommands = [
+    REQUIRED_SKILLS_VALIDATION_COMMAND,
+    REQUIRED_SKILLS_INDEX_CHECK_COMMAND,
+    REQUIRED_LLM_MARKDOWN_COMMAND
+  ];
+  const removedCommands = new Set(remove);
+  return requiredCommands.filter((command) => !removedCommands.has(command)).join(" && ");
+}
+
+function requiredPackageScripts({ preflightRemove = [], llmPolicyRemove = [] } = {}) {
+  return {
+    "preflight:pre-commit": requiredPreflightScript({ remove: preflightRemove }),
+    "repair:llm-policy": REQUIRED_SKILLS_INDEX_REPAIR_COMMAND,
+    "validate:llm-policy": requiredLlmPolicyScript({ remove: llmPolicyRemove })
+  };
 }
 
 describe("validate-pre-commit-tooling", () => {
@@ -312,9 +342,7 @@ describe("validate-pre-commit-tooling", () => {
   });
 
   test("hasPreCommitRepairBeforeHookMarkdown requires executable repair before hook parity", () => {
-    const valid = [REQUIRED_PRE_COMMIT_REPAIR_COMMAND, REQUIRED_HOOK_MARKDOWN_COMMAND].join(
-      " && "
-    );
+    const valid = [REQUIRED_PRE_COMMIT_REPAIR_COMMAND, REQUIRED_HOOK_MARKDOWN_COMMAND].join(" && ");
     const reversed = [REQUIRED_HOOK_MARKDOWN_COMMAND, REQUIRED_PRE_COMMIT_REPAIR_COMMAND].join(
       " && "
     );
@@ -357,6 +385,27 @@ describe("validate-pre-commit-tooling", () => {
     const script = "npm run validate:pre-commit-tooling && echo npm run validate:llm-markdown";
 
     expect(hasRequiredLlmMarkdownCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredLlmPolicyCommand detects combined .llm policy validation step", () => {
+    const script = [
+      REQUIRED_NODE_TOOLING_COMMAND,
+      REQUIRED_LLM_POLICY_REPAIR_COMMAND,
+      REQUIRED_LLM_POLICY_COMMAND,
+      REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
+      REQUIRED_PRECHECK_PARSER_COMMAND
+    ].join(" && ");
+
+    expect(hasRequiredLlmPolicyRepairCommand(script)).toBe(true);
+    expect(hasRequiredLlmPolicyCommand(script)).toBe(true);
+    expect(hasLlmPolicyRepairBeforeValidation(script)).toBe(true);
+  });
+
+  test("hasRequiredSkillsIndexCheckCommand rejects repair-only index command", () => {
+    expect(hasRequiredSkillsValidationCommand(requiredLlmPolicyScript())).toBe(true);
+    expect(hasRequiredSkillsIndexRepairCommand(REQUIRED_SKILLS_INDEX_REPAIR_COMMAND)).toBe(true);
+    expect(hasRequiredSkillsIndexCheckCommand(REQUIRED_SKILLS_INDEX_REPAIR_COMMAND)).toBe(false);
+    expect(hasRequiredSkillsIndexCheckCommand(REQUIRED_SKILLS_INDEX_CHECK_COMMAND)).toBe(true);
   });
 
   test("hasRequiredChangedDocsCommand detects changed docs precheck step", () => {
@@ -744,10 +793,7 @@ describe("validate-pre-commit-tooling", () => {
     ).toBe(true);
 
     expect(
-      hasGuardedPrettierRestagePattern(
-        "prettier",
-        "node scripts/run-managed-prettier.js --write"
-      )
+      hasGuardedPrettierRestagePattern("prettier", "node scripts/run-managed-prettier.js --write")
     ).toBe(false);
     expect(
       hasGuardedPrettierRestagePattern(
@@ -849,9 +895,7 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript()
-          }
+          scripts: requiredPackageScripts()
         });
       }
 
@@ -1074,9 +1118,7 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript()
-          }
+          scripts: requiredPackageScripts()
         });
       }
 
@@ -1135,7 +1177,11 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain(REQUIRED_NODE_TOOLING_COMMAND);
     expect(preflightScript).toContain("npm run validate:hook-markdown");
     expect(preflightScript).toContain(REQUIRED_CHANGED_DOCS_COMMAND);
-    expect(preflightScript).toContain(REQUIRED_LLM_MARKDOWN_COMMAND);
+    expect(preflightScript).toContain(REQUIRED_LLM_POLICY_REPAIR_COMMAND);
+    expect(preflightScript).toContain(REQUIRED_LLM_POLICY_COMMAND);
+    expect(preflightScript.indexOf(REQUIRED_LLM_POLICY_REPAIR_COMMAND)).toBeLessThan(
+      preflightScript.indexOf(REQUIRED_LLM_POLICY_COMMAND)
+    );
     expect(preflightScript).toContain(REQUIRED_PACKAGE_JSON_FORMAT_COMMAND);
     expect(preflightScript).toContain("npm run check:prettier:hooks");
     expect(preflightScript).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
@@ -1147,12 +1193,19 @@ describe("validate-pre-commit-tooling", () => {
       "node scripts/run-managed-cspell.js"
     );
     expect(packageJson.scripts["check:banner-sync"]).toBe("node scripts/validate-banner.js");
+    expect(packageJson.scripts["repair:llm-policy"]).toBe(REQUIRED_SKILLS_INDEX_REPAIR_COMMAND);
+    expect(packageJson.scripts["validate:llm-policy"]).toContain(
+      REQUIRED_SKILLS_VALIDATION_COMMAND
+    );
+    expect(packageJson.scripts["validate:llm-policy"]).toContain(
+      REQUIRED_SKILLS_INDEX_CHECK_COMMAND
+    );
+    expect(packageJson.scripts["validate:llm-policy"]).toContain(REQUIRED_LLM_MARKDOWN_COMMAND);
     expect(packageJson.scripts["check:yaml"]).toContain(REQUIRED_YAML_COMMENTS_CHECK_COMMAND);
     expect(packageJson.scripts["check:yaml"]).toContain(
       "node scripts/ensure-pre-commit.js run yamllint --all-files"
     );
     expect(preflightScript).toContain("npm run check:yaml");
-    expect(preflightScript).toContain("node scripts/generate-skills-index.js --check");
     expect(preflightScript).toContain("npm run validate:npm-meta");
     expect(preflightScript).toContain(REQUIRED_PRECHECK_PARSER_COMMAND);
     expect(preflightScript).not.toContain("node scripts/run-managed-jest.js --runTestsByPath");
@@ -1162,9 +1215,7 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript()
-          }
+          scripts: requiredPackageScripts()
         });
       }
 
@@ -1196,11 +1247,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_PRECHECK_PARSER_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_PRECHECK_PARSER_COMMAND]
+          })
         });
       }
 
@@ -1232,11 +1281,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_PACKAGE_JSON_FORMAT_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_PACKAGE_JSON_FORMAT_COMMAND]
+          })
         });
       }
 
@@ -1269,8 +1316,8 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_YAML_VALIDATION_COMMAND]
+            ...requiredPackageScripts({
+              preflightRemove: [REQUIRED_YAML_VALIDATION_COMMAND]
             }),
             "check:yaml": [
               "npm run format:yaml:check",
@@ -1310,7 +1357,7 @@ describe("validate-pre-commit-tooling", () => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
           scripts: {
-            "preflight:pre-commit": requiredPreflightScript(),
+            ...requiredPackageScripts(),
             "check:yaml": "npm run format:yaml:check && pre-commit run yamllint --all-files"
           }
         });
@@ -1344,11 +1391,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_HOOK_MARKDOWN_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_HOOK_MARKDOWN_COMMAND]
+          })
         });
       }
 
@@ -1380,11 +1425,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_PRE_COMMIT_REPAIR_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_PRE_COMMIT_REPAIR_COMMAND]
+          })
         });
       }
 
@@ -1423,7 +1466,8 @@ describe("validate-pre-commit-tooling", () => {
               REQUIRED_HOOK_MARKDOWN_COMMAND,
               REQUIRED_PRE_COMMIT_REPAIR_COMMAND,
               REQUIRED_CHANGED_DOCS_COMMAND,
-              REQUIRED_LLM_MARKDOWN_COMMAND,
+              REQUIRED_LLM_POLICY_REPAIR_COMMAND,
+              REQUIRED_LLM_POLICY_COMMAND,
               REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
               REQUIRED_YAML_VALIDATION_COMMAND,
               REQUIRED_SCRIPTS_CSPELL_COMMAND,
@@ -1432,7 +1476,9 @@ describe("validate-pre-commit-tooling", () => {
               REQUIRED_BANNER_SYNC_COMMAND,
               REQUIRED_CHANGELOG_VALIDATION_COMMAND,
               REQUIRED_PRECHECK_PARSER_COMMAND
-            ].join(" && ")
+            ].join(" && "),
+            "repair:llm-policy": REQUIRED_SKILLS_INDEX_REPAIR_COMMAND,
+            "validate:llm-policy": requiredLlmPolicyScript()
           }
         });
       }
@@ -1462,15 +1508,13 @@ describe("validate-pre-commit-tooling", () => {
     expect(violations[0].message).toContain(REQUIRED_HOOK_MARKDOWN_COMMAND);
   });
 
-  test("validatePreflightScriptPolicy reports missing .llm markdown precheck command", () => {
+  test("validatePreflightScriptPolicy reports missing .llm markdown command in policy bundle", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_LLM_MARKDOWN_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            llmPolicyRemove: [REQUIRED_LLM_MARKDOWN_COMMAND]
+          })
         });
       }
 
@@ -1502,11 +1546,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_CHANGED_DOCS_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_CHANGED_DOCS_COMMAND]
+          })
         });
       }
 
@@ -1538,11 +1580,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_SCRIPTS_CSPELL_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_SCRIPTS_CSPELL_COMMAND]
+          })
         });
       }
 
@@ -1574,11 +1614,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_WORKFLOW_CSPELL_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_WORKFLOW_CSPELL_COMMAND]
+          })
         });
       }
 
@@ -1610,11 +1648,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_WORKFLOW_VALIDATION_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_WORKFLOW_VALIDATION_COMMAND]
+          })
         });
       }
 
@@ -1646,11 +1682,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_BANNER_SYNC_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_BANNER_SYNC_COMMAND]
+          })
         });
       }
 
@@ -1682,11 +1716,9 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript({
-              remove: [REQUIRED_CHANGELOG_VALIDATION_COMMAND]
-            })
-          }
+          scripts: requiredPackageScripts({
+            preflightRemove: [REQUIRED_CHANGELOG_VALIDATION_COMMAND]
+          })
         });
       }
 
@@ -1718,9 +1750,7 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript()
-          }
+          scripts: requiredPackageScripts()
         });
       }
 
@@ -1752,9 +1782,7 @@ describe("validate-pre-commit-tooling", () => {
     const readFileSyncMock = jest.fn((filePath) => {
       if (filePath === "/tmp/package.json") {
         return JSON.stringify({
-          scripts: {
-            "preflight:pre-commit": requiredPreflightScript()
-          }
+          scripts: requiredPackageScripts()
         });
       }
 

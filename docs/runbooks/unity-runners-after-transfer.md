@@ -153,6 +153,221 @@ time; until it is restarted it will keep reporting `pwsh: command not found`
 even though a fresh interactive shell can find `pwsh`. Re-run the queued
 Unity workflow once the agent is back online.
 
+## Windows host prerequisites (0xC0000135 / STATUS_DLL_NOT_FOUND)
+
+Unity Editor cannot launch on a self-hosted Windows runner unless the host has
+a small set of OS-level prerequisites installed. GitHub-hosted `windows-2022`
+images ship with these preinstalled; freshly imaged self-hosted runners
+generally do not. This section is the operator-actionable fix for that gap.
+
+The repo ships a one-shot bootstrap script
+([`scripts/unity/bootstrap-windows-runner.ps1`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/scripts/unity/bootstrap-windows-runner.ps1))
+and a `workflow_dispatch`-only auto-recovery workflow
+([`.github/workflows/runner-bootstrap.yml`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/runner-bootstrap.yml))
+plus a per-job preflight composite action
+([`.github/actions/assert-unity-host-prereqs/action.yml`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/actions/assert-unity-host-prereqs/action.yml))
+that wraps the script. Together they form a four-layer defense: a one-shot
+host installer, a per-job preflight that runs the same installer in
+detect-or-install mode, an `ensure-editor.ps1` short-circuit that fails fast
+when Unity itself reports `0xC0000135` instead of looping on a futile editor
+reinstall, and the operator-facing workflow that recovers the host without
+RDP/SSH access. See
+[`.llm/skills/unity/unity-runner-host-prereqs.md`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.llm/skills/unity/unity-runner-host-prereqs.md)
+for the LLM/AI-agent reference.
+
+### Symptom
+
+- A Unity job on a self-hosted Windows runner fails very early (typically
+  within the first ~6 minutes of `Provision Unity Editor`) with
+  `Unity startup provisioning probe exit code: -1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND)`.
+- `ensure-editor.ps1`'s provisioning summary classifies the failure as
+  "host OS/runtime prerequisite damage", not a package/test failure.
+- The error annotation in the Actions log links here and to the bootstrap
+  script.
+- The same job re-run on a freshly imaged Windows runner reliably reproduces
+  the failure; the same job on a runner that has had `bootstrap-windows-runner.ps1`
+  applied passes.
+
+### Root cause
+
+The Windows OS loader cannot resolve a DLL that `Unity.exe` imports. The DLLs
+that fail most often are `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, and
+`MSVCP140.dll`, all of which ship with the Microsoft Visual C++ 2015-2022
+Redistributable (x64). GitHub-hosted `windows-2022` runners include this
+preinstalled; self-hosted runners do not unless an operator has installed it.
+
+Because the missing dependency is at the OS level, retrying the Unity install
+cannot help; `ensure-editor.ps1` short-circuits as soon as it sees
+`0xC0000135` from the startup probe so the job fails fast with an actionable
+annotation rather than burning ~13 minutes per matrix cell on a futile editor
+reinstall.
+
+`bootstrap-windows-runner.ps1` addresses three other foundational host
+concerns in the same pass: Windows long-path support (the prerequisite that
+unblocks the Android NDK 93% unpack failure described in the next section),
+Windows Defender exclusions for the Unity install root and the runner
+workspace, and PowerShell 7 (`pwsh`).
+
+### Auto-recovery: workflow_dispatch (no host access required)
+
+Use this path when you can read the Actions UI but cannot RDP/SSH to the
+runner host. The workflow installs every prereq idempotently and uploads a
+transcript artifact.
+
+1. (HARD-FAIL prerequisite) Take the OTHER runner offline first. Both
+   self-hosted Windows runners share the labels `self-hosted, Windows,
+RAM-64GB`, so the scheduler picks either machine; this workflow HARD-FAILS
+   on wrong-target dispatch (exit 1, by design) to refuse silent bootstraps
+   of an unintended machine. Offline the unwanted runner by opening
+   **Settings -> Actions -> Runners**, clicking the runner, and selecting
+   **Remove runner** (or stop the runner service on the host with
+   `Stop-Service actions.runner.*`), then bring it back online after the
+   bootstrap completes.
+1. Open **Actions -> Runner Bootstrap (Windows) -> Run workflow**.
+1. Pick `runner-label`: the name of the runner you want to bootstrap
+   (`DAD-MACHINE` or `ELI-MACHINE`).
+1. Pick `detect-only`: leave `false` (the default) to auto-install every
+   missing prereq. Set to `true` to audit without mutating the host (the run
+   exits 2 if anything is missing).
+1. Click **Run workflow**.
+1. Wait for the run to finish (~5-10 minutes on a healthy network) and
+   confirm a green status. The run uploads a transcript artifact named
+   `runner-bootstrap-<runner>-<run-id>-<attempt>`.
+1. Re-run the failed Unity job. The next provisioning attempt should pass.
+
+### Local recovery: bootstrap script on the host
+
+Use this path when you can RDP/SSH/console into the runner host.
+
+1. Sign in to the runner host (RDP, SSH, or local console).
+1. Open **Windows PowerShell 5.1 OR PowerShell 7 as Administrator**.
+   Administrator is required because the VC++ redistributable and the
+   `LongPathsEnabled` registry write touch `HKLM`.
+1. `cd` to any local clone of the repo (the actions-runner workspace works):
+
+   ```powershell
+   cd C:\path\to\actions-runner\_work\<repo>\<repo>
+   ```
+
+1. Run the bootstrap script:
+
+   ```powershell
+   .\scripts\unity\bootstrap-windows-runner.ps1
+   ```
+
+1. The script detects each prereq and installs only what is missing. It is
+   idempotent: re-running it on a healthy host is a no-op and exits 0.
+1. After the script reports success, re-run the failed Unity job from the
+   Actions UI. No runner-agent restart is required for the redistributable;
+   `LongPathsEnabled` and the `pwsh` install do require a fresh agent shell,
+   which the next job naturally creates.
+
+### What the bootstrap installs
+
+The bootstrap script detects each prereq independently and remediates only
+what is missing. One prereq's failure does not short-circuit the others; the
+final exit code reflects the worst outcome across all of them.
+
+- **Microsoft Visual C++ 2015-2022 x64 Redistributable** (the primary fix).
+  Installs `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, `MSVCP140.dll`, and the
+  rest of the 14.x C/C++ runtime that Unity links against. Downloaded from
+  the canonical Microsoft URL `https://aka.ms/vc14/vc_redist.x64.exe` and
+  verified by Authenticode signature before launch.
+- **Windows long-path support.** Writes
+  `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem!LongPathsEnabled = 1`.
+  Resolves the Android NDK 93% unpack failure at the legacy MAX_PATH boundary
+  (see the next section for the underlying root cause).
+- **Windows Defender exclusions** for `C:\Unity\Editors` and the active
+  runner workspace. Prevents Defender from transient-locking NDK files during
+  unpack. Skipped gracefully when Defender is absent.
+- **PowerShell 7 (`pwsh`)** via `winget install --id Microsoft.PowerShell
+--scope user`. The `--scope user` install means Administrator is not
+  required for `pwsh` itself.
+- **UCRT** sanity check. Modern Windows (Windows 10+, Server 2019+) already
+  ship UCRT. On downlevel Windows the script probes for KB2999226 and emits
+  an actionable `::error::` pointing at the KB download page rather than
+  attempting the MSU install itself (the URL is host-specific and is a
+  one-time operator action).
+
+### Audit only (no install)
+
+Use `-DetectOnly` for a read-only audit of host state. The script reports
+every prereq's status without mutating anything. Exit codes:
+
+- `0`: every prereq is present.
+- `2`: at least one prereq is missing.
+- non-zero, non-2: an unrecoverable error occurred during detection.
+
+```powershell
+.\scripts\unity\bootstrap-windows-runner.ps1 -DetectOnly
+```
+
+The same audit is available via the workflow: pick `detect-only: true` on the
+`Run workflow` dialog.
+
+### Verification
+
+After bootstrap, sanity-check the host from any PowerShell session on the
+runner:
+
+```powershell
+pwsh -v
+Test-Path 'C:\Windows\System32\VCRUNTIME140_1.dll'
+(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
+```
+
+Expected output:
+
+- `pwsh -v` reports PowerShell 7.x.
+- `Test-Path` returns `True`.
+- `LongPathsEnabled` is `1`.
+
+The next Unity job's `Print runner diagnostics` step runs the per-job
+preflight (`assert-unity-host-prereqs`). A green preflight is the live
+confirmation that recovery worked.
+
+### When auto-install fails
+
+Common failure modes and the remediation for each:
+
+- **Runner agent is not running as Administrator.** VC++ and
+  `LongPathsEnabled` need `HKLM` writes. The script detects access-denied via
+  a locale-safe exception-type check and emits an actionable `::error::`
+  pointing at this section. Fix: re-run the script from an elevated shell on
+  the host, or configure the runner agent service account with local admin
+  rights and re-trigger the workflow.
+- **Network failure during the VC++ download.** Re-trigger the workflow. The
+  script pins the URL to `https://aka.ms/vc14/vc_redist.x64.exe` (canonical
+  Microsoft host) so a transient failure is a real network issue, not a
+  redirect drift.
+- **VC++ Authenticode signature mismatch.** The script refuses to launch an
+  installer that is not signed by Microsoft. If this fires, do NOT bypass:
+  the download was corrupted or the host has been redirected. Investigate
+  before re-running.
+- **`winget` is missing.** Some self-hosted images ship without the
+  `App Installer` package. Install **App Installer** from the Microsoft Store
+  on the host (or use the standalone installer linked from the
+  [PowerShell releases page](https://github.com/PowerShell/PowerShell/releases)),
+  then re-trigger.
+- **Downlevel Windows (Windows 7, Server 2012 R2).** The UCRT step emits an
+  `::error::` pointing at the KB2999226 download page. Install the MSU
+  manually, reboot, and re-trigger. Modern runners should not hit this path.
+
+### Cross-references
+
+- Bootstrap script: [`scripts/unity/bootstrap-windows-runner.ps1`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/scripts/unity/bootstrap-windows-runner.ps1).
+- Per-job preflight composite: [`.github/actions/assert-unity-host-prereqs/action.yml`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/actions/assert-unity-host-prereqs/action.yml).
+- Auto-recovery workflow: [`.github/workflows/runner-bootstrap.yml`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/runner-bootstrap.yml).
+- LLM-agent skill: [`.llm/skills/unity/unity-runner-host-prereqs.md`](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.llm/skills/unity/unity-runner-host-prereqs.md).
+- The [PowerShell 7 prerequisite](#powershell-7-prerequisite-on-self-hosted-runners)
+  section above documents the `pwsh: command not found` failure that the
+  same bootstrap fixes.
+- The next section,
+  [Android NDK install failures and Windows long-path (MAX_PATH) enablement](#android-ndk-install-failures-and-windows-long-path-max_path-enablement),
+  documents the NDK 93% unpack failure; the bootstrap script's
+  `LongPathsEnabled` step is the durable runner-side remediation for that
+  failure mode.
+
 ## Android NDK install failures and Windows long-path (MAX_PATH) enablement
 
 The Android provisioning profile installs `android` plus

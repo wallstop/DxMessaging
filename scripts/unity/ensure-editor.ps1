@@ -1108,6 +1108,125 @@ function Write-UnityCliInstallFailureAnnotation {
     }
 }
 
+function Write-UnityHostPrereqAnnotation {
+    # WRAP-IMMUNE, single-line CI annotation for the 0xC0000135 short-circuit in
+    # Ensure-UnityNativeStartupHealthy. Emits a `::error::` line that NAMES the
+    # operator-actionable remediation (run scripts/unity/bootstrap-windows-runner.ps1,
+    # or trigger the runner-bootstrap workflow) AND the runbook, so the failure
+    # surfaces as a host-OS prerequisite problem instead of a generic Unity install
+    # error. The annotation also lists the DLLs Unity.exe IMPORTS (best-effort, via
+    # Get-UnityNativeImports) -- listing imports does not tell us WHICH one is
+    # missing, but seeing `VCRUNTIME140.dll` / `MSVCP140.dll` / `VCRUNTIME140_1.dll`
+    # in the list pins the missing Microsoft Visual C++ Redistributable as the
+    # overwhelming-most-likely culprit at a glance.
+    #
+    # WHY a separate single-line annotation when the throw text right after it also
+    # carries this info? PowerShell's ConciseView error formatter word-wraps thrown
+    # text at the runner console width and prepends frame markers; that makes the
+    # throw message an unreliable grep target. A `Write-Host "::error::..."` line is
+    # never wrapped or reformatted by the runner, so it survives as a stable single
+    # line in the CI log AND as a stable assertion target for the regression tests
+    # that pin this branch. See reference_pwsh_error_wrap_test_fragility for the
+    # full pattern.
+    #
+    # NEVER THROWS: a failure inside the diagnostic must not mask the underlying
+    # 0xC0000135 throw the caller is about to raise. Get-UnityNativeImports is itself
+    # best-effort; we still emit the rest of the line even with no imports.
+    #
+    # CONTEXT-AWARE CAUSE PHRASING: when the composite preflight action
+    # (`assert-unity-host-prereqs`) has already installed VC++ at job start, it
+    # exports DXM_RUNNER_PREREQ_INSTALLED=1 to the rest of the job. In that case the
+    # 0xC0000135 we are now diagnosing CANNOT be a missing VC++ Redistributable
+    # (preflight just installed it successfully); it is a DIFFERENT missing DLL --
+    # Unity-version-specific, a corrupt install, or a runtime DLL deleted mid-job.
+    # The annotation branches on that env var so we never tell the operator "install
+    # VC++" after preflight already did. When the env var is unset (or any value
+    # other than '1') we keep the original VC++-most-likely phrasing.
+    #
+    # REPAIR-PATH AWARENESS: callers that fire this annotation AFTER a managed
+    # reinstall has already run pass -RepairAttempted; the annotation then says
+    # "managed reinstall already ran and did not help" so the operator does not waste
+    # cycles asking us to retry the auto-repair we already attempted.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][int]$ExitCode,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [string]$EditorPath,
+        [string]$ProbeLog,
+        [switch]$RepairAttempted
+    )
+
+    try {
+        # OUTER @()-wrap is REQUIRED under StrictMode: when the `if` branches both
+        # evaluate to an empty array, the right-hand-side captures $null without the
+        # wrap (PowerShell "implicit unrolling"), and the subsequent .Count access
+        # throws. See reference_powershell_strictmode_collection_safety.
+        $imports = @(if ($EditorPath) {
+            Get-UnityNativeImports -EditorPath $EditorPath
+        } else {
+            @()
+        })
+        $importsSummary = if ($imports.Count -gt 0) {
+            $sample = @($imports | Select-Object -First 12)
+            if ($imports.Count -gt 12) {
+                "Unity.exe imports: $($sample -join ', '), ... (+$($imports.Count - 12) more)"
+            } else {
+                "Unity.exe imports: $($sample -join ', ')"
+            }
+        } else {
+            "Unity.exe imports: (could not enumerate)"
+        }
+
+        $probeLine = if ($ProbeLog) { "Probe log: $ProbeLog. " } else { '' }
+        # CONTEXT-AWARE cause phrasing: if preflight already installed VC++ this
+        # job, the missing DLL is something else; otherwise default to the VC++
+        # Redistributable as the most likely culprit.
+        $preflightRan = ($env:DXM_RUNNER_PREREQ_INSTALLED -eq '1')
+        $causeLine = if ($preflightRan) {
+            "Preflight ran successfully at job start (VC++/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Inspect the imports list above to identify the unresolved name. Re-running the bootstrap script will NOT help."
+        } else {
+            "Most likely cause: missing Microsoft Visual C++ 2015-2022 Redistributable (x64)."
+        }
+        # REPAIR-PATH awareness: phrase the remediation line based on whether the
+        # caller had already tried the managed reinstall before firing this
+        # annotation (post-repair short-circuit) vs. firing it on the first probe
+        # failure (no reinstall yet).
+        $repairLine = if ($RepairAttempted) {
+            "The managed reinstall already ran and did not help (as expected for 0xC0000135 -- the missing DLL is on the OS, not in the Unity install)."
+        } else {
+            $null
+        }
+        # Build remediation line. When preflight already ran, bootstrap will not
+        # help; otherwise direct the operator to run it.
+        $fixLine = if ($preflightRan) {
+            "Fix: identify the missing DLL from the imports list above and install it on the host (or reimage the runner). Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites)."
+        } else {
+            "Fix: run scripts/unity/bootstrap-windows-runner.ps1 on this runner, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites)."
+        }
+        # Single-line, wrap-immune ::error:: annotation. Do NOT split across lines:
+        # the runner emits each Write-Host as one CI log line, and a multi-line
+        # annotation degrades to a generic ::error::. The standalone "(0xC0000135
+        # / STATUS_DLL_NOT_FOUND)" parenthetical is intentionally absent here: it
+        # is already carried by $Description (e.g. "0xC0000135 / STATUS_DLL_NOT_FOUND")
+        # rendered in "exit $ExitCode ($Description)" so repeating it is redundant.
+        $repairSegment = if ($repairLine) { "$repairLine " } else { '' }
+        Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode ($Description). The Windows loader could not resolve a DLL Unity.exe imports. $causeLine $importsSummary. ${probeLine}${repairSegment}$fixLine"
+    } catch {
+        # A failure here must not mask the caller's throw. Emit a minimal fallback
+        # so the operator still sees the host-prereq verdict, then swallow.
+        try {
+            $fallbackPreflight = ($env:DXM_RUNNER_PREREQ_INSTALLED -eq '1')
+            if ($fallbackPreflight) {
+                Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode. Preflight already installed VC++ this job, so a DIFFERENT host DLL is missing -- inspect the Unity.exe imports above. Runbook: docs/runbooks/unity-runners-after-transfer.md."
+            } else {
+                Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode. Likely missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Run scripts/unity/bootstrap-windows-runner.ps1. Runbook: docs/runbooks/unity-runners-after-transfer.md."
+            }
+        } catch {
+            # Truly nothing more we can do; let the caller's throw fail loudly.
+        }
+    }
+}
+
 function Get-InstallDriveFreeSpaceText {
     # PURE-ish, best-effort, StrictMode-safe disk-headroom probe shared by the
     # pre-install diagnostic dump (Write-InstallDiagnostics) and the on-failure
@@ -2149,15 +2268,206 @@ function Get-NativeExitCodeDescription {
     } else {
         [uint32]$ExitCode
     }
-    $hex = "0x$($normalized.ToString('X8'))"
-    if ($normalized -eq 0xC0000135) {
-        return "$hex / STATUS_DLL_NOT_FOUND"
+    $hex = $normalized.ToString('X8')
+    # Compare against the hex STRING form (not the literal 0xC0000135 token) because
+    # PowerShell parses `0xC0000135` as Int32 -1073741515 and `[uint32]$normalized -eq
+    # 0xC0000135` therefore coerces to Int32 -- $normalized (the unsigned value
+    # 3221225781) and -1073741515 are NOT -eq. String compare on the canonical 8-char
+    # hex avoids the int/uint conflation entirely and is what Test-IsNativeDllNotFound
+    # also relies on.
+    if ($hex -eq 'C0000135') {
+        return "0x$hex / STATUS_DLL_NOT_FOUND"
     }
-    if ($normalized -eq 0x8007007E) {
-        return "$hex / ERROR_MOD_NOT_FOUND"
+    if ($hex -eq '8007007E') {
+        return "0x$hex / ERROR_MOD_NOT_FOUND"
     }
 
-    return $hex
+    return "0x$hex"
+}
+
+function Test-IsNativeDllNotFound {
+    # TRUE iff $ExitCode normalizes to the Windows NTSTATUS 0xC0000135
+    # (STATUS_DLL_NOT_FOUND): the OS loader could not resolve an imported DLL when
+    # spawning Unity.exe. This is a HOST OS prerequisite failure (e.g. a missing
+    # Microsoft Visual C++ Redistributable), NOT a Unity install issue, so the
+    # caller must SKIP the managed reinstall path -- reinstalling Unity does NOT
+    # add a DLL to the OS loader's search path. Implemented as a single-purpose
+    # helper (instead of a bare `-eq` in the caller) so the int/uint comparison
+    # bug fixed in Get-NativeExitCodeDescription cannot regress here either: we
+    # compare on the canonical 8-char hex string of the uint32 value.
+    param([Parameter(Mandatory = $true)][int]$ExitCode)
+
+    $normalized = if ($ExitCode -lt 0) {
+        [uint32]($ExitCode + 4294967296)
+    } else {
+        [uint32]$ExitCode
+    }
+    return ($normalized.ToString('X8') -eq 'C0000135')
+}
+
+function Get-UnityNativeImports {
+    # Best-effort PE-import-table dump of Unity.exe. Returns a string[] of imported
+    # DLL filenames (e.g. 'KERNEL32.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll',
+    # 'MSVCP140.dll') or @() on ANY failure / non-PE file / missing PEReader type.
+    # NEVER THROWS -- the caller (Write-UnityHostPrereqAnnotation) calls this from a
+    # diagnostic path that must not itself fail the build.
+    #
+    # WHY: when Unity.exe is launched and the Windows loader exits the process with
+    # 0xC0000135 (STATUS_DLL_NOT_FOUND), the loader does NOT tell us WHICH DLL it
+    # could not resolve -- only that some import was missing. Listing every DLL
+    # Unity.exe IMPORTS narrows the search: if `VCRUNTIME140.dll` / `MSVCP140.dll` /
+    # `VCRUNTIME140_1.dll` appear in the list, the missing DLL is overwhelmingly
+    # likely the Microsoft Visual C++ 2015-2022 Redistributable (x64). The CI
+    # annotation can then NAME that prereq instead of telling the operator "some DLL
+    # is missing -- good luck."
+    #
+    # PARSING STRATEGY: we use System.Reflection.PortableExecutable.PEReader (.NET
+    # 5+ / pwsh 7) to read the import directory. The descriptor walk:
+    #   1. PEHeaders.PEHeader.ImportTableDirectory -> RVA + Size of the import dir.
+    #   2. GetSectionData(rva).GetReader() -> a BlobReader anchored AT the requested
+    #      RVA (the reader is the section data sliced from that RVA to end of
+    #      section, NOT from the section start).
+    #   3. Each IMAGE_IMPORT_DESCRIPTOR is 20 bytes (5 x uint32): ILT, TimeStamp,
+    #      ForwarderChain, NameRVA, FirstThunk. The descriptor sequence is
+    #      terminated by an all-zero entry.
+    #   4. For each non-zero NameRVA, GetSectionData(NameRVA).GetReader() yields the
+    #      ASCII null-terminated DLL name.
+    #
+    # CRITICAL INT/UINT GOTCHA: PEReader.GetSectionData takes an Int32 rva, but the
+    # ReadUInt32 calls return [uint32]. Passing the [uint32] to a [int]-typed
+    # overload SILENTLY routes the call to the (string sectionName) overload (since
+    # neither type matches exactly) and returns a 0-length block, which then throws
+    # "Read out of bounds" on the first ReadByte. We explicitly `[int]`-cast every
+    # RVA before calling GetSectionData to pin the int32 overload.
+    #
+    # TEST-ONLY override (same spirit as DXM_UNITY_FAKE_LONGPATHS_ENABLED): when
+    # DXM_UNITY_FAKE_IMPORTS is non-empty, the comma-separated value is returned
+    # verbatim WITHOUT touching the file. Lets hermetic tests prove the annotation
+    # branch on Linux/macOS without smuggling a real PE binary into the repo.
+    param([Parameter(Mandatory = $true)][string]$EditorPath)
+
+    if (-not [string]::IsNullOrEmpty($env:DXM_UNITY_FAKE_IMPORTS)) {
+        $fake = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($entry in ($env:DXM_UNITY_FAKE_IMPORTS -split ',')) {
+            $trimmed = if ($null -eq $entry) { '' } else { ([string]$entry).Trim() }
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                [void]$fake.Add($trimmed)
+            }
+        }
+        return @($fake.ToArray())
+    }
+
+    if ([string]::IsNullOrWhiteSpace($EditorPath)) {
+        return @()
+    }
+    if (-not (Test-Path -LiteralPath $EditorPath -PathType Leaf)) {
+        return @()
+    }
+
+    try {
+        # Best-effort: pwsh 7 / .NET 5+ ship System.Reflection.PortableExecutable in
+        # the default LoadContext, so the type literal resolves directly. PS 5.1
+        # MAY need an explicit Add-Type for `System.Reflection.Metadata`; if that
+        # fails too, the outer try/catch returns @() and the caller falls back to
+        # an "(could not enumerate)" annotation.
+        try {
+            $null = [System.Reflection.PortableExecutable.PEReader]
+        } catch {
+            try {
+                Add-Type -AssemblyName 'System.Reflection.Metadata' -ErrorAction SilentlyContinue
+            } catch {
+                # Ignored: outer catch returns @() if the type still cannot resolve.
+            }
+        }
+
+        $stream = [System.IO.File]::OpenRead($EditorPath)
+        try {
+            # -ArgumentList is the explicit, StrictMode-friendly form; positional
+            # `(, $stream)` works too but is harder to grep / understand at a glance.
+            $pe = New-Object -TypeName 'System.Reflection.PortableExecutable.PEReader' -ArgumentList $stream
+            try {
+                $headers = $pe.PEHeaders
+                # A non-PE file (e.g. a test stub with a shell shebang body) is
+                # accepted by the PEReader constructor lazily; PEHeader is $null in
+                # that case. Bail out cleanly.
+                if ($null -eq $headers -or $null -eq $headers.PEHeader) {
+                    return @()
+                }
+                $importDir = $headers.PEHeader.ImportTableDirectory
+                if ($null -eq $importDir -or $importDir.Size -le 0 -or $importDir.RelativeVirtualAddress -le 0) {
+                    return @()
+                }
+
+                $block = $pe.GetSectionData([int]$importDir.RelativeVirtualAddress)
+                $reader = $block.GetReader()
+                $names = New-Object 'System.Collections.Generic.List[string]'
+                # Defensive caps: a corrupt or attacker-crafted PE could otherwise
+                # loop indefinitely (no terminator) or chase a name RVA that walks
+                # off the end of every section.
+                $maxEntries = 256
+                $loopCount = 0
+                while ($reader.RemainingBytes -ge 20 -and $loopCount -lt $maxEntries) {
+                    $loopCount++
+                    $importLookupTable = $reader.ReadUInt32()
+                    $null = $reader.ReadUInt32() # TimeDateStamp (unused)
+                    $null = $reader.ReadUInt32() # ForwarderChain (unused)
+                    $nameRva = $reader.ReadUInt32()
+                    $iatRva = $reader.ReadUInt32()
+                    if ($importLookupTable -eq 0 -and $nameRva -eq 0 -and $iatRva -eq 0) {
+                        # Standard PE terminator descriptor -- end of imports.
+                        break
+                    }
+                    if ($nameRva -ne 0) {
+                        try {
+                            $nameBlock = $pe.GetSectionData([int]$nameRva)
+                            $nameReader = $nameBlock.GetReader()
+                            $sb = New-Object 'System.Text.StringBuilder'
+                            $byteCount = 0
+                            # A reasonable DLL name is well under 256 chars; cap to
+                            # prevent a corrupt RVA from consuming the entire
+                            # section.
+                            while ($nameReader.RemainingBytes -gt 0 -and $byteCount -lt 1024) {
+                                $b = $nameReader.ReadByte()
+                                if ($b -eq 0) {
+                                    break
+                                }
+                                # Restrict to printable ASCII to avoid emitting
+                                # garbage if the RVA pointed somewhere other than a
+                                # name table.
+                                if ($b -ge 32 -and $b -lt 127) {
+                                    [void]$sb.Append([char]$b)
+                                } else {
+                                    # Non-printable byte before terminator -- abandon
+                                    # this name; treat as parse failure.
+                                    $sb.Length = 0
+                                    break
+                                }
+                                $byteCount++
+                            }
+                            $name = $sb.ToString()
+                            if (-not [string]::IsNullOrWhiteSpace($name)) {
+                                [void]$names.Add($name)
+                            }
+                        } catch {
+                            # A single bad descriptor must not abort the whole walk;
+                            # continue to the next descriptor.
+                        }
+                    }
+                }
+                return @($names.ToArray())
+            } finally {
+                $pe.Dispose()
+            }
+        } finally {
+            $stream.Dispose()
+        }
+    } catch {
+        # ANY failure -- type missing, file unreadable, malformed PE, BlobReader
+        # exhausted -- returns an empty list. The annotation branch then prints
+        # "(could not enumerate)" instead of named imports, and the build still
+        # surfaces the underlying 0xC0000135 / STATUS_DLL_NOT_FOUND throw.
+        return @()
+    }
 }
 
 function Test-UnityNativeStartup {
@@ -2218,6 +2528,23 @@ function Ensure-UnityNativeStartupHealthy {
         return $EditorPath
     }
 
+    # SHORT-CIRCUIT: 0xC0000135 / STATUS_DLL_NOT_FOUND is a HOST OS prerequisite
+    # failure -- the Windows loader could not resolve a DLL Unity.exe imports
+    # (overwhelmingly the Microsoft Visual C++ 2015-2022 Redistributable). A managed
+    # reinstall of Unity does NOT help: the missing DLL is on the OS, not in the
+    # Unity install tree. Wasting ~6 minutes per matrix cell on a reinstall that
+    # cannot succeed delays the actionable failure mode and obscures the real
+    # remediation. We therefore short-circuit BEFORE the DXM_UNITY_DISABLE_EDITOR_REPAIR
+    # check too: that flag is an operator opt-out of auto-repair, and on 0xC0000135
+    # there is nothing TO repair via reinstall regardless of the flag. The
+    # short-circuit emits a wrap-immune ::error:: annotation BEFORE throwing so the
+    # actionable host-prereq guidance survives ConciseView word-wrap (the throw text
+    # is reformatted by the runner's error formatter; the Write-Host line is not).
+    if (Test-IsNativeDllNotFound -ExitCode $result.ExitCode) {
+        Write-UnityHostPrereqAnnotation -Version $Version -ExitCode $result.ExitCode -Description $result.Description -EditorPath $EditorPath -ProbeLog $probeLog
+        throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) (0xC0000135 / STATUS_DLL_NOT_FOUND). This is a host OS prerequisite failure (the Windows loader could not find a DLL Unity.exe imports). The most likely cause is a missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Skipped managed reinstall (would not help: the missing DLL is on the OS, not in the Unity install). Probe log: $probeLog. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites). Remediation: run scripts/unity/bootstrap-windows-runner.ps1 on this runner (or trigger the runner-bootstrap workflow_dispatch from the Actions UI)."
+    }
+
     if ($env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1') {
         throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) ($($result.Description)), and DXM_UNITY_DISABLE_EDITOR_REPAIR=1 disabled auto-repair. Probe log: $probeLog"
     }
@@ -2231,6 +2558,17 @@ function Ensure-UnityNativeStartupHealthy {
     $repaired = Ensure-UnityCiModules -Version $Version -EditorPath $repaired -InstallRoot $InstallRoot -Profile $Profile -ManagedOnly:$ManagedOnly
     $repairProbe = Test-UnityNativeStartup -EditorPath $repaired -LogPath $probeLog
     if (-not $repairProbe.Success) {
+        # POST-REPAIR HOST-PREREQ SHORT-CIRCUIT: a managed reinstall succeeded but
+        # the editor STILL fails 0xC0000135 / STATUS_DLL_NOT_FOUND. This means the
+        # host went south mid-job (a runtime DLL was deleted or the repair installer
+        # wiped a prerequisite). Same operator-actionable annotation as the
+        # first-probe short-circuit, but with -RepairAttempted so the message
+        # reflects that the managed reinstall already ran (and did not help, as
+        # expected for 0xC0000135 -- the missing DLL is on the OS).
+        if (Test-IsNativeDllNotFound -ExitCode $repairProbe.ExitCode) {
+            Write-UnityHostPrereqAnnotation -Version $Version -ExitCode $repairProbe.ExitCode -Description $repairProbe.Description -EditorPath $repaired -ProbeLog $probeLog -RepairAttempted
+            throw "Unity $Version native startup probe still failed after managed reinstall with exit code $($repairProbe.ExitCode) ($($repairProbe.Description)). Host OS prerequisite damage. The managed reinstall did not help (as expected for 0xC0000135). Probe log: $probeLog. Runbook: docs/runbooks/unity-runners-after-transfer.md. Remediation: run scripts/unity/bootstrap-windows-runner.ps1 (or trigger .github/workflows/runner-bootstrap.yml)."
+        }
         throw "Unity $Version native startup probe still failed after managed reinstall with exit code $($repairProbe.ExitCode) ($($repairProbe.Description)). This indicates host OS/runtime prerequisite damage rather than a package/test issue. Probe log: $probeLog"
     }
 

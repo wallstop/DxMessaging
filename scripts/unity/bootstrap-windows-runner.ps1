@@ -1,0 +1,1385 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Idempotent one-shot Windows runner bootstrap for Unity CI prerequisites.
+
+.DESCRIPTION
+    Installs (or detects, when -DetectOnly) the host-OS prerequisites that
+    Unity Editor needs to launch on a self-hosted Windows GitHub Actions
+    runner. Root cause this script addresses: Unity.exe failed at startup
+    with exit code -1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND) on
+    DAD-MACHINE because the Microsoft Visual C++ 2015-2022 x64 Redistributable
+    was not installed -- the OS loader could not resolve a DLL Unity.exe needs
+    (VCRUNTIME140_1.dll, etc.). GitHub-hosted windows-2022 ships the redist
+    preinstalled; self-hosted runners do not. The existing ensure-editor.ps1
+    retries a Unity reinstall on that failure, which is futile -- the missing
+    DLL is on the OS, not in the Unity install.
+
+    Prerequisites covered (each is independently detected + remediated):
+
+      1. Microsoft Visual C++ 2015-2022 x64 Redistributable
+         Detect (primary): file-level probe of System32 for
+                 VCRUNTIME140.dll, VCRUNTIME140_1.dll, MSVCP140.dll. The OS
+                 loader uses the actual files on disk -- the entire bug class
+                 this script exists for is "DLL missing on disk", so file
+                 presence is the authoritative signal. ALL three must exist.
+         Detect (secondary, only if file probe passes): registry confirms a
+                 "blessed" install via
+                 HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64
+                 (Installed=1 + Bld>=26020). The 26020 threshold separates VS
+                 2017 15.5+ (the first version that ships VCRUNTIME140_1.dll)
+                 from older 14.0 RTM. The x64 redist registers only in the
+                 native 64-bit view, never Wow6432Node, so we deliberately
+                 do NOT probe the WOW mirror.
+         Install: Download https://aka.ms/vc14/vc_redist.x64.exe then
+                  & vc_redist.x64.exe /install /quiet /norestart. URL is
+                  pinned via [ValidatePattern] to known Microsoft hosts;
+                  Authenticode signature is verified before launch.
+
+      2. Windows long-paths
+         Detect: HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem!LongPathsEnabled
+         Install: New-ItemProperty ... LongPathsEnabled -Value 1 (DWORD).
+
+      3. Windows Defender exclusions for the Unity install root and the runner
+         workspace directory. Path inputs are validated against an allow-list
+         so a hostile/misconfigured RUNNER_WORKSPACE cannot exclude C:\.
+         Skipped gracefully when Defender is absent.
+
+      4. PowerShell 7 (pwsh) -- installed via winget --scope user when missing.
+
+      5. UCRT on downlevel Windows. Modern Windows 10+/Server 2019+ ship UCRT
+         preinstalled, so on those hosts this step is a silent no-op. On
+         downlevel hosts we emit ::error:: pointing at the KB2999226 download
+         page (we do not auto-download the MSU because it is a one-time
+         operator action and the URL is host-specific).
+
+    The script is non-fatal across prereqs: each install path catches its own
+    exceptions and converts them into a recorded failure. One prereq's
+    failure never short-circuits the others. The final summary line lists
+    every prereq's final state and exit code reflects the worst outcome.
+
+    Designed for self-hosted GitHub Actions runners running as NETWORK SERVICE
+    (non-admin). On a non-admin shell, prereqs that need HKLM writes (VC++,
+    LongPathsEnabled) will fail at install time with Access Denied -- the
+    script catches that and emits a SPECIFIC ::error:: telling the operator
+    to either run the script as Administrator or trigger
+    .github/workflows/runner-bootstrap.yml from the Actions UI. We deliberately
+    do NOT auto-elevate via Start-Process -Verb RunAs because UAC would hang
+    a non-interactive CI run.
+
+    --- Import contract -----------------------------------------------------
+    DOT-SOURCING THIS SCRIPT MUST NOT MUTATE THE CALLER'S SESSION PREFERENCES.
+    Specifically `Set-StrictMode`, `$ErrorActionPreference`, and
+    `$PSNativeCommandUseErrorActionPreference` are configured ONLY inside the
+    `if ($invokedAsScript)` dispatcher at the bottom of the file. Each
+    function that needs StrictMode does its own LOCAL `Set-StrictMode` (which
+    is scoped to that function and unwinds on return). Contract tests
+    (powershell-syntax.test.js et al.) dot-source the script for parse + AST
+    inspection; that path must stay side-effect-free with respect to caller
+    preferences.
+
+    NOTE: dot-sourcing WILL bind the script's param-block variables
+    (`$DetectOnly`, `$UnityInstallRoot`, `$VcRedistUrl`,
+    `$DownloadTimeoutSeconds`, `$InstallTimeoutSeconds`) and the
+    `$invokedAsScript` dispatcher flag in the caller's scope. That is
+    standard PowerShell behaviour for any dot-sourced script with a
+    `param()` block and cannot be avoided; tests that care should run in a
+    sub-shell or use Push-Variable/Pop-Variable patterns.
+
+.PARAMETER DetectOnly
+    Detect-and-report only; never installs. Exit code: 0 = every prereq OK,
+    2 = at least one prereq missing. Used by contract tests and by the
+    per-job preflight when DXM_RUNNER_DISABLE_AUTO_BOOTSTRAP=1.
+
+.PARAMETER UnityInstallRoot
+    Defender-exclusion path for Unity editor installs. Defaults to the
+    UNITY_EDITOR_INSTALL_ROOT env var, falling back to C:\Unity\Editors.
+
+.PARAMETER VcRedistUrl
+    Canonical Microsoft VC++ redist download URL. Override-able for tests.
+    The [ValidatePattern] pins the host to Microsoft-controlled domains so
+    a hostile caller cannot redirect us to an attacker-controlled binary.
+    After download, Authenticode signature is verified before exec.
+
+.PARAMETER DownloadTimeoutSeconds
+    HTTP timeout for the VC++ redist download. Default 600 seconds.
+    WHY 600: the redist is ~25 MB; on a slow CI link with TLS handshake and
+    HTTP redirect chain (aka.ms -> download.visualstudio.microsoft.com),
+    300s has been observed to time out under sustained load. 600s gives
+    headroom without masking a truly broken connection.
+
+.PARAMETER InstallTimeoutSeconds
+    Hard cap on the VC++ redist installer wait. Default 900 seconds.
+    WHY 900: Microsoft's redist installer can stall for several minutes on
+    pending Windows reboot states (it scans servicing state). 900s (15min)
+    is the largest value that still lets a hung installer fail-fast within
+    the 30-minute self-hosted-runner job budget.
+
+.EXAMPLE
+    .\bootstrap-windows-runner.ps1
+        # Install every missing prereq (run from elevated shell).
+
+.EXAMPLE
+    .\bootstrap-windows-runner.ps1 -DetectOnly
+        # Exit 0 if every prereq is present; exit 2 if any are missing.
+
+.NOTES
+    Parses cleanly on Linux pwsh (enforced by scripts/__tests__/powershell-syntax.test.js).
+    Every Windows-only call site (registry, Add-MpPreference, winget) is wrapped
+    in a Test-IsWindowsHost gate so this file is safe to load on Linux/macOS.
+#>
+[CmdletBinding()]
+[OutputType([int])]
+param(
+    [switch]$DetectOnly,
+
+    [string]$UnityInstallRoot = $(if ($env:UNITY_EDITOR_INSTALL_ROOT) { $env:UNITY_EDITOR_INSTALL_ROOT } else { 'C:\Unity\Editors' }),
+
+    # WHY [ValidatePattern]: an over-broad caller could pass
+    # `-VcRedistUrl http://evil.example.com/dropper.exe` and we would happily
+    # download + Authenticode-fail (or worse, exec). Pin host up-front; the
+    # post-download signature check is defense-in-depth.
+    [ValidatePattern('^https://(aka\.ms|download\.visualstudio\.microsoft\.com|[A-Za-z0-9._-]+\.microsoft\.com)/')]
+    [string]$VcRedistUrl = 'https://aka.ms/vc14/vc_redist.x64.exe',
+
+    [int]$DownloadTimeoutSeconds = 600,
+
+    [int]$InstallTimeoutSeconds = 900
+)
+
+# IMPORTANT: top-level body is intentionally side-effect-free on dot-source.
+# Set-StrictMode, $ErrorActionPreference, and $PSNativeCommandUseErrorActionPreference
+# are configured EXCLUSIVELY inside the $invokedAsScript dispatcher at the
+# bottom of the file. See the "Import contract" section in the .DESCRIPTION.
+
+# CI annotation helpers -- mirror ensure-editor.ps1's Write-CiNotice pattern.
+# All three MUST emit single-line Write-Host so they survive ConciseView's
+# word-wrap (see reference_pwsh_error_wrap_test_fragility). Never use
+# Write-Output (the runner annotation parser does not treat the standard
+# output stream identically to host output in every host configuration).
+
+function Write-CiNotice {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    Write-Host "::notice::$Message"
+}
+
+function Write-CiWarning {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    Write-Host "::warning::$Message"
+}
+
+function Write-CiError {
+    param([Parameter(Mandatory = $true)][string]$Message)
+    Write-Host "::error::$Message"
+}
+
+function Test-IsWindowsHost {
+    # Single source of truth for "is this a real Windows host". Used as a top-
+    # level gate on every install/registry call so the script loads cleanly
+    # on Linux pwsh (which is where powershell-syntax.test.js exercises it).
+    # We deliberately do NOT consult $IsWindows here -- PS 5.1 lacks that
+    # built-in (it is a PS 6+/7 automatic variable) and Set-StrictMode -Version
+    # Latest would throw on the access. DirectorySeparatorChar is universally
+    # available and is '\\' on Windows, '/' everywhere else.
+    return ([System.IO.Path]::DirectorySeparatorChar -eq '\')
+}
+
+function Test-IsAdministrator {
+    # Safe to call on Linux (returns $false). On Windows, returns $true iff
+    # the current process holds the Administrator role.
+    if (-not (Test-IsWindowsHost)) {
+        return $false
+    }
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+
+function Test-IsAccessDeniedException {
+    # WHY a dedicated helper: the previous regex match against the English
+    # message text ('denied|elevation|administrator|not allowed') silently
+    # failed on German/French/Japanese Windows installs (see F13). Match the
+    # exception SHAPE instead -- HResult E_ACCESSDENIED is locale-invariant.
+    # Returns $true iff the caught error looks like a Windows access-denied
+    # failure. NEVER throws.
+    param([Parameter(Mandatory = $true)]$ErrorRecord)
+
+    try {
+        $ex = $ErrorRecord.Exception
+        while ($null -ne $ex) {
+            # Locale-invariant: System.UnauthorizedAccessException and
+            # SecurityException are the canonical .NET shapes.
+            $typeName = $ex.GetType().FullName
+            if ($typeName -eq 'System.UnauthorizedAccessException') { return $true }
+            if ($typeName -eq 'System.Security.SecurityException') { return $true }
+            if ($typeName -eq 'Microsoft.PowerShell.Cmdletization.Cim.CimJobException') { return $true }
+            # HResult E_ACCESSDENIED = 0x80070005 ((int)-2147024891). Some
+            # cmdlets wrap the Win32 error in a generic exception but the
+            # HResult is preserved.
+            try {
+                $hr = [int]$ex.HResult
+                if ($hr -eq -2147024891) { return $true }
+            } catch { }
+            $ex = $ex.InnerException
+        }
+        # Last resort: the English regex fallback. Kept so unfamiliar
+        # exception shapes still surface as access-denied when the message
+        # clearly says so on en-US hosts (the common case).
+        $message = [string]$ErrorRecord.Exception.Message
+        if ($message -match 'denied|elevation|administrator|not allowed') {
+            return $true
+        }
+    } catch { }
+    return $false
+}
+
+function Get-RegistryItemPropertySafe {
+    # Wrapper around Get-ItemPropertyValue that swallows "key not found" /
+    # "property not found" / wrong-type and returns $null. NEVER throws.
+    # Centralized so the VC++ probes do not duplicate try/catch noise.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    try {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            return $null
+        }
+        $value = Get-ItemPropertyValue -LiteralPath $Path -Name $Name -ErrorAction Stop
+        return $value
+    } catch {
+        return $null
+    }
+}
+
+function Test-VcRedistFilesOnDisk {
+    # WHY this is the PRIMARY detection signal: the entire bug class this
+    # script exists for is "OS loader cannot find VCRUNTIME140_1.dll".
+    # Registry presence is not the authoritative signal -- the actual file
+    # on disk is. If any of the three required files is missing, the OS
+    # loader will fail Unity.exe at startup regardless of what the registry
+    # says. Returns @{ present; missing }. NEVER throws.
+    # All three DLLs ship in the VS 2015-2022 redist installer; all are
+    # consumed by Unity.exe's import table.
+    if (-not (Test-IsWindowsHost)) {
+        return @{ present = $true; missing = @() }
+    }
+    $required = @(
+        'C:\Windows\System32\VCRUNTIME140.dll',
+        'C:\Windows\System32\VCRUNTIME140_1.dll',
+        'C:\Windows\System32\MSVCP140.dll'
+    )
+    $missing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($f in $required) {
+        try {
+            if (-not (Test-Path -LiteralPath $f)) {
+                $missing.Add($f) | Out-Null
+            }
+        } catch {
+            # Test-Path can throw on permission-denied paths; treat as missing.
+            $missing.Add($f) | Out-Null
+        }
+    }
+    return @{ present = ($missing.Count -eq 0); missing = @($missing.ToArray()) }
+}
+
+function Test-VcRedistInstalledAtRegistryView {
+    # Probes the native registry view for the VC++ 2015-2022 x64 redist
+    # signature. Returns hashtable @{ installed = $bool; reason = $string }
+    # so the caller can both log the diagnostic and short-circuit on the
+    # first positive hit.
+    #
+    # WHY Bld >= 26020 (not 30000): VS 2017 15.5 is the first toolset that
+    # ships VCRUNTIME140_1.dll, and its redist registers Bld values from
+    # 26020 upward. The previous 30000 threshold false-negatived every
+    # VS 2017 + VS 2019 (<= 16.7) install, which is exactly the lineage
+    # most self-hosted runners come from. See:
+    # https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist
+    param([Parameter(Mandatory = $true)][string]$BaseKey)
+
+    $runtimesKey = Join-Path $BaseKey 'Microsoft\VisualStudio\14.0\VC\Runtimes\X64'
+    $servicingKey = Join-Path $BaseKey 'Microsoft\DevDiv\VC\Servicing\14.0\RuntimeMinimum'
+
+    $installed = Get-RegistryItemPropertySafe -Path $runtimesKey -Name 'Installed'
+    $bld = Get-RegistryItemPropertySafe -Path $runtimesKey -Name 'Bld'
+    if ($installed -eq 1 -and $null -ne $bld) {
+        $bldInt = 0
+        if ([int]::TryParse([string]$bld, [ref]$bldInt)) {
+            if ($bldInt -ge 26020) {
+                return @{ installed = $true; reason = "$runtimesKey (Installed=1, Bld=$bldInt >= 26020 [VCRUNTIME140_1.dll introduced in VS 2017 15.5])" }
+            }
+        }
+    }
+
+    $version = Get-RegistryItemPropertySafe -Path $servicingKey -Name 'Version'
+    if ($version) {
+        return @{ installed = $true; reason = "$servicingKey (Version=$version)" }
+    }
+
+    return @{ installed = $false; reason = "neither $runtimesKey nor $servicingKey indicates installed" }
+}
+
+function Test-VcRedistInstalled {
+    # Two-stage detection. PRIMARY: file-level probe of System32 for the
+    # three required DLLs. SECONDARY: registry confirmation that the install
+    # is "blessed" (so we do not false-positive on a partial / hand-copied
+    # DLL set without a real installer record).
+    #
+    # WHY this order: the OS loader uses files on disk, not the registry.
+    # If files are missing, Unity.exe will fail to start regardless of what
+    # the registry says. If files are present but registry says not-installed
+    # (extremely unusual), we still proceed because the loader will succeed --
+    # we Write-CiWarning so the operator notices the inconsistency.
+    #
+    # WHY only the native registry view (NOT Wow6432Node): the x64 redist
+    # registers exclusively in the native 64-bit view. Probing Wow6432Node
+    # was dead code: the x64 installer never writes there. If a 32-bit
+    # installer mirrored the keys it would be a false positive for the x64
+    # DLL set we actually need on disk.
+    #
+    # Linux-safe: returns $true vacuously when not on Windows so callers can
+    # ignore the prereq on non-Windows hosts (this script never runs the
+    # install path on non-Windows, but the helper is still callable from
+    # tests).
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+
+    Set-StrictMode -Version Latest
+
+    $fileProbe = Test-VcRedistFilesOnDisk
+    if (-not $fileProbe.present) {
+        $missingList = ($fileProbe.missing -join ', ')
+        Write-CiNotice "VC++ redist file probe missing: $missingList"
+        return $false
+    }
+
+    # Files are present -- confirm registry agrees (for sanity).
+    $regProbe = Test-VcRedistInstalledAtRegistryView -BaseKey 'HKLM:\SOFTWARE'
+    if ($regProbe.installed) {
+        Write-CiNotice "VC++ redist detected: files on disk + registry agrees via $($regProbe.reason)"
+        return $true
+    }
+
+    # Files exist but registry disagrees. Trust the loader's POV (files
+    # decide) but flag the inconsistency.
+    Write-CiWarning "VC++ redist DLLs are present on disk but registry probe says not-installed ($($regProbe.reason)). Treating as installed (the OS loader uses files, not the registry); operator may want to verify the install record is intact."
+    return $true
+}
+
+function Test-VcRedistAuthenticodeSignature {
+    # WHY: even with the [ValidatePattern]-pinned URL, we want defense-in-
+    # depth before exec'ing a downloaded binary. A signed-and-trusted
+    # Microsoft certificate is the strongest signal we can verify locally.
+    # Returns @{ valid; reason }. NEVER throws.
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    if (-not (Test-IsWindowsHost)) {
+        # Get-AuthenticodeSignature is Windows-only.
+        return @{ valid = $false; reason = "Authenticode signature verification skipped on non-Windows" }
+    }
+    try {
+        $sig = Get-AuthenticodeSignature -FilePath $FilePath -ErrorAction Stop
+        if (-not $sig) {
+            return @{ valid = $false; reason = "Get-AuthenticodeSignature returned null" }
+        }
+        if ($sig.Status -ne 'Valid') {
+            return @{ valid = $false; reason = "Authenticode Status='$($sig.Status)' (expected 'Valid')" }
+        }
+        $subject = ''
+        try { $subject = [string]$sig.SignerCertificate.Subject } catch { $subject = '' }
+        if ($subject -notmatch 'Microsoft Corporation') {
+            return @{ valid = $false; reason = "Authenticode signer '$subject' does not match 'Microsoft Corporation'" }
+        }
+        return @{ valid = $true; reason = "Authenticode Valid, signer=$subject" }
+    } catch {
+        return @{ valid = $false; reason = "Get-AuthenticodeSignature threw: $($_.Exception.Message)" }
+    }
+}
+
+function Invoke-VcRedistDownload {
+    # Downloads vc_redist.x64.exe to a temp path. Returns hashtable
+    # @{ success = $bool; path = $string; reason = $string }. NEVER throws.
+    # On failure, the partial temp file is cleaned up in the finally block
+    # so we never leave litter for the next bootstrap run.
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("vc_redist.x64.{0}.exe" -f ([Guid]::NewGuid().ToString('N')))
+    $success = $false
+    try {
+        # WHY explicit TLS 1.2/1.3: Windows PowerShell 5.1's
+        # ServicePointManager default is Ssl3|Tls (TLS 1.0). aka.ms and
+        # download.visualstudio.microsoft.com reject anything below TLS 1.2.
+        # THIS is the bootstrap -- it runs FIRST, BEFORE pwsh exists, so
+        # PS 5.1 is the realistic runtime here. Without this block,
+        # Invoke-WebRequest fails with "The underlying connection was closed:
+        # An unexpected error occurred on a send." on a stock Server 2019.
+        try {
+            $tls12 = [Net.SecurityProtocolType]::Tls12
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $tls12
+            # Tls13 may not be defined on older .NET Framework (4.7.2-);
+            # ignore in catch so we still get TLS 1.2.
+            try {
+                $tls13 = [Net.SecurityProtocolType]::Tls13
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $tls13
+            } catch { }
+        } catch {
+            Write-CiWarning "Could not configure TLS 1.2/1.3 (continuing; download may fail on older Windows): $($_.Exception.Message)"
+        }
+
+        # -UseBasicParsing is REQUIRED for Windows PowerShell 5.1 compatibility:
+        # without it, Invoke-WebRequest tries to instantiate IE's COM parser
+        # which fails on server SKUs. PS7's Invoke-WebRequest ignores the
+        # parameter so we can pass it unconditionally.
+        # -MaximumRedirection 5: aka.ms is a redirector to
+        # download.visualstudio.microsoft.com; the default of 0 would fail.
+        # -UserAgent: some Microsoft CDNs heuristically rate-limit the
+        # default PowerShell UA; a deterministic UA gives us a paper trail
+        # without changing behavior.
+        Invoke-WebRequest -Uri $Url -OutFile $tempPath -UseBasicParsing -TimeoutSec $TimeoutSeconds -MaximumRedirection 5 -UserAgent 'DXMessaging-RunnerBootstrap/1.0' -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $tempPath)) {
+            return @{ success = $false; path = $tempPath; reason = "Invoke-WebRequest returned without an exception but no file appeared at $tempPath" }
+        }
+        $size = (Get-Item -LiteralPath $tempPath).Length
+        if ($size -le 0) {
+            return @{ success = $false; path = $tempPath; reason = "Downloaded file at $tempPath is 0 bytes (likely a transient failure)" }
+        }
+        $success = $true
+        return @{ success = $true; path = $tempPath; reason = "downloaded $size bytes to $tempPath" }
+    } catch {
+        return @{ success = $false; path = $tempPath; reason = "Invoke-WebRequest failed: $($_.Exception.Message)" }
+    } finally {
+        # WHY this cleanup: previously a failed Invoke-WebRequest left a
+        # partial file at $tempPath (e.g. half-downloaded after a timeout).
+        # The next bootstrap run would generate a different GUID temp path,
+        # so the litter accumulated indefinitely. The success path keeps
+        # the file for the caller to install; the failure path scrubs it.
+        if (-not $success) {
+            try {
+                if (Test-Path -LiteralPath $tempPath) {
+                    Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+                }
+            } catch { }
+        }
+    }
+}
+
+function Invoke-VcRedistInstaller {
+    # Runs the vc_redist.x64.exe installer with the silent/no-restart flags.
+    # Uses Start-Process -PassThru and a manual WaitForExit($ms) so we can
+    # enforce a timeout (Start-Process has no -Timeout parameter).
+    # Returns hashtable @{ success = $bool; exitCode = $int; reason = $string }.
+    # NEVER throws. Treats well-known installer exit codes per Microsoft docs:
+    #   0    = installed (success)
+    #   1638 = newer version already installed (treat as success)
+    #   3010 = success-restart-required (treat as success + warning)
+    #   1602 = user cancel (failure)
+    #   1603 = fatal install error (failure)
+    # Reference:
+    #   https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallerPath,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    if (-not (Test-Path -LiteralPath $InstallerPath)) {
+        return @{ success = $false; exitCode = -1; reason = "installer path $InstallerPath does not exist" }
+    }
+
+    # Resolve the installer log path up-front so both success-mode reasons
+    # (e.g. 1638/3010) AND failure-mode reasons include it. The redist
+    # installer writes dd_vcredist_amd64_*.log under %TEMP%.
+    $logHint = "${env:TEMP}\dd_vcredist_amd64_*.log"
+
+    $process = $null
+    try {
+        $process = Start-Process -FilePath $InstallerPath -ArgumentList @('/install', '/quiet', '/norestart') -PassThru -ErrorAction Stop
+        $exited = $process.WaitForExit($TimeoutSeconds * 1000)
+        if (-not $exited) {
+            # $pid is a read-only AUTOMATIC variable in PowerShell (the running
+            # pwsh's own PID) — assigning to it throws under StrictMode + Stop.
+            # Use a renamed local so the timeout-kill diagnostic survives.
+            $killedPid = $process.Id
+            try { $process.Kill() } catch { } # best-effort
+            # WHY blocking WaitForExit() after Kill(): without it, the
+            # Process object may still hold an unsignaled handle while the
+            # kernel finishes process termination, leading to handle leaks
+            # under repeated bootstrap loops. The unbounded WaitForExit()
+            # is a finite wait in practice (Kill() targets STATUS_CONTROL_C
+            # / TerminateProcess which the kernel completes in milliseconds).
+            try { $process.WaitForExit() } catch { }
+            return @{ success = $false; exitCode = -1; reason = "installer did not exit within $TimeoutSeconds seconds; killed process $killedPid (see $logHint)" }
+        }
+        $code = $process.ExitCode
+        switch ($code) {
+            0 { return @{ success = $true; exitCode = $code; reason = "installer reported success (exit 0); log: $logHint" } }
+            1638 { return @{ success = $true; exitCode = $code; reason = "newer version already installed (exit 1638; idempotent); log: $logHint" } }
+            3010 { return @{ success = $true; exitCode = $code; reason = "success-restart-required (exit 3010; a reboot is recommended but not enforced here); log: $logHint" } }
+            1602 { return @{ success = $false; exitCode = $code; reason = "user cancel (exit 1602); log: $logHint" } }
+            1603 { return @{ success = $false; exitCode = $code; reason = "fatal install error (exit 1603); see $logHint" } }
+            default { return @{ success = $false; exitCode = $code; reason = "unrecognized installer exit code $code; see $logHint" } }
+        }
+    } catch {
+        $message = $_.Exception.Message
+        # Detect the Access Denied case via exception SHAPE (not English
+        # regex). Surface it as a specific actionable error.
+        if (Test-IsAccessDeniedException -ErrorRecord $_) {
+            return @{ success = $false; exitCode = -1; reason = "access denied (likely non-admin): $message" }
+        }
+        return @{ success = $false; exitCode = -1; reason = "Start-Process threw: $message" }
+    } finally {
+        # WHY Dispose(): Process is IDisposable and holds a kernel handle
+        # to the child process even after exit. Repeated bootstrap runs
+        # without Dispose accumulate handles and (eventually) GDI/User
+        # objects via the parent token. Wrap in try/catch because Dispose
+        # itself can throw if the handle was already cleaned up.
+        if ($null -ne $process) {
+            try { $process.Dispose() } catch { }
+        }
+    }
+}
+
+function Install-VcRedist {
+    # Download + Authenticode verify + install + post-install probe. Returns
+    # hashtable @{ success = $bool; reason = $string }. NEVER throws -- every
+    # failure is captured and the call site emits an annotation from $reason.
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][int]$DownloadTimeoutSeconds,
+        [Parameter(Mandatory = $true)][int]$InstallTimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    if (-not (Test-IsWindowsHost)) {
+        return @{ success = $false; reason = "not a Windows host" }
+    }
+
+    $download = Invoke-VcRedistDownload -Url $Url -TimeoutSeconds $DownloadTimeoutSeconds
+    if (-not $download.success) {
+        return @{ success = $false; reason = "download failed: $($download.reason)" }
+    }
+
+    try {
+        # WHY signature verification BEFORE exec: even though
+        # [ValidatePattern] pins the URL to Microsoft hosts, a hostile
+        # man-in-the-middle (or compromised CDN entry) could serve a
+        # binary that looks legit but is not Microsoft-signed. The
+        # Authenticode signature anchors trust at the Microsoft certificate.
+        $sigCheck = Test-VcRedistAuthenticodeSignature -FilePath $download.path
+        if (-not $sigCheck.valid) {
+            return @{ success = $false; reason = "Authenticode signature check failed: $($sigCheck.reason). Refusing to execute downloaded installer." }
+        }
+
+        $install = Invoke-VcRedistInstaller -InstallerPath $download.path -TimeoutSeconds $InstallTimeoutSeconds
+        if (-not $install.success) {
+            return @{ success = $false; reason = "installer failed (exit $($install.exitCode)): $($install.reason)" }
+        }
+
+        # WHY a file-level post-install probe (in addition to the registry
+        # check inside Test-VcRedistInstalled): the installer can report
+        # success exit 0 even when the kernel cancelled mid-extract (rare
+        # but observed after Defender quarantine of a DLL). The OS loader
+        # cares about the actual files on disk -- if ANY of the three are
+        # missing post-install, we know the install lied. F8/F15.
+        $fileProbe = Test-VcRedistFilesOnDisk
+        if (-not $fileProbe.present) {
+            $missingList = ($fileProbe.missing -join ', ')
+            return @{ success = $false; reason = "installer reported success (exit $($install.exitCode)) but post-install file probe missing: $missingList. check ${env:TEMP}\dd_vcredist_amd64_*.log" }
+        }
+
+        # Post-install re-probe: file probe passed; combine with registry
+        # check via Test-VcRedistInstalled for a final canonical answer.
+        if (-not (Test-VcRedistInstalled)) {
+            return @{ success = $false; reason = "installer reported success (exit $($install.exitCode)) but post-install probe still shows not-installed; check ${env:TEMP}\dd_vcredist_amd64_*.log" }
+        }
+
+        if ($install.exitCode -eq 3010) {
+            Write-CiWarning "VC++ redist installer requested a reboot (exit 3010). The runtime is installed but a reboot is recommended before the next Unity job."
+        }
+        return @{ success = $true; reason = $install.reason }
+    } finally {
+        # Best-effort cleanup of the downloaded installer (we have what we need).
+        try { Remove-Item -LiteralPath $download.path -Force -ErrorAction SilentlyContinue } catch { }
+    }
+}
+
+function Test-LongPathsEnabled {
+    # Mirrors Test-WindowsLongPathSupport in ensure-editor.ps1 (read it for
+    # style) -- registry-only probe; honors the same DXM_UNITY_FAKE_LONGPATHS_ENABLED
+    # test override so contract tests can deterministically exercise both
+    # branches on every OS. Returns $true (enabled) / $false (disabled or
+    # unreadable). NEVER throws. Difference from ensure-editor.ps1: we
+    # collapse the $null "unreadable" case into $false here, because the
+    # bootstrap WANTS to remediate any non-true state.
+    if ($env:DXM_UNITY_FAKE_LONGPATHS_ENABLED -eq '1') {
+        return $true
+    }
+    if ($env:DXM_UNITY_FAKE_LONGPATHS_ENABLED -eq '0') {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+    try {
+        $value = Get-ItemPropertyValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -ErrorAction Stop
+        if ($null -eq $value) {
+            return $false
+        }
+        return ([int]$value -ne 0)
+    } catch {
+        return $false
+    }
+}
+
+function Enable-LongPaths {
+    # Sets the LongPathsEnabled DWORD to 1. Requires HKLM write -- on a
+    # non-admin shell New-ItemProperty throws "Requested registry access is
+    # not allowed". We catch that and convert to a specific actionable
+    # ::error:: at the call site. Returns @{ success; reason }. NEVER throws.
+    if (-not (Test-IsWindowsHost)) {
+        return @{ success = $false; reason = "not a Windows host" }
+    }
+    # WHY pre-check Test-IsAdministrator: catches the access-denied case
+    # locale-invariantly BEFORE the cmdlet throws, so the failure reason
+    # is deterministic regardless of Windows display language.
+    if (-not (Test-IsAdministrator)) {
+        return @{ success = $false; reason = "not running as Administrator; HKLM write of LongPathsEnabled requires elevation" }
+    }
+    try {
+        New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -Value 1 -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+        # Re-probe to confirm the write actually landed.
+        if (Test-LongPathsEnabled) {
+            return @{ success = $true; reason = "LongPathsEnabled set to 1 (re-probe confirmed)" }
+        }
+        return @{ success = $false; reason = "New-ItemProperty returned without throwing but re-probe still reports disabled" }
+    } catch {
+        $message = $_.Exception.Message
+        if (Test-IsAccessDeniedException -ErrorRecord $_) {
+            return @{ success = $false; reason = "access denied (likely non-admin): $message" }
+        }
+        return @{ success = $false; reason = "New-ItemProperty threw: $message" }
+    }
+}
+
+function Test-DefenderExclusionPathAllowed {
+    # WHY: previously the bootstrap would happily forward any string in
+    # $env:RUNNER_WORKSPACE to Add-MpPreference, including pathological
+    # values like 'C:\' or '\' which would whitelist the ENTIRE filesystem
+    # from Defender on-access scanning -- a massive privilege amplification
+    # (F2/F10). This helper enforces an allow-list:
+    #   1. Must start with $UnityInstallRoot prefix, OR
+    #   2. Contain a known runner workspace fragment (\_work\,
+    #      \actions-runner\, \runners\), OR
+    #   3. Match nothing on the allow-list -> reject.
+    # We also reject single drive roots and any string shorter than 8 chars
+    # as a coarse-grained sanity check.
+    # Returns $true if the path is safe to exclude; $false otherwise.
+    # NEVER throws.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$UnityInstallRoot
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $false
+    }
+
+    # Reject single-drive roots: 'C:', 'C:\', 'C:/', 'D:\', etc. The regex
+    # below tolerates either separator and an optional trailing one.
+    if ($Path -match '^[A-Za-z]:[\\/]?$') {
+        return $false
+    }
+
+    # Reject obviously-too-short paths. Most legitimate paths are much
+    # longer; 8 chars is well below 'C:\Unity'.
+    if ($Path.Length -lt 8) {
+        return $false
+    }
+
+    # Reject UNC roots like '\\server\share' without a subpath.
+    if ($Path -match '^[\\/]+[^\\/]+[\\/][^\\/]+[\\/]?$') {
+        # OK: '\\server\share\sub'. NOT OK: '\\server\share' or '\\server\share\'.
+        # The simple regex above matches `\\server\share` -- so reject.
+        # (A subpath would produce two more `\sub` segments and not match.)
+        if ($Path -notmatch '[\\/].+[\\/].+[\\/].+') {
+            return $false
+        }
+    }
+
+    # Comparison must be case-insensitive on Windows paths.
+    $cmp = [System.StringComparison]::OrdinalIgnoreCase
+
+    # Rule 1: prefix match against UnityInstallRoot. Use StartsWith with the
+    # case-insensitive comparer rather than a regex match (UnityInstallRoot
+    # is unsanitized user input and could contain regex metacharacters).
+    # C4 (final-review nit): require a path-separator boundary after the
+    # prefix so `C:\Unity\Editors` does NOT accidentally match a sibling
+    # directory like `C:\Unity\EditorsBackup\...`. Equality (exact match)
+    # is also allowed -- the root itself is a valid exclusion target.
+    if (-not [string]::IsNullOrWhiteSpace($UnityInstallRoot)) {
+        $rootNoTrail = $UnityInstallRoot.TrimEnd('\', '/')
+        if ([string]::Equals($Path, $rootNoTrail, $cmp) -or
+            $Path.StartsWith($rootNoTrail + '\', $cmp) -or
+            $Path.StartsWith($rootNoTrail + '/', $cmp)) {
+            return $true
+        }
+    }
+
+    # Rule 2: contains a known runner workspace fragment.
+    $workspaceFragments = @('\_work\', '/_work/', '\actions-runner\', '/actions-runner/', '\runners\', '/runners/')
+    foreach ($frag in $workspaceFragments) {
+        if ($Path.IndexOf($frag, $cmp) -ge 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-DefenderExclusionPaths {
+    # Returns the array of paths to add to Defender exclusions. Always
+    # includes $UnityInstallRoot; additionally includes $env:RUNNER_WORKSPACE
+    # when defined (the GitHub Actions runner workspace dir holds the
+    # Unity Library cache that Defender on-access scanning would otherwise
+    # thrash). De-duplicates by normalized path. Untrusted/suspicious paths
+    # are rejected via Test-DefenderExclusionPathAllowed -- a rejected path
+    # produces a Write-CiWarning but does not abort.
+    #
+    # IMPORTANT: callers MUST splat the return value with @() at the call
+    # site so an empty-array return survives the PowerShell-pipeline
+    # unwrap. Returning an empty List[string].ToArray() unwraps to
+    # AutomationNull, which would then fail to bind to a Mandatory
+    # [string[]] parameter downstream (F1).
+    param([Parameter(Mandatory = $true)][string]$UnityInstallRoot)
+
+    $candidates = New-Object 'System.Collections.Generic.List[string]'
+    if (-not [string]::IsNullOrWhiteSpace($UnityInstallRoot)) {
+        $candidates.Add($UnityInstallRoot) | Out-Null
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:RUNNER_WORKSPACE)) {
+        $candidates.Add($env:RUNNER_WORKSPACE) | Out-Null
+    }
+
+    # Validate each candidate against the allow-list.
+    $validated = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($p in $candidates) {
+        if (Test-DefenderExclusionPathAllowed -Path $p -UnityInstallRoot $UnityInstallRoot) {
+            $validated.Add($p) | Out-Null
+        } else {
+            Write-CiWarning "rejecting suspicious exclusion path '$p' (not in allow-list; would amplify Defender exclusions). Allowed: paths under UnityInstallRoot ('$UnityInstallRoot') or containing \_work\ / \actions-runner\ / \runners\."
+        }
+    }
+
+    # De-dup case-insensitively (Windows paths are case-insensitive).
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $result = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($p in $validated) {
+        if ($seen.Add($p)) {
+            $result.Add($p) | Out-Null
+        }
+    }
+    # NOTE: returning .ToArray() on an empty list unwraps to AutomationNull
+    # in the PowerShell pipeline. Callers must @()-wrap the call to keep an
+    # empty array shape; we document that contract on the param block above.
+    return $result.ToArray()
+}
+
+function Test-DefenderAvailable {
+    # Returns $true iff Get-MpPreference is callable AND returns a
+    # non-null object. Defender may be disabled, uninstalled, or missing
+    # the Defender PowerShell module entirely on Server Core SKUs.
+    # NEVER throws.
+    #
+    # Side-effect: on success, caches the resolved $pref object in
+    # $script:DxmDefenderPref so callers can read ExclusionPath without
+    # racing a second Get-MpPreference call (F21). The cache is local to
+    # this script-scope variable; tests that re-import the script start
+    # with a clean cache automatically.
+    if (-not (Test-IsWindowsHost)) {
+        return $false
+    }
+    try {
+        $cmd = Get-Command -Name 'Get-MpPreference' -ErrorAction SilentlyContinue
+        if (-not $cmd) {
+            return $false
+        }
+        $pref = Get-MpPreference -ErrorAction Stop
+        if ($null -eq $pref) {
+            return $false
+        }
+        $script:DxmDefenderPref = $pref
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Test-DefenderExclusion {
+    # Returns $true iff $Path appears (case-insensitively) in the current
+    # Defender ExclusionPath set. Caller MUST first verify Test-DefenderAvailable.
+    # Uses $script:DxmDefenderPref when available (cached by
+    # Test-DefenderAvailable) to avoid the race where Get-MpPreference
+    # disappears between the availability probe and this call.
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+    try {
+        $pref = $null
+        # Use cached pref if available.
+        try { $pref = $script:DxmDefenderPref } catch { $pref = $null }
+        if ($null -eq $pref) {
+            $pref = Get-MpPreference -ErrorAction Stop
+        }
+        $existing = @($pref.ExclusionPath)
+        foreach ($e in $existing) {
+            if ($null -eq $e) { continue }
+            if ([string]::Equals([string]$e, $Path, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+        return $false
+    } catch {
+        return $false
+    }
+}
+
+function Add-DefenderExclusion {
+    # Adds $Path to Defender ExclusionPath. Returns @{ success; reason }.
+    # NEVER throws. Add-MpPreference is idempotent w.r.t. duplicates (the
+    # cmdlet collapses), but we still gate on Test-DefenderExclusion so the
+    # idempotent re-run path emits a ::notice:: rather than a redundant
+    # "Add succeeded".
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-IsWindowsHost)) {
+        return @{ success = $false; reason = "not a Windows host" }
+    }
+    # WHY pre-check admin: catches non-admin BEFORE the cmdlet throws, so
+    # the failure reason does not depend on a locale-specific exception
+    # message. Add-MpPreference requires admin on every Windows SKU.
+    if (-not (Test-IsAdministrator)) {
+        return @{ success = $false; reason = "not running as Administrator; Add-MpPreference requires elevation" }
+    }
+    try {
+        Add-MpPreference -ExclusionPath $Path -ErrorAction Stop
+        # Invalidate the cached pref so subsequent Test-DefenderExclusion
+        # calls see the freshly added entry.
+        $script:DxmDefenderPref = $null
+        return @{ success = $true; reason = "Add-MpPreference applied to $Path" }
+    } catch {
+        $message = $_.Exception.Message
+        if (Test-IsAccessDeniedException -ErrorRecord $_) {
+            return @{ success = $false; reason = "access denied (Defender ExclusionPath requires admin): $message" }
+        }
+        return @{ success = $false; reason = "Add-MpPreference threw: $message" }
+    }
+}
+
+function Test-PowerShell7Installed {
+    # Returns $true iff Get-Command pwsh resolves. Note: this script itself
+    # runs in either Windows PowerShell 5.1 or PowerShell 7+ -- it does NOT
+    # require pwsh to load. The check is purely to ensure subsequent Unity
+    # CI steps (which DO `shell: pwsh`) will find it on PATH.
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+    try {
+        $cmd = Get-Command -Name 'pwsh' -ErrorAction SilentlyContinue
+        return ($null -ne $cmd)
+    } catch {
+        return $false
+    }
+}
+
+function Install-PowerShell7 {
+    # Installs PowerShell 7 via winget. We use winget specifically because:
+    #  1. It is the Microsoft-blessed package manager (no third-party sites).
+    #  2. With --scope user, it puts pwsh on the runner-service user's PATH
+    #     -- exactly where subsequent CI steps need it, and the user-scope
+    #     install does NOT require admin elevation (works under the
+    #     NETWORK SERVICE / local user the runner usually runs as).
+    #  3. It accepts --silent + --accept-source-agreements + --accept-package-agreements
+    #     to run non-interactively (required for CI).
+    # Returns @{ success; reason }. NEVER throws.
+    if (-not (Test-IsWindowsHost)) {
+        return @{ success = $false; reason = "not a Windows host" }
+    }
+
+    $winget = Get-Command -Name 'winget' -ErrorAction SilentlyContinue
+    if (-not $winget) {
+        return @{ success = $false; reason = "winget is not on PATH; install App Installer (winget) from the Microsoft Store, or manually download pwsh from https://github.com/PowerShell/PowerShell/releases" }
+    }
+
+    try {
+        # WHY $wingetArgs (not $args): $args is a PowerShell AUTOMATIC
+        # variable (reserved for positional inputs); reassigning it inside
+        # a function silently clobbers caller-side $args. Renamed to avoid
+        # the foot-gun (F5).
+        # WHY --scope user: see function header.
+        $wingetArgs = @(
+            'install',
+            '--id', 'Microsoft.PowerShell',
+            '--source', 'winget',
+            '--scope', 'user',
+            '--silent',
+            '--accept-source-agreements',
+            '--accept-package-agreements'
+        )
+        $process = Start-Process -FilePath $winget.Source -ArgumentList $wingetArgs -PassThru -Wait -NoNewWindow -ErrorAction Stop
+        $code = $process.ExitCode
+        # C6 (final-review nit): winget's User-scope install updates the
+        # User PATH registry value, but the CURRENT process's $env:Path was
+        # captured at spawn and isn't refreshed. The post-install
+        # Test-PowerShell7Installed re-detect via `Get-Command pwsh` would
+        # false-negative until the next CI step. Refresh $env:Path from the
+        # Machine + User registry views BEFORE the success return so the
+        # re-detect sees the newly installed pwsh. Wrap in try/catch:
+        # missing/unreadable PATH from either scope is non-fatal (winget
+        # itself succeeded; the next process will have the correct PATH).
+        if ($code -eq 0 -or $code -eq -1978335189 -or $code -eq -1978335212 -or $code -eq -1978335153 -or $code -eq -1978334975) {
+            try {
+                $machinePath = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
+                $userPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+                $segments = @($env:Path, $machinePath, $userPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                $env:Path = ($segments -join ';')
+            } catch { }
+        }
+        if ($code -eq 0) {
+            return @{ success = $true; reason = "winget install Microsoft.PowerShell exit 0" }
+        }
+        # WHY these specific codes are success: winget treats "already
+        # installed / no applicable update / etc." as nonzero exits.
+        # Idempotent re-runs of this bootstrap MUST not flip the prereq to
+        # 'failed' just because pwsh is already there. Reference:
+        #   https://github.com/microsoft/winget-cli/blob/master/doc/windows/package-manager/winget/returnCodes.md
+        # The decimal values below are the signed-int form of the original
+        # 0x8A150xxx codes (winget propagates HRESULT via process exit).
+        switch ($code) {
+            -1978335189 {
+                # 0x8A15002B APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE
+                return @{ success = $true; reason = "winget reports no applicable update (exit $code; already at latest, idempotent)" }
+            }
+            -1978335212 {
+                # 0x8A150014 APPINSTALLER_CLI_ERROR_NO_APPLICABLE_INSTALLER
+                return @{ success = $true; reason = "winget reports no applicable installer (exit $code; treated as already-installed for idempotency)" }
+            }
+            -1978335153 {
+                # 0x8A15004F APPINSTALLER_CLI_ERROR_NO_APPLICABLE_UPGRADE
+                return @{ success = $true; reason = "winget reports no applicable upgrade (exit $code; already at latest, idempotent)" }
+            }
+            -1978334975 {
+                # 0x8A150101 APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE (alt path)
+                return @{ success = $true; reason = "winget reports update not applicable (exit $code; already installed, idempotent)" }
+            }
+            default {
+                return @{ success = $false; reason = "winget install Microsoft.PowerShell exited with code $code" }
+            }
+        }
+    } catch {
+        return @{ success = $false; reason = "Start-Process winget threw: $($_.Exception.Message)" }
+    }
+}
+
+function Test-UcrtPresent {
+    # The Universal C Runtime (UCRT) ships preinstalled on Windows 10+/Server
+    # 2019+. On those modern hosts UCRT is always present and this returns
+    # $true silently. On downlevel hosts (Windows 7/8/Server 2012R2) we
+    # check for KB2999226 via Get-HotFix and return its presence.
+    # NEVER throws. Returns $true on non-Windows for the same vacuous-OK
+    # reason as Test-VcRedistInstalled.
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+    try {
+        $os = [Environment]::OSVersion.Version
+        # Build is what differentiates Win10+/Server2019+ from older SKUs:
+        # OSVersion.Version.Major returns 10 for Win10, Server2016, Server2019, Server2022,
+        # Win11. Pre-Win10 returns 6 (Win7/8/Server2012/Server2012R2). On 10+ UCRT
+        # is part of the OS image.
+        if ($os.Major -ge 10) {
+            return $true
+        }
+        # Downlevel: probe for KB2999226 (UCRT update for Win7SP1/Win8.1/Server2008R2/Server2012R2).
+        # Get-HotFix is slow but reliable. The fast WMI alternative requires
+        # admin so we accept the cost.
+        $kb = Get-HotFix -Id 'KB2999226' -ErrorAction SilentlyContinue
+        return ($null -ne $kb)
+    } catch {
+        return $false
+    }
+}
+
+function Invoke-BootstrapStep {
+    # Generic recording/orchestration wrapper for a single prereq. Always
+    # runs Detect; if missing AND not DetectOnly, runs Install + re-Detect.
+    # Returns hashtable @{ name; finalState; detail }. NEVER throws.
+    #
+    #   finalState options:
+    #     'ok'             -- present (no install needed) OR install succeeded
+    #     'installed'      -- install succeeded this run
+    #     'install-failed' -- install path returned success=$false (admin issue,
+    #                         download failure, installer exit, etc.)
+    #     'missing'        -- DetectOnly mode + detect returned $false
+    #     'skipped'        -- intentionally not applicable (e.g. Defender absent)
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][scriptblock]$DetectFn,
+        [Parameter(Mandatory = $true)][scriptblock]$InstallFn,
+        [bool]$DetectOnly = $false
+    )
+
+    Write-Host "::group::bootstrap step: $Name"
+    try {
+        $present = $false
+        try {
+            $present = [bool](& $DetectFn)
+        } catch {
+            Write-CiError "$Name detection threw: $($_.Exception.Message)"
+            return @{ name = $Name; finalState = 'install-failed'; detail = "detect threw: $($_.Exception.Message)" }
+        }
+
+        if ($present) {
+            Write-CiNotice "$Name already present (no action needed)"
+            return @{ name = $Name; finalState = 'ok'; detail = 'already present' }
+        }
+
+        if ($DetectOnly) {
+            Write-CiWarning "$Name is MISSING (DetectOnly mode; not installing)"
+            return @{ name = $Name; finalState = 'missing'; detail = 'missing in DetectOnly mode' }
+        }
+
+        Write-Host "$Name is missing -- attempting install"
+        $result = $null
+        try {
+            $result = & $InstallFn
+        } catch {
+            Write-CiError "$Name install threw: $($_.Exception.Message)"
+            return @{ name = $Name; finalState = 'install-failed'; detail = "install threw: $($_.Exception.Message)" }
+        }
+
+        if ($null -eq $result -or -not ($result -is [hashtable])) {
+            Write-CiError "$Name install function returned unexpected payload (expected hashtable); treating as failure"
+            return @{ name = $Name; finalState = 'install-failed'; detail = 'install returned non-hashtable' }
+        }
+
+        $success = $false
+        try { $success = [bool]$result.success } catch { $success = $false }
+        $reason = ''
+        try { $reason = [string]$result.reason } catch { $reason = '' }
+
+        if (-not $success) {
+            Write-CiError "$Name install FAILED: $reason"
+            return @{ name = $Name; finalState = 'install-failed'; detail = "install failed: $reason" }
+        }
+
+        # Re-probe to confirm install actually fixed the detection.
+        $postPresent = $false
+        try {
+            $postPresent = [bool](& $DetectFn)
+        } catch {
+            Write-CiError "$Name post-install re-detect threw: $($_.Exception.Message)"
+            return @{ name = $Name; finalState = 'install-failed'; detail = "post-install detect threw: $($_.Exception.Message)" }
+        }
+        if (-not $postPresent) {
+            Write-CiError "$Name install reported success but post-install detection still says missing: $reason"
+            return @{ name = $Name; finalState = 'install-failed'; detail = "install ok but re-detect failed; reason: $reason" }
+        }
+
+        Write-CiNotice "$Name installed: $reason"
+        return @{ name = $Name; finalState = 'installed'; detail = $reason }
+    } finally {
+        Write-Host "::endgroup::"
+    }
+}
+
+function Invoke-DefenderBootstrap {
+    # Wraps Defender exclusion logic into one step that produces a single
+    # final-state record. Defender is structurally different from the other
+    # prereqs: it has N paths to configure rather than 1, and the cmdlet may
+    # be missing entirely on hosts without Defender (Server Core, Defender
+    # disabled). We handle those branches inline so the per-path failures
+    # roll up into a single summary entry.
+    #
+    # WHY [AllowEmptyCollection]: callers @()-wrap an array that may be
+    # empty (e.g. when every candidate path was rejected by the allow-list).
+    # An empty [string[]] is a valid input -- the explicit "no paths
+    # configured" branch handles it -- so a Mandatory+empty combination
+    # would otherwise prevent the function from ever being called in that
+    # legitimate case (F1).
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [string[]]$Paths,
+        [bool]$DetectOnly = $false
+    )
+
+    Write-Host "::group::bootstrap step: defender-exclusion"
+    try {
+        if (-not (Test-DefenderAvailable)) {
+            Write-CiNotice "Defender not present (Get-MpPreference unavailable); skipping exclusion configuration."
+            return @{ name = 'defender-exclusion'; finalState = 'skipped'; detail = 'Defender not available' }
+        }
+
+        if ($null -eq $Paths -or $Paths.Length -eq 0) {
+            Write-CiNotice "No Defender exclusion paths configured; skipping."
+            return @{ name = 'defender-exclusion'; finalState = 'skipped'; detail = 'no paths configured' }
+        }
+
+        $missing = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($p in $Paths) {
+            if (-not (Test-DefenderExclusion -Path $p)) {
+                $missing.Add($p) | Out-Null
+            } else {
+                Write-CiNotice "Defender exclusion already present for $p"
+            }
+        }
+
+        if ($missing.Count -eq 0) {
+            return @{ name = 'defender-exclusion'; finalState = 'ok'; detail = "all $($Paths.Length) path(s) already excluded" }
+        }
+
+        if ($DetectOnly) {
+            $list = ($missing -join ', ')
+            Write-CiWarning "Defender exclusion(s) MISSING (DetectOnly mode): $list"
+            return @{ name = 'defender-exclusion'; finalState = 'missing'; detail = "missing in DetectOnly mode: $list" }
+        }
+
+        $failures = New-Object 'System.Collections.Generic.List[string]'
+        $installed = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($p in $missing) {
+            $r = Add-DefenderExclusion -Path $p
+            if ($r.success) {
+                $installed.Add($p) | Out-Null
+                Write-CiNotice "Defender exclusion added for $p"
+            } else {
+                $failures.Add("$p ($($r.reason))") | Out-Null
+                Write-CiError "Defender exclusion FAILED for ${p}: $($r.reason)"
+            }
+        }
+
+        if ($failures.Count -gt 0) {
+            return @{ name = 'defender-exclusion'; finalState = 'install-failed'; detail = "failed for $($failures.Count): $($failures -join '; ')" }
+        }
+        return @{ name = 'defender-exclusion'; finalState = 'installed'; detail = "added: $($installed -join ', ')" }
+    } finally {
+        Write-Host "::endgroup::"
+    }
+}
+
+function Invoke-UcrtBootstrap {
+    # Wraps the UCRT prereq: silent skip on modern Windows, error with
+    # manual-install link on downlevel hosts missing KB2999226. We do NOT
+    # auto-install KB2999226 because the MSU URL is host-architecture-specific
+    # and the operator action is one-time.
+    param([bool]$DetectOnly = $false)
+
+    Write-Host "::group::bootstrap step: ucrt"
+    try {
+        if (-not (Test-IsWindowsHost)) {
+            Write-CiNotice "UCRT step skipped (not Windows)"
+            return @{ name = 'ucrt'; finalState = 'skipped'; detail = 'not Windows' }
+        }
+        $os = [Environment]::OSVersion.Version
+        if ($os.Major -ge 10) {
+            Write-CiNotice "UCRT shipped with Windows $($os) (Win10+/Server2019+ has UCRT built in); no action needed."
+            return @{ name = 'ucrt'; finalState = 'ok'; detail = "Windows $os has UCRT built in" }
+        }
+        if (Test-UcrtPresent) {
+            Write-CiNotice "UCRT (KB2999226) detected on downlevel Windows $os"
+            return @{ name = 'ucrt'; finalState = 'ok'; detail = "KB2999226 present on $os" }
+        }
+        # Downlevel + KB missing -- this is an operator action; emit a
+        # clear ::error:: with the manual-install link. Do not try to
+        # auto-download an MSU (size + arch + KB ID varies per host).
+        $link = 'https://support.microsoft.com/help/2999226'
+        Write-CiError "UCRT (KB2999226) is missing on downlevel Windows $os. Unity may fail to start without it. Install KB2999226 manually from $link (operator action; this bootstrap does NOT auto-install MSU files)."
+        if ($DetectOnly) {
+            return @{ name = 'ucrt'; finalState = 'missing'; detail = "KB2999226 missing on $os (DetectOnly)" }
+        }
+        return @{ name = 'ucrt'; finalState = 'install-failed'; detail = "KB2999226 missing on $os (manual install required)" }
+    } finally {
+        Write-Host "::endgroup::"
+    }
+}
+
+function Format-BootstrapSummary {
+    # Produces the single-line ::notice:: summary expected by the
+    # workflow/composite. Each entry is "name=state"; states are short
+    # ('ok', 'installed', 'install-failed', 'missing', 'skipped').
+    # WHY Write-CiWarning on the catch path (F22): silently swallowing
+    # malformed results made debugging "summary shows no entries" hard.
+    # Surface the malformed object so the operator can see it.
+    param([Parameter(Mandatory = $true)][object[]]$Results)
+
+    $parts = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($r in $Results) {
+        if ($null -eq $r) { continue }
+        $name = ''
+        $state = ''
+        try {
+            $name = [string]$r.name
+            $state = [string]$r.finalState
+        } catch {
+            Write-CiWarning "Format-BootstrapSummary: malformed result entry: $r ($($_.Exception.Message))"
+            $name = '<unknown>'
+            $state = '<unknown>'
+        }
+        if ([string]::IsNullOrWhiteSpace($name)) { $name = '<unknown>' }
+        if ([string]::IsNullOrWhiteSpace($state)) { $state = '<unknown>' }
+        $parts.Add("$name=$state") | Out-Null
+    }
+    return ($parts -join ' ')
+}
+
+# --- Top-level dispatcher -----------------------------------------------------
+# This is the ONLY place that invokes the prereq functions. Everything above is
+# Linux-parse-safe (no registry, no Defender, no winget calls at module load).
+# The dispatcher early-returns on non-Windows with a clear ::error::, so the
+# top-level body never reaches the install paths on Linux/macOS.
+
+function Invoke-WindowsRunnerBootstrap {
+    param(
+        [Parameter(Mandatory = $true)][bool]$DetectOnly,
+        [Parameter(Mandatory = $true)][string]$UnityInstallRoot,
+        [Parameter(Mandatory = $true)][string]$VcRedistUrl,
+        [Parameter(Mandatory = $true)][int]$DownloadTimeoutSeconds,
+        [Parameter(Mandatory = $true)][int]$InstallTimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    if (-not (Test-IsWindowsHost)) {
+        # Hard-fail on non-Windows EXCEPT in DetectOnly mode: tests want to
+        # confirm the script parses + the gate fires. DetectOnly emits a
+        # ::notice:: instead so test runs on Linux don't trip an ::error::.
+        if ($DetectOnly) {
+            Write-CiNotice "bootstrap-windows-runner.ps1 detected non-Windows host; nothing to do in DetectOnly mode. skipping (not Windows)"
+            return 0
+        }
+        Write-CiError "bootstrap-windows-runner.ps1 is Windows-only. Detected directory separator '$([System.IO.Path]::DirectorySeparatorChar)' which is not '\'. Run this on a self-hosted Windows runner or via .github/workflows/runner-bootstrap.yml."
+        return 1
+    }
+
+    $mode = if ($DetectOnly) { 'DetectOnly' } else { 'Install' }
+    $isAdmin = Test-IsAdministrator
+    Write-CiNotice "bootstrap-windows-runner.ps1 mode=$mode admin=$isAdmin UnityInstallRoot=$UnityInstallRoot"
+    if (-not $isAdmin -and -not $DetectOnly) {
+        # Not a hard-fail (Defender exclusion + Defender preference itself may
+        # work in some configurations; PowerShell 7 install via winget per-user
+        # works without admin), but flag explicitly so any subsequent
+        # 'access denied' has context.
+        Write-CiWarning "bootstrap-windows-runner.ps1 running NON-admin. Prereqs that require HKLM writes (VC++ redist install, LongPathsEnabled) will fail with Access Denied. To remediate: run this script from an elevated PowerShell, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
+    }
+
+    $results = New-Object 'System.Collections.Generic.List[object]'
+
+    # Step 1: VC++ redist (THE root cause of the DAD-MACHINE failure).
+    $results.Add((
+            Invoke-BootstrapStep -Name 'vcredist' -DetectOnly $DetectOnly `
+                -DetectFn { Test-VcRedistInstalled } `
+                -InstallFn { Install-VcRedist -Url $VcRedistUrl -DownloadTimeoutSeconds $DownloadTimeoutSeconds -InstallTimeoutSeconds $InstallTimeoutSeconds }
+        )) | Out-Null
+
+    # Step 2: Long-paths.
+    $results.Add((
+            Invoke-BootstrapStep -Name 'long-paths' -DetectOnly $DetectOnly `
+                -DetectFn { Test-LongPathsEnabled } `
+                -InstallFn { Enable-LongPaths }
+        )) | Out-Null
+
+    # Step 3: Defender exclusion (N paths -> 1 step). The @()-wrap is
+    # REQUIRED: Get-DefenderExclusionPaths returns ToArray() on a
+    # List[string], which unwraps to AutomationNull when empty. Without
+    # the @() splat, Invoke-DefenderBootstrap's Mandatory [string[]]$Paths
+    # would fail to bind on the empty-array path (F1).
+    $paths = @(Get-DefenderExclusionPaths -UnityInstallRoot $UnityInstallRoot)
+    $results.Add((Invoke-DefenderBootstrap -Paths $paths -DetectOnly $DetectOnly)) | Out-Null
+
+    # Step 4: PowerShell 7.
+    $results.Add((
+            Invoke-BootstrapStep -Name 'pwsh' -DetectOnly $DetectOnly `
+                -DetectFn { Test-PowerShell7Installed } `
+                -InstallFn { Install-PowerShell7 }
+        )) | Out-Null
+
+    # Step 5: UCRT (modern Windows: silent OK; downlevel: ::error:: + manual link).
+    $results.Add((Invoke-UcrtBootstrap -DetectOnly $DetectOnly)) | Out-Null
+
+    # Summary line + exit-code resolution.
+    $summary = Format-BootstrapSummary -Results $results
+    Write-CiNotice "bootstrap-windows-runner summary: $summary"
+
+    $anyFailed = $false
+    $anyMissing = $false
+    foreach ($r in $results) {
+        # F16: guard against $null in the result list. Format-BootstrapSummary
+        # already skips $null but the exit-code resolution did not.
+        if ($null -eq $r) { continue }
+        try {
+            $state = [string]$r.finalState
+            if ($state -eq 'install-failed') { $anyFailed = $true }
+            elseif ($state -eq 'missing') { $anyMissing = $true }
+        } catch {
+            # Treat a malformed entry as a missing prereq under DetectOnly
+            # and a hard failure otherwise. Surface a warning so the operator
+            # sees we recovered from a malformed entry.
+            Write-CiWarning "bootstrap-windows-runner: malformed result entry while computing exit code; treating as failure: $($_.Exception.Message)"
+            $anyFailed = $true
+        }
+    }
+
+    if ($anyFailed) {
+        Write-CiError "bootstrap-windows-runner: one or more prereqs failed to install. See individual ::error:: lines above. To remediate: run this script from an elevated PowerShell, or trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
+        return 1
+    }
+    if ($DetectOnly -and $anyMissing) {
+        Write-CiWarning "bootstrap-windows-runner (DetectOnly): one or more prereqs are missing; exit 2."
+        return 2
+    }
+    return 0
+}
+
+# Only execute the dispatcher when this script is INVOKED -- not when it is
+# dot-sourced by tests for function inspection. PSScriptRoot is reliable enough
+# here; tests that want to inspect functions can dot-source from a different
+# script.
+$invokedAsScript = $MyInvocation.InvocationName -ne '' -and $MyInvocation.InvocationName -ne '.'
+
+if ($invokedAsScript) {
+    # Per the import contract documented in .DESCRIPTION: session-level mode
+    # changes happen ONLY here, inside the invocation gate. Dot-source paths
+    # (tests doing `. ./bootstrap-windows-runner.ps1`) bypass this block and
+    # therefore do NOT see Set-StrictMode / $EAP / $PSNCUEAP leak.
+    Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
+
+    # Same rationale as scripts/unity/ensure-editor.ps1 lines 42-52: pin
+    # $PSNativeCommandUseErrorActionPreference = $false so LASTEXITCODE-based
+    # handling is authoritative across hosts/versions. PS 5.1 lacks this
+    # variable; the assignment is harmless + StrictMode-safe there (it just
+    # creates a regular variable in scope).
+    $PSNativeCommandUseErrorActionPreference = $false
+
+    $exit = Invoke-WindowsRunnerBootstrap `
+        -DetectOnly:$DetectOnly.IsPresent `
+        -UnityInstallRoot $UnityInstallRoot `
+        -VcRedistUrl $VcRedistUrl `
+        -DownloadTimeoutSeconds $DownloadTimeoutSeconds `
+        -InstallTimeoutSeconds $InstallTimeoutSeconds
+    exit $exit
+}

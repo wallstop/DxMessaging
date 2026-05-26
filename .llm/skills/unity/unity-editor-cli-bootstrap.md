@@ -60,6 +60,7 @@ related:
   - "unity-ci-matrix"
   - "headless-test-runner"
   - "unity-license-bootstrap"
+  - "unity-runner-host-prereqs"
 
 status: "stable"
 ---
@@ -192,6 +193,8 @@ Set `DXM_UNITY_DISABLE_EDITOR_REPAIR=1` only when debugging the installer itself
 
 After module validation, `ensure-editor.ps1` runs a native startup probe before the license lock. If startup fails, the script performs one managed reinstall AND re-runs `Ensure-UnityCiModules` with the selected profile, then probes again. A second startup failure is classified as host OS/runtime prerequisite damage (for example missing native DLLs such as `0xC0000135` / `STATUS_DLL_NOT_FOUND`), not a package/test failure.
 
+The `0xC0000135` failure mode has its own short-circuit: both probe sites emit a wrap-immune single-line `::error::` annotation BEFORE the throw and refuse to loop on a futile Unity reinstall (the missing DLL is on the OS, not in the Unity install). The host-OS prereqs themselves are remediated out-of-band by [Unity Runner Host Prerequisites](./unity-runner-host-prereqs.md) -- a per-job preflight composite (`.github/actions/assert-unity-host-prereqs`) auto-installs the Microsoft Visual C++ 2015-2022 Redistributable, Windows long-path support, Defender exclusions, and PowerShell 7, exporting `DXM_RUNNER_PREREQ_INSTALLED=1` on success so the short-circuit annotation can adjust the suggested cause when the preflight has already run.
+
 ## Verification
 
 - `scripts/__tests__/powershell-syntax.test.js` reparses the edited `.ps1`; keep it valid PowerShell 5.1.
@@ -202,6 +205,7 @@ After module validation, `ensure-editor.ps1` runs a native startup probe before 
 
 ## See Also
 
+- [Unity Runner Host Prerequisites](./unity-runner-host-prereqs.md)
 - [Unity CI Matrix](./unity-ci-matrix.md)
 - [Headless Test Runner](./headless-test-runner.md)
 - [Unity License Bootstrap](./unity-license-bootstrap.md)

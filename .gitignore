@@ -16,6 +16,14 @@ coverage/
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
+# Locally-downloaded CI artifacts.
+# `gh run download` (e.g. when inspecting a failed Unity job's provisioning
+# diagnostics) drops `<artifact-name>.zip` files in the repo root by default.
+# The Unity test workflow uploads `unity-provisioning-<unity-version>-<test-mode>`
+# artifacts (see .github/workflows/unity-tests.yml -> "Upload Unity
+# provisioning diagnostics"); downloads of those land here.
+unity-provisioning-*.zip
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

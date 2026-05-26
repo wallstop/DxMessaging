@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-24. Do not edit manually.
+> **Auto-generated** on 2026-05-26. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -9,7 +9,7 @@
 
 | Metric       | Value |
 | ------------ | ----- |
-| Total Skills | 165   |
+| Total Skills | 166   |
 | Categories   | 8     |
 
 ---
@@ -23,7 +23,7 @@
 - [Scripting](#scripting) (19)
 - [Solid](#solid) (15)
 - [Testing](#testing) (38)
-- [Unity](#unity) (9)
+- [Unity](#unity) (10)
 
 ---
 
@@ -58,7 +58,7 @@
 | [MkDocs Navigation Management](./documentation/mkdocs-navigation.md)                                  | [ok] 252   | [basic]        | [stable] | [risk: none] | documentation, mkdocs             |
 | [MkDocs Navigation Management Part 1](./documentation/mkdocs-navigation-part-1.md)                    | [draft] 71 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
 | [No PLAN Vocabulary in Shipping Content](./documentation/no-plan-vocabulary.md)                       | [ok] 154   | [basic]        | [stable] | [risk: none] | documentation, vocabulary         |
-| [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                                  | [ok] 256   | [basic]        | [stable] | [risk: none] | documentation, skills             |
+| [Skill File Sizing Guidelines](./documentation/skill-file-sizing.md)                                  | [ok] 258   | [basic]        | [stable] | [risk: none] | documentation, skills             |
 | [Skill File Sizing Guidelines Part 1](./documentation/skill-file-sizing-part-1.md)                    | [draft] 34 | [intermediate] | [stable] | [risk: low]  | migration, split                  |
 | [XML Documentation Standards](./documentation/documentation-xml-docs.md)                              | [ok] 191   | [basic]        | [stable] | [risk: none] | documentation, xml-docs           |
 
@@ -226,10 +226,11 @@
 | [Headless Unity Test Runner](./unity/headless-test-runner.md)               | [ok] 228   | [intermediate] | [stable] | [risk: none] | unity, testing       |
 | [MessageAwareComponent Base-Call Contract](./unity/base-call-contract.md)   | [warn] 267 | [intermediate] | [stable] | [risk: none] | unity, analyzer      |
 | [Unity CI Matrix](./unity/unity-ci-matrix.md)                               | [ok] 219   | [intermediate] | [stable] | [risk: low]  | unity, ci            |
-| [Unity Editor CLI Bootstrap](./unity/unity-editor-cli-bootstrap.md)         | [ok] 216   | [intermediate] | [stable] | [risk: none] | unity, cli           |
+| [Unity Editor CLI Bootstrap](./unity/unity-editor-cli-bootstrap.md)         | [ok] 220   | [intermediate] | [stable] | [risk: none] | unity, cli           |
 | [Unity License Bootstrap](./unity/unity-license-bootstrap.md)               | [ok] 240   | [basic]        | [stable] | [risk: none] | unity, license       |
 | [Unity License Return Guarantee](./unity/unity-license-return-guarantee.md) | [warn] 290 | [intermediate] | [stable] | [risk: none] | unity, serial        |
 | [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)           | [ok] 219   | [intermediate] | [stable] | [risk: high] | unity, performance   |
+| [Unity Runner Host Prerequisites](./unity/unity-runner-host-prereqs.md)     | [ok] 219   | [intermediate] | [stable] | [risk: none] | unity, windows       |
 | [UPM Test Harness](./unity/upm-test-harness.md)                             | [ok] 193   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---

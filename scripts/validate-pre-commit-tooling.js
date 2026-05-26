@@ -10,6 +10,7 @@
  * - Mutating pre-commit hooks must use run-and-restage / run-and-stage.
  * - YAML comment auto-wrap hook must use run-and-restage + require_serial.
  * - Markdown auto-fix pipeline must use run-and-restage + require_serial.
+ * - preflight:pre-commit must repair and validate .llm policy before hook parity.
  * - preflight:pre-commit must include YAML policy checks, including comment drift checks.
  */
 
@@ -36,6 +37,12 @@ const REQUIRED_NODE_TOOLING_COMMAND = "npm run validate:node-tooling";
 const REQUIRED_HOOK_MARKDOWN_COMMAND = "npm run validate:hook-markdown";
 const REQUIRED_CHANGED_DOCS_COMMAND = "npm run validate:changed-docs";
 const REQUIRED_LLM_MARKDOWN_COMMAND = "npm run validate:llm-markdown";
+const REQUIRED_SKILLS_VALIDATION_COMMAND = "npm run validate:skills";
+const REQUIRED_LLM_POLICY_REPAIR_COMMAND = "npm run repair:llm-policy";
+const REQUIRED_LLM_POLICY_COMMAND = "npm run validate:llm-policy";
+const REQUIRED_SKILLS_INDEX_REPAIR_COMMAND =
+  "node scripts/run-and-stage.js node scripts/generate-skills-index.js -- .llm/skills/index.md";
+const REQUIRED_SKILLS_INDEX_CHECK_COMMAND = "node scripts/generate-skills-index.js --check";
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_YAML_VALIDATION_COMMAND = "npm run check:yaml";
 const REQUIRED_YAML_COMMENTS_CHECK_COMMAND = "npm run check:yaml:comments";
@@ -258,6 +265,32 @@ function hasRequiredChangedDocsCommand(preflightScript) {
 
 function hasRequiredLlmMarkdownCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_LLM_MARKDOWN_COMMAND);
+}
+
+function hasRequiredSkillsValidationCommand(script) {
+  return hasRequiredPreflightCommand(script, REQUIRED_SKILLS_VALIDATION_COMMAND);
+}
+
+function hasRequiredLlmPolicyRepairCommand(script) {
+  return hasRequiredPreflightCommand(script, REQUIRED_LLM_POLICY_REPAIR_COMMAND);
+}
+
+function hasRequiredLlmPolicyCommand(script) {
+  return hasRequiredPreflightCommand(script, REQUIRED_LLM_POLICY_COMMAND);
+}
+
+function hasLlmPolicyRepairBeforeValidation(preflightScript) {
+  const repairIndex = preflightScript.indexOf(REQUIRED_LLM_POLICY_REPAIR_COMMAND);
+  const validateIndex = preflightScript.indexOf(REQUIRED_LLM_POLICY_COMMAND);
+  return repairIndex >= 0 && validateIndex >= 0 && repairIndex < validateIndex;
+}
+
+function hasRequiredSkillsIndexRepairCommand(script) {
+  return hasRequiredPreflightCommand(script, REQUIRED_SKILLS_INDEX_REPAIR_COMMAND);
+}
+
+function hasRequiredSkillsIndexCheckCommand(script) {
+  return hasRequiredPreflightCommand(script, REQUIRED_SKILLS_INDEX_CHECK_COMMAND);
 }
 
 function hasRequiredScriptsCspellCommand(preflightScript) {
@@ -915,15 +948,101 @@ function validatePreflightScriptPolicy(
     );
   }
 
-  if (!hasRequiredLlmMarkdownCommand(preflightScript)) {
+  if (!hasRequiredLlmPolicyRepairCommand(preflightScript)) {
     violations.push(
       new Violation(
         "preflight-script",
         1,
-        `preflight:pre-commit must include '${REQUIRED_LLM_MARKDOWN_COMMAND}' so .llm markdown policy violations are caught before hook-time.`,
+        `preflight:pre-commit must include '${REQUIRED_LLM_POLICY_REPAIR_COMMAND}' so generated .llm index drift is auto-repaired before validation.`,
         preflightScript
       )
     );
+  }
+
+  if (!hasRequiredLlmPolicyCommand(preflightScript)) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must include '${REQUIRED_LLM_POLICY_COMMAND}' so .llm skill size/schema, index, and markdown policy failures are caught before hook-time.`,
+        preflightScript
+      )
+    );
+  }
+
+  if (
+    hasRequiredLlmPolicyRepairCommand(preflightScript) &&
+    hasRequiredLlmPolicyCommand(preflightScript) &&
+    !hasLlmPolicyRepairBeforeValidation(preflightScript)
+  ) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `preflight:pre-commit must run '${REQUIRED_LLM_POLICY_REPAIR_COMMAND}' before '${REQUIRED_LLM_POLICY_COMMAND}' so auto-generated .llm index drift is repaired before the check.`,
+        preflightScript
+      )
+    );
+  }
+
+  const llmPolicyRepairScript = packageJson?.scripts?.["repair:llm-policy"];
+  if (
+    typeof llmPolicyRepairScript !== "string" ||
+    !hasRequiredSkillsIndexRepairCommand(llmPolicyRepairScript)
+  ) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        `package.json scripts.repair:llm-policy must include '${REQUIRED_SKILLS_INDEX_REPAIR_COMMAND}' so generated .llm index drift has a zero-touch repair path.`,
+        String(llmPolicyRepairScript || "")
+      )
+    );
+  }
+
+  const llmPolicyScript = packageJson?.scripts?.["validate:llm-policy"];
+  if (typeof llmPolicyScript !== "string" || llmPolicyScript.trim().length === 0) {
+    violations.push(
+      new Violation(
+        "preflight-script",
+        1,
+        "Missing package.json scripts.validate:llm-policy command.",
+        "package.json"
+      )
+    );
+  } else {
+    if (!hasRequiredSkillsValidationCommand(llmPolicyScript)) {
+      violations.push(
+        new Violation(
+          "preflight-script",
+          1,
+          `validate:llm-policy must include '${REQUIRED_SKILLS_VALIDATION_COMMAND}' so skill size/schema failures are caught outside hooks.`,
+          llmPolicyScript
+        )
+      );
+    }
+
+    if (!hasRequiredSkillsIndexCheckCommand(llmPolicyScript)) {
+      violations.push(
+        new Violation(
+          "preflight-script",
+          1,
+          `validate:llm-policy must include '${REQUIRED_SKILLS_INDEX_CHECK_COMMAND}' so generated index drift is still enforced in CI/read-only validation.`,
+          llmPolicyScript
+        )
+      );
+    }
+
+    if (!hasRequiredLlmMarkdownCommand(llmPolicyScript)) {
+      violations.push(
+        new Violation(
+          "preflight-script",
+          1,
+          `validate:llm-policy must include '${REQUIRED_LLM_MARKDOWN_COMMAND}' so .llm ASCII/code/prose checks stay bundled with skill policy.`,
+          llmPolicyScript
+        )
+      );
+    }
   }
 
   if (!hasRequiredScriptsCspellCommand(preflightScript)) {
@@ -1168,6 +1287,12 @@ module.exports = {
   hasRequiredHookMarkdownCommand,
   hasRequiredChangedDocsCommand,
   hasRequiredLlmMarkdownCommand,
+  hasRequiredSkillsValidationCommand,
+  hasRequiredLlmPolicyRepairCommand,
+  hasRequiredLlmPolicyCommand,
+  hasLlmPolicyRepairBeforeValidation,
+  hasRequiredSkillsIndexRepairCommand,
+  hasRequiredSkillsIndexCheckCommand,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
   hasRequiredWorkflowValidationCommand,
@@ -1205,6 +1330,11 @@ module.exports = {
   REQUIRED_HOOK_MARKDOWN_COMMAND,
   REQUIRED_CHANGED_DOCS_COMMAND,
   REQUIRED_LLM_MARKDOWN_COMMAND,
+  REQUIRED_SKILLS_VALIDATION_COMMAND,
+  REQUIRED_LLM_POLICY_REPAIR_COMMAND,
+  REQUIRED_LLM_POLICY_COMMAND,
+  REQUIRED_SKILLS_INDEX_REPAIR_COMMAND,
+  REQUIRED_SKILLS_INDEX_CHECK_COMMAND,
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_YAML_VALIDATION_COMMAND,
   REQUIRED_YAML_COMMENTS_CHECK_COMMAND,

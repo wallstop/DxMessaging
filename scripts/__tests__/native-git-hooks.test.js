@@ -37,6 +37,7 @@ describe("native Git hooks", () => {
     expect(content).toContain('"pre-commit"');
     expect(content).toContain('"--hook-stage"');
     expect(content).toContain("retrying once after auto-fixes");
+    expect(content).toContain("failed without detected file changes");
     expect(content).toContain("spawnPlatformCommandSync");
     expect(content).not.toMatch(/\b(?:bash|sh|pwsh|powershell)\b/);
     expect(content).not.toContain("shell: true");

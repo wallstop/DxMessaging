@@ -568,6 +568,7 @@ if (typeof module !== "undefined" && module.exports) {
     applyBrandCapitalization,
     categoryToTitle,
     formatWithPrettier,
+    getLineSizeIndicator,
     parseFrontmatter,
     BRAND_NAMES
   };
