@@ -833,6 +833,34 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).toContain("-EnableCacheServer");
     expect(runCi).toContain("Test-NUnitResults");
     expect(runCi).toContain("0 tests ran");
+    expect(runCi).toContain("function ConvertTo-NormalizedAcceleratorEndpoint");
+    // M2: pin BOTH add-mask Write-Host calls to their actual syntax, anchored
+    // to start-of-line so a `# ` comment prefix never satisfies the match.
+    // A bare `toContain("::add-mask::")` matches the documentation comment
+    // block even if both Write-Host lines are deleted; this regex set matches
+    // only the EXECUTABLE Write-Host invocations (multiline, leading
+    // whitespace only -- no `#`).
+    expect(runCi).toMatch(/^\s*Write-Host\s+"::add-mask::\$\(\$Endpoint\.Trim\(\)\)"/m);
+    expect(runCi).toMatch(/^\s*Write-Host\s+"::add-mask::\$normalized"/m);
+    // Regression (m3): the old URL-rejection throws MUST be gone forever.
+    // Pin to `throw "..."` syntax via regex so a code-archaeology comment
+    // that quotes the old message text doesn't unexpectedly fail this guard.
+    expect(runCi).not.toMatch(/throw\s+"UNITY_ACCELERATOR_ENDPOINT must be host:port/);
+  });
+
+  test(".llm/context.md describes Accelerator endpoint as URL-or-host:port (normalized)", () => {
+    const ctx = fs.readFileSync(path.join(REPO_ROOT, ".llm", "context.md"), "utf8");
+    // Pin to the actual normalizer function name (unambiguous, stable) rather
+    // than the loose word "normalized" within an arbitrary char window. The
+    // 800-char window is well above the current bullet's ~580 chars, leaving
+    // headroom for documentation growth without fragility.
+    expect(ctx).toMatch(/UNITY_ACCELERATOR_ENDPOINT[\s\S]{0,800}ConvertTo-NormalizedAcceleratorEndpoint/);
+    expect(ctx).toMatch(/scheme:\/\/host:port/);
+    // Inverse-claim guard (m2): the OLD wording must never come back.
+    // Loosened to catch grammar variants ("not a http URL", "not an http URL",
+    // "requires host:port format", "requires the host:port format", etc.).
+    expect(ctx).not.toMatch(/not an? `?http:\/\/`? URL/i);
+    expect(ctx).not.toMatch(/requires (?:the )?`?host:port`? format/i);
   });
 
   test("run-ci-tests uses classic serial activation with a guaranteed license return", () => {

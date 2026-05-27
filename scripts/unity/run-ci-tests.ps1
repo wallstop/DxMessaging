@@ -255,6 +255,92 @@ function Initialize-EphemeralProject {
     return $project
 }
 
+function ConvertTo-NormalizedAcceleratorEndpoint {
+    param([string]$Endpoint)
+
+    # Pure: returns $null for empty input or a non-empty 'host:port' string;
+    # THROWS with form-only diagnostics (never echoes the input value -- the
+    # raw form is sensitive even if it just looks like a URL, and a future
+    # secret-masking lapse must not exfiltrate it through our error text).
+    if (-not $Endpoint -or $Endpoint.Trim().Length -eq 0) {
+        return $null
+    }
+
+    $trimmed = $Endpoint.Trim()
+    $hostPart = $null
+    $portPart = 0
+
+    # URL form: a scheme is present. [System.Uri]::TryCreate handles userinfo
+    # stripping, path/query/fragment stripping, bracketed IPv6 hosts, and
+    # explicit port extraction in one call. PS 5.1 compatible.
+    if ($trimmed -match '^[a-zA-Z][a-zA-Z0-9+.\-]*://') {
+        [System.Uri]$uri = $null
+        # NOTE (leak-guard): the throw text below is form-only and intentionally
+        # interpolates NO part of `$Endpoint`/`$trimmed`. The fourth normalizer
+        # throw path (URL TryCreate failure) is therefore statically safe even
+        # though it cannot be deterministically triggered from a unit test --
+        # [System.Uri]::TryCreate is too permissive about most malformed URLs.
+        if (-not [System.Uri]::TryCreate($trimmed, [System.UriKind]::Absolute, [ref]$uri)) {
+            throw 'UNITY_ACCELERATOR_ENDPOINT could not be parsed as a URL form (scheme present, but not RFC 3986 well-formed). Expected host:port or scheme://host:port.'
+        }
+        # IsDefaultPort=TRUE means the URL OMITTED :port and the scheme's
+        # default (e.g. 80/443 for http/https) was substituted -- both cases
+        # are wrong for a Unity cache server, which needs an EXPLICIT port.
+        # The `$uri.Port -lt 0` clause is belt-and-suspenders: on pwsh 7+ a
+        # missing port yields Port == -1 AND IsDefaultPort == True, so the
+        # -lt 0 check is subsumed -- it stays here as defense against a future
+        # .NET runtime change that decouples the two flags.
+        if ($uri.Port -lt 0 -or $uri.IsDefaultPort) {
+            throw 'UNITY_ACCELERATOR_ENDPOINT URL is missing an explicit :port. Provide host:port or scheme://host:port.'
+        }
+        # `Uri.Host` returns `[::1]` (with brackets) on pwsh 7+ / .NET Core (the
+        # CI runtime), and historically returned `::1` (no brackets) on PS 5.1 /
+        # .NET Framework. The `StartsWith('[')` guard makes the assembled
+        # 'host:port' string unambiguous on both runtimes; the production target
+        # is pwsh 7+, so this is defense-in-depth against a future PS 5.1
+        # backport.
+        $hostPart = $uri.Host
+        if ($uri.HostNameType -eq [System.UriHostNameType]::IPv6 -and -not $hostPart.StartsWith('[')) {
+            $hostPart = "[$hostPart]"
+        }
+        $portPart = $uri.Port
+    }
+    else {
+        # Bare host:port (canonical). Bracketed IPv6 first because the v4 /
+        # hostname regex would mis-anchor on the closing bracket.
+        #
+        # LEAK GUARD: pre-validate the port digit length BEFORE the `[int]` cast.
+        # The .NET Int32 overflow exception text echoes the offending value
+        # verbatim ("Cannot convert value "99999999999" to type ...") which would
+        # contradict the function's "never echoes the input" invariant. 5 digits
+        # is the max legal port (65535); anything longer is automatically out of
+        # range, so reject with the existing form-only message before the cast.
+        if ($trimmed -match '^\[([0-9A-Fa-f:]+)\]:(\d+)$') {
+            if ($matches[2].Length -gt 5) {
+                throw 'UNITY_ACCELERATOR_ENDPOINT port is out of range (must be 1-65535).'
+            }
+            $hostPart = "[$($matches[1])]"
+            $portPart = [int]$matches[2]
+        }
+        elseif ($trimmed -match '^([^:\s/?#]+):(\d+)$') {
+            if ($matches[2].Length -gt 5) {
+                throw 'UNITY_ACCELERATOR_ENDPOINT port is out of range (must be 1-65535).'
+            }
+            $hostPart = $matches[1]
+            $portPart = [int]$matches[2]
+        }
+        else {
+            throw 'UNITY_ACCELERATOR_ENDPOINT could not be parsed: expected host:port (e.g. 127.0.0.1:10080), [ipv6]:port, or scheme://host:port[/path].'
+        }
+    }
+
+    if ($portPart -le 0 -or $portPart -gt 65535) {
+        throw 'UNITY_ACCELERATOR_ENDPOINT port is out of range (must be 1-65535).'
+    }
+
+    return ('{0}:{1}' -f $hostPart, $portPart)
+}
+
 function Get-AcceleratorArguments {
     param(
         [string]$Endpoint,
@@ -262,21 +348,29 @@ function Get-AcceleratorArguments {
         [Parameter(Mandatory = $true)][string]$Mode
     )
 
-    if (-not $Endpoint -or $Endpoint.Trim().Length -eq 0) {
+    $normalized = ConvertTo-NormalizedAcceleratorEndpoint -Endpoint $Endpoint
+    if (-not $normalized) {
         return @()
     }
 
-    $trimmed = $Endpoint.Trim()
-    if ($trimmed -match '^[a-zA-Z][a-zA-Z0-9+.-]*://') {
-        throw "UNITY_ACCELERATOR_ENDPOINT must be host:port, not a URL with a scheme: '$trimmed'."
-    }
-    if ($trimmed -notmatch '^[^:\s/]+:\d+$') {
-        throw "UNITY_ACCELERATOR_ENDPOINT must be host:port, for example 127.0.0.1:10080. Got '$trimmed'."
-    }
+    # SECURITY: defense-in-depth masking. GitHub Actions masks the original
+    # secret value, but here we extract a NEW substring (the normalized
+    # host:port form) -- masking a parent string does NOT propagate to derived
+    # substrings. Register BOTH the raw trimmed input (defense-in-depth, in
+    # case the secret was passed via non-secret env in some other call path)
+    # AND the normalized form BEFORE any downstream log line could echo them:
+    # Invoke-UnityEditor prints "$EditorPath $($Arguments -join ' ')" later in
+    # this same script (search for `Write-Host "`"$EditorPath`"`) which WOULD
+    # leak the host:port unmasked without these directives.
+    #
+    # `::add-mask::` is a no-op outside GitHub Actions, so local runs are
+    # unaffected. Done at the top of the success path so all callers benefit.
+    Write-Host "::add-mask::$($Endpoint.Trim())"
+    Write-Host "::add-mask::$normalized"
 
     return @(
         '-EnableCacheServer',
-        '-cacheServerEndpoint', $trimmed,
+        '-cacheServerEndpoint', $normalized,
         '-cacheServerNamespacePrefix', "dxmessaging-$Version-$Mode",
         '-cacheServerEnableDownload', 'true',
         '-cacheServerEnableUpload', 'true'
@@ -711,7 +805,7 @@ if ($env:GITHUB_ACTIONS -eq 'true' -and -not $hasLicenseCreds) {
 # it -- only a LITERAL $null operand would add a spurious element.)
 $acceleratorArgs = @(Get-AcceleratorArguments -Endpoint $env:UNITY_ACCELERATOR_ENDPOINT -Version $UnityVersion -Mode $TestMode)
 if ($acceleratorArgs.Count -gt 0) {
-    Write-CiNotice "Unity Accelerator enabled for namespace dxmessaging-$UnityVersion-$TestMode."
+    Write-CiNotice "Unity Accelerator enabled for namespace dxmessaging-$UnityVersion-$TestMode (endpoint normalized at the script boundary; value masked)."
 } else {
     Write-CiNotice "Unity Accelerator disabled; UNITY_ACCELERATOR_ENDPOINT is unset."
 }
