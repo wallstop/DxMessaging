@@ -1108,6 +1108,69 @@ function Write-UnityCliInstallFailureAnnotation {
     }
 }
 
+function Test-VcRedistGeneration {
+    # CLASSIFIES a list of missing-DLL names into the Microsoft Visual C++
+    # redistributable generation that ships them. Returns one of four string
+    # tags so the annotation's cause-line can be precise:
+    #   'vc2010'   -- missing includes MSVCP100/MSVCR100 (2010 SP1 generation)
+    #   'vcmodern' -- missing includes MSVCP140/VCRUNTIME140/VCRUNTIME140_1
+    #                 (2015-2022 generation)
+    #   'both'     -- missing contains BOTH 2010 and modern markers
+    #   'neither'  -- missing contains neither generation's marker DLLs (the
+    #                 missing DLL is something else: KERNEL32/ucrtbase/Unity-
+    #                 shipped/etc.)
+    # Match is CASE-INSENSITIVE; `.dll` suffix is OPTIONAL. NEVER throws.
+    # Empty / null input returns 'neither' (no evidence either way).
+    #
+    # WHY this matters: production run 70874414898 identified MSVCP100.dll as
+    # the load-bearing missing DLL on both self-hosted Windows runners. The
+    # previous annotation hard-coded "missing VC++ 2015-2022 Redistributable"
+    # which was wrong for MSVCP100 (a 2010 file). The 2010 and 2015-2022
+    # redistributables are SEPARATE Microsoft packages -- installing one does
+    # NOT install the other. The annotation needs to tell the operator which
+    # generation to install, NOT both / neither / the wrong one.
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [string[]]$MissingDlls
+    )
+
+    if ($null -eq $MissingDlls -or $MissingDlls.Count -eq 0) {
+        return 'neither'
+    }
+
+    # Case-insensitive regex anchors. The .dll suffix is optional so a name
+    # like 'MSVCP100' (without extension) still classifies correctly. We
+    # match the prefix only -- 'MSVCP100' matches 'MSVCP100.dll' and bare
+    # 'MSVCP100', but NOT 'MSVCP100_v2.dll' (that would be a future-version
+    # variant the heuristic should not silently absorb).
+    $vc2010Pattern = '(?i)^(MSVCP100|MSVCR100)(\.dll)?$'
+    $vcmodernPattern = '(?i)^(MSVCP140|MSVCR140|VCRUNTIME140|VCRUNTIME140_1)(\.dll)?$'
+
+    $has2010 = $false
+    $hasModern = $false
+    foreach ($name in $MissingDlls) {
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $trimmed = $name.Trim()
+        # Strip any leading directory component (defensive: callers should
+        # pass bare filenames, but the resolver may surface a full path on
+        # some edge cases).
+        try { $trimmed = [System.IO.Path]::GetFileName($trimmed) } catch { }
+        if ($trimmed -match $vc2010Pattern) {
+            $has2010 = $true
+        }
+        if ($trimmed -match $vcmodernPattern) {
+            $hasModern = $true
+        }
+    }
+
+    if ($has2010 -and $hasModern) { return 'both' }
+    if ($has2010) { return 'vc2010' }
+    if ($hasModern) { return 'vcmodern' }
+    return 'neither'
+}
+
 function Write-UnityHostPrereqAnnotation {
     # WRAP-IMMUNE, single-line CI annotation for the 0xC0000135 short-circuit in
     # Ensure-UnityNativeStartupHealthy. Emits a `::error::` line that NAMES the
@@ -1244,16 +1307,20 @@ function Write-UnityHostPrereqAnnotation {
         }
 
         $probeLine = if ($ProbeLog) { "Probe log: $ProbeLog. " } else { '' }
-        # CONTEXT-AWARE cause phrasing: if preflight already installed VC++ this
-        # job, the missing DLL is something else; otherwise default to the VC++
-        # Redistributable as the most likely culprit. R2 (round-3 review minor):
+        # CONTEXT-AWARE cause phrasing: if preflight already installed both VC++
+        # generations this job, the missing DLL is something else; otherwise
+        # SUB-CLASSIFY by the generation Microsoft ships the missing DLL in
+        # (2010 vs 2015-2022 vs both). The 2010 generation is a SEPARATE
+        # Microsoft package -- the bootstrap's `vcredist-2015-2022` step alone
+        # does NOT install MSVCP100. R2 (round-3 review minor):
         # SUPPRESS the VC++ cause line when every import resolves (the
         # "all resolve" diagnostic segment directly contradicts a "missing
         # VC++" claim). Same when no imports could be enumerated (no evidence
         # for the VC++ hypothesis either way).
         $preflightRan = ($env:DXM_RUNNER_PREREQ_INSTALLED -eq '1')
+        $generation = Test-VcRedistGeneration -MissingDlls $missingList
         $causeLine = if ($preflightRan) {
-            "Preflight ran successfully at job start (VC++/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Re-running the bootstrap script will NOT help."
+            "Preflight ran successfully at job start (VC++ 2010/VC++ 2015-2022/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Re-running the bootstrap script will NOT help. If the missing DLL is MSVCP100.dll, the host needs Microsoft Visual C++ 2010 Redistributable; the bootstrap script's 'vcredist-2010' step installs this."
         } elseif ($missingList.Count -eq 0 -and $imports.Count -gt 0) {
             # The resolver found every import on the loader search path -- the
             # VC++ cause line would directly contradict the "All Unity.exe
@@ -1262,8 +1329,27 @@ function Write-UnityHostPrereqAnnotation {
             # we keep the default VC++ cause hypothesis: lack of evidence
             # is not evidence of lack.)
             $null
+        } elseif ($generation -eq 'both') {
+            # Both 2010 AND 2015-2022 markers in the missing-DLL list: the host
+            # is missing BOTH redistributable packages. Direct the operator at
+            # the bootstrap which installs both generations.
+            "Most likely cause: missing Microsoft Visual C++ Redistributables (BOTH 2010 AND 2015-2022 x64 are missing). Run the bootstrap script as Administrator to install both."
+        } elseif ($generation -eq 'vc2010') {
+            # MSVCP100 / MSVCR100 in the missing-DLL list -- the host needs the
+            # 2010 SP1 redistributable specifically. The modern installer does
+            # NOT install these (they are a separate Microsoft package).
+            "Most likely cause: missing Microsoft Visual C++ 2010 Redistributable (x64). Run the bootstrap script as Administrator to install it."
+        } elseif ($generation -eq 'vcmodern') {
+            # MSVCP140 / VCRUNTIME140 / VCRUNTIME140_1 in the missing-DLL list
+            # -- the modern 2015-2022 generation. Preserve the original
+            # wording so existing test assertions stay green.
+            "Most likely cause: missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Run the bootstrap script as Administrator to install it."
         } else {
-            "Most likely cause: missing Microsoft Visual C++ 2015-2022 Redistributable (x64)."
+            # 'neither' (no VC++ marker in the missing-DLL list). The default
+            # hypothesis still surfaces VC++ 2015-2022 -- it is the single
+            # most common cause empirically -- but mentions VC++ 2010 as a
+            # near-second so operators with MSVCP100 missing still get a hint.
+            "Most likely cause: missing Microsoft Visual C++ 2015-2022 Redistributable (x64); if the missing DLL is MSVCP100.dll, install Microsoft Visual C++ 2010 Redistributable (x64) instead. Run the bootstrap script as Administrator to install both."
         }
         # REPAIR-PATH awareness: phrase the remediation line based on whether the
         # caller had already tried the managed reinstall before firing this
@@ -1302,9 +1388,9 @@ function Write-UnityHostPrereqAnnotation {
         try {
             $fallbackPreflight = ($env:DXM_RUNNER_PREREQ_INSTALLED -eq '1')
             if ($fallbackPreflight) {
-                Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode. Preflight already installed VC++ this job, so a DIFFERENT host DLL is missing -- inspect the Unity.exe imports above. Runbook: docs/runbooks/unity-runners-after-transfer.md."
+                Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode. Preflight already installed VC++ (both 2010 and 2015-2022 generations) this job, so a DIFFERENT host DLL is missing -- inspect the Unity.exe imports above. Runbook: docs/runbooks/unity-runners-after-transfer.md."
             } else {
-                Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode. Likely missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Run scripts/unity/bootstrap-windows-runner.ps1. Runbook: docs/runbooks/unity-runners-after-transfer.md."
+                Write-Host "::error title=Unity $Version host prerequisite missing::Unity $Version native startup failed with exit $ExitCode. Likely missing Microsoft Visual C++ Redistributables (2010 SP1 x64 ships MSVCP100.dll/MSVCR100.dll; 2015-2022 x64 ships VCRUNTIME140.dll/MSVCP140.dll -- both are required for Unity). Run scripts/unity/bootstrap-windows-runner.ps1. Runbook: docs/runbooks/unity-runners-after-transfer.md."
             }
         } catch {
             # Truly nothing more we can do; let the caller's throw fail loudly.
@@ -3001,9 +3087,11 @@ function Ensure-UnityNativeStartupHealthy {
 
     # SHORT-CIRCUIT: 0xC0000135 / STATUS_DLL_NOT_FOUND is a HOST OS prerequisite
     # failure -- the Windows loader could not resolve a DLL Unity.exe imports
-    # (overwhelmingly the Microsoft Visual C++ 2015-2022 Redistributable). A managed
-    # reinstall of Unity does NOT help: the missing DLL is on the OS, not in the
-    # Unity install tree. Wasting ~6 minutes per matrix cell on a reinstall that
+    # (overwhelmingly the Microsoft Visual C++ Redistributables -- production
+    # run 70874414898 identified MSVCP100 from the 2010 generation; the 2015-2022
+    # generation is the other common culprit). A managed reinstall of Unity does
+    # NOT help: the missing DLL is on the OS, not in the Unity install tree.
+    # Wasting ~6 minutes per matrix cell on a reinstall that
     # cannot succeed delays the actionable failure mode and obscures the real
     # remediation. We therefore short-circuit BEFORE the DXM_UNITY_DISABLE_EDITOR_REPAIR
     # check too: that flag is an operator opt-out of auto-repair, and on 0xC0000135
@@ -3025,7 +3113,7 @@ function Ensure-UnityNativeStartupHealthy {
             Write-CiNotice "DXM_UNITY_FORCE_REINSTALL=1: bypassing 0xC0000135 short-circuit; will attempt managed reinstall (caller asserts the failure is install corruption, not host prereq). If the reinstall fails to recover Unity startup, the post-repair short-circuit will fire."
         } else {
             Write-UnityHostPrereqAnnotation -Version $Version -ExitCode $result.ExitCode -Description $result.Description -EditorPath $EditorPath -ProbeLog $probeLog
-            throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) (0xC0000135 / STATUS_DLL_NOT_FOUND). This is a host OS prerequisite failure (the Windows loader could not find a DLL Unity.exe imports). The most likely cause is a missing Microsoft Visual C++ 2015-2022 Redistributable (x64). Skipped managed reinstall (would not help: the missing DLL is on the OS, not in the Unity install). Probe log: $probeLog. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites). Remediation: run scripts/unity/bootstrap-windows-runner.ps1 on this runner (or trigger the runner-bootstrap workflow_dispatch from the Actions UI). If the missing DLL is Unity-shipped (libfbxsdk, optix, etc., per the MISSING DLL annotation above), set DXM_UNITY_FORCE_REINSTALL=1 to bypass this short-circuit and retry with a managed reinstall."
+            throw "Unity $Version native startup probe failed with exit code $($result.ExitCode) (0xC0000135 / STATUS_DLL_NOT_FOUND). This is a host OS prerequisite failure (the Windows loader could not find a DLL Unity.exe imports). The most likely cause is a missing Microsoft Visual C++ Redistributable: the 2010 SP1 generation ships MSVCP100.dll/MSVCR100.dll, and the 2015-2022 generation ships VCRUNTIME140.dll/MSVCP140.dll -- BOTH are required for Unity. Skipped managed reinstall (would not help: the missing DLL is on the OS, not in the Unity install). Probe log: $probeLog. Runbook: docs/runbooks/unity-runners-after-transfer.md (Windows host prerequisites). Remediation: run scripts/unity/bootstrap-windows-runner.ps1 on this runner (or trigger the runner-bootstrap workflow_dispatch from the Actions UI). If the missing DLL is Unity-shipped (libfbxsdk, optix, etc., per the MISSING DLL annotation above), set DXM_UNITY_FORCE_REINSTALL=1 to bypass this short-circuit and retry with a managed reinstall."
         }
     }
 

@@ -2,16 +2,21 @@ name: Runner Bootstrap (Windows)
 
 # Operator-driven, workflow_dispatch-only bootstrap of a self-hosted Windows
 # runner's host-OS prerequisites for Unity CI. Installs the Microsoft Visual
-# C++ 2015-2022 x64 Redistributable, Windows long-paths, Windows Defender
-# exclusions, PowerShell 7, and (where applicable) the UCRT KB.
+# C++ 2010 SP1 + 2015-2022 x64 Redistributables (BOTH generations -- Unity
+# 2021/2022/6000 depend on each: MSVCP100.dll/MSVCR100.dll come from the
+# 2010 redist, VCRUNTIME140.dll/MSVCP140.dll/VCRUNTIME140_1.dll from the
+# 2015-2022 redist), Windows long-paths, Windows Defender exclusions,
+# PowerShell 7, and (where applicable) the UCRT KB.
 #
 # Root cause this workflow addresses: Unity.exe failed at startup with
 # -1073741515 / 0xC0000135 (STATUS_DLL_NOT_FOUND) on DAD-MACHINE because the
-# VC++ redist was missing. GitHub-hosted windows-2022 ships the redist
-# preinstalled; self-hosted runners do not. The fix is OS-level (install
-# the redist), so ensure-editor.ps1's Unity-reinstall retry loop is futile.
-# This workflow gives operators a one-click recovery path that does not
-# require shelling onto the runner host.
+# VC++ Redistributables were missing -- Unity 2021/2022/6000 depend on BOTH
+# the 2010 SP1 (MSVCP100.dll / MSVCR100.dll) AND the 2015-2022 x64 (MSVCP140 +
+# VCRUNTIME140) generations. GitHub-hosted windows-2022 ships both preinstalled;
+# self-hosted runners do not. The fix is OS-level (install the redists), so
+# ensure-editor.ps1's Unity-reinstall retry loop is futile. This workflow
+# gives operators a one-click recovery path that does not require shelling
+# onto the runner host.
 #
 # Targeting a SPECIFIC runner (HARD-FAIL on wrong target):
 #   * The repo's runner topology currently labels both Windows runners

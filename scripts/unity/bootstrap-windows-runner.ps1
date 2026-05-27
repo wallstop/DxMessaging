@@ -8,16 +8,40 @@
     Unity Editor needs to launch on a self-hosted Windows GitHub Actions
     runner. Root cause this script addresses: Unity.exe failed at startup
     with exit code -1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND) on
-    DAD-MACHINE because the Microsoft Visual C++ 2015-2022 x64 Redistributable
-    was not installed -- the OS loader could not resolve a DLL Unity.exe needs
-    (VCRUNTIME140_1.dll, etc.). GitHub-hosted windows-2022 ships the redist
-    preinstalled; self-hosted runners do not. The existing ensure-editor.ps1
-    retries a Unity reinstall on that failure, which is futile -- the missing
-    DLL is on the OS, not in the Unity install.
+    DAD-MACHINE because the Microsoft Visual C++ Redistributables were not
+    installed -- the OS loader could not resolve a DLL Unity.exe needs.
+    Unity 2021.3 / 2022.3 / 6000.x ALL depend on BOTH the VC++ 2010
+    runtime (MSVCP100.dll / MSVCR100.dll -- this is the load-bearing missing
+    DLL identified in production run 70874414898) AND the VC++ 2015-2022
+    runtime (VCRUNTIME140.dll / VCRUNTIME140_1.dll / MSVCP140.dll). The two
+    are SEPARATE redistributable packages: installing only the modern
+    2015-2022 generation leaves MSVCP100 unresolved. GitHub-hosted windows-2022
+    ships both preinstalled; self-hosted runners do not. The existing
+    ensure-editor.ps1 retries a Unity reinstall on that failure, which is
+    futile -- the missing DLL is on the OS, not in the Unity install.
 
     Prerequisites covered (each is independently detected + remediated):
 
-      1. Microsoft Visual C++ 2015-2022 x64 Redistributable
+      1. Microsoft Visual C++ 2010 SP1 x64 Redistributable (version
+         10.0.40219.325). Installs MSVCP100.dll + MSVCR100.dll into
+         C:\Windows\System32. Unity 2021/2022/6000 depend on this 2010-era
+         runtime in addition to the modern one (Unity Discussions:
+         https://discussions.unity.com/t/what-c-redistributable-does-unity3d-editor-require/244474).
+         Detect (primary): file-level probe of System32 for MSVCP100.dll AND
+                 MSVCR100.dll. Both must exist.
+         Detect (secondary, only if file probe passes): registry confirms a
+                 "blessed" install via
+                 HKLM:\SOFTWARE\Microsoft\VisualStudio\10.0\VC\VCRedist\x64
+                 (Installed=1) on either the native 64-bit view OR Wow6432Node.
+         Install: Download
+                  https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+                  then & vcredist_x64.exe /q /norestart. NOTE the silent
+                  switches differ from the modern generation: /q (not /quiet)
+                  and no /install verb. Authenticode signature is verified
+                  before launch (Microsoft signs both 2010 and 2015-2022
+                  redistributables).
+
+      2. Microsoft Visual C++ 2015-2022 x64 Redistributable
          Detect (primary): file-level probe of System32 for
                  VCRUNTIME140.dll, VCRUNTIME140_1.dll, MSVCP140.dll. The OS
                  loader uses the actual files on disk -- the entire bug class
@@ -36,18 +60,18 @@
                   pinned via [ValidatePattern] to known Microsoft hosts;
                   Authenticode signature is verified before launch.
 
-      2. Windows long-paths
+      3. Windows long-paths
          Detect: HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem!LongPathsEnabled
          Install: New-ItemProperty ... LongPathsEnabled -Value 1 (DWORD).
 
-      3. Windows Defender exclusions for the Unity install root and the runner
+      4. Windows Defender exclusions for the Unity install root and the runner
          workspace directory. Path inputs are validated against an allow-list
          so a hostile/misconfigured RUNNER_WORKSPACE cannot exclude C:\.
          Skipped gracefully when Defender is absent.
 
-      4. PowerShell 7 (pwsh) -- installed via winget --scope user when missing.
+      5. PowerShell 7 (pwsh) -- installed via winget --scope user when missing.
 
-      5. UCRT on downlevel Windows. Modern Windows 10+/Server 2019+ ship UCRT
+      6. UCRT on downlevel Windows. Modern Windows 10+/Server 2019+ ship UCRT
          preinstalled, so on those hosts this step is a silent no-op. On
          downlevel hosts we emit ::error:: pointing at the KB2999226 download
          page (we do not auto-download the MSU because it is a one-time
@@ -59,10 +83,10 @@
     every prereq's final state and exit code reflects the worst outcome.
 
     Designed for self-hosted GitHub Actions runners running as NETWORK SERVICE
-    (non-admin). On a non-admin shell, prereqs that need HKLM writes (VC++,
-    LongPathsEnabled) will fail at install time with Access Denied -- the
-    script catches that and emits a SPECIFIC ::error:: telling the operator
-    to either run the script as Administrator or trigger
+    (non-admin). On a non-admin shell, prereqs that need HKLM writes (VC++ 2010,
+    VC++ 2015-2022, LongPathsEnabled) will fail at install time with Access
+    Denied -- the script catches that and emits a SPECIFIC ::error:: telling
+    the operator to either run the script as Administrator or trigger
     .github/workflows/runner-bootstrap.yml from the Actions UI. We deliberately
     do NOT auto-elevate via Start-Process -Verb RunAs because UAC would hang
     a non-interactive CI run.
@@ -79,7 +103,7 @@
     preferences.
 
     NOTE: dot-sourcing WILL bind the script's param-block variables
-    (`$DetectOnly`, `$UnityInstallRoot`, `$VcRedistUrl`,
+    (`$DetectOnly`, `$UnityInstallRoot`, `$VcRedistUrl`, `$VcRedist2010Url`,
     `$DownloadTimeoutSeconds`, `$InstallTimeoutSeconds`) and the
     `$invokedAsScript` dispatcher flag in the caller's scope. That is
     standard PowerShell behaviour for any dot-sourced script with a
@@ -96,10 +120,19 @@
     UNITY_EDITOR_INSTALL_ROOT env var, falling back to C:\Unity\Editors.
 
 .PARAMETER VcRedistUrl
-    Canonical Microsoft VC++ redist download URL. Override-able for tests.
-    The [ValidatePattern] pins the host to Microsoft-controlled domains so
-    a hostile caller cannot redirect us to an attacker-controlled binary.
+    Canonical Microsoft VC++ 2015-2022 redist download URL. Override-able for
+    tests. The [ValidatePattern] pins the host to Microsoft-controlled domains
+    so a hostile caller cannot redirect us to an attacker-controlled binary.
     After download, Authenticode signature is verified before exec.
+
+.PARAMETER VcRedist2010Url
+    Canonical Microsoft VC++ 2010 SP1 x64 redist download URL. Defaults to
+    https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+    (the only canonical URL Microsoft publishes for this artifact; there is no
+    aka.ms shortcut because VS 2010 extended support ended 2020-07-14).
+    Override-able for tests. The [ValidatePattern] restricts the host to
+    Microsoft-controlled domains (download.microsoft.com and *.microsoft.com).
+    Authenticode signature is verified before exec.
 
 .PARAMETER DownloadTimeoutSeconds
     HTTP timeout for the VC++ redist download. Default 600 seconds.
@@ -141,6 +174,19 @@ param(
     # post-download signature check is defense-in-depth.
     [ValidatePattern('^https://(aka\.ms|download\.visualstudio\.microsoft\.com|[A-Za-z0-9._-]+\.microsoft\.com)/')]
     [string]$VcRedistUrl = 'https://aka.ms/vc14/vc_redist.x64.exe',
+
+    # WHY a separate parameter for the 2010 redist URL: the VC++ 2010 SP1
+    # download lives at a different (and more URL-specific) Microsoft host than
+    # the modern redist. There is no aka.ms shortcut for the 2010 generation
+    # because VS 2010 extended support ended 2020-07-14, so the only canonical
+    # URL Microsoft publishes is the direct download.microsoft.com path with
+    # the artifact GUID. The [ValidatePattern] still pins the host to
+    # Microsoft-controlled domains (download.microsoft.com is the canonical
+    # CDN endpoint; *.microsoft.com is the broader allowance for any future
+    # redirect-host migration). Authenticode signature is verified post-
+    # download regardless of the URL.
+    [ValidatePattern('^https://(download\.microsoft\.com|[A-Za-z0-9._-]+\.microsoft\.com)/')]
+    [string]$VcRedist2010Url = 'https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe',
 
     [int]$DownloadTimeoutSeconds = 600,
 
@@ -272,7 +318,7 @@ function Get-RegistryItemPropertySafe {
     }
 }
 
-function Test-VcRedistFilesOnDisk {
+function Test-VcRedistModernFilesOnDisk {
     # WHY this is the PRIMARY detection signal: the entire bug class this
     # script exists for is "OS loader cannot find VCRUNTIME140_1.dll".
     # Registry presence is not the authoritative signal -- the actual file
@@ -303,7 +349,47 @@ function Test-VcRedistFilesOnDisk {
     return @{ present = ($missing.Count -eq 0); missing = @($missing.ToArray()) }
 }
 
-function Test-VcRedistInstalledAtRegistryView {
+function Test-VcRedist2010FilesOnDisk {
+    # PRIMARY detection signal for the VC++ 2010 SP1 x64 Redistributable.
+    # Mirrors Test-VcRedistModernFilesOnDisk: the OS loader uses the actual
+    # files on disk, not the registry. The 2010 redist installs TWO load-
+    # bearing DLLs into System32: MSVCP100.dll (C++ Standard Library) and
+    # MSVCR100.dll (C Runtime). Both must exist or Unity 2021.3 / 2022.3 /
+    # 6000.x will fail at startup with 0xC0000135 (this is the load-bearing
+    # missing DLL identified in production run 70874414898 -- the bootstrap
+    # was previously installing only the modern 2015-2022 generation and
+    # missing MSVCP100 entirely).
+    # Returns @{ present; missing }. NEVER throws. Non-Windows hosts return
+    # the vacuous-OK shape so callers can compose without crashing on Linux
+    # (the dot-source-safety tests rely on this).
+    if (-not (Test-IsWindowsHost)) {
+        return @{ present = $true; missing = @() }
+    }
+    # Use Join-Path to be explicit that we are probing the OS-resolved
+    # System32 directory (a pinned `C:\Windows\System32\...` literal would
+    # be wrong if WINDIR is ever non-default; mirror the modern probe's
+    # literal style except prefer the env-var-derived join here so we get
+    # both styles covered).
+    $system32 = Join-Path $env:WINDIR 'System32'
+    $required = @(
+        (Join-Path $system32 'MSVCP100.dll'),
+        (Join-Path $system32 'MSVCR100.dll')
+    )
+    $missing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($f in $required) {
+        try {
+            if (-not (Test-Path -LiteralPath $f)) {
+                $missing.Add($f) | Out-Null
+            }
+        } catch {
+            # Test-Path can throw on permission-denied paths; treat as missing.
+            $missing.Add($f) | Out-Null
+        }
+    }
+    return @{ present = ($missing.Count -eq 0); missing = @($missing.ToArray()) }
+}
+
+function Test-VcRedistModernInstalledAtRegistryView {
     # Probes the native registry view for the VC++ 2015-2022 x64 redist
     # signature. Returns hashtable @{ installed = $bool; reason = $string }
     # so the caller can both log the diagnostic and short-circuit on the
@@ -339,11 +425,12 @@ function Test-VcRedistInstalledAtRegistryView {
     return @{ installed = $false; reason = "neither $runtimesKey nor $servicingKey indicates installed" }
 }
 
-function Test-VcRedistInstalled {
-    # Two-stage detection. PRIMARY: file-level probe of System32 for the
-    # three required DLLs. SECONDARY: registry confirmation that the install
-    # is "blessed" (so we do not false-positive on a partial / hand-copied
-    # DLL set without a real installer record).
+function Test-VcRedistModernInstalled {
+    # Two-stage detection for the VC++ 2015-2022 x64 Redistributable.
+    # PRIMARY: file-level probe of System32 for the three required DLLs.
+    # SECONDARY: registry confirmation that the install is "blessed" (so we
+    # do not false-positive on a partial / hand-copied DLL set without a
+    # real installer record).
     #
     # WHY this order: the OS loader uses files on disk, not the registry.
     # If files are missing, Unity.exe will fail to start regardless of what
@@ -367,27 +454,112 @@ function Test-VcRedistInstalled {
 
     Set-StrictMode -Version Latest
 
-    $fileProbe = Test-VcRedistFilesOnDisk
+    $fileProbe = Test-VcRedistModernFilesOnDisk
     if (-not $fileProbe.present) {
         $missingList = ($fileProbe.missing -join ', ')
-        Write-CiNotice "VC++ redist file probe missing: $missingList"
+        Write-CiNotice "VC++ 2015-2022 redist file probe missing: $missingList"
         return $false
     }
 
     # Files are present -- confirm registry agrees (for sanity).
-    $regProbe = Test-VcRedistInstalledAtRegistryView -BaseKey 'HKLM:\SOFTWARE'
+    $regProbe = Test-VcRedistModernInstalledAtRegistryView -BaseKey 'HKLM:\SOFTWARE'
     if ($regProbe.installed) {
-        Write-CiNotice "VC++ redist detected: files on disk + registry agrees via $($regProbe.reason)"
+        Write-CiNotice "VC++ 2015-2022 redist detected: files on disk + registry agrees via $($regProbe.reason)"
         return $true
     }
 
     # Files exist but registry disagrees. Trust the loader's POV (files
     # decide) but flag the inconsistency.
-    Write-CiWarning "VC++ redist DLLs are present on disk but registry probe says not-installed ($($regProbe.reason)). Treating as installed (the OS loader uses files, not the registry); operator may want to verify the install record is intact."
+    Write-CiWarning "VC++ 2015-2022 redist DLLs are present on disk but registry probe says not-installed ($($regProbe.reason)). Treating as installed (the OS loader uses files, not the registry); operator may want to verify the install record is intact."
     return $true
 }
 
-function Test-VcRedistAuthenticodeSignature {
+function Test-VcRedist2010InstalledAtRegistryView {
+    # Probes a specific registry view (native HKLM:\SOFTWARE OR Wow6432Node)
+    # for the VC++ 2010 SP1 x64 redist signature. Returns hashtable
+    # @{ installed = $bool; reason = $string }. NEVER throws.
+    #
+    # WHY both views are probed (caller composes via OR): unlike the modern
+    # 2015-2022 generation, the 2010 SP1 redist installer has been observed
+    # to write its install record to BOTH the native and Wow6432Node views
+    # depending on the install host's bitness / install path / installer
+    # variant (Microsoft's installer technology for VS 2010 differs from
+    # the modern VC redist). A single registry view probe would false-
+    # negative on hosts where the install record landed in the other view.
+    # Test-VcRedist2010Installed below composes the two views with OR.
+    param([Parameter(Mandatory = $true)][string]$BaseKey)
+
+    $vcredistKey = Join-Path $BaseKey 'Microsoft\VisualStudio\10.0\VC\VCRedist\x64'
+
+    $installed = Get-RegistryItemPropertySafe -Path $vcredistKey -Name 'Installed'
+    if ($installed -eq 1) {
+        return @{ installed = $true; reason = "$vcredistKey (Installed=1)" }
+    }
+
+    return @{ installed = $false; reason = "$vcredistKey does not indicate installed" }
+}
+
+function Test-VcRedist2010Installed {
+    # Two-stage detection for the VC++ 2010 SP1 x64 Redistributable.
+    # PRIMARY: file-level probe of System32 for MSVCP100.dll + MSVCR100.dll.
+    # SECONDARY: registry confirmation via either the native HKLM:\SOFTWARE
+    # view OR the Wow6432Node mirror (the 2010 installer has been observed
+    # to write to either depending on host configuration -- unlike the
+    # modern 2015-2022 redist, which writes exclusively to the native view).
+    #
+    # Returns hashtable @{ installed = $bool; reason = $string } so the caller
+    # can both log the diagnostic and short-circuit. The shape mirrors the
+    # composite-return pattern of Test-VcRedistModernInstalled's underlying
+    # registry helper; we add the outer hashtable here so Install-VcRedist2010's
+    # admin pre-check can return early with a meaningful reason field.
+    #
+    # WHY this order: the OS loader uses files on disk, not the registry.
+    # If files are missing, Unity.exe will fail to start regardless of what
+    # the registry says. If files are present but registry says not-installed
+    # (extremely unusual), we still proceed because the loader will succeed --
+    # we Write-CiWarning so the operator notices the inconsistency.
+    #
+    # Linux-safe: returns @{ installed = $true; reason = '...' } vacuously
+    # when not on Windows so callers can ignore the prereq on non-Windows
+    # hosts (this script never runs the install path on non-Windows, but the
+    # helper is still callable from tests).
+    if (-not (Test-IsWindowsHost)) {
+        return @{ installed = $true; reason = 'not a Windows host (vacuous OK)' }
+    }
+
+    Set-StrictMode -Version Latest
+
+    $fileProbe = Test-VcRedist2010FilesOnDisk
+    if (-not $fileProbe.present) {
+        $missingList = ($fileProbe.missing -join ', ')
+        Write-CiNotice "VC++ 2010 redist file probe missing: $missingList"
+        return @{ installed = $false; reason = "file probe missing: $missingList" }
+    }
+
+    # Files are present -- confirm registry agrees (for sanity). Composite
+    # OR over native + Wow6432Node: the 2010 installer can land in either
+    # view depending on host configuration. At least one positive hit is
+    # sufficient to call the install "blessed".
+    $nativeProbe = Test-VcRedist2010InstalledAtRegistryView -BaseKey 'HKLM:\SOFTWARE'
+    if ($nativeProbe.installed) {
+        Write-CiNotice "VC++ 2010 redist detected: files on disk + registry agrees via $($nativeProbe.reason)"
+        return @{ installed = $true; reason = $nativeProbe.reason }
+    }
+
+    $wowProbe = Test-VcRedist2010InstalledAtRegistryView -BaseKey 'HKLM:\SOFTWARE\Wow6432Node'
+    if ($wowProbe.installed) {
+        Write-CiNotice "VC++ 2010 redist detected: files on disk + registry agrees via $($wowProbe.reason)"
+        return @{ installed = $true; reason = $wowProbe.reason }
+    }
+
+    # Files exist but neither registry view agrees. Trust the loader's POV
+    # (files decide) but flag the inconsistency.
+    $combinedReason = "$($nativeProbe.reason); $($wowProbe.reason)"
+    Write-CiWarning "VC++ 2010 redist DLLs are present on disk but neither registry view indicates installed ($combinedReason). Treating as installed (the OS loader uses files, not the registry); operator may want to verify the install record is intact."
+    return @{ installed = $true; reason = "files present on disk but registry inconsistent: $combinedReason" }
+}
+
+function Test-VcRedistAuthenticodeSignatureMicrosoft {
     # WHY: even with the [ValidatePattern]-pinned URL, we want defense-in-
     # depth before exec'ing a downloaded binary. A signed-and-trusted
     # Microsoft certificate is the strongest signal we can verify locally.
@@ -417,11 +589,11 @@ function Test-VcRedistAuthenticodeSignature {
     }
 }
 
-function Invoke-VcRedistDownload {
-    # Downloads vc_redist.x64.exe to a temp path. Returns hashtable
-    # @{ success = $bool; path = $string; reason = $string }. NEVER throws.
-    # On failure, the partial temp file is cleaned up in the finally block
-    # so we never leave litter for the next bootstrap run.
+function Invoke-VcRedistModernDownload {
+    # Downloads vc_redist.x64.exe (the VC++ 2015-2022 redist) to a temp path.
+    # Returns hashtable @{ success = $bool; path = $string; reason = $string }.
+    # NEVER throws. On failure, the partial temp file is cleaned up in the
+    # finally block so we never leave litter for the next bootstrap run.
     param(
         [Parameter(Mandatory = $true)][string]$Url,
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds
@@ -489,12 +661,13 @@ function Invoke-VcRedistDownload {
     }
 }
 
-function Invoke-VcRedistInstaller {
-    # Runs the vc_redist.x64.exe installer with the silent/no-restart flags.
-    # Uses Start-Process -PassThru and a manual WaitForExit($ms) so we can
-    # enforce a timeout (Start-Process has no -Timeout parameter).
-    # Returns hashtable @{ success = $bool; exitCode = $int; reason = $string }.
-    # NEVER throws. Treats well-known installer exit codes per Microsoft docs:
+function Invoke-VcRedistModernInstaller {
+    # Runs the vc_redist.x64.exe installer (VC++ 2015-2022 generation) with
+    # the silent/no-restart flags. Uses Start-Process -PassThru and a manual
+    # WaitForExit($ms) so we can enforce a timeout (Start-Process has no
+    # -Timeout parameter). Returns hashtable
+    # @{ success = $bool; exitCode = $int; reason = $string }. NEVER throws.
+    # Treats well-known installer exit codes per Microsoft docs:
     #   0    = installed (success)
     #   1638 = newer version already installed (treat as success)
     #   3010 = success-restart-required (treat as success + warning)
@@ -566,10 +739,177 @@ function Invoke-VcRedistInstaller {
     }
 }
 
-function Install-VcRedist {
-    # Download + Authenticode verify + install + post-install probe. Returns
-    # hashtable @{ success = $bool; reason = $string }. NEVER throws -- every
-    # failure is captured and the call site emits an annotation from $reason.
+function Invoke-VcRedist2010Download {
+    # Downloads the VC++ 2010 SP1 x64 redist (vcredist_x64.exe, version
+    # 10.0.40219.325) to a temp path. Mirrors Invoke-VcRedistModernDownload
+    # in structure (TLS 1.2/1.3 setup, partial-file cleanup, deterministic
+    # user-agent) but uses a different default URL because Microsoft does
+    # NOT publish an aka.ms shortcut for VS 2010 (extended support ended
+    # 2020-07-14). The default download.microsoft.com path is the only
+    # canonical Microsoft URL for this artifact.
+    # Returns hashtable @{ success = $bool; path = $string; reason = $string }.
+    # NEVER throws. On failure, the partial temp file is cleaned up in the
+    # finally block so we never leave litter for the next bootstrap run.
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    # WHY a different temp file prefix: keeps the modern + 2010 install
+    # processes' temp files distinguishable in the logs (a quick `ls $env:TEMP`
+    # immediately separates "the 2010 path stalled" from "the modern path
+    # stalled" when debugging on the host).
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("vcredist_x64_2010.{0}.exe" -f ([Guid]::NewGuid().ToString('N')))
+    $success = $false
+    try {
+        # WHY explicit TLS 1.2/1.3: Windows PowerShell 5.1's
+        # ServicePointManager default is Ssl3|Tls (TLS 1.0). The download
+        # endpoint (download.microsoft.com) rejects anything below TLS 1.2.
+        # This is the bootstrap -- it runs FIRST, BEFORE pwsh exists, so
+        # PS 5.1 is the realistic runtime. Without this block,
+        # Invoke-WebRequest fails with "The underlying connection was closed:
+        # An unexpected error occurred on a send." on a stock Server 2019.
+        try {
+            $tls12 = [Net.SecurityProtocolType]::Tls12
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $tls12
+            # Tls13 may not be defined on older .NET Framework (4.7.2-);
+            # ignore in catch so we still get TLS 1.2.
+            try {
+                $tls13 = [Net.SecurityProtocolType]::Tls13
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $tls13
+            } catch { }
+        } catch {
+            Write-CiWarning "Could not configure TLS 1.2/1.3 (continuing; download may fail on older Windows): $($_.Exception.Message)"
+        }
+
+        # -UseBasicParsing is REQUIRED for Windows PowerShell 5.1 compatibility
+        # (mirror modern download). -MaximumRedirection 5 keeps us tolerant of
+        # any Microsoft CDN redirect chain that might be introduced; the
+        # current URL is a direct download but using the same redirection
+        # tolerance as the modern path future-proofs us.
+        # -UserAgent: deterministic UA gives us a paper trail in Microsoft
+        # CDN logs without changing behavior.
+        Invoke-WebRequest -Uri $Url -OutFile $tempPath -UseBasicParsing -TimeoutSec $TimeoutSeconds -MaximumRedirection 5 -UserAgent 'DXMessaging-RunnerBootstrap/1.0' -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $tempPath)) {
+            return @{ success = $false; path = $tempPath; reason = "Invoke-WebRequest returned without an exception but no file appeared at $tempPath" }
+        }
+        $size = (Get-Item -LiteralPath $tempPath).Length
+        if ($size -le 0) {
+            return @{ success = $false; path = $tempPath; reason = "Downloaded file at $tempPath is 0 bytes (likely a transient failure)" }
+        }
+        $success = $true
+        return @{ success = $true; path = $tempPath; reason = "downloaded $size bytes to $tempPath" }
+    } catch {
+        return @{ success = $false; path = $tempPath; reason = "Invoke-WebRequest failed: $($_.Exception.Message)" }
+    } finally {
+        # WHY this cleanup: a failed Invoke-WebRequest can leave a partial file
+        # at $tempPath (e.g. half-downloaded after a timeout). The next
+        # bootstrap run would generate a different GUID temp path, so the
+        # litter accumulated indefinitely. The success path keeps the file
+        # for the caller to install; the failure path scrubs it.
+        if (-not $success) {
+            try {
+                if (Test-Path -LiteralPath $tempPath) {
+                    Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+                }
+            } catch { }
+        }
+    }
+}
+
+function Invoke-VcRedist2010Installer {
+    # Runs the vcredist_x64.exe installer (VC++ 2010 SP1 generation) with
+    # the silent / no-restart flags SPECIFIC to the 2010 installer
+    # technology. Uses Start-Process -PassThru and a manual WaitForExit($ms)
+    # so we can enforce a timeout (Start-Process has no -Timeout parameter).
+    # Returns hashtable @{ success = $bool; exitCode = $int; reason = $string }.
+    # NEVER throws. Treats well-known installer exit codes per Microsoft docs:
+    #   0    = installed (success)
+    #   1638 = newer version already installed (treat as success)
+    #   3010 = success-restart-required (treat as success + warning)
+    #   1602 = user cancel (failure)
+    #   1603 = fatal install error (failure)
+    # Reference:
+    #   https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+    #
+    # CRITICAL DIFFERENCE FROM Invoke-VcRedistModernInstaller: the VC++ 2010
+    # installer uses `/q /norestart` (NOT `/install /quiet /norestart`). The
+    # 2010-era Microsoft installer technology predates the unified `/install`
+    # verb and exposes a different (older) silent-install switch set.
+    # Passing `/install /quiet /norestart` to vcredist_x64.exe (2010) causes
+    # the installer to silently FAIL (the unrecognized arguments cause the
+    # installer to fall through to its "show help" code path which never
+    # actually installs). The /q switch is the load-bearing one for 2010.
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallerPath,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    if (-not (Test-Path -LiteralPath $InstallerPath)) {
+        return @{ success = $false; exitCode = -1; reason = "installer path $InstallerPath does not exist" }
+    }
+
+    # WHY a different installer-log filename: the 2010 redist installer
+    # writes to a separate log filename than the modern installer
+    # (dd_vcredist_*_2010 vs dd_vcredist_amd64). We don't know the exact
+    # filename pattern Microsoft chose for the VS 2010 generation (the
+    # MSI internally), so the hint stays generic: %TEMP% is the location.
+    $logHint = "${env:TEMP}\dd_*.log (and ${env:TEMP}\*VC*Redist*.log if present)"
+
+    $process = $null
+    try {
+        # NOTE: /q (not /quiet) and NO /install verb. Pinned via the static
+        # contract test so a future refactor cannot silently regress to the
+        # modern switches that would cause a no-op install.
+        $process = Start-Process -FilePath $InstallerPath -ArgumentList @('/q', '/norestart') -PassThru -ErrorAction Stop
+        $exited = $process.WaitForExit($TimeoutSeconds * 1000)
+        if (-not $exited) {
+            # $pid is a read-only AUTOMATIC variable in PowerShell (the running
+            # pwsh's own PID) — assigning to it throws under StrictMode + Stop.
+            # Use a renamed local so the timeout-kill diagnostic survives.
+            $killedPid = $process.Id
+            try { $process.Kill() } catch { } # best-effort
+            # Blocking WaitForExit() after Kill() to prevent handle leaks
+            # (mirror modern installer's pattern).
+            try { $process.WaitForExit() } catch { }
+            return @{ success = $false; exitCode = -1; reason = "installer did not exit within $TimeoutSeconds seconds; killed process $killedPid (see $logHint)" }
+        }
+        $code = $process.ExitCode
+        switch ($code) {
+            0 { return @{ success = $true; exitCode = $code; reason = "installer reported success (exit 0); log: $logHint" } }
+            1638 { return @{ success = $true; exitCode = $code; reason = "newer version already installed (exit 1638; idempotent); log: $logHint" } }
+            3010 { return @{ success = $true; exitCode = $code; reason = "success-restart-required (exit 3010; a reboot is recommended but not enforced here); log: $logHint" } }
+            1602 { return @{ success = $false; exitCode = $code; reason = "user cancel (exit 1602); log: $logHint" } }
+            1603 { return @{ success = $false; exitCode = $code; reason = "fatal install error (exit 1603); see $logHint" } }
+            default { return @{ success = $false; exitCode = $code; reason = "unrecognized installer exit code $code; see $logHint" } }
+        }
+    } catch {
+        $message = $_.Exception.Message
+        # Detect the Access Denied case via exception SHAPE (not English
+        # regex). Surface it as a specific actionable error.
+        if (Test-IsAccessDeniedException -ErrorRecord $_) {
+            return @{ success = $false; exitCode = -1; reason = "access denied (likely non-admin): $message" }
+        }
+        return @{ success = $false; exitCode = -1; reason = "Start-Process threw: $message" }
+    } finally {
+        # Dispose() the Process to release the kernel handle (mirror modern
+        # installer's pattern). Try/catch because Dispose itself can throw
+        # if the handle was already cleaned up.
+        if ($null -ne $process) {
+            try { $process.Dispose() } catch { }
+        }
+    }
+}
+
+function Install-VcRedistModern {
+    # Download + Authenticode verify + install + post-install probe for the
+    # VC++ 2015-2022 x64 Redistributable. Returns hashtable
+    # @{ success = $bool; reason = $string }. NEVER throws -- every failure
+    # is captured and the call site emits an annotation from $reason.
     param(
         [Parameter(Mandatory = $true)][string]$Url,
         [Parameter(Mandatory = $true)][int]$DownloadTimeoutSeconds,
@@ -582,7 +922,17 @@ function Install-VcRedist {
         return @{ success = $false; reason = "not a Windows host" }
     }
 
-    $download = Invoke-VcRedistDownload -Url $Url -TimeoutSeconds $DownloadTimeoutSeconds
+    # WHY pre-check Test-IsAdministrator: vcredist install writes HKLM and
+    # System32 -- both require elevation. Detecting non-admin BEFORE the
+    # download + Authenticode check produces a faster, more deterministic
+    # error path and matches the modern installer's pre-check posture for
+    # parity. (The download/sig-check would still work on non-admin but the
+    # installer would access-denied; bailing here saves the round-trip.)
+    if (-not (Test-IsAdministrator)) {
+        return @{ success = $false; reason = "access denied (likely non-admin): VC++ 2015-2022 redist install requires Administrator. Run the bootstrap from an elevated shell or trigger .github/workflows/runner-bootstrap.yml." }
+    }
+
+    $download = Invoke-VcRedistModernDownload -Url $Url -TimeoutSeconds $DownloadTimeoutSeconds
     if (-not $download.success) {
         return @{ success = $false; reason = "download failed: $($download.reason)" }
     }
@@ -593,36 +943,137 @@ function Install-VcRedist {
         # man-in-the-middle (or compromised CDN entry) could serve a
         # binary that looks legit but is not Microsoft-signed. The
         # Authenticode signature anchors trust at the Microsoft certificate.
-        $sigCheck = Test-VcRedistAuthenticodeSignature -FilePath $download.path
+        $sigCheck = Test-VcRedistAuthenticodeSignatureMicrosoft -FilePath $download.path
         if (-not $sigCheck.valid) {
             return @{ success = $false; reason = "Authenticode signature check failed: $($sigCheck.reason). Refusing to execute downloaded installer." }
         }
 
-        $install = Invoke-VcRedistInstaller -InstallerPath $download.path -TimeoutSeconds $InstallTimeoutSeconds
+        $install = Invoke-VcRedistModernInstaller -InstallerPath $download.path -TimeoutSeconds $InstallTimeoutSeconds
         if (-not $install.success) {
             return @{ success = $false; reason = "installer failed (exit $($install.exitCode)): $($install.reason)" }
         }
 
         # WHY a file-level post-install probe (in addition to the registry
-        # check inside Test-VcRedistInstalled): the installer can report
+        # check inside Test-VcRedistModernInstalled): the installer can report
         # success exit 0 even when the kernel cancelled mid-extract (rare
         # but observed after Defender quarantine of a DLL). The OS loader
         # cares about the actual files on disk -- if ANY of the three are
         # missing post-install, we know the install lied. F8/F15.
-        $fileProbe = Test-VcRedistFilesOnDisk
+        $fileProbe = Test-VcRedistModernFilesOnDisk
         if (-not $fileProbe.present) {
             $missingList = ($fileProbe.missing -join ', ')
             return @{ success = $false; reason = "installer reported success (exit $($install.exitCode)) but post-install file probe missing: $missingList. check ${env:TEMP}\dd_vcredist_amd64_*.log" }
         }
 
         # Post-install re-probe: file probe passed; combine with registry
-        # check via Test-VcRedistInstalled for a final canonical answer.
-        if (-not (Test-VcRedistInstalled)) {
+        # check via Test-VcRedistModernInstalled for a final canonical answer.
+        if (-not (Test-VcRedistModernInstalled)) {
             return @{ success = $false; reason = "installer reported success (exit $($install.exitCode)) but post-install probe still shows not-installed; check ${env:TEMP}\dd_vcredist_amd64_*.log" }
         }
 
         if ($install.exitCode -eq 3010) {
-            Write-CiWarning "VC++ redist installer requested a reboot (exit 3010). The runtime is installed but a reboot is recommended before the next Unity job."
+            Write-CiWarning "VC++ 2015-2022 redist installer requested a reboot (exit 3010). The runtime is installed but a reboot is recommended before the next Unity job."
+        }
+        return @{ success = $true; reason = $install.reason }
+    } finally {
+        # Best-effort cleanup of the downloaded installer (we have what we need).
+        try { Remove-Item -LiteralPath $download.path -Force -ErrorAction SilentlyContinue } catch { }
+    }
+}
+
+function Install-VcRedist2010 {
+    # Download + Authenticode verify + install + post-install probe for the
+    # VC++ 2010 SP1 x64 Redistributable. Returns hashtable
+    # @{ success = $bool; reason = $string }. NEVER throws -- every failure
+    # is captured and the call site emits an annotation from $reason.
+    #
+    # MIRRORS Install-VcRedistModern's flow:
+    #   1. Test-IsAdministrator pre-check (HKLM writes require elevation).
+    #   2. Skip if already installed (idempotent re-run).
+    #   3. Download via Invoke-VcRedist2010Download.
+    #   4. Authenticode signature check via the shared
+    #      Test-VcRedistAuthenticodeSignatureMicrosoft helper (Microsoft signs
+    #      both 2010 and 2015-2022 redistributables with the same certificate
+    #      chain).
+    #   5. Launch via Invoke-VcRedist2010Installer (uses /q /norestart, NOT
+    #      /install /quiet /norestart -- the 2010 installer's switches differ
+    #      from the modern generation).
+    #   6. Post-install file-on-disk re-verify; if the files are still missing
+    #      after an exit-0 install, treat it as a failure and surface the
+    #      installer-log hint.
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][int]$DownloadTimeoutSeconds,
+        [Parameter(Mandatory = $true)][int]$InstallTimeoutSeconds
+    )
+
+    Set-StrictMode -Version Latest
+
+    if (-not (Test-IsWindowsHost)) {
+        return @{ success = $false; reason = "not a Windows host" }
+    }
+
+    # WHY pre-check Test-IsAdministrator FIRST: the 2010 redist install
+    # writes HKLM and System32. Both require elevation. Detecting non-admin
+    # BEFORE the download + Authenticode check produces a faster, more
+    # deterministic error path. Mirrors the access-denied posture of the
+    # modern installer.
+    if (-not (Test-IsAdministrator)) {
+        return @{ success = $false; reason = "access denied (likely non-admin): VC++ 2010 redist install requires Administrator. Run the bootstrap from an elevated shell or trigger .github/workflows/runner-bootstrap.yml." }
+    }
+
+    # Idempotent skip: if Test-VcRedist2010Installed already reports success,
+    # there is nothing for us to do. (The Invoke-BootstrapStep wrapper already
+    # gates on Detect; this is belt-and-suspenders for any direct caller.)
+    $detect = Test-VcRedist2010Installed
+    if ($detect.installed) {
+        return @{ success = $true; reason = "already installed: $($detect.reason)" }
+    }
+
+    $download = Invoke-VcRedist2010Download -Url $Url -TimeoutSeconds $DownloadTimeoutSeconds
+    if (-not $download.success) {
+        return @{ success = $false; reason = "download failed: $($download.reason)" }
+    }
+
+    try {
+        # WHY signature verification BEFORE exec: even though
+        # [ValidatePattern] pins the URL to Microsoft hosts, a hostile
+        # man-in-the-middle (or compromised CDN entry) could serve a
+        # binary that looks legit but is not Microsoft-signed. The
+        # Authenticode signature anchors trust at the Microsoft certificate.
+        # Microsoft signs BOTH the 2010 and 2015-2022 redistributables, so
+        # we reuse the same Test-VcRedistAuthenticodeSignatureMicrosoft helper.
+        $sigCheck = Test-VcRedistAuthenticodeSignatureMicrosoft -FilePath $download.path
+        if (-not $sigCheck.valid) {
+            return @{ success = $false; reason = "Authenticode signature check failed: $($sigCheck.reason). Refusing to execute downloaded installer." }
+        }
+
+        $install = Invoke-VcRedist2010Installer -InstallerPath $download.path -TimeoutSeconds $InstallTimeoutSeconds
+        if (-not $install.success) {
+            return @{ success = $false; reason = "installer failed (exit $($install.exitCode)): $($install.reason)" }
+        }
+
+        # WHY a file-level post-install probe: the installer can report
+        # success exit 0 even when something went wrong on disk (e.g. AV
+        # quarantine of MSVCP100.dll mid-extract -- rare but observed). The
+        # OS loader cares about the actual files on disk -- if either
+        # MSVCP100.dll or MSVCR100.dll is missing post-install, we know the
+        # install lied and Unity will still fail with 0xC0000135.
+        $fileProbe = Test-VcRedist2010FilesOnDisk
+        if (-not $fileProbe.present) {
+            $missingList = ($fileProbe.missing -join ', ')
+            return @{ success = $false; reason = "installer reported success (exit $($install.exitCode)) but post-install file probe missing: $missingList. Check %TEMP% for the installer log." }
+        }
+
+        # Post-install re-probe via the composite Test-VcRedist2010Installed
+        # for the canonical answer (files + registry).
+        $postDetect = Test-VcRedist2010Installed
+        if (-not $postDetect.installed) {
+            return @{ success = $false; reason = "installer reported success (exit $($install.exitCode)) but post-install probe still shows not-installed: $($postDetect.reason). Check %TEMP% for the installer log." }
+        }
+
+        if ($install.exitCode -eq 3010) {
+            Write-CiWarning "VC++ 2010 redist installer requested a reboot (exit 3010). The runtime is installed but a reboot is recommended before the next Unity job."
         }
         return @{ success = $true; reason = $install.reason }
     } finally {
@@ -1016,7 +1467,7 @@ function Test-UcrtPresent {
     # $true silently. On downlevel hosts (Windows 7/8/Server 2012R2) we
     # check for KB2999226 via Get-HotFix and return its presence.
     # NEVER throws. Returns $true on non-Windows for the same vacuous-OK
-    # reason as Test-VcRedistInstalled.
+    # reason as Test-VcRedistModernInstalled.
     if (-not (Test-IsWindowsHost)) {
         return $true
     }
@@ -1333,6 +1784,7 @@ function Invoke-WindowsRunnerBootstrap {
         [Parameter(Mandatory = $true)][bool]$DetectOnly,
         [Parameter(Mandatory = $true)][string]$UnityInstallRoot,
         [Parameter(Mandatory = $true)][string]$VcRedistUrl,
+        [Parameter(Mandatory = $true)][string]$VcRedist2010Url,
         [Parameter(Mandatory = $true)][int]$DownloadTimeoutSeconds,
         [Parameter(Mandatory = $true)][int]$InstallTimeoutSeconds
     )
@@ -1359,24 +1811,39 @@ function Invoke-WindowsRunnerBootstrap {
         # works without admin; vcredist/long-paths/Defender each emit their
         # own specific access-denied diagnostic when applicable), but flag
         # explicitly so any subsequent 'access denied' has context. List
-        # ALL admin-requiring prereqs: critical (VC++ + LongPathsEnabled,
-        # HKLM writes) AND best-effort (Defender, which is now SKIPPED on
-        # non-admin per the 2026-05-26 tiering fix -- prior code treated
-        # Defender's non-admin failure as a critical failure and exited 1).
-        Write-CiWarning "bootstrap-windows-runner.ps1 running NON-admin. Critical prereqs that require HKLM writes (VC++ redist install, LongPathsEnabled) will fail with Access Denied; best-effort prereqs that require admin (Defender exclusions) are SKIPPED with a notice. To install missing critical prereqs, run from an elevated shell, OR trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
+        # ALL admin-requiring prereqs: critical (VC++ 2010 install,
+        # VC++ 2015-2022 install, LongPathsEnabled, all HKLM writes) AND
+        # best-effort (Defender, which is now SKIPPED on non-admin per the
+        # 2026-05-26 tiering fix -- prior code treated Defender's non-admin
+        # failure as a critical failure and exited 1).
+        Write-CiWarning "bootstrap-windows-runner.ps1 running NON-admin. Critical prereqs that require HKLM writes (VC++ 2010 redist install, VC++ 2015-2022 redist install, LongPathsEnabled) will fail with Access Denied; best-effort prereqs that require admin (Defender exclusions) are SKIPPED with a notice. To install missing critical prereqs, run from an elevated shell, OR trigger .github/workflows/runner-bootstrap.yml from the Actions UI."
     }
 
     $results = New-Object 'System.Collections.Generic.List[object]'
 
-    # Step 1: VC++ redist (THE root cause of the DAD-MACHINE failure).
-    # CRITICAL: Unity won't start without VCRUNTIME140*.dll on the OS.
+    # Step 1: VC++ 2010 redist (the load-bearing missing DLL identified in
+    # production run 70874414898: MSVCP100.dll). Older runtime first by
+    # convention -- newer-shadows-older means installing 2010 first cannot
+    # break the modern install, while installing the modern one first MIGHT
+    # cause the 2010 installer to refuse on a partially-shared registry view.
+    # CRITICAL: Unity 2021/2022/6000 won't start without MSVCP100.dll +
+    # MSVCR100.dll on the OS. SEPARATE Microsoft package from the 2015-2022
+    # generation -- the modern installer never lays these down.
     $results.Add((
-            Invoke-BootstrapStep -Name 'vcredist' -DetectOnly $DetectOnly -Critical $true `
-                -DetectFn { Test-VcRedistInstalled } `
-                -InstallFn { Install-VcRedist -Url $VcRedistUrl -DownloadTimeoutSeconds $DownloadTimeoutSeconds -InstallTimeoutSeconds $InstallTimeoutSeconds }
+            Invoke-BootstrapStep -Name 'vcredist-2010' -DetectOnly $DetectOnly -Critical $true `
+                -DetectFn { ([bool]((Test-VcRedist2010Installed).installed)) } `
+                -InstallFn { Install-VcRedist2010 -Url $VcRedist2010Url -DownloadTimeoutSeconds $DownloadTimeoutSeconds -InstallTimeoutSeconds $InstallTimeoutSeconds }
         )) | Out-Null
 
-    # Step 2: Long-paths.
+    # Step 2: VC++ 2015-2022 redist (THE root cause of the DAD-MACHINE failure).
+    # CRITICAL: Unity won't start without VCRUNTIME140*.dll on the OS.
+    $results.Add((
+            Invoke-BootstrapStep -Name 'vcredist-2015-2022' -DetectOnly $DetectOnly -Critical $true `
+                -DetectFn { Test-VcRedistModernInstalled } `
+                -InstallFn { Install-VcRedistModern -Url $VcRedistUrl -DownloadTimeoutSeconds $DownloadTimeoutSeconds -InstallTimeoutSeconds $InstallTimeoutSeconds }
+        )) | Out-Null
+
+    # Step 3: Long-paths.
     # CRITICAL: the Android NDK unpack hits MAX_PATH at ~240 chars without it.
     $results.Add((
             Invoke-BootstrapStep -Name 'long-paths' -DetectOnly $DetectOnly -Critical $true `
@@ -1384,7 +1851,7 @@ function Invoke-WindowsRunnerBootstrap {
                 -InstallFn { Enable-LongPaths }
         )) | Out-Null
 
-    # Step 3: Defender exclusion (N paths -> 1 step).
+    # Step 4: Defender exclusion (N paths -> 1 step).
     # BEST-EFFORT (critical = $false, set inside Invoke-DefenderBootstrap):
     # Defender exclusions are a perf optimization (faster Android NDK unpack)
     # and NOT a correctness requirement for Unity startup. The dispatcher's
@@ -1396,7 +1863,7 @@ function Invoke-WindowsRunnerBootstrap {
     $paths = @(Get-DefenderExclusionPaths -UnityInstallRoot $UnityInstallRoot)
     $results.Add((Invoke-DefenderBootstrap -Paths $paths -DetectOnly $DetectOnly)) | Out-Null
 
-    # Step 4: PowerShell 7.
+    # Step 5: PowerShell 7.
     # CRITICAL: many CI composites use `shell: pwsh` -- without it the very
     # next step would fail with `pwsh: command not found`.
     $results.Add((
@@ -1405,7 +1872,7 @@ function Invoke-WindowsRunnerBootstrap {
                 -InstallFn { Install-PowerShell7 }
         )) | Out-Null
 
-    # Step 5: UCRT (modern Windows: silent OK; downlevel: ::error:: + manual link).
+    # Step 6: UCRT (modern Windows: silent OK; downlevel: ::error:: + manual link).
     # CRITICAL on the hosts that need it (downlevel Win/Server); silent
     # no-op on Win10+/Server2019+ which ship UCRT preinstalled.
     $results.Add((Invoke-UcrtBootstrap -DetectOnly $DetectOnly)) | Out-Null
@@ -1421,10 +1888,10 @@ function Invoke-WindowsRunnerBootstrap {
     Write-CiNotice "(* = best-effort prereq; not load-bearing for Unity correctness)"
 
     # Tier-aware exit-code resolution. Failures are partitioned into:
-    #   - CRITICAL: load-bearing for Unity correctness (vcredist, long-paths,
-    #     pwsh, ucrt). A critical failure exits 1 and the operator MUST
-    #     remediate (elevated re-run or workflow_dispatch) before the next
-    #     Unity job can pass.
+    #   - CRITICAL: load-bearing for Unity correctness (vcredist-2010,
+    #     vcredist-2015-2022, long-paths, pwsh, ucrt). A critical failure exits
+    #     1 and the operator MUST remediate (elevated re-run or
+    #     workflow_dispatch) before the next Unity job can pass.
     #   - BEST-EFFORT: perf optimizations or convenience (defender-exclusion).
     #     A best-effort failure produces a ::warning:: and the dispatcher
     #     continues -- Unity correctness is unaffected. This is the
@@ -1520,6 +1987,7 @@ if ($invokedAsScript) {
         -DetectOnly:$DetectOnly.IsPresent `
         -UnityInstallRoot $UnityInstallRoot `
         -VcRedistUrl $VcRedistUrl `
+        -VcRedist2010Url $VcRedist2010Url `
         -DownloadTimeoutSeconds $DownloadTimeoutSeconds `
         -InstallTimeoutSeconds $InstallTimeoutSeconds
     exit $exit

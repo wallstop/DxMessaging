@@ -190,11 +190,24 @@ for the LLM/AI-agent reference.
 
 ### Root cause
 
-The Windows OS loader cannot resolve a DLL that `Unity.exe` imports. The DLLs
-that fail most often are `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, and
-`MSVCP140.dll`, all of which ship with the Microsoft Visual C++ 2015-2022
-Redistributable (x64). GitHub-hosted `windows-2022` runners include this
-preinstalled; self-hosted runners do not unless an operator has installed it.
+The Windows OS loader cannot resolve a DLL that `Unity.exe` imports. There are
+TWO independent Microsoft Visual C++ Redistributable packages Unity depends on
+and BOTH must be installed on the host:
+
+- **VC++ 2010 SP1 x64 Redistributable** (version `10.0.40219.325`) -- ships
+  `MSVCP100.dll` and `MSVCR100.dll`. Identified in production run
+  [`70874414898`](https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898)
+  as the load-bearing missing DLL on both self-hosted Windows runners.
+  [Unity Discussions confirms](https://discussions.unity.com/t/what-c-redistributable-does-unity3d-editor-require/244474)
+  that Unity 2021 / 2022 / 6000 ALL depend on this 2010-era runtime in
+  addition to the modern one.
+- **VC++ 2015-2022 x64 Redistributable** -- ships `VCRUNTIME140.dll`,
+  `VCRUNTIME140_1.dll`, and `MSVCP140.dll`. The original failure cause
+  identified on DAD-MACHINE.
+
+The two are SEPARATE Microsoft packages -- installing one does NOT install
+the other. GitHub-hosted `windows-2022` runners include both preinstalled;
+self-hosted runners do not unless an operator has installed them.
 
 Because the missing dependency is at the OS level, retrying the Unity install
 cannot help; `ensure-editor.ps1` short-circuits as soon as it sees
@@ -292,11 +305,25 @@ The bootstrap script detects each prereq independently and remediates only
 what is missing. One prereq's failure does not short-circuit the others; the
 final exit code reflects the worst outcome across all of them.
 
-- **Microsoft Visual C++ 2015-2022 x64 Redistributable** (the primary fix).
-  Installs `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, `MSVCP140.dll`, and the
-  rest of the 14.x C/C++ runtime that Unity links against. Downloaded from
-  the canonical Microsoft URL `https://aka.ms/vc14/vc_redist.x64.exe` and
-  verified by Authenticode signature before launch.
+- **Microsoft Visual C++ 2010 SP1 x64 Redistributable**, version
+  `10.0.40219.325` (the load-bearing missing DLL identified in production
+  run 70874414898). Installs `MSVCP100.dll` and `MSVCR100.dll`. Unity 2021.3
+  / 2022.3 / 6000.x ALL depend on this 2010-era runtime in addition to the
+  modern one ([Unity Discussions confirms](https://discussions.unity.com/t/what-c-redistributable-does-unity3d-editor-require/244474)).
+  This is a SEPARATE Microsoft package from the 2015-2022 generation -- the
+  modern installer does NOT install MSVCP100. Downloaded from the canonical
+  Microsoft URL
+  `https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe`
+  (no `aka.ms` shortcut exists for VS 2010 because extended support ended
+  2020-07-14) and verified by Authenticode signature before launch. Uses
+  silent-install switches `/q /norestart` (DIFFERENT from the modern
+  generation's `/install /quiet /norestart`).
+- **Microsoft Visual C++ 2015-2022 x64 Redistributable** (the original
+  DAD-MACHINE fix). Installs `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`,
+  `MSVCP140.dll`, and the rest of the 14.x C/C++ runtime that Unity links
+  against. Downloaded from the canonical Microsoft URL
+  `https://aka.ms/vc14/vc_redist.x64.exe` and verified by Authenticode
+  signature before launch.
 - **Windows long-path support.** Writes
   `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem!LongPathsEnabled = 1`.
   Resolves the Android NDK 93% unpack failure at the legacy MAX_PATH boundary
@@ -344,13 +371,16 @@ runner:
 ```powershell
 pwsh -v
 Test-Path 'C:\Windows\System32\VCRUNTIME140_1.dll'
+Test-Path 'C:\Windows\System32\MSVCP100.dll'
 (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem').LongPathsEnabled
 ```
 
 Expected output:
 
 - `pwsh -v` reports PowerShell 7.x.
-- `Test-Path` returns `True`.
+- BOTH `Test-Path` checks return `True` (VCRUNTIME140_1.dll is from the
+  VC++ 2015-2022 redist; MSVCP100.dll is from the VC++ 2010 SP1 redist --
+  Unity needs both).
 - `LongPathsEnabled` is `1`.
 
 The next Unity job's `Print runner diagnostics` step runs the per-job
@@ -361,20 +391,23 @@ confirmation that recovery worked.
 
 Common failure modes and the remediation for each:
 
-- **Runner agent is not running as Administrator.** VC++ and
-  `LongPathsEnabled` need `HKLM` writes. The script detects access-denied via
-  a locale-safe exception-type check and emits an actionable `::error::`
-  pointing at this section. Fix: re-run the script from an elevated shell on
-  the host, or configure the runner agent service account with local admin
-  rights and re-trigger the workflow.
+- **Runner agent is not running as Administrator.** Both VC++ redists
+  (2010 and 2015-2022) and `LongPathsEnabled` need `HKLM` writes. The
+  script detects access-denied via a locale-safe exception-type check and
+  emits an actionable `::error::` pointing at this section. Fix: re-run
+  the script from an elevated shell on the host, or configure the runner
+  agent service account with local admin rights and re-trigger the
+  workflow.
 - **Network failure during the VC++ download.** Re-trigger the workflow. The
-  script pins the URL to `https://aka.ms/vc14/vc_redist.x64.exe` (canonical
-  Microsoft host) so a transient failure is a real network issue, not a
-  redirect drift.
+  script pins each generation's URL to its canonical Microsoft host
+  (`https://aka.ms/vc14/vc_redist.x64.exe` for the 2015-2022 generation;
+  `https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe`
+  for the 2010 SP1 generation) so a transient failure is a real network
+  issue, not a redirect drift.
 - **VC++ Authenticode signature mismatch.** The script refuses to launch an
-  installer that is not signed by Microsoft. If this fires, do NOT bypass:
-  the download was corrupted or the host has been redirected. Investigate
-  before re-running.
+  installer (either generation) that is not signed by Microsoft. If this
+  fires, do NOT bypass: the download was corrupted or the host has been
+  redirected. Investigate before re-running.
 - **`winget` is missing.** Some self-hosted images ship without the
   `App Installer` package. Install **App Installer** from the Microsoft Store
   on the host (or use the standalone installer linked from the
@@ -386,11 +419,20 @@ Common failure modes and the remediation for each:
 
 ### Persistent 0xC0000135 after VC++ + long-paths are confirmed installed
 
+**Most common cause: missing Microsoft Visual C++ 2010 Redistributable
+(x64).** The bootstrap installs this automatically -- confirm it ran
+successfully AS ADMIN at least once on the host (the `vcredist-2010` step
+in the summary line must say `ok`, not `install-failed`). If the summary
+shows `vcredist-2010=install-failed` while `vcredist-2015-2022=ok`, the
+host is missing the 2010 generation's `MSVCP100.dll` / `MSVCR100.dll`
+which Unity depends on independently of the modern redist.
+
 The per-job preflight (`assert-unity-host-prereqs`) has already exported
-`DXM_RUNNER_PREREQ_INSTALLED=1` (`vcredist=ok long-paths=ok`), yet Unity
-itself still exits `0xC0000135` from the startup probe. The DLL that the
-Windows loader cannot resolve is therefore **NOT** in the VC++
-Redistributable bundle. `ensure-editor.ps1` now resolves every Unity.exe
+`DXM_RUNNER_PREREQ_INSTALLED=1` (`vcredist-2010=ok vcredist-2015-2022=ok
+long-paths=ok`), yet Unity itself still exits `0xC0000135` from the
+startup probe. The DLL that the Windows loader cannot resolve is therefore
+**NOT** in either VC++ Redistributable bundle (both 2010 SP1 and 2015-2022
+have been installed). `ensure-editor.ps1` now resolves every Unity.exe
 import against the Windows loader search path (KnownDLLs / Unity install
 dir / System32 / Windows / PATH, both regular and delay-loaded imports)
 and emits an annotation that NAMES the specific missing DLL(s) instead
@@ -398,7 +440,7 @@ of a truncated list. The annotation lives on a single line and looks
 roughly like:
 
 ```text
-::error title=Unity <version> host prerequisite missing::Unity <version> native startup failed with exit -1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND). The Windows loader could not resolve a DLL Unity.exe imports. Preflight ran successfully at job start (VC++/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Re-running the bootstrap script will NOT help. MISSING DLL(s): <names>. ... Resolved: <S> system + <U> editor + <W> Windows + <P> PATH + <K> KnownDLLs out of <N> total imports. Probe log: ...
+::error title=Unity <version> host prerequisite missing::Unity <version> native startup failed with exit -1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND). The Windows loader could not resolve a DLL Unity.exe imports. Preflight ran successfully at job start (VC++ 2010/VC++ 2015-2022/long-paths/Defender/pwsh OK), so this is a DIFFERENT missing DLL (Unity-version-specific or corrupt install). Re-running the bootstrap script will NOT help. If the missing DLL is MSVCP100.dll, the host needs Microsoft Visual C++ 2010 Redistributable; the bootstrap script's 'vcredist-2010' step installs this. MISSING DLL(s): <names>. ... Resolved: <S> system + <U> editor + <W> Windows + <P> PATH + <K> KnownDLLs out of <N> total imports. Probe log: ...
 ```
 
 #### If the missing DLL is a SYSTEM library (`CRYPT32.dll`, `bcrypt.dll`, `KERNEL32.dll`, `ucrtbase.dll`, `api-ms-win-*.dll`, etc.)
@@ -474,9 +516,16 @@ block (EDR / AppLocker / Code Integrity Guard).
    gflags.exe -i Unity.exe +sls
    ```
 
-   The next CI run will surface the loader-init failure in the
-   **Application** event log (`eventvwr.msc` -> Windows Logs ->
-   Application) with the specific missing transitive dependency.
+1. **CRITICAL: loader snaps go to the kernel debug output stream, NOT
+   to the Application event log.** To actually capture them, download
+   [DebugView from
+   Sysinternals](https://learn.microsoft.com/en-us/sysinternals/downloads/debugview),
+   run `Dbgview.exe` **as Administrator**, and enable
+   **Capture -> Capture Kernel** AND **Capture -> Capture Global
+   Win32**. Then run `Unity.exe` (or trigger the CI job). The loader
+   snap output (`LdrpLoadDll`, `LdrpProcessRelocationBlock`,
+   `LdrpSnapModule`, `LdrpFindOrMapDll`, etc.) appears in DebugView's
+   window. Save the capture (File -> Save) for the next debug pass.
 
 1. Disable loader snaps after diagnosing (gflags settings persist):
 
@@ -485,8 +534,43 @@ block (EDR / AppLocker / Code Integrity Guard).
    ```
 
 1. If the failure is an EDR / AppLocker / CIG block, the event-log
-   entry will name the policy. Add `Unity.exe` and the Unity install
-   dir to the relevant allowlist on the host.
+   entry (Security log, NOT Application) will name the policy. Add
+   `Unity.exe` and the Unity install dir to the relevant allowlist on
+   the host.
+
+##### Known red herring: Event 1534 (`tiledatamodelsvc`)
+
+The Application event log on every Windows 10 1809+ host emits
+continuous **Event ID 1534** warnings from `User Profile Service`:
+
+```text
+Profile notification of event Load for component
+{B31118B2-1F49-48E5-B6F5-BC21CAEC56FB} failed, error code is See
+Tracelogging for error details.
+```
+
+`{B31118B2-...}` is `tiledatamodelsvc` (Tile Data Model service),
+which Microsoft removed in Windows 10 1809 but left a stale
+registration entry under
+`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileNotification`.
+
+**This is NOT related to Unity's `0xC0000135`.** The "Load" in
+"Profile notification of event Load" is **user profile load**
+(logon), not **DLL load** -- a different Windows subsystem
+(`UserProfileSvc`) from the loader (`ntdll!Ldrp*`). Every Windows
+10 1809+ machine emits this warning continuously; Unity runs fine
+on most of them.
+
+If the noise is bothersome, delete the orphan registry key (silences
+the warning; no effect on Unity):
+
+```powershell
+Remove-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileNotification\TDL' -Force -ErrorAction SilentlyContinue
+```
+
+Sources:
+[Microsoft Q&A 1534](https://learn.microsoft.com/en-us/answers/questions/2185615/user-profile-event-trigger-1534),
+[gHacks: Event ID 1534 warnings](https://www.ghacks.net/2018/12/29/windows-10-user-profile-service-event-id-1534-warnings/).
 
 ### Cross-references
 

@@ -1,12 +1,15 @@
 /**
- * @fileoverview Static contract guard for the new Unity host-prereq bootstrap
+ * @fileoverview Static contract guard for the Unity host-prereq bootstrap
  * surface (scripts/unity/bootstrap-windows-runner.ps1).
  *
  * Root cause this script exists for: Unity.exe failed at startup with exit code
- * -1073741515 / 0xC0000135 (STATUS_DLL_NOT_FOUND) on a self-hosted Windows
- * runner because the Microsoft Visual C++ 2015-2022 x64 Redistributable was not
- * installed. The bootstrap script detects + installs every host-OS prereq Unity
- * needs to launch (VC++ redist, Windows long-paths, Windows Defender
+ * -1073741515 / 0xC0000135 (STATUS_DLL_NOT_FOUND) on self-hosted Windows
+ * runners because the Microsoft Visual C++ Redistributables were not installed.
+ * Production run 70874414898 identified MSVCP100.dll (from the 2010 generation)
+ * as the load-bearing missing DLL; the modern 2015-2022 generation is a
+ * SEPARATE Microsoft package and the bootstrap must install BOTH. The bootstrap
+ * script detects + installs every host-OS prereq Unity needs to launch (VC++
+ * 2010 redist, VC++ 2015-2022 redist, Windows long-paths, Windows Defender
  * exclusions, PowerShell 7, UCRT). This file is the PURE-text / AST regression
  * guard for the script's contract surface -- no process spawning, no behavior
  * under test -- so the cost is sub-millisecond and the assertions stay green
@@ -120,7 +123,7 @@ describe("bootstrap-windows-runner.ps1 directive + advanced-function metadata", 
     expect(SCRIPT_TEXT).toMatch(/\[OutputType\(\[int\]\)\]/);
   });
 
-  test("the PARAM block declares all six expected parameters with the right types", () => {
+  test("the PARAM block declares all expected parameters (incl. VcRedist2010Url) with the right types", () => {
     // We anchor against the first param block (the one that follows
     // [CmdletBinding()] / [OutputType] at the top of the file). Whitespace
     // tolerant so harmless reformatting (PSScriptAnalyzer reflow, comment
@@ -128,6 +131,10 @@ describe("bootstrap-windows-runner.ps1 directive + advanced-function metadata", 
     expect(SCRIPT_TEXT).toMatch(/\[switch\]\s*\$DetectOnly\b/);
     expect(SCRIPT_TEXT).toMatch(/\[string\]\s*\$UnityInstallRoot\b/);
     expect(SCRIPT_TEXT).toMatch(/\[string\]\s*\$VcRedistUrl\b/);
+    // VC++ 2010 redist URL parameter MUST exist (it is the script-level
+    // override-able URL for the 2010 SP1 generation, which is a separate
+    // Microsoft package from the modern 2015-2022 redist).
+    expect(SCRIPT_TEXT).toMatch(/\[string\]\s*\$VcRedist2010Url\b/);
     expect(SCRIPT_TEXT).toMatch(/\[int\]\s*\$DownloadTimeoutSeconds\b/);
     expect(SCRIPT_TEXT).toMatch(/\[int\]\s*\$InstallTimeoutSeconds\b/);
   });
@@ -372,22 +379,25 @@ describe("bootstrap-windows-runner.ps1 winget install args", () => {
   });
 });
 
-describe("bootstrap-windows-runner.ps1 VC++ redist install args + detection", () => {
-  test("Invoke-VcRedistInstaller passes /install /quiet /norestart", () => {
-    // Microsoft's documented silent install flags. Missing any of the three
-    // means the installer pauses for UI / forces a reboot mid-job; both
-    // failure modes are unacceptable on a non-interactive runner.
-    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedistInstaller");
+describe("bootstrap-windows-runner.ps1 VC++ 2015-2022 redist install args + detection", () => {
+  test("Invoke-VcRedistModernInstaller passes /install /quiet /norestart", () => {
+    // Microsoft's documented silent install flags for the 2015-2022 generation.
+    // Missing any of the three means the installer pauses for UI / forces a
+    // reboot mid-job; both failure modes are unacceptable on a non-interactive
+    // runner. CRITICALLY: do NOT confuse with the 2010 generation's switches
+    // (/q /norestart -- no /install verb) -- the two generations use
+    // DIFFERENT silent-install switch sets.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedistModernInstaller");
     expect(body).not.toBeNull();
     expect(body).toMatch(/'\/install'\s*,\s*'\/quiet'\s*,\s*'\/norestart'/);
   });
 
-  test("Test-VcRedistFilesOnDisk checks all three required DLLs in System32", () => {
+  test("Test-VcRedistModernFilesOnDisk checks all three required DLLs in System32", () => {
     // The file probe is the AUTHORITATIVE detection signal -- the OS loader
     // fails Unity.exe at startup based on these on-disk files, not the
     // registry. All three must be probed; missing any one means a Unity
     // launch can still fail with 0xC0000135 even when the other two land.
-    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistFilesOnDisk");
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistModernFilesOnDisk");
     expect(body).not.toBeNull();
     expect(body).toContain("VCRUNTIME140.dll");
     expect(body).toContain("VCRUNTIME140_1.dll");
@@ -409,20 +419,20 @@ describe("bootstrap-windows-runner.ps1 VC++ redist install args + detection", ()
     // VS 2019 (<= 16.7) install, which is the lineage most self-hosted
     // runners come from. 26020 is the first VS 2017 15.5 build that ships
     // VCRUNTIME140_1.dll.
-    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistInstalledAtRegistryView");
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistModernInstalledAtRegistryView");
     expect(body).not.toBeNull();
     expect(body).toMatch(/-ge\s+26020\b/);
     // The wrong threshold MUST NOT reappear anywhere in the script.
     expect(SCRIPT_TEXT).not.toMatch(/-ge\s+30000\b/);
   });
 
-  test("TLS 1.2 (mandatory) + TLS 1.3 (best-effort) is configured before Invoke-WebRequest", () => {
+  test("TLS 1.2 (mandatory) + TLS 1.3 (best-effort) is configured before Invoke-WebRequest (modern download)", () => {
     // Stock Windows PowerShell 5.1's ServicePointManager defaults to
     // Ssl3|Tls1.0 -- which aka.ms and download.visualstudio.microsoft.com
     // reject. Without TLS 1.2 the download fails with "underlying connection
     // was closed". Tls13 is best-effort (older .NET Framework lacks the
     // enum value).
-    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedistDownload");
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedistModernDownload");
     expect(body).not.toBeNull();
     // TLS 1.2 MUST be configured.
     expect(body).toMatch(/\[Net\.SecurityProtocolType\]::Tls12/);
@@ -440,25 +450,207 @@ describe("bootstrap-windows-runner.ps1 VC++ redist install args + detection", ()
     expect(tls12Idx).toBeLessThan(iwrCallMatch.index);
   });
 
-  test("Get-AuthenticodeSignature is called on the downloaded EXE before launching it", () => {
+  test("Get-AuthenticodeSignature is called on the downloaded EXE before launching the modern installer", () => {
     // The [ValidatePattern]-pinned URL is necessary but not sufficient
     // (compromised CDN entry, MITM, etc.). Authenticode signature
     // verification at install time anchors trust on the Microsoft cert
     // chain. The signature check must precede the installer launch.
-    const verifierBody = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistAuthenticodeSignature");
+    const verifierBody = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistAuthenticodeSignatureMicrosoft");
     expect(verifierBody).not.toBeNull();
     expect(verifierBody).toMatch(/Get-AuthenticodeSignature\s+-FilePath\s+\$FilePath/);
     expect(verifierBody).toContain("Microsoft Corporation");
 
-    // The installer orchestrator must call the verifier BEFORE
-    // Invoke-VcRedistInstaller.
-    const installerBody = extractPowerShellFunction(SCRIPT_TEXT, "Install-VcRedist");
+    // The modern installer orchestrator must call the verifier BEFORE
+    // Invoke-VcRedistModernInstaller.
+    const installerBody = extractPowerShellFunction(SCRIPT_TEXT, "Install-VcRedistModern");
     expect(installerBody).not.toBeNull();
-    const sigIdx = installerBody.indexOf("Test-VcRedistAuthenticodeSignature");
-    const installIdx = installerBody.indexOf("Invoke-VcRedistInstaller");
+    const sigIdx = installerBody.indexOf("Test-VcRedistAuthenticodeSignatureMicrosoft");
+    const installIdx = installerBody.indexOf("Invoke-VcRedistModernInstaller");
     expect(sigIdx).toBeGreaterThan(-1);
     expect(installIdx).toBeGreaterThan(-1);
     expect(sigIdx).toBeLessThan(installIdx);
+  });
+
+  test("Install-VcRedistModern pre-checks Test-IsAdministrator before download", () => {
+    // The HKLM write of the registry-blessed install record requires elevation;
+    // detecting non-admin BEFORE the download avoids the round-trip + temp
+    // file footprint when we already know the install will fail. Mirrors the
+    // 2010 installer's pre-check.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Install-VcRedistModern");
+    expect(body).not.toBeNull();
+    const adminIdx = body.indexOf("Test-IsAdministrator");
+    const downloadIdx = body.indexOf("Invoke-VcRedistModernDownload");
+    expect(adminIdx).toBeGreaterThan(-1);
+    expect(downloadIdx).toBeGreaterThan(-1);
+    expect(adminIdx).toBeLessThan(downloadIdx);
+  });
+});
+
+describe("bootstrap-windows-runner.ps1 VC++ 2010 redist install args + detection", () => {
+  // Production run 70874414898 identified MSVCP100.dll (from the 2010 SP1
+  // generation) as the load-bearing missing DLL on both self-hosted Windows
+  // runners. The 2010 SP1 redistributable is a SEPARATE Microsoft package
+  // from the modern 2015-2022 generation -- installing the modern one does
+  // NOT install MSVCP100. The contract assertions below pin every load-
+  // bearing token / arg / URL of the 2010 install path so a refactor that
+  // drifts ANY of them (URL drift, switch drift, missing admin pre-check)
+  // fails this guard with a deterministic line number.
+
+  test("the canonical VC++ 2010 SP1 x64 redist URL is hardcoded in the script", () => {
+    // The download.microsoft.com path is the only canonical URL Microsoft
+    // publishes for this artifact (VS 2010 extended support ended
+    // 2020-07-14, so no aka.ms shortcut exists). The full URL with the
+    // artifact GUID 165255E7-... must appear verbatim somewhere in the
+    // script (the [ValidatePattern]-constrained default for $VcRedist2010Url).
+    expect(SCRIPT_TEXT).toContain(
+      "download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe"
+    );
+  });
+
+  test("VcRedist2010Url parameter carries a [ValidatePattern] pinning Microsoft hosts", () => {
+    // Same defense-in-depth as VcRedistUrl: any caller-overridden URL must
+    // come from a Microsoft-controlled domain. The 2010 URL list is narrower
+    // than the modern one (no aka.ms shortcut exists for VS 2010).
+    const lines = SCRIPT_TEXT.split("\n");
+    const validatorLineIdx = lines.findIndex(
+      (line) =>
+        line.includes("[ValidatePattern(") &&
+        /download\\\.microsoft\\\.com/.test(line)
+    );
+    expect(validatorLineIdx).toBeGreaterThan(-1);
+    const validatorLine = lines[validatorLineIdx];
+    expect(validatorLine).toMatch(/\[ValidatePattern\(.*download\\\.microsoft\\\.com.*\)\]/);
+    // The IMMEDIATELY-FOLLOWING non-empty line must declare $VcRedist2010Url,
+    // so the validator decorates exactly that parameter (and nothing else).
+    let nextLineIdx = validatorLineIdx + 1;
+    while (nextLineIdx < lines.length && lines[nextLineIdx].trim() === "") {
+      nextLineIdx += 1;
+    }
+    expect(nextLineIdx).toBeLessThan(lines.length);
+    expect(lines[nextLineIdx]).toMatch(/\[string\]\s*\$VcRedist2010Url\b/);
+  });
+
+  test("Invoke-VcRedist2010Installer passes /q /norestart (NOT /install /quiet /norestart)", () => {
+    // CRITICAL DIFFERENCE FROM THE MODERN GENERATION: the VC++ 2010 installer
+    // uses `/q /norestart` (NOT `/install /quiet /norestart`). The 2010-era
+    // Microsoft installer technology predates the unified `/install` verb
+    // and exposes a different (older) silent-install switch set. Passing
+    // the modern switches to the 2010 installer causes the unrecognized
+    // args to fall through to the help code path and the installer NEVER
+    // actually installs anything.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedist2010Installer");
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/'\/q'\s*,\s*'\/norestart'/);
+    // The function body MUST NOT contain the modern switch combination.
+    // (The literal regex pin defends against a future refactor that copy-
+    // pasted the modern args into the 2010 installer.)
+    expect(body).not.toMatch(/'\/install'\s*,\s*'\/quiet'\s*,\s*'\/norestart'/);
+  });
+
+  test("Test-VcRedist2010FilesOnDisk checks BOTH MSVCP100.dll AND MSVCR100.dll in System32", () => {
+    // Both DLLs ship in the 2010 SP1 redist installer; both are consumed
+    // by Unity.exe's import table (via the VC++ 2010-era libraries Unity
+    // statically links). Either being missing produces 0xC0000135 at
+    // startup, so both must be probed.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedist2010FilesOnDisk");
+    expect(body).not.toBeNull();
+    expect(body).toContain("MSVCP100.dll");
+    expect(body).toContain("MSVCR100.dll");
+    // SysWOW64 (the 32-bit mirror) MUST NOT be probed -- the x64 install
+    // lands in the native System32 only.
+    expect(body).not.toMatch(/SysWOW64/);
+  });
+
+  test("Test-VcRedist2010InstalledAtRegistryView probes the canonical VS 2010 VCRedist key", () => {
+    // The 2010 redist registers under
+    //   HKLM:\SOFTWARE\Microsoft\VisualStudio\10.0\VC\VCRedist\x64
+    // (also mirrored to Wow6432Node on some hosts -- the composite probe
+    // in Test-VcRedist2010Installed handles both). Pin the literal sub-path
+    // so a refactor that drifted the key (e.g. swapped 10.0 -> 14.0)
+    // fails this guard.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedist2010InstalledAtRegistryView");
+    expect(body).not.toBeNull();
+    expect(body).toContain("Microsoft\\VisualStudio\\10.0\\VC\\VCRedist\\x64");
+  });
+
+  test("Test-VcRedist2010Installed composes the file probe with BOTH native AND Wow6432Node registry views", () => {
+    // The 2010 installer can write to EITHER view depending on host
+    // configuration (unlike the modern redist which writes exclusively to
+    // the native view). The composite probe must check both views and OR
+    // them so a host where the install record landed in only one view is
+    // still classified as installed.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedist2010Installed");
+    expect(body).not.toBeNull();
+    // The native view probe must come first (it's the primary).
+    expect(body).toMatch(/Test-VcRedist2010InstalledAtRegistryView\s+-BaseKey\s+'HKLM:\\SOFTWARE'/);
+    // The Wow6432Node view probe must follow as the secondary.
+    expect(body).toMatch(/Test-VcRedist2010InstalledAtRegistryView\s+-BaseKey\s+'HKLM:\\SOFTWARE\\Wow6432Node'/);
+    // The file-on-disk probe must precede the registry probes (files are
+    // the OS-loader's authoritative signal).
+    const fileProbeIdx = body.indexOf("Test-VcRedist2010FilesOnDisk");
+    const nativeProbeIdx = body.indexOf("HKLM:\\SOFTWARE'");
+    expect(fileProbeIdx).toBeGreaterThan(-1);
+    expect(nativeProbeIdx).toBeGreaterThan(-1);
+    expect(fileProbeIdx).toBeLessThan(nativeProbeIdx);
+  });
+
+  test("TLS 1.2 (mandatory) + TLS 1.3 (best-effort) is configured before Invoke-WebRequest (2010 download)", () => {
+    // Same TLS posture as the modern download. The 2010 generation download
+    // uses download.microsoft.com which (like the modern endpoint) rejects
+    // TLS below 1.2. Without TLS 1.2 the download fails with "underlying
+    // connection was closed" on PS 5.1.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedist2010Download");
+    expect(body).not.toBeNull();
+    expect(body).toMatch(/\[Net\.SecurityProtocolType\]::Tls12/);
+    expect(body).toMatch(/ServicePointManager.*Tls12/s);
+    expect(body).toMatch(/\[Net\.SecurityProtocolType\]::Tls13/);
+    const tls12Idx = body.indexOf("[Net.SecurityProtocolType]::Tls12");
+    const iwrCallMatch = /Invoke-WebRequest\s+-Uri\b/.exec(body);
+    expect(tls12Idx).toBeGreaterThan(-1);
+    expect(iwrCallMatch).not.toBeNull();
+    expect(tls12Idx).toBeLessThan(iwrCallMatch.index);
+  });
+
+  test("Get-AuthenticodeSignature is called on the downloaded EXE before launching the 2010 installer", () => {
+    // Same trust posture as the modern installer: Authenticode verification
+    // anchors trust on Microsoft's certificate chain. Microsoft signs BOTH
+    // 2010 and 2015-2022 redistributables so the same shared helper
+    // (Test-VcRedistAuthenticodeSignatureMicrosoft) is reused for both.
+    const installerBody = extractPowerShellFunction(SCRIPT_TEXT, "Install-VcRedist2010");
+    expect(installerBody).not.toBeNull();
+    const sigIdx = installerBody.indexOf("Test-VcRedistAuthenticodeSignatureMicrosoft");
+    const installIdx = installerBody.indexOf("Invoke-VcRedist2010Installer");
+    expect(sigIdx).toBeGreaterThan(-1);
+    expect(installIdx).toBeGreaterThan(-1);
+    expect(sigIdx).toBeLessThan(installIdx);
+  });
+
+  test("Install-VcRedist2010 pre-checks Test-IsAdministrator before download", () => {
+    // The HKLM write of the registry-blessed install record requires elevation;
+    // detecting non-admin BEFORE the download avoids the round-trip + temp
+    // file footprint when we already know the install will fail. Mirrors the
+    // modern installer's pre-check pattern.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Install-VcRedist2010");
+    expect(body).not.toBeNull();
+    const adminIdx = body.indexOf("Test-IsAdministrator");
+    const downloadIdx = body.indexOf("Invoke-VcRedist2010Download");
+    expect(adminIdx).toBeGreaterThan(-1);
+    expect(downloadIdx).toBeGreaterThan(-1);
+    expect(adminIdx).toBeLessThan(downloadIdx);
+  });
+
+  test("Install-VcRedist2010 re-verifies the file probe AFTER the installer reports success", () => {
+    // The installer can return exit 0 even when the kernel canceled
+    // mid-extract (e.g. AV quarantine of MSVCP100.dll). The OS loader cares
+    // about the actual files on disk -- so the post-install probe is
+    // load-bearing for correctness.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Install-VcRedist2010");
+    expect(body).not.toBeNull();
+    const installerIdx = body.indexOf("Invoke-VcRedist2010Installer");
+    const postProbeIdx = body.lastIndexOf("Test-VcRedist2010FilesOnDisk");
+    expect(installerIdx).toBeGreaterThan(-1);
+    expect(postProbeIdx).toBeGreaterThan(-1);
+    expect(installerIdx).toBeLessThan(postProbeIdx);
   });
 });
 
@@ -508,18 +700,34 @@ describe("bootstrap-windows-runner.ps1 declares every required helper function",
   // These names form the script's public-ish surface (the dispatcher invokes
   // them; tests inspect them; future contributors will hunt them by name).
   // A rename that drops one must be reflected here or fail the suite.
+  // The names follow the convention:
+  //   - *Modern* = VC++ 2015-2022 generation (vc_redist.x64.exe / aka.ms/vc14)
+  //   - *2010*   = VC++ 2010 SP1 generation (vcredist_x64.exe / direct
+  //                download.microsoft.com URL with the 165255E7-... GUID)
+  //   - *Microsoft (on the shared signature helper) = the shared abstraction
+  //     because Microsoft signs both generations with the same trust chain.
   const REQUIRED_HELPERS = [
     "Test-IsWindowsHost",
     "Test-IsAdministrator",
     "Test-IsAccessDeniedException",
     "Get-RegistryItemPropertySafe",
-    "Test-VcRedistFilesOnDisk",
-    "Test-VcRedistInstalledAtRegistryView",
-    "Test-VcRedistInstalled",
-    "Test-VcRedistAuthenticodeSignature",
-    "Invoke-VcRedistDownload",
-    "Invoke-VcRedistInstaller",
-    "Install-VcRedist",
+    // VC++ 2015-2022 (modern) generation helpers.
+    "Test-VcRedistModernFilesOnDisk",
+    "Test-VcRedistModernInstalledAtRegistryView",
+    "Test-VcRedistModernInstalled",
+    "Invoke-VcRedistModernDownload",
+    "Invoke-VcRedistModernInstaller",
+    "Install-VcRedistModern",
+    // VC++ 2010 SP1 generation helpers (new).
+    "Test-VcRedist2010FilesOnDisk",
+    "Test-VcRedist2010InstalledAtRegistryView",
+    "Test-VcRedist2010Installed",
+    "Invoke-VcRedist2010Download",
+    "Invoke-VcRedist2010Installer",
+    "Install-VcRedist2010",
+    // Shared Authenticode verifier (both 2010 and 2015-2022 signers are
+    // Microsoft Corporation; the helper name reflects the shared abstraction).
+    "Test-VcRedistAuthenticodeSignatureMicrosoft",
     "Test-LongPathsEnabled",
     "Enable-LongPaths",
     "Test-DefenderExclusionPathAllowed",
@@ -543,6 +751,33 @@ describe("bootstrap-windows-runner.ps1 declares every required helper function",
   test.each(REQUIRED_HELPERS)("declares helper function %s", (name) => {
     const body = extractPowerShellFunction(SCRIPT_TEXT, name);
     expect(body).not.toBeNull();
+  });
+
+  // The OLD (pre-rename) names MUST NOT appear ANYWHERE in the script as
+  // function definitions OR call sites. A refactor that left a stale call
+  // to e.g. `Test-VcRedistInstalled` would compile but throw at runtime
+  // (PowerShell treats unknown commands as errors under StrictMode +
+  // ErrorActionPreference=Stop, which the dispatcher enables).
+  const FORBIDDEN_OLD_NAMES = [
+    "Test-VcRedistInstalled",
+    "Test-VcRedistInstalledAtRegistryView",
+    "Test-VcRedistFilesOnDisk",
+    "Test-VcRedistAuthenticodeSignature",
+    "Invoke-VcRedistDownload",
+    "Invoke-VcRedistInstaller",
+    "Install-VcRedist"
+  ];
+
+  test.each(FORBIDDEN_OLD_NAMES)("forbids reference to the pre-rename helper name %s", (name) => {
+    // We use a word-boundary regex so e.g. "Install-VcRedist" does not
+    // false-positive on "Install-VcRedistModern" / "Install-VcRedist2010".
+    // The negative pattern matches the bare name NOT followed by an
+    // identifier character (digit / letter / underscore / hyphen).
+    const pattern = new RegExp(`\\b${name}(?![\\w-])`);
+    // Allow only the FORBIDDEN_OLD_NAMES list reference inside the test
+    // file's own forbidden-name registry; we are testing the SCRIPT_TEXT,
+    // not this test file. Any match in SCRIPT_TEXT is a stale reference.
+    expect(SCRIPT_TEXT).not.toMatch(pattern);
   });
 });
 
@@ -590,12 +825,20 @@ describe("bootstrap-windows-runner.ps1 PowerShell automatic-variable hygiene (ro
   // intended "installer timed out" reason into a misleading "Start-Process
   // threw: Cannot overwrite variable PID" message. The fix renames the
   // local so the timeout diagnostic survives end-to-end.
-  test("Invoke-VcRedistInstaller does NOT assign to the reserved $pid automatic variable", () => {
-    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedistInstaller");
+  test("Invoke-VcRedistModernInstaller does NOT assign to the reserved $pid automatic variable", () => {
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedistModernInstaller");
     expect(body).not.toBeNull();
     // Negative: no `$pid =` assignment ANYWHERE in the function body.
     // PowerShell's $pid is the running process's PID; assigning to it
     // throws under StrictMode + ErrorActionPreference=Stop.
+    expect(body).not.toMatch(/^\s*\$pid\s*=/m);
+    expect(body).not.toMatch(/[^\w]\$pid\s*=/);
+  });
+
+  test("Invoke-VcRedist2010Installer does NOT assign to the reserved $pid automatic variable", () => {
+    // Mirror guard for the 2010 installer (same regression class).
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-VcRedist2010Installer");
+    expect(body).not.toBeNull();
     expect(body).not.toMatch(/^\s*\$pid\s*=/m);
     expect(body).not.toMatch(/[^\w]\$pid\s*=/);
   });
@@ -750,20 +993,29 @@ describe("bootstrap-windows-runner.ps1 best-effort tiering (Defender is non-load
   test("Invoke-WindowsRunnerBootstrap explicitly tiers each prereq", () => {
     // Make the contract explicit so a future maintainer reading this test
     // sees exactly which prereqs are load-bearing vs best-effort.
-    //   vcredist     -- critical=$true (Unity won't start)
+    //   vcredist-2010      -- critical=$true (Unity won't start without
+    //                         MSVCP100/MSVCR100; identified in run 70874414898)
+    //   vcredist-2015-2022 -- critical=$true (Unity won't start without
+    //                         VCRUNTIME140*/MSVCP140; the original DAD-MACHINE
+    //                         failure cause)
     //   long-paths   -- critical=$true (Android NDK won't unpack)
     //   pwsh         -- critical=$true (CI composites use `shell: pwsh`)
     //   ucrt         -- critical=$true (Unity needs it on downlevel Windows)
     //   defender     -- critical=$false (perf optimization only)
     //
-    // The vcredist, long-paths, pwsh call sites all go through
-    // Invoke-BootstrapStep -- assert each one passes `-Critical $true`
-    // explicitly so an audit immediately sees the load-bearing intent.
+    // The vcredist-2010, vcredist-2015-2022, long-paths, pwsh call sites
+    // all go through Invoke-BootstrapStep -- assert each one passes
+    // `-Critical $true` explicitly so an audit immediately sees the
+    // load-bearing intent.
     const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-WindowsRunnerBootstrap");
     expect(body).not.toBeNull();
-    // vcredist call site must declare -Critical $true.
+    // vcredist-2010 call site must declare -Critical $true.
     expect(body).toMatch(
-      /Invoke-BootstrapStep[\s\S]{0,400}-Name\s+'vcredist'[\s\S]{0,400}-Critical\s+\$true/
+      /Invoke-BootstrapStep[\s\S]{0,400}-Name\s+'vcredist-2010'[\s\S]{0,400}-Critical\s+\$true/
+    );
+    // vcredist-2015-2022 call site must declare -Critical $true.
+    expect(body).toMatch(
+      /Invoke-BootstrapStep[\s\S]{0,400}-Name\s+'vcredist-2015-2022'[\s\S]{0,400}-Critical\s+\$true/
     );
     // long-paths call site must declare -Critical $true.
     expect(body).toMatch(
@@ -780,6 +1032,16 @@ describe("bootstrap-windows-runner.ps1 best-effort tiering (Defender is non-load
     const defenderCallMatch = body.match(/Invoke-DefenderBootstrap[\s\S]{0,200}/);
     expect(defenderCallMatch).not.toBeNull();
     expect(defenderCallMatch[0]).not.toMatch(/-Critical/);
+
+    // Order pin: vcredist-2010 step MUST appear BEFORE vcredist-2015-2022 in
+    // the dispatcher (older-runtime-first convention; not strictly required
+    // for correctness, but the consistent ordering simplifies audit and
+    // matches the documented expectation).
+    const vc2010Idx = body.indexOf("'vcredist-2010'");
+    const vcModernIdx = body.indexOf("'vcredist-2015-2022'");
+    expect(vc2010Idx).toBeGreaterThan(-1);
+    expect(vcModernIdx).toBeGreaterThan(-1);
+    expect(vc2010Idx).toBeLessThan(vcModernIdx);
   });
 
   test("Format-BootstrapSummary suffixes best-effort outcomes with `*`", () => {
@@ -815,16 +1077,18 @@ describe("bootstrap-windows-runner.ps1 best-effort tiering (Defender is non-load
     expect(summaryIdx).toBeLessThan(legendIdx);
   });
 
-  test("non-admin warning at the top of the dispatcher mentions Defender (now skipped)", () => {
-    // The pre-existing non-admin warning forgot Defender; the fix updates
-    // it to list both critical (HKLM writes) AND best-effort (Defender)
-    // admin-requiring prereqs, and clarifies that Defender is now SKIPPED
-    // rather than failing. Pin the updated text so a future refactor can't
-    // drop the Defender mention.
+  test("non-admin warning at the top of the dispatcher mentions BOTH VC++ generations + Defender (now skipped)", () => {
+    // The pre-existing non-admin warning forgot Defender; the round-3 fix
+    // updates it to list both critical (HKLM writes) AND best-effort
+    // (Defender) admin-requiring prereqs, and clarifies that Defender is
+    // now SKIPPED rather than failing. The current revision also names
+    // BOTH VC++ generations (2010 + 2015-2022) so an operator scanning the
+    // log sees the full HKLM-write footprint at a glance. Pin the updated
+    // text so a future refactor can't drop any of these mentions.
     const body = extractPowerShellFunction(SCRIPT_TEXT, "Invoke-WindowsRunnerBootstrap");
     expect(body).not.toBeNull();
-    // The warning still flags HKLM writes...
-    expect(body).toMatch(/HKLM writes[^"']*VC\+\+[^"']*LongPathsEnabled/);
+    // The warning still flags HKLM writes AND mentions both VC++ generations.
+    expect(body).toMatch(/HKLM writes[^"']*VC\+\+\s+2010[^"']*VC\+\+\s+2015-2022[^"']*LongPathsEnabled/);
     // ...AND now also flags Defender being SKIPPED on non-admin.
     expect(body).toMatch(/best-effort prereqs[^"']*Defender exclusions[^"']*SKIPPED/);
     // The remediation hint (elevated shell OR workflow_dispatch) must remain.

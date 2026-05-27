@@ -110,7 +110,9 @@ describe("scripts/unity/bootstrap-windows-runner.ps1 helper mutation resistance"
     test.skip("Test-DefenderExclusionPathAllowed accepts 'C:\\Unity\\Editors'", () => {});
     test.skip("Test-DefenderExclusionPathAllowed accepts a runner _work fragment", () => {});
     test.skip("Test-DefenderExclusionPathAllowed rejects 'C:\\WINDOWS'", () => {});
-    test.skip("Test-VcRedistFilesOnDisk on Linux returns @{present=$true; missing=@()}", () => {});
+    test.skip("Test-VcRedistModernFilesOnDisk on Linux returns @{present=$true; missing=@()}", () => {});
+    test.skip("Test-VcRedist2010FilesOnDisk on Linux returns @{present=$true; missing=@()}", () => {});
+    test.skip("Test-VcRedist2010Installed on Linux returns @{installed=$true; reason=...}", () => {});
     return;
   }
 
@@ -253,7 +255,7 @@ describe("scripts/unity/bootstrap-windows-runner.ps1 helper mutation resistance"
     expect((result.stdout || "").trim()).toBe("False");
   });
 
-  test("Test-VcRedistFilesOnDisk on Linux returns the vacuous-OK shape (present=$true)", () => {
+  test("Test-VcRedistModernFilesOnDisk on Linux returns the vacuous-OK shape (present=$true)", () => {
     if (!ON_NON_WINDOWS) {
       // On Windows this depends on the host install; not asserted here.
       return;
@@ -265,7 +267,7 @@ describe("scripts/unity/bootstrap-windows-runner.ps1 helper mutation resistance"
     // dot-source test harness on Linux pwsh.
     const result = runHarness(
       [
-        "$r = Test-VcRedistFilesOnDisk",
+        "$r = Test-VcRedistModernFilesOnDisk",
         "Write-Output ('present=' + [bool]$r.present)",
         "Write-Output ('missing.count=' + ($r.missing.Count))"
       ].join("\n")
@@ -274,6 +276,59 @@ describe("scripts/unity/bootstrap-windows-runner.ps1 helper mutation resistance"
     const out = (result.stdout || "").trim();
     expect(out).toContain("present=True");
     expect(out).toContain("missing.count=0");
+  });
+
+  test("Test-VcRedist2010FilesOnDisk on Linux returns the vacuous-OK shape (present=$true)", () => {
+    if (!ON_NON_WINDOWS) {
+      // On Windows this depends on the host install; not asserted here
+      // (the file probe is OS-dependent and we don't want this test to
+      // become a host-state-dependent oracle on a real Windows runner).
+      return;
+    }
+    // Mirror of the modern probe's Linux behavior: non-Windows hosts have
+    // no System32 dir so the helper MUST short-circuit with the vacuous-OK
+    // shape (present=$true; missing=@()) so callers can compose it without
+    // crashing on Linux. The early-return is load-bearing for the dot-source
+    // test harness AND for any future Linux-side dispatcher test (the
+    // dispatcher already short-circuits on non-Windows but Test-IsWindowsHost
+    // is the only thing keeping the file probes safe to dot-source on Linux).
+    const result = runHarness(
+      [
+        "$r = Test-VcRedist2010FilesOnDisk",
+        "Write-Output ('present=' + [bool]$r.present)",
+        "Write-Output ('missing.count=' + ($r.missing.Count))"
+      ].join("\n")
+    );
+    expect(result.status).toBe(0);
+    const out = (result.stdout || "").trim();
+    expect(out).toContain("present=True");
+    expect(out).toContain("missing.count=0");
+  });
+
+  test("Test-VcRedist2010Installed on Linux returns @{installed=$true; reason=...} (vacuous OK)", () => {
+    if (!ON_NON_WINDOWS) {
+      // On Windows the result depends on the host install; not asserted here.
+      return;
+    }
+    // The composite Test-VcRedist2010Installed must short-circuit to the
+    // vacuous-OK shape on non-Windows so the dispatcher's DetectFn on Linux
+    // returns truthy (the dispatcher uses
+    //   { ([bool]((Test-VcRedist2010Installed).installed)) }
+    // as the detection scriptblock, which must NOT throw on Linux when the
+    // bootstrap is dot-sourced or run in DetectOnly mode for parity tests).
+    const result = runHarness(
+      [
+        "$r = Test-VcRedist2010Installed",
+        "Write-Output ('installed=' + [bool]$r.installed)",
+        // The reason is a string -- assert it is non-null/non-empty so a
+        // mutation that nulled it out would be caught.
+        "Write-Output ('reason-nonempty=' + (-not [string]::IsNullOrWhiteSpace([string]$r.reason)))"
+      ].join("\n")
+    );
+    expect(result.status).toBe(0);
+    const out = (result.stdout || "").trim();
+    expect(out).toContain("installed=True");
+    expect(out).toContain("reason-nonempty=True");
   });
 
   test("Test-LongPathsEnabled honors DXM_UNITY_FAKE_LONGPATHS_ENABLED on every OS", () => {

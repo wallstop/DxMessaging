@@ -20,6 +20,9 @@ tags:
   - "windows"
   - "prerequisites"
   - "vcredist"
+  - "vcredist-2010"
+  - "vcredist-2015-2022"
+  - "msvcp100"
   - "bootstrap"
   - "self-hosted"
   - "0xC0000135"
@@ -62,6 +65,8 @@ aliases:
   - "0xC0000135 runbook"
   - "STATUS_DLL_NOT_FOUND fix"
   - "VC++ redistributable bootstrap"
+  - "VC++ 2010 redistributable bootstrap"
+  - "MSVCP100 fix"
 
 related:
   - "unity-editor-cli-bootstrap"
@@ -71,22 +76,32 @@ related:
 status: "stable"
 ---
 
-<!-- trigger: windows, vcredist, vcruntime, msvcp140, 0xC0000135, STATUS_DLL_NOT_FOUND, bootstrap, host-prereqs, longpaths, defender, winget, pwsh | Self-hosted Windows runner host-OS prerequisites for Unity Editor startup | Core -->
+<!-- trigger: windows, vcredist, vcruntime, msvcp140, msvcp100, msvcr100, vcredist-2010, 0xC0000135, STATUS_DLL_NOT_FOUND, bootstrap, host-prereqs, longpaths, defender, winget, pwsh | Self-hosted Windows runner host-OS prerequisites for Unity Editor startup | Core -->
 
 # Unity Runner Host Prerequisites
 
 > **One-line summary**: Use a four-layer defense for self-hosted Windows
-> Unity runners: bootstrap host prerequisites, preflight every Unity job,
-> short-circuit host-level startup faults, and keep an Actions recovery path.
+> Unity runners: bootstrap host prerequisites (BOTH VC++ 2010 and 2015-2022
+> generations), preflight every Unity job, short-circuit host-level startup
+> faults, and keep an Actions recovery path.
 
 ## Overview
 
 `scripts/unity/bootstrap-windows-runner.ps1` is the canonical Windows-host
-prereq installer for Unity CI. It detects and installs the Microsoft Visual
-C++ 2015-2022 x64 Redistributable, enables Windows long paths, adds guarded
-Windows Defender exclusions for the Unity install root and runner workspace,
-installs PowerShell 7 (`pwsh`) through `winget`, and audits UCRT on downlevel
-Windows. It is idempotent and supports `-DetectOnly`.
+prereq installer for Unity CI. It detects and installs BOTH the Microsoft
+Visual C++ 2010 SP1 x64 Redistributable (ships `MSVCP100.dll`/`MSVCR100.dll`
+-- load-bearing missing DLL identified in production run 70874414898) AND
+the Microsoft Visual C++ 2015-2022 x64 Redistributable (ships
+`VCRUNTIME140.dll`/`MSVCP140.dll`), enables Windows long paths, adds
+guarded Windows Defender exclusions for the Unity install root and runner
+workspace, installs PowerShell 7 (`pwsh`) through `winget`, and audits UCRT
+on downlevel Windows. It is idempotent and supports `-DetectOnly`.
+
+> **Unity 2021.3 / 2022.3 / 6000.x ALL depend on BOTH VC++ generations.**
+> The 2010 runtime (`MSVCP100.dll` / `MSVCR100.dll`) is required IN ADDITION
+> to VC++ 2015-2022 (`VCRUNTIME140.dll` / `MSVCP140.dll`). The two are
+> SEPARATE Microsoft packages -- installing one does NOT install the other.
+> ([Unity Discussions reference](https://discussions.unity.com/t/what-c-redistributable-does-unity3d-editor-require/244474))
 
 Three entry points consume it:
 
@@ -106,8 +121,16 @@ quarantine/reinstall. Missing loader DLLs are host damage, not editor damage.
 
 Freshly imaged self-hosted Windows runners can miss DLLs that GitHub-hosted
 Windows runners already include. Unity then fails during `Provision Unity
-Editor` with `-1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND)`, commonly due
-to missing `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, or `MSVCP140.dll`.
+Editor` with `-1073741515 (0xC0000135 / STATUS_DLL_NOT_FOUND)`. The two
+common cases are:
+
+- Missing `MSVCP100.dll` / `MSVCR100.dll` (VC++ 2010 SP1 generation -- the
+  load-bearing miss identified in production run 70874414898).
+- Missing `VCRUNTIME140.dll` / `VCRUNTIME140_1.dll` / `MSVCP140.dll` (VC++
+  2015-2022 generation -- the original DAD-MACHINE failure).
+
+The two are SEPARATE Microsoft redistributable packages -- installing one
+does NOT install the other. The bootstrap installs both in one pass.
 
 Before this defense, `ensure-editor.ps1` treated that startup failure as a
 Unity-install fault. It quarantined and reinstalled the editor, failed the same
@@ -139,10 +162,19 @@ operators a no-host-access recovery path.
 
 ## Prereqs Managed
 
+- **Microsoft Visual C++ 2010 SP1 x64 Redistributable** (version
+  `10.0.40219.325`): primary remediation for `0xC0000135` when the missing
+  DLL is `MSVCP100.dll` or `MSVCR100.dll` (identified in production run
+  70874414898). The script downloads
+  `https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe`
+  (no aka.ms shortcut exists for VS 2010) and verifies the Authenticode
+  signature before launch. Uses silent-install switches `/q /norestart`
+  (DIFFERENT from the modern generation's `/install /quiet /norestart`).
 - **Microsoft Visual C++ 2015-2022 x64 Redistributable**: primary remediation
-  for `0xC0000135`; installs the VC++ runtime DLLs Unity imports. The script
-  downloads `https://aka.ms/vc14/vc_redist.x64.exe` and verifies the
-  Authenticode signature before launch.
+  for `0xC0000135` when the missing DLL is `VCRUNTIME140*.dll` or
+  `MSVCP140.dll`; installs the modern 14.x VC++ runtime DLLs Unity imports.
+  The script downloads `https://aka.ms/vc14/vc_redist.x64.exe` and verifies
+  the Authenticode signature before launch.
 - **Windows long paths**: writes
   `HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem!LongPathsEnabled = 1` to
   prevent deterministic long-path unpack failures.
@@ -156,16 +188,24 @@ Microsoft.PowerShell --scope user`, so Administrator is not required for
   emits an actionable KB2999226 error instead of attempting a host-specific MSU
   install.
 
-When running non-admin, HKLM-backed repairs such as VC++ and long paths can
-fail with Access Denied. The script reports that directly and points to the
-elevated local-host path or the Actions recovery workflow. It does not use
-`Start-Process -Verb RunAs`; UAC prompts would hang non-interactive CI.
+When running non-admin, HKLM-backed repairs such as both VC++ generations
+and long paths can fail with Access Denied. The script reports that
+directly and points to the elevated local-host path or the Actions recovery
+workflow. It does not use `Start-Process -Verb RunAs`; UAC prompts would
+hang non-interactive CI.
 
 ## Detection Contracts
 
 Treat file-on-disk probes as authoritative when they reflect loader behavior:
 
-- VC++ detection first checks `C:\Windows\System32` for
+- **VC++ 2010** detection first checks `C:\Windows\System32` for
+  `MSVCP100.dll` and `MSVCR100.dll` (BOTH must exist). Only after file
+  presence passes does the script consult the registry: either
+  `HKLM:\SOFTWARE\Microsoft\VisualStudio\10.0\VC\VCRedist\x64!Installed = 1`
+  OR the `Wow6432Node` mirror (the 2010 installer can register in either
+  view depending on host configuration -- unlike the modern generation,
+  which writes exclusively to the native view).
+- **VC++ 2015-2022** detection first checks `C:\Windows\System32` for
   `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, and `MSVCP140.dll`. All three
   must exist. Only after file presence passes does the script consult the
   native 64-bit `HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64`

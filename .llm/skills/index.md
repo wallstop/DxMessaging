@@ -230,7 +230,7 @@
 | [Unity License Bootstrap](./unity/unity-license-bootstrap.md)               | [ok] 240   | [basic]        | [stable] | [risk: none] | unity, license       |
 | [Unity License Return Guarantee](./unity/unity-license-return-guarantee.md) | [warn] 290 | [intermediate] | [stable] | [risk: none] | unity, serial        |
 | [Unity Perf Test Isolation](./unity/unity-perf-test-isolation.md)           | [ok] 219   | [intermediate] | [stable] | [risk: high] | unity, performance   |
-| [Unity Runner Host Prerequisites](./unity/unity-runner-host-prereqs.md)     | [ok] 219   | [intermediate] | [stable] | [risk: none] | unity, windows       |
+| [Unity Runner Host Prerequisites](./unity/unity-runner-host-prereqs.md)     | [ok] 259   | [intermediate] | [stable] | [risk: none] | unity, windows       |
 | [UPM Test Harness](./unity/upm-test-harness.md)                             | [ok] 193   | [basic]        | [stable] | [risk: none] | unity, upm           |
 
 ---

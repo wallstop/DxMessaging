@@ -216,12 +216,39 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
     expect(fs.existsSync(ENSURE_EDITOR)).toBe(true);
   });
 
-  test("declares Test-IsNativeDllNotFound, Get-UnityNativeImports, Write-UnityHostPrereqAnnotation", () => {
+  test("declares Test-IsNativeDllNotFound, Get-UnityNativeImports, Write-UnityHostPrereqAnnotation, Test-VcRedistGeneration", () => {
     expect(extractPowerShellFunction(SCRIPT_TEXT, "Test-IsNativeDllNotFound")).not.toBeNull();
     expect(extractPowerShellFunction(SCRIPT_TEXT, "Get-UnityNativeImports")).not.toBeNull();
     expect(
       extractPowerShellFunction(SCRIPT_TEXT, "Write-UnityHostPrereqAnnotation")
     ).not.toBeNull();
+    // Test-VcRedistGeneration is the load-bearing classifier that decides
+    // which VC++ generation to name in the cause-line (2010 vs 2015-2022 vs
+    // both vs neither). Pinning its existence as an AST contract prevents
+    // a future refactor from inlining the classification logic into
+    // Write-UnityHostPrereqAnnotation without test coverage.
+    expect(extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistGeneration")).not.toBeNull();
+  });
+
+  test("Test-VcRedistGeneration classifies the four cases via MSVCP100/MSVCR100 + MSVCP140/VCRUNTIME140* patterns", () => {
+    // Static-shape guard for the classifier's pattern set. A refactor that
+    // dropped MSVCR100 (the C runtime DLL, paired with MSVCP100) from the
+    // vc2010 pattern would silently mis-classify a host where MSVCR100 was
+    // the missing DLL. Pin every load-bearing identifier here.
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Test-VcRedistGeneration");
+    expect(body).not.toBeNull();
+    // The 2010-generation marker DLLs MUST appear in the classifier.
+    expect(body).toContain("MSVCP100");
+    expect(body).toContain("MSVCR100");
+    // The modern-generation marker DLLs MUST appear in the classifier.
+    expect(body).toContain("MSVCP140");
+    expect(body).toContain("VCRUNTIME140");
+    expect(body).toContain("VCRUNTIME140_1");
+    // The four classification outputs must all be present.
+    expect(body).toMatch(/'vc2010'/);
+    expect(body).toMatch(/'vcmodern'/);
+    expect(body).toMatch(/'both'/);
+    expect(body).toMatch(/'neither'/);
   });
 
   test("Test-IsNativeDllNotFound compares against 'C0000135' hex string (NOT the 0xC0000135 int literal)", () => {
@@ -450,6 +477,10 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
     test.skip("Annotation: Unity-shipped missing DLL surfaces 'corrupt install' hint + DXM_UNITY_FORCE_REINSTALL", () => {});
     test.skip("Annotation: when ALL imports resolve, switches to transitive-dependency hint", () => {});
     test.skip("Annotation: 'Resolved: ...' diagnostic is always present and well-formed", () => {});
+    test.skip("Annotation: missing MSVCP100 surfaces VC++ 2010 cause line (NOT 2015-2022)", () => {});
+    test.skip("Annotation: missing BOTH 2010 + 2015-2022 markers surfaces BOTH cause line", () => {});
+    test.skip("Annotation: missing only VCRUNTIME140 keeps the existing 2015-2022 cause line", () => {});
+    test.skip("Test-VcRedistGeneration classifies vc2010 / vcmodern / both / neither correctly", () => {});
     return;
   }
 
@@ -466,6 +497,7 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
       "Test-UnityImportResolution",
       "Test-UnityImportLooksUnityShipped",
       "Write-UnityHostPrereqAnnotation",
+      "Test-VcRedistGeneration",
       "Write-CiNotice"
     ];
     const wantedLiteral = wanted.map((n) => `'${n}'`).join(", ");
@@ -869,6 +901,147 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
     const out = combined(result);
     expect(out).toMatch(
       /Resolved:.*system.*editor.*Windows.*PATH.*KnownDLLs.*out of 3 total imports/
+    );
+  });
+
+  // ===========================================================================
+  // VC++ generation classification (Test-VcRedistGeneration + cause-line phrasing)
+  //
+  // Production run 70874414898 identified MSVCP100.dll (from the VC++ 2010 SP1
+  // generation) as the load-bearing missing DLL on both self-hosted Windows
+  // runners. The previous annotation hard-coded "missing VC++ 2015-2022
+  // Redistributable" which was wrong for MSVCP100. The 2010 generation is a
+  // SEPARATE Microsoft package -- the bootstrap's `vcredist-2015-2022` step
+  // alone does NOT install MSVCP100. The tests below pin the four
+  // classification outcomes (vc2010 / vcmodern / both / neither) AND the
+  // exact wording each branch produces so a refactor that flipped the cause
+  // line (or dropped a marker DLL from the pattern set) fails loudly.
+  // ===========================================================================
+
+  test("Test-VcRedistGeneration classifies the four cases (vc2010 / vcmodern / both / neither)", () => {
+    // Direct behavioral test of the classifier. Tests every documented case
+    // with both `.dll`-suffixed and bare names + a case-insensitive variant
+    // to cover the AllowEmptyCollection / case-insensitive contract.
+    const result = runHarness([
+      "Write-Output ('case1=' + (Test-VcRedistGeneration -MissingDlls @('MSVCP100.dll')))",
+      "Write-Output ('case2=' + (Test-VcRedistGeneration -MissingDlls @('msvcr100')))",
+      "Write-Output ('case3=' + (Test-VcRedistGeneration -MissingDlls @('VCRUNTIME140_1.dll')))",
+      "Write-Output ('case4=' + (Test-VcRedistGeneration -MissingDlls @('MSVCP140.dll')))",
+      "Write-Output ('case5=' + (Test-VcRedistGeneration -MissingDlls @('MSVCP100.dll', 'VCRUNTIME140_1.dll')))",
+      "Write-Output ('case6=' + (Test-VcRedistGeneration -MissingDlls @('KERNEL32.dll', 'CRYPT32.dll')))",
+      "Write-Output ('case7=' + (Test-VcRedistGeneration -MissingDlls @()))"
+    ]);
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const lines = (result.stdout || "").trim().split(/\r?\n/);
+    expect(lines).toContain("case1=vc2010"); // MSVCP100.dll alone
+    expect(lines).toContain("case2=vc2010"); // bare 'msvcr100' (case-insensitive, no .dll)
+    expect(lines).toContain("case3=vcmodern"); // VCRUNTIME140_1.dll
+    expect(lines).toContain("case4=vcmodern"); // MSVCP140.dll
+    expect(lines).toContain("case5=both"); // MSVCP100 + VCRUNTIME140_1
+    expect(lines).toContain("case6=neither"); // OS DLLs (KERNEL32, CRYPT32)
+    expect(lines).toContain("case7=neither"); // empty input
+  });
+
+  test("Annotation: missing MSVCP100 surfaces VC++ 2010 cause line (NOT 2015-2022)", () => {
+    // The load-bearing fix for production run 70874414898: when the
+    // resolver identifies MSVCP100 as the missing DLL, the annotation MUST
+    // name the VC++ 2010 Redistributable -- NOT the 2015-2022 generation
+    // (which is a separate Microsoft package that won't help here). The
+    // operator copy-pastes this remediation; getting the generation wrong
+    // sends them down a fruitless install path.
+    const result = runHarness(
+      [
+        "$out = & {",
+        "  Write-UnityHostPrereqAnnotation -Version '6000.0.32f1' -ExitCode -1073741515 -Description '0xC0000135 / STATUS_DLL_NOT_FOUND' -EditorPath '/nonexistent/Unity.exe' -ProbeLog '/tmp/probe.log'",
+        "} *>&1 | Out-String",
+        "Write-Output $out"
+      ],
+      {
+        DXM_UNITY_FAKE_IMPORTS: "MSVCP100.dll,MSVCR100.dll",
+        DXM_UNITY_FAKE_MISSING_IMPORTS: "MSVCP100.dll,MSVCR100.dll",
+        DXM_RUNNER_PREREQ_INSTALLED: ""
+      }
+    );
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = combined(result);
+    // The cause line MUST name VC++ 2010 Redistributable.
+    expect(out).toContain("Visual C++ 2010 Redistributable");
+    // And MUST NOT name VC++ 2015-2022 Redistributable as the cause
+    // (because the resolver knows the missing DLL is 2010-era; mis-naming
+    // the generation here is the exact production bug we're guarding).
+    // We anchor the negative on "Most likely cause" prefix to allow the
+    // "BOTH" / "neither" fallback wording (which can mention 2015-2022
+    // alongside 2010) but reject the standalone vcmodern cause line.
+    expect(out).not.toMatch(
+      /Most likely cause:\s*missing Microsoft Visual C\+\+ 2015-2022 Redistributable \(x64\)\.\s+Run/
+    );
+    // The MISSING DLL annotation must still name MSVCP100.
+    expect(out).toContain("MSVCP100.dll");
+  });
+
+  test("Annotation: missing BOTH 2010 + 2015-2022 markers surfaces BOTH cause line", () => {
+    // When the resolver identifies marker DLLs from BOTH generations, the
+    // annotation tells the operator BOTH packages are missing -- this is the
+    // worst-case host state and the bootstrap installs both in one pass.
+    const result = runHarness(
+      [
+        "$out = & {",
+        "  Write-UnityHostPrereqAnnotation -Version '6000.0.32f1' -ExitCode -1073741515 -Description '0xC0000135 / STATUS_DLL_NOT_FOUND' -EditorPath '/nonexistent/Unity.exe' -ProbeLog '/tmp/probe.log'",
+        "} *>&1 | Out-String",
+        "Write-Output $out"
+      ],
+      {
+        DXM_UNITY_FAKE_IMPORTS: "MSVCP100.dll,VCRUNTIME140_1.dll,MSVCP140.dll",
+        DXM_UNITY_FAKE_MISSING_IMPORTS: "MSVCP100.dll,VCRUNTIME140_1.dll,MSVCP140.dll",
+        DXM_RUNNER_PREREQ_INSTALLED: ""
+      }
+    );
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = combined(result);
+    // Must surface BOTH generations explicitly.
+    expect(out).toMatch(/BOTH 2010 AND 2015-2022/);
+    expect(out).toContain("install both");
+    expect(out).toContain("MSVCP100.dll");
+    expect(out).toContain("VCRUNTIME140_1.dll");
+  });
+
+  test("Annotation: missing only modern (VCRUNTIME140) keeps the existing VC++ 2015-2022 cause line", () => {
+    // Backward-compatibility pin: when the missing DLLs are entirely from
+    // the modern generation, the cause line MUST keep the existing
+    // "missing Microsoft Visual C++ 2015-2022 Redistributable (x64)"
+    // wording (so existing operator runbooks / training materials remain
+    // accurate). The original annotation phrasing for this branch is
+    // unchanged; we test it specifically to guard the existing case.
+    const result = runHarness(
+      [
+        "$out = & {",
+        "  Write-UnityHostPrereqAnnotation -Version '6000.0.32f1' -ExitCode -1073741515 -Description '0xC0000135 / STATUS_DLL_NOT_FOUND' -EditorPath '/nonexistent/Unity.exe' -ProbeLog '/tmp/probe.log'",
+        "} *>&1 | Out-String",
+        "Write-Output $out"
+      ],
+      {
+        DXM_UNITY_FAKE_IMPORTS: "VCRUNTIME140.dll,VCRUNTIME140_1.dll,MSVCP140.dll",
+        DXM_UNITY_FAKE_MISSING_IMPORTS: "VCRUNTIME140.dll,VCRUNTIME140_1.dll,MSVCP140.dll",
+        DXM_RUNNER_PREREQ_INSTALLED: ""
+      }
+    );
+    if (result.status !== 0) {
+      throw new Error(combined(result));
+    }
+    const out = combined(result);
+    // Keep the existing 2015-2022 wording exactly.
+    expect(out).toContain("Visual C++ 2015-2022 Redistributable");
+    // The 2010 wording MUST NOT appear when only modern DLLs are missing
+    // (only the 2010-specific branch's MOST-LIKELY-CAUSE phrasing; we still
+    // allow incidental 2010 mention elsewhere if the comment text grows).
+    expect(out).not.toMatch(
+      /Most likely cause:\s*missing Microsoft Visual C\+\+ 2010 Redistributable \(x64\)/
     );
   });
 });
