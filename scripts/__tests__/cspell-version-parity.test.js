@@ -71,6 +71,35 @@ function findPinnedVersionsInText(text, packageName) {
   return Array.from(text.matchAll(re), (match) => match[1]);
 }
 
+function expandExtensionPattern(pattern) {
+  if (pattern === "ya?ml") {
+    return ["yaml", "yml"];
+  }
+  return [pattern];
+}
+
+function getCspellHookExtensions(blockText) {
+  const match = /files:\s*['"]\(\?i\)\\\.\(([^)]+)\)\$['"]/.exec(blockText || "");
+  if (!match) {
+    return [];
+  }
+
+  return match[1].split("|").flatMap(expandExtensionPattern).sort();
+}
+
+function getPackageCspellAllExtensions(script) {
+  const match = /"\*\*\/\*\.\{([^}]+)\}"/.exec(script || "");
+  if (!match) {
+    return [];
+  }
+
+  return match[1]
+    .split(",")
+    .map((extension) => extension.trim())
+    .filter(Boolean)
+    .sort();
+}
+
 function readWorkflowFiles() {
   return fs
     .readdirSync(WORKFLOWS_DIR)
@@ -114,11 +143,18 @@ describe("cspell version parity", () => {
   );
 
   test("package cspell scripts use the managed runner with the repository-pinned fallback", () => {
+    expect(pkg.scripts?.["check:cspell:all"]).toContain("node scripts/run-managed-cspell.js");
     expect(pkg.scripts?.["check:cspell:scripts"]).toContain("node scripts/run-managed-cspell.js");
     expect(pkg.scripts?.["check:workflow-cspell"]).toContain("node scripts/run-managed-cspell.js");
 
     const managedCspell = fs.readFileSync(MANAGED_CSPELL_PATH, "utf8");
     expect(managedCspell).toContain(`FALLBACK_CSPELL_SPEC = "cspell@${declaredVersion}"`);
+  });
+
+  test("check:cspell:all covers the same extensions as the pre-push cspell hook", () => {
+    expect(getPackageCspellAllExtensions(pkg.scripts?.["check:cspell:all"])).toEqual(
+      getCspellHookExtensions(block)
+    );
   });
 
   test("workflow npx fallback pins match package.json devDependency version", () => {

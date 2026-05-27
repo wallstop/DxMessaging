@@ -30,6 +30,8 @@ const {
   hasLlmPolicyRepairBeforeValidation,
   hasRequiredSkillsIndexRepairCommand,
   hasRequiredSkillsIndexCheckCommand,
+  hasRequiredAllCspellCommand,
+  hasAllCspellBeforePrePushHookParity,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
   hasRequiredWorkflowValidationCommand,
@@ -73,6 +75,7 @@ const {
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_YAML_VALIDATION_COMMAND,
   REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
+  REQUIRED_ALL_CSPELL_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_VALIDATION_COMMAND,
@@ -118,9 +121,24 @@ function requiredLlmPolicyScript({ remove = [] } = {}) {
   return requiredCommands.filter((command) => !removedCommands.has(command)).join(" && ");
 }
 
-function requiredPackageScripts({ preflightRemove = [], llmPolicyRemove = [] } = {}) {
+function requiredPrePushScript({ remove = [] } = {}) {
+  const requiredCommands = [
+    "npm run preflight:pre-commit",
+    REQUIRED_ALL_CSPELL_COMMAND,
+    "node scripts/ensure-pre-commit.js run --hook-stage pre-push --all-files"
+  ];
+  const removedCommands = new Set(remove);
+  return requiredCommands.filter((command) => !removedCommands.has(command)).join(" && ");
+}
+
+function requiredPackageScripts({
+  preflightRemove = [],
+  prePushRemove = [],
+  llmPolicyRemove = []
+} = {}) {
   return {
     "preflight:pre-commit": requiredPreflightScript({ remove: preflightRemove }),
+    "preflight:pre-push": requiredPrePushScript({ remove: prePushRemove }),
     "repair:llm-policy": REQUIRED_SKILLS_INDEX_REPAIR_COMMAND,
     "validate:llm-policy": requiredLlmPolicyScript({ remove: llmPolicyRemove })
   };
@@ -443,6 +461,22 @@ describe("validate-pre-commit-tooling", () => {
     const script = "npm run validate:pre-commit-tooling && echo npm run check:cspell:scripts";
 
     expect(hasRequiredScriptsCspellCommand(script)).toBe(false);
+  });
+
+  test("hasRequiredAllCspellCommand detects all-file cspell command as chained step", () => {
+    const script = requiredPrePushScript();
+
+    expect(hasRequiredAllCspellCommand(script)).toBe(true);
+  });
+
+  test("hasAllCspellBeforePrePushHookParity rejects cspell after hook parity", () => {
+    const script = [
+      "npm run preflight:pre-commit",
+      "node scripts/ensure-pre-commit.js run --hook-stage pre-push --all-files",
+      REQUIRED_ALL_CSPELL_COMMAND
+    ].join(" && ");
+
+    expect(hasAllCspellBeforePrePushHookParity(script)).toBe(false);
   });
 
   test("hasRequiredWorkflowCspellCommand detects workflow cspell command as chained step", () => {
@@ -1162,6 +1196,7 @@ describe("validate-pre-commit-tooling", () => {
     const packageJsonPath = path.resolve(__dirname, "../../package.json");
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
     const preflightScript = packageJson.scripts["preflight:pre-commit"];
+    const prePushScript = packageJson.scripts["preflight:pre-push"];
 
     expect(packageJson.scripts["check:prettier:hooks"]).toContain(
       "node scripts/run-managed-prettier.js --check"
@@ -1186,6 +1221,10 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain("npm run check:prettier:hooks");
     expect(preflightScript).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
     expect(preflightScript).toContain(REQUIRED_WORKFLOW_CSPELL_COMMAND);
+    expect(prePushScript).toContain(REQUIRED_ALL_CSPELL_COMMAND);
+    expect(prePushScript.indexOf(REQUIRED_ALL_CSPELL_COMMAND)).toBeLessThan(
+      prePushScript.indexOf("run --hook-stage pre-push")
+    );
     expect(preflightScript).toContain(REQUIRED_WORKFLOW_VALIDATION_COMMAND);
     expect(preflightScript).toContain(REQUIRED_BANNER_SYNC_COMMAND);
     expect(preflightScript).toContain(REQUIRED_CHANGELOG_VALIDATION_COMMAND);
@@ -1608,6 +1647,79 @@ describe("validate-pre-commit-tooling", () => {
     expect(violations).toHaveLength(1);
     expect(violations[0].hookId).toBe("preflight-script");
     expect(violations[0].message).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports missing all-file cspell pre-push command", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: requiredPackageScripts({
+            prePushRemove: [REQUIRED_ALL_CSPELL_COMMAND]
+          })
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain(REQUIRED_ALL_CSPELL_COMMAND);
+  });
+
+  test("validatePreflightScriptPolicy reports all-file cspell after hook parity", () => {
+    const readFileSyncMock = jest.fn((filePath) => {
+      if (filePath === "/tmp/package.json") {
+        return JSON.stringify({
+          scripts: {
+            ...requiredPackageScripts(),
+            "preflight:pre-push": [
+              "npm run preflight:pre-commit",
+              "node scripts/ensure-pre-commit.js run --hook-stage pre-push --all-files",
+              REQUIRED_ALL_CSPELL_COMMAND
+            ].join(" && ")
+          }
+        });
+      }
+
+      if (filePath === "/tmp/pre-commit.yaml") {
+        return [
+          "repos:",
+          "  - repo: local",
+          "    hooks:",
+          `      - id: ${REQUIRED_PARSER_SUITE_HOOK_ID}`,
+          "        entry: node scripts/run-managed-jest.js --runTestsByPath scripts/__tests__/generate-skills-index.test.js scripts/__tests__/fix-csharp-underscore-methods.test.js scripts/__tests__/check-conflict-markers.test.js scripts/__tests__/validate-changed-docs.test.js scripts/__tests__/validate-changelog.test.js scripts/__tests__/pre-commit-hook-stage-policy.test.js"
+        ].join("\n");
+      }
+
+      return "";
+    });
+
+    const violations = validatePreflightScriptPolicy(
+      readFileSyncMock,
+      "/tmp/package.json",
+      "/tmp/pre-commit.yaml"
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].hookId).toBe("preflight-script");
+    expect(violations[0].message).toContain("before the full pre-push hook parity");
   });
 
   test("validatePreflightScriptPolicy reports missing workflow cspell precheck command", () => {

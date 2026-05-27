@@ -52,6 +52,14 @@
  * pwsh is preinstalled on GitHub runners; locally-absent pwsh -> behavioral
  * tests skip with a console.warn; the always-on static assertions still
  * guarantee a zero-coverage regression cannot hide.
+ *
+ * @cross-platform-regression -- this marker gates the file on the
+ * ubuntu/windows/macos targeted-attribution step of
+ * .github/workflows/cross-platform-preflight.yml; enforced by
+ * scripts/__tests__/cross-platform-preflight-coverage.test.js. The
+ * DXM_UNITY_FAKE_IMPORTS / DXM_UNITY_FAKE_MISSING_IMPORTS split is
+ * specifically Windows-sensitive because native Windows can resolve VC++ DLLs
+ * from System32 and KERNEL32 from KnownDLLs.
  */
 
 "use strict";
@@ -60,6 +68,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { maskCommentsAndStrings } = require("../lib/source-stripping");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const ENSURE_EDITOR = path.join(REPO_ROOT, "scripts", "unity", "ensure-editor.ps1");
@@ -130,6 +139,70 @@ function extractPowerShellFunction(source, name) {
   return null;
 }
 
+function listTestFilesUnder(root) {
+  const files = [];
+  if (!fs.existsSync(root)) {
+    return files;
+  }
+
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listTestFilesUnder(absolutePath));
+    } else if (entry.isFile() && entry.name.endsWith(".test.js")) {
+      files.push(absolutePath);
+    }
+  }
+
+  return files;
+}
+
+function extractJestTestBlocks(source) {
+  const blocks = [];
+  const masked = maskCommentsAndStrings(source);
+  const testCall = /\b(?:test|it)(?:\.(?:only|skip|todo|each))?\s*\(/g;
+  for (const match of masked.matchAll(testCall)) {
+    const openBrace = masked.indexOf("{", match.index);
+    if (openBrace < 0) {
+      continue;
+    }
+
+    let depth = 0;
+    for (let i = openBrace; i < masked.length; i += 1) {
+      const ch = masked[i];
+      if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          blocks.push(source.slice(match.index, i + 1));
+          break;
+        }
+      }
+    }
+  }
+
+  return blocks;
+}
+
+function getFakeImportsFromBlock(block) {
+  const match = /DXM_UNITY_FAKE_IMPORTS\s*:\s*(["'`])([\s\S]*?)\1/.exec(block);
+  if (!match) {
+    return [];
+  }
+
+  return match[2]
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function isHostResolvableWindowsImport(name) {
+  return /^(?:api-ms-win-[a-z0-9-]+|bcrypt|crypt32|d3d\d+|dxgi|gdi32|kernel32|msvcp140|ntdll|ole32|shell32|ucrtbase|user32|vcruntime140(?:_1)?)\.dll$/i.test(
+    name
+  );
+}
+
 let SCRIPT_TEXT;
 beforeAll(() => {
   SCRIPT_TEXT = fs.readFileSync(ENSURE_EDITOR, "utf8");
@@ -146,7 +219,9 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
   test("declares Test-IsNativeDllNotFound, Get-UnityNativeImports, Write-UnityHostPrereqAnnotation", () => {
     expect(extractPowerShellFunction(SCRIPT_TEXT, "Test-IsNativeDllNotFound")).not.toBeNull();
     expect(extractPowerShellFunction(SCRIPT_TEXT, "Get-UnityNativeImports")).not.toBeNull();
-    expect(extractPowerShellFunction(SCRIPT_TEXT, "Write-UnityHostPrereqAnnotation")).not.toBeNull();
+    expect(
+      extractPowerShellFunction(SCRIPT_TEXT, "Write-UnityHostPrereqAnnotation")
+    ).not.toBeNull();
   });
 
   test("Test-IsNativeDllNotFound compares against 'C0000135' hex string (NOT the 0xC0000135 int literal)", () => {
@@ -166,10 +241,7 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
   });
 
   test("Write-UnityHostPrereqAnnotation emits ::error title= and names bootstrap-windows-runner.ps1", () => {
-    const body = extractPowerShellFunction(
-      SCRIPT_TEXT,
-      "Write-UnityHostPrereqAnnotation"
-    );
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Write-UnityHostPrereqAnnotation");
     expect(body).not.toBeNull();
     // The wrap-immune annotation MUST use the GitHub Actions
     // ::error title=... syntax so it survives ConciseView's word wrap.
@@ -188,10 +260,7 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
   });
 
   test("Ensure-UnityNativeStartupHealthy short-circuits on first-probe 0xC0000135 BEFORE attempting repair", () => {
-    const body = extractPowerShellFunction(
-      SCRIPT_TEXT,
-      "Ensure-UnityNativeStartupHealthy"
-    );
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Ensure-UnityNativeStartupHealthy");
     expect(body).not.toBeNull();
 
     // The first-probe short-circuit must fire BEFORE the
@@ -213,10 +282,7 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
   });
 
   test("first-probe short-circuit calls Write-UnityHostPrereqAnnotation WITHOUT -RepairAttempted, then throws", () => {
-    const body = extractPowerShellFunction(
-      SCRIPT_TEXT,
-      "Ensure-UnityNativeStartupHealthy"
-    );
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Ensure-UnityNativeStartupHealthy");
     expect(body).not.toBeNull();
     // Single-line regex: the first-probe branch annotates THEN throws, in
     // that order, both inside the `if (Test-IsNativeDllNotFound ...)` block.
@@ -233,10 +299,7 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
   });
 
   test("post-repair short-circuit calls Write-UnityHostPrereqAnnotation WITH -RepairAttempted, then throws", () => {
-    const body = extractPowerShellFunction(
-      SCRIPT_TEXT,
-      "Ensure-UnityNativeStartupHealthy"
-    );
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Ensure-UnityNativeStartupHealthy");
     expect(body).not.toBeNull();
     // Single-line regex: the post-repair branch annotates with
     // -RepairAttempted THEN throws.
@@ -246,10 +309,7 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
   });
 
   test("throw messages name the bootstrap path AND the runbook", () => {
-    const body = extractPowerShellFunction(
-      SCRIPT_TEXT,
-      "Ensure-UnityNativeStartupHealthy"
-    );
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Ensure-UnityNativeStartupHealthy");
     expect(body).not.toBeNull();
     // Both throws MUST name the operator-actionable bootstrap script.
     const throwBootstrapPattern = /throw\s+"[^"]*bootstrap-windows-runner\.ps1/g;
@@ -268,7 +328,9 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
     expect(body).not.toBeNull();
     // -EditorPath MUST be mandatory but accept empty strings (the resolver
     // is best-effort and must not throw when the caller has no path).
-    expect(body).toMatch(/\[Parameter\(Mandatory\s*=\s*\$true\)\]\[AllowEmptyString\(\)\]\[string\]\$EditorPath/);
+    expect(body).toMatch(
+      /\[Parameter\(Mandatory\s*=\s*\$true\)\]\[AllowEmptyString\(\)\]\[string\]\$EditorPath/
+    );
     // -Imports MUST accept empty collections (a partial PE walk may return
     // zero imports; the resolver should still return its empty-bucket
     // hashtable without throwing).
@@ -316,10 +378,7 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
     // else), MUST be guarded by the literal "1" string (so a stray value
     // cannot accidentally bypass), and MUST emit a CI notice so the override
     // is visible in the log.
-    const body = extractPowerShellFunction(
-      SCRIPT_TEXT,
-      "Ensure-UnityNativeStartupHealthy"
-    );
+    const body = extractPowerShellFunction(SCRIPT_TEXT, "Ensure-UnityNativeStartupHealthy");
     expect(body).not.toBeNull();
     expect(body).toMatch(/\$env:DXM_UNITY_FORCE_REINSTALL\s*-eq\s*'1'/);
     // The bypass must NOT short-circuit -- it falls through to the existing
@@ -349,6 +408,28 @@ describe("ensure-editor.ps1 0xC0000135 short-circuit source shape", () => {
     // The descriptor walk must be 32 bytes per entry for the delay-import
     // directory (8 uint32 fields).
     expect(body).toMatch(/RemainingBytes\s*-ge\s*32/);
+  });
+
+  test("host-resolvable fake imports do not assert missing-DLL output without the fake-missing override", () => {
+    const testsRoot = path.join(REPO_ROOT, "scripts", "__tests__");
+    const violations = [];
+    for (const filePath of listTestFilesUnder(testsRoot)) {
+      const source = fs.readFileSync(filePath, "utf8");
+      for (const block of extractJestTestBlocks(source)) {
+        if (!/MISSING DLL\(s\)/.test(block) || /DXM_UNITY_FAKE_MISSING_IMPORTS\s*:/.test(block)) {
+          continue;
+        }
+
+        const imports = getFakeImportsFromBlock(block);
+        if (imports.length === 0 || !imports.every(isHostResolvableWindowsImport)) {
+          continue;
+        }
+
+        violations.push(path.relative(REPO_ROOT, filePath).split(path.sep).join("/"));
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 });
 
@@ -406,15 +487,11 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
     const workspace = makeWorkspace();
     const harness = path.join(workspace, "harness.ps1");
     fs.writeFileSync(harness, buildHarness(bodyLines), "utf8");
-    return spawnSync(
-      "pwsh",
-      ["-NoProfile", "-NonInteractive", "-File", harness],
-      {
-        encoding: "utf8",
-        maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, ...extraEnv }
-      }
-    );
+    return spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", harness], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, ...extraEnv }
+    });
   }
 
   test("Test-IsNativeDllNotFound classifies -1073741515 (canonical Int32 form) as $true", () => {
@@ -536,18 +613,16 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
     expect(out).toContain("0xC0000135");
   });
 
-  test("DXM_UNITY_FAKE_IMPORTS injects the comma-separated names into the annotation", () => {
+  test("DXM_UNITY_FAKE_IMPORTS and DXM_UNITY_FAKE_MISSING_IMPORTS make missing-DLL annotation deterministic", () => {
     // The test override (documented in Get-UnityNativeImports) lets a
     // hermetic Linux/macOS test prove the annotation surfaces the import
     // list WITHOUT smuggling a real PE binary into the repo.
     //
-    // On Linux (no Windows loader search path), Test-UnityImportResolution
-    // routes every injected name into the .missing bucket because the candidate
-    // dirs (System32, Windows, PATH) do not resolve. The annotation therefore
-    // phrases them as "MISSING DLL(s): <names>" rather than the truncated
-    // "Unity.exe imports:" list the previous implementation emitted. We assert
-    // on the new "MISSING DLL(s):" segment AND that every injected name is
-    // listed.
+    // Important: DXM_UNITY_FAKE_IMPORTS only supplies the import list. On a
+    // native Windows runner, VCRUNTIME/MSVCP can legitimately resolve from
+    // System32 and KERNEL32 can resolve via KnownDLLs. DXM_UNITY_FAKE_MISSING_IMPORTS
+    // is the host-independent control that forces this test down the
+    // "MISSING DLL(s): <names>" branch.
     const result = runHarness(
       [
         "$out = & {",
@@ -557,6 +632,8 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
       ],
       {
         DXM_UNITY_FAKE_IMPORTS: "VCRUNTIME140.dll,VCRUNTIME140_1.dll,MSVCP140.dll,KERNEL32.dll",
+        DXM_UNITY_FAKE_MISSING_IMPORTS:
+          "VCRUNTIME140.dll,VCRUNTIME140_1.dll,MSVCP140.dll,KERNEL32.dll",
         DXM_RUNNER_PREREQ_INSTALLED: ""
       }
     );
@@ -564,8 +641,8 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
       throw new Error(combined(result));
     }
     const out = combined(result);
-    // The "MISSING DLL(s):" segment must name every injected import (on Linux
-    // all of them resolve as missing because System32/Windows/PATH are absent).
+    // The "MISSING DLL(s):" segment must name every forced-missing import
+    // regardless of the host OS or installed redistributable packages.
     expect(out).toMatch(/MISSING DLL\(s\):/);
     expect(out).toContain("VCRUNTIME140.dll");
     expect(out).toContain("VCRUNTIME140_1.dll");
@@ -790,6 +867,8 @@ describe("ensure-editor.ps1 0xC0000135 helpers (behavioral)", () => {
       throw new Error(combined(result));
     }
     const out = combined(result);
-    expect(out).toMatch(/Resolved:.*system.*editor.*Windows.*PATH.*KnownDLLs.*out of 3 total imports/);
+    expect(out).toMatch(
+      /Resolved:.*system.*editor.*Windows.*PATH.*KnownDLLs.*out of 3 total imports/
+    );
   });
 });

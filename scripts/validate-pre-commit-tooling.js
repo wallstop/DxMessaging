@@ -12,6 +12,7 @@
  * - Markdown auto-fix pipeline must use run-and-restage + require_serial.
  * - preflight:pre-commit must repair and validate .llm policy before hook parity.
  * - preflight:pre-commit must include YAML policy checks, including comment drift checks.
+ * - preflight:pre-push must run all-file managed cspell before full hook parity.
  */
 
 "use strict";
@@ -46,6 +47,7 @@ const REQUIRED_SKILLS_INDEX_CHECK_COMMAND = "node scripts/generate-skills-index.
 const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format";
 const REQUIRED_YAML_VALIDATION_COMMAND = "npm run check:yaml";
 const REQUIRED_YAML_COMMENTS_CHECK_COMMAND = "npm run check:yaml:comments";
+const REQUIRED_ALL_CSPELL_COMMAND = "npm run check:cspell:all";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
 const REQUIRED_WORKFLOW_CSPELL_COMMAND = "npm run check:workflow-cspell";
 const REQUIRED_WORKFLOW_VALIDATION_COMMAND = "npm run validate:workflows";
@@ -295,6 +297,20 @@ function hasRequiredSkillsIndexCheckCommand(script) {
 
 function hasRequiredScriptsCspellCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_SCRIPTS_CSPELL_COMMAND);
+}
+
+function hasRequiredAllCspellCommand(prePushScript) {
+  return hasRequiredPreflightCommand(prePushScript, REQUIRED_ALL_CSPELL_COMMAND);
+}
+
+function hasAllCspellBeforePrePushHookParity(prePushScript) {
+  if (typeof prePushScript !== "string" || !hasRequiredAllCspellCommand(prePushScript)) {
+    return false;
+  }
+
+  const cspellIndex = prePushScript.indexOf(REQUIRED_ALL_CSPELL_COMMAND);
+  const prePushHookIndex = prePushScript.indexOf("run --hook-stage pre-push");
+  return cspellIndex >= 0 && prePushHookIndex >= 0 && cspellIndex < prePushHookIndex;
 }
 
 function hasRequiredWorkflowCspellCommand(preflightScript) {
@@ -1100,6 +1116,29 @@ function validatePreflightScriptPolicy(
     );
   }
 
+  const prePushScript = packageJson?.scripts?.["preflight:pre-push"];
+  if (typeof prePushScript === "string" && prePushScript.trim().length > 0) {
+    if (!hasRequiredAllCspellCommand(prePushScript)) {
+      violations.push(
+        new Violation(
+          "preflight-script",
+          1,
+          `preflight:pre-push must include '${REQUIRED_ALL_CSPELL_COMMAND}' so full-repo spelling failures are caught before hook parity.`,
+          prePushScript
+        )
+      );
+    } else if (!hasAllCspellBeforePrePushHookParity(prePushScript)) {
+      violations.push(
+        new Violation(
+          "preflight-script",
+          1,
+          `preflight:pre-push must run '${REQUIRED_ALL_CSPELL_COMMAND}' before the full pre-push hook parity invocation.`,
+          prePushScript
+        )
+      );
+    }
+  }
+
   const yamlCheckScript = packageJson?.scripts?.["check:yaml"];
   if (
     typeof yamlCheckScript === "string" &&
@@ -1293,6 +1332,8 @@ module.exports = {
   hasLlmPolicyRepairBeforeValidation,
   hasRequiredSkillsIndexRepairCommand,
   hasRequiredSkillsIndexCheckCommand,
+  hasRequiredAllCspellCommand,
+  hasAllCspellBeforePrePushHookParity,
   hasRequiredScriptsCspellCommand,
   hasRequiredWorkflowCspellCommand,
   hasRequiredWorkflowValidationCommand,
@@ -1338,6 +1379,7 @@ module.exports = {
   REQUIRED_PACKAGE_JSON_FORMAT_COMMAND,
   REQUIRED_YAML_VALIDATION_COMMAND,
   REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
+  REQUIRED_ALL_CSPELL_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_VALIDATION_COMMAND,

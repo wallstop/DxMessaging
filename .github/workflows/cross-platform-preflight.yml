@@ -116,6 +116,7 @@ jobs:
             scripts/__tests__/hermetic-host-env-policy.test.js \
             scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js \
             scripts/__tests__/unity-ensure-editor-install-resilience.test.js \
+            scripts/__tests__/unity-ensure-editor-host-prereq-shortcircuit.test.js \
             scripts/__tests__/unity-native-startup-probe-isolation.test.js \
             scripts/__tests__/unity-runner-host-prereq-dot-source-safety.test.js
 

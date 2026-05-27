@@ -41,6 +41,7 @@ const PREFLIGHT_EXEMPT_HOOKS = [];
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
+const ALL_FILES_CSPELL_COMMAND = "npm run check:cspell:all";
 
 const PRE_COMMIT_RUNNER_RE = /(?:\bpre-commit\b|\bnode\s+scripts\/ensure-pre-commit\.js)\s+run\b/;
 const BULK_PRE_PUSH_TOKENS = [PRE_COMMIT_RUNNER_RE, /--hook-stage\s+pre-push\b/, /--all-files\b/];
@@ -103,6 +104,22 @@ describe("preflight:pre-push static coverage", () => {
     const prePushIndex = script.indexOf("run --hook-stage pre-push");
     expect(preCommitIndex).toBeGreaterThanOrEqual(0);
     expect(prePushIndex).toBeGreaterThan(preCommitIndex);
+  });
+
+  test("preflight:pre-push runs all-file cspell before hook parity", () => {
+    // The pre-push cspell hook is intentionally pre-push-only for commit
+    // latency, but agentic workflows still need an explicit non-hook command
+    // before the bulk hook sweep. This catches spelling vocabulary drift with
+    // the managed cspell runner before pre-commit delegates to the hook.
+    const pkg = loadPackageJson();
+    const script = pkg.scripts["preflight:pre-push"];
+    expect(script).toContain(ALL_FILES_CSPELL_COMMAND);
+
+    const cspellIndex = script.indexOf(ALL_FILES_CSPELL_COMMAND);
+    const preCommitIndex = script.indexOf("npm run preflight:pre-commit");
+    const prePushIndex = script.indexOf("run --hook-stage pre-push");
+    expect(cspellIndex).toBeGreaterThan(preCommitIndex);
+    expect(prePushIndex).toBeGreaterThan(cspellIndex);
   });
 
   test("preflight:pre-push covers every pre-push hook in .pre-commit-config.yaml", () => {

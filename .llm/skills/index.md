@@ -135,7 +135,7 @@
 
 | Skill                                                                                                    | Lines       | Complexity     | Status   | Performance  | Tags                             |
 | -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | ------------ | -------------------------------- |
-| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [warn] 268  | [intermediate] | [stable] | [risk: none] | cross-platform, case-sensitivity |
+| [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [warn] 282  | [intermediate] | [stable] | [risk: none] | cross-platform, case-sensitivity |
 | [Integrity Gate Robustness](./scripting/integrity-gate-robustness.md)                                    | [warn] 299  | [intermediate] | [stable] | [risk: low]  | integrity, auto-repair           |
 | [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                              | [ok] 159    | [intermediate] | [stable] | [risk: none] | javascript, code-quality         |
 | [JavaScript Code Quality Practices Part 1](./scripting/javascript-code-quality-part-1.md)                | [ok] 178    | [intermediate] | [stable] | [risk: low]  | migration, split                 |

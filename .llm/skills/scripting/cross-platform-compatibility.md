@@ -2,9 +2,9 @@
 title: "Cross-Platform Script Compatibility"
 id: "cross-platform-compatibility"
 category: "scripting"
-version: "1.0.0"
+version: "1.0.1"
 created: "2026-01-28"
-updated: "2026-01-28"
+updated: "2026-05-26"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -235,6 +235,20 @@ fans out to scan every other test under `scripts/__tests__/` that drives
 Production CI never sets `DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE`; the probe and
 auto-repair behavior in `Ensure-UnityNativeStartupHealthy` is unchanged for real
 Unity editors.
+
+## Host DLL state in PowerShell tests
+
+Tests for Windows loader diagnostics must not infer missing DLLs from
+`DXM_UNITY_FAKE_IMPORTS` alone. That override supplies a fake Unity import list,
+but `Test-UnityImportResolution` still resolves those names against the native
+host: on Windows, `KERNEL32.dll` can resolve through KnownDLLs and
+`VCRUNTIME140.dll` / `MSVCP140.dll` can resolve from System32 when the Visual C++
+Redistributable is installed.
+
+When a test needs the `MISSING DLL(s):` annotation branch, force the missing
+bucket with `DXM_UNITY_FAKE_MISSING_IMPORTS` or use synthetic DLL names that
+cannot resolve on any supported host. Reserve `DXM_UNITY_FAKE_IMPORTS` alone for
+tests that are explicitly about the import-list or all-imports-resolve branches.
 
 ## Validation Checklist
 
