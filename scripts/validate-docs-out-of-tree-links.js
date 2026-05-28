@@ -177,6 +177,14 @@ function escapesDocsTree(fromFile, linkTarget) {
 // same check covers both forms). Anchored so it only matches OUR repo.
 const SELF_REPO_BLOB_RE =
   /^https:\/\/github\.com\/Ambiguous-Interactive\/DxMessaging\/(?:blob|tree)\/[^/]+\/(.+)$/;
+// Ephemeral CI-run URL shape: `https://github.com/<org>/<repo>/actions/runs/<runId>`.
+// These URLs are PER-RUN audit-trail decoration; the run is purgeable, the link
+// goes 404, and lychee then reports a hard failure. This is a CLASS BUG, not a
+// point fix (no repo can rely on a specific actions/runs URL surviving), so the
+// validator REJECTS it ANYWHERE in any docs/ markdown link. The right shape for
+// citing a run id in prose is plain backticked text (e.g. `production run 12345`)
+// -- no hyperlink. Anchored so a substring inside another URL cannot match.
+const EPHEMERAL_CI_RUN_RE = /^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+/;
 // A single trailing prose character that can leak into a captured token in
 // edge cases (e.g. a stray trailing backtick, period, closing paren, or
 // comma). We only ever trim ONE of these, and only when doing so makes a
@@ -264,6 +272,23 @@ function scanContent(filePath, content) {
   stripped = stripIndentedCodeBlocks(stripped);
 
   const checkUrl = (url, charIndex) => {
+    // CONCERN 3 (ephemeral CI-run URLs) runs FIRST: any markdown link whose
+    // URL points at `https://github.com/<org>/<repo>/actions/runs/<runId>` is
+    // rejected outright. These URLs are per-run audit-trail decoration -- the
+    // run is purgeable, the link goes 404 within months, and lychee then
+    // reports a hard failure during docs lint (this is a CLASS bug, not a
+    // point fix). Cite the run id as backticked text instead of a hyperlink.
+    if (EPHEMERAL_CI_RUN_RE.test(url)) {
+      violations.push({
+        file: filePath,
+        line: lineNumberOf(stripped, charIndex),
+        url,
+        reason:
+          "ephemeral CI run URLs go stale; cite the run id as backticked text instead of a hyperlink"
+      });
+      return;
+    }
+
     // CONCERN 2 (offline self-repo blob/tree existence) runs FIRST and
     // independently of the out-of-tree check below. A self-repo blob/tree URL is
     // an EXTERNAL url (starts with `https:`), so the `isExternalUrl`
@@ -400,6 +425,7 @@ module.exports = {
   // cover BOTH self-repo `blob/` (file) and `tree/` (directory) links.
   selfRepoBlobTarget,
   selfRepoBlobTargetExists,
+  EPHEMERAL_CI_RUN_RE,
   isDocsMarkdown,
   listAllDocsFiles,
   stripFencedBlocks,

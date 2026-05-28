@@ -92,7 +92,17 @@ const SERIAL_CREDS = {
 //   - `-returnlicense` (the seat return)     -> APPEND a line to the marker file
 //     named by $env:DXM_SMOKE_RETURN_MARKER, then exit 0. This is how the test
 //     proves the seat was returned (on return-at-start AND in the finally).
-//   - `-runTests` (the test run)             -> {RUNTESTS_BODY} (per scenario).
+//   - `-runTests` AND `-quit` together       -> exit 0 WITHOUT writing
+//     results.xml. This models the REAL Unity behavior: per
+//     https://docs.unity3d.com/Manual/EditorCommandLineArguments.html the editor
+//     QUITS IMMEDIATELY when -quit and -runTests are combined, before in-progress
+//     tests can complete, exiting 0 with NO results file. This makes the
+//     existing "fails LOUDLY when the editor exits 0 but produces no results.xml"
+//     scenario a real regression detector for the -quit + -runTests combo --
+//     pinned by the data-driven Unity.exe arg-array contract test in
+//     scripts/__tests__/unity-runner-script-contract.test.js
+//     ("run-ci-tests Unity.exe arg arrays obey -runTests excludes -quit").
+//   - `-runTests` alone (the test run)       -> {RUNTESTS_BODY} (per scenario).
 //   - otherwise (-serial activation, or the standalone configure -executeMethod
 //     pass) -> a clean exit-0 no-op (activation "succeeds").
 // {RUNTESTS_BODY} is substituted per scenario below.
@@ -107,6 +117,11 @@ function stubEditor(runTestsBody) {
     "    if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
     "    Add-Content -LiteralPath $marker -Value ('returned ' + ($Rest -join ' '))",
     "  }",
+    "  exit 0",
+    "}",
+    "if (($Rest -contains '-runTests') -and ($Rest -contains '-quit')) {",
+    "  # Simulate Unity's documented behavior: -quit + -runTests => quit BEFORE",
+    "  # tests complete, exit 0 with NO results.xml. See the stub comment above.",
     "  exit 0",
     "}",
     "if ($Rest -contains '-runTests') {",
@@ -357,6 +372,96 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
       expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
     }
   );
+
+  // ---------------------------------------------------------------------------
+  // REGRESSION GUARD for the production bug: run-ci-tests.ps1 used to pass BOTH
+  // `-quit` and `-runTests` to Unity.exe, which per the manual causes the editor
+  // to exit immediately with NO results.xml -- silently breaking every Unity
+  // 2021.3/2022.3 cell. The shared stubEditor() above now models the real Unity
+  // behavior (exit 0 / no results on the combo); this test instruments the args
+  // the script actually passed by logging them to a file and asserting that the
+  // test-launch invocation NEVER mixes -quit with -runTests. The data-driven
+  // contract test in unity-runner-script-contract.test.js pins the SOURCE shape;
+  // this pins the RUNTIME shape (post-templating, post-StrictMode).
+  // ---------------------------------------------------------------------------
+  test("the test-launch invocation does NOT pass -quit alongside -runTests", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    // Build a custom stub that LOGS the full arg vector for any -runTests call,
+    // then behaves like the passing stub (writes results.xml) so the run
+    // reaches a clean exit and we can inspect the recorded args.
+    const argsLogPath = path.join(ws.base, "runtests-args.log");
+    const loggingRunTests = [
+      "  $logPath = $env:DXM_SMOKE_RUNTESTS_ARGS_LOG",
+      "  if ($logPath) {",
+      "    $d = Split-Path -Parent $logPath",
+      "    if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
+      "    Add-Content -LiteralPath $logPath -Value (($Rest -join '|'))",
+      "  }",
+      "  $i = [array]::IndexOf($Rest, '-testResults')",
+      "  if ($i -ge 0 -and ($i + 1) -lt $Rest.Count) {",
+      "    $out = $Rest[$i + 1]; $d = Split-Path -Parent $out",
+      "    if ($d) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
+      '    \'<?xml version="1.0" encoding="utf-8"?><test-run total="1" passed="1" failed="0" skipped="0" result="Passed"></test-run>\' | Set-Content -LiteralPath $out -Encoding UTF8',
+      "  }",
+      "  exit 0"
+    ].join("\n");
+    const loggingStubPath = path.join(ws.base, "stub-editor-logging.ps1");
+    fs.writeFileSync(loggingStubPath, stubEditor(loggingRunTests), "utf8");
+
+    // Run with the logging stub. We must pre-set DXM_SMOKE_RUNTESTS_ARGS_LOG so
+    // the stub sees it; runScript merges DXM_SMOKE_RETURN_MARKER itself.
+    const env = cleanedEnv(path.join(ws.base, "host-env-sandbox"));
+    env.DXM_SMOKE_RETURN_MARKER = ws.returnMarker;
+    env.DXM_SMOKE_RUNTESTS_ARGS_LOG = argsLogPath;
+    const result = spawnSync(
+      "pwsh",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        RUN_CI_TESTS,
+        "-UnityVersion",
+        "2021.3.45f1",
+        "-TestMode",
+        "editmode",
+        "-AssemblyNames",
+        "WallstopStudios.DxMessaging.Tests.Editor",
+        "-ArtifactsPath",
+        ws.artifacts,
+        "-ProjectPath",
+        ws.project,
+        "-RepoRoot",
+        ws.repoRoot,
+        "-UnityEditorPath",
+        loggingStubPath
+      ],
+      { env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }
+    );
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(argsLogPath)).toBe(true);
+
+    // Each line of the log is one -runTests invocation's pipe-joined args. The
+    // PRODUCTION GUARD: every such invocation must contain -runTests and must
+    // NOT contain -quit. (Multiple lines are possible if the standalone code
+    // path were ever exercised; editmode produces a single test-launch.)
+    const lines = fs
+      .readFileSync(argsLogPath, "utf8")
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    for (const line of lines) {
+      const args = line.split("|");
+      expect(args).toContain("-runTests");
+      // THE PRODUCTION GUARD: the editor would otherwise quit immediately, exit 0,
+      // and write NO results.xml. See the stubEditor() comment + the docs link.
+      expect(args).not.toContain("-quit");
+    }
+  });
 
   test("surfaces targeted diagnostics when the editor exits non-zero after CS8032", () => {
     const ws = makeWorkspace();

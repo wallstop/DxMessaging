@@ -195,8 +195,7 @@ TWO independent Microsoft Visual C++ Redistributable packages Unity depends on
 and BOTH must be installed on the host:
 
 - **VC++ 2010 SP1 x64 Redistributable** (version `10.0.40219.325`) -- ships
-  `MSVCP100.dll` and `MSVCR100.dll`. Identified in production run
-  [`70874414898`](https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898)
+  `MSVCP100.dll` and `MSVCR100.dll`. Identified in `production run 70874414898`
   as the load-bearing missing DLL on both self-hosted Windows runners.
   [Unity Discussions confirms](https://discussions.unity.com/t/what-c-redistributable-does-unity3d-editor-require/244474)
   that Unity 2021 / 2022 / 6000 ALL depend on this 2010-era runtime in

@@ -599,7 +599,13 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
         extractEnsureEditorFunctions([
           "ConvertTo-ProcessArgumentLine",
           "Invoke-UnityCliCaptureWithTimeout",
-          "Get-LastCliProgressMessage"
+          "Get-LastCliProgressMessage",
+          // Required transitive deps for the heartbeat-stall detector + the
+          // de-duplicating collapsed tail used in the wrap-immune ::error::.
+          "Get-CliProgressTriple",
+          "Get-EnsureEditorProgressStallSeconds",
+          "Get-EnsureEditorProgressNoticeIntervalSeconds",
+          "Get-CollapsedCliOutputTail"
         ]),
         "$script:UnityCliPath = 'node'",
         `$result = Invoke-UnityCliCaptureWithTimeout -Arguments @('${cliScriptLiteral}', 'arg with spaces', 'quote \" inside', 'backslash\\tail') -TimeoutSeconds 30`,
@@ -1210,7 +1216,13 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
           extractEnsureEditorFunctions([
             "ConvertTo-ProcessArgumentLine",
             "Invoke-UnityCliCaptureWithTimeout",
-            "Get-LastCliProgressMessage"
+            "Get-LastCliProgressMessage",
+            // Required transitive deps for the heartbeat-stall detector + the
+            // de-duplicating collapsed tail used in the wrap-immune ::error::.
+            "Get-CliProgressTriple",
+            "Get-EnsureEditorProgressStallSeconds",
+            "Get-EnsureEditorProgressNoticeIntervalSeconds",
+            "Get-CollapsedCliOutputTail"
           ]),
           // `node` resolves via PATH in ProcessStartInfo on every OS, so no shell
           // shim is needed; the CLI script path is the first -Argument.
@@ -1421,7 +1433,13 @@ function runCaptureViaAst(cliScript, timeoutSeconds) {
       extractEnsureEditorFunctions([
         "ConvertTo-ProcessArgumentLine",
         "Invoke-UnityCliCaptureWithTimeout",
-        "Get-LastCliProgressMessage"
+        "Get-LastCliProgressMessage",
+        // Required transitive deps for the heartbeat-stall detector + the
+        // de-duplicating collapsed tail used in the wrap-immune ::error::.
+        "Get-CliProgressTriple",
+        "Get-EnsureEditorProgressStallSeconds",
+        "Get-EnsureEditorProgressNoticeIntervalSeconds",
+        "Get-CollapsedCliOutputTail"
       ]),
       "$script:UnityCliPath = 'node'",
       `$result = Invoke-UnityCliCaptureWithTimeout -Arguments @('${cliScriptLiteral}', 'install') -TimeoutSeconds ${timeoutSeconds}`,

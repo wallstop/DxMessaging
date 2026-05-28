@@ -347,6 +347,81 @@ function Get-EnsureEditorInstallTimeoutSeconds {
     return $Default
 }
 
+function Get-EnsureEditorProgressStallSeconds {
+    # Single source of truth for the HEARTBEAT-STALL threshold applied to a captured
+    # CLI invocation (see Invoke-UnityCliCaptureWithTimeout's poll loop). This is
+    # COMPLEMENTARY to Get-EnsureEditorInstallTimeoutSeconds (the total wall-clock
+    # fallback): the heartbeat detector fires when the LAST observed progress
+    # triple (pct, phase, msg) has been unchanged for >= this many seconds, which
+    # is the actual failure mode of the Unity 6.3 install hang -- thousands of
+    # byte-identical `{"type":"progress","pct":50,"msg":"Installing Unity (6000.3.16f1)...","phase":"install"}`
+    # lines stream for 20 minutes with NO triple advance, then the job times out.
+    # Killing on stall classifies as retryable (sentinel exit 125, distinct from
+    # the wall-clock 124 so callers and tests can tell the two apart) and lets
+    # the existing retry + classification flow run on a hang.
+    #
+    # Honors DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS following the EXACT
+    # convention of Get-EnsureEditorInstallTimeoutSeconds: tests set it small
+    # (e.g. 2) to force the stall path; CI leaves it unset for the production
+    # default. A non-integer or NEGATIVE override is ignored with a ::warning::
+    # and the default is used. A value of 0 is the explicit OPT-OUT (no heartbeat
+    # detection): the wall-clock fallback alone gates the run.
+    #
+    # Default rationale (600s = 10 minutes): a healthy advance of (pct, phase, msg)
+    # arrives within seconds during a normal install; 10 minutes comfortably
+    # exceeds even a slow chunk transition without false-positive killing, while
+    # surfacing the real hang ~halfway through the observed 20-minute window
+    # rather than waiting for the 45-minute wall-clock. StrictMode-safe: no
+    # collection reads.
+    param([int]$Default = 600)
+
+    if ($env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS='$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
+function Get-EnsureEditorProgressNoticeIntervalSeconds {
+    # Single source of truth for the PERIODIC ::notice:: cadence in
+    # Invoke-UnityCliCaptureWithTimeout's poll loop. The notice is wall-clock
+    # gated (NOT per-line) so a long advancing install yields a human-readable
+    # mid-flight summary in the live CI log instead of the raw dupe-progress
+    # wall the Unity beta CLI emits. Extracted to a helper so tests can drop
+    # the cadence to a few seconds without forcing the suite to wait the
+    # production minute.
+    #
+    # Honors DXM_ENSURE_EDITOR_PROGRESS_NOTICE_INTERVAL_SECONDS following the
+    # EXACT convention of Get-EnsureEditorProgressStallSeconds: a non-integer
+    # or NEGATIVE override is ignored with a ::warning:: and the default is
+    # used. A value of 0 is the explicit OPT-OUT (no periodic notice ever
+    # fires); the live progress stream is unaffected. StrictMode-safe: no
+    # collection reads.
+    #
+    # Default 60s balances "human can see progress mid-flight" against "do not
+    # bury the live progress stream"; lower would spam, higher would lose
+    # actionability on the long-install path.
+    param([int]$Default = 60)
+
+    if ($env:DXM_ENSURE_EDITOR_PROGRESS_NOTICE_INTERVAL_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_ENSURE_EDITOR_PROGRESS_NOTICE_INTERVAL_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_PROGRESS_NOTICE_INTERVAL_SECONDS='$env:DXM_ENSURE_EDITOR_PROGRESS_NOTICE_INTERVAL_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
 function Get-EnsureEditorInstallRetryAttempts {
     # Single source of truth for the base-install Invoke-WithRetry attempt count.
     # Honors DXM_ENSURE_EDITOR_INSTALL_RETRY_ATTEMPTS following the EXACT
@@ -488,6 +563,46 @@ function Get-CollapsedCliOutputTail {
     $tailCount = [Math]::Min($MaxLines, $collapsedArray.Count)
     $tailLines = @($collapsedArray[($collapsedArray.Count - $tailCount)..($collapsedArray.Count - 1)])
     return ($tailLines -join "`n")
+}
+
+function Get-CliProgressTriple {
+    # PURE, StrictMode-safe extractor for the (pct, phase, msg) progress TRIPLE
+    # from a single captured CLI line. Returns a hashtable with three string
+    # fields (any missing field is the empty string), or $null if the line is
+    # NOT a JSON progress line. Used by the heartbeat-stall detector in
+    # Invoke-UnityCliCaptureWithTimeout to recognize an UNCHANGED triple over
+    # the configured stall window (the actual failure mode of the Unity 6.3
+    # install hang -- thousands of byte-identical progress lines streaming for
+    # 20 minutes with NO triple advance).
+    #
+    # Deliberately regex-based (no ConvertFrom-Json): the lines are interleaved
+    # progress spam, not a single JSON document, and a malformed/non-JSON beta
+    # line must never throw here. Mirrors Get-LastCliProgressMessage's parsing
+    # idiom so the two scanners stay in lockstep on field shape.
+    param([string]$Line)
+
+    $text = [string]$Line
+    if ($text.Length -eq 0) {
+        return $null
+    }
+    # Must carry the progress shape; otherwise it is plainly not a progress line.
+    if ($text -notmatch '"type"\s*:\s*"progress"') {
+        return $null
+    }
+    $pctMatch = [regex]::Match($text, '"pct"\s*:\s*(\d+)')
+    $phaseMatch = [regex]::Match($text, '"phase"\s*:\s*"((?:\\.|[^"\\])*)"')
+    $msgMatch = [regex]::Match($text, '"msg"\s*:\s*"((?:\\.|[^"\\])*)"')
+    $pct = if ($pctMatch.Success) { $pctMatch.Groups[1].Value } else { '' }
+    $phase = if ($phaseMatch.Success) { $phaseMatch.Groups[1].Value } else { '' }
+    $msg = if ($msgMatch.Success) { $msgMatch.Groups[1].Value } else { '' }
+    if ($pct -eq '' -and $phase -eq '' -and $msg -eq '') {
+        return $null
+    }
+    return @{
+        Pct = $pct
+        Phase = $phase
+        Msg = $msg
+    }
 }
 
 function Get-LastCliProgressMessage {
@@ -793,9 +908,15 @@ function Invoke-UnityCliCapture {
     # the exit code + output together, so this helper provides both.
     #
     # Returns a StrictMode-safe hashtable with:
-    #   Success  [bool]     - $true when exit code is 0
-    #   ExitCode [int]      - the native exit code (-1 if the call threw/spawn failed)
-    #   Output   [string[]] - @()-wrapped stdout+stderr lines (never $null)
+    #   Success           [bool]     - $true when exit code is 0
+    #   ExitCode          [int]      - the native exit code (-1 if the call threw/spawn failed;
+    #                                  124 for wall-clock timeout, 125 for heartbeat-stall kill)
+    #   Output            [string[]] - @()-wrapped stdout+stderr lines (never $null)
+    #   StallKilled       [bool]     - $true when killed by the heartbeat-stall detector
+    #                                  (no (pct,phase,msg) triple change for the stall window);
+    #                                  see Invoke-UnityCliCaptureWithTimeout
+    #   TimedOutWallClock [bool]     - $true when killed by the absolute wall-clock timeout;
+    #                                  mutually exclusive with StallKilled
     # Every field is always populated, so callers can read .Output.Count and
     # index .Output without the 0/1/many AutomationNull hazard.
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
@@ -806,8 +927,10 @@ function Invoke-UnityCliCapture {
     # this function is UNCHANGED: same per-line LIVE streaming (the timeout runner
     # echoes each line the instant it arrives, exactly like this function's
     # original `& $cli | ForEach-Object { Write-Host }` did), same 2>&1 merge
-    # semantics, same @{ Success; ExitCode; Output } shape, same exit code on normal
-    # completion, same catch-on-spawn-failure behavior (the timeout runner maps a
+    # semantics, return shape `@{ Success; ExitCode; Output; StallKilled; TimedOutWallClock }`
+    # (the last two added with the heartbeat-stall detector; see the header for field
+    # semantics), same exit code on normal completion, same catch-on-spawn-failure behavior
+    # (the timeout runner maps a
     # spawn failure to ExitCode -1 with the message in Output, exactly as before).
     # The timeout is sourced from the single override-aware helper so tests can
     # force the timeout path (small value) or opt out (0) without changing callers.
@@ -863,27 +986,83 @@ function Invoke-UnityCliCaptureWithTimeout {
     # independent (tail de-dup, last-progress parse, substring matches), so
     # arrival-order is acceptable and, for live echo, strictly more faithful.
     #
-    # Returns the SAME StrictMode-safe shape as Invoke-UnityCliCapture:
-    #   Success  [bool]     - $true when exit code is 0
-    #   ExitCode [int]      - native exit (-1 on spawn failure; the timeout
-    #                         sentinel on a kill -- see $timeoutExitCode)
-    #   Output   [string[]] - @()-wrapped merged stdout+stderr lines (never $null)
+    # HEARTBEAT-STALL DETECTOR (Unity 6.3 install hang): a captured progress
+    # TRIPLE (pct, phase, msg) that has not advanced for >= $StallSeconds is
+    # classified as hung and tree-killed with sentinel exit 125 (distinct from
+    # the wall-clock 124 so callers and tests can tell hang-detected from
+    # wall-timeout-elapsed). This is the surgical fix for the Unity 6.3 install
+    # that streams ~4,672 byte-identical
+    # `{"type":"progress","pct":50,"msg":"Installing Unity (6000.3.16f1)...","phase":"install"}`
+    # lines for 20 minutes before the GitHub job is cancelled by the outer wall.
+    # Detecting the stall and surfacing it as a RETRYABLE failure (handled by
+    # the same Invoke-WithRetry flow as 124) lets the next attempt run.
+    #
+    # The periodic ::notice:: emitted every PROGRESS_NOTICE_INTERVAL_SECONDS
+    # makes the live CI log human-readable mid-flight (the alternative is a
+    # 4,672-line dupe wall the reader has to scroll past); it is GATED ON
+    # WALL-CLOCK TIME, not on every output line, so it cannot dilute the live
+    # progress stream.
+    #
+    # Returns a SUPERSET of Invoke-UnityCliCapture's StrictMode-safe shape, with
+    # two additional fields so downstream classifiers can attribute a 125 exit to
+    # WHO actually killed the process (NOT to the raw exit code alone -- a
+    # native exit 125 from the Unity CLI must NOT be misread as "heartbeat
+    # stalled"). All callers that ONLY consume Success / ExitCode / Output
+    # continue to work unchanged; the diagnostic sites read the new fields when
+    # they need to phrase the failure correctly.
+    #   Success            [bool]     - $true when exit code is 0
+    #   ExitCode           [int]      - native exit (-1 on spawn failure; the
+    #                                   wall-clock timeout sentinel 124 on a
+    #                                   wall-clock kill; the heartbeat-stall
+    #                                   sentinel 125 on a stall kill OR on a
+    #                                   native non-killed 125 from Unity CLI)
+    #   Output             [string[]] - @()-wrapped merged stdout+stderr lines
+    #                                   (never $null)
+    #   StallKilled        [bool]     - $true ONLY when the wrapper's heartbeat
+    #                                   detector killed the process (sentinel
+    #                                   exit 125 from THIS wrapper). $false on
+    #                                   a NATIVE 125 from the CLI.
+    #   TimedOutWallClock  [bool]     - $true ONLY when the wrapper's wall-clock
+    #                                   deadline killed the process (sentinel
+    #                                   exit 124 from THIS wrapper). $false on
+    #                                   a NATIVE 124 from the CLI.
     param(
         [Parameter(Mandatory = $true)][string[]]$Arguments,
         [int]$TimeoutSeconds = 2700,
-        [string]$TimeoutKnob = 'DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS'
+        [string]$TimeoutKnob = 'DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS',
+        [int]$StallSeconds = -1,
+        [string]$StallKnob = 'DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS'
     )
+
+    # Default the stall threshold from the env-aware helper when the caller did
+    # not pass one. -1 means "unset" so 0 (explicit opt-out) remains distinguishable
+    # from "not specified" -- 0 disables the heartbeat detector entirely.
+    if ($StallSeconds -lt 0) {
+        $StallSeconds = Get-EnsureEditorProgressStallSeconds
+    }
 
     if (Get-Command Register-UnityCliCommandAttempt -ErrorAction SilentlyContinue) {
         Register-UnityCliCommandAttempt -Arguments $Arguments
     }
     Write-Host "$script:UnityCliPath $($Arguments -join ' ')"
 
-    # Sentinel exit code for a TIMEOUT kill. 124 mirrors GNU coreutils `timeout`
-    # (it exits 124 when the command times out), so the code is recognizable in
-    # logs; it is non-zero, so the standard non-zero-exit classification (a
-    # retryable failure) applies without any special-casing.
+    # Sentinel exit code for a WALL-CLOCK TIMEOUT kill. 124 mirrors GNU coreutils
+    # `timeout` (it exits 124 when the command times out), so the code is
+    # recognizable in logs; it is non-zero, so the standard non-zero-exit
+    # classification (a retryable failure) applies without any special-casing.
     $timeoutExitCode = 124
+    # Sentinel exit code for a HEARTBEAT-STALL kill. 125 is one above the
+    # wall-clock sentinel so callers (and tests) can tell the two failure modes
+    # apart at a glance; both are RETRYABLE and treated identically by
+    # Write-ModuleInstallFailureDiagnostics + the install retry classifier.
+    $stallExitCode = 125
+    # Live-log periodic ::notice:: cadence. 60s default balances "human can see
+    # progress mid-flight" against "do not bury the live progress stream"; lower
+    # would spam, higher would lose actionability on the stall path. Sourced via
+    # the env-aware helper so tests can drop the cadence to a few seconds
+    # without forcing the suite to wait the production minute; 0 opts out.
+    $progressNoticeIntervalSeconds = Get-EnsureEditorProgressNoticeIntervalSeconds
+    $progressNoticeEnabled = ($progressNoticeIntervalSeconds -gt 0)
 
     # Ordered capture buffer. Appended ONLY from the main-thread poll loop (and the
     # spawn-failure catch), so no synchronization is needed.
@@ -909,6 +1088,10 @@ function Invoke-UnityCliCaptureWithTimeout {
     $exit = -1
     $timedOut = $false
     $reaped = $false
+    # Declared at the OUTER scope (not just inside the try) so a spawn failure
+    # that lands in the catch still leaves both kill-state booleans defined
+    # for the StrictMode-safe return-shape construction below.
+    $stalled = $false
     try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $script:UnityCliPath
@@ -943,6 +1126,21 @@ function Invoke-UnityCliCaptureWithTimeout {
             $deadline = [DateTime]::MaxValue
         }
 
+        # Heartbeat-stall + periodic-notice state. The "last triple" is the most
+        # recently observed (pct, phase, msg); we restart the stall clock every
+        # time it CHANGES. The notice clock is independent (time-gated, not
+        # output-gated) so a long advancing install still gets a human-readable
+        # cadence in the live log instead of the raw dupe wall. Opt-out semantics:
+        # $StallSeconds == 0 disables heartbeat-kill entirely; $startedAt is the
+        # wall-clock anchor for the elapsed/stallElapsed fields in the notice.
+        $startedAt = [DateTime]::UtcNow
+        $lastTripleAdvanceAt = $startedAt
+        $lastNoticeAt = $startedAt
+        $lastTripleKey = $null
+        $lastTriple = $null
+        $stallEnabled = ($StallSeconds -gt 0)
+        $stalled = $false
+
         $oDone = $false
         $eDone = $false
         while (-not ($oDone -and $eDone)) {
@@ -955,6 +1153,18 @@ function Invoke-UnityCliCaptureWithTimeout {
                 } else {
                     Write-Host $line
                     $buffer.Add([string]$line)
+                    # Triple advance: if this line is a JSON progress line whose
+                    # (pct, phase, msg) differs from the last observed triple, the
+                    # install is making forward progress; reset the stall clock.
+                    $triple = Get-CliProgressTriple -Line $line
+                    if ($null -ne $triple) {
+                        $key = "$($triple.Pct)|$($triple.Phase)|$($triple.Msg)"
+                        if ($key -ne $lastTripleKey) {
+                            $lastTripleKey = $key
+                            $lastTriple = $triple
+                            $lastTripleAdvanceAt = [DateTime]::UtcNow
+                        }
+                    }
                     $oTask = $outReader.ReadLineAsync()
                 }
                 $progressed = $true
@@ -967,12 +1177,57 @@ function Invoke-UnityCliCaptureWithTimeout {
                 } else {
                     Write-Host $line
                     $buffer.Add([string]$line)
+                    $triple = Get-CliProgressTriple -Line $line
+                    if ($null -ne $triple) {
+                        $key = "$($triple.Pct)|$($triple.Phase)|$($triple.Msg)"
+                        if ($key -ne $lastTripleKey) {
+                            $lastTripleKey = $key
+                            $lastTriple = $triple
+                            $lastTripleAdvanceAt = [DateTime]::UtcNow
+                        }
+                    }
                     $eTask = $errReader.ReadLineAsync()
                 }
                 $progressed = $true
             }
 
-            if ([DateTime]::UtcNow -ge $deadline) {
+            $nowUtc = [DateTime]::UtcNow
+
+            # Periodic human-readable progress notice (time-gated, NOT per-line).
+            # Reports the last triple + elapsed totals so an observer can see at a
+            # glance how far the install has come AND how long the stall clock has
+            # been ticking on the current triple.
+            $sinceNotice = ($nowUtc - $lastNoticeAt).TotalSeconds
+            if ($progressNoticeEnabled -and $sinceNotice -ge $progressNoticeIntervalSeconds) {
+                $lastNoticeAt = $nowUtc
+                $elapsedSec = [int][Math]::Floor(($nowUtc - $startedAt).TotalSeconds)
+                $stallElapsedSec = [int][Math]::Floor(($nowUtc - $lastTripleAdvanceAt).TotalSeconds)
+                if ($null -ne $lastTriple) {
+                    $pctText = if ($lastTriple.Pct) { $lastTriple.Pct } else { '?' }
+                    $phaseText = if ($lastTriple.Phase) { $lastTriple.Phase } else { '?' }
+                    $msgText = if ($lastTriple.Msg) { $lastTriple.Msg } else { '?' }
+                    Write-Host "::notice::Unity CLI install heartbeat: pct=$pctText phase=$phaseText msg=`"$msgText`" elapsed=${elapsedSec}s stallElapsed=${stallElapsedSec}s"
+                } else {
+                    Write-Host "::notice::Unity CLI install heartbeat: no progress line observed yet elapsed=${elapsedSec}s stallElapsed=${stallElapsedSec}s"
+                }
+            }
+
+            # HEARTBEAT-STALL DETECTOR. Fires only when the operator has not opted
+            # out AND the last observed triple has been unchanged for >= the
+            # configured window. Tree-kills with the distinct stall sentinel so
+            # the failure-diagnostic path can name "heartbeat stall" specifically.
+            if ($stallEnabled -and ($nowUtc - $lastTripleAdvanceAt).TotalSeconds -ge $StallSeconds) {
+                $stalled = $true
+                $timedOut = $true
+                try {
+                    $proc.Kill($true)
+                } catch {
+                    try { $proc.Kill() } catch { }
+                }
+                break
+            }
+
+            if ($nowUtc -ge $deadline) {
                 # HUNG (or a quick-exit child whose grandchild still holds the pipe
                 # open, so EOF never arrives): kill the WHOLE process tree. The bool
                 # overload Kill($true) terminates descendants on .NET Core / PS7 (the
@@ -1020,7 +1275,14 @@ function Invoke-UnityCliCaptureWithTimeout {
         }
 
         if ($timedOut) {
-            $exit = $timeoutExitCode
+            # Distinguish heartbeat-stall (125) from wall-clock timeout (124) so
+            # callers + tests can attribute the failure mode precisely. Both are
+            # treated as retryable by the install retry classifier.
+            if ($stalled) {
+                $exit = $stallExitCode
+            } else {
+                $exit = $timeoutExitCode
+            }
         } else {
             # ExitCode is only valid after a CONFIRMED exit; HasExited guards the
             # rare case the bounded reap above did not catch a (non-killed) exit.
@@ -1056,16 +1318,38 @@ function Invoke-UnityCliCaptureWithTimeout {
         # ConciseView word-wrap): name the timeout, the configured limit, the env
         # knob to raise it, and the LAST progress message seen so CI has a stable,
         # greppable summary of WHAT hung. The normal throw/classification flow
-        # still runs on the returned (retryable) failure.
+        # still runs on the returned (retryable) failure. Reuse the de-duplicating
+        # tail formatter so the surfaced lines are READABLE even when the CLI spammed
+        # thousands of identical progress lines before the kill.
         $lastProgress = Get-LastCliProgressMessage -Output $captured
-        $knob = if ($TimeoutKnob) { $TimeoutKnob } else { 'DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS' }
-        Write-Host "::error::Unity CLI command '$($Arguments -join ' ')' TIMED OUT after $TimeoutSeconds second(s) and the process tree was killed (sentinel exit $timeoutExitCode). Raise the limit via $knob (0 disables the timeout). Last progress message: $lastProgress"
+        $collapsedTail = Get-CollapsedCliOutputTail -Output $captured -MaxLines 10
+        if ($stalled) {
+            # HEARTBEAT-STALL kill: distinct sentinel (125) AND distinct annotation
+            # wording so an observer can tell at a glance whether the install was
+            # killed for "no triple advance in N seconds" (this branch) versus
+            # "exceeded the total wall-clock budget" (the else branch below).
+            $stallKnobName = if ($StallKnob) { $StallKnob } else { 'DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS' }
+            Write-Host "::error::Unity CLI command '$($Arguments -join ' ')' HEARTBEAT STALLED after $StallSeconds second(s) with no progress (pct, phase, msg) advance; the process tree was killed (sentinel exit $stallExitCode). Raise the threshold via $stallKnobName (0 disables the heartbeat detector). Last progress message: $lastProgress. Collapsed tail:`n$collapsedTail"
+        } else {
+            $knob = if ($TimeoutKnob) { $TimeoutKnob } else { 'DXM_ENSURE_EDITOR_INSTALL_TIMEOUT_SECONDS' }
+            Write-Host "::error::Unity CLI command '$($Arguments -join ' ')' TIMED OUT after $TimeoutSeconds second(s) and the process tree was killed (sentinel exit $timeoutExitCode). Raise the limit via $knob (0 disables the timeout). Last progress message: $lastProgress. Collapsed tail:`n$collapsedTail"
+        }
     }
 
+    # StallKilled / TimedOutWallClock distinguish a WRAPPER-DRIVEN kill (the
+    # heartbeat detector or the wall-clock deadline) from a NATIVE non-zero exit
+    # that happens to share the same sentinel code. A native exit 125 from the
+    # Unity CLI must NOT be misread as "heartbeat stalled" by downstream
+    # classifiers, and a native exit 124 likewise must not be misread as
+    # "wall-clock timeout." Both are derived ONLY from the in-process kill
+    # state, never from $exit, so a coincidental native exit code cannot
+    # impersonate a kill.
     return @{
-        Success  = ($exit -eq 0)
-        ExitCode = $exit
-        Output   = @($captured)
+        Success           = ($exit -eq 0)
+        ExitCode          = $exit
+        Output            = @($captured)
+        StallKilled       = [bool]$stalled
+        TimedOutWallClock = [bool]($timedOut -and -not $stalled)
     }
 }
 
@@ -1432,11 +1716,14 @@ function Write-ModuleInstallFailureDiagnostics {
     # assertion target. Additive only -- the caller still throws its full message.
     #
     # The summary names: the version, the failing verb/args, the outcome (exit code
-    # OR "timed out after Ns"), the LAST meaningful progress message parsed from the
-    # captured output (the JSON "msg" of the last progress line, else the last
-    # non-empty line -- via Get-LastCliProgressMessage), and the install-drive free
-    # space (via the shared Get-InstallDriveFreeSpaceText). Best-effort and
-    # StrictMode-safe: never throws, @()-wraps the output capture.
+    # OR "wall-clock timed out after Ns" OR "heartbeat stalled after Ns" -- chosen
+    # by the kill-state booleans, NOT the raw exit code, so a NATIVE 125 from the
+    # Unity CLI is never misattributed as a heartbeat-stall kill), the LAST
+    # meaningful progress message parsed from the captured output (the JSON
+    # "msg" of the last progress line, else the last non-empty line -- via
+    # Get-LastCliProgressMessage), and the install-drive free space (via the
+    # shared Get-InstallDriveFreeSpaceText). Best-effort and StrictMode-safe:
+    # never throws, @()-wraps the output capture.
     param(
         [Parameter(Mandatory = $true)][string]$Version,
         [string[]]$Output,
@@ -1444,12 +1731,29 @@ function Write-ModuleInstallFailureDiagnostics {
         [string[]]$Arguments,
         [string]$Root,
         [switch]$TimedOut,
-        [int]$TimeoutSeconds = 0
+        [switch]$StallKilled,
+        [switch]$TimedOutWallClock,
+        [int]$TimeoutSeconds = 0,
+        [int]$StallSeconds = 0
     )
 
     $argLine = if ($Arguments) { ($Arguments -join ' ') } else { '(unavailable)' }
     $lastProgress = Get-LastCliProgressMessage -Output $Output
-    $outcome = if ($TimedOut) { "timed out after $TimeoutSeconds second(s)" } else { "exit code $ExitCode" }
+    # Phrase the outcome from the KILL-STATE BOOLEANS supplied by the caller, NOT
+    # from the raw exit code: a Unity CLI that ORGANICALLY exits with 124 or 125
+    # would otherwise be misattributed to a wrapper-driven timeout/stall kill.
+    # The -TimedOut switch remains accepted as the legacy "either kind of
+    # wrapper-driven timeout" signal for backward compatibility with any caller
+    # that has not migrated; the new switches WIN when supplied.
+    $outcome = if ($StallKilled) {
+        "heartbeat stalled after $StallSeconds second(s)"
+    } elseif ($TimedOutWallClock) {
+        "wall-clock timed out after $TimeoutSeconds second(s)"
+    } elseif ($TimedOut) {
+        "timed out after $TimeoutSeconds second(s)"
+    } else {
+        "exit code $ExitCode"
+    }
     $diskText = if ($Root) { Get-InstallDriveFreeSpaceText -Root $Root } else { 'install drive: (unknown root)' }
 
     Write-Host "::error::Unity $Version module install FAILED ($outcome). Verb/args: $argLine. Last progress message: $lastProgress. Disk: $diskText"
@@ -2386,8 +2690,17 @@ function Install-UnityEditorWithCiModules {
         }
 
         Write-UnityCliInstallFailureAnnotation -Version $Version -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs
-        $installTimedOut = ($installResult.ExitCode -eq 124)
-        Write-ModuleInstallFailureDiagnostics -Version $Version -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$installTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+        # Wrapper-driven kill state drives the diagnostic wording: the new
+        # StallKilled / TimedOutWallClock fields distinguish a heartbeat-stall
+        # kill from a wall-clock kill from a NATIVE exit code that happens to
+        # equal 124 or 125 (which must NOT be misread as a wrapper kill). The
+        # legacy exit-code classification is retained ONLY for the retryable
+        # decision (both sentinels remain retryable, as before); the failure
+        # summary now names the actual kill reason or the raw exit code.
+        $installStallKilled = [bool]$installResult.StallKilled
+        $installWallTimedOut = [bool]$installResult.TimedOutWallClock
+        $installTimedOut = ($installStallKilled -or $installWallTimedOut)
+        Write-ModuleInstallFailureDiagnostics -Version $Version -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$installTimedOut -StallKilled:$installStallKilled -TimedOutWallClock:$installWallTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds) -StallSeconds (Get-EnsureEditorProgressStallSeconds)
         Write-InstalledEditorDiagnostics -Version $Version -Root $InstallRoot -Reason "Unity repair install failed."
         throw "Unity $Version repair install with CI modules failed with exit code $($installResult.ExitCode). CLI output tail:`n$tail"
     }
@@ -3395,8 +3708,14 @@ function Install-UnityAndroidModules {
         # This attempt did not deliver the android tier: emit the targeted
         # annotation + the wrap-immune summary so each failed attempt is diagnosable.
         Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
-        $androidTimedOut = ($result.ExitCode -eq 124)
-        Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$androidTimedOut -TimeoutSeconds $installTimeout
+        # Phrase the annotation from the WRAPPER-DRIVEN kill state, not the raw
+        # exit code: a NATIVE 124/125 from the Unity CLI must not be misread as
+        # a heartbeat-stall or wall-clock kill. The retry classifier is unchanged
+        # -- both sentinels remain retryable via the existing throw flow.
+        $androidStallKilled = [bool]$result.StallKilled
+        $androidWallTimedOut = [bool]$result.TimedOutWallClock
+        $androidTimedOut = ($androidStallKilled -or $androidWallTimedOut)
+        Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$androidTimedOut -StallKilled:$androidStallKilled -TimedOutWallClock:$androidWallTimedOut -TimeoutSeconds $installTimeout -StallSeconds (Get-EnsureEditorProgressStallSeconds)
     }
 
     # Exhausted every bounded Android-only attempt. Existing editors get this
@@ -3501,8 +3820,13 @@ function Ensure-UnityCiModules {
             # targeted, high-signal annotation + the wrap-immune summary BEFORE we
             # repair or throw, so the root cause is obvious in the CI log.
             Write-UnityCliInstallFailureAnnotation -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs
-            $moduleAddTimedOut = ($result.ExitCode -eq 124)
-            Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$moduleAddTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+            # Phrase from wrapper-driven kill state so a NATIVE 124/125 from the
+            # Unity CLI is not misread as a stall or wall-clock kill. Retryable
+            # classification (both sentinels) is unchanged via the throw flow.
+            $moduleAddStallKilled = [bool]$result.StallKilled
+            $moduleAddWallTimedOut = [bool]$result.TimedOutWallClock
+            $moduleAddTimedOut = ($moduleAddStallKilled -or $moduleAddWallTimedOut)
+            Write-ModuleInstallFailureDiagnostics -Version $Version -Output $result.Output -ExitCode $result.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$moduleAddTimedOut -StallKilled:$moduleAddStallKilled -TimedOutWallClock:$moduleAddWallTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds) -StallSeconds (Get-EnsureEditorProgressStallSeconds)
 
             $repairDisabled = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
             if ($repairDisabled) {
@@ -3775,7 +4099,14 @@ if (-not $editor) {
                 if ($installText -match '(?i)already installed|editor already installed|is already installed') {
                     Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI reported the editor is already installed, but Unity.exe could not be resolved afterward."
                     Invoke-UnityVersionUninstallForRepair -Version $UnityVersion -Reason "Unity CLI reported an already-installed editor, but Unity.exe could not be resolved." -InstallRoot $InstallRoot | Out-Null
-                    if ($installResult.ExitCode -eq 124) {
+                    # Stop stale provisioning processes ONLY when the wrapper
+                    # actually killed the install (heartbeat-stall OR wall-clock
+                    # deadline). A NATIVE 124/125 from the Unity CLI is a clean
+                    # exit and leaves no stale tree to clean up; running the
+                    # stale-process sweep on a native exit would be wasted work
+                    # at best and a footgun against an unrelated Unity instance
+                    # at worst.
+                    if ($installResult.StallKilled -or $installResult.TimedOutWallClock) {
                         Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $UnityVersion -Reason "timed out already-installed install before quarantine"
                     }
                     Move-UnityVersionInstallToQuarantine -Version $UnityVersion -InstallRoot $InstallRoot
@@ -3783,8 +4114,14 @@ if (-not $editor) {
                 }
 
                 Write-UnityCliInstallFailureAnnotation -Version $UnityVersion -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs
-                $baseInstallTimedOut = ($installResult.ExitCode -eq 124)
-                Write-ModuleInstallFailureDiagnostics -Version $UnityVersion -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$baseInstallTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds)
+                # Phrase from wrapper-driven kill state so a NATIVE 124/125 from
+                # the Unity CLI is not misread as a stall or wall-clock kill.
+                # The retry classifier is unchanged -- both sentinels remain
+                # retryable via the existing throw flow.
+                $baseInstallStallKilled = [bool]$installResult.StallKilled
+                $baseInstallWallTimedOut = [bool]$installResult.TimedOutWallClock
+                $baseInstallTimedOut = ($baseInstallStallKilled -or $baseInstallWallTimedOut)
+                Write-ModuleInstallFailureDiagnostics -Version $UnityVersion -Output $installResult.Output -ExitCode $installResult.ExitCode -Arguments $installArgs -Root $InstallRoot -TimedOut:$baseInstallTimedOut -StallKilled:$baseInstallStallKilled -TimedOutWallClock:$baseInstallWallTimedOut -TimeoutSeconds (Get-EnsureEditorInstallTimeoutSeconds) -StallSeconds (Get-EnsureEditorProgressStallSeconds)
                 Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "Unity CLI install failed and Unity.exe could not be resolved afterward."
                 throw "Unity CLI '$($installArgs -join ' ')' failed with exit code $($installResult.ExitCode). CLI output tail:`n$installTail"
             }

@@ -242,7 +242,11 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
       "function Get-UnityCliOutput { param([string[]]$Arguments) return @() }",
       "function Invoke-UnityCliCapture {",
       "  param([string[]]$Arguments)",
-      `  return @{ Success = $false; ExitCode = 6; Output = @('${outputLiteral}') }`,
+      // The stub mirrors the FULL return shape published by
+      // Invoke-UnityCliCaptureWithTimeout so downstream classifiers (which now
+      // consult StallKilled / TimedOutWallClock to attribute the failure mode)
+      // see a deterministic "neither wrapper-killed" result under StrictMode.
+      `  return @{ Success = $false; ExitCode = 6; Output = @('${outputLiteral}'); StallKilled = $false; TimedOutWallClock = $false }`,
       "}",
       extractEnsureEditorFunctions([
         "Test-Il2CppModulePresent",
@@ -274,6 +278,10 @@ function runAddWindowsIl2CppModuleHarness(editorPath, outputText) {
         "Get-LastCliProgressMessage",
         "Get-InstallDriveFreeSpaceText",
         "Get-EnsureEditorInstallTimeoutSeconds",
+        // The classifiers pass the StallSeconds knob into the diagnostic
+        // formatter so the wrap-immune ::error:: can name the heartbeat-stall
+        // window when applicable; the helper itself must be in scope.
+        "Get-EnsureEditorProgressStallSeconds",
         "Write-ModuleInstallFailureDiagnostics",
         // Dedicated, bounded Android tier install + its helpers, reached when only
         // the android tier is missing before any managed repair escalation.
@@ -1124,7 +1132,13 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
           "Invoke-UnityCliCapture",
           "Invoke-UnityCliCaptureWithTimeout",
           "Get-EnsureEditorInstallTimeoutSeconds",
-          "Get-LastCliProgressMessage"
+          "Get-LastCliProgressMessage",
+          // The timeout runner also consults the heartbeat-stall env helper and
+          // uses the de-duplicating tail formatter for its wrap-immune ::error::.
+          "Get-EnsureEditorProgressStallSeconds",
+          "Get-EnsureEditorProgressNoticeIntervalSeconds",
+          "Get-CliProgressTriple",
+          "Get-CollapsedCliOutputTail"
         ]),
         "$script:UnityCliPath = '/definitely/not/a/unity-cli'",
         "$result = Invoke-UnityCliCapture -Arguments @('install', '6000.0.32f1')",

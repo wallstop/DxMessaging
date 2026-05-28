@@ -870,8 +870,12 @@ try {
         Write-CscRspDiagnostics -Project $ProjectPath -LogPath $configureLogPath -Label 'standalone configure'
     }
 
+    # MUST NOT include '-quit' alongside '-runTests': per the Unity Editor manual
+    # (https://docs.unity3d.com/Manual/EditorCommandLineArguments.html), if the
+    # Editor is running tests with -runTests, -quit causes it to QUIT IMMEDIATELY
+    # before in-progress tests can complete -- the editor exits 0 having written
+    # no results.xml. Pinned by scripts/__tests__/unity-runner-script-contract.test.js.
     $testArgs = @(
-        '-quit',
         '-batchmode',
         '-nographics',
         '-projectPath', $ProjectPath,

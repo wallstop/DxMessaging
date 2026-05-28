@@ -371,6 +371,81 @@ const FIXTURES = [
       "See [ghost dir](https://github.com/Ambiguous-Interactive/DxMessaging/tree/master/no/such/dir).",
     expectedViolations: 1,
     reasonMatch: /does not exist in the working tree: no\/such\/dir/
+  },
+  // ---------------------------------------------------------------------------
+  // EPHEMERAL CI-RUN URL rejection. These URLs (.../actions/runs/<id>) are
+  // per-run audit decoration; the run is purgeable, the link goes 404, and
+  // lychee reports a hard failure. The class-wide guard rejects ANY such link
+  // in docs/ markdown. The right shape is backticked plain text (no hyperlink).
+  // ---------------------------------------------------------------------------
+  {
+    name: "ACTIONS-RUN FAILS: self-repo actions/runs/<id> hyperlink",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Identified in [`70874414898`](https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898) as the load-bearing missing DLL.",
+    expectedViolations: 1,
+    reasonMatch: /ephemeral CI run URLs go stale/
+  },
+  {
+    name: "ACTIONS-RUN FAILS: cross-org actions/runs/<id> hyperlink",
+    relativePath: "docs/runbooks/foo.md",
+    content: "See [run](https://github.com/SomeOrg/SomeRepo/actions/runs/123456789).",
+    expectedViolations: 1,
+    reasonMatch: /ephemeral CI run URLs go stale/
+  },
+  {
+    name: "ACTIONS-RUN FAILS: a deep URL fragment under actions/runs/<id>",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "See [job](https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898/job/19370238492).",
+    expectedViolations: 1,
+    reasonMatch: /ephemeral CI run URLs go stale/
+  },
+  {
+    name: "ACTIONS-RUN OK: backticked plain run id (no hyperlink) -- the canonical form",
+    relativePath: "docs/runbooks/foo.md",
+    // Inline `..` makes it a single inline code span, which the validator
+    // already excludes from link scanning.
+    content: "Identified in `production run 70874414898` as the load-bearing missing DLL.",
+    expectedViolations: 0
+  },
+  {
+    name: "ACTIONS-RUN OK: linking to a workflow definition under .github/workflows/ is NOT ephemeral",
+    relativePath: "docs/runbooks/foo.md",
+    content:
+      "Trigger [stuck-job-watchdog.yml](https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml).",
+    expectedViolations: 0
+  },
+  {
+    name: "ACTIONS-RUN OK: linking to the actions WORKFLOWS landing page (no run id) is not rejected",
+    relativePath: "docs/runbooks/foo.md",
+    // The validator scopes the ephemeral check to `/actions/runs/<digit-id>`; the
+    // generic /actions or /actions/workflows page is not run-specific decoration.
+    content: "See [workflows](https://github.com/Ambiguous-Interactive/DxMessaging/actions).",
+    expectedViolations: 0
+  },
+  {
+    name: "ACTIONS-RUN inside a fenced code block is ignored",
+    relativePath: "docs/runbooks/foo.md",
+    content: [
+      "```text",
+      "[run](https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898)",
+      "```",
+      "",
+      "After: [other](./other.md)"
+    ].join("\n"),
+    expectedViolations: 0
+  },
+  {
+    name: "ACTIONS-RUN as a reference-style link is rejected",
+    relativePath: "docs/runbooks/foo.md",
+    content: [
+      "See [run][r].",
+      "",
+      "[r]: https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898"
+    ].join("\n"),
+    expectedViolations: 1,
+    reasonMatch: /ephemeral CI run URLs go stale/
   }
 ];
 
@@ -383,30 +458,27 @@ describe("validate-docs-out-of-tree-links scanContent", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test.each(FIXTURES)(
-    "$name",
-    ({ relativePath, content, expectedViolations, reasonMatch }) => {
-      // Build a synthetic docs root in tempDir so escapesDocsTree compares
-      // against THIS tree, not the repo's real docs/. The validator uses
-      // `validator.DOCS_ROOT` as the boundary, so we point relative paths
-      // at the real docs/ by faking the file path under <repo>/docs/.
-      const realDocsRoot = validator.DOCS_ROOT;
-      const fakeAbsPath = path.join(realDocsRoot, "..", relativePath.replace(/^docs\//, "docs/"));
-      // Make sure the file we hand the scanner actually points into the
-      // real docs/ subtree (we never write to it on disk; scanContent
-      // only needs the path to resolve the link's destination). Self-repo
-      // blob fixtures additionally resolve their target against the real
-      // working tree (validator.REPO_ROOT), which is why the existing/bogus
-      // paths above are chosen relative to the actual repo.
-      const violations = validator.scanContent(fakeAbsPath, content);
-      expect(violations).toHaveLength(expectedViolations);
-      for (const v of violations) {
-        // Self-repo blob existence violations carry a distinct reason; the
-        // out-of-tree relative-link violations carry the original one.
-        expect(v.reason).toMatch(reasonMatch || /full https:\/\/github\.com/);
-      }
+  test.each(FIXTURES)("$name", ({ relativePath, content, expectedViolations, reasonMatch }) => {
+    // Build a synthetic docs root in tempDir so escapesDocsTree compares
+    // against THIS tree, not the repo's real docs/. The validator uses
+    // `validator.DOCS_ROOT` as the boundary, so we point relative paths
+    // at the real docs/ by faking the file path under <repo>/docs/.
+    const realDocsRoot = validator.DOCS_ROOT;
+    const fakeAbsPath = path.join(realDocsRoot, "..", relativePath.replace(/^docs\//, "docs/"));
+    // Make sure the file we hand the scanner actually points into the
+    // real docs/ subtree (we never write to it on disk; scanContent
+    // only needs the path to resolve the link's destination). Self-repo
+    // blob fixtures additionally resolve their target against the real
+    // working tree (validator.REPO_ROOT), which is why the existing/bogus
+    // paths above are chosen relative to the actual repo.
+    const violations = validator.scanContent(fakeAbsPath, content);
+    expect(violations).toHaveLength(expectedViolations);
+    for (const v of violations) {
+      // Self-repo blob existence violations carry a distinct reason; the
+      // out-of-tree relative-link violations carry the original one.
+      expect(v.reason).toMatch(reasonMatch || /full https:\/\/github\.com/);
     }
-  );
+  });
 });
 
 describe("validate-docs-out-of-tree-links isDocsMarkdown", () => {
@@ -489,6 +561,56 @@ describe("validate-docs-out-of-tree-links selfRepoBlobTargetExists (unit)", () =
 
   test("resolves an existing directory (tree-link target)", () => {
     expect(validator.selfRepoBlobTargetExists("scripts")).toBe(true);
+  });
+});
+
+describe("validate-docs-out-of-tree-links EPHEMERAL_CI_RUN_RE (unit)", () => {
+  test("matches a self-repo actions/runs/<id> URL", () => {
+    expect(
+      validator.EPHEMERAL_CI_RUN_RE.test(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898"
+      )
+    ).toBe(true);
+  });
+
+  test("matches a cross-org actions/runs/<id> URL", () => {
+    expect(
+      validator.EPHEMERAL_CI_RUN_RE.test(
+        "https://github.com/SomeOrg/SomeRepo/actions/runs/123456789"
+      )
+    ).toBe(true);
+  });
+
+  test("matches a deep job/<id> URL under actions/runs/<id>", () => {
+    expect(
+      validator.EPHEMERAL_CI_RUN_RE.test(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/actions/runs/70874414898/job/19370238492"
+      )
+    ).toBe(true);
+  });
+
+  test("does NOT match the generic /actions page (no run id)", () => {
+    expect(
+      validator.EPHEMERAL_CI_RUN_RE.test(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/actions"
+      )
+    ).toBe(false);
+  });
+
+  test("does NOT match a workflow-definition blob link under .github/workflows/", () => {
+    expect(
+      validator.EPHEMERAL_CI_RUN_RE.test(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/blob/master/.github/workflows/stuck-job-watchdog.yml"
+      )
+    ).toBe(false);
+  });
+
+  test("does NOT match the actions/workflows landing page", () => {
+    expect(
+      validator.EPHEMERAL_CI_RUN_RE.test(
+        "https://github.com/Ambiguous-Interactive/DxMessaging/actions/workflows/ci.yml"
+      )
+    ).toBe(false);
   });
 });
 

@@ -854,7 +854,9 @@ describe("scripts/unity direct CI runner contract", () => {
     // than the loose word "normalized" within an arbitrary char window. The
     // 800-char window is well above the current bullet's ~580 chars, leaving
     // headroom for documentation growth without fragility.
-    expect(ctx).toMatch(/UNITY_ACCELERATOR_ENDPOINT[\s\S]{0,800}ConvertTo-NormalizedAcceleratorEndpoint/);
+    expect(ctx).toMatch(
+      /UNITY_ACCELERATOR_ENDPOINT[\s\S]{0,800}ConvertTo-NormalizedAcceleratorEndpoint/
+    );
     expect(ctx).toMatch(/scheme:\/\/host:port/);
     // Inverse-claim guard (m2): the OLD wording must never come back.
     // Loosened to catch grammar variants ("not a http URL", "not an http URL",
@@ -887,6 +889,249 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).not.toContain("services-config.json");
     expect(runCi).not.toContain("Write-UnityLicensingServerConfig");
     expect(runCi).not.toContain("Resolve-UnityLicensingClient");
+  });
+
+  // -------------------------------------------------------------------------
+  // PRODUCTION GUARD (data-driven): every Unity.exe arg-array literal in
+  // run-ci-tests.ps1 must obey the manual's rule that `-runTests` and `-quit`
+  // are MUTUALLY EXCLUSIVE -- per
+  // https://docs.unity3d.com/Manual/EditorCommandLineArguments.html the editor
+  // QUITS IMMEDIATELY when both are present, before in-progress tests complete,
+  // exiting 0 with NO results.xml. The non-test invocations (license activate /
+  // return, native startup probe, configure -executeMethod) legitimately need
+  // -quit; the test-launch array must not.
+  //
+  // We scan every top-level `@( ... )` array literal in the script that LOOKS
+  // LIKE a Unity.exe argument vector (contains -batchmode OR -runTests OR
+  // -quit OR -executeMethod as a quoted token) and assert the rule against
+  // each one, so a NEWLY ADDED Unity.exe invocation is automatically
+  // checked rather than silently skipped. The check is order-independent: any
+  // matching array literal in the file is evaluated.
+  // -------------------------------------------------------------------------
+  describe("run-ci-tests Unity.exe arg arrays obey -runTests excludes -quit", () => {
+    // Extract every top-level `@( ... )` array literal from the script source by
+    // brace-matching the parentheses (so nested `@(...)` inside an array is
+    // preserved within the outer extent rather than ending the slice prematurely).
+    // Returns each match with its starting char index (so we can compute a line
+    // number) and the raw body text BETWEEN the outer `@(` and `)`.
+    function extractAtArrayLiterals(scriptText) {
+      const matches = [];
+      let i = 0;
+      while (i < scriptText.length) {
+        const open = scriptText.indexOf("@(", i);
+        if (open < 0) {
+          break;
+        }
+        let depth = 1;
+        let j = open + 2;
+        while (j < scriptText.length && depth > 0) {
+          const ch = scriptText[j];
+          if (ch === "(") {
+            depth++;
+          } else if (ch === ")") {
+            depth--;
+            if (depth === 0) {
+              break;
+            }
+          }
+          j++;
+        }
+        if (depth !== 0) {
+          // Unbalanced -- bail out rather than report bogus violations.
+          break;
+        }
+        matches.push({ index: open, body: scriptText.slice(open + 2, j) });
+        i = j + 1;
+      }
+      return matches;
+    }
+
+    function lineNumberOf(text, charIndex) {
+      let n = 1;
+      for (let k = 0; k < charIndex && k < text.length; k++) {
+        if (text[k] === "\n") {
+          n++;
+        }
+      }
+      return n;
+    }
+
+    // Collect all quoted tokens (single OR double quoted) inside an array
+    // literal body. A "Unity.exe arg-vector" array is one whose tokens include
+    // at least one of the Unity command-line flags the script uses.
+    //
+    // PowerShell `#`-to-EOL comments are stripped FIRST so a contributor who
+    // disables a flag via `# '-quit',  <-- intentionally disabled` doesn't
+    // trigger a false-positive contract failure. The stripper is
+    // quote-aware: a `#` INSIDE a single- or double-quoted string is literal,
+    // NOT a comment start, and is preserved verbatim.
+    function stripPowerShellLineComments(body) {
+      const lines = body.split("\n");
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
+        let inSingle = false;
+        let inDouble = false;
+        let commentAt = -1;
+        for (let k = 0; k < line.length; k++) {
+          const ch = line[k];
+          if (inSingle) {
+            if (ch === "'") {
+              inSingle = false;
+            }
+            continue;
+          }
+          if (inDouble) {
+            if (ch === '"') {
+              inDouble = false;
+            }
+            continue;
+          }
+          if (ch === "'") {
+            inSingle = true;
+            continue;
+          }
+          if (ch === '"') {
+            inDouble = true;
+            continue;
+          }
+          if (ch === "#") {
+            commentAt = k;
+            break;
+          }
+        }
+        if (commentAt >= 0) {
+          lines[li] = line.slice(0, commentAt);
+        }
+      }
+      return lines.join("\n");
+    }
+
+    const QUOTED_TOKEN_RE = /'([^']*)'|"([^"]*)"/g;
+    function quotedTokensIn(body) {
+      const stripped = stripPowerShellLineComments(body);
+      const out = [];
+      QUOTED_TOKEN_RE.lastIndex = 0;
+      let m;
+      while ((m = QUOTED_TOKEN_RE.exec(stripped)) !== null) {
+        out.push(m[1] !== undefined ? m[1] : m[2]);
+      }
+      return out;
+    }
+
+    describe("quotedTokensIn helper is PowerShell-comment-aware", () => {
+      test("strips '#'-to-EOL disabled-flag comments before tokenizing", () => {
+        const body = [
+          "    '-batchmode',",
+          "    # '-quit', # intentionally disabled per docs/runbook",
+          "    '-runTests'"
+        ].join("\n");
+        const tokens = quotedTokensIn(body);
+        expect(tokens).toContain("-runTests");
+        expect(tokens).toContain("-batchmode");
+        expect(tokens).not.toContain("-quit");
+      });
+
+      test("preserves '#' that appears INSIDE a single-quoted string literal", () => {
+        const body = ["    'has # in literal',", "    '-runTests'"].join("\n");
+        const tokens = quotedTokensIn(body);
+        expect(tokens).toContain("has # in literal");
+        expect(tokens).toContain("-runTests");
+      });
+
+      test("preserves '#' that appears INSIDE a double-quoted string literal", () => {
+        const body = ['    "tag #1",', "    '-runTests'"].join("\n");
+        const tokens = quotedTokensIn(body);
+        expect(tokens).toContain("tag #1");
+        expect(tokens).toContain("-runTests");
+      });
+    });
+
+    const UNITY_FLAG_MARKERS = new Set([
+      "-batchmode",
+      "-runTests",
+      "-quit",
+      "-executeMethod",
+      "-returnlicense",
+      "-serial"
+    ]);
+
+    function isUnityArgVector(tokens) {
+      for (const t of tokens) {
+        if (UNITY_FLAG_MARKERS.has(t)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    test("every Unity.exe arg-array literal is scanned and at least one matches", () => {
+      // Sanity: the extractor MUST find at least the five known Unity arg
+      // vectors (activate, return, probe, configure, test). A regression that
+      // turned the extractor into a silent no-op would otherwise pass an empty
+      // table below.
+      const literals = extractAtArrayLiterals(runCi);
+      const unityVectors = literals.filter((l) => isUnityArgVector(quotedTokensIn(l.body)));
+      expect(unityVectors.length).toBeGreaterThanOrEqual(5);
+    });
+
+    test("NO Unity.exe arg array contains both '-runTests' AND '-quit'", () => {
+      const literals = extractAtArrayLiterals(runCi);
+      const violations = [];
+      for (const lit of literals) {
+        const tokens = quotedTokensIn(lit.body);
+        if (!isUnityArgVector(tokens)) {
+          continue;
+        }
+        if (tokens.includes("-runTests") && tokens.includes("-quit")) {
+          violations.push({
+            line: lineNumberOf(runCi, lit.index),
+            tokens
+          });
+        }
+      }
+      if (violations.length > 0) {
+        const detail = violations
+          .map(
+            (v) =>
+              `scripts/unity/run-ci-tests.ps1:${v.line} -- Unity arg array contains both '-runTests' and '-quit' (illegal per https://docs.unity3d.com/Manual/EditorCommandLineArguments.html). Tokens: ${JSON.stringify(v.tokens)}`
+          )
+          .join("\n");
+        throw new Error(detail);
+      }
+      expect(violations).toEqual([]);
+    });
+
+    test("the test-launch array (contains '-runTests') exists, omits '-quit', and still has '-batchmode'", () => {
+      // Positive coverage: prove the rule is enforced on an array that ACTUALLY
+      // runs tests (so a refactor that accidentally deleted the only -runTests
+      // array would still be caught -- otherwise the negative test above would
+      // trivially pass on an empty set).
+      const literals = extractAtArrayLiterals(runCi);
+      const testArrays = literals
+        .map((l) => ({ line: lineNumberOf(runCi, l.index), tokens: quotedTokensIn(l.body) }))
+        .filter((entry) => entry.tokens.includes("-runTests"));
+      expect(testArrays.length).toBeGreaterThanOrEqual(1);
+      for (const entry of testArrays) {
+        expect(entry.tokens).toContain("-batchmode");
+        expect(entry.tokens).not.toContain("-quit");
+      }
+    });
+
+    test("arrays containing '-executeMethod' MAY contain '-quit' (the standalone configure pass is the canonical case)", () => {
+      // The standalone configure -executeMethod invocation NEEDS -quit so the
+      // editor exits after applying the configurator (it is NOT a test run).
+      // We don't REQUIRE -quit on every -executeMethod array, but we want to
+      // PROVE the rule allows it: assert at least one such array exists and
+      // its presence does NOT violate the negative rule above.
+      const literals = extractAtArrayLiterals(runCi);
+      const execMethodArrays = literals
+        .map((l) => quotedTokensIn(l.body))
+        .filter((tokens) => tokens.includes("-executeMethod") && !tokens.includes("-runTests"));
+      expect(execMethodArrays.length).toBeGreaterThanOrEqual(1);
+      // The canonical case bundles -quit with -executeMethod for a clean exit.
+      const withQuit = execMethodArrays.filter((tokens) => tokens.includes("-quit"));
+      expect(withQuit.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });
 
