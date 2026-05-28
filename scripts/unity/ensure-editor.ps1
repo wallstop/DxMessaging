@@ -3979,7 +3979,12 @@ function Write-UnityProvisioningSummary {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
         }
 
-        $profile = Get-UnityProvisioningProfile
+        # Local copy of the current provisioning profile. Named
+        # $provisioningProfile (NOT the auto-variable $PROFILE, which holds
+        # the PowerShell startup-script path) so this helper does not
+        # shadow that built-in even though PowerShell variable names are
+        # case-insensitive.
+        $provisioningProfile = Get-UnityProvisioningProfile
         $modulePresence = [ordered]@{}
         foreach ($group in @(Get-UnityCiModuleSpec | Where-Object { $_.Verified } | ForEach-Object { $_.Id })) {
             $present = $false
@@ -3989,7 +3994,7 @@ function Write-UnityProvisioningSummary {
             $modulePresence[$group] = $present
         }
         $requiredModulePresence = [ordered]@{}
-        foreach ($group in @(Get-UnityCiVerifiedModuleGroups -Profile $profile)) {
+        foreach ($group in @(Get-UnityCiVerifiedModuleGroups -Profile $provisioningProfile)) {
             $requiredModulePresence[$group] = $modulePresence[$group]
         }
 
@@ -3997,16 +4002,16 @@ function Write-UnityProvisioningSummary {
         $summary = [ordered]@{
             generatedUtc              = [DateTime]::UtcNow.ToString('o')
             unityVersion              = $Version
-            provisioningProfile       = $profile
+            provisioningProfile       = $provisioningProfile
             cliPath                   = $script:UnityCliPath
             cliVersion                = $(if ($script:UnityCliVersionText) { $script:UnityCliVersionText } else { '(not queried)' })
             installRoot               = $Root
             editorPath                = $EditorPath
             ciManagedOnly             = [bool]$CiManagedOnly
             attemptedCommandClasses   = $commandClasses
-            desiredModules            = @(Get-UnityCiModuleIds -Profile $profile)
-            verifiedModules           = @(Get-UnityCiVerifiedModuleGroups -Profile $profile)
-            skippedModuleGroups       = @(Get-UnityCiSkippedModuleGroups -Profile $profile)
+            desiredModules            = @(Get-UnityCiModuleIds -Profile $provisioningProfile)
+            verifiedModules           = @(Get-UnityCiVerifiedModuleGroups -Profile $provisioningProfile)
+            skippedModuleGroups       = @(Get-UnityCiSkippedModuleGroups -Profile $provisioningProfile)
             modulePresence            = $modulePresence
             requiredModulePresence    = $requiredModulePresence
             provisioningBudgetSeconds = $script:ProvisioningBudgetSeconds
@@ -4021,7 +4026,7 @@ function Write-UnityProvisioningSummary {
         $textLines = @(
             "Unity provisioning summary",
             "classification=$script:ProvisioningFinalClassification",
-            "provisioningProfile=$profile",
+            "provisioningProfile=$provisioningProfile",
             "unityVersion=$Version",
             "cliPath=$script:UnityCliPath",
             "cliVersion=$($summary.cliVersion)",

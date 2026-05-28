@@ -583,6 +583,118 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     }
   );
 
+  // Pin the gating condition shape on every "Verify tests actually ran" step
+  // across all workflows. A revert to `if: always()` would silently re-introduce
+  // the race against user-initiated cancellations -- the verify step would run
+  // even when the run was cancelled and emit a misleading "tests did not run"
+  // error annotation. We forbid `always()` on every "Verify tests" step and
+  // require the canonical `!cancelled()` shape on the REQUIRED Unity workflows
+  // (unity-tests.yml, unity-benchmarks.yml, release.yml). The non-required
+  // GameCI experiment uses a different `steps.<id>.outcome == 'success'` guard
+  // by design (it is the only "Verify tests" step that intentionally skips on
+  // an earlier step's failure), so we only require it not be `always()`.
+  function collectVerifyTestsSteps() {
+    const records = [];
+    for (const workflow of fs.readdirSync(WORKFLOWS_DIR).filter((name) => /\.ya?ml$/i.test(name))) {
+      const parsed = loadWorkflowYaml(workflow);
+      for (const [jobId, job] of Object.entries(parsed.jobs || {})) {
+        for (const step of job.steps || []) {
+          if (typeof step.name === "string" && /verify\s+tests/i.test(step.name)) {
+            records.push({ workflow, jobId, step });
+          }
+        }
+      }
+    }
+    return records;
+  }
+
+  function isAlwaysCondition(ifValue) {
+    if (typeof ifValue !== "string") {
+      return false;
+    }
+    // Strip ${{ }} wrapper and ALL whitespace so we match `always()`,
+    // `${{ always() }}`, `${{  always()  }}`, `${{ always () }}`, and any
+    // future formatter that inserts spaces inside the call. This is purely a
+    // robustness tweak -- the production workflows write `always()` exactly,
+    // but yamlfmt / prettier could re-flow whitespace without changing
+    // semantics and we don't want that to silently flip a guard test.
+    const inner = ifValue
+      .replace(/^\s*\$\{\{\s*/, "")
+      .replace(/\s*\}\}\s*$/, "")
+      .replace(/\s+/g, "");
+    return inner === "always()";
+  }
+
+  function isCancelledGuard(ifValue) {
+    if (typeof ifValue !== "string") {
+      return false;
+    }
+    const inner = ifValue
+      .replace(/^\s*\$\{\{\s*/, "")
+      .replace(/\s*\}\}\s*$/, "")
+      .replace(/\s+/g, "");
+    return inner === "!cancelled()";
+  }
+
+  test("every 'Verify tests' step exists and was located by the scanner", () => {
+    // ANTI-NO-OP: if a workflow rename causes the scan to silently turn up
+    // nothing, the assertions below would vacuously pass. Pin the count to
+    // catch that.
+    const records = collectVerifyTestsSteps();
+    expect(records.length).toBeGreaterThanOrEqual(3);
+    const workflows = records.map((r) => r.workflow).sort();
+    expect(workflows).toEqual(expect.arrayContaining([
+      "release.yml",
+      "unity-benchmarks.yml",
+      "unity-tests.yml"
+    ]));
+  });
+
+  test("no 'Verify tests' step uses if: always() (catches revert to the racy gate)", () => {
+    const records = collectVerifyTestsSteps();
+    const offenders = records
+      .filter(({ step }) => isAlwaysCondition(step.if))
+      .map(({ workflow, jobId, step }) => `${workflow}:${jobId} -- if: ${step.if}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow 'Verify tests actually ran' step uses if: !cancelled() (not always(), not raw on/off)",
+    ({ workflow }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const verifySteps = [];
+      for (const job of Object.values(parsed.jobs || {})) {
+        for (const step of job.steps || []) {
+          if (typeof step.name === "string" && /verify\s+tests/i.test(step.name)) {
+            verifySteps.push(step);
+          }
+        }
+      }
+      expect(verifySteps.length).toBeGreaterThan(0);
+      for (const step of verifySteps) {
+        expect(typeof step.if).toBe("string");
+        expect(isAlwaysCondition(step.if)).toBe(false);
+        expect(isCancelledGuard(step.if)).toBe(true);
+      }
+    }
+  );
+
+  // Canonical labels carried by both the verify-unity-results composite
+  // action and scripts/unity/run-ci-tests.ps1's $script:CatastrophicPatterns
+  // array. Both consumers must reference EVERY label so a Unity-side compile
+  // catastrophe (PrecompiledAssemblyException, CompilationFailedException,
+  // raw `error CS####` lines, the warning CS8032 analyzer-load-failure) gets
+  // a top-of-summary `::error::` annotation regardless of which call site
+  // fires first. Keeping this list co-located with the assertions keeps
+  // catastrophic-pattern drift a one-line edit instead of a silent omission.
+  const CATASTROPHIC_PATTERN_LABELS = [
+    "PrecompiledAssemblyException",
+    "CompilationFailedException",
+    "Multiple precompiled assemblies with the same name",
+    "error CS\\d+",
+    "warning CS8032"
+  ];
+
   test("verify-unity-results composite action carries the load-bearing guard logic", () => {
     // Pin the actual guard logic to the composite action file so it cannot be
     // hollowed out during a future refactor. This is the single source of
@@ -598,7 +710,113 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     expect(text).toContain("Provisioning diagnostics files");
     // Composite run: steps on self-hosted Windows MUST set shell: pwsh.
     expect(text).toMatch(/shell:\s*pwsh/);
+
+    // Catastrophic-pattern helper must exist and be wired into the step;
+    // a refactor that drops the helper would silently lose top-of-summary
+    // `::error::` annotations for compile-time-catastrophe failures.
+    expect(text).toContain("Write-UnityCatastrophicPatternHits");
+    // Every canonical label must appear in the action.yml text (data drift
+    // catch: if someone shrinks the pattern set in the action without
+    // shrinking the runner script's set, the silent-killer guard becomes
+    // half-blind).
+    for (const label of CATASTROPHIC_PATTERN_LABELS) {
+      expect(text).toContain(label);
+    }
   });
+
+  test("catastrophic patterns stay in sync between run-ci-tests.ps1, verify-unity-results/action.yml, and dump-unity-log-tail/action.yml", () => {
+    // All THREE consumers MUST carry the same label set so a compile-time
+    // catastrophe produces identical top-of-summary `::error::` annotations
+    // regardless of which call site fires first:
+    //   1) runner script during the Unity invocation
+    //   2) verify-unity-results AFTER the run on the happy/failure path
+    //   3) dump-unity-log-tail on failure() OR cancelled() (covers the
+    //      Unity-2022-csc-hang scenario where the verify step is skipped
+    //      because the cancel set the job state to cancelled).
+    // Drift in any direction = half-blind diagnostics.
+    const runnerPath = path.join(REPO_ROOT, "scripts", "unity", "run-ci-tests.ps1");
+    const verifyActionPath = path.join(ACTIONS_DIR, "verify-unity-results", "action.yml");
+    const dumpActionPath = path.join(ACTIONS_DIR, "dump-unity-log-tail", "action.yml");
+    expect(fs.existsSync(runnerPath)).toBe(true);
+    expect(fs.existsSync(verifyActionPath)).toBe(true);
+    expect(fs.existsSync(dumpActionPath)).toBe(true);
+
+    const runnerText = fs.readFileSync(runnerPath, "utf8");
+    const verifyActionText = fs.readFileSync(verifyActionPath, "utf8");
+    const dumpActionText = fs.readFileSync(dumpActionPath, "utf8");
+
+    // Heuristic co-presence check: ALL files must contain every canonical
+    // label string. We deliberately do not try to parse the PowerShell
+    // array literal (fragile across PS formatting) -- the label strings
+    // appear verbatim in all three files inside `Label = '<text>'` (or
+    // YAML's Label = '<text>') and inside the surrounding comment blocks,
+    // so a string-contains check catches drift without requiring a parser.
+    for (const label of CATASTROPHIC_PATTERN_LABELS) {
+      expect(runnerText.includes(label)).toBe(true);
+      expect(verifyActionText.includes(label)).toBe(true);
+      expect(dumpActionText.includes(label)).toBe(true);
+    }
+  });
+
+  // Pin the dump-unity-log-tail composite shape: it MUST exist, be a pwsh
+  // composite, dump unity.log via Get-Content -Tail, and carry every
+  // catastrophic-pattern label (verified by the co-sync test above too).
+  // The `if: failure() || cancelled()` wiring lives on the CALLER (each
+  // Unity workflow), not on this action; we pin the wiring separately in
+  // the per-workflow "wires the dump-unity-log-tail step on failure or
+  // cancellation" tests below.
+  test("dump-unity-log-tail composite action carries the load-bearing diagnostic logic", () => {
+    const actionPath = path.join(ACTIONS_DIR, "dump-unity-log-tail", "action.yml");
+    expect(fs.existsSync(actionPath)).toBe(true);
+    const text = fs.readFileSync(actionPath, "utf8");
+    // Composite run: steps on self-hosted Windows MUST set shell: pwsh.
+    expect(text).toMatch(/shell:\s*pwsh/);
+    // The action MUST read unity.log from the supplied results-dir.
+    expect(text).toContain("unity.log");
+    // The action MUST emit a tail via Get-Content -Tail (the load-bearing
+    // diagnostic so the operator has SOMETHING to look at on cancel).
+    expect(text).toMatch(/Get-Content[^|]*-Tail/);
+    // Best-effort posture: the action must NOT throw (operator's upstream
+    // failure must remain the root cause, not a diagnostic helper crash).
+    expect(text).toContain("results-dir");
+    expect(text).toContain("label");
+  });
+
+  // The dump-unity-log-tail step MUST be wired with if: failure() ||
+  // cancelled() on every required Unity workflow, BEFORE the verify step
+  // (so its log-tail output appears above the verify step's annotation in
+  // the GitHub summary).
+  test.each(UNITY_LICENSED_JOBS)(
+    "$workflow wires the dump-unity-log-tail step on failure() or cancelled() BEFORE the verify step",
+    ({ workflow, jobId }) => {
+      const parsed = loadWorkflowYaml(workflow);
+      const steps = parsed.jobs[jobId].steps;
+
+      const dumpIndex = steps.findIndex(
+        (step) => step.uses === "./.github/actions/dump-unity-log-tail"
+      );
+      const verifyIndex = steps.findIndex(
+        (step) => step.uses === "./.github/actions/verify-unity-results"
+      );
+
+      expect(dumpIndex).toBeGreaterThanOrEqual(0);
+      expect(verifyIndex).toBeGreaterThanOrEqual(0);
+      // The dump step provides catastrophic-pattern hits on cancel; placing
+      // it BEFORE the verify step means the operator sees them above the
+      // verify-step output in the GitHub summary.
+      expect(dumpIndex).toBeLessThan(verifyIndex);
+
+      const dumpStep = steps[dumpIndex];
+      // The `if:` MUST include both failure() AND cancelled() so the step
+      // runs on EITHER a step-timeout/red-test scenario (failure) OR a
+      // user-initiated cancel.
+      const condition = String(dumpStep.if || "")
+        .replace(/^\s*\$\{\{\s*/, "")
+        .replace(/\s*\}\}\s*$/, "")
+        .replace(/\s+/g, "");
+      expect(condition).toBe("failure()||cancelled()");
+    }
+  );
 
   test("compute-unity-assemblies composite action shells out to asmdef-discovery", () => {
     // Pin the single-source assembly resolution to the composite action file.

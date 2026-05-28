@@ -68,6 +68,87 @@ function Write-CiNotice {
     Write-Host "::notice::$Message"
 }
 
+# SINGLE SOURCE OF TRUTH for the catastrophic-pattern list that both
+# Write-UnityCatastrophicErrorAnnotations (new ::error:: annotation surface)
+# AND Write-UnityResultFailureDiagnostics (older line-numbered selected-line
+# printer) scan for. Each entry has:
+#   Label    : human-readable label written into the GitHub group/error line
+#   Pattern  : the Select-String pattern (regex when UseSimple=false, literal
+#              substring when UseSimple=true)
+#   UseSimple: whether to invoke Select-String -SimpleMatch (literal substring,
+#              cheaper) or as a regex
+# Keeping this at $script: scope keeps the array deterministic and shared
+# even when callers run from inside a try/finally or a child function.
+#
+# Patterns covered:
+#   - PrecompiledAssemblyException -- "Multiple precompiled assemblies with
+#     the same name" (the analyzer-DLL duplicate that motivated this
+#     diagnostic; the runtime auto-copy that caused it has been removed).
+#   - CompilationFailedException -- generic compile-failure path.
+#   - error CS\d+ -- compiler errors (CS0246, CS0103, CS0117, etc).
+#   - warning CS8032 -- "An instance of analyzer cannot be created" (analyzer
+#     failed to instantiate; same class of issue).
+$script:CatastrophicPatterns = @(
+    @{ Label = 'PrecompiledAssemblyException'; Pattern = 'PrecompiledAssemblyException'; UseSimple = $true }
+    @{ Label = 'CompilationFailedException'; Pattern = 'CompilationFailedException'; UseSimple = $true }
+    @{ Label = 'Multiple precompiled assemblies with the same name'; Pattern = 'Multiple precompiled assemblies with the same name'; UseSimple = $true }
+    @{ Label = 'error CS\d+'; Pattern = 'error CS\d+'; UseSimple = $false }
+    @{ Label = 'warning CS8032'; Pattern = 'warning CS8032'; UseSimple = $false }
+)
+
+# CLASS-OF-ISSUE DIAGNOSTIC: when Unity exits non-zero, the operator's next
+# question is "WHY did Unity fail?". The most common silent-killer answers are
+# catastrophic compile-time errors -- the editor exits before running tests at
+# all, leaving no NUnit XML. Surface these patterns as `::error::` annotations
+# directly from the runner script so they ALWAYS show up in both the runner log
+# and GitHub's error summary, independent of whether the workflow-level verify
+# step also runs. Reusable at top-level so additional call sites can adopt it.
+# Patterns come from the single-source-of-truth $script:CatastrophicPatterns
+# array above; see Write-UnityResultFailureDiagnostics for the second consumer.
+function Write-UnityCatastrophicErrorAnnotations {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [int]$MaxPerPattern = 5
+    )
+
+    if (-not $LogPath -or -not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+        return
+    }
+
+    foreach ($entry in $script:CatastrophicPatterns) {
+        try {
+            if ($entry.UseSimple) {
+                $hits = @(
+                    Select-String -LiteralPath $LogPath -SimpleMatch -Pattern $entry.Pattern -ErrorAction SilentlyContinue |
+                        Select-Object -First $MaxPerPattern
+                )
+            } else {
+                $hits = @(
+                    Select-String -LiteralPath $LogPath -Pattern $entry.Pattern -ErrorAction SilentlyContinue |
+                        Select-Object -First $MaxPerPattern
+                )
+            }
+        } catch {
+            # Best-effort; never throw from a diagnostic helper -- the caller is
+            # already in the middle of a throw path.
+            continue
+        }
+
+        if ($hits.Count -lt 1) {
+            continue
+        }
+
+        Write-Host "::group::Catastrophic pattern: $($entry.Label)"
+        foreach ($hit in $hits) {
+            $line = $hit.Line.Trim()
+            Write-Host "::error::Pattern detected -- $($entry.Label):: $line"
+            Write-Host "  $($hit.Path):$($hit.LineNumber): $line"
+        }
+        Write-Host "::endgroup::"
+    }
+}
+
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     $executionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
@@ -507,6 +588,12 @@ function Invoke-UnityEditor {
     $exitCode = $LASTEXITCODE
     Write-Host "::endgroup::"
     if ($exitCode -ne 0) {
+        # Proactively surface catastrophic compile-time failure patterns
+        # (PrecompiledAssemblyException, CompilationFailedException, CS####,
+        # CS8032) as ::error:: annotations so the operator sees the root cause
+        # in BOTH the runner log AND GitHub's error summary, independent of
+        # whether the workflow-level verify step also fires.
+        Write-UnityCatastrophicErrorAnnotations -LogPath $LogPath
         throw "$Label failed with exit code $exitCode. See the streamed Unity log above (also saved to $LogPath)."
     }
 }
@@ -608,9 +695,24 @@ function Write-UnityResultFailureDiagnostics {
     try {
         if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
             Write-Host "Unity log path: $LogPath"
-            $diagnosticPatterns = @(
-                'warning CS8032',
-                'error CS\d+',
+            # Compose this function's scan list as:
+            #   (catastrophic patterns from the shared $script:CatastrophicPatterns
+            #    array; ONLY the regex-form entries, since Select-String's
+            #    -Pattern overload is regex when -SimpleMatch is absent)
+            # plus this function's local additions (Aborting/Exiting/No tests/
+            # TestRunner/results.xml/assemblyNames) -- the latter are NOT
+            # catastrophic-class patterns and are intentionally NOT in the
+            # shared array. This keeps the "single source of truth" rule for
+            # the overlapping patterns (error CS\d+, warning CS8032) without
+            # changing the function's overall scan behavior.
+            $catastrophicRegexes = @(
+                foreach ($entry in $script:CatastrophicPatterns) {
+                    if (-not $entry.UseSimple) {
+                        $entry.Pattern
+                    }
+                }
+            )
+            $localDiagnosticPatterns = @(
                 'Aborting batchmode',
                 'Exiting batchmode successfully',
                 'No tests',
@@ -618,6 +720,7 @@ function Write-UnityResultFailureDiagnostics {
                 'results\.xml',
                 'assemblyNames'
             )
+            $diagnosticPatterns = @($catastrophicRegexes) + @($localDiagnosticPatterns)
             $matches = @(
                 Select-String -LiteralPath $LogPath -Pattern $diagnosticPatterns -ErrorAction SilentlyContinue |
                     Select-Object -First 80

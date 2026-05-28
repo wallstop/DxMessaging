@@ -249,10 +249,31 @@ jobs:
         env:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
+      # CANCELLATION + TIMEOUT DIAGNOSTIC: when Unity 2022 hangs in csc the
+      # runner step times out (or the operator cancels), and the verify
+      # step below (gated on `!cancelled()`) skips -- so its catastrophic-
+      # pattern scan never fires either. This step covers both
+      # failure() AND cancelled() so the operator has SOMETHING to look at
+      # in the GitHub summary (the tail of unity.log + any catastrophic
+      # patterns the partial log happened to surface). Best-effort: never
+      # fails the job, no-ops when unity.log doesn't exist (cancellation
+      # before Unity launched).
+      - name: Dump Unity log tail on failure or cancellation
+        if: ${{ failure() || cancelled() }}
+        uses: ./.github/actions/dump-unity-log-tail
+        with:
+          results-dir: .artifacts/unity/benchmarks/${{ matrix.unity-version }}-${{ matrix.test-mode }}
+          label: Benchmarks ${{ matrix.unity-version }} ${{ matrix.test-mode }}
+
       # CLASS GUARD: Unity can fail before NUnit writes results. The shared
       # composite fails unless a results XML exists AND reports total > 0.
+      # Skip on cancellation so a user-cancelled run does not emit the
+      # generic "tests did not run" annotation -- the cancellation itself
+      # is the explanation. The guard still runs on failure (to surface
+      # "tests did not run" / catastrophic-compile diagnostics) and on
+      # success (to confirm a real result XML exists).
       - name: Verify tests actually ran
-        if: always()
+        if: ${{ !cancelled() }}
         uses: ./.github/actions/verify-unity-results
         with:
           results-dir: .artifacts/unity/benchmarks/${{ matrix.unity-version }}-${{ matrix.test-mode }}
