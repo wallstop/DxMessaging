@@ -41,6 +41,8 @@
   "words": [
     "DxMessaging",
     "dxmessaging",
+    "DxUnsafe",
+    "UnsafeUtility",
     "greppable",
     "hermeticity",
     "HKLM",
@@ -273,6 +275,7 @@
     "recognised",
     "recompiles",
     "reentrancy",
+    "preflight",
     "serialisable",
     "unconfigured",
     "unrecognised",

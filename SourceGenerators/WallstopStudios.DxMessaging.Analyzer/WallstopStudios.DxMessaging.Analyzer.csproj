@@ -17,13 +17,9 @@
     <LangVersion>latest</LangVersion>
     <!-- DO NOT bump this without verifying Unity 2021 still loads the analyzer.
          Unity 2021's analyzer loader silently rejects analyzers compiled against
-         Roslyn 4.x. -->
+         Roslyn 4.x. This pin is enforced by
+         scripts/__tests__/unity-test-harness-contract.test.js. -->
     <MicrosoftCodeAnalysisVersion>3.8.0</MicrosoftCodeAnalysisVersion>
-    <!-- Microsoft.CodeAnalysis.Common 3.8.0's transitive dependency on
-         System.Collections.Immutable >= 5.0.0 forces us to align here too. The
-         versions diverge from Microsoft's public Roslyn 3.8 OOB metadata (which
-         used 1.7.0), but the 3.8 analyzer surface itself is unchanged. -->
-    <SystemCollectionsImmutableVersion>5.0.0</SystemCollectionsImmutableVersion>
     <RootNamespace>WallstopStudios.DxMessaging.SourceGenerators</RootNamespace>
     <AssemblyName>WallstopStudios.DxMessaging.Analyzer</AssemblyName>
     <!-- Suppress NU1701/NU1603 noise from older Roslyn metapackages building
@@ -47,15 +43,22 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
-  <!-- Post-build copy of analyzer DLL/PDB into package Editor/Analyzers.
-       The legacy Assets/Plugins/Editor/WallstopStudios.DxMessaging copy
-       was REMOVED: it produced a second on-disk copy of the analyzer DLL
-       in any Unity project that built the analyzer inside its tree, which
-       Unity 2021's importer rejects with `PrecompiledAssemblyException:
-       Multiple precompiled assemblies with the same name`. The shipped
-       Editor/Analyzers/*.dll.meta files carry the RoslynAnalyzer label
-       directly, so no auto-copy is needed for Unity to pick up the
-       analyzer. -->
+  <!-- Post-build copy of the analyzer DLL/PDB into package Editor/Analyzers.
+
+       This target copies ONLY the freshly-built analyzer DLL/PDB. The Roslyn
+       runtime deps that the package ships alongside it
+       (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
+       System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe)
+       are committed in Editor/Analyzers/ as fixed bytes; the PrivateAssets=all
+       PackageReferences below keep this project's build from emitting its own
+       (3.8.0-pinned) copies of those deps, so a normal rebuild leaves the
+       committed dep DLLs untouched. Do NOT wipe Editor/Analyzers/ wholesale;
+       the committed dep bytes are the proven, Unity-validated set.
+
+       The shipped Editor/Analyzers/*.dll.meta files for the two analyzer
+       assemblies carry the analyzer configuration directly, and SetupCscRsp
+       copies the analyzer DLLs into Assets/Plugins/Editor/ so the analyzer
+       applies project-wide. -->
   <Target Name="PostBuildCopyAnalyzers" AfterTargets="Build">
     <PropertyGroup>
       <!-- Repo/package root: two levels up from this project directory -->

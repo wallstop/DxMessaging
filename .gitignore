@@ -91,6 +91,11 @@ artifacts/
 *.tmp
 *.tmp_proj
 *.log
+# Unity auto-generates a .meta sibling for any file under the package root,
+# including ignored *.log diagnostics (e.g. an Editor.log dropped here for
+# triage). The *.log rule above does not match the .meta suffix, so ignore it
+# too -- otherwise the untracked-and-unignored policy fails on Editor.log.meta.
+*.log.meta
 *.vspscc
 *.vssscc
 .builds

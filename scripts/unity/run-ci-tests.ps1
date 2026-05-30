@@ -44,14 +44,18 @@ $PSNativeCommandUseErrorActionPreference = $false
 $PackageName = 'com.wallstop-studios.dxmessaging'
 $TestFrameworkVersion = '1.4.5'
 $PerformanceFrameworkVersion = '3.4.2'
+# DxMessaging's own analyzer + source-generator assemblies. These are the DLLs
+# the generated csc.rsp wires in via -a: (see New-CscRspContent below), so they
+# MUST be present in Editor/Analyzers/ for the analyzer/source-generator to load.
+# Editor/Analyzers/ ALSO ships the Roslyn runtime deps
+# (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
+# System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe) alongside
+# these two; this roster is a "must be present" list for the analyzer DLLs and
+# is NOT an exhaustive inventory of Editor/Analyzers/ -- the extra dep DLLs being
+# present is expected and does not affect csc.rsp generation.
 $DxMessagingAnalyzerDllNames = @(
     'WallstopStudios.DxMessaging.SourceGenerators.dll',
-    'WallstopStudios.DxMessaging.Analyzer.dll',
-    'Microsoft.CodeAnalysis.dll',
-    'Microsoft.CodeAnalysis.CSharp.dll',
-    'System.Reflection.Metadata.dll',
-    'System.Runtime.CompilerServices.Unsafe.dll',
-    'System.Collections.Immutable.dll'
+    'WallstopStudios.DxMessaging.Analyzer.dll'
 )
 $RequiredDxMessagingAnalyzerDllNames = @(
     'WallstopStudios.DxMessaging.SourceGenerators.dll',
@@ -146,6 +150,201 @@ function Write-UnityCatastrophicErrorAnnotations {
             Write-Host "  $($hit.Path):$($hit.LineNumber): $line"
         }
         Write-Host "::endgroup::"
+    }
+}
+
+# Collapse any run of whitespace (including CR/LF) to a single space and trim, so
+# a multi-line NUnit <failure>/<message> renders as ONE line. GitHub `::error::`
+# annotations are single-line: an embedded newline silently truncates the
+# annotation at the first line break, so the whole message must be flattened
+# before it is emitted. Mirrors the `.Trim()` collapse the catastrophic-pattern
+# scanner applies to each matched log line.
+function ConvertTo-SingleLineDiagnostic {
+    param([string]$Text)
+    if (-not $Text) {
+        return ''
+    }
+    return (($Text -replace '\s+', ' ').Trim())
+}
+
+# Holder for the ::stop-commands::<token> ... ::<token>:: fence token that wraps
+# caller-controlled raw multi-line dumps (NUnit <message>/<stack-trace>). GitHub
+# parses every stdout line for `::command::` directives; fencing the raw body
+# disables that processing so an assertion message containing a line like
+# `::error file=...::` or `::set-output name=x::` cannot inject a spurious
+# workflow command. The token is NOT a fixed literal: a crafted message
+# containing the exact `::<literal>::` close line could otherwise end the fence
+# early and re-enable injection. Instead a FRESH random token is generated per
+# enumeration via New-WorkflowCommandStopToken (mirroring GitHub's own
+# @actions/core, which uses a random per-invocation delimiter) and the SAME
+# value is used for the opening and closing fence lines. The matching fence in
+# .github/actions/verify-unity-results/action.yml uses the same scheme.
+$script:WorkflowCommandStopToken = $null
+
+# Generate a fresh, unpredictable stop-commands fence token. A GUID 'N' form is
+# 32 hex chars with no separators, so it can never collide with caller text and
+# is regenerated each call so it is neither predictable nor committed.
+function New-WorkflowCommandStopToken {
+    return ('dxm-stop-commands-{0}' -f [guid]::NewGuid().ToString('N'))
+}
+
+# Resolve an NUnit test-case / test-suite node's display name using
+# XmlElement.GetAttribute, which returns '' for an ABSENT attribute instead of
+# THROWING under Set-StrictMode -Version Latest (the dynamic `$node.fullname`
+# property accessor throws "The property 'fullname' cannot be found" when the
+# attribute is missing, which would degrade the whole failed-test enumeration to
+# a generic warning for any NUnit XML lacking a fullname). Prefers fullname, then
+# name, then a final '(unnamed test)' fallback.
+function Get-NUnitNodeFullName {
+    param([Parameter(Mandatory = $true)]$Node)
+
+    $fullName = $Node.GetAttribute('fullname')
+    if (-not $fullName) {
+        $fullName = $Node.GetAttribute('name')
+    }
+    if (-not $fullName) {
+        $fullName = '(unnamed test)'
+    }
+    return $fullName
+}
+
+# DIAGNOSTIC: when a Unity test run reports failures, the operator's next question
+# is "WHICH tests failed and WHY?". The aggregate `failed=N` count alone is not
+# actionable -- a real 2021.3 PlayMode run failed 1 of 697 tests and the logs
+# never named it. This best-effort helper enumerates each failed test from the
+# NUnit3 results XML and emits BOTH:
+#   - a single-line `::error::` GitHub annotation per failed test (label +
+#     fullname + first line of the failure message), and
+#   - a `::group::Failed test: <fullname>` ... `::endgroup::` console block with
+#     the full multi-line message and stack trace.
+# It NEVER throws (the caller is already on a throw path; a diagnostic error must
+# not mask the real test failure) and follows the structure of the other
+# best-effort scanners (Write-UnityCatastrophicErrorAnnotations /
+# Write-UnityResultFailureDiagnostics).
+#
+# Two classes of failed node are enumerated:
+#   (1) Failed leaf cases: //test-case[@result='Failed'] -- the ordinary
+#       assertion failure.
+#   (2) Failed suites that carry their OWN direct <failure> child:
+#       //test-suite[@result='Failed'] with a direct <failure> element. This is
+#       the OneTimeSetUp / OneTimeTearDown failure shape (e.g.
+#       SuiteWallClockBudgetTest's [OneTimeTearDown] Assert.Fail) -- a suite can
+#       carry its OWN teardown failure message EVEN WHEN it also has a failed
+#       child case, so we report on the direct <failure> regardless of failed
+#       descendants. The fullname de-dup keeps a suite distinct from its child
+#       cases (suite fullname differs from case fullname), so this never
+#       double-prints; an aggregate-only suite (no direct <failure>) is still
+#       skipped because its failure is just the roll-up of the child cases.
+# De-duplicated by fullname so the same logical node is never printed twice, and
+# capped at the first $MaxFailures (a truncation notice is printed -- no silent
+# cap). Attribute reads use XmlElement.GetAttribute (returns '' when absent,
+# never throws) so a results.xml lacking a fullname/name attribute does NOT
+# degrade the whole enumeration to a generic warning under Set-StrictMode.
+function Write-UnityFailedTestAnnotations {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]$Xml,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [int]$MaxFailures = 50
+    )
+
+    try {
+        $failedCases = @($Xml.SelectNodes("//test-case[@result='Failed']"))
+        $failedSuites = @($Xml.SelectNodes("//test-suite[@result='Failed']"))
+
+        # A failed suite is reported on its OWN merits whenever it carries a
+        # direct <failure> child element. This captures the OneTimeSetUp /
+        # OneTimeTearDown failure message even when the suite ALSO has a failed
+        # descendant case (the teardown's own message would otherwise be lost).
+        # An aggregate-only suite (no direct <failure>, just a roll-up of failed
+        # children) is skipped. The fullname de-dup below keeps the suite
+        # distinct from its child cases, so this never double-prints.
+        $ownFailureSuites = @(
+            foreach ($suite in $failedSuites) {
+                $directFailure = $suite.SelectSingleNode('failure')
+                if ($directFailure) {
+                    $suite
+                }
+            }
+        )
+
+        $failedNodes = @($failedCases) + @($ownFailureSuites)
+        if ($failedNodes.Count -lt 1) {
+            return
+        }
+
+        # De-duplicate by fullname (fallback name) so the same logical test is
+        # never printed twice.
+        $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+        $uniqueNodes = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($node in $failedNodes) {
+            $fullName = Get-NUnitNodeFullName -Node $node
+            if ($seen.Add($fullName)) {
+                $uniqueNodes.Add($node)
+            }
+        }
+
+        $totalFailed = $uniqueNodes.Count
+        $shown = @($uniqueNodes | Select-Object -First $MaxFailures)
+        foreach ($node in $shown) {
+            $fullName = Get-NUnitNodeFullName -Node $node
+
+            $failureNode = $node.SelectSingleNode('failure')
+            $message = ''
+            $stackTrace = ''
+            if ($failureNode) {
+                $messageNode = $failureNode.SelectSingleNode('message')
+                if ($messageNode) {
+                    $message = $messageNode.InnerText
+                }
+                $stackNode = $failureNode.SelectSingleNode('stack-trace')
+                if ($stackNode) {
+                    $stackTrace = $stackNode.InnerText
+                }
+            }
+
+            $firstMessageLine = ConvertTo-SingleLineDiagnostic -Text $message
+            # The single-line ::error:: annotation stays OUTSIDE the fence so it
+            # is still processed as a GitHub annotation. ConvertTo-SingleLineDiagnostic
+            # already flattens it to one line, so an embedded `::error::`/`::set-output::`
+            # token cannot start a NEW directive on its own line here.
+            Write-Host "::error::${Label} failed test: $fullName -- $firstMessageLine"
+
+            Write-Host "::group::Failed test: $fullName"
+            # SECURITY: the raw NUnit <message>/<stack-trace> are caller-controlled
+            # (an assertion message can contain ANY text). GitHub parses every
+            # stdout line for `::command::` directives, so a message line like
+            # `::error file=...::` or `::set-output name=x::` would inject a
+            # spurious workflow command. Fence the raw multi-line dump with
+            # ::stop-commands::<token> ... ::<token>:: so command processing is
+            # disabled for the enclosed lines. The token is a FRESH random GUID
+            # per dump (never a fixed literal) so a crafted message containing
+            # the exact `::<literal>::` close line cannot end the fence early and
+            # re-enable injection. The ::group::/::endgroup:: markers stay OUTSIDE
+            # the fence so they are still processed.
+            $script:WorkflowCommandStopToken = New-WorkflowCommandStopToken
+            Write-Host "::stop-commands::$script:WorkflowCommandStopToken"
+            if ($message) {
+                Write-Host "Message:"
+                Write-Host $message
+            } else {
+                Write-Host "Message: (none recorded)"
+            }
+            if ($stackTrace) {
+                Write-Host "Stack trace:"
+                Write-Host $stackTrace
+            }
+            Write-Host "::$script:WorkflowCommandStopToken::"
+            Write-Host "::endgroup::"
+        }
+
+        if ($totalFailed -gt $shown.Count) {
+            $omitted = $totalFailed - $shown.Count
+            Write-CiNotice "${Label}: $omitted additional failed test(s) not shown (showing first $($shown.Count) of $totalFailed)."
+        }
+    } catch {
+        # Best-effort; a diagnostic must never mask the real test failure.
+        Write-Host "::warning::Could not enumerate failed tests for ${Label}: $($_.Exception.Message)"
     }
 }
 
@@ -821,6 +1020,11 @@ function Test-NUnitResults {
         throw "0 tests ran for $Label."
     }
     if ($failed -gt 0) {
+        # Enumerate WHICH tests failed (fullname + message + stack) BEFORE the
+        # throw so the operator sees the actionable detail, not just the count.
+        # Best-effort inside the helper's own try/catch -- it never masks the
+        # real failure below.
+        Write-UnityFailedTestAnnotations -Xml $xml -Label $Label
         Write-CiError "$failed tests failed for $Label."
         throw "$failed tests failed for $Label."
     }

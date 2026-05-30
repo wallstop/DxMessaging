@@ -193,6 +193,155 @@ runs:
           }
         }
 
+        # DIAGNOSTIC: when results.xml reports failures, name WHICH tests failed
+        # and print their assertion messages. The aggregate "failed=N" count is
+        # not actionable on its own (a real 2021.3 PlayMode run failed 1 of 697
+        # tests and the logs never named it). Emits a single-line ::error::
+        # annotation per failed test plus a ::group:: console block with the full
+        # multi-line message + stack trace. Two classes are enumerated:
+        #   (1) failed leaf cases: //test-case[@result='Failed'], and
+        #   (2) failed suites with their OWN direct <failure> child (the
+        #       OneTimeSetUp/OneTimeTearDown shape, e.g. a [OneTimeTearDown]
+        #       Assert.Fail), which manifest as a failed SUITE. Reported even when
+        #       the suite also has a failed child case, so the teardown's own
+        #       message is not lost; fullname de-dup keeps it distinct from the
+        #       child cases. An aggregate-only suite (no direct <failure>) is
+        #       skipped.
+        # De-duplicated by fullname, capped at the first 50 (with a truncation
+        # notice), and best-effort (never throws -- a diagnostic must not mask
+        # the real failure below). Attribute reads use XmlElement.GetAttribute
+        # (returns '' when absent, never throws) so behavior stays synchronized
+        # with run-ci-tests.ps1 even though this script does not set StrictMode.
+        function ConvertTo-SingleLineDiagnostic {
+          param([string]$Text)
+          if (-not $Text) {
+            return ''
+          }
+          return (($Text -replace '\s+', ' ').Trim())
+        }
+        # Token holder for the ::stop-commands::<token> ... ::<token>:: fence that
+        # wraps caller-controlled raw multi-line dumps (NUnit
+        # <message>/<stack-trace>). GitHub parses every stdout line for
+        # `::command::` directives; fencing the raw body disables that processing
+        # so an assertion message containing a line like `::error file=...::` or
+        # `::set-output name=x::` cannot inject a spurious workflow command. The
+        # token is NOT a fixed literal: a crafted message containing the exact
+        # `::<literal>::` close line could otherwise end the fence early and
+        # re-enable injection. A FRESH random GUID token is generated per dump
+        # via New-WorkflowCommandStopToken (mirroring GitHub's own @actions/core
+        # random per-invocation delimiter) and reused for the open and close.
+        # Kept in sync with run-ci-tests.ps1's matching fence scheme.
+        function New-WorkflowCommandStopToken {
+          return ('dxm-stop-commands-{0}' -f [guid]::NewGuid().ToString('N'))
+        }
+        # Resolve a node's display name via XmlElement.GetAttribute (returns ''
+        # for an ABSENT attribute, never throws) -- kept synchronized with
+        # run-ci-tests.ps1's StrictMode-safe Get-NUnitNodeFullName. Prefers
+        # fullname, then name, then a '(unnamed test)' fallback.
+        function Get-NUnitNodeFullName {
+          param([Parameter(Mandatory = $true)]$Node)
+          $fullName = $Node.GetAttribute('fullname')
+          if (-not $fullName) {
+            $fullName = $Node.GetAttribute('name')
+          }
+          if (-not $fullName) {
+            $fullName = '(unnamed test)'
+          }
+          return $fullName
+        }
+        function Write-FailedTestAnnotations {
+          param(
+            [Parameter(Mandatory = $true)]$Doc,
+            [Parameter(Mandatory = $true)][string]$Label,
+            [int]$MaxFailures = 50
+          )
+
+          try {
+            $failedCases = @($Doc.SelectNodes("//test-case[@result='Failed']"))
+            $failedSuites = @($Doc.SelectNodes("//test-suite[@result='Failed']"))
+            # Report a failed suite on its OWN merits whenever it carries a
+            # direct <failure> child (even if it also has a failed descendant
+            # case) so a [OneTimeTearDown] message is not lost. fullname de-dup
+            # keeps it distinct from its child cases; an aggregate-only suite
+            # (no direct <failure>) is skipped.
+            $ownFailureSuites = @(
+              foreach ($suite in $failedSuites) {
+                $directFailure = $suite.SelectSingleNode('failure')
+                if ($directFailure) {
+                  $suite
+                }
+              }
+            )
+            $failedNodes = @($failedCases) + @($ownFailureSuites)
+            if ($failedNodes.Count -lt 1) {
+              return
+            }
+
+            $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+            $uniqueNodes = New-Object 'System.Collections.Generic.List[object]'
+            foreach ($node in $failedNodes) {
+              $fullName = Get-NUnitNodeFullName -Node $node
+              if ($seen.Add($fullName)) {
+                $uniqueNodes.Add($node)
+              }
+            }
+
+            $totalFailed = $uniqueNodes.Count
+            $shown = @($uniqueNodes | Select-Object -First $MaxFailures)
+            foreach ($node in $shown) {
+              $fullName = Get-NUnitNodeFullName -Node $node
+              $failureNode = $node.SelectSingleNode('failure')
+              $message = ''
+              $stackTrace = ''
+              if ($failureNode) {
+                $messageNode = $failureNode.SelectSingleNode('message')
+                if ($messageNode) {
+                  $message = $messageNode.InnerText
+                }
+                $stackNode = $failureNode.SelectSingleNode('stack-trace')
+                if ($stackNode) {
+                  $stackTrace = $stackNode.InnerText
+                }
+              }
+              $firstLine = ConvertTo-SingleLineDiagnostic -Text $message
+              # The single-line ::error:: annotation stays OUTSIDE the fence so
+              # GitHub still processes it; it is already flattened to one line.
+              Write-Host "::error::${Label} failed test: $fullName -- $firstLine"
+              Write-Host "::group::Failed test: $fullName"
+              # SECURITY: the raw NUnit <message>/<stack-trace> are
+              # caller-controlled; GitHub parses every stdout line for
+              # `::command::` directives. Fence the raw multi-line dump with
+              # ::stop-commands::<token> ... ::<token>:: so an injected line like
+              # `::set-output name=x::` is neutralized. The token is a FRESH
+              # random GUID per dump (never a fixed literal) so a crafted message
+              # containing the exact `::<literal>::` close line cannot end the
+              # fence early. The ::group::/::endgroup:: markers stay OUTSIDE the
+              # fence so they are still processed.
+              $stopToken = New-WorkflowCommandStopToken
+              Write-Host "::stop-commands::$stopToken"
+              if ($message) {
+                Write-Host "Message:"
+                Write-Host $message
+              } else {
+                Write-Host "Message: (none recorded)"
+              }
+              if ($stackTrace) {
+                Write-Host "Stack trace:"
+                Write-Host $stackTrace
+              }
+              Write-Host "::$stopToken::"
+              Write-Host "::endgroup::"
+            }
+
+            if ($totalFailed -gt $shown.Count) {
+              $omitted = $totalFailed - $shown.Count
+              Write-Host "::notice::${Label}: $omitted additional failed test(s) not shown (showing first $($shown.Count) of $totalFailed)."
+            }
+          } catch {
+            Write-Host "::warning::Could not enumerate failed tests for ${Label}: $($_.Exception.Message)"
+          }
+        }
+
         # ALWAYS scan the Unity log for catastrophic patterns first, regardless
         # of which exit branch fires below. The patterns (PrecompiledAssemblyException,
         # CompilationFailedException, error CS####, warning CS8032) are the
@@ -232,6 +381,7 @@ runs:
           exit 1
         }
         if ($failed -gt 0) {
+          Write-FailedTestAnnotations -Doc $doc -Label $label
           Write-Host "::error::$label reported $failed failed test(s); see $($xml.FullName)"
           exit 1
         }

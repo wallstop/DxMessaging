@@ -394,7 +394,7 @@ The Inspector overlay's data source is the **`BaseCallTypeScanner`** -- a determ
 
 **Legacy console-scrape bridge (opt-in).** A toggle at **Project Settings -> DxMessaging -> Also Scrape Console (Legacy)** (`DxMessagingSettings.UseConsoleBridge`) re-enables the old data sources (`UnityEditor.LogEntries` reflection + `CompilationPipeline.assemblyCompilationFinished` `CompilerMessage[]`) and unions them INTO the IL scanner's snapshot -- never overrides it. Default off. Enable only if you want the union of both data sources, e.g. to surface a regression in the IL byte-walker that is correctly captured by the compile-time analyzer's console output.
 
-The unified per-FQN snapshot is persisted to `Library/DxMessaging/baseCallReport.json` so the overlay has data to render before the first post-load rescan completes; it is rewritten on every successful rescan. A manual `Tools  ->  DxMessaging  ->  Rescan Base-Call Warnings` menu is available for force-rescan.
+The unified per-FQN snapshot is persisted to `Library/DxMessaging/baseCallReport.json` so the overlay has data to render before the first post-load rescan completes; it is rewritten on every successful rescan. A manual `Tools -> DxMessaging -> Rescan Base-Call Warnings` menu is available for force-rescan.
 
 The overlay itself uses two complementary editor-injection paths, each with its own entry point in `MessageAwareComponentInspectorOverlay`:
 
@@ -446,7 +446,7 @@ If you are upgrading from a prior version and DXMSG warnings stop appearing on U
 
 1. Delete the package's `Library/ScriptAssemblies` folder so Unity's compiler cache re-evaluates the analyzer DLL hashes -- Unity 2021 caches "rejected analyzer" decisions per-DLL-hash.
 1. Reimport the package's `Editor/Analyzers/` folder (right-click -> Reimport).
-1. Force a clean rebuild via `Tools  ->  DxMessaging  ->  Rescan Base-Call Warnings` after the next compile finishes.
+1. Force a clean rebuild via `Tools -> DxMessaging -> Rescan Base-Call Warnings` after the next compile finishes.
 
 The Inspector overlay also has a Unity 2021 fallback: a `[CustomEditor(typeof(MessageAwareComponent), editorForChildClasses: true, isFallback: true)]` is registered alongside the cross-version `Editor.finishedDefaultHeaderGUI` hook. User-defined `[CustomEditor]`s for the same component type still win precedence over the fallback -- see the [Inspector integration](#inspector-integration) section above.
 

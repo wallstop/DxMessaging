@@ -5,12 +5,9 @@
     <!-- DO NOT bump this without verifying Unity 2021 still loads the source
          generators. Unity 2021's analyzer/source-generator loader runs on
          Roslyn 3.8.x and fails to instantiate generators compiled against
-         Roslyn 4.x. -->
+         Roslyn 4.x. This pin is enforced by
+         scripts/__tests__/unity-test-harness-contract.test.js. -->
     <MicrosoftCodeAnalysisVersion>3.8.0</MicrosoftCodeAnalysisVersion>
-    <SystemCollectionsImmutableVersion>5.0.0</SystemCollectionsImmutableVersion>
-    <SystemReflectionMetadataVersion>5.0.0</SystemReflectionMetadataVersion>
-    <SystemRuntimeCompilerServicesUnsafeVersion>6.0.0</SystemRuntimeCompilerServicesUnsafeVersion>
-    <SystemTextEncodingsWebVersion>6.0.0</SystemTextEncodingsWebVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.3">
@@ -24,15 +21,24 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
-  <!-- Post-build copy of analyzer DLL/PDB into package Editor/Analyzers.
-       The legacy Assets/Plugins/Editor/WallstopStudios.DxMessaging copy
-       was REMOVED: it produced a second on-disk copy of the analyzer DLLs
-       in any Unity project that built the source generators inside its
-       tree, which Unity 2021's importer rejects with
-       `PrecompiledAssemblyException: Multiple precompiled assemblies with
-       the same name`. The shipped Editor/Analyzers/*.dll.meta files carry
-       the RoslynAnalyzer label directly, so no auto-copy is needed for
-       Unity to pick up the analyzers/source-generators. -->
+  <!-- Post-build copy of the source-generator DLL/PDB into package
+       Editor/Analyzers.
+
+       This target copies ONLY the freshly-built source-generator DLL/PDB.
+       The Roslyn runtime deps that this package ships alongside it
+       (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
+       System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe)
+       are committed in Editor/Analyzers/ as fixed bytes and are NOT
+       re-copied by this build: a normal (non-clean) rebuild therefore
+       leaves those committed dep DLLs untouched. Do NOT wipe
+       Editor/Analyzers/ wholesale; the committed dep bytes are the proven,
+       Unity-validated set and are not reproduced by this 3.8.0-pinned build
+       (the committed deps were built against Roslyn 4.2.0).
+
+       The shipped Editor/Analyzers/*.dll.meta files for the two analyzer
+       assemblies carry the analyzer configuration directly, and SetupCscRsp
+       copies the analyzer DLLs into Assets/Plugins/Editor/ so the source
+       generator applies project-wide. -->
   <Target Name="PostBuildCopyAnalyzers" AfterTargets="Build">
     <!-- Compute paths relative to this project directory -->
     <PropertyGroup>
@@ -43,23 +49,7 @@
     </PropertyGroup>
     <ItemGroup>
       <AnalyzerOutput Include="$(AnalyzerDll)" />
-      <AnalyzerDependency Include="$(NuGetPackageRoot)microsoft.codeanalysis.common\$(MicrosoftCodeAnalysisVersion)\lib\netstandard2.0\Microsoft.CodeAnalysis.dll" />
-      <AnalyzerDependency Include="$(NuGetPackageRoot)microsoft.codeanalysis.csharp\$(MicrosoftCodeAnalysisVersion)\lib\netstandard2.0\Microsoft.CodeAnalysis.CSharp.dll" />
-      <AnalyzerDependency Include="$(NuGetPackageRoot)system.collections.immutable\$(SystemCollectionsImmutableVersion)\lib\netstandard2.0\System.Collections.Immutable.dll" />
-      <AnalyzerDependency
-        Include="$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\net6.0\System.Reflection.Metadata.dll"
-        Condition="Exists('$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\net6.0\System.Reflection.Metadata.dll')"
-      />
-      <AnalyzerDependency
-        Include="$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\netstandard2.0\System.Reflection.Metadata.dll"
-        Condition="Exists('$(NuGetPackageRoot)system.reflection.metadata\$(SystemReflectionMetadataVersion)\lib\netstandard2.0\System.Reflection.Metadata.dll')"
-      />
-      <AnalyzerDependency Include="$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\$(SystemRuntimeCompilerServicesUnsafeVersion)\lib\netstandard2.0\System.Runtime.CompilerServices.Unsafe.dll" />
       <AllAnalyzerFiles Include="@(AnalyzerOutput)" />
-      <AllAnalyzerFiles
-        Include="@(AnalyzerDependency)"
-        Condition="Exists('%(AnalyzerDependency.Identity)')"
-      />
     </ItemGroup>
     <!-- Copy into package Editor/Analyzers (used by SetupCscRsp and package consumers) -->
     <MakeDir Directories="$(EditorAnalyzersDir)" Condition="!Exists('$(EditorAnalyzersDir)')" />

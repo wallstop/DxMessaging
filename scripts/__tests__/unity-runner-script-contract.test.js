@@ -848,6 +848,407 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).not.toMatch(/throw\s+"UNITY_ACCELERATOR_ENDPOINT must be host:port/);
   });
 
+  // -------------------------------------------------------------------------
+  // FAILED-TEST ENUMERATION DIAGNOSTIC (static contract).
+  //
+  // When Unity reports failures, the aggregate "$failed tests failed" line is
+  // not actionable -- a real 2021.3 PlayMode run failed 1 of 697 tests and the
+  // logs never named it. Test-NUnitResults must enumerate WHICH tests failed
+  // (fullname + message + stack) via Write-UnityFailedTestAnnotations BEFORE the
+  // existing Write-CiError + throw. We pin the helper's existence, its XPath
+  // surface (leaf cases AND OneTimeSetUp/TearDown suite failures), its
+  // single-line annotation collapse, its cap, and that the throw still follows.
+  // The behavioral proof (it actually prints fullname + message + annotation)
+  // lives in the spawn-based test below and in verify-unity-results-action.test.js.
+  // -------------------------------------------------------------------------
+  test("run-ci-tests Test-NUnitResults enumerates failed tests before throwing", () => {
+    // The diagnostic helper exists and is the single-line collapse helper it
+    // depends on.
+    expect(runCi).toContain("function Write-UnityFailedTestAnnotations");
+    expect(runCi).toContain("function ConvertTo-SingleLineDiagnostic");
+
+    // It selects failed leaf cases AND failed suites (the OneTimeSetUp/TearDown
+    // shape). Both XPath selectors must be present.
+    expect(runCi).toContain("//test-case[@result='Failed']");
+    expect(runCi).toContain("//test-suite[@result='Failed']");
+    // The suite branch reports any suite with its OWN direct <failure> child
+    // (deduped by fullname), so a suite's teardown message is not lost even when
+    // it also has a failed child case.
+    expect(runCi).toContain("SelectSingleNode('failure')");
+
+    // FIX 1 (StrictMode safety): attribute reads on test nodes go through
+    // XmlElement.GetAttribute (returns '' when absent, never throws) via the
+    // Get-NUnitNodeFullName helper -- NOT the dynamic `$node.fullname` accessor,
+    // which throws "property cannot be found" under Set-StrictMode for an absent
+    // attribute and would degrade the whole enumeration to a generic warning.
+    expect(runCi).toContain("function Get-NUnitNodeFullName");
+    expect(runCi).toContain("$Node.GetAttribute('fullname')");
+    expect(runCi).toContain("$Node.GetAttribute('name')");
+    // The fragile dynamic accessors must NOT reappear in executable code.
+    expect(runCi).not.toMatch(/^\s*\$fullName\s*=\s*\$node\.fullname\b/m);
+    expect(runCi).not.toMatch(/^\s*\$fullName\s*=\s*\$node\.name\b/m);
+
+    // FIX 3 (workflow-command injection): the raw multi-line message/stack dump
+    // is fenced with ::stop-commands::<token> ... ::<token>:: so an injected
+    // `::error::`/`::set-output::` line in an assertion message is neutralized.
+    // The token is a FRESH random GUID per dump (defense-in-depth, mirroring
+    // GitHub's own @actions/core), so the open and close fence lines reference
+    // the same $script:WorkflowCommandStopToken value, which is (re)assigned from
+    // the New-WorkflowCommandStopToken generator immediately before each dump.
+    expect(runCi).toContain("$script:WorkflowCommandStopToken");
+    expect(runCi).toMatch(/Write-Host "::stop-commands::\$script:WorkflowCommandStopToken"/);
+    expect(runCi).toMatch(/Write-Host "::\$script:WorkflowCommandStopToken::"/);
+    // The random-token generator exists and is invoked per dump; the old fixed
+    // literal must NOT be the value emitted into the fence anymore.
+    expect(runCi).toContain("function New-WorkflowCommandStopToken");
+    expect(runCi).toMatch(/\[guid\]::NewGuid\(\)\.ToString\('N'\)/);
+    expect(runCi).toMatch(
+      /\$script:WorkflowCommandStopToken = New-WorkflowCommandStopToken/
+    );
+    // The token holder must not be initialized to the old fixed literal.
+    expect(runCi).not.toMatch(
+      /\$script:WorkflowCommandStopToken\s*=\s*'dxm-stop-commands-failed-test-dump'/
+    );
+
+    // Per-failure detail: message inner text and stack.
+    expect(runCi).toContain("SelectSingleNode('message')");
+    expect(runCi).toContain("SelectSingleNode('stack-trace')");
+
+    // A single-line ::error:: annotation per failed test and a ::group:: console
+    // block with the full multi-line detail.
+    expect(runCi).toMatch(/::error::\$\{Label\} failed test:/);
+    expect(runCi).toContain('::group::Failed test:');
+
+    // Bounded output with a no-silent-cap truncation notice.
+    expect(runCi).toContain("Select-Object -First $MaxFailures");
+    expect(runCi).toMatch(/additional failed test\(s\) not shown/);
+
+    // The enumeration runs BEFORE the existing Write-CiError + throw (it must
+    // not replace or mask the real failure). Assert ordering by index.
+    const enumIdx = runCi.indexOf("Write-UnityFailedTestAnnotations -Xml $xml -Label $Label");
+    const throwIdx = runCi.indexOf('throw "$failed tests failed for $Label."');
+    expect(enumIdx).toBeGreaterThan(-1);
+    expect(throwIdx).toBeGreaterThan(-1);
+    expect(enumIdx).toBeLessThan(throwIdx);
+
+    // The aggregate Results: line, the ${Label} notice, and the "0 tests ran"
+    // handling are all preserved alongside the new enumeration.
+    expect(runCi).toContain(
+      'Write-Host "Results: total=$total passed=$passed failed=$failed skipped=$skipped"'
+    );
+    expect(runCi).toContain('Write-CiNotice "${Label}: total=$total');
+    expect(runCi).toContain('Write-CiError "0 tests ran for $Label');
+  });
+
+  // Behavioral proof for the runner's enumeration helper: extract the helper
+  // (and the two functions it depends on) from the real script source, define
+  // them in a fresh pwsh via Invoke-Expression, and run them against a synthetic
+  // NUnit3 results.xml that contains BOTH a failed <test-case> AND a failed
+  // <test-suite>/OneTimeTearDown. Mirrors the extract-and-run pattern in
+  // unity-accelerator-endpoint-normalization.test.js. Skips when pwsh is absent
+  // (CI runners have pwsh); an always-on sanity assertion keeps it from becoming
+  // a silent no-op.
+  describe("run-ci-tests Write-UnityFailedTestAnnotations behavioral enumeration", () => {
+    const {
+      combinedText: combinePwsh
+    } = require("../lib/pwsh-output");
+    const os = require("os");
+
+    function pwshAvailable() {
+      return (
+        childProcess.spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
+          encoding: "utf8"
+        }).status === 0
+      );
+    }
+    const PWSH_PRESENT = pwshAvailable();
+
+    function extractHelperSources() {
+      return [
+        extractFunctionBody(runCi, "Write-CiNotice"),
+        extractFunctionBody(runCi, "ConvertTo-SingleLineDiagnostic"),
+        // The enumeration helper now depends on the StrictMode-safe
+        // Get-NUnitNodeFullName resolver, the $script:WorkflowCommandStopToken
+        // holder, and the New-WorkflowCommandStopToken random-token generator;
+        // all must be defined in the extracted environment or the helper
+        // degrades to its generic catch (no name / no fence). The token is now a
+        // FRESH random GUID per dump, not a fixed literal, so we seed the holder
+        // to $null and let the helper assign each dump's token via the generator.
+        "$script:WorkflowCommandStopToken = $null",
+        extractFunctionBody(runCi, "New-WorkflowCommandStopToken"),
+        extractFunctionBody(runCi, "Get-NUnitNodeFullName"),
+        extractFunctionBody(runCi, "Write-UnityFailedTestAnnotations")
+      ].join("\n");
+    }
+
+    // Synthetic NUnit3 results.xml: one failed leaf case (assertion failure) and
+    // one failed SetUpFixture suite whose own <failure> is a [OneTimeTearDown]
+    // Assert.Fail (no failed child case) -- the SuiteWallClockBudgetTest shape.
+    // The outer aggregate suites are result="Failed" too but must NOT be printed
+    // (the Assembly suite has no direct <failure>; the fixture has a failed child).
+    const FAILED_RESULTS_XML = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<test-run total="3" passed="1" failed="2" skipped="0" result="Failed">',
+      '  <test-suite type="Assembly" name="Tests.dll" fullname="Tests.dll" result="Failed">',
+      '    <test-suite type="SetUpFixture" name="SuiteWallClockBudgetTest"',
+      '        fullname="DxMessaging.Tests.Runtime.SuiteWallClockBudgetTest" result="Failed">',
+      "      <failure>",
+      "        <message>OneTimeTearDown: Default suite wall clock (200.00s) exceeded the hard",
+      "budget (180.0s). Reduce iteration counts.</message>",
+      "        <stack-trace>at SuiteWallClockBudgetTest.EndSuiteTimer()</stack-trace>",
+      "      </failure>",
+      "    </test-suite>",
+      '    <test-suite type="TestFixture" name="MessageBusTests"',
+      '        fullname="DxMessaging.Tests.Runtime.Core.MessageBusTests" result="Failed">',
+      '      <test-case name="DispatchOrder"',
+      '          fullname="DxMessaging.Tests.Runtime.Core.MessageBusTests.DispatchOrder" result="Failed">',
+      "        <failure>",
+      "          <message>  Expected: 5\n  But was:  4</message>",
+      "          <stack-trace>at MessageBusTests.DispatchOrder() in MessageBusTests.cs:line 42</stack-trace>",
+      "        </failure>",
+      "      </test-case>",
+      '      <test-case name="PassingOne"',
+      '          fullname="DxMessaging.Tests.Runtime.Core.MessageBusTests.PassingOne" result="Passed" />',
+      "    </test-suite>",
+      "  </test-suite>",
+      "</test-run>"
+    ].join("\n");
+
+    function runEnumeration(xmlText) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-failed-enum-"));
+      const xmlPath = path.join(tmpDir, "results.xml");
+      fs.writeFileSync(xmlPath, xmlText, "utf8");
+      const program = [
+        "Set-StrictMode -Version Latest",
+        "$ErrorActionPreference = 'Stop'",
+        "Invoke-Expression $env:DXM_HELPER_SOURCE",
+        "[xml]$doc = Get-Content -LiteralPath $env:DXM_RESULTS_XML -Raw",
+        "Write-UnityFailedTestAnnotations -Xml $doc -Label 'Unity 2021.3 playmode'"
+      ].join("\n");
+      const result = childProcess.spawnSync(
+        "pwsh",
+        ["-NoProfile", "-NonInteractive", "-Command", program],
+        {
+          env: {
+            ...process.env,
+            DXM_HELPER_SOURCE: extractHelperSources(),
+            DXM_RESULTS_XML: xmlPath
+          },
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024
+        }
+      );
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      return result;
+    }
+
+    test("the helper source is extractable from the script (sanity, always runs)", () => {
+      expect(extractFunctionBody(runCi, "Write-UnityFailedTestAnnotations")).not.toBe("");
+    });
+
+    (PWSH_PRESENT ? test : test.skip)(
+      "prints fullname + message + single-line annotation for a failed test-case AND a OneTimeTearDown suite",
+      () => {
+        const result = runEnumeration(FAILED_RESULTS_XML);
+        const text = combinePwsh(result);
+
+        // (1) Failed leaf case: fullname + collapsed single-line ::error:: + the
+        // multi-line message recovered inside the ::group:: block.
+        expect(text).toContain(
+          "::error::Unity 2021.3 playmode failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests.DispatchOrder"
+        );
+        expect(text).toContain("::group::Failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests.DispatchOrder");
+        expect(text).toContain("Expected: 5");
+        expect(text).toContain("But was: 4");
+
+        // (2) OneTimeTearDown suite failure: enumerated as its OWN failed node
+        // (failed suite with a <failure> and no failed child case).
+        expect(text).toContain(
+          "::error::Unity 2021.3 playmode failed test: DxMessaging.Tests.Runtime.SuiteWallClockBudgetTest"
+        );
+        expect(text).toContain("exceeded the hard budget");
+
+        // (3) The aggregate-only suites are NOT enumerated (no double-print):
+        // the assembly suite has no annotation of its own, and the MessageBusTests
+        // fixture is covered by its failed child case, not a separate suite entry.
+        expect(text).not.toContain("failed test: Tests.dll");
+        expect(text).not.toContain("failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests --");
+
+        // (4) The passing case is never reported.
+        expect(text).not.toContain("PassingOne");
+      }
+    );
+
+    (PWSH_PRESENT ? test : test.skip)(
+      "caps output at 50 failed tests and prints a truncation notice (no silent cap)",
+      () => {
+        const cases = [];
+        for (let i = 1; i <= 55; i++) {
+          cases.push(
+            `    <test-case name="T${i}" fullname="Ns.Big.T${i}" result="Failed">` +
+              `<failure><message>fail ${i}</message></failure></test-case>`
+          );
+        }
+        const xml = [
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<test-run total="55" passed="0" failed="55" skipped="0" result="Failed">',
+          '  <test-suite type="TestFixture" name="Big" fullname="Ns.Big" result="Failed">',
+          ...cases,
+          "  </test-suite>",
+          "</test-run>"
+        ].join("\n");
+
+        const result = runEnumeration(xml);
+        const text = combinePwsh(result);
+
+        const annotationCount = (
+          text.match(/::error::Unity 2021\.3 playmode failed test:/g) || []
+        ).length;
+        expect(annotationCount).toBe(50);
+        expect(text).toContain("5 additional failed test(s) not shown");
+      }
+    );
+
+    // FIX 1 (StrictMode safety): a Failed <test-case> with NO `fullname`
+    // attribute (only `name`). The enumeration helper runs under
+    // `Set-StrictMode -Version Latest` (see runEnumeration's program preamble),
+    // where the OLD dynamic `$node.fullname` accessor THROWS "The property
+    // 'fullname' cannot be found" for an absent attribute -- degrading the whole
+    // enumeration to the generic ::warning:: catch. With the GetAttribute-based
+    // resolver it must instead print the NAME + annotation and NOT warn.
+    (PWSH_PRESENT ? test : test.skip)(
+      "enumerates a failed test-case that has only name (no fullname) without throwing under StrictMode",
+      () => {
+        const xml = [
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<test-run total="1" passed="0" failed="1" skipped="0" result="Failed">',
+          '  <test-suite type="TestFixture" name="NoFullName" result="Failed">',
+          '    <test-case name="OnlyHasName" result="Failed">',
+          "      <failure><message>boom</message></failure>",
+          "    </test-case>",
+          "  </test-suite>",
+          "</test-run>"
+        ].join("\n");
+
+        const result = runEnumeration(xml);
+        const text = combinePwsh(result);
+
+        // The name is used as the fullname fallback in BOTH the annotation and
+        // the group header; the helper did not degrade to the generic warning.
+        expect(text).toContain(
+          "::error::Unity 2021.3 playmode failed test: OnlyHasName"
+        );
+        expect(text).toContain("::group::Failed test: OnlyHasName");
+        expect(text).toContain("boom");
+        expect(text).not.toContain("Could not enumerate failed tests");
+        // The StrictMode "property cannot be found" failure must never surface.
+        expect(text).not.toContain("cannot be found");
+      }
+    );
+
+    // FIX 3 (workflow-command injection): a Failed test whose raw <message>
+    // contains `::error::INJECTED` and `::set-output name=x::`. The raw
+    // multi-line dump inside the ::group:: block must be wrapped in a
+    // ::stop-commands::<token> ... ::<token>:: fence so GitHub does not execute
+    // the injected directives. The token is a RANDOM per-dump GUID, so we
+    // EXTRACT the actual token from the output and assert (a) the matching
+    // `::<that-token>::` close exists, and (b) the injected directives fall
+    // BETWEEN the opening fence and its close (neutralized).
+    (PWSH_PRESENT ? test : test.skip)(
+      "fences the raw failure message in ::stop-commands:: so an injected workflow command is neutralized",
+      () => {
+        const xml = [
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<test-run total="1" passed="0" failed="1" skipped="0" result="Failed">',
+          '  <test-suite type="TestFixture" name="Inj" fullname="Ns.Inj" result="Failed">',
+          '    <test-case name="Evil" fullname="Ns.Inj.Evil" result="Failed">',
+          "      <failure>",
+          "        <message>line one",
+          "::error::INJECTED",
+          "::set-output name=x::pwned</message>",
+          "        <stack-trace>at Ns.Inj.Evil()</stack-trace>",
+          "      </failure>",
+          "    </test-case>",
+          "  </test-suite>",
+          "</test-run>"
+        ].join("\n");
+
+        const result = runEnumeration(xml);
+        const text = combinePwsh(result);
+
+        // Extract the ACTUAL random token emitted after `::stop-commands::` and
+        // assert the matching `::<that-token>::` close line exists. The token
+        // shape is `dxm-stop-commands-<32-hex-guid>` (a GUID 'N' form). The old
+        // fixed literal must NOT appear.
+        const openMatch = /::stop-commands::(dxm-stop-commands-[0-9a-fA-F]{32})/.exec(text);
+        expect(openMatch).not.toBeNull();
+        const token = openMatch[1];
+        expect(token).not.toBe("dxm-stop-commands-failed-test-dump");
+        const openMarker = `::stop-commands::${token}`;
+        const closeMarker = `::${token}::`;
+        expect(text).toContain(openMarker);
+        expect(text).toContain(closeMarker);
+
+        // The injected directives appear INSIDE the fence: after the opening
+        // ::stop-commands:: marker and before its closing token. (combinedText
+        // flattens newlines, so order is checked by index. The injected strings
+        // ALSO appear earlier in the flattened single-line ::error:: annotation;
+        // we search for the raw-body copy AFTER the opening fence.)
+        const openIdx = text.indexOf(openMarker);
+        const closeIdx = text.indexOf(closeMarker, openIdx + openMarker.length);
+        const injectedErrorIdx = text.indexOf("::error::INJECTED", openIdx + 1);
+        const injectedOutputIdx = text.indexOf("::set-output name=x::pwned", openIdx + 1);
+        expect(openIdx).toBeGreaterThanOrEqual(0);
+        expect(closeIdx).toBeGreaterThan(openIdx);
+        expect(injectedErrorIdx).toBeGreaterThan(openIdx);
+        expect(injectedErrorIdx).toBeLessThan(closeIdx);
+        expect(injectedOutputIdx).toBeGreaterThan(openIdx);
+        expect(injectedOutputIdx).toBeLessThan(closeIdx);
+      }
+    );
+
+    // LOW (suite with BOTH its own failure AND a failed child): a fixture that
+    // fails a test AND throws in [OneTimeTearDown] must surface BOTH the child
+    // case's assertion message AND the suite's own teardown message. The suite
+    // is reported on its direct <failure> regardless of failed descendants;
+    // fullname de-dup keeps the suite distinct from its child case.
+    (PWSH_PRESENT ? test : test.skip)(
+      "reports a suite's own teardown failure even when it also has a failed child case",
+      () => {
+        const xml = [
+          '<?xml version="1.0" encoding="utf-8"?>',
+          '<test-run total="2" passed="0" failed="2" skipped="0" result="Failed">',
+          '  <test-suite type="TestFixture" name="BothFix"',
+          '      fullname="Ns.BothFix" result="Failed">',
+          "    <failure>",
+          "      <message>OneTimeTearDown: teardown blew up</message>",
+          "      <stack-trace>at Ns.BothFix.TearDown()</stack-trace>",
+          "    </failure>",
+          '    <test-case name="ChildFail" fullname="Ns.BothFix.ChildFail" result="Failed">',
+          "      <failure><message>child assert failed</message></failure>",
+          "    </test-case>",
+          "  </test-suite>",
+          "</test-run>"
+        ].join("\n");
+
+        const result = runEnumeration(xml);
+        const text = combinePwsh(result);
+
+        // The child case is enumerated.
+        expect(text).toContain(
+          "::error::Unity 2021.3 playmode failed test: Ns.BothFix.ChildFail"
+        );
+        expect(text).toContain("child assert failed");
+        // The suite's OWN teardown failure is ALSO enumerated (its fullname
+        // differs from the child's, so no double-print).
+        expect(text).toContain(
+          "::error::Unity 2021.3 playmode failed test: Ns.BothFix"
+        );
+        expect(text).toContain("teardown blew up");
+      }
+    );
+  });
+
   test(".llm/context.md describes Accelerator endpoint as URL-or-host:port (normalized)", () => {
     const ctx = fs.readFileSync(path.join(REPO_ROOT, ".llm", "context.md"), "utf8");
     // Pin to the actual normalizer function name (unambiguous, stable) rather

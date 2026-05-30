@@ -4,7 +4,6 @@ namespace DxMessaging.Tests.Runtime.Core
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Diagnostics;
     using System.Globalization;
     using System.Linq;
     using DxMessaging.Core;
@@ -33,12 +32,26 @@ namespace DxMessaging.Tests.Runtime.Core
         protected virtual int StressRegistrations => 150;
 
         /// <summary>
-        /// Maximum time the polling loop in
-        /// <see cref="WaitUntilMessageHandlerIsFresh"/> waits for the message
-        /// bus to drain before failing. Override in derived fixtures that need
-        /// a tighter or looser bound.
+        /// Maximum number of polled frames the loop in
+        /// <see cref="WaitUntilMessageHandlerIsFresh"/> yields, waiting for the
+        /// message bus to drain before failing. Override in derived fixtures
+        /// that need a tighter or looser bound.
         /// </summary>
-        protected virtual TimeSpan FreshHandlerWaitTimeout => TimeSpan.FromSeconds(1.5);
+        /// <remarks>
+        /// This budget is expressed in FRAMES, not wall-clock time, on purpose.
+        /// A wall-clock threshold (the prior 1.5s <see cref="TimeSpan"/> bound)
+        /// is inherently runner-speed dependent: a slower CI runner (observed on
+        /// Unity 2021.3 PlayMode) can exceed a fixed millisecond budget for the
+        /// same amount of deterministic work and flake, even though the bus
+        /// drains in the same NUMBER of frames everywhere. The bus drains
+        /// synchronously on the deferred-destroy flush, which Unity performs in
+        /// a single frame, so the happy path clears in zero-to-one polled
+        /// frames. The budget below is a generous deterministic safety margin
+        /// that polls a fixed maximum number of frames regardless of how fast
+        /// each frame executes; it cannot flake on a slow machine because it is
+        /// not measuring wall clock.
+        /// </remarks>
+        protected virtual int FreshHandlerWaitFrameBudget => 600;
 
         /// <summary>
         /// Resolved test seed cached for the lifetime of the process. The
@@ -325,19 +338,26 @@ namespace DxMessaging.Tests.Runtime.Core
             IMessageBus messageBus = MessageHandler.MessageBus;
             Assert.IsNotNull(messageBus);
 
-            Stopwatch timer = Stopwatch.StartNew();
-            // Generous safety margin; the loop exits as soon as state clears, so this only bites under extreme load.
-            TimeSpan timeout = FreshHandlerWaitTimeout;
+            // Deterministic, runner-speed-independent budget: poll a bounded
+            // NUMBER of frames rather than a wall-clock interval. The loop
+            // exits as soon as state clears (zero-to-one frames on the happy
+            // path), so this only bites under extreme load. Frame counting
+            // cannot flake on a slow CI runner the way the prior 1.5s
+            // wall-clock bound could (see FreshHandlerWaitFrameBudget remarks).
+            int frameBudget = FreshHandlerWaitFrameBudget;
+            int framesWaited = 0;
 
-            while (IsStale() && timer.Elapsed < timeout)
+            while (IsStale() && framesWaited < frameBudget)
             {
+                ++framesWaited;
                 yield return null;
             }
 
             Assert.IsFalse(
                 IsStale(),
-                "MessageHandler remained stale after waiting {0}ms (isPlaying={1}). {2}",
-                timer.Elapsed.TotalMilliseconds,
+                "MessageHandler remained stale after polling {0} frames (budget {1}, isPlaying={2}). {3}",
+                framesWaited,
+                frameBudget,
                 Application.isPlaying,
                 DescribeMessageBusState(messageBus, includeLog: true)
             );

@@ -15,6 +15,14 @@ Run these steps in order:
 
 Prettier hooks and npm scripts route through `scripts/run-managed-prettier.js` so format checks and writes use the same resolved Prettier version across local shells and CI.
 
+## Before you push
+
+You do not need to remember which validator to run for each file you touched:
+
+- `npm run preflight` -- change-aware (the default). It inspects exactly what you changed (committed range vs the integration base, plus staged/unstaged/untracked work), delegates file-to-hook selection to pre-commit, self-heals tooling first, and runs the relevant checks in-loop. A push-guard runs it automatically before `git push`. See [Change-Aware Preflight](./.llm/skills/scripting/change-aware-preflight.md).
+- `npm run preflight:pre-push` -- full parity with the native pre-push hook (the exhaustive sweep CI runs); use it when you want the complete check set on demand.
+- `npm run doctor` -- diagnose and repair the local Node/hook environment (run it after a `testRunner option was not found` / `jest-circus` error or a partial `node_modules` extract).
+
 Windows note: if you use `nvm` or `fnm`, run commits from a shell where Node is initialized (PowerShell or Git Bash) and verify `npm --version` before running hooks.
 If you edit `.github/workflows/*.yml`, run `npm run preflight:pre-commit` in that same shell before `git commit`.
 
@@ -101,3 +109,18 @@ To fix issues:
 - For missing .meta files: Ensure Unity generates the `.meta` file, or copy it from the repository
 
 If you do still need to repair line endings manually (for example, after copying files from an external tool), run `node scripts/fix-eol.js -v` and then re-stage the affected files.
+
+## SourceGenerators Analyzer Troubleshooting
+
+If you open the package in Unity and see project-wide `CS0315` / `CS0452` errors (`type ... cannot be used as type parameter ...; there is no boxing conversion to ...IMessage`), or `CS0006` errors that name a metadata file under `SourceGenerators/.../obj/...dll` or `SourceGenerators/.../bin/...dll`, the cause is stale build output rather than a code change.
+
+Cause: Unity imported the `SourceGenerators/` projects' in-tree `obj/` and `bin/` build DLLs and cached the auto-referenced-plugin registrations in its Library. Those stray DLLs shadow the two real analyzers shipped in `Editor/Analyzers/`, so the wrong assemblies feed the compiler.
+
+To fix it:
+
+1. Close Unity.
+1. Delete the Unity **project's** `Library/` folder. A partial **Assets > Reimport** does not clear the cached auto-referenced-plugin registrations, so the full Library delete is required.
+1. Confirm no `obj/` or `bin/` folders remain under `SourceGenerators/`. The build is configured to emit output to `.artifacts/`, which Unity ignores.
+1. Reopen the project.
+
+Contributor invariant: never let the `SourceGenerators/` projects build their `obj/` or `bin/` in-tree. `SourceGenerators/Directory.Build.props` redirects all output (obj, bin, and restore) to the git-ignored `.artifacts/` tree precisely so Unity never imports a build DLL.

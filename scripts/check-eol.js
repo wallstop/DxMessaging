@@ -224,12 +224,40 @@ function getIndexEolIssues(files) {
       continue;
     }
 
-    if (indexToken !== "i/lf" && indexToken !== "i/none") {
+    if (isIndexEolViolation(indexToken)) {
       issues.push({ path: filePath, indexEol: indexToken });
     }
   }
 
   return issues;
+}
+
+/**
+ * Classify a git `ls-files --eol` index token as an EOL violation or not.
+ *
+ * Only CRLF and mixed endings stored in the index are genuine
+ * non-normalized-EOL violations. Two tokens are deliberately NOT violations:
+ *   - `i/lf` / `i/none`  -- already normalized (none == text with no EOLs).
+ *   - `i/-text`          -- git classified the indexed blob as BINARY (for
+ *                           example it contains NUL bytes), regardless of any
+ *                           explicit `text` gitattribute. A binary blob is
+ *                           stored byte-for-byte and is never line-ending
+ *                           converted, so it carries no LF/CRLF normalization
+ *                           concern. Flagging it produces a false positive
+ *                           that NO line-ending fixer can ever clear (fix-eol
+ *                           leaves the bytes untouched), which is exactly the
+ *                           fixer/checker divergence this classifier prevents.
+ *
+ * Keep this whitelist-style (only crlf/mixed fail) rather than a blacklist:
+ * any future or unknown token git invents stays a non-violation by default,
+ * so the checker can never out-grow what fix-eol is able to normalize.
+ *
+ * @param {string} indexToken - The `i/<eol>` token, e.g. "i/lf", "i/crlf",
+ *   "i/mixed", "i/none", "i/-text".
+ * @returns {boolean} True only for genuine non-normalized index endings.
+ */
+function isIndexEolViolation(indexToken) {
+  return indexToken === "i/crlf" || indexToken === "i/mixed";
 }
 
 /**
@@ -383,6 +411,7 @@ if (require.main === module) {
 
 module.exports = {
   splitNormalizedLines,
+  isIndexEolViolation,
   hasBom,
   hasNonCrlfEol,
   hasNonLfEol,

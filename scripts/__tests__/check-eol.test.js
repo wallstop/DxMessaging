@@ -5,8 +5,16 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
-const { splitNormalizedLines, hasBom, hasNonCrlfEol, hasNonLfEol } = require("../check-eol.js");
+const { spawnSync } = require("child_process");
+const {
+  splitNormalizedLines,
+  isIndexEolViolation,
+  hasBom,
+  hasNonCrlfEol,
+  hasNonLfEol
+} = require("../check-eol.js");
 const { crlfExts, lfExts } = require("../lib/eol-policy.js");
 
 function getLeadingBlockComment(filePath) {
@@ -244,6 +252,33 @@ describe("check-eol helpers", () => {
     });
   });
 
+  describe("isIndexEolViolation (index-token classifier)", () => {
+    // Regression guard for the git-hook failure where a staged file that git
+    // classifies as binary (i/-text, e.g. it contains NUL bytes) was reported
+    // as a non-normalized-EOL violation that NO line-ending fixer could clear.
+    test("i/-text is NOT a violation (binary blob -- never EOL-converted)", () => {
+      expect(isIndexEolViolation("i/-text")).toBe(false);
+    });
+
+    test("i/lf and i/none are NOT violations (already normalized)", () => {
+      expect(isIndexEolViolation("i/lf")).toBe(false);
+      expect(isIndexEolViolation("i/none")).toBe(false);
+    });
+
+    test("i/crlf and i/mixed ARE violations (genuine non-normalized endings)", () => {
+      expect(isIndexEolViolation("i/crlf")).toBe(true);
+      expect(isIndexEolViolation("i/mixed")).toBe(true);
+    });
+
+    test("unknown / future tokens default to non-violation (whitelist semantics)", () => {
+      // Whitelist (only crlf/mixed fail) guarantees the checker can never
+      // out-grow what fix-eol is able to normalize.
+      expect(isIndexEolViolation("i/something-new")).toBe(false);
+      expect(isIndexEolViolation("")).toBe(false);
+      expect(isIndexEolViolation(undefined)).toBe(false);
+    });
+  });
+
   describe("script walker safety", () => {
     test("fix-eol walk warns instead of silently swallowing readdirSync errors", () => {
       const fixEolPath = path.resolve(__dirname, "../fix-eol.js");
@@ -267,5 +302,145 @@ describe("check-eol helpers", () => {
         expect(content).toMatch(/Unable to read (directory|workflows directory)/);
       }
     });
+  });
+});
+
+/**
+ * Fixer/checker closure contract.
+ *
+ * THE failure class these tests lock out: a checker (check-eol.js) that can
+ * FAIL on a state its paired auto-fixer (fix-eol.js) cannot reach a passing
+ * state for. When the two diverge, the pre-commit auto-fix "Passes", the check
+ * still "Fails", and the commit loops forever with no automated recovery.
+ *
+ * Two complementary proofs, both spawning the REAL scripts cross-platform via
+ * `process.execPath` so the contract holds on Linux / macOS / Windows:
+ *   1. CONTENT closure (no git): every dirty working-tree shape that check-eol
+ *      can flag is cleared by one fix-eol pass.
+ *   2. INDEX regression (real git): a staged file git classifies as binary
+ *      (NUL bytes -> i/-text) is NOT flagged, and stays clean across a
+ *      fix-eol + re-stage cycle. This is the exact case that broke the hook.
+ */
+describe("fix-eol -> check-eol closure contract", () => {
+  const REPO_ROOT = path.resolve(__dirname, "..", "..");
+  const FIX_EOL = path.join(REPO_ROOT, "scripts", "fix-eol.js");
+  const CHECK_EOL = path.join(REPO_ROOT, "scripts", "check-eol.js");
+
+  const tempDirs = [];
+
+  function makeTempDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-eol-closure-"));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  function runNode(scriptPath, args, cwd) {
+    return spawnSync(process.execPath, [scriptPath, ...args], {
+      cwd,
+      encoding: "utf8"
+    });
+  }
+
+  function gitAvailable() {
+    const probe = spawnSync("git", ["--version"], { encoding: "utf8" });
+    return !probe.error && probe.status === 0;
+  }
+
+  afterAll(() => {
+    for (const dir of tempDirs) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch (_error) {
+        // Best-effort cleanup; a leaked temp dir must never fail the suite.
+      }
+    }
+  });
+
+  test("one fix-eol pass clears every content shape check-eol can flag", () => {
+    const dir = makeTempDir();
+    // Dirty fixtures spanning every content-level violation check-eol reports.
+    // Written as raw bytes so the on-disk EOLs are exactly what we intend
+    // (writeFileSync with a string would not introduce CRLF on its own, but
+    // being explicit keeps the fixtures unambiguous across platforms).
+    const fixtures = {
+      // LF file requiring LF but stored CRLF -> violation.
+      "crlf.js": Buffer.from("const a = 1;\r\nconst b = 2;\r\n", "utf8"),
+      // BOM + CRLF -> BOM violation + EOL violation.
+      "bom.json": Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from('{\r\n  "a": 1\r\n}\r\n', "utf8")
+      ]),
+      // Bare CR (classic-Mac) -> violation for an LF file.
+      "bare-cr.yaml": Buffer.from("a: 1\rb: 2\r", "utf8"),
+      // Mixed CRLF + LF -> violation.
+      "mixed.md": Buffer.from("# Title\r\n\nBody\r\n", "utf8"),
+      // C#/.NET file requiring CRLF but stored LF -> violation.
+      "Sample.cs": Buffer.from("class A\n{\n}\n", "utf8")
+    };
+    const names = Object.keys(fixtures);
+    for (const name of names) {
+      fs.writeFileSync(path.join(dir, name), fixtures[name]);
+    }
+
+    // Sanity: the checker must actually flag the dirty corpus first, otherwise
+    // the closure assertion below would be vacuously true.
+    const before = runNode(CHECK_EOL, names, dir);
+    expect(before.status).toBe(1);
+
+    // One fixer pass.
+    const fixed = runNode(FIX_EOL, names, dir);
+    expect(fixed.status).toBe(0);
+
+    // Closure: the checker now passes on the fixer's output.
+    const after = runNode(CHECK_EOL, names, dir);
+    expect(after.status).toBe(0);
+
+    // Idempotence: a second fixer pass changes nothing.
+    const refixed = runNode(FIX_EOL, names, dir);
+    expect(refixed.stdout).toMatch(/Updated 0\./);
+  });
+
+  test("binary-content (NUL) staged file is not flagged and survives fix + re-stage", () => {
+    if (!gitAvailable()) {
+      // git is a hard dependency of the hook itself; if it is somehow absent
+      // the index-level contract cannot be exercised. Never fail on infra.
+      return;
+    }
+    const dir = makeTempDir();
+    const git = (args) =>
+      spawnSync("git", args, { cwd: dir, encoding: "utf8", env: { ...process.env } });
+
+    expect(git(["init"]).status).toBe(0);
+    git(["config", "user.email", "test@example.com"]);
+    git(["config", "user.name", "Test"]);
+    // Mirror the repo's default text policy so attributes resolve to text/eol=lf
+    // exactly as in the real tree; git's content scan still classifies a
+    // NUL-bearing blob as binary (i/-text) regardless.
+    fs.writeFileSync(path.join(dir, ".gitattributes"), "* text=auto eol=lf\n");
+
+    // A NUL-bearing .js fixture mirroring scripts/__tests__ files that assert on
+    // NUL-delimited `git ... -z` output. LF-only endings: the ONLY thing wrong
+    // (pre-fix) was git's binary classification, which is not an EOL fault.
+    const nulFile = "nul-fixture.test.js";
+    fs.writeFileSync(
+      path.join(dir, nulFile),
+      Buffer.from('const z = "A\u0000src/a.cs\u0000M\u0000b.cs\u0000";\n', "utf8")
+    );
+    git(["add", ".gitattributes", nulFile]);
+
+    // Precondition: git really does classify the staged blob as binary.
+    const ls = git(["ls-files", "--eol", "--", nulFile]);
+    expect(ls.status).toBe(0);
+    expect(ls.stdout).toMatch(/^i\/-text\b/);
+
+    // The checker must PASS (the regression: it used to fail here).
+    const checked = runNode(CHECK_EOL, [nulFile], dir);
+    expect(checked.status).toBe(0);
+
+    // Closure across the auto-fix + re-stage cycle the pre-commit hook performs.
+    expect(runNode(FIX_EOL, [nulFile], dir).status).toBe(0);
+    git(["add", nulFile]);
+    const recheck = runNode(CHECK_EOL, [nulFile], dir);
+    expect(recheck.status).toBe(0);
   });
 });

@@ -397,21 +397,20 @@ const rootShippedFilesRequiringMeta = new Set([
 // allowlist entry (or vice versa) is the regression vector this validator is meant to catch.
 const sourceGeneratorTrackedNonCodeFiles = new Set(["SourceGenerators/Directory.Build.props"]);
 
+// The package MUST ship its own two analyzer assemblies
+// (WallstopStudios.DxMessaging.SourceGenerators.dll and
+// WallstopStudios.DxMessaging.Analyzer.dll) -- the generated Unity csc.rsp
+// references them directly. Editor/Analyzers/ ALSO ships the Roslyn runtime
+// deps (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
+// System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe)
+// alongside them; the list below only enforces that the two REQUIRED analyzer
+// assemblies (and their .meta partners) are present, and intentionally does NOT
+// forbid the dep DLLs from shipping.
 const requiredAnalyzerPackageFiles = [
   "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll",
   "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll.meta",
   "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll",
-  "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll.meta",
-  "Editor/Analyzers/Microsoft.CodeAnalysis.dll",
-  "Editor/Analyzers/Microsoft.CodeAnalysis.dll.meta",
-  "Editor/Analyzers/Microsoft.CodeAnalysis.CSharp.dll",
-  "Editor/Analyzers/Microsoft.CodeAnalysis.CSharp.dll.meta",
-  "Editor/Analyzers/System.Reflection.Metadata.dll",
-  "Editor/Analyzers/System.Reflection.Metadata.dll.meta",
-  "Editor/Analyzers/System.Runtime.CompilerServices.Unsafe.dll",
-  "Editor/Analyzers/System.Runtime.CompilerServices.Unsafe.dll.meta",
-  "Editor/Analyzers/System.Collections.Immutable.dll",
-  "Editor/Analyzers/System.Collections.Immutable.dll.meta"
+  "Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll.meta"
 ];
 
 /**
