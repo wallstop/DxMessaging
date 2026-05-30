@@ -25,6 +25,8 @@ const {
   PATH_CLASS_UNKNOWN,
   normalizeForPathComparison,
   isPathInsideDirectory,
+  isPathOutsideDirectory,
+  isOutsideRelative,
   classifyCapturedPath,
   toPosixPath,
   toRepoPosixRelative
@@ -65,6 +67,122 @@ describe("isPathInsideDirectory", () => {
 
   test("returns false for the parent directory", () => {
     expect(isPathInsideDirectory(path.dirname(__dirname), __dirname)).toBe(false);
+  });
+});
+
+describe("isPathOutsideDirectory", () => {
+  test("is the exact inverse of isPathInsideDirectory (self, descendant, sibling, parent)", () => {
+    const cases = [
+      [__dirname, __dirname], // self
+      [path.join(__dirname, "child.js"), __dirname], // descendant
+      [path.join(path.dirname(__dirname), "sibling.js"), __dirname], // sibling
+      [path.dirname(__dirname), __dirname] // parent
+    ];
+    for (const [filePath, dir] of cases) {
+      expect(isPathOutsideDirectory(filePath, dir)).toBe(!isPathInsideDirectory(filePath, dir));
+    }
+  });
+
+  test("false when filePath is the directory itself (descendant-or-self)", () => {
+    expect(isPathOutsideDirectory(__dirname, __dirname)).toBe(false);
+  });
+
+  test("false for a descendant", () => {
+    expect(isPathOutsideDirectory(path.join(__dirname, "a", "b.js"), __dirname)).toBe(false);
+  });
+
+  test("true for a sibling and for the parent", () => {
+    expect(isPathOutsideDirectory(path.join(path.dirname(__dirname), "x.js"), __dirname)).toBe(
+      true
+    );
+    expect(isPathOutsideDirectory(path.dirname(__dirname), __dirname)).toBe(true);
+  });
+
+  test("CROSS-DRIVE Windows: the failure-1 relative shape is absolute, not a '..' (raw behavior)", () => {
+    // The bug this whole change fixes: path.win32.relative across drives returns
+    // an ABSOLUTE target (not a "..") so a bare startsWith("..") reports INSIDE.
+    // This pins the RAW path.win32 behavior on any host. The OUTSIDE-predicate
+    // itself, fed this exact win32 result, is exercised in the next test through
+    // isOutsideRelative(rel, path.win32) -- isPathOutsideDirectory()/
+    // isPathInsideDirectory() bind the host `path` and so cannot evaluate a
+    // win32 drive letter on a POSIX host; isOutsideRelative accepts an injected
+    // path impl precisely so the cross-drive branch IS covered on Linux CI.
+    const rel = path.win32.relative(
+      "D:\\a\\repo",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\dxmessaging-managed-jest"
+    );
+    // Sanity: the bare shortcut is WRONG here; the absolute-aware predicate is right.
+    expect(rel.startsWith("..")).toBe(false);
+    expect(path.win32.isAbsolute(rel)).toBe(true);
+  });
+
+  test("CROSS-DRIVE Windows: the OUTSIDE predicate (via isOutsideRelative + path.win32) reports OUTSIDE on a POSIX host", () => {
+    // Close the coverage gap the describe-block naming implied: actually run the
+    // sanctioned predicate on the cross-drive shape, on EITHER host OS. The
+    // win32 cross-drive relative result is an absolute C:\ target; the bare
+    // startsWith("..") shortcut would mislabel it as INSIDE (false), but the
+    // absolute-aware predicate correctly reports OUTSIDE (true).
+    const crossDriveRel = path.win32.relative(
+      "D:\\a\\repo",
+      "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\dxmessaging-managed-jest"
+    );
+    expect(crossDriveRel.startsWith("..")).toBe(false); // the WRONG shortcut
+    expect(isOutsideRelative(crossDriveRel, path.win32)).toBe(true); // the RIGHT predicate
+
+    // A win32 SAME-drive descendant is NOT outside (control), proving the
+    // predicate is not just always-true on win32 inputs.
+    const sameDriveRel = path.win32.relative("D:\\a\\repo", "D:\\a\\repo\\sub\\file.js");
+    expect(isOutsideRelative(sameDriveRel, path.win32)).toBe(false);
+
+    // A win32 genuine upward traversal (`..\\sibling`) is outside, exercising
+    // the injected `pathImpl.sep` branch on a POSIX host.
+    const traversalRel = path.win32.relative("D:\\a\\repo", "D:\\a\\sibling");
+    expect(traversalRel.startsWith("..")).toBe(true);
+    expect(isOutsideRelative(traversalRel, path.win32)).toBe(true);
+  });
+});
+
+describe("isOutsideRelative", () => {
+  test("empty string means self/descendant -> NOT outside", () => {
+    expect(isOutsideRelative("")).toBe(false);
+  });
+
+  test("a plain relative descendant is NOT outside", () => {
+    expect(isOutsideRelative(path.join("sub", "file.js"))).toBe(false);
+    expect(isOutsideRelative("..foo")).toBe(false); // "..foo" is a descendant name, not traversal
+  });
+
+  test("bare '..' and '..'+sep are outside", () => {
+    expect(isOutsideRelative("..")).toBe(true);
+    expect(isOutsideRelative(".." + path.sep + "sibling")).toBe(true);
+  });
+
+  test("an absolute path (cross-drive Windows / UNC) is outside", () => {
+    // path.isAbsolute is platform-specific; assert via an absolute path the
+    // current platform recognizes, plus pin the win32 cross-drive case.
+    expect(isOutsideRelative(path.resolve(path.sep))).toBe(true);
+    // The exact cross-drive relative result on Windows is an absolute C:\ path.
+    const winRel = path.win32.relative("D:\\repo", "C:\\Temp\\cache");
+    expect(path.win32.isAbsolute(winRel)).toBe(true);
+  });
+
+  test("non-string inputs are treated as not-outside (defensive)", () => {
+    expect(isOutsideRelative(null)).toBe(false);
+    expect(isOutsideRelative(undefined)).toBe(false);
+  });
+
+  test("injected pathImpl evaluates sep/isAbsolute against the GIVEN platform (win32 vs posix on any host)", () => {
+    // The optional pathImpl seam lets the cross-drive/UNC absolute branch and the
+    // platform-specific separator be exercised regardless of host OS.
+    // win32: a drive-qualified absolute target is outside; a backslash traversal is outside.
+    expect(isOutsideRelative("C:\\Temp\\cache", path.win32)).toBe(true);
+    expect(isOutsideRelative(".." + path.win32.sep + "sibling", path.win32)).toBe(true);
+    // win32: a same-drive descendant is NOT outside.
+    expect(isOutsideRelative("sub\\file.js", path.win32)).toBe(false);
+    // posix: a forward-slash traversal is outside; a leading-slash absolute is outside.
+    expect(isOutsideRelative(".." + path.posix.sep + "sibling", path.posix)).toBe(true);
+    expect(isOutsideRelative("/etc/hosts", path.posix)).toBe(true);
+    expect(isOutsideRelative("sub/file.js", path.posix)).toBe(false);
   });
 });
 

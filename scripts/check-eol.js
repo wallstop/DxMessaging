@@ -56,6 +56,25 @@ const excludeRegexes = [
   /(^|[\/\\])site([\/\\]|$)/
 ];
 
+/**
+ * Report whether an absolute path would be dropped by the directory-exclusion
+ * list (.git, node_modules, Library, obj, Temp, Samples~, .vs, .venv,
+ * .artifacts, site) before any text-file collection happens.
+ *
+ * Exposed so callers/tests can verify, against the SAME source of truth the
+ * checker uses, that a chosen fixture/scratch location is admissible -- rather
+ * than assuming a host-provided directory (e.g. os.tmpdir(), which on Windows
+ * is '...\\AppData\\Local\\Temp\\...' and so carries an excluded `Temp`
+ * segment) survives collection. The exclusion is case-sensitive for the
+ * Unity/.NET segments, so this is the only reliable way to know.
+ *
+ * @param {string} candidatePath - Absolute path to test.
+ * @returns {boolean} True if some exclusion regex matches the path.
+ */
+function isPathExcluded(candidatePath) {
+  return excludeRegexes.some((re) => re.test(candidatePath));
+}
+
 // SYNC (bidirectional): Keep extension policy in sync with scripts/lib/eol-policy.js
 // (source of truth), scripts/check-eol.ps1 extension lists, and .gitattributes.
 
@@ -91,7 +110,7 @@ function walk(dir, files = []) {
   }
   for (const ent of entries) {
     const full = path.join(dir, ent.name);
-    if (excludeRegexes.some((re) => re.test(full))) {
+    if (isPathExcluded(full)) {
       continue;
     }
     if (ent.isDirectory()) {
@@ -127,8 +146,7 @@ function resolveTargets(targets) {
       continue;
     }
 
-    const isExcluded = excludeRegexes.some((re) => re.test(targetPath));
-    if (isExcluded) {
+    if (isPathExcluded(targetPath)) {
       continue;
     }
 
@@ -417,5 +435,6 @@ module.exports = {
   hasNonLfEol,
   getStagedFiles,
   getIndexEolIssues,
+  isPathExcluded,
   main
 };

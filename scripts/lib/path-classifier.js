@@ -63,7 +63,63 @@ function isPathInsideDirectory(filePath, directoryPath) {
   const normalizedFilePath = normalizeForPathComparison(filePath);
   const normalizedDirectoryPath = normalizeForPathComparison(directoryPath);
   const relativePath = path.relative(normalizedDirectoryPath, normalizedFilePath);
-  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  return !isOutsideRelative(relativePath);
+}
+
+/**
+ * Return true when `filePath` is OUTSIDE `directoryPath` -- i.e. it is neither
+ * `directoryPath` itself nor a descendant of it. This is the cross-drive-safe
+ * inverse of {@link isPathInsideDirectory} and is THE sanctioned way to answer
+ * "is this path outside X".
+ *
+ * Why a named helper instead of `path.relative(dir, file).startsWith("..")`:
+ * on Windows when `file` and `dir` live on DIFFERENT drives (e.g. a D:\ repo
+ * and a C:\ os.tmpdir() cache root), `path.relative` cannot express a relative
+ * traversal and returns the ABSOLUTE target (`C:\Users\...`). That string does
+ * NOT start with `".."`, so a bare `startsWith("..")` reports the path as
+ * INSIDE the directory even though it is on another drive entirely. Routing
+ * through {@link isPathInsideDirectory} (which guards with `path.isAbsolute`,
+ * symlink-resolves, and case-folds on Windows) is correct on Linux, macOS,
+ * Windows same-drive, AND Windows cross-drive.
+ *
+ * @param {string} filePath Path under test.
+ * @param {string} directoryPath Candidate parent directory.
+ * @returns {boolean} True when `filePath` is outside `directoryPath`.
+ */
+function isPathOutsideDirectory(filePath, directoryPath) {
+  return !isPathInsideDirectory(filePath, directoryPath);
+}
+
+/**
+ * Low-level companion to {@link isPathOutsideDirectory} for call sites that
+ * ALREADY hold a `path.relative(dir, file)` result and only need to know
+ * whether that relative path escapes the directory. Returns true when `rel`
+ * names something outside (or above) the base directory:
+ *   - `".."` exactly (the parent itself),
+ *   - a `".." + path.sep` prefix (genuine upward traversal), OR
+ *   - an ABSOLUTE path (cross-drive Windows / UNC, where `path.relative`
+ *     returns a drive-qualified absolute target rather than a `..` chain).
+ *
+ * An empty string means `rel` IS the base directory (a descendant-or-self), so
+ * it is NOT outside. This is the canonical predicate for the bare
+ * `rel.startsWith("..")` anti-pattern: that shortcut omits the
+ * `path.isAbsolute(rel)` branch and therefore mislabels cross-drive paths.
+ *
+ * @param {string} rel A `path.relative()` result.
+ * @param {{sep: string, isAbsolute: (p: string) => boolean}} [pathImpl]
+ *   Path implementation to evaluate separators and absoluteness against.
+ *   Defaults to the host `path`. Tests inject `path.win32` (or `path.posix`)
+ *   so the cross-drive/UNC absolute branch can be exercised on EITHER host OS
+ *   rather than only on the one whose `path.sep`/`path.isAbsolute` happens to
+ *   match -- the same platform-divergence discipline the repo applies to
+ *   spawn-shape and EOL tests.
+ * @returns {boolean} True when `rel` escapes the base directory.
+ */
+function isOutsideRelative(rel, pathImpl = path) {
+  if (typeof rel !== "string" || rel === "") {
+    return false;
+  }
+  return rel === ".." || rel.startsWith(".." + pathImpl.sep) || pathImpl.isAbsolute(rel);
 }
 
 /**
@@ -155,7 +211,7 @@ function toRepoPosixRelative(absPath, repoRoot) {
     return absPath;
   }
   const rel = path.relative(repoRoot, absPath);
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+  if (rel === "" || isOutsideRelative(rel)) {
     return toPosixPath(absPath);
   }
   return toPosixPath(rel);
@@ -167,6 +223,8 @@ module.exports = {
   PATH_CLASS_UNKNOWN,
   normalizeForPathComparison,
   isPathInsideDirectory,
+  isPathOutsideDirectory,
+  isOutsideRelative,
   classifyCapturedPath,
   toPosixPath,
   toRepoPosixRelative

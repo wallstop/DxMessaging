@@ -34,6 +34,7 @@ const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
 const { stripJsCommentsAndStrings } = require("../lib/source-stripping");
+const { isPathOutsideDirectory } = require("../lib/path-classifier");
 
 const guard = require("../hooks/preflight-before-push-guard");
 const stop = require("../hooks/preflight-on-stop");
@@ -573,9 +574,17 @@ describe("preflight.runRecovery regenerable-cache heal (push-guard --no-recover 
   });
 
   test("the regenerable cache root is OUTSIDE the repo (guard/Stop read-only-to-committed-files invariant)", () => {
-    // Purging the cache mutates no tracked/committed file: it resolves to a
-    // '..'-prefixed relative path from the repo root (under os.tmpdir()).
-    const rel = path.relative(RUN_MANAGED_JEST_REPO_ROOT, ISOLATED_JEST_CACHE_ROOT);
-    expect(rel.startsWith("..")).toBe(true);
+    // Purging the cache mutates no tracked/committed file: the cache root lives
+    // under os.tmpdir(), which is outside the repo tree.
+    //
+    // We route through the shared, cross-drive-safe `isPathOutsideDirectory`
+    // helper rather than the bare `path.relative(repo, cache).startsWith("..")`
+    // shortcut. On Windows where os.tmpdir() is on C:\ and the repo is on D:\,
+    // `path.relative` returns an ABSOLUTE `C:\...` target (it cannot express a
+    // cross-drive traversal), which does NOT start with ".." -- so the bare
+    // shortcut would wrongly report the cache as INSIDE the repo and fail this
+    // assertion even though the cache is on another drive entirely. The helper
+    // covers Linux/macOS, Windows same-drive, and Windows cross-drive uniformly.
+    expect(isPathOutsideDirectory(ISOLATED_JEST_CACHE_ROOT, RUN_MANAGED_JEST_REPO_ROOT)).toBe(true);
   });
 });

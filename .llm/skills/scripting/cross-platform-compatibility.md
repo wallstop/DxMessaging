@@ -2,9 +2,9 @@
 title: "Cross-Platform Script Compatibility"
 id: "cross-platform-compatibility"
 category: "scripting"
-version: "1.0.1"
+version: "1.1.0"
 created: "2026-01-28"
-updated: "2026-05-26"
+updated: "2026-05-30"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -250,6 +250,21 @@ bucket with `DXM_UNITY_FAKE_MISSING_IMPORTS` or use synthetic DLL names that
 cannot resolve on any supported host. Reserve `DXM_UNITY_FAKE_IMPORTS` alone for
 tests that are explicitly about the import-list or all-imports-resolve branches.
 
+## Cross-drive path containment (Windows)
+
+`path.relative(dir, file)` does NOT always return a `..`-prefixed path. On
+DIFFERENT Windows drives -- the common hook case (repo on `D:\`, `os.tmpdir()` on
+`C:\`) -- it returns the ABSOLUTE target (`C:\Users\...`), so `rel.startsWith("..")`
+is `false` for a genuinely-outside path (mislabeled INSIDE), and its negation is
+wrong for "inside" too (UNC and 8.3-short-name paths also break a raw compare).
+Never hand-roll it -- use `isPathInsideDirectory` / `isPathOutsideDirectory` /
+`isOutsideRelative` from `scripts/lib/path-classifier.js`, which add the
+`path.isAbsolute` branch plus symlink-resolve + case-fold on Windows
+(`isOutsideRelative(rel)` is `""`->false, else `..` / `..`+sep / absolute). If you
+truly cannot use the helper, pair with `path.isAbsolute(rel)` (idiom
+`!rel.startsWith("..") && !path.isAbsolute(rel)`). Enforced by
+`scripts/__tests__/path-containment-policy.test.js` (CATEGORY A).
+
 ## Validation Checklist
 
 Before merging scripts:
@@ -276,6 +291,7 @@ Before merging scripts:
 
 ## Changelog
 
-| Version | Date       | Changes                               |
-| ------- | ---------- | ------------------------------------- |
-| 1.0.0   | 2026-01-28 | Initial version from PR #144 feedback |
+| Version | Date       | Changes                                                          |
+| ------- | ---------- | ---------------------------------------------------------------- |
+| 1.1.0   | 2026-05-30 | Add cross-drive path containment section (Windows `os.tmpdir()`) |
+| 1.0.0   | 2026-01-28 | Initial version from PR #144 feedback                            |

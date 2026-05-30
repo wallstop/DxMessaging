@@ -42,6 +42,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnPlatformCommandSync } = require("../lib/shell-command");
+const { isOutsideRelative } = require("../lib/path-classifier");
 
 const PACKAGING_SKILL = ".llm/skills/packaging/npm-package-configuration.md";
 const DOCS_SKILL = ".llm/skills/documentation/documentation-style-guide.md";
@@ -180,11 +181,17 @@ function resolveRepoRoot() {
  * @returns {string|null} Repo-relative POSIX path, or null when outside repo.
  */
 function toRepoRelativePosix(repoRoot, absPath) {
-  const rel = path.relative(repoRoot, absPath).replace(/\\/g, "/");
-  if (rel.length === 0 || rel.startsWith("..")) {
+  const rawRel = path.relative(repoRoot, absPath);
+  // `isOutsideRelative` is cross-drive-safe: on Windows where the edited file
+  // and the repo live on different drives, `path.relative` returns an ABSOLUTE
+  // target rather than a `..` chain, and the bare `rel.startsWith("..")` form
+  // would wrongly treat that out-of-repo file as repo-relative and run
+  // validators against a corrupted path. The empty string means absPath IS the
+  // repo root (a directory, never validated here), so treat it as outside too.
+  if (rawRel.length === 0 || isOutsideRelative(rawRel)) {
     return null;
   }
-  return rel;
+  return rawRel.replace(/\\/g, "/");
 }
 
 /**

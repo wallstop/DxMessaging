@@ -118,7 +118,8 @@ jobs:
             scripts/__tests__/unity-ensure-editor-install-resilience.test.js \
             scripts/__tests__/unity-ensure-editor-host-prereq-shortcircuit.test.js \
             scripts/__tests__/unity-native-startup-probe-isolation.test.js \
-            scripts/__tests__/unity-runner-host-prereq-dot-source-safety.test.js
+            scripts/__tests__/unity-runner-host-prereq-dot-source-safety.test.js \
+            scripts/__tests__/path-containment-policy.test.js
 
       - name: Run pre-push preflight
         shell: bash

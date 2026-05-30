@@ -22,6 +22,7 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("./lib/quote-parser");
+const { isPathOutsideDirectory } = require("./lib/path-classifier");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const LLMS_TXT_PATH = path.join(ROOT_DIR, "llms.txt");
@@ -33,7 +34,11 @@ const NON_SKILL_DIRECTORIES = new Set(["templates"]);
 function isCountedSkillPath(fullPath) {
   const relativePath = path.relative(LLM_SKILLS_DIR, fullPath).split(path.sep).join("/");
 
-  if (!relativePath || relativePath.startsWith("../")) {
+  // Cross-drive-safe containment (scripts/lib/path-classifier.js): a bare
+  // `relativePath.startsWith("../")` misses the absolute target that
+  // path.relative returns across Windows drives. `!relativePath` also rules out
+  // fullPath === LLM_SKILLS_DIR (the dir itself is never a counted skill file).
+  if (!relativePath || isPathOutsideDirectory(fullPath, LLM_SKILLS_DIR)) {
     return false;
   }
 

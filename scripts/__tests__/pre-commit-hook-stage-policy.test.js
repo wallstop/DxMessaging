@@ -229,6 +229,7 @@ describe("pre-commit hook stage policy", () => {
     expect(blockText).toContain("scripts/__tests__/spawn-invocation-policy.test.js");
     expect(blockText).toContain("scripts/__tests__/hermetic-host-env-policy.test.js");
     expect(blockText).toContain("scripts/__tests__/cross-platform-preflight-coverage.test.js");
+    expect(blockText).toContain("scripts/__tests__/path-containment-policy.test.js");
     expect(blockText).toContain("scripts/lib/__tests__/spawn-env-sandbox.test.js");
     expect(blockText).toContain("scripts/__tests__/fix-csharp-underscore-methods.test.js");
     expect(blockText).toContain("scripts/__tests__/validate-changelog.test.js");

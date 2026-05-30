@@ -29,6 +29,7 @@ const ascii = require("./validate-docs-ascii");
 const codePatterns = require("./validate-doc-code-patterns");
 const prose = require("./validate-docs-prose");
 const sharedFormatters = require("./lib/staged-doc-formatters");
+const { isOutsideRelative } = require("./lib/path-classifier");
 
 // Mirror the YAML-level files: '\.(md|cs)$' filter.
 const ALLOWED_EXTS = new Set([".md", ".markdown", ".cs"]);
@@ -45,7 +46,10 @@ function toRepoRelative(absOrRelPath) {
     ? absOrRelPath
     : path.resolve(process.cwd(), absOrRelPath);
   const rel = path.relative(ROOT_DIR, abs);
-  if (rel.startsWith("..")) {
+  // Cross-drive-safe (see scripts/lib/path-classifier.js): `isOutsideRelative`
+  // also catches the absolute target `path.relative` yields on Windows when
+  // `abs` is on a different drive than ROOT_DIR.
+  if (isOutsideRelative(rel)) {
     // Outside the repo; fall back to the raw input so the user sees it.
     return absOrRelPath.split(path.sep).join("/");
   }

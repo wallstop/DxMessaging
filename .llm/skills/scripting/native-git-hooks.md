@@ -2,7 +2,7 @@
 title: "Native Git Hook Bootstrap"
 id: "native-git-hooks"
 category: "scripting"
-version: "1.1.0"
+version: "1.2.0"
 created: "2026-05-22"
 updated: "2026-05-30"
 
@@ -87,6 +87,7 @@ The native hook wrappers are intentionally small Node scripts. They avoid Bash, 
 1. `scripts/run-prepush-parallel.js` is the parallel executor of the full pre-push parity set: it runs the mutating hooks (csharpier, dotnet-tool-restore) serially FIRST (so auto-fixers/restagers heal the tree before the read-only freshness checks observe it -- the fix-before-check auto-heal invariant), then the read-only pre-push hooks plus the preflight-only validators concurrently, with the same coverage as `npm run preflight:pre-push` (kept as the serial, byte-for-byte on-demand and CI parity command). It dedups the subset Jest suites against the full `script-tests` suite and the cspell subsets against the cspell hook. Coverage equivalence and the dedup proofs are pinned by `scripts/__tests__/run-prepush-parallel.test.js`.
 1. `scripts/install-git-hooks.js` must refuse to configure `core.hooksPath` unless every required native hook is present.
 1. `postinstall` may warn, but must not make `npm install` fatal when hook installation cannot run outside a Git worktree.
+1. Cross-platform path invariant: never assert path containment with a bare `path.relative(...).startsWith("..")` (it is wrong across Windows drives -- use `isPathInsideDirectory`/`isPathOutsideDirectory`/`isOutsideRelative` from `scripts/lib/path-classifier.js`), and never root a `check-eol`/`fix-eol` test fixture under `os.tmpdir()` at all (`check-eol`'s case-sensitive `Temp` exclusion drops every Windows `os.tmpdir()` path, so the spawn passes vacuously -- and `git init`-ing the fixture dir does NOT remedy it; there is no git-init escape hatch). Instead root the fixture in an in-repo, NON-excluded scratch dir (`fs.mkdtempSync(path.join(REPO_ROOT, "dxm-...-"))`, with the prefix gitignored) and assert admissibility via the exported `isPathExcluded(dir) === false` from `check-eol.js`. Both are pinned by `scripts/__tests__/path-containment-policy.test.js` under `script-parser-tests`. See [Cross-Platform Script Compatibility](./cross-platform-compatibility.md#cross-drive-path-containment-windows).
 
 ## Agent Workflow
 
@@ -109,3 +110,11 @@ For hook-gated tooling, workflow, script, or `.llm` edits:
 - [Cross-Platform Script Compatibility](./cross-platform-compatibility.md)
 - [Integrity Gate Robustness](./integrity-gate-robustness.md)
 - [Jest Hook Robustness](./jest-hook-robustness.md)
+
+## Changelog
+
+| Version | Date       | Changes                                                                                                                                                                                                                                                               |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.2.0   | 2026-05-30 | Added the cross-platform path invariant rule: never bare `path.relative(...).startsWith("..")` (wrong across Windows drives), never root a `check-eol`/`fix-eol` fixture under `os.tmpdir()` (no git-init escape hatch); pinned by `path-containment-policy.test.js`. |
+| 1.1.0   | 2026-05-30 | Documented the `run-prepush-parallel.js` parallel pre-push executor (fix-before-check ordering, coverage equivalence with `preflight:pre-push`, suite/cspell dedup).                                                                                                  |
+| 1.0.0   | 2026-05-22 | Initial version: native hook bootstrap, automatic dependency repair, restage-in-process rule, and `install-git-hooks.js` refusal invariant.                                                                                                                           |

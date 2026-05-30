@@ -7,6 +7,7 @@ const { createRequire } = require("module");
 const { pathToFileURL } = require("url");
 const { resolveBundledNpxCliPath } = require("./lib/managed-prettier");
 const { INTEGRITY_TARGETS, probeIntegrity } = require("./lib/node-modules-integrity");
+const { isOutsideRelative } = require("./lib/path-classifier");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const REPO_REQUIRE = createRequire(path.join(REPO_ROOT, "package.json"));
@@ -78,8 +79,11 @@ function toAbs(repoRelativePath) {
 }
 
 function toRepoRelative(absPath) {
-  const rel = path.relative(REPO_ROOT, absPath).split(path.sep).join("/");
-  return rel.startsWith("..") ? absPath.split(path.sep).join("/") : rel;
+  const rel = path.relative(REPO_ROOT, absPath);
+  // Cross-drive-safe (see scripts/lib/path-classifier.js): `isOutsideRelative`
+  // also catches the absolute target `path.relative` returns on Windows when
+  // `absPath` is on a different drive than REPO_ROOT.
+  return isOutsideRelative(rel) ? absPath.split(path.sep).join("/") : rel.split(path.sep).join("/");
 }
 
 function formatInstallGuidance() {

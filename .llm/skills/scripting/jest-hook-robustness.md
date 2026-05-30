@@ -2,7 +2,7 @@
 title: "Jest Hook Robustness"
 id: "jest-hook-robustness"
 category: "scripting"
-version: "1.3.0"
+version: "1.6.0"
 created: "2026-05-18"
 updated: "2026-05-30"
 
@@ -84,9 +84,9 @@ Pre-push hooks that run Jest in this repository go through
 `scripts/run-managed-jest.js`. The wrapper validates the local install and
 falls back to an isolated install if needed, but it MUST forward the resolver
 decision to Jest itself. The failure that motivated this skill was a Windows
-pre-push log (`pre-push.txt`) reporting `Validation Error: testRunner option
-was not found` because the wrapper passed an absolute path to `jest-circus`
-that jest-config's internal validator rejected on Windows drive-letter paths.
+pre-push log (`pre-push.txt`) reporting `Validation Error: testRunner option was
+not found` because the wrapper passed an absolute `jest-circus` path that
+jest-config's internal validator rejected on Windows drive-letter paths.
 
 ## Solution
 
@@ -119,17 +119,16 @@ which is more reliable than any caller-side pre-resolution.
 
 ## Partial-extract failure class
 
-The Windows `testRunner option was not found` error has a second root cause
-that the `--testRunner`-injection-avoidance contract alone does not fix:
-the repository's `node_modules/jest-circus/build/runner.js` (and similar
-critical files) can be missing or zero-byte on disk after a partial
-extract. The integrity gate
-(`scripts/lib/node-modules-integrity.js`) closes that loop by probing
-the on-disk critical-file list BEFORE Jest is invoked and calling
-`npm ci` when a partial extract is detected. See
-[Integrity Gate Robustness](./integrity-gate-robustness.md) for the
-full state diagram, refusal rules, env-var matrix, and the path-classifier
-dispatch that decides between `npm ci` and isolated cache reset.
+The Windows `testRunner option was not found` error has a second root cause that
+the `--testRunner`-injection-avoidance contract alone does not fix: the
+repository's `node_modules/jest-circus/build/runner.js` (and similar critical
+files) can be missing or zero-byte on disk after a partial extract. The integrity
+gate (`scripts/lib/node-modules-integrity.js`) closes that loop by probing the
+on-disk critical-file list BEFORE Jest is invoked and calling `npm ci` when a
+partial extract is detected. See
+[Integrity Gate Robustness](./integrity-gate-robustness.md) for the full state
+diagram, refusal rules, env-var matrix, and the path-classifier dispatch that
+decides between `npm ci` and isolated cache reset.
 
 ## The fix invariant
 
@@ -156,12 +155,11 @@ Before reporting done for any change that touches
 `scripts/validate-pre-commit-tooling.js`,
 `scripts/validate-node-tooling.js`, `.github/workflows/*.yml`, or any
 file gated by `script-parser-tests`, `script-tests`, or
-`unity-contract-tests`, run `npm run preflight:pre-push`. For triage on
-a fresh clone or a flaky workstation, run `npm run doctor` -- it prints
-Node, npm, `jest-circus` install state, and the isolated cache
-directory. A corrupt/partial isolated cache is auto-cleared by
-`npm run repair:node-tooling` (it runs before the doctor in the native hook);
-the doctor only reports it as WARN.
+`unity-contract-tests`, run `npm run preflight:pre-push`. For triage on a fresh
+clone or a flaky workstation, run `npm run doctor` -- it prints Node, npm,
+`jest-circus` install state, and the isolated cache directory. A corrupt/partial
+isolated cache is auto-cleared by `npm run repair:node-tooling` (it runs before
+the doctor in the native hook); the doctor only reports it as WARN.
 
 ## Hook self-heal protocol (zero manual touch)
 
@@ -217,10 +215,59 @@ routing.
 On Windows, prefer open-source PowerShell 7+ (`pwsh`); legacy `powershell` works
 but is slower. Bash on macOS and Linux works directly. Internally,
 `scripts/run-managed-jest.js` uses `spawnPlatformCommandSync` from
-`scripts/lib/shell-command.js` so npm and Node shims resolve through the
-Windows shell-shim rules consistently. See
-[Cross-Platform Script Compatibility](./cross-platform-compatibility.md) for
-the shared helper and case-sensitivity rules.
+`scripts/lib/shell-command.js` so npm and Node shims resolve through the Windows
+shell-shim rules consistently. See
+[Cross-Platform Script Compatibility](./cross-platform-compatibility.md) for the
+shared helper and case-sensitivity rules.
+
+## Never root a check-eol/fix-eol fixture under `os.tmpdir()`
+
+`scripts/check-eol.js` drops any target whose ABSOLUTE path contains an excluded
+directory segment -- its `excludeRegexes`: `.git`, `node_modules`, `Library`,
+`obj`, `Temp`, `Samples~`, `.vs`, `.venv`, `.artifacts`, `site` -- BEFORE it
+collects any text files. The `Temp` rule (`/(^|[\/\\])Temp([\/\\]|$)/`) is
+case-SENSITIVE and matches the capitalized `Temp` segment Windows `os.tmpdir()`
+always carries (`C:\Users\<u>\AppData\Local\Temp\...`).
+
+So any test that creates a fixture via
+`fs.mkdtempSync(path.join(os.tmpdir(), ...))` and spawns `check-eol`/`fix-eol`
+against it is unsound. On Windows EVERY fixture under `os.tmpdir()` is excluded:
+the checker prints `EOL check skipped` and exits `0`, making a "dirty corpus must
+fail" / "must pass" precondition pass vacuously. It passes on the Linux `/tmp`
+fallback only because `/tmp` has no `Temp` segment -- the same platform asymmetry
+as the cross-drive containment bug; see
+[Cross-Platform Script Compatibility](./cross-platform-compatibility.md#cross-drive-path-containment-windows).
+
+This exclusion is the DOMINANT mechanism and it defeats every `os.tmpdir()`
+workaround: bare-vs-absolute targets and `git init`-ing the fixture dir do NOT
+help, because none of them changes the resolved, excluded path (a `git init`
+"hermeticity" recipe was tried and is wrong).
+
+Sound fix -- root the fixture where the exclusion list cannot drop it:
+
+- Use an in-repo, NON-excluded scratch dir:
+  `fs.mkdtempSync(path.join(REPO_ROOT, 'dxm-...-'))`. The repo working tree is by
+  construction not under any excluded segment, so its toplevel is the repo and
+  the path survives collection on every platform.
+- GITIGNORE the scratch prefix (e.g. `dxm-eol-closure-*`): `afterAll` cleanup does
+  NOT survive SIGKILL / CI timeout / Ctrl-C, and a leaked dir would otherwise trip
+  `validate-untracked-policy` (a pre-commit + preflight gate) and a repo-wide
+  `check-eol`. The gitignore list is separate from `excludeRegexes` (still collected).
+- ASSERT admissibility against the SAME source of truth the script uses:
+  `expect(isPathExcluded(dir)).toBe(false)` (exported from `check-eol.js`), so a
+  future exclude-list change that would silently drop the fixture fails loudly.
+- ASSERT the precondition really held -- the checker's stdout does NOT match
+  `/EOL check skipped/` before trusting exit status -- so a dropped/empty corpus
+  cannot make the assertion vacuous.
+- Pass ABSOLUTE fixture paths (`path.resolve(anyRoot, abs) === abs`), the
+  convention in `fix-csharp-underscore-methods.test.js`, keeping resolution
+  independent of cwd.
+
+This is enforced by `scripts/__tests__/path-containment-policy.test.js`
+(CATEGORY B), which flags ANY tmpdir-rooted `check-eol`/`fix-eol` fixture --
+categorical over the resolution spelling (idiomatic `os.tmpdir()`, inline
+`require("os").tmpdir()`, and destructured `{ tmpdir } = require("os")`); git-init
+is not an escape hatch.
 
 ## Adding a new Jest-backed hook
 
@@ -241,10 +288,12 @@ the shared helper and case-sensitivity rules.
 
 ## Changelog
 
-| Version | Date       | Changes                                                                                                                                                                                                                                                                                                  |
-| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.0.0   | 2026-05-18 | Initial version after the pre-push.txt failure.                                                                                                                                                                                                                                                          |
-| 1.1.0   | 2026-05-18 | Added integrity-gate auto-repair flow, state diagram, refusal rules, and environment-var matrix.                                                                                                                                                                                                         |
-| 1.2.0   | 2026-05-30 | Proactive zero-touch isolated-cache heal (registry-driven); doctor downgraded to WARN; removed the manual `rm` repair step; added the detection-without-remediation anti-pattern.                                                                                                                        |
-| 1.3.0   | 2026-05-30 | Documented the heal's two-part wall-time bound: 250ms lock-acquire cap plus a 600ms cumulative in-lock purge-sleep budget (shared across all corrupt dirs) so a persistent Windows lock on N dirs cannot exceed the <1s git-hook target; heal backoff `[200, 400]` is tighter than npm-ci `[750, 2000]`. |
-| 1.3.0   | 2026-05-30 | Heal/checker now cover the zero-byte runner (empty-file rule) and the stray-FILE (`ENOTDIR`) cache root; the readdir host-fault FAIL is gated on fallback relevance.                                                                                                                                     |
+| Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.6.0   | 2026-05-30 | Gitignore the in-repo scratch prefix (`dxm-eol-closure-*`) so a hard-killed run cannot leak an untracked fixture dir that trips `validate-untracked-policy` / repo-wide `check-eol`. CATEGORY B's tmpdir detector is now categorical over the resolution spelling (inline `require("os").tmpdir()` and destructured `{ tmpdir } = require("os")`), not just idiomatic `os.tmpdir()`.                                                                                                                                   |
+| 1.5.0   | 2026-05-30 | Corrected the tmpdir-fixture guidance: the dominant Windows failure is `check-eol`'s case-sensitive `Temp` exclude regex dropping every `os.tmpdir()` path (not just bare-name resolution), so `git init` and absolute paths do NOT remedy it. Sound fix: root `check-eol`/`fix-eol` fixtures in an in-repo NON-excluded scratch dir asserted via the new exported `isPathExcluded()`, plus a non-`EOL check skipped` precondition guard. CATEGORY B now flags ANY `os.tmpdir()`-rooted `check-eol`/`fix-eol` fixture. |
+| 1.3.1   | 2026-05-30 | Heal/checker now cover the zero-byte runner (empty-file rule) and the stray-FILE (`ENOTDIR`) cache root; the readdir host-fault FAIL is gated on fallback relevance.                                                                                                                                                                                                                                                                                                                                                   |
+| 1.3.0   | 2026-05-30 | Documented the heal's two-part wall-time bound: 250ms lock-acquire cap plus a 600ms cumulative in-lock purge-sleep budget (shared across all corrupt dirs) so a persistent Windows lock on N dirs cannot exceed the <1s git-hook target; heal backoff `[200, 400]` is tighter than npm-ci `[750, 2000]`.                                                                                                                                                                                                               |
+| 1.2.0   | 2026-05-30 | Proactive zero-touch isolated-cache heal (registry-driven); doctor downgraded to WARN; removed the manual `rm` repair step; added the detection-without-remediation anti-pattern.                                                                                                                                                                                                                                                                                                                                      |
+| 1.1.0   | 2026-05-18 | Added integrity-gate auto-repair flow, state diagram, refusal rules, and environment-var matrix.                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 1.0.0   | 2026-05-18 | Initial version after the pre-push.txt failure.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

@@ -30,6 +30,7 @@ const { decodeJestStderr, formatRepairBanner, isTruthyEnv } = jestErrorDecoderMo
 const {
   normalizeForPathComparison,
   isPathInsideDirectory,
+  isOutsideRelative,
   classifyCapturedPath,
   PATH_CLASS_REPO,
   PATH_CLASS_ISOLATED,
@@ -219,12 +220,12 @@ function removeDirIfStrictDescendant(
   const resolvedRoot = path.resolve(cacheRoot);
   const resolvedTarget = path.resolve(targetDir);
   const relativePath = path.relative(resolvedRoot, resolvedTarget);
-  if (
-    relativePath === "" ||
-    relativePath === ".." ||
-    relativePath.startsWith(".." + path.sep) ||
-    path.isAbsolute(relativePath)
-  ) {
+  // Strict descendant: reject "" (the cache root itself) AND anything outside
+  // it. `isOutsideRelative` (scripts/lib/path-classifier.js) is the shared,
+  // cross-drive-safe predicate covering "..", "../...", and the absolute target
+  // `path.relative` yields across Windows drives -- a sanitized key like
+  // "..foo" resolves UNDER the root, is not a traversal, and is not rejected.
+  if (relativePath === "" || isOutsideRelative(relativePath)) {
     warnFn(
       `WARNING: Refusing to reset isolated managed-Jest cache; resolved path is not a descendant of ${toPosixPath(resolvedRoot)}: ${toPosixPath(resolvedTarget)}`
     );
@@ -741,17 +742,13 @@ function prepareIsolatedFallbackJest(
     const cacheRoot = path.resolve(ISOLATED_JEST_CACHE_ROOT);
     const resolvedInstallDir = path.resolve(installDir);
     const relativePath = path.relative(cacheRoot, resolvedInstallDir);
-    // Mirror the segment-boundary traversal guard from
-    // `attemptIsolatedCacheReset`: reject "" (the cache root itself),
-    // bare ".." and ".." followed by path.sep (genuine parent
-    // traversal), and absolute paths. A sanitized key like "..foo"
-    // resolves under the cache root, is NOT a traversal, and must not
-    // trip the guard.
-    const isStrictDescendant =
-      relativePath !== "" &&
-      relativePath !== ".." &&
-      !relativePath.startsWith(".." + path.sep) &&
-      !path.isAbsolute(relativePath);
+    // Same strict-descendant guard as `attemptIsolatedCacheReset`, routed
+    // through the shared cross-drive-safe `isOutsideRelative` predicate
+    // (scripts/lib/path-classifier.js): reject "" (the cache root itself) and
+    // anything outside it ("..", "../...", or the absolute target produced
+    // across Windows drives). A sanitized key like "..foo" resolves UNDER the
+    // cache root, is NOT a traversal, and must not trip the guard.
+    const isStrictDescendant = relativePath !== "" && !isOutsideRelative(relativePath);
 
     if (!isStrictDescendant) {
       warnFn(

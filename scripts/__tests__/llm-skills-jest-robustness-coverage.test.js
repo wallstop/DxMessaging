@@ -32,7 +32,7 @@ const SKILL_CONTENT_ANCHORS = {
     "findZeroByteNativeBinaries",
     "DXMSG_HOOK_NO_AUTOREPAIR"
   ],
-  "scripting/jest-hook-robustness.md": ["testRunner"],
+  "scripting/jest-hook-robustness.md": ["testRunner", "os.tmpdir()", "isPathExcluded"],
   "scripting/let-tools-resolve-modules.md": ["resolve"]
 };
 

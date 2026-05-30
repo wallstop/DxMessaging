@@ -40,6 +40,7 @@ const path = require("path");
 const childProcess = require("child_process");
 const { pathToFileURL } = require("url");
 const { spawnPlatformCommandSync } = require("./lib/shell-command");
+const { isOutsideRelative } = require("./lib/path-classifier");
 const {
   TOOL_LOAD_ERROR_PATTERNS,
   isRecoverableToolLoadError,
@@ -147,7 +148,10 @@ function toRepoRelative(absOrRelPath) {
     ? absOrRelPath
     : path.resolve(process.cwd(), absOrRelPath);
   const rel = path.relative(ROOT_DIR, abs);
-  if (rel.startsWith("..")) {
+  // Cross-drive-safe: `isOutsideRelative` also catches the absolute target that
+  // `path.relative` returns on Windows when `abs` is on a different drive than
+  // ROOT_DIR (a bare `startsWith("..")` would miss it).
+  if (isOutsideRelative(rel)) {
     return absOrRelPath.split(path.sep).join("/");
   }
   return rel.split(path.sep).join("/");

@@ -5,7 +5,6 @@
 "use strict";
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
@@ -13,7 +12,8 @@ const {
   isIndexEolViolation,
   hasBom,
   hasNonCrlfEol,
-  hasNonLfEol
+  hasNonLfEol,
+  isPathExcluded
 } = require("../check-eol.js");
 const { crlfExts, lfExts } = require("../lib/eol-policy.js");
 
@@ -328,9 +328,45 @@ describe("fix-eol -> check-eol closure contract", () => {
 
   const tempDirs = [];
 
+  // Create the fixture scratch dir INSIDE the repo under a benign, non-excluded
+  // name -- NOT under os.tmpdir().
+  //
+  // WHY NOT os.tmpdir(): check-eol.js drops any target path that matches its
+  // directory-exclusion list (.git, node_modules, Library, obj, Temp,
+  // Samples~, .vs, .venv, .artifacts, site) in resolveTargets() BEFORE any
+  // text-file collection. The `Temp` rule (/(^|[\/\\])Temp([\/\\]|$)/) is
+  // case-SENSITIVE and matches the capitalized `Temp` segment that Windows
+  // os.tmpdir() always carries ('C:\\Users\\<u>\\AppData\\Local\\Temp\\...').
+  // So on the reporting Windows host EVERY fixture under os.tmpdir() is
+  // excluded -> the checker prints "EOL check skipped" and exits 0, defeating
+  // BOTH bare-name and absolute-path inputs (path-resolution and git toplevel
+  // are irrelevant once the path is excluded). /tmp on Linux has no `Temp`
+  // segment, which is why the bug only ever surfaced on Windows -- the same
+  // platform asymmetry as the original failure.
+  //
+  // The repo's own working tree is by construction NOT under any excluded
+  // segment, so a scratch dir directly beneath REPO_ROOT survives collection on
+  // every platform. We PROVE the location is admissible below via the checker's
+  // own isPathExcluded(), so the fixture placement can never silently regress
+  // if the exclude list grows.
+  //
+  // ZERO-POLLUTION: the `dxm-eol-closure-*` prefix is in .gitignore, so an
+  // interrupted run (SIGKILL / CI timeout / Ctrl-C between fixture creation and
+  // afterAll) cannot leave an untracked dir at REPO_ROOT that would trip
+  // validate-untracked-policy (a pre-commit + preflight gate) or a repo-wide
+  // check-eol -- both the happy path and the crash window stay zero-manual-touch.
+  // The gitignore prefix is NOT in check-eol's excludeRegexes (separate lists),
+  // so the isPathExcluded() self-guard below still passes and the fixtures are
+  // still collected.
   function makeTempDir() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-eol-closure-"));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, "dxm-eol-closure-"));
     tempDirs.push(dir);
+    // Self-guard: assert the scratch location is admissible to check-eol's
+    // exclusion list (the SAME source of truth the script uses). If this ever
+    // fires, the fixtures would be silently dropped and downstream
+    // "must-fail"/"must-pass" assertions would go vacuous -- exactly the
+    // Windows `Temp` failure mode. Fail loudly here instead.
+    expect(isPathExcluded(dir)).toBe(false);
     return dir;
   }
 
@@ -346,6 +382,10 @@ describe("fix-eol -> check-eol closure contract", () => {
     return !probe.error && probe.status === 0;
   }
 
+  function git(cwd, args) {
+    return spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env } });
+  }
+
   afterAll(() => {
     for (const dir of tempDirs) {
       try {
@@ -357,6 +397,9 @@ describe("fix-eol -> check-eol closure contract", () => {
   });
 
   test("one fix-eol pass clears every content shape check-eol can flag", () => {
+    // No git needed: the fixtures live in an in-repo, non-excluded scratch dir
+    // (see makeTempDir), so check-eol/fix-eol resolve and collect them on every
+    // platform without any git-init recipe.
     const dir = makeTempDir();
     // Dirty fixtures spanning every content-level violation check-eol reports.
     // Written as raw bytes so the on-disk EOLs are exactly what we intend
@@ -381,22 +424,35 @@ describe("fix-eol -> check-eol closure contract", () => {
     for (const name of names) {
       fs.writeFileSync(path.join(dir, name), fixtures[name]);
     }
+    // Pass ABSOLUTE fixture paths: both scripts resolve targets via
+    // path.resolve(repoRoot, rawTarget), and path.resolve(anyRoot, abs) === abs
+    // on every platform, so absolute inputs are independent of whatever git
+    // toplevel the host assigns to cwd -- matching the established absolute-path
+    // convention in fix-csharp-underscore-methods.test.js and
+    // run-staged-validators.test.js. (Combined with the in-repo, non-excluded
+    // scratch dir, the fixtures are guaranteed to reach text-file collection.)
+    const absPaths = names.map((name) => path.join(dir, name));
 
     // Sanity: the checker must actually flag the dirty corpus first, otherwise
     // the closure assertion below would be vacuously true.
-    const before = runNode(CHECK_EOL, names, dir);
+    const before = runNode(CHECK_EOL, absPaths, dir);
+    // Precondition guard against the Windows `Temp`-exclusion regression: prove
+    // the fixtures were genuinely collected and inspected, not silently dropped.
+    // A dropped/empty corpus prints "EOL check skipped" and exits 0; assert the
+    // checker neither skipped nor passed, and that it named a real violation.
+    expect(before.stdout || "").not.toMatch(/EOL check skipped/);
     expect(before.status).toBe(1);
 
     // One fixer pass.
-    const fixed = runNode(FIX_EOL, names, dir);
+    const fixed = runNode(FIX_EOL, absPaths, dir);
     expect(fixed.status).toBe(0);
 
     // Closure: the checker now passes on the fixer's output.
-    const after = runNode(CHECK_EOL, names, dir);
+    const after = runNode(CHECK_EOL, absPaths, dir);
     expect(after.status).toBe(0);
 
     // Idempotence: a second fixer pass changes nothing.
-    const refixed = runNode(FIX_EOL, names, dir);
+    const refixed = runNode(FIX_EOL, absPaths, dir);
     expect(refixed.stdout).toMatch(/Updated 0\./);
   });
 
@@ -407,12 +463,11 @@ describe("fix-eol -> check-eol closure contract", () => {
       return;
     }
     const dir = makeTempDir();
-    const git = (args) =>
-      spawnSync("git", args, { cwd: dir, encoding: "utf8", env: { ...process.env } });
+    const gitHere = (args) => git(dir, args);
 
-    expect(git(["init"]).status).toBe(0);
-    git(["config", "user.email", "test@example.com"]);
-    git(["config", "user.name", "Test"]);
+    expect(gitHere(["init"]).status).toBe(0);
+    gitHere(["config", "user.email", "test@example.com"]);
+    gitHere(["config", "user.name", "Test"]);
     // Mirror the repo's default text policy so attributes resolve to text/eol=lf
     // exactly as in the real tree; git's content scan still classifies a
     // NUL-bearing blob as binary (i/-text) regardless.
@@ -426,20 +481,27 @@ describe("fix-eol -> check-eol closure contract", () => {
       path.join(dir, nulFile),
       Buffer.from('const z = "A\u0000src/a.cs\u0000M\u0000b.cs\u0000";\n', "utf8")
     );
-    git(["add", ".gitattributes", nulFile]);
+    gitHere(["add", ".gitattributes", nulFile]);
 
     // Precondition: git really does classify the staged blob as binary.
-    const ls = git(["ls-files", "--eol", "--", nulFile]);
+    const ls = gitHere(["ls-files", "--eol", "--", nulFile]);
     expect(ls.status).toBe(0);
     expect(ls.stdout).toMatch(/^i\/-text\b/);
 
     // The checker must PASS (the regression: it used to fail here).
     const checked = runNode(CHECK_EOL, [nulFile], dir);
+    // Precondition: the fixture must have been collected (not dropped by an
+    // exclusion segment), else status 0 would pass vacuously -- the same
+    // Windows `Temp`-exclusion failure mode the closure test guards against.
+    // The in-repo, non-excluded scratch dir (makeTempDir) ensures this on every
+    // platform; assert it explicitly so a future scratch-location regression is
+    // caught here too.
+    expect(checked.stdout || "").not.toMatch(/EOL check skipped/);
     expect(checked.status).toBe(0);
 
     // Closure across the auto-fix + re-stage cycle the pre-commit hook performs.
     expect(runNode(FIX_EOL, [nulFile], dir).status).toBe(0);
-    git(["add", nulFile]);
+    gitHere(["add", nulFile]);
     const recheck = runNode(CHECK_EOL, [nulFile], dir);
     expect(recheck.status).toBe(0);
   });

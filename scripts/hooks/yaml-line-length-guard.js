@@ -34,6 +34,7 @@
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("../lib/quote-parser");
+const { isOutsideRelative } = require("../lib/path-classifier");
 // Comment-wrap behavior is sourced from the lib (single source of truth) so the
 // agentic guard cannot diverge from the commit-time CLI fixer.
 const {
@@ -213,8 +214,13 @@ function run(stdinPayload) {
     }
   }
 
-  let relativePath = path.relative(repoRoot, filePath).replace(/\\/g, "/");
-  if (relativePath.length === 0 || relativePath.startsWith("..")) {
+  const rawRel = path.relative(repoRoot, filePath);
+  // Cross-drive-safe: fall back to the raw path when the file is the repo root
+  // itself or lives outside the repo (on Windows cross-drive, `path.relative`
+  // returns an absolute target, which `isOutsideRelative` detects via
+  // `path.isAbsolute` -- a bare `startsWith("..")` would mislabel it as inside).
+  let relativePath = rawRel.replace(/\\/g, "/");
+  if (rawRel.length === 0 || isOutsideRelative(rawRel)) {
     relativePath = filePath;
   }
 
