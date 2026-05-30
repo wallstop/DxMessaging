@@ -15,7 +15,8 @@ const {
   resolveSpawnCommand,
   resolveSpawnOptions,
   buildSpawnInvocation,
-  spawnPlatformCommandSync
+  spawnPlatformCommandSync,
+  spawnPlatformCommand
 } = require("../lib/shell-command");
 
 describe("shell-command", () => {
@@ -306,5 +307,94 @@ describe("shell-command", () => {
 
       expect(spawnSyncMock).toHaveBeenCalledWith(inv.command, inv.args, inv.options);
     });
+  });
+});
+
+describe("spawnPlatformCommand (async)", () => {
+  const { EventEmitter } = require("events");
+
+  function fakeChild({ status = 0, signal = null, stdout = "", stderr = "", emitError = null }) {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stdout.setEncoding = () => {};
+    child.stderr = new EventEmitter();
+    child.stderr.setEncoding = () => {};
+    process.nextTick(() => {
+      if (emitError) {
+        child.emit("error", emitError);
+        return;
+      }
+      if (stdout) {
+        child.stdout.emit("data", stdout);
+      }
+      if (stderr) {
+        child.stderr.emit("data", stderr);
+      }
+      child.emit("close", status, signal);
+    });
+    return child;
+  }
+
+  test("resolves with status and captured stdout/stderr", async () => {
+    const spawnImpl = () => fakeChild({ status: 0, stdout: "out", stderr: "err" });
+    const result = await spawnPlatformCommand("node", ["x"], {}, spawnImpl, "linux");
+    expect(result).toEqual({ status: 0, signal: null, stdout: "out", stderr: "err", error: null });
+  });
+
+  test("derives the win32 npm invocation from buildSpawnInvocation (no drift from the sync path)", async () => {
+    let captured;
+    const spawnImpl = (command, args, options) => {
+      captured = { command, args, options };
+      return fakeChild({ status: 0 });
+    };
+    await spawnPlatformCommand("npm", ["run", "x"], { cwd: "C:/repo" }, spawnImpl, "win32");
+    const inv = buildSpawnInvocation("npm", ["run", "x"], { cwd: "C:/repo" }, "win32");
+    expect(captured.command).toBe(inv.command);
+    expect(captured.args).toEqual(inv.args);
+    expect(captured.options).toEqual(inv.options);
+  });
+
+  test("passes non-shim commands through unchanged on linux", async () => {
+    let captured;
+    const spawnImpl = (command, args) => {
+      captured = { command, args };
+      return fakeChild({ status: 0 });
+    };
+    await spawnPlatformCommand("git", ["status"], {}, spawnImpl, "linux");
+    expect(captured.command).toBe("git");
+    expect(captured.args).toEqual(["status"]);
+  });
+
+  test("propagates a non-zero exit status", async () => {
+    const spawnImpl = () => fakeChild({ status: 3 });
+    const result = await spawnPlatformCommand("node", ["x"], {}, spawnImpl, "linux");
+    expect(result.status).toBe(3);
+  });
+
+  test("a child 'error' event resolves with the error (never rejects)", async () => {
+    const spawnImpl = () => fakeChild({ emitError: new Error("ENOENT") });
+    const result = await spawnPlatformCommand("nope", [], {}, spawnImpl, "linux");
+    expect(result.status).toBeNull();
+    expect(result.error).toBeInstanceOf(Error);
+  });
+
+  test("a synchronous spawn throw resolves with the error (never rejects)", async () => {
+    const spawnImpl = () => {
+      throw new Error("spawn boom");
+    };
+    const result = await spawnPlatformCommand("node", ["x"], {}, spawnImpl, "linux");
+    expect(result.status).toBeNull();
+    expect(result.error.message).toBe("spawn boom");
+  });
+
+  test("consumes the custom encoding key and does not forward it into spawn options", async () => {
+    let captured;
+    const spawnImpl = (command, args, options) => {
+      captured = options;
+      return fakeChild({ status: 0 });
+    };
+    await spawnPlatformCommand("node", ["x"], { encoding: "utf8", cwd: "/tmp" }, spawnImpl, "linux");
+    expect(captured.encoding).toBeUndefined();
+    expect(captured.cwd).toBe("/tmp");
   });
 });

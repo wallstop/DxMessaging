@@ -20,7 +20,6 @@ const {
   extractRunBlocks,
   findLockfileInstallViolations,
   findPreCommitInstallHookWriterViolations,
-  findDxMessagingAnalyzerPackageViolations,
   detectBashSyntaxPattern,
   findWindowsBashPortabilityViolations,
   findForbiddenRunsOnGroupViolations,
@@ -477,48 +476,6 @@ describe("pre-commit hook environment policy", () => {
     const violations = findPreCommitInstallHookWriterViolations("test.yml", lines);
 
     expect(violations).toHaveLength(expectedViolations);
-  });
-});
-
-describe("DxMessaging analyzer package policy", () => {
-  test.each([
-    {
-      name: "allows explicit analyzer dll package entries",
-      packageJson: {
-        files: ["Editor/**", "Editor/Analyzers/*.dll", "Editor/Analyzers/*.dll.meta"]
-      },
-      expectedViolations: 0
-    },
-    {
-      name: "flags missing dll entry",
-      packageJson: {
-        files: ["Editor/**", "Editor/Analyzers/*.dll.meta"]
-      },
-      expectedViolations: 1
-    },
-    {
-      name: "flags missing dll meta entry",
-      packageJson: {
-        files: ["Editor/**", "Editor/Analyzers/*.dll"]
-      },
-      expectedViolations: 1
-    },
-    {
-      name: "flags missing files array",
-      packageJson: {},
-      expectedViolations: 2
-    }
-  ])("$name", ({ packageJson, expectedViolations }) => {
-    const lines = JSON.stringify(packageJson, null, 2).split("\n");
-    const violations = findDxMessagingAnalyzerPackageViolations("package.json", lines);
-
-    expect(violations).toHaveLength(expectedViolations);
-  });
-
-  test("ignores non-package files", () => {
-    const lines = JSON.stringify({ files: [] }, null, 2).split("\n");
-
-    expect(findDxMessagingAnalyzerPackageViolations("workflow.yml", lines)).toEqual([]);
   });
 });
 

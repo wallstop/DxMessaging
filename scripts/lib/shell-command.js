@@ -135,11 +135,88 @@ function spawnPlatformCommandSync(
   return spawnSyncImpl(invocation.command, invocation.args, invocation.options);
 }
 
+/**
+ * Async sibling of spawnPlatformCommandSync. Spawns a platform-aware child
+ * process and resolves with a spawnSync-shaped result
+ * (`{status, signal, stdout, stderr, error}`). The invocation shape is computed
+ * by the SAME buildSpawnInvocation() as the sync helper, so the Windows
+ * `<ComSpec> /d /s /c npm.cmd ...` wrapping and `windowsHide` are identical to
+ * production and to the cross-platform test expectations -- no drift.
+ *
+ * Used by the parallel pre-push orchestrator (a Promise pool of these). stdout
+ * and stderr are captured to strings (the orchestrator buffers per-lane output
+ * and flushes it atomically so concurrent lanes stay attributable). Pass
+ * `options.encoding` (default "utf8") to control decoding. This NEVER sets
+ * `shell:true`; argv arrays are passed through unescaped exactly like the sync
+ * path.
+ *
+ * @param {string} command - Base command name (for example "node", "npm")
+ * @param {string[]} args - Command arguments
+ * @param {object} options - child_process.spawn options (cwd, env, encoding...)
+ * @param {Function} spawnImpl - Optional spawn implementation for tests
+ * @param {string} platform - Process platform string
+ * @returns {Promise<{status:(number|null), signal:(string|null), stdout:string,
+ *   stderr:string, error:(Error|null)}>} Resolves (never rejects) with the
+ *   process outcome; spawn errors are surfaced as `error`.
+ */
+function spawnPlatformCommand(
+  command,
+  args = [],
+  options = {},
+  spawnImpl = childProcess.spawn,
+  platform = process.platform
+) {
+  const { encoding = "utf8", ...spawnOptions } = options;
+  const invocation = buildSpawnInvocation(command, args, spawnOptions, platform);
+
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawnImpl(invocation.command, invocation.args, invocation.options);
+    } catch (error) {
+      resolve({ status: null, signal: null, stdout: "", stderr: "", error });
+      return;
+    }
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const settle = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+    };
+
+    if (child.stdout) {
+      child.stdout.setEncoding(encoding);
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk;
+      });
+    }
+    if (child.stderr) {
+      child.stderr.setEncoding(encoding);
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+    }
+
+    child.on("error", (error) => {
+      settle({ status: null, signal: null, stdout, stderr, error });
+    });
+    child.on("close", (status, signal) => {
+      settle({ status, signal: signal || null, stdout, stderr, error: null });
+    });
+  });
+}
+
 module.exports = {
   toShellCommand,
   isShellShimCommand,
   resolveSpawnCommand,
   resolveSpawnOptions,
   buildSpawnInvocation,
-  spawnPlatformCommandSync
+  spawnPlatformCommandSync,
+  spawnPlatformCommand
 };

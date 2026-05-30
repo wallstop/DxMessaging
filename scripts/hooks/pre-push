@@ -60,8 +60,15 @@ function main() {
     return doctorStatus;
   }
 
-  process.stdout.write("Running pre-push parity preflight...\n");
-  return run("npm", ["run", "preflight:pre-push"]);
+  // Run the OPTIMIZED parallel executor of the full pre-push parity set (same
+  // coverage as `npm run preflight:pre-push`, but the heavy pre-push hook sweep
+  // and the preflight-only validators run concurrently across cores, the
+  // per-`npm run` wrapper tax is gone for hook lanes, and the whole-repo cspell
+  // run is deduped against the cspell hook). `npm run preflight:pre-push` stays
+  // the byte-for-byte serial parity command for CI and on-demand use; coverage
+  // equivalence is pinned by scripts/__tests__/run-prepush-parallel.test.js.
+  process.stdout.write("Running pre-push parity preflight (parallel)...\n");
+  return run(process.execPath, ["scripts/run-prepush-parallel.js"]);
 }
 
 if (require.main === module) {

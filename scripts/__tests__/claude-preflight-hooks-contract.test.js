@@ -200,6 +200,17 @@ describe("change-aware preflight Claude hooks contract", () => {
     expect(yamlEntry.command).toContain("$CLAUDE_PROJECT_DIR");
   });
 
+  test("PostToolUse has a generalized post-edit-validate guard entry (Edit|Write|MultiEdit)", () => {
+    const commands = flattenHookCommands(parsed.hooks.PostToolUse);
+    const guardEntry = commands.find((c) =>
+      c.command.includes("scripts/hooks/post-edit-validate-guard.js")
+    );
+    expect(guardEntry).toBeDefined();
+    expect(guardEntry.matcher).toBe("Edit|Write|MultiEdit");
+    expect(guardEntry.command).toContain("$CLAUDE_PROJECT_DIR");
+    expect(guardEntry.command.startsWith("node ")).toBe(true);
+  });
+
   test("settings.json has NO permissions key (auto-approval stays out of tracked settings)", () => {
     // context.md:26 -- never commit settings that auto-approve chat-invoked
     // terminal commands. A committed `permissions` block must fail here. The

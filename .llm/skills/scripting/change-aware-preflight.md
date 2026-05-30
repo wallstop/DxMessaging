@@ -159,11 +159,11 @@ exist; otherwise it runs the single relevant pass. This never under-runs.
 
 ### Division of labor
 
-| Layer                  | Scope                      | When               | Behavior                                                                                                                  |
-| ---------------------- | -------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| PreToolUse push-guard  | full (committed + working) | before `git push`  | BLOCKS on `checks-failed` / any `policyFailures`; allows on infra-unavailable with a warning.                             |
-| Stop hook              | worktree only              | end of turn        | ADVISORY ONLY -- emits a `systemMessage`, NEVER `decision:block`, always exits 0. Covers "declared done without pushing". |
-| Native `pre-push` hook | `--all` parity             | real push boundary | The exhaustive, tool-agnostic guarantee (`npm run preflight:pre-push`).                                                   |
+| Layer                  | Scope                      | When               | Behavior                                                                                                                                                                   |
+| ---------------------- | -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PreToolUse push-guard  | full (committed + working) | before `git push`  | BLOCKS on `checks-failed` / any `policyFailures`; allows on infra-unavailable with a warning.                                                                              |
+| Stop hook              | worktree only              | end of turn        | ADVISORY ONLY -- emits a `systemMessage`, NEVER `decision:block`, always exits 0. Covers "declared done without pushing".                                                  |
+| Native `pre-push` hook | `--all` parity             | real push boundary | The exhaustive, tool-agnostic guarantee; delegates to `scripts/run-prepush-parallel.js` (parallel; same coverage as the on-demand/CI serial `npm run preflight:pre-push`). |
 
 Both hooks honor the `DXMSG_PREFLIGHT_ACTIVE=1` re-entrancy sentinel so a `git`
 call made inside preflight is not re-guarded.

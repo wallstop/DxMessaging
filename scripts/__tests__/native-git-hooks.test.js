@@ -51,7 +51,7 @@ describe("native Git hooks", () => {
     expect(frameworkIndex).toBeGreaterThan(ensureIndex);
   });
 
-  test("pre-push hook is a Node wrapper for the full pre-push preflight", () => {
+  test("pre-push hook is a Node wrapper for the parallel full pre-push preflight", () => {
     expect(fs.existsSync(PRE_PUSH_HOOK)).toBe(true);
 
     const content = fs.readFileSync(PRE_PUSH_HOOK, "utf8");
@@ -59,7 +59,11 @@ describe("native Git hooks", () => {
     expect(content).toContain("repair-node-tooling.js");
     expect(content).toContain("ensure-pre-commit.js");
     expect(content).toContain('"doctor"');
-    expect(content).toContain('"preflight:pre-push"');
+    // The hook delegates the full parity sweep to the parallel orchestrator
+    // (same coverage as `npm run preflight:pre-push`, run concurrently). The
+    // serial `preflight:pre-push` npm script remains the on-demand/CI parity
+    // command; coverage equivalence is pinned by run-prepush-parallel.test.js.
+    expect(content).toContain("scripts/run-prepush-parallel.js");
     expect(content).toContain("spawnPlatformCommandSync");
     expect(content).not.toMatch(/\b(?:bash|sh|pwsh|powershell)\b/);
     expect(content).not.toContain("shell: true");
@@ -67,7 +71,7 @@ describe("native Git hooks", () => {
     const repairIndex = content.indexOf("repair-node-tooling.js");
     const ensureIndex = content.indexOf("ensure-pre-commit.js");
     const doctorIndex = content.indexOf('"doctor"');
-    const preflightIndex = content.indexOf('"preflight:pre-push"');
+    const preflightIndex = content.indexOf("scripts/run-prepush-parallel.js");
     expect(repairIndex).toBeGreaterThanOrEqual(0);
     expect(ensureIndex).toBeGreaterThan(repairIndex);
     expect(doctorIndex).toBeGreaterThan(ensureIndex);
