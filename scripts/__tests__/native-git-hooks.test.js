@@ -11,6 +11,7 @@ const childProcess = require("child_process");
 const { installGitHooks } = require("../install-git-hooks");
 const { repairNodeTooling } = require("../repair-node-tooling");
 const { ensurePreCommit, runPreCommit, PACKAGE_SPEC } = require("../ensure-pre-commit");
+const { maskCommentsAndStrings } = require("../lib/source-stripping");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const PRE_COMMIT_HOOK = path.join(REPO_ROOT, "scripts", "hooks", "pre-commit");
@@ -73,6 +74,39 @@ describe("native Git hooks", () => {
     expect(preflightIndex).toBeGreaterThan(doctorIndex);
   });
 
+  test("pre-push runs the doctor with DXMSG_DOCTOR_FAST=1 (perf wiring; ~1.7s budget guard)", () => {
+    // PERF REGRESSION GUARD: the in-hook doctor MUST carry DXMSG_DOCTOR_FAST=1 so
+    // it skips the two redundant git-walk sections (working-tree + changed-docs,
+    // re-run authoritatively by preflight:pre-push). Measured full=~2.0s vs
+    // fast=~0.28s; dropping this env silently reverts the hook to the ~2.0s
+    // git-walk -- a ~1.7s hook-budget regression that every OTHER test would
+    // miss. Pin it structurally: the doctor `run(...)` call carries the env, and
+    // the repair / ensure-pre-commit invocations deliberately do NOT.
+    const content = fs.readFileSync(PRE_PUSH_HOOK, "utf8");
+
+    // The doctor invocation must pass DXMSG_DOCTOR_FAST as the env override
+    // (raw source: the string literals "doctor"/"1" are load-bearing here).
+    expect(content).toMatch(
+      /run\(\s*"npm",\s*\[\s*"run",\s*"doctor"\s*\][^)]*DXMSG_DOCTOR_FAST\s*:\s*"1"/s
+    );
+
+    // And ONLY the doctor: the repair-node-tooling and ensure-pre-commit run(...)
+    // calls must NOT carry DXMSG_DOCTOR_FAST (they intentionally run full so a
+    // fresh clone gets the complete bootstrap). Strip comments first (the
+    // rationale comment legitimately names the env) so we count CODE occurrences
+    // only; in code the env identifier must appear EXACTLY once.
+    const code = maskCommentsAndStrings(content);
+    const codeOccurrences = code.match(/DXMSG_DOCTOR_FAST/g) || [];
+    expect(codeOccurrences).toHaveLength(1);
+
+    // The sole code occurrence sits on the doctor `run(...)` call, which is the
+    // only `run(...)` taking a third (env) argument: assert no env object is
+    // passed to the repair / ensure-pre-commit run(...) calls (they are
+    // two-argument calls). maskCommentsAndStrings blanks string CONTENTS but
+    // preserves the call structure, so a third-arg `{ ... }` would show here.
+    expect(code).toMatch(/run\(\s*process\.execPath,\s*\[[^\]]*\]\s*\)/);
+  });
+
   test("native hook executability is tracked in Git metadata", () => {
     for (const hookPath of ["scripts/hooks/pre-commit", "scripts/hooks/pre-push"]) {
       const result = runGit(["ls-files", "--stage", "--", hookPath], REPO_ROOT);
@@ -115,6 +149,73 @@ describe("native Git hooks", () => {
         attemptNpmCiRecoveryFn: expect.any(Function),
         isAutoRepairAllowedFn: expect.any(Function)
       })
+    );
+  });
+
+  test("repair-node-tooling status is INDEPENDENT of a throwing heal orchestrator (best-effort)", () => {
+    // The heal is best-effort: a throwing healRegenerableCachesFn must NEVER
+    // abort the bootstrap (the first native-pre-push step). It is wrapped in
+    // try/catch so repairNodeTooling still returns the gate-derived status
+    // (0 when the integrity gate is ok), matching the documented contract.
+    const warnFn = jest.fn();
+    const throwingHeal = jest.fn(() => {
+      throw new Error("heal orchestrator blew up");
+    });
+
+    let result;
+    expect(() => {
+      result = repairNodeTooling({
+        env: {},
+        repoRoot: REPO_ROOT,
+        runIntegrityGateWithRecoveryFn: jest.fn(() => ({ ok: true, didRecover: false })),
+        probeIntegrityFn: jest.fn(),
+        probeIntegrityInSubprocessFn: jest.fn(),
+        probeResolverHealthFn: jest.fn(),
+        attemptNpmCiRecoveryFn: jest.fn(),
+        getNpmMajorVersionFn: jest.fn(() => 11),
+        printActionableRepairBannerFn: jest.fn(),
+        healRegenerableCachesFn: throwingHeal,
+        warnFn
+      });
+    }).not.toThrow();
+
+    expect(throwingHeal).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe(0); // gate ok -> 0, despite the heal throw
+    expect(warnFn.mock.calls.some((c) => String(c[0]).includes("heal orchestrator threw"))).toBe(
+      true
+    );
+  });
+
+  test("DXMSG_HOOK_SKIP_INTEGRITY=1 STILL invokes the regenerable-cache heal (orthogonal opt-outs)", () => {
+    // The integrity-gate bypass (DXMSG_HOOK_SKIP_INTEGRITY) and the
+    // regenerable-cache heal opt-out (DXMSG_HOOK_NO_REGENERABLE_HEAL) are
+    // ORTHOGONAL: skipping the expensive node_modules npm-ci probe must NOT
+    // silently disable the cheap, safe tmpdir-cache heal. The heal runs BEFORE
+    // the skip-integrity early return, so it fires even in skip mode. The
+    // integrity gate itself must NOT run (it was skipped).
+    const healFn = jest.fn(() => ({ healed: false, perEntry: [] }));
+    const gateFn = jest.fn(() => ({ ok: true, didRecover: false }));
+    const result = repairNodeTooling({
+      env: { DXMSG_HOOK_SKIP_INTEGRITY: "1" },
+      repoRoot: REPO_ROOT,
+      runIntegrityGateWithRecoveryFn: gateFn,
+      probeIntegrityFn: jest.fn(),
+      probeIntegrityInSubprocessFn: jest.fn(),
+      probeResolverHealthFn: jest.fn(),
+      attemptNpmCiRecoveryFn: jest.fn(),
+      getNpmMajorVersionFn: jest.fn(() => 11),
+      printActionableRepairBannerFn: jest.fn(),
+      healRegenerableCachesFn: healFn,
+      warnFn: jest.fn()
+    });
+
+    expect(result.skipped).toBe(true); // integrity bootstrap was skipped
+    expect(gateFn).not.toHaveBeenCalled(); // the expensive gate did NOT run
+    expect(healFn).toHaveBeenCalledTimes(1); // but the heal STILL ran
+    // The heal is gated only by its OWN opt-out: the call carries the env so
+    // healRegenerableCaches can honor DXMSG_HOOK_NO_REGENERABLE_HEAL itself.
+    expect(healFn).toHaveBeenCalledWith(
+      expect.objectContaining({ env: { DXMSG_HOOK_SKIP_INTEGRITY: "1" } })
     );
   });
 

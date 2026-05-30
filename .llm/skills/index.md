@@ -1,6 +1,6 @@
 # Skills Index
 
-> **Auto-generated** on 2026-05-29. Do not edit manually.
+> **Auto-generated** on 2026-05-30. Do not edit manually.
 > Run `node scripts/generate-skills-index.js` to regenerate.
 
 ---
@@ -141,7 +141,7 @@
 | [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                              | [ok] 159    | [intermediate] | [stable] | [risk: none]   | javascript, code-quality         |
 | [JavaScript Code Quality Practices Part 1](./scripting/javascript-code-quality-part-1.md)                | [ok] 178    | [intermediate] | [stable] | [risk: low]    | migration, split                 |
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]    | migration, split                 |
-| [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 213    | [intermediate] | [stable] | [risk: none]   | jest, pre-commit                 |
+| [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [ok] 251    | [intermediate] | [stable] | [risk: none]   | jest, pre-commit                 |
 | [Let Tools Resolve Modules](./scripting/let-tools-resolve-modules.md)                                    | [ok] 152    | [basic]        | [stable] | [risk: none]   | cross-platform, tooling          |
 | [Native Git Hook Bootstrap](./scripting/native-git-hooks.md)                                             | [draft] 111 | [intermediate] | [stable] | [risk: low]    | git-hooks, cross-platform        |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 106 | [intermediate] | [stable] | [risk: none]   | powershell, scripting            |

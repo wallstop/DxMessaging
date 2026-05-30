@@ -37,6 +37,11 @@ const { stripJsCommentsAndStrings } = require("../lib/source-stripping");
 
 const guard = require("../hooks/preflight-before-push-guard");
 const stop = require("../hooks/preflight-on-stop");
+const preflight = require("../preflight");
+const {
+  ISOLATED_JEST_CACHE_ROOT,
+  REPO_ROOT: RUN_MANAGED_JEST_REPO_ROOT
+} = require("../run-managed-jest");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SETTINGS_PATH = path.join(REPO_ROOT, ".claude", "settings.json");
@@ -474,5 +479,92 @@ describe("change-aware preflight Claude hooks contract", () => {
     } finally {
       process.stdout.write = original;
     }
+  });
+});
+
+describe("preflight.runRecovery regenerable-cache heal (push-guard --no-recover gap)", () => {
+  test("invokes the regenerable-cache heal EVEN when options.recover === false (guard path)", () => {
+    // The PreToolUse push-guard spawns preflight with --no-recover, which skips
+    // the expensive node_modules npm-ci recovery. The regenerable-cache heal
+    // MUST still run (it is placed OUTSIDE the recover gate) or the guard would
+    // never auto-clear the corrupt isolated cache before the native hook fires.
+    const healSpy = jest.fn(() => ({ healed: false, perEntry: [] }));
+    const repairSpy = jest.fn(() => ({ status: 0 }));
+    const ensureSpy = jest.fn(() => ({ ok: true }));
+
+    const result = preflight.runRecovery(
+      { recover: false },
+      {
+        repairNodeToolingFn: repairSpy,
+        ensurePreCommitFn: ensureSpy,
+        healRegenerableCachesFn: healSpy,
+        logFn: () => {},
+        env: {}
+      }
+    );
+
+    // The heal ran; the expensive node_modules repair did NOT (recover:false).
+    expect(healSpy).toHaveBeenCalledTimes(1);
+    expect(repairSpy).not.toHaveBeenCalled();
+    // A heal call must not add an infraReason or change the recovery shape.
+    expect(result.infraReasons).toEqual([]);
+    expect(result.integrity).toBeNull();
+  });
+
+  test("also invokes the heal on the recover path (native hook / Stop hook)", () => {
+    const healSpy = jest.fn(() => ({ healed: false, perEntry: [] }));
+    const repairSpy = jest.fn(() => ({ status: 0 }));
+    const ensureSpy = jest.fn(() => ({ ok: true }));
+
+    preflight.runRecovery(
+      { recover: true },
+      {
+        repairNodeToolingFn: repairSpy,
+        ensurePreCommitFn: ensureSpy,
+        healRegenerableCachesFn: healSpy,
+        logFn: () => {},
+        env: {}
+      }
+    );
+
+    expect(healSpy).toHaveBeenCalledTimes(1);
+    expect(repairSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("a THROWING heal does NOT fail-close runRecovery: the call is wrapped best-effort", () => {
+    // runRecovery wraps the healRegenerableCachesFn call in try/catch, so the
+    // "never adds an infraReason / never changes preflight status" guarantee
+    // holds EVEN IF a future caller passes a raw (non-orchestrator) healer that
+    // throws -- not just the production orchestrator that catches per-entry. We
+    // inject a THROWING fake and assert runRecovery neither propagates the throw
+    // nor records an infraReason.
+    const throwingHeal = jest.fn(() => {
+      throw new Error("heal orchestrator blew up");
+    });
+    const warnings = [];
+    let result;
+    expect(() => {
+      result = preflight.runRecovery(
+        { recover: false },
+        {
+          repairNodeToolingFn: jest.fn(),
+          ensurePreCommitFn: () => ({ ok: true }),
+          healRegenerableCachesFn: throwingHeal,
+          logFn: (m) => warnings.push(String(m)),
+          env: {}
+        }
+      );
+    }).not.toThrow();
+    expect(throwingHeal).toHaveBeenCalledTimes(1);
+    expect(result.infraReasons).toEqual([]);
+    // The swallow is surfaced as a best-effort warning, not a status change.
+    expect(warnings.some((m) => m.includes("heal orchestrator threw"))).toBe(true);
+  });
+
+  test("the regenerable cache root is OUTSIDE the repo (guard/Stop read-only-to-committed-files invariant)", () => {
+    // Purging the cache mutates no tracked/committed file: it resolves to a
+    // '..'-prefixed relative path from the repo root (under os.tmpdir()).
+    const rel = path.relative(RUN_MANAGED_JEST_REPO_ROOT, ISOLATED_JEST_CACHE_ROOT);
+    expect(rel.startsWith("..")).toBe(true);
   });
 });

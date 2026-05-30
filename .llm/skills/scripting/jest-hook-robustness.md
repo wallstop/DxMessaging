@@ -2,9 +2,9 @@
 title: "Jest Hook Robustness"
 id: "jest-hook-robustness"
 category: "scripting"
-version: "1.1.0"
+version: "1.3.0"
 created: "2026-05-18"
-updated: "2026-05-18"
+updated: "2026-05-30"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
@@ -95,8 +95,10 @@ that jest-config's internal validator rejected on Windows drive-letter paths.
 1. Before reporting a hook-adjacent change complete, run
    `npm run preflight:pre-push`.
 1. On `testRunner option was not found` or any `jest-circus` resolution
-   error, run `npm run doctor`; the wrapper self-heals once per run, and the
-   doctor surfaces the manual repair commands when self-heal fails.
+   error, run `npm run repair:node-tooling` (the bootstrap auto-heals the
+   isolated cache) then `npm run doctor`. The doctor is read-only and reports a
+   corrupt regenerable cache as WARN (never a hard FAIL); it never prints a
+   manual `rm`.
 
 ## The failure mode
 
@@ -157,25 +159,58 @@ file gated by `script-parser-tests`, `script-tests`, or
 `unity-contract-tests`, run `npm run preflight:pre-push`. For triage on
 a fresh clone or a flaky workstation, run `npm run doctor` -- it prints
 Node, npm, `jest-circus` install state, and the isolated cache
-directory and reports the manual repair commands listed below.
+directory. A corrupt/partial isolated cache is auto-cleared by
+`npm run repair:node-tooling` (it runs before the doctor in the native hook);
+the doctor only reports it as WARN.
 
-## Hook self-heal protocol
+## Hook self-heal protocol (zero manual touch)
 
-On `testRunner option was not found` or any `jest-circus` resolution failure:
+The isolated managed-Jest cache is a REGENERABLE tmpdir fallback
+(`os.tmpdir()/dxmessaging-managed-jest`), consulted only when the local
+`node_modules` Jest is unhealthy. A corrupt/partial cache is auto-cleared:
 
-1. `scripts/run-managed-jest.js` auto-retries once after clearing the
-   isolated managed cache or rebuilding it. The decoder reads the failing
-   stderr to decide which recovery to attempt.
-1. If the retry fails, the wrapper banner prints the explicit repair
-   commands that match the manual repair procedure below.
-1. Manual repair (only after the wrapper has already failed twice). The first
-   command is cross-platform (Linux, macOS, Windows CMD, Windows PowerShell);
-   run them in order:
-   1. `node -e "require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })"`
-   1. `npm ci`
-   1. `npm run preflight:pre-push`
+1. PROACTIVE: `scripts/repair-node-tooling.js` (run by the native `pre-commit`
+   and `pre-push` hooks, the advisory Stop hook, and `npm run preflight`) calls
+   `healRegenerableCaches`, which path-guard-purges every corrupt install dir
+   under the cache root -- under a distinct cross-process lock, with bounded
+   EPERM/EBUSY retry -- BEFORE the cache is ever consulted. The next
+   managed-Jest run rebuilds it. This runs before `npm run doctor` in the
+   native hook, so the doctor sees a clean (or absent) cache. Corruption shapes
+   it heals: a partial install (missing `jest-circus/build/runner.js`), a
+   zero-byte runner (antivirus/Disk-Cleanup mid-write -- size 0 is treated as a
+   miss, mirroring the integrity gate's empty-file rule), and a stray FILE
+   sitting where the cache directory belongs (an `ENOTDIR` root, cleared via a
+   strict-equality-guarded delete since the strict-descendant guard cannot).
+   HAPPY-PATH COST IS ~0 (cache root absent -> no readdir, no lock). The only
+   non-zero cost is the rare corrupt-AND-locked path, bounded in TWO parts so it
+   stays inside the <1s git-hook budget: lock acquisition is capped at
+   `REGENERABLE_CACHE_HEAL_LOCK_TIMEOUT_MS` (250ms -- best-effort, a wedged peer
+   is abandoned and the reactive tier below clears the cache), and the in-lock
+   per-dir EPERM/EBUSY retry sleep is capped IN AGGREGATE by
+   `REGENERABLE_CACHE_HEAL_PURGE_BUDGET_MS` (600ms shared across all corrupt dirs
+   and the stray-file branch via one budgeted sleep) so N persistently-locked
+   dirs can never stack into N\*backoff. Worst case ~= 250ms + 600ms < 1s; the
+   heal backoff `[200, 400]` is deliberately tighter than the npm-ci
+   `[750, 2000]`.
+1. REACTIVE: if a real Jest run still emits a `jest-circus` resolution failure,
+   `scripts/run-managed-jest.js` decodes the stderr and resets the isolated
+   cache once before retrying (see
+   [Integrity Gate Robustness](./integrity-gate-robustness.md) for the routing).
 1. Never bypass with `git commit --no-verify` or `git push --no-verify`. The
    hook is the gate, not the obstacle.
+
+### Anti-pattern: detection without wired-in automated remediation
+
+A checker that can FAIL on a regenerable/transient artifact while offering only
+a manual command is a defect -- the generalized fixer/checker-divergence
+category: a checker that can fail on a state with no automated path to a clean
+state. Auto-heal-or-downgrade; never a hard gate. The healer MUST clear EVERY
+state the checker can flag (no fixer/checker scope divergence): the
+regenerable-cache healer iterates the exact set of install dirs the doctor
+walks. The doctor stays read-only and reports WARN; the heal lives in
+`repair-node-tooling.js`. See
+[Integrity Gate Robustness](./integrity-gate-robustness.md) for the reactive
+routing.
 
 ## Cross-platform note
 
@@ -206,7 +241,10 @@ the shared helper and case-sensitivity rules.
 
 ## Changelog
 
-| Version | Date       | Changes                                                                                          |
-| ------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| 1.0.0   | 2026-05-18 | Initial version after the pre-push.txt failure.                                                  |
-| 1.1.0   | 2026-05-18 | Added integrity-gate auto-repair flow, state diagram, refusal rules, and environment-var matrix. |
+| Version | Date       | Changes                                                                                                                                                                                                                                                                                                  |
+| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0.0   | 2026-05-18 | Initial version after the pre-push.txt failure.                                                                                                                                                                                                                                                          |
+| 1.1.0   | 2026-05-18 | Added integrity-gate auto-repair flow, state diagram, refusal rules, and environment-var matrix.                                                                                                                                                                                                         |
+| 1.2.0   | 2026-05-30 | Proactive zero-touch isolated-cache heal (registry-driven); doctor downgraded to WARN; removed the manual `rm` repair step; added the detection-without-remediation anti-pattern.                                                                                                                        |
+| 1.3.0   | 2026-05-30 | Documented the heal's two-part wall-time bound: 250ms lock-acquire cap plus a 600ms cumulative in-lock purge-sleep budget (shared across all corrupt dirs) so a persistent Windows lock on N dirs cannot exceed the <1s git-hook target; heal backoff `[200, 400]` is tighter than npm-ci `[750, 2000]`. |
+| 1.3.0   | 2026-05-30 | Heal/checker now cover the zero-byte runner (empty-file rule) and the stray-FILE (`ENOTDIR`) cache root; the readdir host-fault FAIL is gated on fallback relevance.                                                                                                                                     |

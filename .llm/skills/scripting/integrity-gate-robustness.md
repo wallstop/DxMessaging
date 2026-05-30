@@ -158,11 +158,11 @@ CI to fail rather than auto-repair set `DXMSG_HOOK_NO_AUTOREPAIR=1`.
 
 ## Environment variables
 
-| Variable                           | Effect                                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `DXMSG_HOOK_SKIP_INTEGRITY=1`      | Bypass the integrity gate entirely. Tier dispatch runs without any pre-flight probe.                          |
-| `DXMSG_HOOK_NO_AUTOREPAIR=1`       | Still probe, but skip `npm ci` on failure. Proceed to tier dispatch with a degraded gate (banner is printed). |
-| `DXMSG_HOOK_AGGRESSIVE_RECOVERY=1` | `rm -rf node_modules` before `npm ci`. Use when the partial extract has gone past simple `npm ci` recovery.   |
+| Variable                           | Effect                                                                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DXMSG_HOOK_SKIP_INTEGRITY=1`      | Bypass the integrity gate entirely. Tier dispatch runs without any pre-flight probe. Does NOT disable the orthogonal regenerable-cache heal in `repair-node-tooling.js` (that has its own opt-out, `DXMSG_HOOK_NO_REGENERABLE_HEAL`). |
+| `DXMSG_HOOK_NO_AUTOREPAIR=1`       | Still probe, but skip `npm ci` on failure. Proceed to tier dispatch with a degraded gate (banner is printed).                                                                                                                         |
+| `DXMSG_HOOK_AGGRESSIVE_RECOVERY=1` | `rm -rf node_modules` before `npm ci`. Use when the partial extract has gone past simple `npm ci` recovery.                                                                                                                           |
 
 All three honor `isTruthyEnv` semantics from
 `scripts/lib/jest-error-decoder.js`: `0`, `false`, `no`, `off`, and the

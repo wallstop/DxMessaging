@@ -68,6 +68,14 @@ When `scripts/run-managed-jest.js`, `scripts/run-managed-prettier.js`, or
    fails, the wrapper prints the actionable repair banner and exits with
    status 1.
 
+Separately, the isolated managed-Jest fallback cache under the OS temp
+dir is auto-healed: `node scripts/repair-node-tooling.js` (the first
+native pre-push step) and `scripts/preflight.js` both call
+`healRegenerableCaches`, which purges any corrupt/partial
+`<tmpdir>/dxmessaging-managed-jest/jest_<version>` install (or a stray file
+at the cache root) before the read-only doctor inspects it. See
+[Isolated managed-Jest cache (regenerable; auto-healed)](#isolated-managed-jest-cache-regenerable-auto-healed).
+
 The gate emits no `--testRunner` injection at any point; the contract
 documented in
 `.llm/skills/scripting/jest-hook-robustness.md` remains load-bearing.
@@ -84,22 +92,54 @@ The gate refuses to run `npm ci` in any of these states:
 | Mid-rebase (`.git/rebase-apply` exists)  | Finish the rebase, then re-run.                                        |
 | `DXMSG_HOOK_NO_AUTOREPAIR=1` is set      | Either unset the variable or run `npm ci` manually.                    |
 
-## Manual recovery (cross-platform)
+## Isolated managed-Jest cache (regenerable; auto-healed)
 
-If auto-repair is refused or fails, run these commands in order. They
-work on Linux, macOS, Windows CMD, and Windows PowerShell:
+The isolated managed-Jest fallback cache under the OS temp dir
+(`<tmpdir>/dxmessaging-managed-jest`) is a REGENERABLE artifact: the tooling
+rebuilds it on demand. When it is corrupt or partially installed (a Windows
+`%TEMP%` cleaner, antivirus mid-write, Disk Cleanup, or a reboot left a
+half-written `jest_<version>` dir, or a stray file sits where the cache dir
+belongs), the correct response is to PURGE it and let the next managed-Jest run
+rebuild it -- never a manual `rm` gate.
+
+This is fully automated and needs ZERO manual touch. The native pre-push hook
+runs `node scripts/repair-node-tooling.js` first; that calls
+`healRegenerableCaches` (in `scripts/lib/regenerable-cache-registry.js`), which
+auto-clears the corrupt cache BEFORE `npm run doctor` ever inspects it. The
+agentic preflight (`scripts/preflight.js`) fires the same heal. So a corrupt
+isolated cache is purged automatically on the next push or preflight, and the
+read-only doctor reports it as a non-blocking WARN (never a hard FAIL).
+
+To trigger the automated heal explicitly (e.g. before a push):
 
 ```bash
-node -e "require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })"
+npm run repair:node-tooling
+```
+
+## Manual node_modules recovery (cross-platform)
+
+If the `node_modules` integrity auto-repair is refused or fails, run these
+commands in order. They work on Linux, macOS, Windows CMD, and Windows
+PowerShell:
+
+```bash
 npm ci
 node scripts/validate-node-tooling.js
 npm run preflight:pre-push
 ```
 
-The first command clears the isolated managed-Jest cache under the OS
-temp dir. The second reinstalls the repo's `node_modules` from the
-lockfile. The third verifies the install is complete. The fourth runs
-the full pre-push gauntlet.
+The first reinstalls the repo's `node_modules` from the lockfile. The second
+verifies the install is complete. The third runs the full pre-push gauntlet.
+
+If, after the above, a stale isolated managed-Jest cache somehow persists
+(it should already be auto-healed by `npm run repair:node-tooling` above), you
+may clear it directly as a last resort. They work on Linux, macOS, Windows CMD,
+and Windows PowerShell:
+
+```bash
+# last resort only -- npm run repair:node-tooling auto-clears this for you
+node -e "require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })"
+```
 
 ## Aggressive recovery
 

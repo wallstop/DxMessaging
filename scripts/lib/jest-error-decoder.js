@@ -20,19 +20,35 @@
  * not found" sentence) comes before the broader CORRUPT_ISOLATED_CACHE and
  * MISSING_LOCAL_JEST "Cannot find module" patterns. If stderr ever satisfies
  * both, the more-specific MISSING_TEST_RUNNER decode is preferred.
+ *
+ * Repair-command policy: every entry leads with an AUTOMATED, zero-touch
+ * entrypoint (`npm ci` / `node scripts/repair-node-tooling.js`). The corrupt
+ * isolated cache is auto-healed by repair-node-tooling before it is consulted,
+ * so the raw rm one-liner is demoted to a labeled LAST RESORT, never the
+ * advertised first step.
  */
 
 const SKILL_REF = ".llm/skills/scripting/jest-hook-robustness.md";
 const PREFLIGHT_COMMAND = "npm run preflight:pre-push";
 
 /**
- * Cross-platform rm -rf snippet for an isolated managed-jest cache entry.
- *
- * NOTE: this clears the ENTIRE dxmessaging-managed-jest tree, not just the
- * pinned-spec subdirectory that `attemptIsolatedCacheReset()` targets. The
- * user-facing repair hint is broader on purpose: it works regardless of which
- * pinned spec is in play, and it is safe to run when no isolated cache is
- * present. The runtime self-heal path uses the narrower per-spec reset.
+ * Automated, zero-touch repair entrypoint for a corrupt isolated managed-Jest
+ * cache. `repair-node-tooling.js` runs the node_modules integrity gate THEN
+ * `healRegenerableCaches`, which path-guard-purges every corrupt install dir
+ * under the isolated cache root (with EPERM/EBUSY retry) BEFORE the cache is
+ * consulted. This is the PRIMARY, advertised resolution -- the raw rm one-liner
+ * below is a labeled LAST RESORT only.
+ */
+const AUTOMATED_CACHE_REPAIR_COMMAND = "node scripts/repair-node-tooling.js";
+
+/**
+ * Cross-platform rm -rf snippet for the isolated managed-jest cache (LAST
+ * RESORT). Retained for back-compat, but it is NO LONGER the advertised
+ * resolution: the automated heal above clears the same state with zero manual
+ * touch. This clears the ENTIRE dxmessaging-managed-jest tree, not just the
+ * pinned-spec subdirectory that `attemptIsolatedCacheReset()` targets. It works
+ * regardless of which pinned spec is in play and is safe to run when no
+ * isolated cache is present.
  */
 const ISOLATED_CACHE_RESET_COMMAND =
   "node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })\"";
@@ -71,10 +87,15 @@ const PATTERNS = Object.freeze([
       "previous fallback install was interrupted",
       "cache directory was partially deleted"
     ]),
+    // Automated, zero-touch heal FIRST. `repair-node-tooling.js` purges every
+    // corrupt isolated-cache install dir before it is consulted (and the
+    // managed-Jest run then rebuilds it). The raw rm is a labeled LAST RESORT
+    // trailing entry only -- it is no longer the advertised resolution.
     repairCommands: Object.freeze([
-      ISOLATED_CACHE_RESET_COMMAND,
+      AUTOMATED_CACHE_REPAIR_COMMAND,
       "node scripts/run-managed-jest.js --version",
-      PREFLIGHT_COMMAND
+      PREFLIGHT_COMMAND,
+      `(last resort) ${ISOLATED_CACHE_RESET_COMMAND}`
     ]),
     skillRef: SKILL_REF,
     selfHeal: Object.freeze({ isolatedCacheReset: true, retryOnce: true })
@@ -259,5 +280,7 @@ module.exports = {
   PATTERNS,
   decodeJestStderr,
   formatRepairBanner,
-  isTruthyEnv
+  isTruthyEnv,
+  AUTOMATED_CACHE_REPAIR_COMMAND,
+  ISOLATED_CACHE_RESET_COMMAND
 };

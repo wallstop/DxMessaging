@@ -11,8 +11,16 @@
  *      enforces (including jest-circus/runner -- the exact dependency whose
  *      partial install caused the MISSING_TEST_RUNNER stderr that motivated
  *      this phase of work).
- *   2. The isolated managed-Jest cache under os.tmpdir(): does it resolve,
- *      is any entry stale, and what is the manual-reset command?
+ *   2. The isolated managed-Jest cache under os.tmpdir(): does it resolve and
+ *      is any entry stale? This is a REGENERABLE tmpdir fallback consulted by
+ *      run-managed-jest ONLY when local node_modules Jest is unhealthy, so a
+ *      corrupt/partial cache is reported at most WARN (never a hard push-block):
+ *      the bootstrap (repair-node-tooling) auto-clears it before the doctor
+ *      runs, and when local Jest is healthy the fallback is provably never
+ *      consulted (so EVERY branch caps at WARN on that run). The one case that
+ *      stays FAIL is an unreadable cache root (EACCES/EIO -- a host fault, not
+ *      regenerable corruption) WHEN local Jest is also unhealthy; a stray-file
+ *      (ENOTDIR) root is regenerable and stays WARN (auto-healed).
  *   3. The shared EOL policy constants (CRLF/LF extension counts).
  *   4. The pre-commit YAML: hook counts, pre-push subset, cross-reference
  *      with the preflight:pre-push npm script.
@@ -53,7 +61,7 @@ const precommitYaml = require("./lib/precommit-yaml");
 const precommitPerfScore = require("./lib/precommit-perf-score");
 const shellCommand = require("./lib/shell-command");
 const { isTruthyEnv } = require("./lib/jest-error-decoder");
-const { ISOLATED_JEST_CACHE_ROOT } = require("./run-managed-jest");
+const { ISOLATED_JEST_CACHE_ROOT, hasHealthyLocalJestInstall } = require("./run-managed-jest");
 const { INTEGRITY_TARGETS, probeIntegrity } = require("./lib/node-modules-integrity");
 const { runChangedDocValidators } = require("./validate-changed-docs");
 const { findPython, probePreCommitModule } = require("./ensure-pre-commit");
@@ -65,6 +73,15 @@ const PRECOMMIT_CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
 
 const STALE_CACHE_DAYS = 30;
 const STALE_CACHE_MS = STALE_CACHE_DAYS * 24 * 60 * 60 * 1000;
+
+// Hot-path trim: the native pre-push hook sets DXMSG_DOCTOR_FAST=1 for the
+// doctor call ONLY, so the two redundant git-walk sections (working-tree state
+// + changed documentation) are skipped. Those exact validators run
+// authoritatively later in the SAME push via preflight:pre-push
+// (validate:untracked-policy + validate:changed-docs), so the fast path loses
+// ZERO coverage; it removes a ~1.0s re-walk. Standalone `npm run doctor` (no
+// env) keeps full coverage for fresh-clone / flaky-workstation triage.
+const DOCTOR_FAST = isTruthyEnv(process.env.DXMSG_DOCTOR_FAST);
 
 const ANSI_RESET = "\x1b[0m";
 const ANSI_GREEN = "\x1b[32m";
@@ -272,30 +289,59 @@ function checkNodeModulesFreshness(options = {}) {
 }
 
 /**
- * 2. Isolated managed-Jest cache audit.
+ * 2. Isolated managed-Jest cache audit (REGENERABLE tmpdir fallback).
  *    - Lists each install directory under ISOLATED_JEST_CACHE_ROOT.
  *    - For each, verifies jest-circus/runner resolution from inside that dir.
  *    - Flags entries older than STALE_CACHE_DAYS as stale.
- *    - Always prints the manual-reset command, even on a clean cache.
+ *
+ * SEVERITY CONTRACT (zero manual touch): this cache is a regenerable fallback
+ * that run-managed-jest consults ONLY when the local node_modules Jest is
+ * unhealthy. A corrupt/partial entry (missing or zero-byte runner, missing
+ * package.json, or a stray FILE at the cache root) is auto-cleared by
+ * `npm run repair:node-tooling` (native hooks + Stop hook + npm preflight) and
+ * by the agentic preflight BEFORE this read-only probe ever runs; the next
+ * managed-Jest run rebuilds it. So a corrupt regenerable entry -- including an
+ * ENOTDIR stray-file root -- is reported at most WARN, never a push-blocking
+ * FAIL, and the doctor emits NO manual rm command.
+ *
+ * RELEVANCE GATE: when local Jest is healthy the fallback is PROVABLY never
+ * consulted on this run, so EVERY branch caps at WARN -- including a genuine
+ * readdir/stat host read-error (EACCES/EIO), which is then purely
+ * informational. The ONE case that stays FAIL is an unreadable cache root
+ * (EACCES/EIO/other, NOT ENOTDIR) WHEN local Jest is ALSO unhealthy: only then
+ * could the fallback actually be consulted, and a host fault that is not
+ * regenerable corruption and not auto-deletable is a real blocker. The module
+ * stays read-only (it never mutates the cache); the heal lives in
+ * repair-node-tooling.
  */
+function isResolvedRunnerNonEmpty(resolvedRunnerPath, statSyncFn) {
+  try {
+    return statSyncFn(resolvedRunnerPath).size > 0;
+  } catch {
+    // A stat throw on a path existsSync just confirmed (raced away) is treated
+    // as a miss -> WARN, mirroring run-managed-jest's isUsableRunnerFile.
+    return false;
+  }
+}
+
 function checkIsolatedJestCache(options = {}) {
   const {
     readdirSyncFn = fs.readdirSync,
     statSyncFn = fs.statSync,
     existsSyncFn = fs.existsSync,
     createRequireFn = createRequire,
+    hasHealthyLocalJestInstallFn = hasHealthyLocalJestInstall,
     cacheRoot = ISOLATED_JEST_CACHE_ROOT,
     nowMs = Date.now(),
     staleMs = STALE_CACHE_MS
   } = options;
 
   const lines = [];
-  const resetCommand =
-    "node -e \"require('fs').rmSync(require('path').join(require('os').tmpdir(), 'dxmessaging-managed-jest'), { recursive: true, force: true })\"";
+  const autoHealNote =
+    "A corrupt/partial cache is auto-cleared by `npm run repair:node-tooling` and the agentic preflight; the next managed-Jest run rebuilds it.";
 
   if (!existsSyncFn(cacheRoot)) {
     lines.push(`  ok    No isolated managed-Jest cache yet (${cacheRoot} does not exist).`);
-    lines.push(`        Manual reset (safe even when absent): ${resetCommand}`);
     return {
       name: "isolated managed-Jest cache",
       status: "ok",
@@ -307,9 +353,51 @@ function checkIsolatedJestCache(options = {}) {
   try {
     entries = readdirSyncFn(cacheRoot, { withFileTypes: true });
   } catch (error) {
+    const code = error && error.code;
     const detail = error && error.message ? error.message : String(error);
+    const localJestHealthy = hasHealthyLocalJestInstallFn();
+
+    // ENOTDIR: the cache ROOT is a stray FILE, not a directory (botched
+    // extract, a `>` redirect, another tool). This IS regenerable corruption --
+    // the bootstrap's healRegenerableCaches purges the stray file (strict-
+    // equality-guarded) and the next managed-Jest run rebuilds the dir -- so it
+    // is WARN, never a push-blocking FAIL, mirroring the partial-install WARN.
+    if (code === "ENOTDIR") {
+      lines.push(`  warn  Cache root ${cacheRoot} is a stray FILE, not a directory: ${detail}`);
+      lines.push("");
+      if (localJestHealthy) {
+        lines.push(
+          "  info  Local node_modules Jest is healthy; this fallback cache is not consulted on this run."
+        );
+      }
+      lines.push(`  ${autoHealNote}`);
+      return {
+        name: "isolated managed-Jest cache",
+        status: "warn",
+        lines
+      };
+    }
+
+    // Genuine host read-error (EACCES/EIO/other): not regenerable corruption and
+    // not auto-deletable. Relevance gate (mirrors the runner-failure branch): if
+    // local Jest is healthy the fallback is PROVABLY never consulted on this run
+    // (pre-push.txt proof), so an unreadable root is purely informational ->
+    // WARN. It stays FAIL only when local Jest is ALSO unhealthy: then the
+    // fallback could actually be consulted and an unreadable root is a real,
+    // non-auto-fixable blocker that must surface loudly.
+    if (localJestHealthy) {
+      lines.push(`  warn  Could not read cache root ${cacheRoot}: ${detail}`);
+      lines.push("");
+      lines.push(
+        "  info  Local node_modules Jest is healthy; this fallback cache is not consulted on this run."
+      );
+      return {
+        name: "isolated managed-Jest cache",
+        status: "warn",
+        lines
+      };
+    }
     lines.push(`  FAIL  Could not read cache root ${cacheRoot}: ${detail}`);
-    lines.push(`        Manual reset: ${resetCommand}`);
     return {
       name: "isolated managed-Jest cache",
       status: "fail",
@@ -321,7 +409,6 @@ function checkIsolatedJestCache(options = {}) {
 
   if (installDirs.length === 0) {
     lines.push(`  ok    Cache root exists but contains no install dirs (${cacheRoot}).`);
-    lines.push(`        Manual reset: ${resetCommand}`);
     return {
       name: "isolated managed-Jest cache",
       status: "ok",
@@ -345,8 +432,10 @@ function checkIsolatedJestCache(options = {}) {
       ageDays = Math.floor((nowMs - mtimeMs) / (24 * 60 * 60 * 1000));
       stale = nowMs - mtimeMs > staleMs;
     } catch (error) {
+      // A per-dir stat throw is a corrupt/partial regenerable entry (the dir
+      // raced away mid-walk, or is unreadable): WARN, auto-healed out-of-band.
       const detail = error && error.message ? error.message : String(error);
-      lines.push(`  FAIL  ${entry.name}: stat failed (${detail})`);
+      lines.push(`  warn  ${entry.name}: stat failed (${detail})`);
       runnerFailures += 1;
       continue;
     }
@@ -358,27 +447,36 @@ function checkIsolatedJestCache(options = {}) {
         const isolatedRequire = createRequireFn(packageJsonPath);
         const resolved = isolatedRequire.resolve("jest-circus/runner");
         if (!resolved || !existsSyncFn(resolved)) {
-          runnerStatus = "fail";
+          runnerStatus = "warn";
           runnerDetail = `jest-circus/runner resolved to missing path ${resolved || "(null)"}`;
+          runnerFailures += 1;
+        } else if (!isResolvedRunnerNonEmpty(resolved, statSyncFn)) {
+          // Zero-byte runner.js (antivirus/Disk-Cleanup mid-write): present but
+          // empty -> require() loads an empty module and Jest crashes. Mirror
+          // node-modules-integrity's empty-file rule AND run-managed-jest's
+          // isUsableRunnerFile predicate so the doctor flags exactly what the
+          // healer/runner deem corrupt (regenerable -> WARN, auto-healed).
+          runnerStatus = "warn";
+          runnerDetail = `jest-circus/runner resolved to empty (size 0) path ${resolved}`;
           runnerFailures += 1;
         } else {
           runnerDetail = `jest-circus/runner -> ${resolved}`;
         }
       } catch (error) {
-        runnerStatus = "fail";
+        runnerStatus = "warn";
         const message = error && error.message ? error.message : String(error);
         runnerDetail = `jest-circus/runner resolve threw: ${message}`;
         runnerFailures += 1;
       }
     } else {
-      runnerStatus = "fail";
+      runnerStatus = "warn";
       runnerDetail = `package.json missing at ${packageJsonPath}`;
       runnerFailures += 1;
     }
 
     const ageLabel = ageDays === null ? "age=?" : `age=${ageDays}d`;
     const staleLabel = stale ? " STALE" : "";
-    const tag = runnerStatus === "fail" ? "FAIL" : stale ? "warn" : "ok  ";
+    const tag = runnerStatus === "warn" ? "warn" : stale ? "warn" : "ok  ";
     lines.push(`  ${tag}  ${entry.name} (${ageLabel}${staleLabel})`);
     lines.push(`          ${runnerDetail}`);
 
@@ -387,19 +485,28 @@ function checkIsolatedJestCache(options = {}) {
     }
   }
 
-  lines.push("");
-  lines.push(`  Manual reset (clears every install dir under the cache root):`);
-  lines.push(`    ${resetCommand}`);
-
   if (runnerFailures > 0) {
+    // Corrupt/partial REGENERABLE entry: WARN, never a push-blocking FAIL. The
+    // bootstrap auto-clears it before the doctor runs (see header). Relevance
+    // gate: if local Jest is healthy the fallback is PROVABLY never consulted
+    // (pre-push.txt proof), so the WARN is purely informational either way.
+    lines.push("");
+    if (hasHealthyLocalJestInstallFn()) {
+      lines.push(
+        "  info  Local node_modules Jest is healthy; this fallback cache is not consulted on this run."
+      );
+    }
+    lines.push(`  ${autoHealNote}`);
     return {
       name: "isolated managed-Jest cache",
-      status: "fail",
+      status: "warn",
       lines
     };
   }
 
   if (staleCount > 0) {
+    lines.push("");
+    lines.push(`  ${autoHealNote}`);
     return {
       name: "isolated managed-Jest cache",
       status: "warn",
@@ -1092,7 +1199,26 @@ function probeToolVersions(options = {}) {
  *   (see probeToolVersions). When omitted, every section spawns its own
  *   probes; tests can supply deterministic fakes here.
  */
-function runDoctor({ overrides = {}, versionProbes = null } = {}) {
+/**
+ * Build a stable "skipped" section so the report SHAPE stays constant (same
+ * section names, same ordering, still visible in the footer) even when the
+ * hot-path fast mode elides the section's git walk.
+ *
+ * Status is "ok" (NOT a bespoke "info" string): aggregateStatus is fail-safe
+ * and treats any status outside KNOWN_STATUSES as "fail", which would WRONGLY
+ * block the push. The "skipped" intent is carried by the line text; the OK
+ * status keeps it aggregation-neutral. The redundant validators still run
+ * authoritatively in preflight:pre-push on the same push.
+ */
+function skippedSection(name) {
+  return {
+    name,
+    status: "ok",
+    lines: ["  ok    skipped (covered by preflight:pre-push validators)."]
+  };
+}
+
+function runDoctor({ overrides = {}, versionProbes = null, fast = DOCTOR_FAST } = {}) {
   const preCommitOverrides = { ...(overrides.checkPreCommitConfig || {}) };
   const crossPlatformOverrides = { ...(overrides.checkCrossPlatformSanity || {}) };
 
@@ -1108,6 +1234,19 @@ function runDoctor({ overrides = {}, versionProbes = null } = {}) {
     }
   }
 
+  // Hot-path fast mode: SKIP the two redundant git-walk sections
+  // (checkWorkingTreeState ~668ms + checkChangedDocumentation ~360ms). They are
+  // re-run authoritatively in the SAME push by preflight:pre-push
+  // (validate:untracked-policy + validate:changed-docs), so eliding them here
+  // loses ZERO coverage. We emit a visible "skipped" info section for each so
+  // the report shape is stable AND we never even invoke their git runners.
+  const workingTreeSection = fast
+    ? skippedSection("working-tree state")
+    : checkWorkingTreeState(overrides.checkWorkingTreeState || {});
+  const changedDocsSection = fast
+    ? skippedSection("changed documentation validators")
+    : checkChangedDocumentation(overrides.checkChangedDocumentation || {});
+
   const sections = [
     checkNodeModulesFreshness(overrides.checkNodeModulesFreshness || {}),
     checkIsolatedJestCache(overrides.checkIsolatedJestCache || {}),
@@ -1115,8 +1254,8 @@ function runDoctor({ overrides = {}, versionProbes = null } = {}) {
     checkPreCommitConfig(preCommitOverrides),
     checkHookPerfBudget(overrides.checkHookPerfBudget || {}),
     checkCrossPlatformSanity(crossPlatformOverrides),
-    checkWorkingTreeState(overrides.checkWorkingTreeState || {}),
-    checkChangedDocumentation(overrides.checkChangedDocumentation || {})
+    workingTreeSection,
+    changedDocsSection
   ];
 
   const overall = aggregateStatus(sections);

@@ -250,6 +250,12 @@ function acquireRepairLock(repoRoot, options = {}) {
     : DEFAULT_REPAIR_LOCK_TIMEOUT_MS;
   const staleMs = Number.isFinite(options.staleMs) ? options.staleMs : DEFAULT_REPAIR_LOCK_STALE_MS;
   const retryDelayMs = Number.isFinite(options.retryDelayMs) ? options.retryDelayMs : 250;
+  // Caller may supply a distinct lock NAME so independent repair domains (e.g.
+  // the regenerable-cache heal vs node_modules npm-ci recovery) do not
+  // serialize against each other. Defaults to REPAIR_LOCK_NAME so every
+  // existing caller (runLockedNpmCiRecovery, repairNodeTooling) is unchanged.
+  const lockName =
+    typeof options.lockName === "string" && options.lockName ? options.lockName : REPAIR_LOCK_NAME;
   const gitControlDir = resolveGitControlDir(repoRoot, {
     fsModule: {
       statSync: statSyncFn,
@@ -257,7 +263,7 @@ function acquireRepairLock(repoRoot, options = {}) {
     },
     pathModule
   });
-  const lockDir = pathModule.join(gitControlDir, REPAIR_LOCK_NAME);
+  const lockDir = pathModule.join(gitControlDir, lockName);
   const startedAt = nowFn();
   const ownerId = `${process.pid}-${nowFn()}-${Math.random().toString(36).slice(2)}`;
   let warnedWait = false;
@@ -330,13 +336,23 @@ function acquireRepairLock(repoRoot, options = {}) {
 function runWithRepairLock(repoRoot, callbackFn, options = {}) {
   const warnFn = options.warnFn || console.warn;
   const acquireRepairLockFn = options.acquireRepairLockFn || acquireRepairLock;
+  // Spread carries options.lockName (and timeout/stale overrides) through to
+  // acquireRepairLock so a caller can target a distinct, non-serializing lock.
   const lockOptions = { ...options, warnFn };
   delete lockOptions.acquireRepairLockFn;
 
   const lock = acquireRepairLockFn(repoRoot, lockOptions);
   if (!lock || !lock.acquired) {
     const reason = lock && lock.reason ? lock.reason : "no reason";
-    warnFn(`WARNING: unable to acquire node_modules repair lock (${reason}).`);
+    // Name the ACTUAL lock so the contention message is accurate for every
+    // caller, not just the default node_modules-repair one (the regenerable-
+    // cache healer passes a distinct lockName). Falls back to the default
+    // name when the caller did not override it.
+    const reportedLockName =
+      typeof options.lockName === "string" && options.lockName
+        ? options.lockName
+        : REPAIR_LOCK_NAME;
+    warnFn(`WARNING: unable to acquire repair lock '${reportedLockName}' (${reason}).`);
     return { status: 1, error: null, lockFailed: true, reason };
   }
 

@@ -264,8 +264,11 @@ describe("checkNodeModulesFreshness", () => {
 });
 
 describe("checkIsolatedJestCache", () => {
-  function makeStat(mtimeMs) {
-    return { mtimeMs };
+  // size defaults to non-zero so a healthy resolved runner passes the new
+  // zero-byte (empty-file) check; tests that exercise the empty-runner path
+  // override statSyncFn to return { size: 0 } for the runner path explicitly.
+  function makeStat(mtimeMs, size = 1024) {
+    return { mtimeMs, size };
   }
 
   test("returns ok with no-cache message when cache root does not exist", () => {
@@ -284,7 +287,9 @@ describe("checkIsolatedJestCache", () => {
     expect(section.status).toBe("ok");
     const text = section.lines.join("\n");
     expect(text).toContain("No isolated managed-Jest cache yet");
-    expect(text).toContain("Manual reset");
+    // Zero manual touch: the doctor no longer prints a manual rm one-liner for
+    // a regenerable artifact. The bootstrap auto-clears it.
+    expect(text).not.toContain("Manual reset");
   });
 
   test("returns ok when cache root exists but is empty", () => {
@@ -330,7 +335,10 @@ describe("checkIsolatedJestCache", () => {
     expect(text).toContain("age=40d");
   });
 
-  test("returns fail when jest-circus/runner cannot be resolved from the install dir", () => {
+  test("returns WARN (not fail) when jest-circus/runner cannot be resolved (regenerable corruption)", () => {
+    // SEVERITY CONTRACT: a corrupt/partial REGENERABLE isolated cache is never
+    // a push-blocking FAIL. The bootstrap (repair-node-tooling) auto-clears it
+    // before the doctor runs; the doctor reports WARN with NO manual command.
     const now = 1_700_000_000_000;
     const recentMs = now - 1000;
 
@@ -343,18 +351,52 @@ describe("checkIsolatedJestCache", () => {
           throw new Error("Cannot find module 'jest-circus/runner'");
         }
       }),
+      // Pin the relevance gate so the status is host-independent (warn either
+      // way; gate only toggles the info line).
+      hasHealthyLocalJestInstallFn: () => false,
       cacheRoot: "/tmp/dxmessaging-managed-jest",
       nowMs: now
     });
 
-    expect(section.status).toBe("fail");
-    expect(section.lines.join("\n")).toContain("Cannot find module 'jest-circus/runner'");
+    expect(section.status).toBe("warn");
+    const text = section.lines.join("\n");
+    expect(text).toContain("Cannot find module 'jest-circus/runner'");
+    // The diagnostic still prints, but with zero manual recourse.
+    expect(text).not.toContain("Manual reset");
   });
 
-  test("returns fail when readdirSync throws (m4)", () => {
-    // Simulates a read failure mid-flight (EACCES, EIO, etc.). The
-    // section should report fail and surface the underlying error
-    // message; it must not silently treat the cache as empty.
+  test("caps at WARN (never fail) when local Jest is healthy even if the isolated runner is missing", () => {
+    // Relevance gate (pre-push.txt proof): when local node_modules Jest is
+    // healthy the fallback is PROVABLY never consulted, so a corrupt fallback
+    // cache is purely informational -- it must not block the push.
+    const now = 1_700_000_000_000;
+    const section = checkIsolatedJestCache({
+      existsSyncFn: () => true,
+      readdirSyncFn: () => [{ name: "jest_30.3.0", isDirectory: () => true }],
+      statSyncFn: () => makeStat(now - 1000),
+      createRequireFn: () => ({
+        resolve: () => {
+          throw new Error("Cannot find module 'jest-circus/runner'");
+        }
+      }),
+      hasHealthyLocalJestInstallFn: () => true,
+      cacheRoot: "/tmp/dxmessaging-managed-jest",
+      nowMs: now
+    });
+
+    expect(section.status).toBe("warn");
+    expect(section.lines.join("\n")).toContain(
+      "Local node_modules Jest is healthy; this fallback cache is not consulted"
+    );
+  });
+
+  test("returns fail when readdirSync throws EACCES AND local Jest is unhealthy (m4)", () => {
+    // Simulates a read failure mid-flight (EACCES, EIO, etc.) on the cache ROOT.
+    // This is a genuine HOST read-error, not regenerable corruption, and not
+    // auto-deletable. It stays FAIL ONLY when local Jest is ALSO unhealthy --
+    // then the fallback could actually be consulted, so an unreadable root is a
+    // real blocker. The section must surface the underlying error message and
+    // must not silently treat the cache as empty.
     const section = checkIsolatedJestCache({
       existsSyncFn: () => true,
       readdirSyncFn: () => {
@@ -364,6 +406,7 @@ describe("checkIsolatedJestCache", () => {
       },
       statSyncFn: () => makeStat(0),
       createRequireFn: () => ({ resolve: () => "/never" }),
+      hasHealthyLocalJestInstallFn: () => false,
       cacheRoot: "/tmp/dxmessaging-managed-jest",
       nowMs: 1_700_000_000_000
     });
@@ -372,7 +415,91 @@ describe("checkIsolatedJestCache", () => {
     const text = section.lines.join("\n");
     expect(text).toContain("Could not read cache root");
     expect(text).toContain("EACCES: permission denied");
-    expect(text).toContain("Manual reset");
+    // Even on the host-fault FAIL path there is no manual rm one-liner.
+    expect(text).not.toContain("Manual reset");
+  });
+
+  test("readdir EACCES caps at WARN (not fail) when local Jest is HEALTHY (relevance gate)", () => {
+    // WRONG-SEVERITY guard: a host permissions/IO glitch on the REGENERABLE,
+    // irrelevant tmp cache root must NOT hard-block a push that would provably
+    // never consult the fallback. When local Jest is healthy the readdir-error
+    // branch is purely informational -> WARN (mirrors the runner-failure
+    // branch's relevance gate).
+    const section = checkIsolatedJestCache({
+      existsSyncFn: () => true,
+      readdirSyncFn: () => {
+        const err = new Error("EIO: i/o error, scandir");
+        err.code = "EIO";
+        throw err;
+      },
+      statSyncFn: () => makeStat(0),
+      createRequireFn: () => ({ resolve: () => "/never" }),
+      hasHealthyLocalJestInstallFn: () => true,
+      cacheRoot: "/tmp/dxmessaging-managed-jest",
+      nowMs: 1_700_000_000_000
+    });
+
+    expect(section.status).toBe("warn");
+    const text = section.lines.join("\n");
+    expect(text).toContain("Could not read cache root");
+    expect(text).toContain(
+      "Local node_modules Jest is healthy; this fallback cache is not consulted"
+    );
+    expect(text).not.toContain("Manual reset");
+  });
+
+  for (const localJestHealthy of [true, false]) {
+    test(`readdir ENOTDIR (stray FILE at cache root) -> WARN regenerable, never FAIL (localJestHealthy=${localJestHealthy})`, () => {
+      // The cache ROOT is a stray FILE, not a dir: readdir throws ENOTDIR. This
+      // IS regenerable corruption (the bootstrap purges the stray file and the
+      // next run rebuilds the dir), so it is WARN regardless of the relevance
+      // gate -- never a push-blocking FAIL. Contrast with EACCES/EIO above.
+      const section = checkIsolatedJestCache({
+        existsSyncFn: () => true,
+        readdirSyncFn: () => {
+          const err = new Error("ENOTDIR: not a directory, scandir");
+          err.code = "ENOTDIR";
+          throw err;
+        },
+        statSyncFn: () => makeStat(0),
+        createRequireFn: () => ({ resolve: () => "/never" }),
+        hasHealthyLocalJestInstallFn: () => localJestHealthy,
+        cacheRoot: "/tmp/dxmessaging-managed-jest",
+        nowMs: 1_700_000_000_000
+      });
+
+      expect(section.status).toBe("warn");
+      const text = section.lines.join("\n");
+      expect(text).toContain("is a stray FILE, not a directory");
+      // References the automated heal, never a manual rm.
+      expect(text).toContain("auto-cleared");
+      expect(text).not.toContain("Manual reset");
+    });
+  }
+
+  test("returns WARN when the resolved runner is ZERO-BYTE (empty file, antivirus mid-write)", () => {
+    // A jest-circus/build/runner.js that EXISTS but is size 0 is the
+    // antivirus/Disk-Cleanup mid-write class: existsSync passes but require()
+    // would load an empty module and Jest crashes. The doctor treats size 0 as
+    // a miss (mirroring run-managed-jest's isUsableRunnerFile + node-modules-
+    // integrity's empty-file rule) -> regenerable corruption -> WARN.
+    const now = 1_700_000_000_000;
+    const resolvedRunner =
+      "/tmp/dxmessaging-managed-jest/jest_30.3.0/node_modules/jest-circus/build/runner.js";
+    const section = checkIsolatedJestCache({
+      existsSyncFn: () => true, // package.json + runner path both "exist"
+      readdirSyncFn: () => [{ name: "jest_30.3.0", isDirectory: () => true }],
+      statSyncFn: (p) => (p === resolvedRunner ? { size: 0 } : makeStat(now - 1000)),
+      createRequireFn: () => ({ resolve: () => resolvedRunner }),
+      hasHealthyLocalJestInstallFn: () => false,
+      cacheRoot: "/tmp/dxmessaging-managed-jest",
+      nowMs: now
+    });
+
+    expect(section.status).toBe("warn");
+    const text = section.lines.join("\n");
+    expect(text).toContain("empty (size 0)");
+    expect(text).not.toContain("Manual reset");
   });
 
   test("ignores non-directory entries under cache root", () => {
@@ -1230,6 +1357,163 @@ describe("runDoctor aggregator", () => {
     const sanityText = sanitySection.lines.join("\n");
     expect(sanityText).toContain("SENTINEL-PWSH");
     expect(sanityText).toContain("SENTINEL-BASH");
+  });
+
+  test("fast mode skips the two redundant git-walk sections WITHOUT invoking their git runners", () => {
+    // Hot-path trim: with fast:true (DXMSG_DOCTOR_FAST), checkWorkingTreeState
+    // and checkChangedDocumentation are replaced by stable "skipped" sections
+    // and their injected runners are NEVER called (preflight:pre-push re-runs
+    // those validators authoritatively). Inject runners that THROW to prove
+    // they are not invoked.
+    const overrides = {
+      checkNodeModulesFreshness: {
+        toolSpecs: [],
+        existsSyncFn: () => true,
+        requireFn: noopRequire,
+        requireResolveFn: () => "/x",
+        repoRoot: "/repo"
+      },
+      checkIsolatedJestCache: {
+        existsSyncFn: () => false,
+        readdirSyncFn: () => [],
+        statSyncFn: () => ({ mtimeMs: 0 }),
+        cacheRoot: "/never",
+        nowMs: 0
+      },
+      checkEolPolicy: {
+        policy: { crlfExts: new Set([".cs"]), lfExts: new Set([".js"]) }
+      },
+      checkPreCommitConfig: {
+        readFileSyncFn: (filePath) => {
+          if (filePath.endsWith(".pre-commit-config.yaml")) {
+            return "repos: []\n";
+          }
+          return JSON.stringify({
+            scripts: {
+              "preflight:pre-push":
+                "npm run preflight:pre-commit && pre-commit run --hook-stage pre-push --all-files"
+            }
+          });
+        },
+        parsePrecommitYaml: precommitYaml,
+        runCommandFn: () => ({ status: 0, stdout: "pre-commit 4.0.0", error: null })
+      },
+      checkHookPerfBudget: {
+        readFileSyncFn: () => "anything",
+        scoreConfigFn: () => ({
+          totalScore: 0,
+          perHookScores: [],
+          allowList: [],
+          rejections: [],
+          perHookViolations: []
+        }),
+        budget: 10,
+        perHookCeiling: 3
+      },
+      checkCrossPlatformSanity: {
+        platformFn: () => "linux",
+        runCommandFn: () => ({ status: 0, stdout: "x\n", error: null }),
+        readFileSyncFn: () => "{}\n",
+        shellEnv: "/bin/bash"
+      },
+      checkWorkingTreeState: {
+        runCommandFn: () => {
+          throw new Error("checkWorkingTreeState git runner must NOT be called in fast mode");
+        }
+      },
+      checkChangedDocumentation: {
+        runChangedDocValidatorsFn: () => {
+          throw new Error("checkChangedDocumentation runner must NOT be called in fast mode");
+        }
+      }
+    };
+
+    const report = runDoctor({ overrides, fast: true });
+    // Aggregation neutral: skipped sections are OK, so overall stays OK.
+    expect(report.overall).toBe("ok");
+    expect(report.status).toBe(0);
+
+    const wt = report.sections.find((s) => s.name === "working-tree state");
+    const cd = report.sections.find((s) => s.name === "changed documentation validators");
+    // Report shape is stable: both sections still present, both "skipped".
+    expect(wt.status).toBe("ok");
+    expect(cd.status).toBe("ok");
+    expect(wt.lines.join("\n")).toContain("skipped (covered by preflight:pre-push validators)");
+    expect(cd.lines.join("\n")).toContain("skipped (covered by preflight:pre-push validators)");
+  });
+
+  test("non-fast mode (default) still runs the two git-walk sections", () => {
+    // Guard against the fast path silently becoming the default: with fast
+    // unset, the injected runners ARE consulted (here returning clean states).
+    let wtCalled = false;
+    let cdCalled = false;
+    const overrides = {
+      checkNodeModulesFreshness: {
+        toolSpecs: [],
+        existsSyncFn: () => true,
+        requireFn: noopRequire,
+        requireResolveFn: () => "/x",
+        repoRoot: "/repo"
+      },
+      checkIsolatedJestCache: {
+        existsSyncFn: () => false,
+        readdirSyncFn: () => [],
+        statSyncFn: () => ({ mtimeMs: 0 }),
+        cacheRoot: "/never",
+        nowMs: 0
+      },
+      checkEolPolicy: { policy: { crlfExts: new Set([".cs"]), lfExts: new Set([".js"]) } },
+      checkPreCommitConfig: {
+        readFileSyncFn: (filePath) => {
+          if (filePath.endsWith(".pre-commit-config.yaml")) {
+            return "repos: []\n";
+          }
+          return JSON.stringify({
+            scripts: {
+              "preflight:pre-push":
+                "npm run preflight:pre-commit && pre-commit run --hook-stage pre-push --all-files"
+            }
+          });
+        },
+        parsePrecommitYaml: precommitYaml,
+        runCommandFn: () => ({ status: 0, stdout: "pre-commit 4.0.0", error: null })
+      },
+      checkHookPerfBudget: {
+        readFileSyncFn: () => "anything",
+        scoreConfigFn: () => ({
+          totalScore: 0,
+          perHookScores: [],
+          allowList: [],
+          rejections: [],
+          perHookViolations: []
+        }),
+        budget: 10,
+        perHookCeiling: 3
+      },
+      checkCrossPlatformSanity: {
+        platformFn: () => "linux",
+        runCommandFn: () => ({ status: 0, stdout: "x\n", error: null }),
+        readFileSyncFn: () => "{}\n",
+        shellEnv: "/bin/bash"
+      },
+      checkWorkingTreeState: {
+        runCommandFn: () => {
+          wtCalled = true;
+          return { status: 0, stdout: "", error: null, stderr: "" };
+        }
+      },
+      checkChangedDocumentation: {
+        runChangedDocValidatorsFn: () => {
+          cdCalled = true;
+          return { files: [], totalViolations: 0 };
+        }
+      }
+    };
+
+    const report = runDoctor({ overrides, fast: false });
+    expect(report.overall).toBe("ok");
+    expect(wtCalled).toBe(true);
+    expect(cdCalled).toBe(true);
   });
 });
 

@@ -19,10 +19,11 @@ function resolveRepoRoot() {
 
 const REPO_ROOT = resolveRepoRoot();
 
-function run(command, args) {
+function run(command, args, envOverride) {
   const result = spawnPlatformCommandSync(command, args, {
     cwd: REPO_ROOT,
-    stdio: "inherit"
+    stdio: "inherit",
+    ...(envOverride ? { env: { ...process.env, ...envOverride } } : {})
   });
 
   if (result.error && result.error.code === "ENOENT") {
@@ -46,8 +47,15 @@ function main() {
     return preCommitStatus;
   }
 
+  // DXMSG_DOCTOR_FAST=1 for the doctor call ONLY: it skips the two redundant
+  // git-walk sections (working-tree state + changed documentation, ~1.0s) that
+  // preflight:pre-push re-runs authoritatively below
+  // (validate:untracked-policy + validate:changed-docs). This keeps the native
+  // hook under the <1s bootstrap budget without weakening any gate. The repair
+  // step above (which auto-heals the regenerable Jest cache) and ensure-pre-commit
+  // are deliberately NOT given this env.
   process.stdout.write("Running hook environment doctor...\n");
-  const doctorStatus = run("npm", ["run", "doctor"]);
+  const doctorStatus = run("npm", ["run", "doctor"], { DXMSG_DOCTOR_FAST: "1" });
   if (doctorStatus !== 0) {
     return doctorStatus;
   }

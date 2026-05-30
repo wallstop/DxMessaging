@@ -83,6 +83,7 @@ const { computeChangeSet } = require("./lib/changed-files");
 const { stagesInConfig, hookIdsForStage } = require("./lib/precommit-stage-model");
 const { repairNodeTooling } = require("./repair-node-tooling");
 const { ensurePreCommit } = require("./ensure-pre-commit");
+const { healRegenerableCaches } = require("./lib/regenerable-cache-registry");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 
@@ -575,6 +576,7 @@ function runRecovery(options, deps) {
   const {
     repairNodeToolingFn = repairNodeTooling,
     ensurePreCommitFn = ensurePreCommit,
+    healRegenerableCachesFn = healRegenerableCaches,
     logFn = console.error,
     env = process.env
   } = deps;
@@ -591,6 +593,29 @@ function runRecovery(options, deps) {
           : "node_modules integrity gate failed";
       infraReasons.push(reason);
     }
+  }
+
+  // Heal regenerable caches UNCONDITIONALLY -- outside the `options.recover`
+  // gate. The PreToolUse push-guard spawns preflight with --no-recover (so the
+  // expensive npm-ci recovery above is skipped), but a corrupt isolated
+  // managed-Jest cache must STILL be auto-cleared before the native pre-push
+  // hook fires, or the guard would never heal this class. Justified: it is a
+  // ~5ms tmpdir purge (no readdir/lock when the cache root is absent) entirely
+  // unrelated to the npm-ci recovery that --no-recover deliberately skips.
+  // Best-effort: a heal failure NEVER adds an infraReason or changes preflight
+  // status (a regenerable artifact must not fail closed). The cache lives at a
+  // '..'-prefixed path relative to repoRoot (outside the worktree), so purging
+  // it mutates no tracked/committed file -- the guard/Stop read-only-to-the-repo
+  // invariant holds. The default healRegenerableCaches catches per-healer throws
+  // internally, but we wrap the call so the "never changes preflight status"
+  // contract holds even if the orchestrator ITSELF throws (a future bug, or a
+  // raw non-orchestrator healer injected by a future caller): a heal throw must
+  // never fail-close the guard's read-only push check.
+  try {
+    healRegenerableCachesFn({ env, warnFn: logFn });
+  } catch (error) {
+    const detail = error && error.message ? error.message : String(error);
+    logFn(`WARNING: Regenerable-cache heal orchestrator threw (best-effort, ignored): ${detail}`);
   }
 
   const preCommit = ensurePreCommitFn({ logFn, warnFn: logFn });

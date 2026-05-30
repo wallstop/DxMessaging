@@ -83,7 +83,7 @@ The native hook wrappers are intentionally small Node scripts. They avoid Bash, 
 1. Keep dependency repair automatic. Managed Node tools should run the integrity gate and recover with `npm ci` when safe. The `pre-commit` executable is repaired by `scripts/ensure-pre-commit.js`, which uses an existing executable when available and otherwise installs pinned `pre-commit==4.6.0` with Python/pip.
 1. Every mutating pre-commit hook must restage inside the pre-commit process through `scripts/run-and-restage.js` or `scripts/run-and-stage.js`. Do not rely on a native hook retry to stage after pre-commit restores a user's unstaged changes.
 1. `pre-commit` must run `node scripts/repair-node-tooling.js`, then `node scripts/ensure-pre-commit.js`, then delegate to `pre-commit run --hook-stage pre-commit`, retrying the pre-commit stage once so successful restaged auto-fixes do not require a manual second commit attempt.
-1. `pre-push` must run `node scripts/repair-node-tooling.js`, `node scripts/ensure-pre-commit.js`, `npm run doctor`, then `npm run preflight:pre-push`.
+1. `pre-push` must run `node scripts/repair-node-tooling.js`, `node scripts/ensure-pre-commit.js`, `npm run doctor`, then `npm run preflight:pre-push`. It sets `DXMSG_DOCTOR_FAST=1` for the doctor call only (skips the working-tree + changed-docs git walks, which `preflight:pre-push` runs authoritatively), and `repair-node-tooling.js` auto-heals the regenerable isolated-Jest cache before the doctor runs.
 1. `scripts/install-git-hooks.js` must refuse to configure `core.hooksPath` unless every required native hook is present.
 1. `postinstall` may warn, but must not make `npm install` fatal when hook installation cannot run outside a Git worktree.
 

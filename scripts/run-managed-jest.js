@@ -184,36 +184,41 @@ function runCommandCapturingStderr(command, args, spawnOptions = {}) {
 }
 
 /**
- * Delete the isolated managed-Jest install directory for the given spec so
- * the next invocation re-bootstraps from scratch. Returns true on success,
- * false on error (errors are logged via warnFn).
+ * Delete `targetDir` only if it is a STRICT DESCENDANT of `cacheRoot`, with a
+ * bounded EPERM/EBUSY retry. The single guarded-rm primitive shared by
+ * attemptIsolatedCacheReset (per-pinned-spec) AND the regenerable-cache healer
+ * (per-dir under an arbitrary -- possibly sandbox -- cache root). Centralizing
+ * it guarantees BOTH callers enforce the same descendant guard against the
+ * SAME root they intend to operate within (the healer passes the root it
+ * walked, not a hardcoded one), so the deletion scope can never drift.
  *
- * Scoped to the isolated fallback path only; never touches local node_modules.
+ * Safety: refuses the cache root itself (""), bare ".." / any first-segment
+ * ".." parent-traversal, and absolute relatives. A sanitized key like "..foo"
+ * resolves to a legitimate descendant and is allowed (segment-boundary
+ * semantics). This blocks `sanitizeCacheKey("..")` (which preserves "..") from
+ * being weaponized into deleting the cache root's parent (the OS temp dir).
  *
- * Safety: the resolved install directory is validated to be a STRICT
- * descendant of ISOLATED_JEST_CACHE_ROOT before any deletion. This prevents
- * `sanitizeCacheKey("..")` (which preserves "..", since `.` is in the
- * allow-list) from being weaponized into deleting the cache root's parent
- * (typically the OS temp dir).
+ * Windows hardening: %TEMP% cleaners, antivirus, indexers, and Disk Cleanup can
+ * hold a transient handle mid-write (EPERM/EBUSY); the rm retries on those with
+ * a bounded backoff (mirroring attemptNpmCiRecovery's [750, 2000]). ENOENT is a
+ * no-op via force:true; the happy path (first rm succeeds) pays ZERO sleeps; a
+ * non-retryable error fails immediately.
  *
- * @param {string} jestSpec Pinned jest spec (e.g. "jest@30.3.0").
- * @param {object} options Dependency injection options.
- * @returns {boolean}
+ * @returns {boolean} true on deletion (or no-op), false on refusal/failure.
  */
-function attemptIsolatedCacheReset(jestSpec, { rmSyncFn = fs.rmSync, warnFn = console.warn } = {}) {
-  const { installDir } = getIsolatedJestPaths(jestSpec);
-
-  // Defense-in-depth: refuse to delete anything that does not normalize to
-  // a strict descendant of the isolated cache root. This blocks
-  // path-traversal inputs like "..", ".", or absolute paths.
-  const cacheRoot = path.resolve(ISOLATED_JEST_CACHE_ROOT);
-  const resolvedInstallDir = path.resolve(installDir);
-  const relativePath = path.relative(cacheRoot, resolvedInstallDir);
-  // Reject the cache root itself ("") and any genuine parent-traversal
-  // (either bare ".." or any path whose first segment is ".."). The
-  // ".." + path.sep check intentionally rejects only segment-boundary
-  // traversal: a sanitized key like "..foo" is NOT a traversal and
-  // must not trip the guard.
+function removeDirIfStrictDescendant(
+  cacheRoot,
+  targetDir,
+  {
+    rmSyncFn = fs.rmSync,
+    warnFn = console.warn,
+    sleepFn = sleepSync,
+    retryDelaysMs = [750, 2000]
+  } = {}
+) {
+  const resolvedRoot = path.resolve(cacheRoot);
+  const resolvedTarget = path.resolve(targetDir);
+  const relativePath = path.relative(resolvedRoot, resolvedTarget);
   if (
     relativePath === "" ||
     relativePath === ".." ||
@@ -221,21 +226,69 @@ function attemptIsolatedCacheReset(jestSpec, { rmSyncFn = fs.rmSync, warnFn = co
     path.isAbsolute(relativePath)
   ) {
     warnFn(
-      `WARNING: Refusing to reset isolated managed-Jest cache; resolved path is not a descendant of ${toPosixPath(cacheRoot)}: ${toPosixPath(resolvedInstallDir)}`
+      `WARNING: Refusing to reset isolated managed-Jest cache; resolved path is not a descendant of ${toPosixPath(resolvedRoot)}: ${toPosixPath(resolvedTarget)}`
     );
     return false;
   }
 
-  try {
-    rmSyncFn(resolvedInstallDir, { recursive: true, force: true });
-    return true;
-  } catch (error) {
-    const detail = error && error.message ? error.message : String(error);
-    warnFn(
-      `WARNING: Failed to reset isolated managed-Jest cache at ${toPosixPath(resolvedInstallDir)}: ${detail}`
-    );
-    return false;
+  const delays = Array.isArray(retryDelaysMs) ? retryDelaysMs : [];
+  // Attempt 0 plus one retry per configured delay.
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    try {
+      rmSyncFn(resolvedTarget, { recursive: true, force: true });
+      return true;
+    } catch (error) {
+      const code = error && error.code;
+      const detail = error && error.message ? error.message : String(error);
+      const retryable = code === "EPERM" || code === "EBUSY";
+      if (!retryable || attempt >= delays.length) {
+        warnFn(
+          `WARNING: Failed to reset isolated managed-Jest cache at ${toPosixPath(resolvedTarget)}: ${detail}`
+        );
+        return false;
+      }
+      const delayMs = Number(delays[attempt]);
+      if (delayMs > 0) {
+        warnFn(
+          `WARNING: Isolated managed-Jest cache reset hit ${code} at ${toPosixPath(resolvedTarget)}; retrying in ${delayMs}ms.`
+        );
+        sleepFn(delayMs);
+      }
+    }
   }
+
+  return false;
+}
+
+/**
+ * Delete the isolated managed-Jest install directory for the given spec so
+ * the next invocation re-bootstraps from scratch. Returns true on success,
+ * false on error (errors are logged via warnFn).
+ *
+ * Scoped to the isolated fallback path only; never touches local node_modules.
+ * Delegates to the shared removeDirIfStrictDescendant guard against
+ * ISOLATED_JEST_CACHE_ROOT.
+ *
+ * @param {string} jestSpec Pinned jest spec (e.g. "jest@30.3.0").
+ * @param {object} options Dependency injection options.
+ * @returns {boolean}
+ */
+function attemptIsolatedCacheReset(
+  jestSpec,
+  {
+    rmSyncFn = fs.rmSync,
+    warnFn = console.warn,
+    sleepFn = sleepSync,
+    retryDelaysMs = [750, 2000]
+  } = {}
+) {
+  const { installDir } = getIsolatedJestPaths(jestSpec);
+  return removeDirIfStrictDescendant(ISOLATED_JEST_CACHE_ROOT, installDir, {
+    rmSyncFn,
+    warnFn,
+    sleepFn,
+    retryDelaysMs
+  });
 }
 
 /**
@@ -556,9 +609,32 @@ function getIsolatedJestPaths(jestSpec) {
   };
 }
 
+/**
+ * A runner path is USABLE only if it exists AND is non-empty. A zero-byte
+ * runner.js is the antivirus/Disk-Cleanup mid-write failure class that
+ * node-modules-integrity.js already special-cases for the repo tree (empty-file
+ * detection): the file is present so existsSync passes, but `require()` would
+ * load an empty module and Jest would crash with an un-decoded error. Treating
+ * size 0 as a miss keeps the isolated-cache corruption predicate identical to
+ * the repo-tree one, so a zero-byte runner is proactively rebuilt (the resolver
+ * returns null -> the managed-Jest fallback re-bootstraps) and the
+ * regenerable-cache healer purges it instead of surfacing later as a different,
+ * un-decoded Jest crash. A statSync throw (raced-away file) is also a miss.
+ */
+function isUsableRunnerFile(runnerPath, existsSyncFn, statSyncFn) {
+  if (!existsSyncFn(runnerPath)) {
+    return false;
+  }
+  try {
+    return statSyncFn(runnerPath).size > 0;
+  } catch {
+    return false;
+  }
+}
+
 function resolveIsolatedJestRunnerPath(
   installDir,
-  { existsSyncFn = fs.existsSync, createRequireFn = createRequire } = {}
+  { existsSyncFn = fs.existsSync, statSyncFn = fs.statSync, createRequireFn = createRequire } = {}
 ) {
   const packageJsonPath = path.join(installDir, "package.json");
   const defaultRunnerPath = getDefaultIsolatedJestRunnerPath(installDir);
@@ -567,7 +643,7 @@ function resolveIsolatedJestRunnerPath(
     if (existsSyncFn(packageJsonPath)) {
       const isolatedRequire = createRequireFn(packageJsonPath);
       const resolvedRunnerPath = isolatedRequire.resolve("jest-circus/runner");
-      if (existsSyncFn(resolvedRunnerPath)) {
+      if (isUsableRunnerFile(resolvedRunnerPath, existsSyncFn, statSyncFn)) {
         return resolvedRunnerPath;
       }
     }
@@ -575,7 +651,7 @@ function resolveIsolatedJestRunnerPath(
     // Fall back to the legacy internal path for compatibility with older layouts.
   }
 
-  if (existsSyncFn(defaultRunnerPath)) {
+  if (isUsableRunnerFile(defaultRunnerPath, existsSyncFn, statSyncFn)) {
     return defaultRunnerPath;
   }
 
@@ -612,6 +688,7 @@ function prepareIsolatedFallbackJest(
   jestSpec = getPinnedFallbackJestSpec(),
   {
     existsSyncFn = fs.existsSync,
+    statSyncFn = fs.statSync,
     mkdirSyncFn = fs.mkdirSync,
     writeFileSyncFn = fs.writeFileSync,
     rmSyncFn = fs.rmSync,
@@ -628,8 +705,11 @@ function prepareIsolatedFallbackJest(
   } = getIsolatedJestPaths(jestSpec);
 
   const hasCachedJestBin = existsSyncFn(jestBinPath);
+  // Thread statSyncFn so the runner's zero-byte (empty-file) check uses the same
+  // injected stat as the rest of the builder; in production this is fs.statSync.
   const cachedJestRunnerPath = resolveIsolatedJestRunnerPathFn(installDir, {
-    existsSyncFn
+    existsSyncFn,
+    statSyncFn
   });
   const hasCachedJestRunner = typeof cachedJestRunnerPath === "string";
 
@@ -727,7 +807,8 @@ function prepareIsolatedFallbackJest(
   }
 
   const installedJestRunnerPath = resolveIsolatedJestRunnerPathFn(installDir, {
-    existsSyncFn
+    existsSyncFn,
+    statSyncFn
   });
 
   if (!installedJestRunnerPath) {
@@ -1265,6 +1346,7 @@ module.exports = {
   runManagedJest,
   printManagedJestLaunchError,
   attemptIsolatedCacheReset,
+  removeDirIfStrictDescendant,
   attemptNpmCiRecovery,
   getNpmRecoveryCommand,
   runLockedNpmCiRecovery,

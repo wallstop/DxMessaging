@@ -185,15 +185,50 @@ describe("run-managed-jest", () => {
     );
     const resolveFn = jest.fn(() => resolvedRunnerPath);
     const createRequireFn = jest.fn(() => ({ resolve: resolveFn }));
+    // A present runner is non-empty; size>0 so the new zero-byte check passes.
+    const statSyncFn = jest.fn(() => ({ size: 1024 }));
 
     const runnerPath = resolveIsolatedJestRunnerPath(installDir, {
       existsSyncFn,
+      statSyncFn,
       createRequireFn
     });
 
     expect(runnerPath).toBe(resolvedRunnerPath);
     expect(createRequireFn).toHaveBeenCalledWith(packageJsonPath);
     expect(resolveFn).toHaveBeenCalledWith("jest-circus/runner");
+  });
+
+  test("resolveIsolatedJestRunnerPath treats a ZERO-BYTE resolved runner as a miss (empty-file rule)", () => {
+    // A jest-circus/build/runner.js that EXISTS but is size 0 is the
+    // antivirus/Disk-Cleanup mid-write class. existsSync passes but require()
+    // would load an empty module -> Jest crashes. isUsableRunnerFile treats
+    // size 0 as a miss so the fallback re-bootstraps and the healer purges it.
+    const installDir = path.join(ISOLATED_JEST_CACHE_ROOT, "jest_30.3.0");
+    const packageJsonPath = path.join(installDir, "package.json");
+    const resolvedRunnerPath = path.join(
+      installDir,
+      "node_modules",
+      "jest-circus",
+      "build",
+      "runner.js"
+    );
+    const legacyRunnerPath = getDefaultIsolatedJestRunnerPath(installDir);
+    // Both the resolved runner AND the legacy fallback exist but are size 0.
+    const existsSyncFn = jest.fn(
+      (p) => p === packageJsonPath || p === resolvedRunnerPath || p === legacyRunnerPath
+    );
+    const statSyncFn = jest.fn(() => ({ size: 0 }));
+    const createRequireFn = jest.fn(() => ({ resolve: () => resolvedRunnerPath }));
+
+    const runnerPath = resolveIsolatedJestRunnerPath(installDir, {
+      existsSyncFn,
+      statSyncFn,
+      createRequireFn
+    });
+
+    // size 0 -> both the exports-resolved AND legacy paths are misses -> null.
+    expect(runnerPath).toBeNull();
   });
 
   test("resolveIsolatedJestRunnerPath falls back to legacy path when resolution fails", () => {
@@ -203,9 +238,11 @@ describe("run-managed-jest", () => {
     const existsSyncFn = jest.fn(
       (targetPath) => targetPath === packageJsonPath || targetPath === legacyRunnerPath
     );
+    const statSyncFn = jest.fn(() => ({ size: 1024 }));
 
     const runnerPath = resolveIsolatedJestRunnerPath(installDir, {
       existsSyncFn,
+      statSyncFn,
       createRequireFn: () => {
         throw new Error("resolution unavailable");
       }
@@ -220,10 +257,14 @@ describe("run-managed-jest", () => {
     const existsSyncFn = jest.fn(
       (targetPath) => targetPath === jestBinPath || targetPath === jestRunnerPath
     );
+    // The cached runner is present and non-empty (size>0) so the zero-byte
+    // check treats it as usable -> cache hit.
+    const statSyncFn = jest.fn(() => ({ size: 1024 }));
     const runCommandFn = jest.fn();
 
     const result = prepareIsolatedFallbackJest(jestSpec, {
       existsSyncFn,
+      statSyncFn,
       runCommandFn
     });
 
@@ -237,6 +278,16 @@ describe("run-managed-jest", () => {
     const existingPaths = new Set([jestBinPath]);
 
     const existsSyncFn = jest.fn((targetPath) => existingPaths.has(targetPath));
+    // Any path that "exists" reports a non-zero size (a present runner is
+    // non-empty); the zero-byte check uses this injected stat.
+    const statSyncFn = jest.fn((targetPath) => {
+      if (!existingPaths.has(targetPath)) {
+        const err = new Error("ENOENT");
+        err.code = "ENOENT";
+        throw err;
+      }
+      return { size: 1024 };
+    });
     const runCommandFn = jest.fn((_command, _args, options) => {
       expect(options).toEqual(expect.objectContaining({ cwd: installDir }));
       existingPaths.add(jestBinPath);
@@ -246,6 +297,7 @@ describe("run-managed-jest", () => {
 
     const result = prepareIsolatedFallbackJest(jestSpec, {
       existsSyncFn,
+      statSyncFn,
       mkdirSyncFn: jest.fn(),
       writeFileSyncFn: jest.fn(),
       runCommandFn,
@@ -263,6 +315,14 @@ describe("run-managed-jest", () => {
     const existingPaths = new Set();
 
     const existsSyncFn = jest.fn((targetPath) => existingPaths.has(targetPath));
+    const statSyncFn = jest.fn((targetPath) => {
+      if (!existingPaths.has(targetPath)) {
+        const err = new Error("ENOENT");
+        err.code = "ENOENT";
+        throw err;
+      }
+      return { size: 1024 };
+    });
     const mkdirSyncFn = jest.fn();
     const writeFileSyncFn = jest.fn((targetPath) => {
       existingPaths.add(targetPath);
@@ -276,6 +336,7 @@ describe("run-managed-jest", () => {
 
     const result = prepareIsolatedFallbackJest(jestSpec, {
       existsSyncFn,
+      statSyncFn,
       mkdirSyncFn,
       writeFileSyncFn,
       runCommandFn
@@ -307,6 +368,14 @@ describe("run-managed-jest", () => {
     let runnerInstalled = false;
 
     const existsSyncFn = jest.fn((targetPath) => existingPaths.has(targetPath));
+    const statSyncFn = jest.fn((targetPath) => {
+      if (!existingPaths.has(targetPath)) {
+        const err = new Error("ENOENT");
+        err.code = "ENOENT";
+        throw err;
+      }
+      return { size: 1024 };
+    });
     const rmSyncFn = jest.fn((target) => {
       // After rm, the install dir and bin are gone.
       existingPaths.delete(target);
@@ -324,6 +393,7 @@ describe("run-managed-jest", () => {
 
     const result = prepareIsolatedFallbackJest(jestSpec, {
       existsSyncFn,
+      statSyncFn,
       mkdirSyncFn,
       writeFileSyncFn,
       rmSyncFn,
@@ -386,11 +456,13 @@ describe("run-managed-jest", () => {
     const existsSyncFn = jest.fn(
       (targetPath) => targetPath === jestBinPath || targetPath === jestRunnerPath
     );
+    const statSyncFn = jest.fn(() => ({ size: 1024 }));
     const rmSyncFn = jest.fn();
     const runCommandFn = jest.fn();
 
     const result = prepareIsolatedFallbackJest(jestSpec, {
       existsSyncFn,
+      statSyncFn,
       mkdirSyncFn: jest.fn(),
       writeFileSyncFn: jest.fn(),
       rmSyncFn,
@@ -1656,16 +1728,99 @@ describe("run-managed-jest self-heal and decoder integration", () => {
     expect(warnFn).not.toHaveBeenCalled();
   });
 
-  test("attemptIsolatedCacheReset returns false when rm fails", () => {
+  test("attemptIsolatedCacheReset returns false when rm fails with a NON-retryable error (no retry, no sleep)", () => {
+    // A non-EPERM/EBUSY error (e.g. a generic failure with no retryable code)
+    // fails immediately: one rm attempt, one warn, ZERO sleeps.
     const rmSyncFn = jest.fn(() => {
-      throw new Error("EBUSY: resource busy");
+      throw new Error("EROFS: read-only file system");
     });
+    const sleepFn = jest.fn();
     const warnFn = jest.fn();
-    const ok = attemptIsolatedCacheReset("jest@30.3.0", { rmSyncFn, warnFn });
+    const ok = attemptIsolatedCacheReset("jest@30.3.0", { rmSyncFn, warnFn, sleepFn });
 
     expect(ok).toBe(false);
-    expect(warnFn).toHaveBeenCalledTimes(1);
-    expect(warnFn.mock.calls[0][0]).toContain("EBUSY");
+    expect(rmSyncFn).toHaveBeenCalledTimes(1);
+    expect(sleepFn).not.toHaveBeenCalled();
+    expect(warnFn.mock.calls.some((c) => String(c[0]).includes("EROFS"))).toBe(true);
+  });
+
+  test("attemptIsolatedCacheReset does NOT retry or sleep on the happy path", () => {
+    // First rm succeeds -> zero added latency.
+    const rmSyncFn = jest.fn();
+    const sleepFn = jest.fn();
+    const warnFn = jest.fn();
+    const ok = attemptIsolatedCacheReset("jest@30.3.0", {
+      rmSyncFn,
+      warnFn,
+      sleepFn,
+      retryDelaysMs: [750, 2000]
+    });
+
+    expect(ok).toBe(true);
+    expect(rmSyncFn).toHaveBeenCalledTimes(1);
+    expect(sleepFn).not.toHaveBeenCalled();
+    expect(warnFn).not.toHaveBeenCalled();
+  });
+
+  // Windows %TEMP% transient-lock hardening: EPERM/EBUSY are retried with a
+  // bounded backoff. Platform-parameterized so the retry contract is not
+  // assumed to be Linux-only (a stuck antivirus/indexer handle is a Windows
+  // failure mode, but the code path is OS-agnostic).
+  for (const platform of ["linux", "win32", "darwin"]) {
+    for (const code of ["EPERM", "EBUSY"]) {
+      test(`attemptIsolatedCacheReset retries on ${code} then succeeds (platform=${platform})`, () => {
+        withPlatform(platform, () => {
+          let calls = 0;
+          const rmSyncFn = jest.fn(() => {
+            calls += 1;
+            if (calls === 1) {
+              const err = new Error(`${code}: resource busy`);
+              err.code = code;
+              throw err;
+            }
+            // Second attempt succeeds.
+          });
+          const sleepFn = jest.fn();
+          const warnFn = jest.fn();
+
+          const ok = attemptIsolatedCacheReset("jest@30.3.0", {
+            rmSyncFn,
+            warnFn,
+            sleepFn,
+            retryDelaysMs: [750, 2000]
+          });
+
+          expect(ok).toBe(true);
+          expect(rmSyncFn).toHaveBeenCalledTimes(2);
+          expect(sleepFn).toHaveBeenCalledTimes(1);
+          expect(sleepFn).toHaveBeenCalledWith(750);
+        });
+      });
+    }
+  }
+
+  test("attemptIsolatedCacheReset gives up after persistent EPERM and warns", () => {
+    // EPERM on every attempt: 1 initial + 2 retries = 3 rm calls, 2 sleeps,
+    // final return false with a warn naming the error.
+    const rmSyncFn = jest.fn(() => {
+      const err = new Error("EPERM: operation not permitted");
+      err.code = "EPERM";
+      throw err;
+    });
+    const sleepFn = jest.fn();
+    const warnFn = jest.fn();
+
+    const ok = attemptIsolatedCacheReset("jest@30.3.0", {
+      rmSyncFn,
+      warnFn,
+      sleepFn,
+      retryDelaysMs: [750, 2000]
+    });
+
+    expect(ok).toBe(false);
+    expect(rmSyncFn).toHaveBeenCalledTimes(3);
+    expect(sleepFn).toHaveBeenCalledTimes(2);
+    expect(warnFn.mock.calls.some((c) => String(c[0]).includes("EPERM"))).toBe(true);
   });
 
   test("attemptNpmCiRecovery invokes npm ci and returns the runCommand result", () => {
