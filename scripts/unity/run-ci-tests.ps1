@@ -44,19 +44,14 @@ $PSNativeCommandUseErrorActionPreference = $false
 $PackageName = 'com.wallstop-studios.dxmessaging'
 $TestFrameworkVersion = '1.4.5'
 $PerformanceFrameworkVersion = '3.4.2'
-# DxMessaging's own analyzer + source-generator assemblies. These are the DLLs
-# the generated csc.rsp wires in via -a: (see New-CscRspContent below), so they
-# MUST be present in Editor/Analyzers/ for the analyzer/source-generator to load.
-# Editor/Analyzers/ ALSO ships the Roslyn runtime deps
-# (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
-# System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe) alongside
-# these two; this roster is a "must be present" list for the analyzer DLLs and
-# is NOT an exhaustive inventory of Editor/Analyzers/ -- the extra dep DLLs being
-# present is expected and does not affect csc.rsp generation.
-$DxMessagingAnalyzerDllNames = @(
-    'WallstopStudios.DxMessaging.SourceGenerators.dll',
-    'WallstopStudios.DxMessaging.Analyzer.dll'
-)
+# DxMessaging's own analyzer + source-generator assemblies. These MUST be present
+# in Editor/Analyzers/; the harness pre-copies the whole Editor/Analyzers/ roster
+# into the generated project's Assets/Plugins (see Copy-DxMessagingAnalyzersToAssets)
+# and tags these two RoslynAnalyzer, reproducing the single registration that
+# SetupCscRsp makes for real consumers. Editor/Analyzers/ ALSO ships the Roslyn
+# runtime deps (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
+# System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe) the generator
+# loads at compile time; those ride along as plain Editor-only plugins.
 $RequiredDxMessagingAnalyzerDllNames = @(
     'WallstopStudios.DxMessaging.SourceGenerators.dll',
     'WallstopStudios.DxMessaging.Analyzer.dll'
@@ -433,53 +428,168 @@ public static class DxmCiTestConfigurator
 '@
 }
 
-function New-CscRspContent {
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$Project
-    )
+# The two DLLs that MUST be tagged with Unity's "RoslynAnalyzer" asset label in
+# the Assets copy (mirrors SetupCscRsp.AnalyzerLabeledDllNames). The remaining
+# DLLs in Editor/Analyzers/ are the Roslyn runtime the generator loads at compile
+# time; they ride along as plain Editor-only plugins, exactly as SetupCscRsp
+# leaves them.
+$RoslynAnalyzerLabeledDllNames = @(
+    'WallstopStudios.DxMessaging.SourceGenerators.dll',
+    'WallstopStudios.DxMessaging.Analyzer.dll'
+)
 
-    $lines = New-Object System.Collections.Generic.List[string]
+function Assert-DxMessagingAnalyzerDllsPresent {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
     $missingRequired = New-Object System.Collections.Generic.List[string]
-    foreach ($dllName in $DxMessagingAnalyzerDllNames) {
+    foreach ($dllName in $RequiredDxMessagingAnalyzerDllNames) {
         $sourcePath = Join-Path $Root "Editor\Analyzers\$dllName"
-        if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
-            $analyzerPath = ConvertTo-UnityFileUriPath -Path (Resolve-FullPath -Path $sourcePath)
-            $lines.Add("-a:`"$analyzerPath`"")
-        } elseif ($RequiredDxMessagingAnalyzerDllNames -contains $dllName) {
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
             $missingRequired.Add($sourcePath)
         }
     }
 
     if ($missingRequired.Count -gt 0) {
-        throw "Missing required DxMessaging analyzer DLL(s) for generated csc.rsp:`n$($missingRequired.ToArray() -join "`n")"
+        throw "Missing required DxMessaging analyzer DLL(s) in Editor/Analyzers:`n$($missingRequired.ToArray() -join "`n")"
     }
-
-    $ignoreSidecarRelativePath = 'Assets/Editor/DxMessaging.BaseCallIgnore.txt'
-    $ignoreSidecarPath = Join-Path $Project $ignoreSidecarRelativePath
-    if (Test-Path -LiteralPath $ignoreSidecarPath -PathType Leaf) {
-        $lines.Add("-additionalfile:`"$ignoreSidecarRelativePath`"")
-    }
-
-    if ($lines.Count -eq 0) {
-        return ''
-    }
-
-    return (($lines.ToArray() -join [Environment]::NewLine) + [Environment]::NewLine)
 }
 
-function Write-CscRspDiagnostics {
+# Pre-create the SAME Assets/Plugins/Editor/WallstopStudios.DxMessaging/ analyzer
+# copy that the package's Editor/SetupCscRsp.cs makes at editor load, but do it
+# BEFORE Unity launches so the source generator is registered EXACTLY ONCE and is
+# present at the very first compile.
+#
+# WHY: when the package is consumed from Packages/ (the real install shape, and
+# the shape the CI manifest uses via a file: mount), SetupCscRsp copies the
+# analyzer DLLs into the project's Assets and tags the two analyzer DLLs
+# RoslynAnalyzer -- that Assets copy is the single, correct registration. The CI
+# harness USED to ALSO pre-write Assets/csc.rsp with `-a:` entries pointing at the
+# repo's Editor/Analyzers DLLs; combined with SetupCscRsp's Assets copy that fed
+# the SAME generator to the compiler from TWO different physical paths, so Roslyn
+# ran it twice (CS0102 "already contains a definition for 'MessageType'") and
+# Unity 2021 rejected the two same-named DLLs (PrecompiledAssemblyException). The
+# harness now writes NO csc.rsp and instead reproduces the consumer's single
+# registration directly. SetupCscRsp then runs idempotently over the identical
+# copy (its SHA compare + label/importer checks all short-circuit), and its
+# EnsureCscRsp contributes no csc.rsp entry here: SetupCscRsp.GetAnalyzerArguments
+# probes a PHYSICAL path under the project ($(Application.dataPath)/../Packages/
+# com.wallstop-studios.dxmessaging/Editor/Analyzers/...), but a UPM file: package
+# is resolved virtually -- its bytes stay at the repo root and are NOT physically
+# copied under the project's Packages/ -- so File.Exists is false and no -a: line
+# is produced. (Confirmed in the failing CI logs: no "Updated csc.rsp." line and
+# no Packages/-relative -a: arg in any run.)
+function Copy-DxMessagingAnalyzersToAssets {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Project
+    )
+
+    Assert-DxMessagingAnalyzerDllsPresent -Root $Root
+
+    $analyzersDir = Join-Path $Root 'Editor\Analyzers'
+    # SourceGenerators.dll.meta already carries the RoslynAnalyzer label AND the
+    # Editor-only / Standalone-excluded PluginImporter settings SetupCscRsp
+    # converges to, so it is the template for BOTH analyzer DLLs (Analyzer.dll's
+    # own .meta lacks the label). Reusing the package's proven .meta -- changing
+    # only the GUID -- avoids hand-authoring importer YAML that could drift.
+    $analyzerTemplateMeta = Join-Path $analyzersDir 'WallstopStudios.DxMessaging.SourceGenerators.dll.meta'
+    $destDir = Join-Path $Project 'Assets\Plugins\Editor\WallstopStudios.DxMessaging'
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+
+    $copied = New-Object System.Collections.Generic.List[string]
+    foreach ($dll in @(Get-ChildItem -LiteralPath $analyzersDir -Filter '*.dll' -File)) {
+        $destDll = Join-Path $destDir $dll.Name
+
+        # Copy the DLL only when missing or its bytes changed, so reruns against
+        # the cached project do not needlessly invalidate Unity's import cache.
+        $needsCopy = -not (Test-Path -LiteralPath $destDll -PathType Leaf)
+        if (-not $needsCopy) {
+            $needsCopy = (Get-Item -LiteralPath $destDll).Length -ne $dll.Length
+        }
+        if ($needsCopy) {
+            Copy-Item -LiteralPath $dll.FullName -Destination $destDll -Force
+        }
+
+        # Author the .meta only when missing so the GUID -- and thus Unity's asset
+        # identity and import cache -- stays stable across reruns. Fresh GUID so
+        # the Assets copy never collides with the package-resident asset.
+        $destMeta = "$destDll.meta"
+        if (-not (Test-Path -LiteralPath $destMeta -PathType Leaf)) {
+            $isAnalyzer = $RoslynAnalyzerLabeledDllNames -contains $dll.Name
+            $sourceMeta = if ($isAnalyzer) { $analyzerTemplateMeta } else { "$($dll.FullName).meta" }
+            $freshGuid = [guid]::NewGuid().ToString('N')
+            if (Test-Path -LiteralPath $sourceMeta -PathType Leaf) {
+                $metaContent = Get-Content -LiteralPath $sourceMeta -Raw
+                $metaContent = [regex]::Replace(
+                    $metaContent,
+                    '(?m)^guid:\s*[0-9A-Fa-f]+\s*$',
+                    "guid: $freshGuid"
+                )
+            } else {
+                # No shipped .meta to template from. Author a minimal Editor-only
+                # managed-plugin meta, adding the RoslynAnalyzer label only for the
+                # two analyzer DLLs (deps are the Roslyn runtime, not analyzers).
+                $labelBlock = if ($isAnalyzer) { "labels:`n- RoslynAnalyzer`n" } else { '' }
+                $metaContent = @"
+fileFormatVersion: 2
+guid: $freshGuid
+${labelBlock}PluginImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  iconMap: {}
+  executionOrder: {}
+  defineConstraints: []
+  isPreloaded: 0
+  isOverridable: 1
+  isExplicitlyReferenced: 0
+  validateReferences: 1
+  platformData:
+  - first:
+      Any:
+    second:
+      enabled: 0
+      settings: {}
+  - first:
+      Editor: Editor
+    second:
+      enabled: 1
+      settings:
+        DefaultValueInitialized: true
+  userData:
+  assetBundleName:
+  assetBundleVariant:
+"@
+            }
+            Set-Content -LiteralPath $destMeta -Value $metaContent -Encoding UTF8
+        }
+        $copied.Add($dll.Name)
+    }
+
+    Write-Host "::group::DxMessaging analyzer Assets copy"
+    Write-Host "Pre-created the single analyzer registration under $destDir (no csc.rsp is written)."
+    foreach ($name in @($copied | Sort-Object)) {
+        $suffix = if ($RoslynAnalyzerLabeledDllNames -contains $name) { ' [RoslynAnalyzer]' } else { '' }
+        Write-Host "  $name$suffix"
+    }
+    Write-Host "::endgroup::"
+}
+
+function Write-AnalyzerSetupDiagnostics {
     param(
         [Parameter(Mandatory = $true)][string]$Project,
         [string]$LogPath,
         [Parameter(Mandatory = $true)][string]$Label
     )
 
-    $rspPath = Join-Path $Project 'Assets\csc.rsp'
-    $rspExists = Test-Path -LiteralPath $rspPath -PathType Leaf
-    $rspText = if ($rspExists) { Get-Content -LiteralPath $rspPath -Raw } else { '' }
-    $rspHasSourceGenerator = $rspText -match 'WallstopStudios\.DxMessaging\.SourceGenerators\.dll'
-    $rspHasAnalyzer = $rspText -match 'WallstopStudios\.DxMessaging\.Analyzer\.dll'
+    $destDir = Join-Path $Project 'Assets\Plugins\Editor\WallstopStudios.DxMessaging'
+    $sourceGeneratorDll = Join-Path $destDir 'WallstopStudios.DxMessaging.SourceGenerators.dll'
+    $analyzerDll = Join-Path $destDir 'WallstopStudios.DxMessaging.Analyzer.dll'
+
+    $sourceGeneratorLabeled = (Test-Path -LiteralPath "$sourceGeneratorDll.meta" -PathType Leaf) -and
+        ((Get-Content -LiteralPath "$sourceGeneratorDll.meta" -Raw) -match 'RoslynAnalyzer')
+    $analyzerLabeled = (Test-Path -LiteralPath "$analyzerDll.meta" -PathType Leaf) -and
+        ((Get-Content -LiteralPath "$analyzerDll.meta" -Raw) -match 'RoslynAnalyzer')
+
     $logHasSourceGeneratorArg = $false
     $logHasAnalyzerArg = $false
     if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
@@ -488,20 +598,15 @@ function Write-CscRspDiagnostics {
         $logHasAnalyzerArg = $logText -match 'WallstopStudios\.DxMessaging\.Analyzer\.dll'
     }
 
-    Write-Host "::group::DxMessaging compiler response diagnostics ($Label)"
-    Write-Host "csc.rsp exists: $rspExists"
-    Write-Host "csc.rsp has source generator: $rspHasSourceGenerator"
-    Write-Host "csc.rsp has analyzer: $rspHasAnalyzer"
+    Write-Host "::group::DxMessaging analyzer setup diagnostics ($Label)"
+    Write-Host "Assets analyzer copy: RoslynAnalyzer-labeled source generator: $sourceGeneratorLabeled"
+    Write-Host "Assets analyzer copy: RoslynAnalyzer-labeled analyzer: $analyzerLabeled"
     Write-Host "Unity compile log mentioned DxMessaging source-generator arg: $logHasSourceGeneratorArg"
     Write-Host "Unity compile log mentioned DxMessaging analyzer arg: $logHasAnalyzerArg"
-    if ($rspExists) {
-        Write-Host "csc.rsp:"
-        Get-Content -LiteralPath $rspPath
-    }
     Write-Host "::endgroup::"
 
-    if (-not ($rspExists -and $rspHasSourceGenerator -and $rspHasAnalyzer)) {
-        throw "Generated Assets/csc.rsp is missing required DxMessaging source-generator/analyzer entries."
+    if (-not ($sourceGeneratorLabeled -and $analyzerLabeled)) {
+        throw "Generated Assets/Plugins analyzer copy is missing the RoslynAnalyzer-labeled DxMessaging source-generator/analyzer DLLs."
     }
 }
 
@@ -529,8 +634,14 @@ function Initialize-EphemeralProject {
         Set-Content -LiteralPath (Join-Path $project 'ProjectSettings\ProjectVersion.txt') -Encoding UTF8
     New-ConfiguratorSource |
         Set-Content -LiteralPath (Join-Path $project 'Assets\Editor\DxmCiTestConfigurator.cs') -Encoding UTF8
-    New-CscRspContent -Root $Root -Project $project |
-        Set-Content -LiteralPath (Join-Path $project 'Assets\csc.rsp') -Encoding UTF8
+
+    # Register the analyzer/source-generator EXACTLY ONCE by pre-creating the same
+    # Assets/Plugins copy SetupCscRsp makes for consumers (see
+    # Copy-DxMessagingAnalyzersToAssets). The harness intentionally writes NO
+    # Assets/csc.rsp -- a second `-a:` registration there is what duplicated the
+    # generator and broke 2021/2022 play/standalone. SetupCscRsp manages csc.rsp
+    # (only the base-call ignore sidecar) at editor load.
+    Copy-DxMessagingAnalyzersToAssets -Root $Root -Project $project
 
     return $project
 }
@@ -883,6 +994,65 @@ function Invoke-UnityNativeStartupProbe {
     }
 }
 
+# CLASS-OF-ISSUE GUARD: the defect this whole change fixes is a single analyzer
+# DLL handed to the compiler from MORE THAN ONE path (the Assets/Plugins copy plus
+# a duplicate registration). That is invisible in a raw csc command line, so this
+# best-effort scanner reads the Unity compile log, collects every analyzer the
+# compiler was given (-a:/-analyzer:, quoted or not), and -- when the SAME DLL file
+# name came from more than one distinct path -- names the offending DLL and every
+# path. It catches a regression of the project-generation fix loudly. NEVER throws
+# (the caller is already on a throw path).
+function Write-DuplicateAnalyzerDiagnostics {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$LogPath)
+
+    if (-not $LogPath -or -not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+        return
+    }
+
+    try {
+        # -a:"path" / -a:path / -analyzer:"path" / -analyzer:path. Captured lazily
+        # up to the first '.dll' so an unquoted, space-separated token does not
+        # swallow the next argument.
+        $pattern = '-(?:a|analyzer):"?([^"\r\n]+?\.dll)"?(?:"|\s|$)'
+        $pathsByName = @{}
+        $hits = @(
+            Select-String -LiteralPath $LogPath -Pattern $pattern -AllMatches -ErrorAction SilentlyContinue
+        )
+        foreach ($hit in $hits) {
+            foreach ($match in $hit.Matches) {
+                $fullPath = $match.Groups[1].Value.Trim() -replace '\\', '/'
+                if (-not $fullPath) {
+                    continue
+                }
+                $name = Split-Path -Leaf $fullPath
+                if (-not $pathsByName.ContainsKey($name)) {
+                    $pathsByName[$name] = New-Object 'System.Collections.Generic.HashSet[string]'
+                }
+                [void]$pathsByName[$name].Add($fullPath)
+            }
+        }
+
+        $duplicates = @($pathsByName.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
+        if ($duplicates.Count -lt 1) {
+            return
+        }
+
+        Write-Host "::group::Duplicate analyzer registration"
+        foreach ($entry in $duplicates) {
+            $joinedPaths = (@($entry.Value) | Sort-Object) -join '; '
+            Write-CiError ("Analyzer/source-generator '$($entry.Key)' was handed to the compiler from " +
+                "$($entry.Value.Count) distinct paths: $joinedPaths. A source generator that runs more than " +
+                "once emits each member twice (CS0102) and duplicate precompiled assemblies are rejected " +
+                "outright. The harness must register each analyzer DLL EXACTLY ONCE (the pre-created " +
+                "Assets/Plugins copy); it must NOT also wire one via csc.rsp.")
+        }
+        Write-Host "::endgroup::"
+    } catch {
+        Write-Host "::warning::Could not scan for duplicate analyzer registration: $($_.Exception.Message)"
+    }
+}
+
 function Write-UnityResultFailureDiagnostics {
     param(
         [string]$LogPath,
@@ -943,13 +1113,19 @@ function Write-UnityResultFailureDiagnostics {
             if ($logText -match 'Exiting batchmode successfully') {
                 Write-CiError "Unity exited with code 0 but did not write NUnit results. Check the selected assembly list, test platform, and TestRunner log lines above."
             }
+
+            # Name a duplicate analyzer registration (the same generator/analyzer
+            # DLL fed to csc from two paths) -- the precise root cause of the
+            # "Multiple precompiled assemblies" / CS0102 duplicate-'MessageType'
+            # failures this harness change fixes.
+            Write-DuplicateAnalyzerDiagnostics -LogPath $LogPath
         } else {
             Write-Host "Unity log path unavailable or missing: $LogPath"
         }
 
         if ($Project) {
-            $rspPath = Join-Path $Project 'Assets\csc.rsp'
-            Write-Host "Generated csc.rsp exists: $(Test-Path -LiteralPath $rspPath -PathType Leaf)"
+            $analyzerCopyDir = Join-Path $Project 'Assets\Plugins\Editor\WallstopStudios.DxMessaging'
+            Write-Host "Pre-created analyzer copy dir exists: $(Test-Path -LiteralPath $analyzerCopyDir -PathType Container)"
             $scriptAssemblies = Join-Path $Project 'Library\ScriptAssemblies'
             if (Test-Path -LiteralPath $scriptAssemblies -PathType Container) {
                 Write-Host "Script assemblies present:"
@@ -981,7 +1157,7 @@ function Invoke-UnityEditorWithFailureDiagnostics {
     try {
         Invoke-UnityEditor -EditorPath $EditorPath -Arguments $Arguments -Label $Label -LogPath $LogPath
     } catch {
-        Write-CscRspDiagnostics -Project $Project -LogPath $LogPath -Label $CscLabel
+        Write-AnalyzerSetupDiagnostics -Project $Project -LogPath $LogPath -Label $CscLabel
         Write-UnityResultFailureDiagnostics -LogPath $LogPath -Project $Project -Label $DiagnosticsLabel
         throw
     }
@@ -1050,8 +1226,16 @@ Write-Host "LibraryPath: $LibraryPath"
 Write-Host "ArtifactsPath: $ArtifactsPath"
 Write-Host "Manifest:"
 Get-Content -LiteralPath (Join-Path $ProjectPath 'Packages\manifest.json')
-Write-Host "Assets/csc.rsp:"
-Get-Content -LiteralPath (Join-Path $ProjectPath 'Assets\csc.rsp')
+Write-Host "Pre-created analyzer copy (Assets/Plugins/Editor/WallstopStudios.DxMessaging):"
+$analyzerCopyDir = Join-Path $ProjectPath 'Assets\Plugins\Editor\WallstopStudios.DxMessaging'
+if (Test-Path -LiteralPath $analyzerCopyDir -PathType Container) {
+    Get-ChildItem -LiteralPath $analyzerCopyDir -File |
+        Select-Object -ExpandProperty Name |
+        Sort-Object |
+        ForEach-Object { Write-Host "  $_" }
+} else {
+    Write-Host "  (missing)"
+}
 Write-Host "::endgroup::"
 
 if ($GenerateOnly) {
@@ -1174,7 +1358,7 @@ try {
             -Project $ProjectPath `
             -CscLabel 'standalone configure' `
             -DiagnosticsLabel 'Unity standalone configure'
-        Write-CscRspDiagnostics -Project $ProjectPath -LogPath $configureLogPath -Label 'standalone configure'
+        Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $configureLogPath -Label 'standalone configure'
     }
 
     # MUST NOT include '-quit' alongside '-runTests': per the Unity Editor manual
@@ -1205,7 +1389,7 @@ try {
         -Project $ProjectPath `
         -CscLabel "$UnityVersion $TestMode test compile" `
         -DiagnosticsLabel "Unity $UnityVersion $TestMode"
-    Write-CscRspDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion $TestMode test compile"
+    Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion $TestMode test compile"
     Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode" -LogPath $logPath -Project $ProjectPath
 } finally {
     # Deterministic RETURN of the seat on EVERY exit path (clean exit, throw, or a

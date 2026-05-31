@@ -48,14 +48,20 @@ function getActionRunScript(resultsDir, label = "Unity action test") {
     .replaceAll("${{ inputs.label }}", escapePwshDoubleQuoted(label));
 }
 
-function runActionScript(resultsDir, label, cwd) {
+function runActionScript(resultsDir, label, cwd, extraEnv) {
   const script = getActionRunScript(resultsDir, label);
   const harness = path.join(cwd, "verify-unity-results-action.ps1");
   fs.writeFileSync(harness, script, "utf8");
+  // The action maps the `expected-empty` input to the DXM_EXPECTED_EMPTY env in
+  // the step's `env:` block; this spawn harness substitutes only results-dir and
+  // label, so the skip signal must be injected through the environment to
+  // exercise (and pin) the skip-on-empty branch. Always set DXM_EXPECTED_EMPTY
+  // explicitly so an ambient value in the test runner cannot make a case flaky.
   return spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", harness], {
     cwd,
     encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024
+    maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, DXM_EXPECTED_EMPTY: "false", ...(extraEnv || {}) }
   });
 }
 
@@ -129,6 +135,31 @@ describe("verify-unity-results composite action", () => {
     ])("%s", () => {});
     return;
   }
+
+  test("expected-empty=true short-circuits to success even with NO results directory", () => {
+    const workspace = makeWorkspace();
+    const missingDir = path.join(workspace, ".artifacts", "unity", "skipped");
+    // No results dir exists. Normally this is exit 1 ("No artifacts directory"),
+    // but a target that resolved an empty DxMessaging assembly list skipped the
+    // Unity run, so the verifier must report success and explain the skip.
+    const result = runActionScript(missingDir, "Unity 6000 standalone", workspace, {
+      DXM_EXPECTED_EMPTY: "true"
+    });
+    expect(result.status).toBe(0);
+    const out = combinedText(result);
+    expect(out).toMatch(/No DxMessaging test assemblies were selected/i);
+    expect(out).not.toMatch(/No artifacts directory/);
+  });
+
+  test("expected-empty=false does NOT skip -- a missing results directory still fails", () => {
+    const workspace = makeWorkspace();
+    const missingDir = path.join(workspace, ".artifacts", "unity", "notskipped");
+    const result = runActionScript(missingDir, "Unity action test", workspace, {
+      DXM_EXPECTED_EMPTY: "false"
+    });
+    expect(result.status).toBe(1);
+    expect(combinedText(result)).toMatch(/No artifacts directory/);
+  });
 
   test("missing results directory lists provisioning diagnostics when available", () => {
     const workspace = makeWorkspace();

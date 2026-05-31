@@ -58,6 +58,32 @@ const COMPARISON_NAME_REGEX = /(?:Comparisons)/;
 const INTEGRATION_NAME_REGEX = /(?:VContainer|Zenject|Reflex)/;
 
 /**
+ * Assembly-name prefix that marks an asmdef as owned by DxMessaging. The Unity
+ * Test Runner is invoked with an explicit `-assemblyNames` list, so a foreign
+ * test asmdef that happens to live under `Tests/` (for example one pulled in by
+ * an external comparison package, or a stray sample) must never be added to the
+ * list -- it would not compile against the harness manifest and would fail the
+ * run for a reason unrelated to DxMessaging. Every real DxMessaging test
+ * assembly is named `WallstopStudios.DxMessaging.Tests*`, so this owner prefix
+ * is a safe, future-proof gate that is a no-op for the current asmdef set.
+ *
+ * @type {string}
+ */
+const DXMESSAGING_ASSEMBLY_PREFIX = "WallstopStudios.DxMessaging.";
+
+/**
+ * True when `name` is a DxMessaging-owned assembly (see
+ * {@link DXMESSAGING_ASSEMBLY_PREFIX}). Non-string / empty input is treated as
+ * NOT owned so a malformed asmdef can never slip through the include gate.
+ *
+ * @param {string} name - Asmdef assembly name (no extension)
+ * @returns {boolean} True iff the name carries the DxMessaging owner prefix
+ */
+function isDxMessagingOwnedAssembly(name) {
+  return typeof name === "string" && name.startsWith(DXMESSAGING_ASSEMBLY_PREFIX);
+}
+
+/**
  * Recursively enumerate every file path under `dir` whose basename matches
  * `predicate`. Sync. Returns POSIX-style relative paths joined to `dir`.
  *
@@ -151,6 +177,9 @@ function classifyAsmdef(name) {
  * @property {boolean} isComparison - True when classification is "comparison"
  * @property {boolean} isInteg - True when classification is "integration"
  * @property {boolean} isEditorOnly - True iff includePlatforms is exactly ["Editor"]
+ * @property {boolean} isForeign - True when the assembly is NOT DxMessaging-owned
+ *                     (name lacks the `WallstopStudios.DxMessaging.` prefix). Such
+ *                     assemblies are never added to the Unity `-assemblyNames` list.
  */
 
 /**
@@ -197,7 +226,8 @@ function enumerateTestAsmdefs(repoRoot) {
       isPerf: classification === "perf",
       isComparison: classification === "comparison",
       isInteg: classification === "integration",
-      isEditorOnly: readAsmdefIsEditorOnly(asmdefPath)
+      isEditorOnly: readAsmdefIsEditorOnly(asmdefPath),
+      isForeign: !isDxMessagingOwnedAssembly(name)
     };
   });
 
@@ -241,7 +271,15 @@ function defaultIncludeAssemblies(repoRoot, options) {
 
   return enumerateTestAsmdefs(repoRoot)
     .filter((entry) => {
-      // Runtime-only gate first so it composes with the category opt-ins:
+      // Foreign (non-DxMessaging-owned) asmdefs are never added to the Unity
+      // -assemblyNames list: they would not compile against the harness
+      // manifest and would fail the run for a reason unrelated to DxMessaging.
+      // Gated first, ahead of every other decision. A no-op for the current
+      // asmdef set (all entries are DxMessaging-owned).
+      if (entry.isForeign) {
+        return false;
+      }
+      // Runtime-only gate next so it composes with the category opt-ins:
       // editor-only asmdefs cannot run in a built player and are dropped
       // before any perf/comparison/integration decision.
       if (runtimeOnly && entry.isEditorOnly) {
@@ -280,8 +318,13 @@ function defaultExcludeAssemblies(repoRoot, options) {
 
   return enumerateTestAsmdefs(repoRoot)
     .filter((entry) => {
-      // Mirror of defaultIncludeAssemblies: when runtimeOnly is set, every
-      // editor-only asmdef is excluded regardless of category.
+      // Mirror of defaultIncludeAssemblies. Foreign (non-DxMessaging-owned)
+      // asmdefs are never included, so they are always "excluded" here too.
+      if (entry.isForeign) {
+        return true;
+      }
+      // When runtimeOnly is set, every editor-only asmdef is excluded
+      // regardless of category.
       if (runtimeOnly && entry.isEditorOnly) {
         return true;
       }

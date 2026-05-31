@@ -53,8 +53,15 @@ jobs:
       - name: Generate coverage summary
         run: |
           mkdir -p artifacts/coverage
+          # SourceGenerators/Directory.Build.props redirects test output to
+          # .artifacts/$(MSBuildProjectName)/TestResults/, i.e.
+          # .artifacts/WallstopStudios.DxMessaging.SourceGenerators.Tests/TestResults/...
+          # A glob hardcoding ".artifacts/SourceGenerators.Tests/..." misses the
+          # MSBuildProjectName prefix and reportgenerator fails with "found no
+          # matching files". Match any redirected TestResults coverage file so a
+          # future project rename cannot silently break the summary again.
           reportgenerator \
-            -reports:".artifacts/SourceGenerators.Tests/TestResults/**/coverage.cobertura.xml" \
+            -reports:".artifacts/**/TestResults/**/coverage.cobertura.xml" \
             -targetdir:"artifacts/coverage" \
             -reporttypes:"TextSummary;HtmlSummary;Cobertura"
           cat artifacts/coverage/Summary.txt

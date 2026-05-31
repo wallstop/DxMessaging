@@ -232,6 +232,7 @@ jobs:
       # into a composite action so all three Unity workflows share one
       # implementation. shell: pwsh is enforced inside the composite.
       - name: Compute test assembly list
+        id: compute
         uses: ./.github/actions/compute-unity-assemblies
         with:
           runtime-only: "${{ matrix.test-mode == 'standalone' && 'true' || 'false' }}"
@@ -243,7 +244,14 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
 
+      # Skip provisioning, the org lock, and the run when no DxMessaging test
+      # assembly matched this target (compute step resolved an empty list). The
+      # verify step stays !cancelled() (its gate is pinned) but is told the run
+      # was an expected skip via the expected-empty input. This never triggers
+      # for the current asmdef set; it is the robustness path for a target with
+      # no matching assemblies.
       - name: Provision Unity Editor
+        if: ${{ steps.compute.outputs.is-empty != 'true' }}
         timeout-minutes: 180
         shell: pwsh
         run: |
@@ -273,6 +281,7 @@ jobs:
           retention-days: 14
 
       - name: Acquire organization Unity lock
+        if: ${{ steps.compute.outputs.is-empty != 'true' }}
         uses: Ambiguous-Interactive/ambiguous-organization-build-lock/.github/actions/acquire-build-lock@v1
         with:
           lock-name: wallstop-organization-builds
@@ -282,6 +291,7 @@ jobs:
           BUILD_LOCK_TOKEN: ${{ secrets.ORG_BUILD_LOCK_TOKEN }}
 
       - name: Run Unity Test Runner
+        if: ${{ steps.compute.outputs.is-empty != 'true' }}
         timeout-minutes: 120
         shell: pwsh
         env:
@@ -341,6 +351,7 @@ jobs:
         with:
           results-dir: .artifacts/unity/${{ matrix.unity-version }}-${{ matrix.test-mode }}
           label: Unity ${{ matrix.unity-version }} ${{ matrix.test-mode }}
+          expected-empty: ${{ steps.compute.outputs.is-empty }}
 
       - name: Upload Unity test artifacts
         if: always()

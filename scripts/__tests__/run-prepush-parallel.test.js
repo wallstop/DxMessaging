@@ -35,6 +35,12 @@ const {
 } = require("../run-prepush-parallel.js");
 const { hookIdsForStage } = require("../lib/precommit-stage-model.js");
 const { findHookBlock } = require("../lib/precommit-yaml.js");
+// PATH lookups must be case-insensitive: Windows exposes the variable as `Path`,
+// POSIX as `PATH`. The merged spawn-env is a plain object, so a literal
+// `env.PATH` read is case-SENSITIVE and returns undefined on windows-latest even
+// though the child's PATH is intact -- which is exactly what failed this suite on
+// Windows. getPathEnvValue resolves the value under either casing.
+const { getPathEnvValue } = require("../lib/spawn-env-sandbox.js");
 
 const PACKAGE_JSON = path.resolve(__dirname, "..", "..", "package.json");
 const PRE_COMMIT_CONFIG = path.resolve(__dirname, "..", "..", ".pre-commit-config.yaml");
@@ -425,7 +431,8 @@ describe("runPool", () => {
     };
     await runPool([{ id: "x", command: "node", args: ["a"], env: { SKIP: "foo,bar" } }], 1, spawn, () => {});
     expect(capturedOptions.env.SKIP).toBe("foo,bar");
-    expect(capturedOptions.env.PATH).toBe(process.env.PATH);
+    // Case-insensitive: the child must inherit PATH (Windows `Path` / POSIX `PATH`).
+    expect(getPathEnvValue(capturedOptions.env)).toBe(getPathEnvValue(process.env));
   });
 
   test("a spawn error marks the lane failed and is streamed", async () => {

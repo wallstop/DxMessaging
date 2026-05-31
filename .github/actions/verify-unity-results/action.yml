@@ -11,6 +11,14 @@ inputs:
     description: "Human label used in log lines and annotations."
     required: false
     default: "Unity tests"
+  expected-empty:
+    description: >-
+      Set to 'true' by the caller when the DxMessaging test-assembly list
+      resolved EMPTY for this target and the Unity run was intentionally
+      skipped. The verifier then treats the absence of results as an expected
+      skip (notice + success) instead of failing with "tests did not run".
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -24,9 +32,22 @@ runs:
     - name: Verify tests actually ran
       if: ${{ !cancelled() }}
       shell: pwsh
+      env:
+        DXM_EXPECTED_EMPTY: ${{ inputs.expected-empty }}
       run: |
         $dir = "${{ inputs.results-dir }}"
         $label = "${{ inputs.label }}"
+        # When the caller resolved an empty DxMessaging test-assembly list for
+        # this target it skips the Unity run entirely (see compute-unity-assemblies
+        # and unity-tests.yml). There are then no results to verify, so treat it
+        # as an explicit success instead of a "tests did not run" failure. Read
+        # the signal from the environment (NOT an inline ${{ }} expansion) so the
+        # spawn-based verifier tests, which only substitute results-dir/label,
+        # observe an unset var and exercise the normal verification path.
+        if ($env:DXM_EXPECTED_EMPTY -eq 'true') {
+          Write-Host "::notice::No DxMessaging test assemblies were selected for $label; the Unity run was skipped, so there is nothing to verify."
+          exit 0
+        }
         function Write-ProvisioningDiagnosticsHint {
           param([Parameter(Mandatory = $true)][string]$ResultsDir)
 

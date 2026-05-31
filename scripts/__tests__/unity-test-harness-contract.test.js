@@ -55,10 +55,14 @@ describe("generated Unity test harness contract", () => {
       expect(content).toContain("ScriptingImplementation.IL2CPP");
     });
 
-    test("writes DxMessaging analyzer csc.rsp before any Unity compile", () => {
+    test("pre-creates the single Assets/Plugins analyzer copy before any Unity compile", () => {
+      // The harness reproduces the SINGLE registration SetupCscRsp makes for
+      // consumers by pre-creating the Assets/Plugins copy BEFORE Unity launches,
+      // and writes NO csc.rsp (a second `-a:` registration there is what
+      // double-registered the generator and broke 2021/2022 play/standalone).
       const initializeIndex = content.indexOf("function Initialize-EphemeralProject");
-      const cscWriteIndex = content.indexOf(
-        "New-CscRspContent -Root $Root -Project $project",
+      const copyCallIndex = content.indexOf(
+        "Copy-DxMessagingAnalyzersToAssets -Root $Root -Project $project",
         initializeIndex
       );
       const generateOnlyIndex = content.indexOf("if ($GenerateOnly)");
@@ -67,31 +71,40 @@ describe("generated Unity test harness contract", () => {
       );
 
       expect(initializeIndex).toBeGreaterThanOrEqual(0);
-      expect(cscWriteIndex).toBeGreaterThan(initializeIndex);
-      expect(cscWriteIndex).toBeLessThan(generateOnlyIndex);
-      expect(cscWriteIndex).toBeLessThan(firstUnityLaunchIndex);
-      expect(content).toContain("Join-Path $project 'Assets\\csc.rsp'");
+      expect(copyCallIndex).toBeGreaterThan(initializeIndex);
+      expect(copyCallIndex).toBeLessThan(generateOnlyIndex);
+      expect(copyCallIndex).toBeLessThan(firstUnityLaunchIndex);
+      expect(content).toContain("Assets\\Plugins\\Editor\\WallstopStudios.DxMessaging");
+      // The harness must NOT write csc.rsp or generate `-a:` analyzer args -- that
+      // was the duplicate registration. (SetupCscRsp owns csc.rsp at editor load.)
+      expect(content).not.toContain("function New-CscRspContent");
+      expect(content).not.toContain("Join-Path $project 'Assets\\csc.rsp'");
+      expect(content).not.toContain('-a:`"$analyzerPath`"');
     });
 
-    test("generated csc.rsp contains DxMessaging source-generator and analyzer entries", () => {
-      expect(content).toContain("function New-CscRspContent");
+    test("pre-created Assets copy carries the RoslynAnalyzer-labeled DxMessaging DLLs", () => {
+      expect(content).toContain("function Copy-DxMessagingAnalyzersToAssets");
+      expect(content).toContain("function Assert-DxMessagingAnalyzerDllsPresent");
       expect(content).toContain("WallstopStudios.DxMessaging.SourceGenerators.dll");
       expect(content).toContain("WallstopStudios.DxMessaging.Analyzer.dll");
       expect(content).toContain("Missing required DxMessaging analyzer DLL(s)");
-      expect(content).toContain("Resolve-FullPath -Path $sourcePath");
-      expect(content).toContain('-a:`"$analyzerPath`"');
-      expect(content).toContain('-additionalfile:`"$ignoreSidecarRelativePath`"');
+      expect(content).toContain("RoslynAnalyzer");
+      // A fresh GUID per copied .meta so the Assets copy never collides with the
+      // package-resident asset.
+      expect(content).toContain("[guid]::NewGuid().ToString('N')");
     });
 
     test("reports whether Unity compile logs mention DxMessaging analyzer arguments", () => {
-      expect(content).toContain("function Write-CscRspDiagnostics");
-      expect(content).toContain("Generated Assets/csc.rsp is missing required");
+      expect(content).toContain("function Write-AnalyzerSetupDiagnostics");
+      expect(content).toContain(
+        "Generated Assets/Plugins analyzer copy is missing the RoslynAnalyzer-labeled"
+      );
       expect(content).toContain("Unity compile log mentioned DxMessaging source-generator arg");
       expect(content).toContain("Unity compile log mentioned DxMessaging analyzer arg");
-      expect(content).toContain("Write-CscRspDiagnostics -Project $ProjectPath");
+      expect(content).toContain("Write-AnalyzerSetupDiagnostics -Project $ProjectPath");
     });
 
-    test("GenerateOnly writes Assets/csc.rsp with required DxMessaging analyzer entries", () => {
+    test("GenerateOnly pre-creates the labeled Assets/Plugins analyzer copy and writes NO csc.rsp", () => {
       if (!pwshAvailable()) {
         console.warn("[unity-harness-contract] pwsh not found; skipping GenerateOnly assertion.");
         return;
@@ -148,17 +161,32 @@ describe("generated Unity test harness contract", () => {
         );
 
         expect(run.status).toBe(0);
-        const rspPath = path.join(project, "Assets", "csc.rsp");
-        expect(fs.existsSync(rspPath)).toBe(true);
-        const rsp = fs.readFileSync(rspPath, "utf8");
-        const sourceGeneratorPath = path
-          .join(repoRoot, "Editor", "Analyzers", "WallstopStudios.DxMessaging.SourceGenerators.dll")
-          .replace(/\\/g, "/");
-        const analyzerPath = path
-          .join(repoRoot, "Editor", "Analyzers", "WallstopStudios.DxMessaging.Analyzer.dll")
-          .replace(/\\/g, "/");
-        expect(rsp).toContain(`-a:"${sourceGeneratorPath}"`);
-        expect(rsp).toContain(`-a:"${analyzerPath}"`);
+
+        // The harness pre-creates the SINGLE registration: the Assets/Plugins
+        // copy, with the two analyzer DLLs RoslynAnalyzer-labeled. (SetupCscRsp
+        // would make this same copy at editor load for a real consumer.)
+        const copyDir = path.join(
+          project,
+          "Assets",
+          "Plugins",
+          "Editor",
+          "WallstopStudios.DxMessaging"
+        );
+        for (const dllName of [
+          "WallstopStudios.DxMessaging.SourceGenerators.dll",
+          "WallstopStudios.DxMessaging.Analyzer.dll"
+        ]) {
+          const dll = path.join(copyDir, dllName);
+          const meta = `${dll}.meta`;
+          expect(fs.existsSync(dll)).toBe(true);
+          expect(fs.existsSync(meta)).toBe(true);
+          expect(fs.readFileSync(meta, "utf8")).toContain("RoslynAnalyzer");
+        }
+
+        // And it must NOT write Assets/csc.rsp -- a second `-a:` registration
+        // there is exactly what duplicated the generator. (SetupCscRsp manages
+        // csc.rsp at editor load, which -GenerateOnly never reaches.)
+        expect(fs.existsSync(path.join(project, "Assets", "csc.rsp"))).toBe(false);
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
@@ -171,7 +199,7 @@ describe("generated Unity test harness contract", () => {
       expect(content).toContain("$failed -gt 0");
       expect(content).toContain("Write-UnityResultFailureDiagnostics");
       expect(content).toContain("Invoke-UnityEditorWithFailureDiagnostics");
-      expect(content).toContain("Write-CscRspDiagnostics -Project $Project");
+      expect(content).toContain("Write-AnalyzerSetupDiagnostics -Project $Project");
       expect(content).toContain("warning CS8032");
       expect(content).toContain("Unity exited with code 0 but did not write NUnit results");
     });
