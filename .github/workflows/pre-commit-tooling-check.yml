@@ -45,7 +45,17 @@ jobs:
   pre-commit-tooling:
     name: Validate pre-commit tooling (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # This job runs Node-heavy work several times over (npm install, three
+    # pre-push Jest hooks, the full `preflight:pre-push` parity sweep, then the
+    # managed-Jest fallback verification with an isolated `npm install jest`).
+    # The hosted windows-latest runner is ~2x slower at that work than
+    # ubuntu/macos (process spawn + npm I/O), so a single tight job timeout
+    # silently cancels ONLY the Windows leg mid-step ("The operation was
+    # canceled") while ubuntu/macos finish in ~5.5 min. Size the job timeout for
+    # the slowest OS with comfortable headroom (Windows observed ~11-12 min); the
+    # heavy steps below carry their own per-step timeouts so a genuine wedge is
+    # reported as a clear "step timed out" instead of an opaque job cancel.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -173,6 +183,11 @@ jobs:
         # author at the discrepancy. The coverage Jest test catches the
         # static case; this step catches drift the test cannot model
         # (per-platform shell quirks, npm script chaining, env handling).
+        # timeout-minutes: this is the heaviest step (full parity sweep + full
+        # Jest suite). It runs ~5 min on the windows-latest runner; the per-step
+        # timeout allows that with margin but turns a genuine wedge into a clear
+        # "step timed out" signal instead of the opaque job-level cancel.
+        timeout-minutes: 12
         shell: bash
         run: npm run preflight:pre-push
 
@@ -284,12 +299,18 @@ jobs:
         # the local tier remains unhealthy and the isolated-fallback selection
         # diagnostic is emitted. Coverage:
         #   scripts/__tests__/run-managed-jest-fallback-integrity-isolation.test.js.
-        # timeout-minutes: a small assertion that prints --version + greps for
-        # one diagnostic line should never run longer than ~2 minutes. If the
-        # integrity probe wedges (network stall, npm registry hang) the 10-
-        # minute job timeout would obscure the actual cause; a per-step
-        # timeout produces the clear "step timed out" log entry.
-        timeout-minutes: 2
+        # timeout-minutes: this step is where the isolated fallback is actually
+        # MATERIALIZED. With the local runner removed and auto-repair disabled,
+        # `run-managed-jest.js --version` performs a fresh `npm install
+        # jest@<pinned>` into an isolated dir -- ~3s on macos / ~7s on ubuntu but
+        # MUCH slower on windows-latest (npm file I/O). This is exactly where the
+        # old 10-minute JOB timeout fired (windows install still running at ~40s,
+        # opaque "operation was canceled"). Give it a per-step timeout generous
+        # enough for a slow Windows install yet a true subset of the job budget,
+        # so a genuine wedge (registry hang) surfaces as a clear "step timed out"
+        # instead of an opaque job cancel. If the integrity probe ever wedges,
+        # this is the step that catches it.
+        timeout-minutes: 5
         env:
           DXMSG_HOOK_NO_AUTOREPAIR: "1"
         shell: bash
@@ -314,6 +335,17 @@ jobs:
           # scripts/__tests__/run-managed-jest-no-injected-test-runner.test.js.
 
       - name: Verify managed Jest fallback test
+        # Unlike the two steps above, this step runs WITHOUT DXMSG_HOOK_NO_AUTOREPAIR,
+        # so its integrity probe takes the auto-repair path: the local jest-circus
+        # runner was deleted earlier, so run-managed-jest.js runs `npm ci` to
+        # restore the local node_modules and then runs the single named test on
+        # the repaired LOCAL Jest tier (it does NOT use the isolated fallback).
+        # timeout-minutes: the `npm ci` is the heaviest part on windows-latest (a
+        # warm-cache relink of the full tree); size it like the isolated-install
+        # step above -- generous for a slow Windows npm operation, yet a true
+        # subset of the job budget so a wedge is a clear "step timed out" instead
+        # of an opaque job cancel.
+        timeout-minutes: 5
         run: >-
           node scripts/run-managed-jest.js --runTestsByPath
           scripts/__tests__/run-managed-jest.test.js --testNamePattern

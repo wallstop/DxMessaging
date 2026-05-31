@@ -128,5 +128,10 @@ jobs:
         # invocation resolves the same way on windows-latest (Git Bash) as
         # on ubuntu-latest, so a Windows-only quoting or path-shim
         # regression cannot pass CI unnoticed.
+        # timeout-minutes: the heaviest step (full parity sweep + full Jest
+        # suite). The job timeout (30) is generous, but a per-step timeout turns
+        # a genuine wedge into a clear "step timed out" signal instead of an
+        # opaque job-level cancel -- consistent with the other preflight jobs.
+        timeout-minutes: 15
         shell: bash
         run: npm run preflight:pre-push

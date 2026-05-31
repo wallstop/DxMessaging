@@ -39,7 +39,13 @@ jobs:
   preflight:
     name: Preflight (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # Same class as pre-commit-tooling-check.yml: this job runs npm install +
+    # `pre-commit install-hooks` + a targeted regression suite + the full
+    # `preflight:pre-push` parity sweep. The windows-latest runner is ~2x slower
+    # at that work, so a tight job timeout silently cancels only the Windows leg.
+    # Size for the slowest OS with headroom; the heavy preflight step below
+    # carries its own per-step timeout for a clear "step timed out" signal.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -122,5 +128,10 @@ jobs:
             scripts/__tests__/path-containment-policy.test.js
 
       - name: Run pre-push preflight
+        # timeout-minutes: the heaviest step (full parity sweep + full Jest
+        # suite), ~5 min on windows-latest. The per-step timeout allows that with
+        # margin but reports a genuine wedge as a clear "step timed out" instead
+        # of the opaque job-level cancel.
+        timeout-minutes: 12
         shell: bash
         run: npm run preflight:pre-push
