@@ -891,12 +891,16 @@ function Initialize-EphemeralProject {
     New-ConfiguratorSource |
         Set-Content -LiteralPath (Join-Path $project 'Assets\Editor\DxmCiTestConfigurator.cs') -Encoding UTF8
 
-    # Register the analyzer/source-generator EXACTLY ONCE by pre-creating the same
-    # Assets/Plugins copy SetupCscRsp makes for consumers (see
-    # Copy-DxMessagingAnalyzersToAssets). The harness intentionally writes NO
-    # Assets/csc.rsp -- a second `-a:` registration there is what duplicated the
-    # generator and broke 2021/2022 play/standalone. SetupCscRsp manages csc.rsp
-    # (only the base-call ignore sidecar) at editor load.
+    # Pre-create the same Assets/Plugins analyzer copy SetupCscRsp makes for consumers
+    # (see Copy-DxMessagingAnalyzersToAssets) so the source generator is registered at
+    # the very first compile. The analyzer DLLs are excluded from every platform and
+    # activated solely by the RoslynAnalyzer label, so neither this Assets copy nor the
+    # package's own Editor/Analyzers copy is a managed precompiled assembly -- the
+    # Editor-ENABLED duplicate of those same-named DLLs is what aborted Unity 2021 with
+    # "Multiple precompiled assemblies with the same name". The harness writes NO
+    # Assets/csc.rsp; for the CI file: mount SetupCscRsp emits no -a: line anyway (the
+    # package's bytes live at the repo root, outside <project>/Packages, so its
+    # File.Exists probe is false), and it manages only the base-call ignore sidecar.
     Copy-DxMessagingAnalyzersToAssets -Root $Root -Project $project
 
     # STANDALONE ONLY: generate the split-build helpers that sever the test
@@ -1472,8 +1476,12 @@ function Invoke-StandaloneTestPlayer {
     # PlayerConnection): the player-side TestRunCallback writes NUnit XML to the
     # -dxmTestResults path and quits 0/1/2/3. The exe is launched under the hard
     # tree-kill watchdog so a hung player is killed long before the GitHub step is
-    # cancelled. The caller ALWAYS validates the FILE next (Test-NUnitResults); the
-    # exit code only fast-fails the missing-results case.
+    # cancelled. Returns @{ ExitCode; TimedOut }. The FILE is the source of truth: the
+    # caller validates results.xml and treats a watchdog timeout as fatal ONLY when no
+    # usable results file was written (a player can finish writing results in
+    # RunFinished and then have Application.Quit deferred in -batchmode IL2CPP, which
+    # the watchdog would otherwise turn into a spurious failure). Exit 2 (the player got
+    # no -dxmTestResults arg -- a harness-contract violation) is still thrown here.
     #
     # ONE results channel: -dxmTestResults. There is NO environment-variable handoff
     # and NO per-user-data-folder fallback.
@@ -1498,14 +1506,18 @@ function Invoke-StandaloneTestPlayer {
         -LogPath $LogPath `
         -Label 'Run standalone test player'
 
-    if ($result.TimedOut) {
-        throw "Standalone test player timed out after $TimeoutSeconds second(s) and the process tree was killed. Raise the limit via DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS (0 disables the timeout). See the player log at $LogPath."
-    }
+    # Exit 2 means the player received no -dxmTestResults arg (a harness-contract
+    # violation -- the harness always passes it), so no file can exist: fail fast.
     if ($result.ExitCode -eq 2) {
         throw "Standalone test player reported no -dxmTestResults path (exit 2); no results were written. See the player log at $LogPath."
     }
 
-    return $result.ExitCode
+    # Do NOT throw on a watchdog timeout here. A player can write a complete results
+    # file in its RunFinished callback and then have Application.Quit deferred/ignored
+    # in -batchmode -nographics IL2CPP; the watchdog then tree-kills it (TimedOut) even
+    # though the results are valid. The caller validates the FILE (the source of truth)
+    # and decides, so a deferred-quit run is not turned into a spurious failure.
+    return @{ ExitCode = $result.ExitCode; TimedOut = $result.TimedOut }
 }
 
 function Invoke-UnityEditor {
@@ -2080,11 +2092,24 @@ try {
         }
 
         # (2b) RUN the built exe directly (no PlayerConnection), under the watchdog.
-        Invoke-StandaloneTestPlayer `
+        $playerTimeoutSeconds = Get-StandaloneTestPlayerTimeoutSeconds
+        $playerResult = Invoke-StandaloneTestPlayer `
             -EditorBuiltExePath $standaloneExe `
             -ResultsPath $resultsPath `
             -LogPath $playerLogPath `
-            -TimeoutSeconds (Get-StandaloneTestPlayerTimeoutSeconds)
+            -TimeoutSeconds $playerTimeoutSeconds
+
+        # A watchdog timeout is fatal ONLY when the player wrote no results. If the
+        # results file exists, honor it as the source of truth (Application.Quit can be
+        # deferred in -batchmode -nographics IL2CPP after RunFinished already wrote the
+        # file) and fall through to Test-NUnitResults; otherwise fail with the timeout.
+        if ($playerResult.TimedOut) {
+            if (Test-Path -LiteralPath $resultsPath -PathType Leaf) {
+                Write-Host "::warning::Standalone test player exceeded the ${playerTimeoutSeconds}s watchdog and was tree-killed, but it had already written $resultsPath; honoring that results file as the source of truth (Application.Quit was likely deferred in -batchmode IL2CPP). Raise DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS if this recurs."
+            } else {
+                throw "Standalone test player timed out after $playerTimeoutSeconds second(s) and was tree-killed before writing any results to $resultsPath. Raise the limit via DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS (0 disables the timeout). See the player log at $playerLogPath."
+            }
+        }
 
         # (2c) VALIDATE the FILE (the source of truth). The player log carries the
         # diagnostics for a missing/empty file (its stdout no longer flows through

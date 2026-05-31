@@ -1639,9 +1639,15 @@ describe("scripts/unity direct CI runner contract", () => {
       expect(normalized).toContain("'-logFile', '-',");
       expect(normalized).toContain("'-dxmTestResults', $ResultsPath");
       expect(normalized).toContain("Invoke-ProcessWithTreeKillTimeout");
-      // Watchdog breach + exit-2 (no path) both throw with the env-knob name.
-      expect(normalized).toContain("DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS");
+      // Exit-2 (no -dxmTestResults path) is thrown here; a watchdog TIMEOUT is NOT --
+      // it is RETURNED (TimedOut) so the CALLER can honor the results FILE as the
+      // source of truth. A player can write a valid results.xml in RunFinished and then
+      // have Application.Quit deferred in -batchmode IL2CPP; treating that tree-kill as
+      // a hard failure would turn a passing run red, so the file decides, not the exit.
       expect(normalized).toMatch(/\$result\.ExitCode -eq 2/);
+      expect(normalized).toContain("TimedOut = $result.TimedOut");
+      // The timeout env-knob handling now lives in the caller, not this function.
+      expect(normalized).not.toContain("DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS");
     });
 
     test("the standalone branch builds with -runTests + -buildTarget and NO -quit", () => {
@@ -1680,6 +1686,19 @@ describe("scripts/unity direct CI runner contract", () => {
       expect(runCi).toContain(
         'Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode" -LogPath $logPath -Project $ProjectPath'
       );
+
+      // MAJOR-fix contract: on a player watchdog TIMEOUT the caller honors the results
+      // FILE as the source of truth when one exists (a deferred Application.Quit after
+      // RunFinished already wrote it) and throws the timeout ONLY when no file exists,
+      // so a passing run is never turned red by a deferred quit. The timeout guard sits
+      // BETWEEN the player run and the file validation.
+      const timeoutGuardIdx = runCi.indexOf("if ($playerResult.TimedOut)");
+      expect(timeoutGuardIdx).toBeGreaterThan(playerCallIdx);
+      expect(timeoutGuardIdx).toBeLessThan(standaloneValidateIdx);
+      const guardRegion = runCi.slice(timeoutGuardIdx, standaloneValidateIdx);
+      expect(guardRegion).toMatch(/Test-Path -LiteralPath \$resultsPath/);
+      expect(guardRegion).toMatch(/honoring that results file/i);
+      expect(guardRegion).toMatch(/timed out after \$playerTimeoutSeconds/);
     });
 
     test("the standalone configure step (New-ConfiguratorSource) is UNCHANGED -- no waitForManagedDebugger / ConnectWithProfiler", () => {

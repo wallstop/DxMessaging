@@ -199,7 +199,11 @@ const SHEBANG = "#!/usr/bin/env pwsh";
 //   fail        -> write a FAILING <test-run .../> (failed=1) and exit 1
 //   no-results  -> exit 0 WITHOUT writing (models a player that died before
 //                  RunFinished wrote the file)
-//   sleep       -> sleep > the player watchdog window so the watchdog tree-kills it
+//   sleep       -> sleep > the player watchdog window WITHOUT writing (no file)
+//   write-then-hang -> write a PASSING file, THEN sleep > the watchdog window so the
+//                  watchdog tree-kills it AFTER results exist (models Application.Quit
+//                  deferred/ignored in -batchmode IL2CPP); the file is the source of
+//                  truth, so the harness must treat this as a PASS (with a warning)
 // The player NEVER reads an env results channel; only -dxmTestResults.
 function playerStubBody() {
   return [
@@ -221,6 +225,10 @@ function playerStubBody() {
     "  exit 1",
     "}",
     '\'<?xml version="1.0" encoding="utf-8"?><test-run id="2" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="1" result="Passed"><test-suite type="Assembly" result="Passed"><test-case name="Ns.WillPass" fullname="Ns.WillPass" result="Passed" /></test-suite></test-run>\' | Set-Content -LiteralPath $out -Encoding UTF8',
+    // write-then-hang: results are written; now hang so the watchdog tree-kills the
+    // player AFTER the file exists (models a deferred Application.Quit). The harness
+    // must honor the file as the source of truth and pass.
+    "if ($mode -eq 'write-then-hang') { Start-Sleep -Seconds 30; exit 0 }",
     "exit 0",
     ""
   ].join("\n");
@@ -742,6 +750,31 @@ describe("run-ci-tests.ps1 standalone split-build file-based results", () => {
     expect(combined).toMatch(/player timed out|tree was killed/i);
     // No results were written by the killed player.
     expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
+  });
+
+  test("DEFERRED-QUIT: player writes results then hangs -> watchdog kills it but the file is honored (green + warning)", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const startedAt = Date.now();
+    // DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS=2; the player WRITES a passing results.xml
+    // and THEN sleeps 30s (models Application.Quit deferred/ignored in -batchmode
+    // IL2CPP). The watchdog tree-kills it, but the results file already exists, so the
+    // harness must honor the file as the source of truth and PASS (with a warning),
+    // never a spurious failure.
+    const result = runStandaloneScript(ws, { playerMode: "write-then-hang" });
+    const elapsedMs = Date.now() - startedAt;
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    // The tree-kill fired (did NOT wait the full 30s hang)...
+    expect(elapsedMs).toBeLessThan(25000);
+    // ...yet the run is GREEN because the player had already written a passing file.
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(true);
+    // The deferred quit was surfaced as a non-fatal warning, NOT a failure.
+    expect(combined).toMatch(/honoring that results file/i);
+    expect(combined).not.toMatch(/did not produce NUnit results|No NUnit results XML/);
   });
 
   test("BUILD-WATCHDOG: a hung build is tree-killed and the run throws, no hang", () => {

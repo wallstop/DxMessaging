@@ -56,6 +56,23 @@ runs:
         }
         Write-Host "::endgroup::"
 
+        # STANDALONE: the test player runs as a SEPARATE process and writes its own
+        # log (player.log), not unity.log. On a standalone failure the player log
+        # carries the actual test output and quit diagnostics, so tail it too when
+        # present (no-op for editmode/playmode, which write only unity.log).
+        $playerLog = if ($dir) { Join-Path $dir 'player.log' } else { $null }
+        if ($playerLog -and (Test-Path -LiteralPath $playerLog -PathType Leaf)) {
+          Write-Host "::group::Standalone player log tail (last $tailLines lines) -- $label"
+          try {
+            Get-Content -LiteralPath $playerLog -Tail $tailLines | ForEach-Object {
+              Write-Host $_
+            }
+          } catch {
+            Write-Host "::notice::Unable to read tail of '$playerLog': $($_.Exception.Message)"
+          }
+          Write-Host "::endgroup::"
+        }
+
         # Rerun the catastrophic-pattern scan over the (possibly partial)
         # log. The pattern list MUST stay in sync with verify-unity-results/
         # action.yml's $patterns array and run-ci-tests.ps1's
