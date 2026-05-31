@@ -10,7 +10,8 @@
  * timeout (Get-EnsureEditorInstallTimeoutSeconds, sentinel exit 124) is the
  * fallback; the surgical fix is a HEARTBEAT-STALL DETECTOR in the poll loop
  * that tree-kills when the last observed triple has been unchanged for
- * >= DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS (default 600), and surfaces a
+ * >= DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS (profile-aware default: 900s for
+ * EditorOnly, 1800s for the heavier install profiles), and surfaces a
  * distinct sentinel exit (125) so callers + tests can attribute "killed for
  * stall" separately from "elapsed the total wall-clock budget."
  *
@@ -229,7 +230,7 @@ describe("ensure-editor.ps1 heartbeat-stall detector + periodic notice", () => {
     test.skip("an advancing stream does NOT trip the stall detector", () => {});
     test.skip("DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS=0 opts out (no kill on the stuck stream)", () => {});
     test.skip("negative + non-integer values warn and fall back to default", () => {});
-    test.skip("Get-EnsureEditorProgressStallSeconds honors the env override and defaults/validates", () => {});
+    test.skip("Get-EnsureEditorProgressStallSeconds honors the env override and the PROFILE-AWARE defaults", () => {});
     test.skip("the periodic ::notice:: is emitted at least once during a long advancing run", () => {});
     test.skip("Get-EnsureEditorProgressNoticeIntervalSeconds honors the env override and defaults/validates", () => {});
     test.skip("native exit 125 from the Unity CLI is NOT misattributed as a heartbeat stall", () => {});
@@ -241,23 +242,40 @@ describe("ensure-editor.ps1 heartbeat-stall detector + periodic notice", () => {
   // Pure unit coverage for the env-knob helper. Mirrors the matching test in
   // unity-ensure-editor-install-resilience.test.js for the wall-clock helper.
   // -------------------------------------------------------------------------
-  test("Get-EnsureEditorProgressStallSeconds honors the env override and defaults/validates", () => {
+  test("Get-EnsureEditorProgressStallSeconds honors the env override and the PROFILE-AWARE defaults", () => {
     const out = runPwshScript(
       [
         "Set-StrictMode -Version Latest",
         "$ErrorActionPreference = 'Stop'",
-        extractEnsureEditorFunctions(["Get-EnsureEditorProgressStallSeconds"]),
+        // The profile-aware default reads the script-scoped provisioning profile via
+        // Get-UnityProvisioningProfile, so it must be extracted alongside the helper.
+        extractEnsureEditorFunctions([
+          "Get-EnsureEditorProgressStallSeconds",
+          "Get-UnityProvisioningProfile"
+        ]),
         "$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS = $null",
-        "Write-Output ('DEFAULT=' + (Get-EnsureEditorProgressStallSeconds))",
+        // Profile-aware default: EditorOnly -> 900s (15 min); the heavy install
+        // profiles -> 1800s (30 min). Evidence: the EditorOnly install froze at the
+        // monolithic 'Installing Unity...' triple for 600s on a HEALTHY run and was
+        // falsely killed; the il2cpp/standalone profile unpacks more and freezes
+        // longer, so a flat 600s was a false-positive threshold for both.
+        "$script:UnityProvisioningProfile = 'EditorOnly'",
+        "Write-Output ('DEFAULT_EDITORONLY=' + (Get-EnsureEditorProgressStallSeconds))",
+        "$script:UnityProvisioningProfile = 'StandaloneWindowsIl2Cpp'",
+        "Write-Output ('DEFAULT_IL2CPP=' + (Get-EnsureEditorProgressStallSeconds))",
+        "$script:UnityProvisioningProfile = 'Full'",
+        "Write-Output ('DEFAULT_FULL=' + (Get-EnsureEditorProgressStallSeconds))",
+        // An explicitly-pinned -Default still wins over the profile-aware path.
+        "Write-Output ('PINNED=' + (Get-EnsureEditorProgressStallSeconds -Default 42))",
         "$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS = '5'",
         "Write-Output ('OVERRIDE=' + (Get-EnsureEditorProgressStallSeconds))",
         // Explicit opt-out (0 is allowed -> heartbeat disabled).
         "$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS = '0'",
         "Write-Output ('OPTOUT=' + (Get-EnsureEditorProgressStallSeconds))",
-        // Invalid -> warn + default.
+        // Invalid -> warn + profile-aware default (il2cpp profile still set).
         "$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS = 'nope'",
         "Write-Output ('INVALID=' + (Get-EnsureEditorProgressStallSeconds))",
-        // Negative -> warn + default.
+        // Negative -> warn + profile-aware default.
         "$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS = '-7'",
         "Write-Output ('NEGATIVE=' + (Get-EnsureEditorProgressStallSeconds))"
       ].join("\n")
@@ -265,12 +283,16 @@ describe("ensure-editor.ps1 heartbeat-stall detector + periodic notice", () => {
     expect(out.status).toBe(0);
     const stdout = out.stdout || "";
     const combined = combinedText(out);
-    // Default rationale documented in the script: 600s (10 min).
-    expect(stdout).toContain("DEFAULT=600");
+    // Profile-aware defaults documented in the script.
+    expect(stdout).toContain("DEFAULT_EDITORONLY=900");
+    expect(stdout).toContain("DEFAULT_IL2CPP=1800");
+    expect(stdout).toContain("DEFAULT_FULL=1800");
+    expect(stdout).toContain("PINNED=42");
     expect(stdout).toContain("OVERRIDE=5");
     expect(stdout).toContain("OPTOUT=0");
-    expect(stdout).toContain("INVALID=600");
-    expect(stdout).toContain("NEGATIVE=600");
+    // Invalid/negative fall back to the profile-aware default (Full profile -> 1800).
+    expect(stdout).toContain("INVALID=1800");
+    expect(stdout).toContain("NEGATIVE=1800");
     // Invalid + negative both emit ::warning::.
     expect(combined).toContain("::warning::");
     expect(combined).toContain("Ignoring invalid DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS");

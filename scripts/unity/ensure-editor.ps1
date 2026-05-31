@@ -367,13 +367,26 @@ function Get-EnsureEditorProgressStallSeconds {
     # and the default is used. A value of 0 is the explicit OPT-OUT (no heartbeat
     # detection): the wall-clock fallback alone gates the run.
     #
-    # Default rationale (600s = 10 minutes): a healthy advance of (pct, phase, msg)
-    # arrives within seconds during a normal install; 10 minutes comfortably
-    # exceeds even a slow chunk transition without false-positive killing, while
-    # surfacing the real hang ~halfway through the observed 20-minute window
-    # rather than waiting for the 45-minute wall-clock. StrictMode-safe: no
-    # collection reads.
-    param([int]$Default = 600)
+    # Default rationale (PROFILE-AWARE; raised from a flat 600s after CI evidence):
+    # the Unity 6000.3.16f1 install emits a SINGLE monolithic
+    # `{"...,"pct":50,"phase":"install","msg":"Installing Unity (6000.3.16f1)..."}`
+    # triple that does NOT advance for the WHOLE on-disk unpack. On run 26701943540
+    # the EditorOnly playmode job sat at that exact triple for 600s on a REAL,
+    # HEALTHY install and was killed at precisely 600s (exit 125) -- a FALSE
+    # POSITIVE; it only recovered because Unity.exe happened to be resolvable and
+    # EditorOnly skips module verification. The il2cpp/standalone (and Android/Full)
+    # profiles unpack MORE payload during that same frozen phase, so they freeze
+    # even LONGER, and they CANNOT lean on the EditorOnly skip. So:
+    #   * EditorOnly                       -> 900s  (15 min; base-editor unpack only)
+    #   * StandaloneWindowsIl2Cpp/Android/Full -> 1800s (30 min; heavier payload, and
+    #                                          a false kill here cascades into the
+    #                                          module step, the real-world failure)
+    # Both stay well under the 2700s (45 min) wall-clock fallback, so a GENUINE hang
+    # is still surfaced before the job is cancelled, while a slow-but-real unpack is
+    # no longer killed mid-flight. The env override remains authoritative and is
+    # honored verbatim (tests set it to 2 to force the stall path; 0 opts out).
+    # StrictMode-safe: no collection reads.
+    param([int]$Default = -1)
 
     if ($env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS) {
         $parsed = 0
@@ -383,9 +396,26 @@ function Get-EnsureEditorProgressStallSeconds {
         ) {
             return $parsed
         }
-        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS='$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS'; using $Default second(s)."
+        Write-Host "::warning::Ignoring invalid DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS='$env:DXM_ENSURE_EDITOR_PROGRESS_STALL_SECONDS'; using the profile-aware default."
     }
-    return $Default
+
+    if ($Default -ge 0) {
+        return $Default
+    }
+
+    # Profile-aware default (only when the caller did not pin an explicit $Default).
+    # Guard the Get-UnityProvisioningProfile lookup with Get-Command so this helper
+    # still works when AST-extracted in ISOLATION (some unit tests extract only the
+    # timeout/heartbeat helpers, not the profile getter); fall back to the heavier
+    # default in that case, which is the safe (less-likely-to-false-kill) choice.
+    $profile = 'Full'
+    if (Get-Command Get-UnityProvisioningProfile -ErrorAction SilentlyContinue) {
+        $profile = Get-UnityProvisioningProfile
+    }
+    if ($profile -eq 'EditorOnly') {
+        return 900
+    }
+    return 1800
 }
 
 function Get-EnsureEditorProgressNoticeIntervalSeconds {
@@ -2450,6 +2480,108 @@ function Test-UnityCiModulesPresent {
     return ($missing.Count -eq 0)
 }
 
+function Test-ProcessHasModuleUnderDirectory {
+    # Best-effort, NEVER-THROWS cross-identity locker signal. Returns $true iff the
+    # process with $ProcessId has at least one LOADED MODULE whose on-disk file path
+    # is inside $Directory.
+    #
+    # WHY THIS EXISTS (the honest reason): the primary scoping signals in
+    # Stop-StaleUnityProvisioningProcesses come from Win32_Process.CommandLine /
+    # .ExecutablePath, both of which are read from the target process's PEB. PEB
+    # memory is privilege-gated: for a process owned by ANOTHER identity (the Unity
+    # CLI runs install/uninstall work as NetworkService on this runner) queried
+    # WITHOUT elevation, BOTH come back empty -- so a NetworkService-owned locker is
+    # invisible to command-line/image scoping. Get-Process surfaces the loaded-module
+    # list (System.Diagnostics.Process.Modules) through a DIFFERENT API
+    # (CreateToolhelp32Snapshot / EnumProcessModules) that is frequently readable for
+    # a cross-identity process where the PEB is not. It is NOT guaranteed (a fully
+    # protected/elevated process can still deny it, and the call can throw Access
+    # Denied), hence DEFENSE-IN-DEPTH, not the primary fix: any failure is swallowed
+    # and returns $false.
+    #
+    # Scoped to the caller-supplied $Directory (the VERSION dir, never the bare
+    # managed root) so this can never become a cross-version collateral signal.
+    #
+    # TEST override: DXM_UNITY_FAKE_PROCESS_MODULES is a ';'-separated list of
+    # '<pid>=<path>[,<path>...]' entries; when set, the modules for $ProcessId are
+    # read from it verbatim (no real Get-Process), so a hermetic test can prove the
+    # loaded-module scoping branch on a non-Windows host. StrictMode-safe throughout.
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$Directory
+    )
+
+    if ($ProcessId -le 0) {
+        return $false
+    }
+
+    # Hermetic test path: parse the fake module table without touching real processes.
+    $fakeTable = $env:DXM_UNITY_FAKE_PROCESS_MODULES
+    if (-not [string]::IsNullOrEmpty($fakeTable)) {
+        try {
+            foreach ($entry in ($fakeTable -split ';')) {
+                $trimmedEntry = ([string]$entry).Trim()
+                if ($trimmedEntry.Length -eq 0) {
+                    continue
+                }
+                $eq = $trimmedEntry.IndexOf('=')
+                if ($eq -lt 1) {
+                    continue
+                }
+                $pidText = $trimmedEntry.Substring(0, $eq).Trim()
+                $parsedPid = 0
+                if (-not [int]::TryParse($pidText, [ref]$parsedPid)) {
+                    continue
+                }
+                if ($parsedPid -ne $ProcessId) {
+                    continue
+                }
+                $pathsText = $trimmedEntry.Substring($eq + 1)
+                foreach ($modulePath in ($pathsText -split ',')) {
+                    $candidate = ([string]$modulePath).Trim()
+                    if ($candidate.Length -gt 0 -and (Test-IsPathInsideDirectory -Path $candidate -Directory $Directory)) {
+                        return $true
+                    }
+                }
+            }
+        } catch {
+            return $false
+        }
+        return $false
+    }
+
+    try {
+        $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $proc) {
+            return $false
+        }
+        $modules = $null
+        try { $modules = $proc.Modules } catch { $modules = $null }
+        if ($null -eq $modules) {
+            return $false
+        }
+        foreach ($module in $modules) {
+            if ($null -eq $module) {
+                continue
+            }
+            $fileName = ''
+            try { $fileName = [string]$module.FileName } catch { $fileName = '' }
+            if ($fileName.Trim().Length -eq 0) {
+                continue
+            }
+            if (Test-IsPathInsideDirectory -Path $fileName -Directory $Directory) {
+                return $true
+            }
+        }
+    } catch {
+        # Access Denied / process exited / any other failure: best-effort means
+        # "no positive signal", never an abort of the sweep.
+        return $false
+    }
+
+    return $false
+}
+
 function Stop-StaleUnityProvisioningProcesses {
     param(
         [Parameter(Mandatory = $true)][string]$InstallRoot,
@@ -2462,15 +2594,31 @@ function Stop-StaleUnityProvisioningProcesses {
     $details = New-Object System.Collections.Generic.List[string]
     try {
         $rootFull = [System.IO.Path]::GetFullPath($InstallRoot)
+        $versionDirFull = [System.IO.Path]::GetFullPath((Join-Path $rootFull $Version))
         $processes = @()
         try {
+            # Win32_Process also carries ExecutablePath; we capture it to scope a
+            # locker by its ON-DISK image path. NOTE the honest limitation: both
+            # CommandLine and ExecutablePath are read from the target process's PEB,
+            # which is privilege-gated -- for a process owned by ANOTHER identity (the
+            # Unity CLI runs install/uninstall work as NetworkService here) queried
+            # WITHOUT elevation, BOTH read back empty, so image-path scoping is ALSO
+            # blind to a cross-identity locker. On the observed Unity 6000.3.16f1
+            # standalone failure (run 26701943540) the first sweep matched 0 and every
+            # move attempt failed; the logs do NOT identify the locker (no process
+            # listing), so its identity is SUSPECTED, not established. The loaded-module
+            # signal (Test-ProcessHasModuleUnderDirectory, consulted per process below)
+            # is the best-effort cross-identity catch that does not depend on the PEB.
             $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
         } catch {
             $processes = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object {
+                    $exePath = ''
+                    try { $exePath = [string]$_.Path } catch { $exePath = '' }
                     [pscustomobject]@{
-                        ProcessId   = $_.Id
-                        Name        = $_.ProcessName
-                        CommandLine = ''
+                        ProcessId      = $_.Id
+                        Name           = $_.ProcessName
+                        CommandLine    = ''
+                        ExecutablePath = $exePath
                     }
                 })
         }
@@ -2482,26 +2630,63 @@ function Stop-StaleUnityProvisioningProcesses {
             $name = ''
             $processId = 0
             $commandLine = ''
+            $executablePath = ''
             try { $name = [string]$proc.Name } catch { $name = '' }
             try { $processId = [int]$proc.ProcessId } catch { $processId = 0 }
             try { $commandLine = [string]$proc.CommandLine } catch { $commandLine = '' }
+            try { $executablePath = [string]$proc.ExecutablePath } catch { $executablePath = '' }
             if ($processId -le 0 -or $processId -eq $PID) {
                 continue
             }
-            $looksUnity = $name -match '(?i)^(unity|unity\.exe|unity hub|unity hub\.exe|unitycli|unitycli\.exe)$'
-            if (-not $looksUnity) {
-                continue
-            }
-            $scopeText = "$commandLine $name"
-            $isScoped = ($scopeText.IndexOf($Version, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
-                ($commandLine.IndexOf($rootFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
-                ($commandLine.IndexOf($InstallRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+            # VERSION-DIR image scope is the ONLY unconditional kill signal: a process
+            # whose on-disk image lives inside THIS version's directory
+            # (...\<root>\<version>\) is unambiguously the editor we are quarantining,
+            # regardless of its name or an empty CommandLine (e.g. the editor's own
+            # Unity.exe locking its own tree, or a helper unpacker under that dir).
+            # Loaded-module scope (below) catches a locker whose image path the PEB
+            # would not give us but whose loaded modules resolve under the version dir.
+            $imageInsideVersionDir = ($executablePath.Trim().Length -gt 0) -and (Test-IsPathInsideDirectory -Path $executablePath -Directory $versionDirFull)
+
+            # DELIBERATELY NOT a kill signal on its own: "image somewhere under the
+            # shared managed root". The runner hosts 2021/2022/6000 editors side by
+            # side under one root, and this sweep runs in the provision step BEFORE the
+            # cross-version organization lock is acquired, so a sibling-version editor
+            # can legitimately be running concurrently. Killing ANY Unity-named binary
+            # under the root (the prior fix's `imageInsideRoot -and looksUnity` branch)
+            # force-killed that sibling -- a cross-version collateral kill. A broad
+            # under-root match is allowed ONLY when the command line ALSO ties the
+            # process to THIS version/root (commandLineScoped), which a sibling version's
+            # editor does not satisfy.
+            $looksUnity = $name -match '(?i)^(unity|unity\.exe|unity hub|unity hub\.exe|unitycli|unitycli\.exe|unitysetup|unitysetup\.exe|unitydownloadassistant|unitydownloadassistant\.exe|unityhelper|unityhelper\.exe)$'
+
+            $commandLineScoped = ($commandLine.IndexOf($Version, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+                ($commandLine.IndexOf($versionDirFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+
+            # Defense-in-depth cross-identity signal (see Test-ProcessHasModuleUnderDirectory):
+            # a process's LOADED MODULE paths are frequently readable via Get-Process
+            # where the PEB CommandLine/ExecutablePath are NOT (those live in
+            # privilege-gated PEB memory and read back empty for a NetworkService/SYSTEM
+            # process queried without elevation). A module loaded from THIS version's
+            # directory means the process is executing the editor we are quarantining.
+            # Scoped to the VERSION dir (never the bare root) for the same anti-collateral
+            # reason as above.
+            $modulesUnderVersionDir = Test-ProcessHasModuleUnderDirectory -ProcessId $processId -Directory $versionDirFull
+
+            # In-scope when EITHER the image / a loaded module runs from within THIS
+            # version's directory (unconditional -- unambiguously ours), OR it looks
+            # like a Unity process AND its command line genuinely ties it to THIS
+            # version/dir. The bare under-root match is gone: a sibling-version editor
+            # under the shared root with an empty CommandLine is now SPARED (it matches
+            # none of these), while the editor's own Unity.exe locking its own version
+            # dir is still caught. This narrows the prior blast radius without losing the
+            # real, safe catch.
+            $isScoped = $imageInsideVersionDir -or $modulesUnderVersionDir -or ($looksUnity -and $commandLineScoped)
             if (-not $isScoped) {
                 continue
             }
 
             $matched++
-            $details.Add("pid=$processId name=$name command=$commandLine")
+            $details.Add("pid=$processId name=$name image=$executablePath modulesUnderVersionDir=$modulesUnderVersionDir command=$commandLine")
             try {
                 Stop-Process -Id $processId -Force -ErrorAction Stop
                 $stopped++
@@ -2551,9 +2736,43 @@ function Move-UnityInstallDirectoryToQuarantine {
     # fails, so a genuinely stuck directory still aborts loudly. Class rule: any
     # destructive dir op (Move/Remove/Rename) on a transiently-lockable Unity
     # editor directory on Windows goes through this retry helper.
-    Invoke-WithRetry -MaxAttempts 3 -DelaySeconds (Get-EnsureEditorRetryDelaySeconds) -Action {
-        Move-Item -LiteralPath $InstallDirectory -Destination $destination -Force
-    } | Out-Null
+    #
+    # BEFORE EACH RETRY (attempt > 1) we re-run the stale-process sweep. The
+    # observed Unity 6000.3.16f1 standalone failure (run 26701943540) was a held
+    # handle on C:\Unity\Editors\6000.3.16f1\Editor where the FIRST sweep matched 0
+    # and all three move attempts then failed identically. HONEST LIMITATION: the
+    # logs contain NO process listing identifying the locker; the only Unity binary
+    # visible in that run is the CLI at C:\Windows\ServiceProfiles\NetworkService\...
+    # (NetworkService, OUTSIDE the managed root), whose PEB CommandLine/ExecutablePath
+    # read back empty without elevation. The per-retry re-sweep + the loaded-module
+    # signal (Test-ProcessHasModuleUnderDirectory) give the kill multiple shots as a
+    # TRANSIENT handle (AV/indexer/an editor child under the version dir) releases,
+    # which recovers the COMMON case. It does NOT recover a HARD lock by a non-Unity,
+    # cross-identity, out-of-root process; that residual is runner-side and is
+    # surfaced by the wrap-immune ::error:: below. The primary mitigation for the
+    # exit-6 origin is the PROACTIVE atomic-reinstall route (Ensure-UnityCiModules
+    # Step 1b), which avoids reaching this quarantine for a not-module-manageable
+    # editor in the first place.
+    $moveAttempt = [ref] 0
+    try {
+        Invoke-WithRetry -MaxAttempts 3 -DelaySeconds (Get-EnsureEditorRetryDelaySeconds) -Action {
+            $moveAttempt.Value++
+            if ($moveAttempt.Value -gt 1) {
+                Stop-StaleUnityProvisioningProcesses -InstallRoot $InstallRoot -Version $Version -Reason "retry $($moveAttempt.Value) before quarantining $InstallDirectory (a process is still holding the editor tree)"
+            }
+            Move-Item -LiteralPath $InstallDirectory -Destination $destination -Force
+        } | Out-Null
+    } catch {
+        # Persistent lock after every sweep + retry. Emit a WRAP-IMMUNE ::error::
+        # (a thrown message is word-wrapped by PowerShell's ConciseView at the
+        # console width; a Write-Host "::error::..." line is not) so the operator
+        # sees the exact locked path and the remediation instead of a wrapped
+        # Move-Item stack trace. Then rethrow so the run still fails loudly.
+        Write-Host ("::error::Could not quarantine Unity $Version install '$InstallDirectory' for repair: a process is holding a handle on the editor tree and the stale-process sweep could not release it ($($_.Exception.Message)). " +
+            "This blocks the automatic quarantine+reinstall that recovers a base editor whose modules cannot be added (Unity CLI 'install-modules' exit 6 / 'Try reinstalling this editor with Unity Hub'). " +
+            "Remediation on the runner: ensure no Unity.exe/Unity Hub/indexer/antivirus process is holding C:\\...\\$Version\\Editor (Sysinternals handle64.exe `"$InstallDirectory`" finds the locker), then re-run; or manually delete '$InstallDirectory' and let ensure-editor.ps1 reinstall the editor with its modules.")
+        throw
+    }
 }
 
 function Move-UnityEditorInstallToQuarantine {
@@ -3736,6 +3955,130 @@ function Install-UnityAndroidModules {
     return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "Android-only repair exhausted after $maxAttempts attempt(s); missing Android groups: $($stillMissing -join ', ')." -Profile $Profile -ManagedOnly:$ManagedOnly
 }
 
+function Test-TextIndicatesEditorNotModuleManageable {
+    # PURE, StrictMode-safe classifier. Returns $true iff the supplied text carries
+    # the Unity-CLI signal that the target editor is NOT module-manageable, i.e. that
+    # `install-modules` will refuse to add anything to it. Observed verbatim on the
+    # failing self-hosted run (Unity 6000.3.16f1 standalone, run 26701943540):
+    #
+    #   Error: No modules found for this editor.
+    #   Module installation is only supported for editors installed with Unity Hub.
+    #   Try reinstalling this editor with Unity Hub to use this feature.
+    #
+    # Matching ANY of these phrases is sufficient; the wording has drifted across
+    # beta builds, so we accept the stable substrings rather than the whole block.
+    # This is the PROACTIVE root-cause signal that lets the caller skip the doomed
+    # `install-modules` -> exit 6 -> uninstall -> quarantine path and go straight to
+    # the atomic `install <v> -m <modules>` reinstallation verb (the documented way
+    # to add modules to such an editor; see Install-UnityEditorWithCiModules).
+    param([string]$Text)
+
+    $value = [string]$Text
+    if ($value.Trim().Length -eq 0) {
+        return $false
+    }
+    return ($value -match '(?i)only supported for editors installed with Unity Hub') -or
+        ($value -match '(?i)reinstall(?:ing)? this editor with Unity Hub') -or
+        ($value -match '(?i)No modules found for this editor')
+}
+
+function Test-UnityEditorModuleManageable {
+    # Best-effort, NON-THROWING probe: is the editor at $Version in a state where the
+    # Unity CLI's `install-modules` can ADD modules to it? Returns a StrictMode-safe
+    # hashtable @{ Manageable=[bool]; Reason=[string]; Output=[string[]] }.
+    #
+    # Manageable is $false ONLY when the `-l` listing text carries an explicit
+    # not-module-manageable signal (Test-TextIndicatesEditorNotModuleManageable).
+    # When the probe cannot run, times out, or returns ambiguous output, Manageable
+    # defaults to $true: we must NOT route a healthy editor down the heavyweight
+    # atomic-reinstall path on a flaky probe -- the existing disk-authoritative
+    # install-modules flow already handles the normal "modules missing" case and an
+    # exit 6 there still escalates correctly. Only a POSITIVE unmanageable signal
+    # short-circuits to the atomic reinstall.
+    #
+    # Uses the timeout-capable capturing invoker bounded by the PROBE timeout (the
+    # `-l` listing is a quick metadata read, not a multi-GB install -- it must NOT
+    # inherit the 45-minute install wall-clock), and we read the captured output even
+    # on a non-zero exit (Get-UnityCliOutput would discard it) so the signal text is
+    # available regardless of the listing's exit code.
+    param([Parameter(Mandatory = $true)][string]$Version)
+
+    $result = $null
+    try {
+        $requestedTimeout = Get-EnsureEditorProbeTimeoutSeconds
+        $effectiveTimeout = Get-EffectiveUnityCliTimeoutSeconds -RequestedSeconds $requestedTimeout
+        $result = Invoke-UnityCliCaptureWithTimeout -Arguments @('install-modules', '-e', $Version, '-l') -TimeoutSeconds $effectiveTimeout -TimeoutKnob 'DXM_ENSURE_EDITOR_PROBE_TIMEOUT_SECONDS'
+    } catch {
+        return @{ Manageable = $true; Reason = "module-manageability probe threw: $($_.Exception.Message)"; Output = @() }
+    }
+
+    $lines = @($result.Output | ForEach-Object { [string]$_ })
+    $text = ($lines -join "`n")
+    if (Test-TextIndicatesEditorNotModuleManageable -Text $text) {
+        return @{
+            Manageable = $false
+            Reason     = 'Unity CLI reports this editor is not module-manageable (not installed via Hub/CLI registration); install-modules would fail with exit 6.'
+            Output     = $lines
+        }
+    }
+
+    return @{ Manageable = $true; Reason = ''; Output = $lines }
+}
+
+function Install-UnityEditorModulesViaAtomicReinstall {
+    # ROOT-CAUSE SIDESTEP for the not-module-manageable editor (the exit-6 failure):
+    # add the required modules by re-running the ATOMIC `install <v> -m <modules>`
+    # verb -- the Unity-documented "headless reinstallation ... to add modules during
+    # installation" -- INSTEAD of `install-modules` (which exits 6 on such an editor)
+    # followed by uninstall + quarantine.
+    #
+    # WHY TRY IN PLACE FIRST (the real win): the observed failure is that the
+    # uninstall+quarantine path then fails because a process holds a handle on
+    # ...\<version>\Editor, so the Move-Item cannot win and the whole run aborts.
+    # Install-UnityEditorWithCiModules runs the atomic `install` verb DIRECTLY,
+    # WITHOUT a preceding quarantine, so when the install can repair/overlay the
+    # existing tree in place we never touch the locker at all. If that atomic
+    # in-place install genuinely fails (e.g. the editor tree is corrupt and the CLI
+    # cannot overlay it), we FALL BACK to the existing quarantine+reinstall path
+    # (Repair-UnityEditorWithCiModules) -- which may still hit the locker, but that is
+    # no worse than today and is reported honestly by the wrap-immune ::error:: there.
+    #
+    # Wrapped in the install lock so the in-place attempt and any fallback share one
+    # critical section (Invoke-WithUnityInstallLock is re-entrant, so the nested
+    # Repair-... call does not deadlock). StrictMode-safe.
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$EditorPath,
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$Reason,
+        [string]$Profile = $(Get-UnityProvisioningProfile),
+        [switch]$ManagedOnly
+    )
+
+    return Invoke-WithUnityInstallLock -Version $Version -InstallRoot $InstallRoot -Action {
+        Write-CiNotice "Unity $Version is not module-manageable via install-modules; routing to the atomic 'install -m' reinstallation (in place, no quarantine) to add the required modules. Reason: $Reason"
+        try {
+            # In-place atomic install: NO quarantine first, so a held handle on the
+            # editor tree is never even contended unless the CLI itself needs to
+            # rewrite a locked file.
+            return Install-UnityEditorWithCiModules -Version $Version -InstallRoot $InstallRoot -Reason $Reason -Profile $Profile -ManagedOnly:$ManagedOnly
+        } catch {
+            $inPlaceMessage = $_.Exception.Message
+            if ($env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1') {
+                throw
+            }
+            # The atomic in-place install could not deliver the modules (e.g. the CLI
+            # could not overlay the existing tree). Fall back to the heavier
+            # quarantine+reinstall, which moves the version dir aside first. HONEST
+            # CAVEAT: if a cross-identity process holds a hard lock on the tree, that
+            # quarantine can still fail -- Move-UnityInstallDirectoryToQuarantine emits
+            # a wrap-immune ::error:: naming the residual as runner-side.
+            Write-Host "::warning::Atomic in-place reinstall for Unity $Version did not deliver the required modules ($inPlaceMessage); falling back to quarantine + reinstall."
+            return Repair-UnityEditorWithCiModules -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "atomic in-place reinstall did not deliver required modules ($inPlaceMessage)" -Profile $Profile -ManagedOnly:$ManagedOnly
+        }
+    }
+}
+
 function Ensure-UnityCiModules {
     # IDEMPOTENT, disk-authoritative, TIER-AWARE CI module install. The standalone
     # beta CLI can return "No modules found to install." with exit code 6 when
@@ -3787,6 +4130,32 @@ function Ensure-UnityCiModules {
     if ($missing.Count -eq 0) {
         Write-CiNotice "All required Unity CI module groups for provisioning profile '$Profile' already present on disk for Unity $Version; nothing to install."
         return $EditorPath
+    }
+
+    # Step 1b (ROOT-CAUSE SIDESTEP): modules ARE missing. Before driving the
+    # `install-modules` path (which exits 6 -> uninstall -> quarantine -> can be
+    # blocked by a locker, the observed 6000.3.16f1 standalone failure), PROACTIVELY
+    # ask whether this editor is even module-manageable. If the CLI reports it is not
+    # (it was not installed via Hub/CLI registration), `install-modules` cannot help;
+    # route straight to the atomic `install -m` reinstallation, which adds the modules
+    # IN PLACE (no quarantine, so the locker is never contended) and only falls back
+    # to quarantine+reinstall if the in-place install genuinely fails.
+    #
+    # Gated to the cases where the atomic reinstall can actually run: a managed
+    # install root is available and editor repair is not disabled. An operator can
+    # force the legacy install-modules-first path via
+    # DXM_UNITY_DISABLE_PROACTIVE_MODULE_REINSTALL=1 (defense for an unforeseen
+    # regression on a future CLI build). The disk-authoritative install-modules flow
+    # below remains the path for a module-MANAGEABLE editor that is merely missing a
+    # module (the common, healthy case).
+    $proactiveDisabled = $env:DXM_UNITY_DISABLE_PROACTIVE_MODULE_REINSTALL -eq '1'
+    $repairDisabledForProactive = $env:DXM_UNITY_DISABLE_EDITOR_REPAIR -eq '1'
+    if (-not $proactiveDisabled -and -not $repairDisabledForProactive -and $InstallRoot) {
+        $manageability = Test-UnityEditorModuleManageable -Version $Version
+        if (-not $manageability.Manageable) {
+            Write-Host "::warning::Unity $Version editor is not module-manageable ($($manageability.Reason)). Missing module groups: $($missing -join ', '). Skipping the install-modules -> exit 6 -> quarantine path and reinstalling atomically with the required modules instead."
+            return Install-UnityEditorModulesViaAtomicReinstall -Version $Version -EditorPath $EditorPath -InstallRoot $InstallRoot -Reason "editor not module-manageable; missing groups: $($missing -join ', ')" -Profile $Profile -ManagedOnly:$ManagedOnly
+        }
     }
 
     # Step 2: determine whether any CORE-tier group is missing so it can be handled

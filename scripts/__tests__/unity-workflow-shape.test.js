@@ -1136,6 +1136,139 @@ describe(".github/workflows/unity-benchmarks.yml", () => {
   });
 });
 
+// Contract for the perf-doc auto-update reworked after the adversarial review.
+// Each assertion pins one of the CRITICAL/HIGH/MEDIUM fixes so a revert to the
+// red-on-every-run / churns / breaks-on-rerun behaviour fails CI here.
+describe(".github/workflows/unity-benchmarks.yml perf-doc auto-update", () => {
+  let text;
+  let parsed;
+  let updateJob;
+  let benchmarksJob;
+
+  beforeAll(() => {
+    text = readWorkflow("unity-benchmarks.yml");
+    parsed = loadWorkflowYaml("unity-benchmarks.yml");
+    updateJob = parsed.jobs["update-perf-doc"];
+    benchmarksJob = parsed.jobs.benchmarks;
+  });
+
+  test("MEDIUM-1: top-level permissions are least-privilege (no write leak to licensed jobs)", () => {
+    // The licensed matrix jobs (matrix-config / runner-preflight / benchmarks)
+    // must not inherit contents:write or pull-requests:write.
+    expect(parsed.permissions).toEqual({
+      contents: "read",
+      checks: "write",
+      issues: "write"
+    });
+    expect(parsed.permissions).not.toHaveProperty("pull-requests");
+    // benchmarks declares no job-level permissions, so it inherits the
+    // read-only top level -- never the docs-PR write scope.
+    expect(benchmarksJob.permissions).toBeUndefined();
+  });
+
+  test("MEDIUM-1: write scope is granted ONLY on the update-perf-doc job", () => {
+    expect(updateJob.permissions).toEqual({
+      contents: "write",
+      "pull-requests": "write"
+    });
+    expect(updateJob["runs-on"]).toBe("ubuntu-latest");
+  });
+
+  test("MEDIUM-2: gates on the LATEST version succeeding, not on all matrix legs", () => {
+    // Must NOT require the whole matrix to be green (older-version flakiness
+    // would otherwise block the latest-version doc update).
+    expect(updateJob.if).not.toContain("needs.benchmarks.result == 'success'");
+    expect(updateJob.if).toContain("!cancelled()");
+
+    // The benchmark matrix emits a per-version success marker, gated on
+    // success() AND the latest version, and uploads it as perf-latest-ok-*.
+    const markerStep = benchmarksJob.steps.find(
+      (step) => step.name === "Mark latest-version benchmark success"
+    );
+    expect(markerStep).toBeDefined();
+    expect(markerStep.if).toContain("success()");
+    expect(markerStep.if).toContain(
+      "matrix.unity-version == needs.matrix-config.outputs.latest-version"
+    );
+    expect(markerStep.shell).toBe("pwsh"); // self-hosted Windows: not bash
+
+    const markerUpload = benchmarksJob.steps.find(
+      (step) =>
+        step.uses === "actions/upload-artifact@v7" &&
+        step.with &&
+        typeof step.with.name === "string" &&
+        step.with.name.startsWith("perf-latest-ok-")
+    );
+    expect(markerUpload).toBeDefined();
+
+    // update-perf-doc downloads those markers and gates on BOTH being present.
+    const download = updateJob.steps.find(
+      (step) =>
+        step.uses === "actions/download-artifact@v7" &&
+        step.with &&
+        step.with.pattern === "perf-latest-ok-*"
+    );
+    expect(download).toBeDefined();
+    const gate = updateJob.steps.find((step) => step.id === "gate");
+    expect(gate).toBeDefined();
+    expect(gate.run).toContain("editmode.txt");
+    expect(gate.run).toContain("playmode.txt");
+  });
+
+  test("CRITICAL-1: renders, then normalizes with managed Prettier and verifies the gate", () => {
+    const render = updateJob.steps.find((step) => step.id === "render");
+    expect(render).toBeDefined();
+    expect(render.run).toContain("node scripts/unity/render-perf-doc.js");
+    // Prettier --write AFTER render, and changed computed from git diff after.
+    expect(render.run).toMatch(
+      /render-perf-doc\.js[\s\S]*run-managed-prettier\.js --write[\s\S]*git diff --quiet/
+    );
+    // A belt-and-suspenders --check step guarantees the PR is green on the
+    // required markdown-json.yml prettier gate.
+    const verify = updateJob.steps.find(
+      (step) => step.run && /run-managed-prettier\.js --check/.test(step.run)
+    );
+    expect(verify).toBeDefined();
+    // Dependencies are installed so managed Prettier resolves from node_modules.
+    const install = updateJob.steps.find(
+      (step) => step.run && /npm ci/.test(step.run) && /package-lock\.json/.test(step.run)
+    );
+    expect(install).toBeDefined();
+  });
+
+  test("HIGH-1: uses the maintained commit action (no force-with-lease stale-info on rerun)", () => {
+    // The hand-rolled `git push --force-with-lease` recreated-from-master path
+    // failed on the 2nd run. It must be gone.
+    expect(text).not.toContain("--force-with-lease");
+    expect(text).not.toContain("git checkout -B");
+
+    const commit = updateJob.steps.find(
+      (step) =>
+        typeof step.uses === "string" && step.uses.startsWith("stefanzweifel/git-auto-commit-action@")
+    );
+    expect(commit).toBeDefined();
+    // Pinned to the repo's @v7 convention (matches update-llms-txt.yml).
+    expect(commit.uses).toBe("stefanzweifel/git-auto-commit-action@v7");
+    // Force-push to the bot-owned throwaway branch -> recreated each run.
+    expect(commit.with.push_options).toBe("--force");
+    // create_branch makes the action `git checkout -B` the branch, so it is
+    // CREATED on the first run (and after a merge/delete) instead of
+    // `git checkout <branch> --` failing with "invalid reference". Without it
+    // the auto-PR never lands on a clean repo -- the round-2 blocker.
+    expect(commit.with.create_branch).toBe(true);
+    // branch is plumbed via the job env; confirm both the reference and value.
+    expect(commit.with.branch).toBe("${{ env.PERF_BRANCH }}");
+    expect(updateJob.env.PERF_BRANCH).toBe("auto/perf-doc-update");
+
+    // The PR is only opened/refreshed when the commit actually changed files.
+    const openPr = updateJob.steps.find(
+      (step) => step.run && /gh pr create/.test(step.run)
+    );
+    expect(openPr).toBeDefined();
+    expect(openPr.if).toContain("changes_detected");
+  });
+});
+
 describe(".github/workflows/release.yml", () => {
   let text;
   let parsed;

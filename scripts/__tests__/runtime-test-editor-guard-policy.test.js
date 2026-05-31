@@ -84,9 +84,23 @@ function isAllPlatforms(asmdefPath) {
 const EDITOR_USING_REGEX = /\busing\s+UnityEditor\b/;
 const EDITOR_QUALIFIED_REGEX = /\bUnityEditor\s*\./;
 const COMMENT_LINE_REGEX = /^\s*(\/\/|\/\*|\*)/;
-// A #if/#elif condition is editor-guarded if it mentions UNITY_EDITOR not negated.
+// A #if/#elif condition compiles ONLY in the Editor (so a UnityEditor reference
+// inside it is player-safe) iff EVERY ||-disjunct requires UNITY_EDITOR. A lone
+// `UNITY_EDITOR`, or `<anything> && UNITY_EDITOR`, qualifies. But
+// `UNITY_EDITOR || X` ALSO compiles in a player when X is a runtime symbol --
+// e.g. `#if UNITY_EDITOR || UNITY_STANDALONE` is true in a standalone build, so
+// an unguarded UnityEditor reference inside it still breaks that build with
+// CS0246. Such an OR is therefore NOT editor-only. A negated `!UNITY_EDITOR`
+// never qualifies. We err toward flagging (zero false negatives): a redundant
+// editor-only OR like `UNITY_EDITOR || UNITY_EDITOR_WIN` is conservatively
+// flagged -- rewrite it as plain `#if UNITY_EDITOR`.
 function conditionIsEditor(condition) {
-  return /(?:^|[^!\w])UNITY_EDITOR\b/.test(condition) && !/!\s*UNITY_EDITOR\b/.test(condition);
+  return condition
+    .split("||")
+    .every(
+      (disjunct) =>
+        /(?:^|[^!\w])UNITY_EDITOR\b/.test(disjunct) && !/!\s*UNITY_EDITOR\b/.test(disjunct)
+    );
 }
 
 /**
@@ -173,4 +187,62 @@ describe("runtime test editor-guard policy (UnityEditor usage in all-platforms t
       }
     );
   }
+});
+
+// Unit coverage for the #if-region tracker itself, on synthetic sources, so the
+// classifier's own logic is verified independently of whatever the live tree
+// happens to contain (a data-driven scan over real files can pass vacuously).
+describe("runtime test editor-guard policy: #if-region classifier (synthetic)", () => {
+  const ref = "    using UnityEditor;\n";
+  const guard = (cond, body) => `#if ${cond}\n${body}#endif\n`;
+
+  test("plain #if UNITY_EDITOR guards the reference", () => {
+    expect(unguardedEditorReferences(guard("UNITY_EDITOR", ref))).toEqual([]);
+  });
+
+  test("#if <version> && UNITY_EDITOR (subset of editor) guards the reference", () => {
+    expect(
+      unguardedEditorReferences(guard("UNITY_2021_3_OR_NEWER && UNITY_EDITOR", ref))
+    ).toEqual([]);
+  });
+
+  test("#if UNITY_EDITOR || <runtime symbol> does NOT guard -- compiles in player, must flag", () => {
+    // The latent false-negative class: this region is also true in a standalone
+    // IL2CPP player, where UnityEditor does not exist.
+    expect(unguardedEditorReferences(guard("UNITY_EDITOR || UNITY_STANDALONE", ref))).toHaveLength(
+      1
+    );
+  });
+
+  test("#if !UNITY_EDITOR is the non-editor branch -- reference flagged", () => {
+    expect(unguardedEditorReferences(guard("!UNITY_EDITOR", ref))).toHaveLength(1);
+  });
+
+  test("#elif UNITY_EDITOR guards a reference in the elif branch", () => {
+    const src = `#if SOMETHING_ELSE\n    int x = 0;\n#elif UNITY_EDITOR\n${ref}#endif\n`;
+    expect(unguardedEditorReferences(src)).toEqual([]);
+  });
+
+  test("#else after a UNITY_EDITOR #if is the non-editor branch -- reference flagged", () => {
+    const src = `#if UNITY_EDITOR\n    int x = 0;\n#else\n${ref}#endif\n`;
+    expect(unguardedEditorReferences(src)).toHaveLength(1);
+  });
+
+  test("nested non-editor #if inside an editor #if stays guarded", () => {
+    const src = `#if UNITY_EDITOR\n#if UNITY_2021_3_OR_NEWER\n${ref}#endif\n#endif\n`;
+    expect(unguardedEditorReferences(src)).toEqual([]);
+  });
+
+  test("a bare (unguarded) reference is flagged", () => {
+    expect(unguardedEditorReferences(ref)).toHaveLength(1);
+  });
+
+  test("conditionIsEditor classifies OR/AND/negation correctly", () => {
+    expect(conditionIsEditor("UNITY_EDITOR")).toBe(true);
+    expect(conditionIsEditor("FOO && UNITY_EDITOR")).toBe(true);
+    expect(conditionIsEditor("UNITY_EDITOR || UNITY_STANDALONE")).toBe(false);
+    expect(conditionIsEditor("UNITY_EDITOR || UNITY_ANDROID")).toBe(false);
+    expect(conditionIsEditor("!UNITY_EDITOR")).toBe(false);
+    expect(conditionIsEditor("SOME_OTHER_SYMBOL")).toBe(false);
+  });
 });

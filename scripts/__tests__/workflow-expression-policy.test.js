@@ -62,14 +62,19 @@ describe("GitHub Actions expression policy (no empty ${{ }})", () => {
   test.each(files.map((file) => [path.relative(GITHUB_DIR, file), file]))(
     "%s contains no empty ${{ }} expression",
     (_rel, file) => {
-      const lines = fs.readFileSync(file, "utf8").split(/\r\n|\r|\n/);
+      const content = fs.readFileSync(file, "utf8");
       const offenders = [];
-      lines.forEach((line, index) => {
+      content.split(/\r\n|\r|\n/).forEach((line, index) => {
         if (EMPTY_EXPRESSION_REGEX.test(line)) {
           offenders.push(`${index + 1}: ${line.trim()}`);
         }
       });
       expect(offenders).toEqual([]);
+      // Also catch an empty expression split across lines (`${{\n}}`): GitHub's
+      // parser ignores newlines inside the braces, but the per-line scan above
+      // cannot see it. `\s` already spans newlines, so a whole-file test closes
+      // the gap.
+      expect(EMPTY_EXPRESSION_REGEX.test(content)).toBe(false);
     }
   );
 });

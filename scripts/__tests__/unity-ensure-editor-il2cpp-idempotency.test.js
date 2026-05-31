@@ -433,6 +433,37 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     expect(body).not.toMatch(/Invoke-UnityCli\b(?!Capture|Safe)/);
   });
 
+  // Static corroboration (no pwsh): the ROOT-CAUSE SIDESTEP surface exists. When the
+  // CLI reports the editor is not module-manageable, Ensure-UnityCiModules must
+  // PROACTIVELY route to the atomic reinstall (Install-UnityEditorModulesViaAtomicReinstall)
+  // instead of the install-modules -> exit 6 -> uninstall -> quarantine path.
+  test("the proactive not-module-manageable -> atomic-reinstall routing exists in the script", () => {
+    const text = fs.readFileSync(ENSURE_EDITOR, "utf8");
+    expect(text).toContain("function Test-TextIndicatesEditorNotModuleManageable");
+    expect(text).toContain("function Test-UnityEditorModuleManageable");
+    expect(text).toContain("function Install-UnityEditorModulesViaAtomicReinstall");
+    const start = text.indexOf("function Ensure-UnityCiModules");
+    const after = text.indexOf("\nfunction ", start + 1);
+    const body = text.slice(start, after === -1 ? undefined : after);
+    // The proactive branch consults the manageability probe and routes to the atomic
+    // reinstall BEFORE the install-modules core path.
+    expect(body).toContain("Test-UnityEditorModuleManageable");
+    expect(body).toContain("Install-UnityEditorModulesViaAtomicReinstall");
+    const probeIdx = body.indexOf("Test-UnityEditorModuleManageable");
+    const coreInstallIdx = body.indexOf("Get-UnityCliModuleInstallArguments");
+    expect(probeIdx).toBeGreaterThanOrEqual(0);
+    expect(coreInstallIdx).toBeGreaterThan(probeIdx);
+    // The atomic-reinstall helper attempts the in-place atomic install FIRST and only
+    // FALLS BACK to the quarantine+reinstall repair.
+    const helperStart = text.indexOf("function Install-UnityEditorModulesViaAtomicReinstall");
+    const helperAfter = text.indexOf("\nfunction ", helperStart + 1);
+    const helperBody = text.slice(helperStart, helperAfter);
+    const atomicIdx = helperBody.indexOf("Install-UnityEditorWithCiModules");
+    const fallbackIdx = helperBody.indexOf("Repair-UnityEditorWithCiModules");
+    expect(atomicIdx).toBeGreaterThanOrEqual(0);
+    expect(fallbackIdx).toBeGreaterThan(atomicIdx);
+  });
+
   if (!PWSH_PRESENT) {
     // eslint-disable-next-line no-console
     console.warn(
@@ -668,6 +699,188 @@ describe("ensure-editor.ps1 IL2CPP module idempotency", () => {
     ).toBe(true);
     expect(fs.readdirSync(path.join(installRoot, "_quarantine")).length).toBeGreaterThan(0);
   });
+
+  // ROOT-CAUSE SIDESTEP (Unity 6000.3.16f1 standalone, run 26701943540): when
+  // `install-modules -e <v> -l` reports the editor is NOT module-manageable
+  // ("Module installation is only supported for editors installed with Unity Hub"),
+  // the script must PROACTIVELY route to the atomic `install -m` reinstallation,
+  // which adds the modules IN PLACE -- so it NEVER runs the `install-modules` -m add
+  // (which exits 6), NEVER runs `uninstall`, and NEVER quarantines the (potentially
+  // locked) version directory. This is the fix that sidesteps the locker entirely.
+  test(
+    "a not-module-manageable editor is repaired by the atomic in-place reinstall WITHOUT install-modules/uninstall/quarantine",
+    () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-proactive-atomic-"));
+      workspaces.push(base);
+      const installRoot = path.join(base, "configured-root");
+      const editorRoot = path.join(installRoot, "6000.0.32f1");
+      const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+      const moduleAddMarker = path.join(base, "install-modules-add-called.txt");
+      const uninstallMarker = path.join(base, "uninstall-called.txt");
+      const atomicInstallMarker = path.join(base, "atomic-install-called.txt");
+      // The editor exists on disk but WITHOUT the CI module payload (so step 1 finds
+      // missing module groups and the proactive probe runs).
+      writeFakeUnityEditor(editorExe);
+
+      const cliBody = [
+        "const fs = require('fs');",
+        "const path = require('path');",
+        `const installRoot = ${JSON.stringify(installRoot)};`,
+        `const moduleAddMarker = ${JSON.stringify(moduleAddMarker)};`,
+        `const uninstallMarker = ${JSON.stringify(uninstallMarker)};`,
+        `const atomicInstallMarker = ${JSON.stringify(atomicInstallMarker)};`,
+        "const editorRoot = path.join(installRoot, '6000.0.32f1');",
+        "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+        "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+        "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+        "function createModules() {",
+        "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+        "}",
+        "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+        "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+        // The LISTING carries the not-module-manageable signal verbatim (as in the
+        // real failing CI run). This is what the proactive probe keys on.
+        "if (args[0] === 'install-modules' && args.includes('-l')) {",
+        "  write('Error: No modules found for this editor.');",
+        "  write('Module installation is only supported for editors installed with Unity Hub.');",
+        "  exit(0);",
+        "}",
+        // The install-modules ADD path is the DOOMED one: if it is ever taken, record
+        // it and exit 6. The test asserts this marker is NEVER written.
+        "if (args[0] === 'install-modules') { fs.writeFileSync(moduleAddMarker, '1'); write('Module installation is only supported for editors installed with Unity Hub.'); exit(6); }",
+        // uninstall is part of the quarantine path; assert it is NEVER called.
+        "if (args[0] === 'uninstall') { fs.writeFileSync(uninstallMarker, '1'); write('uninstalled'); exit(0); }",
+        // The ATOMIC install verb succeeds IN PLACE and writes the module payload.
+        "if (args[0] === 'install') { fs.writeFileSync(atomicInstallMarker, '1'); createModules(); write('installed editor with CI modules'); exit(0); }",
+        "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+      ];
+
+      const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+      const stdout = out.stdout || "";
+      const combined = combinedText(out);
+      if (out.status !== 0) {
+        throw new Error(combined);
+      }
+
+      // The script resolved the editor (last stdout line is the editor path).
+      expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
+      // It announced the proactive route...
+      expect(combined).toContain("not module-manageable");
+      expect(combined).toContain(
+        "reinstalling atomically with the required modules"
+      );
+      // ...the ATOMIC install ran...
+      expect(fs.existsSync(atomicInstallMarker)).toBe(true);
+      // ...and the il2cpp module payload is now on disk.
+      expect(
+        fs.existsSync(
+          path.join(
+            editorRoot,
+            "Editor",
+            "Data",
+            "PlaybackEngines",
+            "windowsstandalonesupport",
+            "Variations",
+            "win64_player_development_il2cpp",
+            "UnityPlayer.dll"
+          )
+        )
+      ).toBe(true);
+      // CRITICAL: the doomed install-modules ADD, the uninstall, and the quarantine
+      // were all SIDESTEPPED -- the locker is never contended.
+      expect(fs.existsSync(moduleAddMarker)).toBe(false);
+      expect(fs.existsSync(uninstallMarker)).toBe(false);
+      expect(fs.existsSync(path.join(installRoot, "_quarantine"))).toBe(false);
+    },
+    90000
+  );
+
+  // HONEST FALLBACK (objective B): when the in-place atomic install genuinely cannot
+  // deliver the modules (e.g. it cannot overlay the existing tree), the proactive
+  // route FALLS BACK to the quarantine+reinstall path. The first `install` call here
+  // fails to write the payload (simulating "could not overlay"); the second `install`
+  // (post-quarantine) succeeds. We assert the fallback warning fired, the quarantine
+  // happened, and the editor was ultimately repaired.
+  test(
+    "atomic in-place reinstall that cannot deliver modules FALLS BACK to quarantine+reinstall",
+    () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-proactive-fallback-"));
+      workspaces.push(base);
+      const installRoot = path.join(base, "configured-root");
+      const editorRoot = path.join(installRoot, "6000.0.32f1");
+      const editorExe = path.join(editorRoot, "Editor", "Unity.exe");
+      const installAttemptsMarker = path.join(base, "install-attempts.txt");
+      writeFakeUnityEditor(editorExe);
+
+      const cliBody = [
+        "const fs = require('fs');",
+        "const path = require('path');",
+        `const installRoot = ${JSON.stringify(installRoot)};`,
+        `const installAttemptsMarker = ${JSON.stringify(installAttemptsMarker)};`,
+        "const editorRoot = path.join(installRoot, '6000.0.32f1');",
+        "const editorExe = path.join(editorRoot, 'Editor', 'Unity.exe');",
+        "function mkdirp(p) { fs.mkdirSync(p, { recursive: true }); }",
+        "function writeFile(p, value) { mkdirp(path.dirname(p)); fs.writeFileSync(p, value); fs.chmodSync(p, 0o755); }",
+        "function createModules() {",
+        "  writeFile(editorExe, '#!/usr/bin/env sh\\necho \"Unity fake version\"\\nexit 0\\n');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'windowsstandalonesupport', 'Variations', 'win64_player_development_il2cpp', 'UnityPlayer.dll'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'UnityEditor.WebGL.Extensions.dll'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'WebGLSupport', 'BuildTools', 'Emscripten', 'emscripten', 'emcc.py'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'UnityEditor.Android.Extensions.dll'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'SDK', 'platform-tools', 'adb.exe'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'source.properties'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'NDK', 'toolchains', 'llvm', 'prebuilt', 'windows-x86_64', 'bin', 'clang++.exe'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'AndroidPlayer', 'OpenJDK', 'bin', 'java.exe'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_mono', 'LinuxPlayer'), '');",
+        "  writeFile(path.join(editorRoot, 'Editor', 'Data', 'PlaybackEngines', 'LinuxStandaloneSupport', 'Variations', 'linux64_player_development_il2cpp', 'LinuxPlayer'), '');",
+        "}",
+        "if (args.length === 1 && args[0] === 'install-path') { write(installRoot); exit(0); }",
+        "if (args.length >= 1 && args[0] === 'install-path') { exit(0); }",
+        "if (args[0] === 'install-modules' && args.includes('-l')) {",
+        "  write('Module installation is only supported for editors installed with Unity Hub.');",
+        "  exit(0);",
+        "}",
+        "if (args[0] === 'install-modules') { write('only supported for editors installed with Unity Hub'); exit(6); }",
+        "if (args[0] === 'uninstall') { write('uninstalled'); exit(0); }",
+        "if (args[0] === 'install') {",
+        "  const n = fs.existsSync(installAttemptsMarker) ? Number(fs.readFileSync(installAttemptsMarker, 'utf8')) : 0;",
+        "  fs.writeFileSync(installAttemptsMarker, String(n + 1));",
+        // First atomic attempt 'succeeds' (exit 0) but writes NO module payload, so
+        // the post-install module verification fails -> Install-UnityEditorWithCiModules
+        // throws -> the helper falls back to quarantine+reinstall. The post-quarantine
+        // attempt writes the payload.
+        "  if (n === 0) { write('installed (but modules missing)'); exit(0); }",
+        "  createModules(); write('installed editor with CI modules'); exit(0);",
+        "}",
+        "if (args[0] === 'editors') { write(JSON.stringify({ editors: [{ version: '6000.0.32f1', path: editorRoot }] })); exit(0); }"
+      ];
+
+      const out = runEnsureEditorWithFakeCli(cliBody, installRoot);
+      const stdout = out.stdout || "";
+      const combined = combinedText(out);
+      if (out.status !== 0) {
+        throw new Error(combined);
+      }
+      expect(stdout.trim().split(/\r?\n/).pop()).toBe(editorExe);
+      // The fallback warning fired and the quarantine happened.
+      expect(combined).toContain("falling back to quarantine + reinstall");
+      expect(fs.existsSync(path.join(installRoot, "_quarantine"))).toBe(true);
+      expect(fs.readdirSync(path.join(installRoot, "_quarantine")).length).toBeGreaterThan(0);
+      // More than one install attempt was made (in-place, then post-quarantine).
+      expect(Number(fs.readFileSync(installAttemptsMarker, "utf8"))).toBeGreaterThanOrEqual(2);
+    },
+    90000
+  );
 
   test("repair install retries when a successful install leaves no Unity.exe", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-editor-repair-no-editor-"));

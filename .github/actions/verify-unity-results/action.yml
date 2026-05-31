@@ -41,9 +41,10 @@ runs:
         # this target it skips the Unity run entirely (see compute-unity-assemblies
         # and unity-tests.yml). There are then no results to verify, so treat it
         # as an explicit success instead of a "tests did not run" failure. Read
-        # the signal from the environment (NOT an inline ${{ }} expansion) so the
-        # spawn-based verifier tests, which only substitute results-dir/label,
-        # observe an unset var and exercise the normal verification path.
+        # the signal from the environment via an env: mapping above (NOT an inline
+        # workflow-expression expansion in this run script) so the spawn-based
+        # verifier tests, which only substitute results-dir/label, observe an
+        # unset var and exercise the normal verification path.
         if ($env:DXM_EXPECTED_EMPTY -eq 'true') {
           Write-Host "::notice::No DxMessaging test assemblies were selected for $label; the Unity run was skipped, so there is nothing to verify."
           exit 0

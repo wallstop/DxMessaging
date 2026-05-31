@@ -492,6 +492,12 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           branch: ${{ env.PERF_BRANCH }}
+          # create_branch makes the action create-or-reset the bot branch (so it
+          # exists on the first run, and after a merge/delete) instead of trying
+          # to switch to a missing branch and failing with "invalid reference".
+          # Combined with push_options:--force this recreates the throwaway
+          # branch from current HEAD every run.
+          create_branch: true
           push_options: "--force"
           file_pattern: docs/architecture/performance.md
           commit_message: |

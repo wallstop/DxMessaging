@@ -639,6 +639,59 @@ describe("ensure-editor.ps1 production contract", () => {
       expect(cleanupIndex).toBeGreaterThanOrEqual(0);
       expect(moveIndex).toBeGreaterThan(cleanupIndex);
     });
+
+    // REGRESSION (Unity 6000.3.16f1 standalone, run 26701943540): the quarantine
+    // Move-Item failed all 3 retries with "...because it is being used by another
+    // process." on C:\Unity\Editors\6000.3.16f1\Editor, while the stale-process
+    // sweep "matched 0". The sweep scopes a locker by its IMAGE PATH and by its
+    // LOADED MODULES, but ONLY within THIS version's directory -- never the bare
+    // managed root. These assertions pin that the sweep reads ExecutablePath, scopes
+    // by an under-VERSION-DIR image path, and consults the loaded-module fallback.
+    test("the stale-process sweep scopes by executable image path under the VERSION dir", () => {
+      expect(cleanupBody).toContain("ExecutablePath");
+      // The image-path scoping is expressed via the shared path-containment helper.
+      expect(cleanupBody).toMatch(/Test-IsPathInsideDirectory[^\n]*\$executablePath/);
+      // It must consider an image under the VERSION directory (the signal that
+      // survives an empty CommandLine).
+      expect(cleanupBody).toContain("imageInsideVersionDir");
+      // Defense-in-depth cross-identity signal: loaded modules under the version dir.
+      expect(cleanupBody).toContain("Test-ProcessHasModuleUnderDirectory");
+    });
+
+    // HIGH collateral-kill fix (the rework's non-negotiable): the sweep must NOT
+    // force-kill a Unity-named binary merely because its image sits SOMEWHERE under
+    // the shared managed root (a concurrent SIBLING-version editor). The unconditional
+    // image/module kill is VERSION-DIR scoped; a broad match requires the command
+    // line to tie the process to THIS version. Pin that the dropped, dangerous
+    // `imageInsideRoot && looksUnity` kill branch is gone.
+    test("the sweep does NOT kill a Unity-named binary by bare under-ROOT image alone (no cross-version collateral)", () => {
+      // Assert against CODE, not prose: the explanatory comments legitimately name
+      // the removed `imageInsideRoot` branch to document why it is gone.
+      const cleanupCode = stripPwshComments(cleanupBody);
+      // The bare-root scoping variable must no longer exist as a kill input.
+      expect(cleanupCode).not.toContain("imageInsideRoot");
+      // The final scoping decision pairs looksUnity with commandLineScoped only.
+      const scopeMatch = /\$isScoped\s*=([^\n]*)/.exec(cleanupCode);
+      expect(scopeMatch).not.toBeNull();
+      const scopeExpr = scopeMatch[1];
+      expect(scopeExpr).toContain("imageInsideVersionDir");
+      expect(scopeExpr).toContain("commandLineScoped");
+      expect(scopeExpr).not.toContain("imageInsideRoot");
+    });
+
+    test("the quarantine re-sweeps stale processes between move retries and annotates a persistent lock", () => {
+      // The sweep is invoked at least twice in the helper body: once up-front and
+      // once inside the retry action (so a transient AV/installer/indexer handle
+      // gets multiple shots to release as the move is re-attempted).
+      const sweepCalls =
+        quarantineBody.match(/Stop-StaleUnityProvisioningProcesses\b/g) || [];
+      expect(sweepCalls.length).toBeGreaterThanOrEqual(2);
+      // A persistent lock surfaces a wrap-immune ::error:: (Write-Host, not a bare
+      // throw whose message ConciseView would word-wrap) before re-throwing.
+      expect(quarantineBody).toMatch(
+        /Write-Host\s+\([^\n]*::error::Could not quarantine Unity/
+      );
+    });
   });
 
   // --- 2c: the managed-root guard emits a wrap-immune ::error:: before throwing. ---

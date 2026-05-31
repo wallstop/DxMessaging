@@ -628,6 +628,162 @@ describe("ensure-editor.ps1 module-install resilience + diagnostics", () => {
     ]);
   });
 
+  // REGRESSION (Unity 6000.3.16f1 standalone, run 26701943540): the quarantine
+  // could not proceed because the stale-process sweep "matched 0" while a handle was
+  // held on ...\6000.3.16f1\Editor. The sweep is now VERSION-DIR scoped (never the
+  // bare managed root) so it catches the editor's own image/loaded-modules under
+  // THIS version dir without collateral-killing a concurrent SIBLING-version editor.
+  // This behavioral test EXECUTES the sweep against a fabricated Win32_Process table
+  // and asserts the version-dir-scoped lockers are killed while unrelated, out-of-
+  // root, AND sibling-version processes are spared.
+  const itSweep = PWSH_PRESENT ? test : test.skip;
+  itSweep(
+    "the stale-process sweep is VERSION-DIR scoped: kills this-version lockers, spares a concurrent different-version editor",
+    () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-sweep-"));
+      workspaces.push(base);
+      // Host-native paths so the script's GetFullPath-based path containment is
+      // correct on this OS (the assertion is about scoping logic, not Windows
+      // drive-letter syntax, which the real runner exercises natively).
+      const installRoot = path.join(base, "Editors");
+      const version = "6000.3.16f1";
+      const versionDir = path.join(installRoot, version);
+      const imageInVersionDir = path.join(versionDir, "Editor", "Unity.exe");
+      const unpackerInVersionDir = path.join(
+        versionDir,
+        "Editor",
+        "Data",
+        "unpacker.exe"
+      );
+      const unityElsewhere = path.join(base, "elsewhere", "unity.exe");
+      const avOutsideRoot = path.join(base, "Defender", "MsMpEng.exe");
+      // HIGH-fix anchor: a DIFFERENT-version editor running concurrently UNDER THE
+      // SAME managed root. The prior `imageInsideRoot && looksUnity` branch would
+      // have force-killed this; the version-dir-scoped predicate must SPARE it.
+      const siblingVersionDir = path.join(installRoot, "2022.3.45f1");
+      const siblingEditorExe = path.join(siblingVersionDir, "Editor", "Unity.exe");
+      const lit = (p) => p.replace(/'/g, "''");
+
+      const out = runPwshScript(
+        [
+          "Set-StrictMode -Version Latest",
+          "$ErrorActionPreference = 'Stop'",
+          extractEnsureEditorFunctions([
+            "Stop-StaleUnityProvisioningProcesses",
+            "Test-ProcessHasModuleUnderDirectory",
+            "Test-IsPathInsideDirectory",
+            "Add-ProvisioningProcessCleanupEvent",
+            "Write-CiNotice"
+          ]),
+          // The function records cleanup events into this script-scoped list.
+          "$script:ProvisioningProcessCleanupEvents = New-Object System.Collections.Generic.List[object]",
+          // Capture kill requests instead of killing real processes.
+          "$script:Killed = New-Object System.Collections.Generic.List[int]",
+          "function Stop-Process { param([int]$Id, [switch]$Force, $ErrorAction) [void]$script:Killed.Add($Id) }",
+          // Fabricated process table. 9001 is the cross-identity locker shape: a
+          // Unity-named image OUTSIDE the managed root (the NetworkService CLI) with
+          // an EMPTY CommandLine AND empty ExecutablePath -- but a LOADED MODULE
+          // resolving under THIS version dir (the loaded-module fallback catches it).
+          "function Get-CimInstance { param([string]$ClassName, $ErrorAction) @(",
+          `  [pscustomobject]@{ ProcessId = 4242; Name = 'unity.exe'; CommandLine = ''; ExecutablePath = '${lit(imageInVersionDir)}' },`,
+          `  [pscustomobject]@{ ProcessId = 5555; Name = 'explorer.exe'; CommandLine = 'explorer'; ExecutablePath = '${lit(path.join(base, "explorer"))}' },`,
+          `  [pscustomobject]@{ ProcessId = 6666; Name = 'unity.exe'; CommandLine = 'unity install ${version}'; ExecutablePath = '${lit(unityElsewhere)}' },`,
+          `  [pscustomobject]@{ ProcessId = 7777; Name = 'MsMpEng.exe'; CommandLine = ''; ExecutablePath = '${lit(avOutsideRoot)}' },`,
+          `  [pscustomobject]@{ ProcessId = 8888; Name = 'someunpacker.exe'; CommandLine = ''; ExecutablePath = '${lit(unpackerInVersionDir)}' },`,
+          `  [pscustomobject]@{ ProcessId = 9001; Name = 'unity.exe'; CommandLine = ''; ExecutablePath = '' },`,
+          `  [pscustomobject]@{ ProcessId = 2245; Name = 'Unity.exe'; CommandLine = ''; ExecutablePath = '${lit(siblingEditorExe)}' }`,
+          ") }",
+          // Fake loaded-module table: only 9001 has a module under THIS version dir.
+          `$env:DXM_UNITY_FAKE_PROCESS_MODULES = '9001=${lit(path.join(versionDir, "Editor", "Data", "Mono", "mono.dll"))}'`,
+          `Stop-StaleUnityProvisioningProcesses -InstallRoot '${lit(installRoot)}' -Version '${version}' -Reason 'regression'`,
+          "Write-Output ('KILLED=' + (($script:Killed | Sort-Object) -join ','))"
+        ].join("\n")
+      );
+
+      const combined = combinedText(out);
+      if (out.status !== 0) {
+        throw new Error(combined);
+      }
+      const killedMatch = /^KILLED=(.*)$/m.exec(out.stdout || "");
+      expect(killedMatch).not.toBeNull();
+      const killed = killedMatch[1].length ? killedMatch[1].split(",") : [];
+      // Killed: empty-CommandLine image under the version dir (4242), the
+      // version-scoped command line (6666 -> cmdline carries the version), the helper
+      // running FROM the version dir (8888), and the cross-identity locker with a
+      // loaded module under the version dir (9001 -> loaded-module fallback).
+      expect(killed).toEqual(expect.arrayContaining(["4242", "6666", "8888", "9001"]));
+      // SPARED: unrelated explorer (5555), out-of-root antivirus (7777), and --
+      // critically for the HIGH collateral-kill fix -- the concurrent SIBLING-version
+      // editor under the same root (2245), which the prior under-root branch killed.
+      expect(killed).not.toContain("5555");
+      expect(killed).not.toContain("7777");
+      expect(killed).not.toContain("2245");
+    }
+  );
+
+  // FINDING-1 (the REAL locker shape): a Unity-named image OUTSIDE the managed root
+  // (the NetworkService CLI at C:\Windows\ServiceProfiles\...), with BOTH an empty
+  // CommandLine and an empty ExecutablePath (PEB privilege-gated), and NO loaded
+  // module readable under the version dir. This is the honest worst case: the sweep
+  // has NO signal that ties it to our version, so it must be SPARED (matched 0) --
+  // documenting plainly that this residual is not catchable in-tree.
+  itSweep(
+    "the real cross-identity locker (image outside root, empty cmdline+exe, no readable module) is NOT matched (honest residual)",
+    () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-sweep-residual-"));
+      workspaces.push(base);
+      const installRoot = path.join(base, "Editors");
+      const version = "6000.3.16f1";
+      const cliOutsideRoot = path.join(
+        base,
+        "ServiceProfiles",
+        "NetworkService",
+        "AppData",
+        "Local",
+        "Unity",
+        "bin",
+        "unity.exe"
+      );
+      const lit = (p) => p.replace(/'/g, "''");
+
+      const out = runPwshScript(
+        [
+          "Set-StrictMode -Version Latest",
+          "$ErrorActionPreference = 'Stop'",
+          extractEnsureEditorFunctions([
+            "Stop-StaleUnityProvisioningProcesses",
+            "Test-ProcessHasModuleUnderDirectory",
+            "Test-IsPathInsideDirectory",
+            "Add-ProvisioningProcessCleanupEvent",
+            "Write-CiNotice"
+          ]),
+          "$script:ProvisioningProcessCleanupEvents = New-Object System.Collections.Generic.List[object]",
+          "$script:Killed = New-Object System.Collections.Generic.List[int]",
+          "function Stop-Process { param([int]$Id, [switch]$Force, $ErrorAction) [void]$script:Killed.Add($Id) }",
+          "function Get-CimInstance { param([string]$ClassName, $ErrorAction) @(",
+          `  [pscustomobject]@{ ProcessId = 3110; Name = 'unity.exe'; CommandLine = ''; ExecutablePath = '${lit(cliOutsideRoot)}' }`,
+          ") }",
+          // No fake module table: the loaded-module probe returns no positive signal,
+          // exactly like a process whose modules the querying identity cannot read.
+          "$env:DXM_UNITY_FAKE_PROCESS_MODULES = $null",
+          `Stop-StaleUnityProvisioningProcesses -InstallRoot '${lit(installRoot)}' -Version '${version}' -Reason 'residual'`,
+          "Write-Output ('KILLED=' + (($script:Killed | Sort-Object) -join ','))"
+        ].join("\n")
+      );
+
+      const combined = combinedText(out);
+      if (out.status !== 0) {
+        throw new Error(combined);
+      }
+      const killedMatch = /^KILLED=(.*)$/m.exec(out.stdout || "");
+      expect(killedMatch).not.toBeNull();
+      const killed = killedMatch[1].length ? killedMatch[1].split(",") : [];
+      // HONEST: this locker is uncatchable in-tree -- it must NOT be matched.
+      expect(killed).not.toContain("3110");
+      expect(killed).toEqual([]);
+    }
+  );
+
   test("#1 normal completion is unaffected: a fast install streams full output and resolves the editor", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-ensure-resilience-fast-"));
     workspaces.push(base);
