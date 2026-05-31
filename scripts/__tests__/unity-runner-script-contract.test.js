@@ -902,9 +902,7 @@ describe("scripts/unity direct CI runner contract", () => {
     // literal must NOT be the value emitted into the fence anymore.
     expect(runCi).toContain("function New-WorkflowCommandStopToken");
     expect(runCi).toMatch(/\[guid\]::NewGuid\(\)\.ToString\('N'\)/);
-    expect(runCi).toMatch(
-      /\$script:WorkflowCommandStopToken = New-WorkflowCommandStopToken/
-    );
+    expect(runCi).toMatch(/\$script:WorkflowCommandStopToken = New-WorkflowCommandStopToken/);
     // The token holder must not be initialized to the old fixed literal.
     expect(runCi).not.toMatch(
       /\$script:WorkflowCommandStopToken\s*=\s*'dxm-stop-commands-failed-test-dump'/
@@ -917,7 +915,7 @@ describe("scripts/unity direct CI runner contract", () => {
     // A single-line ::error:: annotation per failed test and a ::group:: console
     // block with the full multi-line detail.
     expect(runCi).toMatch(/::error::\$\{Label\} failed test:/);
-    expect(runCi).toContain('::group::Failed test:');
+    expect(runCi).toContain("::group::Failed test:");
 
     // Bounded output with a no-silent-cap truncation notice.
     expect(runCi).toContain("Select-Object -First $MaxFailures");
@@ -949,9 +947,7 @@ describe("scripts/unity direct CI runner contract", () => {
   // (CI runners have pwsh); an always-on sanity assertion keeps it from becoming
   // a silent no-op.
   describe("run-ci-tests Write-UnityFailedTestAnnotations behavioral enumeration", () => {
-    const {
-      combinedText: combinePwsh
-    } = require("../lib/pwsh-output");
+    const { combinedText: combinePwsh } = require("../lib/pwsh-output");
     const os = require("os");
 
     function pwshAvailable() {
@@ -1057,7 +1053,9 @@ describe("scripts/unity direct CI runner contract", () => {
         expect(text).toContain(
           "::error::Unity 2021.3 playmode failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests.DispatchOrder"
         );
-        expect(text).toContain("::group::Failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests.DispatchOrder");
+        expect(text).toContain(
+          "::group::Failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests.DispatchOrder"
+        );
         expect(text).toContain("Expected: 5");
         expect(text).toContain("But was: 4");
 
@@ -1072,7 +1070,9 @@ describe("scripts/unity direct CI runner contract", () => {
         // the assembly suite has no annotation of its own, and the MessageBusTests
         // fixture is covered by its failed child case, not a separate suite entry.
         expect(text).not.toContain("failed test: Tests.dll");
-        expect(text).not.toContain("failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests --");
+        expect(text).not.toContain(
+          "failed test: DxMessaging.Tests.Runtime.Core.MessageBusTests --"
+        );
 
         // (4) The passing case is never reported.
         expect(text).not.toContain("PassingOne");
@@ -1101,9 +1101,8 @@ describe("scripts/unity direct CI runner contract", () => {
         const result = runEnumeration(xml);
         const text = combinePwsh(result);
 
-        const annotationCount = (
-          text.match(/::error::Unity 2021\.3 playmode failed test:/g) || []
-        ).length;
+        const annotationCount = (text.match(/::error::Unity 2021\.3 playmode failed test:/g) || [])
+          .length;
         expect(annotationCount).toBe(50);
         expect(text).toContain("5 additional failed test(s) not shown");
       }
@@ -1135,9 +1134,7 @@ describe("scripts/unity direct CI runner contract", () => {
 
         // The name is used as the fullname fallback in BOTH the annotation and
         // the group header; the helper did not degrade to the generic warning.
-        expect(text).toContain(
-          "::error::Unity 2021.3 playmode failed test: OnlyHasName"
-        );
+        expect(text).toContain("::error::Unity 2021.3 playmode failed test: OnlyHasName");
         expect(text).toContain("::group::Failed test: OnlyHasName");
         expect(text).toContain("boom");
         expect(text).not.toContain("Could not enumerate failed tests");
@@ -1235,15 +1232,11 @@ describe("scripts/unity direct CI runner contract", () => {
         const text = combinePwsh(result);
 
         // The child case is enumerated.
-        expect(text).toContain(
-          "::error::Unity 2021.3 playmode failed test: Ns.BothFix.ChildFail"
-        );
+        expect(text).toContain("::error::Unity 2021.3 playmode failed test: Ns.BothFix.ChildFail");
         expect(text).toContain("child assert failed");
         // The suite's OWN teardown failure is ALSO enumerated (its fullname
         // differs from the child's, so no double-print).
-        expect(text).toContain(
-          "::error::Unity 2021.3 playmode failed test: Ns.BothFix"
-        );
+        expect(text).toContain("::error::Unity 2021.3 playmode failed test: Ns.BothFix");
         expect(text).toContain("teardown blew up");
       }
     );
@@ -1466,13 +1459,33 @@ describe("scripts/unity direct CI runner contract", () => {
     }
 
     test("every Unity.exe arg-array literal is scanned and at least one matches", () => {
-      // Sanity: the extractor MUST find at least the five known Unity arg
-      // vectors (activate, return, probe, configure, test). A regression that
-      // turned the extractor into a silent no-op would otherwise pass an empty
-      // table below.
+      // Sanity: the extractor MUST find at least the six known Unity arg
+      // vectors (activate, return, probe, configure, the editmode/playmode test
+      // run, AND the standalone editor BUILD). A regression that turned the
+      // extractor into a silent no-op would otherwise pass an empty table below.
       const literals = extractAtArrayLiterals(runCi);
       const unityVectors = literals.filter((l) => isUnityArgVector(quotedTokensIn(l.body)));
-      expect(unityVectors.length).toBeGreaterThanOrEqual(5);
+      expect(unityVectors.length).toBeGreaterThanOrEqual(6);
+    });
+
+    test("the standalone player-RUN array has '-dxmTestResults' and NEITHER -runTests NOR -quit", () => {
+      // The directly-launched standalone player vector is
+      // @('-batchmode','-nographics','-logFile','-','-dxmTestResults',$ResultsPath).
+      // It IS recognized as a Unity-marker vector BECAUSE -batchmode is in
+      // UNITY_FLAG_MARKERS, so the negative "-runTests excludes -quit" rule
+      // already covers it; it passes that rule because it has NEITHER flag. Pin
+      // its existence + shape so a refactor that dropped the file-based results
+      // channel (or re-added a -runTests/-quit to the player launch) is caught.
+      const literals = extractAtArrayLiterals(runCi);
+      const playerRunArrays = literals
+        .map((l) => quotedTokensIn(l.body))
+        .filter((tokens) => tokens.includes("-dxmTestResults"));
+      expect(playerRunArrays.length).toBeGreaterThanOrEqual(1);
+      for (const tokens of playerRunArrays) {
+        expect(tokens).toContain("-batchmode");
+        expect(tokens).not.toContain("-runTests");
+        expect(tokens).not.toContain("-quit");
+      }
     });
 
     test("NO Unity.exe arg array contains both '-runTests' AND '-quit'", () => {
@@ -1532,6 +1545,220 @@ describe("scripts/unity direct CI runner contract", () => {
       // The canonical case bundles -quit with -executeMethod for a clean exit.
       const withQuit = execMethodArrays.filter((tokens) => tokens.includes("-quit"));
       expect(withQuit.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // STANDALONE SPLIT-BUILD + FILE-BASED RESULTS contract.
+  //
+  // The legacy `-runTests -testPlatform StandaloneWindows64` flow had the built
+  // player stream NUnit results to the editor over PlayerConnection/TCP, which
+  // hangs on the self-hosted runners' multi-NIC networks (errorcode 10060). The
+  // fix splits the standalone path into (2a) an editor BUILD that severs the
+  // player's outbound connections via a generated DxmCiStandaloneBuildModifier and
+  // exits via IPostBuildCleanup, (2b) a DIRECT run of the built exe (whose
+  // generated DxmCiStandaloneTestCallback writes NUnit XML to -dxmTestResults and
+  // quits), and (2c) file-based validation -- all under a hard tree-kill watchdog.
+  // These tests pin the new helpers, env-vars, sentinels, watchdog SHAPE, ordering,
+  // and the generated-C# content; the behavioral proof is the strictmode-smoke
+  // spawn test. editmode/playmode are untouched.
+  // -------------------------------------------------------------------------
+  describe("run-ci-tests standalone split-build + file-based results", () => {
+    test("declares the new watchdog / timeout / player functions (existence tripwires)", () => {
+      expect(runCi).toContain("function Invoke-ProcessWithTreeKillTimeout");
+      expect(runCi).toContain("function Invoke-StandaloneTestPlayer");
+      expect(runCi).toContain("function Get-StandaloneTestPlayerTimeoutSeconds");
+      expect(runCi).toContain("function Get-StandaloneBuildTimeoutSeconds");
+    });
+
+    test("declares the standalone env-vars and sentinels (existence tripwires)", () => {
+      expect(runCi).toContain("DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS");
+      expect(runCi).toContain("DXM_STANDALONE_BUILD_TIMEOUT_SECONDS");
+      expect(runCi).toContain("DXM_PLAYER_BUILD_PATH");
+      expect(runCi).toContain("-dxmTestResults");
+      expect(runCi).toContain("DxmTestPlayer.exe");
+    });
+
+    test("the timeout getters default to 30 min (player) and 45 min (build) and follow the env-parse convention", () => {
+      expect(runCi).toMatch(
+        /function Get-StandaloneTestPlayerTimeoutSeconds[\s\S]*?param\(\[int\]\$Default = 1800\)/
+      );
+      expect(runCi).toMatch(
+        /function Get-StandaloneBuildTimeoutSeconds[\s\S]*?param\(\[int\]\$Default = 2700\)/
+      );
+      // Mirror ensure-editor's TryParse >= 0 with a ::warning:: on an invalid value.
+      expect(runCi).toMatch(
+        /function Get-StandaloneTestPlayerTimeoutSeconds[\s\S]*?\[int\]::TryParse\(\$env:DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS, \[ref\]\$parsed\)/
+      );
+      expect(runCi).toMatch(
+        /function Get-StandaloneBuildTimeoutSeconds[\s\S]*?\[int\]::TryParse\(\$env:DXM_STANDALONE_BUILD_TIMEOUT_SECONDS, \[ref\]\$parsed\)/
+      );
+    });
+
+    test("the watchdog mirrors the proven ensure-editor tree-kill SHAPE", () => {
+      // SAME structural guards the pinned ensure-editor assertions use: a
+      // System.Diagnostics.Process with a $proc.Kill($true) tree-kill, the
+      // ConvertTo-ProcessArgumentLine helper (NOT .ArgumentList), and NO bare
+      // WaitForExit() (the bounded WaitForExit(5000) reap is fine -- the negative
+      // matches only the empty-parens form).
+      expect(runCi).toMatch(
+        /function Invoke-ProcessWithTreeKillTimeout[\s\S]*?\$proc\.Kill\(\$true\)/
+      );
+      expect(runCi).toContain("function ConvertTo-ProcessArgumentLine");
+      expect(runCi).toMatch(
+        /function Invoke-ProcessWithTreeKillTimeout[\s\S]*?ConvertTo-ProcessArgumentLine -Arguments \$Arguments/
+      );
+      expect(runCi).not.toContain(".ArgumentList");
+      expect(runCi).not.toMatch(/WaitForExit\(\)/);
+      // The launched process is held in a try/finally that tree-kills on any throw
+      // (closes the orphaned-player-on-cancellation gap).
+      expect(runCi).toMatch(
+        /finally\s*\{[\s\S]*?if \(\$proc -and -not \$proc\.HasExited\)\s*\{\s*try \{ \$proc\.Kill\(\$true\) \}/
+      );
+    });
+
+    test("uses a SINGLE results channel (-dxmTestResults), with no env handoff", () => {
+      // The player reads -dxmTestResults only; there is NO env channel and NO
+      // persistentDataPath fallback anywhere in the runner.
+      expect(runCi).not.toContain("DXM_TEST_RESULTS");
+      expect(runCi).not.toContain("persistentDataPath");
+    });
+
+    test("the player build goes UNDER project Temp (not the uploaded artifact) and the player log under artifacts", () => {
+      expect(runCi).toContain("Join-Path $ProjectPath 'Temp\\DxmTestPlayer\\DxmTestPlayer.exe'");
+      expect(runCi).toContain("$playerLogPath = Join-Path $ArtifactsPath 'player.log'");
+    });
+
+    test("Invoke-StandaloneTestPlayer builds the player run vector and maps exit 2 -> no results", () => {
+      const body = extractFunctionBody(runCi, "Invoke-StandaloneTestPlayer");
+      expect(body).not.toBe("");
+      const normalized = normalizeWhitespace(body);
+      // The exact player launch vector (single channel; NO -runTests/-quit).
+      expect(normalized).toContain("'-batchmode',");
+      expect(normalized).toContain("'-nographics',");
+      expect(normalized).toContain("'-logFile', '-',");
+      expect(normalized).toContain("'-dxmTestResults', $ResultsPath");
+      expect(normalized).toContain("Invoke-ProcessWithTreeKillTimeout");
+      // Watchdog breach + exit-2 (no path) both throw with the env-knob name.
+      expect(normalized).toContain("DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS");
+      expect(normalized).toMatch(/\$result\.ExitCode -eq 2/);
+    });
+
+    test("the standalone branch builds with -runTests + -buildTarget and NO -quit", () => {
+      // The editor BUILD vector reuses -runTests (so PlayerLauncher's modify path
+      // fires) + -buildTarget StandaloneWindows64, but must NOT carry -quit (the
+      // editor must reach PostBuildCleanup to exit). It is automatically covered by
+      // the -runTests-excludes-quit negative scan above; here we pin its presence.
+      expect(runCi).toContain("$env:DXM_PLAYER_BUILD_PATH = $standaloneExe");
+      expect(runCi).toMatch(
+        /\$buildResult = Invoke-ProcessWithTreeKillTimeout[\s\S]*?-TimeoutSeconds \(Get-StandaloneBuildTimeoutSeconds\)/
+      );
+      // POST-BUILD exe-exists tripwire with the AutoRunPlayer-still-set diagnostic.
+      expect(runCi).toMatch(
+        /if \(-not \(Test-Path -LiteralPath \$standaloneExe -PathType Leaf\)\)/
+      );
+      expect(runCi).toContain("the build modifier may not have run");
+      // The build-log missed-case scan for the non-redirected AutoRun signatures.
+      expect(runCi).toContain("PlayerWithTests");
+      expect(runCi).toContain("options\\.AutoRunPlayer = True");
+    });
+
+    test("the standalone branch runs the player then validates the FILE; editmode/playmode keep the single -runTests path", () => {
+      // The standalone branch is guarded by `if ($TestMode -eq 'standalone')`, runs
+      // the player BEFORE validating, and validates the FILE with the player log.
+      const playerCallIdx = runCi.indexOf("Invoke-StandaloneTestPlayer `");
+      const standaloneValidateIdx = runCi.indexOf(
+        'Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion standalone" -LogPath $playerLogPath'
+      );
+      expect(playerCallIdx).toBeGreaterThan(-1);
+      expect(standaloneValidateIdx).toBeGreaterThan(-1);
+      // INDEX-ORDER: the player runs before the file validation.
+      expect(playerCallIdx).toBeLessThan(standaloneValidateIdx);
+      // editmode/playmode still use the single -runTests editor invocation (byte
+      // unchanged: same Invoke-UnityEditorWithFailureDiagnostics + Test-NUnitResults
+      // on $logPath, not $playerLogPath).
+      expect(runCi).toContain(
+        'Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode" -LogPath $logPath -Project $ProjectPath'
+      );
+    });
+
+    test("the standalone configure step (New-ConfiguratorSource) is UNCHANGED -- no waitForManagedDebugger / ConnectWithProfiler", () => {
+      // All connection suppression moved to the generated build modifier; the
+      // configurator must stay byte-identical (switch target + IL2CPP + NET_Standard
+      // only). A profiler/debugger PlayerSetting here would be the rejected,
+      // cross-version-fragile design.
+      const body = extractFunctionBody(runCi, "New-ConfiguratorSource");
+      expect(body).not.toBe("");
+      expect(body).not.toContain("waitForManagedDebugger");
+      expect(body).not.toContain("ConnectWithProfiler");
+      expect(body).toContain("SwitchActiveBuildTarget");
+      expect(body).toContain("ScriptingImplementation.IL2CPP");
+      expect(body).toContain("ApiCompatibilityLevel.NET_Standard_2_0");
+    });
+
+    test("New-StandaloneBuildModifierSource emits the dual-attribute modifier + cleanup", () => {
+      const body = extractFunctionBody(runCi, "New-StandaloneBuildModifierSource");
+      expect(body).not.toBe("");
+      expect(body).toContain("ITestPlayerBuildModifier");
+      expect(body).toContain("IPostBuildCleanup");
+      expect(body).toContain("[assembly: TestPlayerBuildModifier(typeof(");
+      expect(body).toContain("[assembly: PostBuildCleanup(typeof(");
+      // The three outbound-connection sources are cleared; test assemblies kept.
+      expect(body).toContain("&= ~BuildOptions.AutoRunPlayer");
+      expect(body).toContain("&= ~BuildOptions.ConnectToHost");
+      expect(body).toContain("&= ~BuildOptions.ConnectWithProfiler");
+      expect(body).toContain("|= BuildOptions.IncludeTestAssemblies");
+      // PostBuildCleanup arms the editor exit gated on -runTests.
+      expect(body).toContain("EditorApplication.Exit(0)");
+      expect(body).toContain("-runTests");
+      expect(body).toContain("DXM_PLAYER_BUILD_PATH");
+    });
+
+    test("New-StandaloneTestCallbackSource emits the player TestRunCallback writing NUnit XML", () => {
+      const body = extractFunctionBody(runCi, "New-StandaloneTestCallbackSource");
+      expect(body).not.toBe("");
+      expect(body).toContain("[assembly: TestRunCallback(typeof(");
+      expect(body).toContain(": ITestRunCallback");
+      expect(body).toContain("RunFinished");
+      expect(body).toContain("result.ToXml(true)");
+      expect(body).toContain('new TNode("test-run")');
+      expect(body).toContain('AddAttribute("total",');
+      expect(body).toContain('AddAttribute("passed",');
+      expect(body).toContain('AddAttribute("failed",');
+      // ResultState is a NUnit OBJECT on the player; must be .ToString()'d.
+      expect(body).toContain("result.ResultState.ToString()");
+      expect(body).toContain("Application.Quit");
+      expect(body).toContain("[Preserve]");
+      expect(body).toContain("-dxmTestResults");
+      // NEGATIVE: single channel only -- no env, no persistentDataPath fallback.
+      expect(body).not.toContain("persistentDataPath");
+      expect(body).not.toContain("DXM_TEST_RESULTS");
+    });
+
+    test("New-StandaloneTestCallbackAsmdef references UnityEngine.TestRunner with nunit + UNITY_INCLUDE_TESTS", () => {
+      const body = extractFunctionBody(runCi, "New-StandaloneTestCallbackAsmdef");
+      expect(body).not.toBe("");
+      expect(body).toContain("UnityEngine.TestRunner");
+      expect(body).toContain("nunit.framework.dll");
+      expect(body).toContain("UNITY_INCLUDE_TESTS");
+      expect(body).toContain("overrideReferences");
+    });
+
+    test("Initialize-EphemeralProject writes the three standalone files ONLY for standalone, idempotently", () => {
+      const body = extractFunctionBody(runCi, "Initialize-EphemeralProject");
+      expect(body).not.toBe("");
+      // Gated on $Mode -eq 'standalone'.
+      expect(body).toContain("if ($Mode -eq 'standalone')");
+      expect(body).toContain("Assets\\Editor\\DxmCiStandaloneBuildModifier.cs");
+      expect(body).toContain("Assets\\DxmCiStandaloneTestCallback\\DxmCiStandaloneTestCallback.cs");
+      expect(body).toContain(
+        "Assets\\DxmCiStandaloneTestCallback\\DxmCiStandaloneTestCallback.asmdef"
+      );
+      // Idempotent write-when-missing-or-changed (like Copy-DxMessagingAnalyzersToAssets).
+      expect(body).toMatch(/Test-Path -LiteralPath \$file\.Path -PathType Leaf/);
+      expect(body).toContain("New-StandaloneBuildModifierSource");
+      expect(body).toContain("New-StandaloneTestCallbackSource");
+      expect(body).toContain("New-StandaloneTestCallbackAsmdef");
     });
   });
 });

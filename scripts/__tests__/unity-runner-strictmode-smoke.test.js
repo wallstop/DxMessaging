@@ -165,6 +165,110 @@ const STUB_EDITOR_NO_RESULTS = stubEditor(RUNTESTS_NO_RESULTS);
 const STUB_EDITOR_FAILING = stubEditor(RUNTESTS_FAILING);
 const STUB_EDITOR_FAILING_CS8032 = stubEditor(RUNTESTS_FAILING_CS8032);
 
+// ===========================================================================
+// STANDALONE SPLIT-BUILD STUBS.
+//
+// The standalone path now (1) launches the editor BUILD via run-ci-tests'
+// Invoke-ProcessWithTreeKillTimeout (System.Diagnostics.Process, NOT pwsh `&`),
+// then (2) launches the editor-built player exe DIRECTLY via the same watchdog.
+// Because both launches go through Process.Start (UseShellExecute=$false), the
+// stub files must be DIRECTLY OS-executable: on Linux/macOS a `#!/usr/bin/env
+// pwsh` shebang script with the executable bit set works (kernel shebang
+// dispatch); on Windows CreateProcess rejects a non-PE file, so the standalone
+// BEHAVIORAL scenarios are skipped on win32 (the editmode/playmode + license
+// regressions, which still launch via pwsh `&`, keep their Windows coverage).
+// This mirrors how the ensure-editor native-startup-probe tests skip their
+// behavioral probe on win32.
+//
+// The standalone editor BUILD stub: when it sees a standalone build
+// (-runTests AND -buildTarget), it WRITES the player stub to
+// $env:DXM_PLAYER_BUILD_PATH (the path run-ci-tests will then launch directly)
+// and exits 0 WITHOUT writing results.xml -- modeling Unity's real split build,
+// where the editor produces the player and exits via PostBuildCleanup, and the
+// results file is written later by the PLAYER. It also honors -returnlicense
+// (append to the marker), the -serial activation, and the configure
+// -executeMethod pass (clean exit-0 no-ops). The optional
+// DXM_SMOKE_BUILD_SLEEP_SECONDS forces a hang so the BUILD watchdog fires (and in
+// that case it does NOT write the player, so a survived watchdog would fail the
+// post-build exe-exists assert anyway).
+const SHEBANG = "#!/usr/bin/env pwsh";
+
+// The PLAYER stub body (substituted into the player stub the build stub writes).
+// It reads -dxmTestResults <path> and behaves per $env:DXM_SMOKE_PLAYER_MODE:
+//   pass        -> write a passing <test-run total=1.../> and exit 0
+//   fail        -> write a FAILING <test-run .../> (failed=1) and exit 1
+//   no-results  -> exit 0 WITHOUT writing (models a player that died before
+//                  RunFinished wrote the file)
+//   sleep       -> sleep > the player watchdog window so the watchdog tree-kills it
+// The player NEVER reads an env results channel; only -dxmTestResults.
+function playerStubBody() {
+  return [
+    SHEBANG,
+    "[CmdletBinding()] param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Rest)",
+    "$Rest = @($Rest)",
+    "$mode = $env:DXM_SMOKE_PLAYER_MODE",
+    "if ($mode -eq 'sleep') { Start-Sleep -Seconds 30; exit 0 }",
+    "$i = [array]::IndexOf($Rest, '-dxmTestResults')",
+    "if ($i -lt 0 -or ($i + 1) -ge $Rest.Count) {",
+    "  [Console]::Error.WriteLine('player stub got no -dxmTestResults'); exit 2",
+    "}",
+    "if ($mode -eq 'no-results') { exit 0 }",
+    "$out = $Rest[$i + 1]",
+    "$d = Split-Path -Parent $out",
+    "if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
+    "if ($mode -eq 'fail') {",
+    '  \'<?xml version="1.0" encoding="utf-8"?><test-run id="2" total="1" passed="0" failed="1" inconclusive="0" skipped="0" asserts="1" result="Failed"><test-suite type="Assembly" result="Failed"><test-case name="Ns.WillFail" fullname="Ns.WillFail" result="Failed"><failure><message>stub player failure</message></failure></test-case></test-suite></test-run>\' | Set-Content -LiteralPath $out -Encoding UTF8',
+    "  exit 1",
+    "}",
+    '\'<?xml version="1.0" encoding="utf-8"?><test-run id="2" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="1" result="Passed"><test-suite type="Assembly" result="Passed"><test-case name="Ns.WillPass" fullname="Ns.WillPass" result="Passed" /></test-suite></test-run>\' | Set-Content -LiteralPath $out -Encoding UTF8',
+    "exit 0",
+    ""
+  ].join("\n");
+}
+
+// The standalone editor BUILD stub. A shebang script (Process.Start-launchable on
+// Linux/macOS). Writes the player stub to $env:DXM_PLAYER_BUILD_PATH on a
+// standalone build, unless DXM_SMOKE_BUILD_SLEEP_SECONDS forces a build hang.
+function standaloneEditorStub() {
+  return [
+    SHEBANG,
+    "[CmdletBinding()] param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Rest)",
+    "$Rest = @($Rest)",
+    "if ($Rest -contains '-returnlicense') {",
+    "  $marker = $env:DXM_SMOKE_RETURN_MARKER",
+    "  if ($marker) {",
+    "    $d = Split-Path -Parent $marker",
+    "    if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
+    "    Add-Content -LiteralPath $marker -Value ('returned ' + ($Rest -join ' '))",
+    "  }",
+    "  exit 0",
+    "}",
+    // The standalone editor BUILD: -runTests WITHOUT -quit, WITH -buildTarget.
+    "if (($Rest -contains '-runTests') -and ($Rest -contains '-buildTarget')) {",
+    "  $sleep = 0",
+    "  if ([int]::TryParse($env:DXM_SMOKE_BUILD_SLEEP_SECONDS, [ref]$sleep) -and $sleep -gt 0) {",
+    "    Start-Sleep -Seconds $sleep; exit 0",
+    "  }",
+    "  $exe = $env:DXM_PLAYER_BUILD_PATH",
+    "  if ($exe) {",
+    "    $d = Split-Path -Parent $exe",
+    "    if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
+    "    Set-Content -LiteralPath $exe -Value $env:DXM_SMOKE_PLAYER_STUB_BODY -Encoding UTF8",
+    "    if (-not $IsWindows) { & chmod +x $exe }",
+    "  }",
+    // The split build writes NO results.xml; the PLAYER writes it later.
+    "  exit 0",
+    "}",
+    // Any other invocation (the -serial activation or the configure
+    // -executeMethod pass): a clean exit-0 no-op.
+    "exit 0",
+    ""
+  ].join("\n");
+}
+
+const PLAYER_STUB_BODY = playerStubBody();
+const STANDALONE_EDITOR_STUB = standaloneEditorStub();
+
 function pwshAvailable() {
   const probe = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], {
     encoding: "utf8"
@@ -227,6 +331,16 @@ function makeWorkspace() {
   const failingCs8032StubPath = path.join(base, "stub-editor-failing-cs8032.ps1");
   fs.writeFileSync(failingCs8032StubPath, STUB_EDITOR_FAILING_CS8032, "utf8");
 
+  // The standalone editor BUILD stub. Written WITHOUT a .ps1-via-`&` assumption:
+  // run-ci-tests launches it via Process.Start (the watchdog), so it carries a
+  // shebang and (on non-Windows) the executable bit. It writes the player stub to
+  // $env:DXM_PLAYER_BUILD_PATH on a standalone build.
+  const standaloneEditorStubPath = path.join(base, "stub-editor-standalone.exe");
+  fs.writeFileSync(standaloneEditorStubPath, STANDALONE_EDITOR_STUB, "utf8");
+  if (process.platform !== "win32") {
+    fs.chmodSync(standaloneEditorStubPath, 0o755);
+  }
+
   const returnMarker = path.join(base, "returned.marker");
 
   return {
@@ -238,6 +352,7 @@ function makeWorkspace() {
     noResultsStubPath,
     failingStubPath,
     failingCs8032StubPath,
+    standaloneEditorStubPath,
     returnMarker
   };
 }
@@ -271,6 +386,54 @@ function runScript(mode, ws, editorPath = ws.stubPath) {
       ws.repoRoot,
       "-UnityEditorPath",
       editorPath
+    ],
+    { env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }
+  );
+}
+
+// Run run-ci-tests.ps1 in -TestMode standalone against the SPLIT-BUILD stubs. The
+// standalone editor stub (launched by the watchdog via Process.Start) writes the
+// player stub to $env:DXM_PLAYER_BUILD_PATH; run-ci-tests then launches that
+// player stub directly. `playerMode` drives the player stub
+// (pass/fail/no-results/sleep). `buildSleepSeconds` (> 0) forces the BUILD stub to
+// hang so the build watchdog fires (and it does NOT write the player). The
+// watchdog windows are pinned SHORT (2s) so a hang scenario resolves quickly.
+function runStandaloneScript(ws, { playerMode = "pass", buildSleepSeconds = 0 } = {}) {
+  const env = cleanedEnv(path.join(ws.base, "host-env-sandbox"));
+  env.DXM_SMOKE_RETURN_MARKER = ws.returnMarker;
+  env.DXM_SMOKE_PLAYER_STUB_BODY = PLAYER_STUB_BODY;
+  env.DXM_SMOKE_PLAYER_MODE = playerMode;
+  if (buildSleepSeconds > 0) {
+    env.DXM_SMOKE_BUILD_SLEEP_SECONDS = String(buildSleepSeconds);
+  }
+  // Short, deterministic watchdog windows so the WATCHDOG scenarios tree-kill
+  // quickly instead of waiting the production 30/45 minutes.
+  env.DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS = "2";
+  env.DXM_STANDALONE_BUILD_TIMEOUT_SECONDS = "2";
+  // The standalone editor stub is a shebang file launched via Process.Start; on
+  // non-Windows that is fine. (These scenarios are win32-skipped at the call site.)
+
+  return spawnSync(
+    "pwsh",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      RUN_CI_TESTS,
+      "-UnityVersion",
+      "2021.3.45f1",
+      "-TestMode",
+      "standalone",
+      "-AssemblyNames",
+      "WallstopStudios.DxMessaging.Tests.Runtime",
+      "-ArtifactsPath",
+      ws.artifacts,
+      "-ProjectPath",
+      ws.project,
+      "-RepoRoot",
+      ws.repoRoot,
+      "-UnityEditorPath",
+      ws.standaloneEditorStubPath
     ],
     { env, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }
   );
@@ -312,23 +475,23 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
     console.warn(
       "[strictmode-smoke] pwsh not found on PATH; skipping run assertions (CI runners have pwsh)."
     );
-    test.skip.each(["editmode", "standalone"])(
+    test.skip.each(["editmode", "playmode"])(
       "%s: runs under StrictMode without the empty-collection .Count throw",
       () => {}
     );
-    test.skip.each(["editmode", "standalone"])(
+    test.skip.each(["editmode", "playmode"])(
       "%s: fails LOUDLY when the editor exits 0 but produces no results.xml",
       () => {}
     );
     return;
   }
 
-  // standalone also exercises the configure-step arg concatenation (the
-  // `... + $acceleratorArgs` path) before the test run, so the `@()`-wrapped
-  // capture is also driven through a `+` concat under StrictMode. (Even unwrapped
-  // these `+` operands would drop, being AutomationNull; the wrap exists for the
-  // `.Count` read, not the concat.)
-  test.each(["editmode", "standalone"])(
+  // editmode/playmode share the single -runTests editor invocation (the generic
+  // stubEditor() writes results.xml on the -runTests-without-quit branch). The
+  // standalone split-build flow has its OWN describe block below. These still
+  // exercise the `@()`-wrapped accelerator capture `.Count` read + `+` concat
+  // under StrictMode.
+  test.each(["editmode", "playmode"])(
     "%s: runs under StrictMode without the empty-collection .Count throw",
     (mode) => {
       const ws = makeWorkspace();
@@ -351,9 +514,8 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
   // nothing" mode that the async-no-wait bug class could otherwise mask -- a
   // false-green pass is the worst outcome, so Test-NUnitResults MUST turn a
   // missing results file into a non-zero exit with a clear diagnostic. Data-
-  // driven over modes so both the editmode and the standalone (configure +
-  // test) paths are covered.
-  test.each(["editmode", "standalone"])(
+  // driven over the single-pass modes (editmode/playmode).
+  test.each(["editmode", "playmode"])(
     "%s: fails LOUDLY when the editor exits 0 but produces no results.xml",
     (mode) => {
       const ws = makeWorkspace();
@@ -479,6 +641,128 @@ describe("run-ci-tests.ps1 StrictMode collection-safety smoke test", () => {
     expect(fs.readFileSync(path.join(ws.artifacts, "unity.log"), "utf8")).toContain(
       "warning CS8032"
     );
+  });
+});
+
+// ===========================================================================
+// STANDALONE SPLIT-BUILD + FILE-BASED RESULTS behavioral smoke test.
+//
+// The standalone path: run-ci-tests (2a) BUILDS the player via the watchdog
+// (editor stub writes a player stub to $env:DXM_PLAYER_BUILD_PATH, NO results.xml),
+// (2b) RUNS that player stub directly via the watchdog (player writes NUnit XML to
+// -dxmTestResults and exits 0/1/2), (2c) validates the FILE. Both launches go
+// through Process.Start, so the shebang stubs are launchable on Linux/macOS but
+// NOT on win32 (CreateProcess rejects a non-PE file) -- these BEHAVIORAL scenarios
+// are win32-skipped (the editmode/playmode + license regressions keep Windows
+// coverage). An always-on existence assertion keeps this from being a silent no-op.
+// ===========================================================================
+describe("run-ci-tests.ps1 standalone split-build file-based results", () => {
+  test("the script under test exists", () => {
+    expect(fs.existsSync(RUN_CI_TESTS)).toBe(true);
+  });
+
+  const STANDALONE_BEHAVIOR_ENABLED = PWSH_PRESENT && process.platform !== "win32";
+  if (!STANDALONE_BEHAVIOR_ENABLED) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[standalone-smoke] skipping standalone behavioral scenarios (pwsh=${PWSH_PRESENT}, platform=${process.platform}); the player/editor stubs must be Process.Start-launchable, which requires a real PE on win32.`
+    );
+    test.skip("PASS: the editor builds the player, the player writes a passing file -> green", () => {});
+    test.skip("FAIL: the player writes a failing file and exits 1 -> Test-NUnitResults throws", () => {});
+    test.skip("NO-RESULTS: the player exits without writing -> the runner throws 'did not produce'", () => {});
+    test.skip("PLAYER-WATCHDOG: a hung player is tree-killed and the run throws, no hang", () => {});
+    test.skip("BUILD-WATCHDOG: a hung build is tree-killed and the run throws, no hang", () => {});
+    return;
+  }
+
+  test("PASS: the editor builds the player, the player writes a passing file -> green", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const result = runStandaloneScript(ws, { playerMode: "pass" });
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    // The editor BUILD wrote the player stub to the build path under project Temp.
+    const builtExe = path.join(ws.project, "Temp", "DxmTestPlayer", "DxmTestPlayer.exe");
+    expect(fs.existsSync(builtExe)).toBe(true);
+    // The PLAYER (not the editor build) wrote results.xml, and it parses green.
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(true);
+    // The player log (small, uploaded) was captured under artifacts, not unity.log.
+    expect(fs.existsSync(path.join(ws.artifacts, "player.log"))).toBe(true);
+  });
+
+  test("FAIL: the player writes a failing file and exits 1 -> Test-NUnitResults throws", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const result = runStandaloneScript(ws, { playerMode: "fail" });
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    // The failing file IS written (so the FILE is the source of truth), and
+    // Test-NUnitResults turns failed>0 into a non-zero exit with "tests failed".
+    expect(result.status).not.toBe(0);
+    expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(true);
+    expect(combined).toMatch(/tests failed/);
+  });
+
+  test("NO-RESULTS: the player exits without writing -> the runner throws 'did not produce'", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const result = runStandaloneScript(ws, { playerMode: "no-results" });
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    // The editor build DID produce the player exe (so the post-build assert
+    // passes), but the player wrote no results, so Test-NUnitResults fails loudly.
+    expect(result.status).not.toBe(0);
+    expect(combined).toMatch(/did not produce NUnit results|No NUnit results XML/);
+    expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
+  });
+
+  test("PLAYER-WATCHDOG: a hung player is tree-killed and the run throws, no hang", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const startedAt = Date.now();
+    // DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS=2; the player sleeps 30s. The watchdog
+    // must tree-kill it well before that.
+    const result = runStandaloneScript(ws, { playerMode: "sleep" });
+    const elapsedMs = Date.now() - startedAt;
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    expect(result.status).not.toBe(0);
+    // The run must NOT have waited the full 30s player sleep (proves the tree-kill
+    // fired). A generous ceiling accounts for pwsh startup + the editor build stub.
+    expect(elapsedMs).toBeLessThan(25000);
+    expect(combined).toMatch(/player timed out|tree was killed/i);
+    // No results were written by the killed player.
+    expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
+  });
+
+  test("BUILD-WATCHDOG: a hung build is tree-killed and the run throws, no hang", () => {
+    const ws = makeWorkspace();
+    workspaces.push(ws);
+
+    const startedAt = Date.now();
+    // DXM_STANDALONE_BUILD_TIMEOUT_SECONDS=2; the BUILD stub sleeps 30s (and never
+    // writes the player). The build watchdog must tree-kill it well before that.
+    const result = runStandaloneScript(ws, { playerMode: "pass", buildSleepSeconds: 30 });
+    const elapsedMs = Date.now() - startedAt;
+    const combined = combinedText(result);
+
+    expect(combined).not.toContain("cannot be found on this object");
+    expect(result.status).not.toBe(0);
+    expect(elapsedMs).toBeLessThan(25000);
+    expect(combined).toMatch(/build timed out|tree was killed/i);
+    // The player was never built and never ran.
+    const builtExe = path.join(ws.project, "Temp", "DxmTestPlayer", "DxmTestPlayer.exe");
+    expect(fs.existsSync(builtExe)).toBe(false);
+    expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
   });
 });
 

@@ -29,33 +29,10 @@ Fixes #
 - [ ] I have updated the [CHANGELOG](../CHANGELOG.md)
 - [ ] My changes do not introduce breaking changes, or breaking changes are documented
 
-### Performance numbers
-
 <!--
-REQUIRED if this PR modifies hot-path files:
-  Runtime/Core/MessageBus/MessageBus.cs
-  Runtime/Core/MessageHandler.cs
-  Runtime/Core/Pooling/**
-
-The perf-numbers-check workflow gates on this section's presence.
-
-Format:
-  | Scenario | Baseline run | This PR | Delta |
-  | --- | --- | --- | --- |
-  | UntargetedFlood_OneHandler (Mono Editor) | X.XX M emits/sec | Y.YY M emits/sec | +Z.Z% |
-  ...
-
-Acceptable substitutions:
-  - "N/A - refactor only <one-line justification>" when the change cannot
-    affect runtime perf, e.g. comments / docs / tests-only changes.
-  - "N/A - non-hot-path edit only <one-line description>" to describe what was
-    actually touched, e.g. settings asset shape or editor tooling.
-  - "N/A - auto-maintained <reference>" to defer the before/after table to the
-    CI perf auto-update (unity-benchmarks.yml refreshes the numbers in
-    docs/architecture/performance.md from the latest Unity run). The reference
-    must mention performance.md or unity-benchmarks so the deferral is
-    auditable.
-
-See docs/architecture/performance.md for the budget and dispatch throughput
-benchmark invocation.
+Dispatch-throughput numbers are owned entirely by CI: the Performance Numbers
+workflow (.github/workflows/perf-numbers.yml) re-runs the benchmarks on every
+pull_request change and commits the refreshed
+docs/architecture/performance.md back onto this branch. You do NOT need to
+paste before/after numbers into this description.
 -->

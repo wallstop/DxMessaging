@@ -21,7 +21,10 @@ namespace DxMessaging.Tests.Runtime.Core
         private const string TestSeedEnvVar = "DXMESSAGING_TEST_SEED";
         private const int DefaultTestSeed = unchecked((int)0xDB1ABCED);
 
+        private const string VerboseLogEnvVar = "DXM_TEST_VERBOSE_LOG";
+
         private static int? _cachedSeed;
+        private static bool? _cachedVerbose;
 
         protected int _numRegistrations;
         protected readonly List<GameObject> _spawned = new();
@@ -67,9 +70,39 @@ namespace DxMessaging.Tests.Runtime.Core
             }
         }
 
+        /// <summary>
+        /// When <c>true</c>, the test-harness <see cref="MessagingDebug.LogFunction"/>
+        /// routes <see cref="LogLevel.Debug"/>/<see cref="LogLevel.Info"/> messages and
+        /// the per-test/per-fixture status dumps to <see cref="Debug.Log"/>. Default is
+        /// <c>false</c>: the bus emits an <see cref="LogLevel.Info"/> "Could not find a
+        /// matching ... handler" line on normal deregistered-emit flow, and each
+        /// <see cref="Debug.Log"/> captures a full stack trace, so leaving this on during
+        /// a full PlayMode run produced a multi-tens-of-megabytes log. Opt in by setting
+        /// the <c>DXM_TEST_VERBOSE_LOG</c> environment variable to a truthy value
+        /// (<c>1</c>/<c>true</c>/<c>yes</c>, case-insensitive). Warnings and errors are
+        /// always routed regardless of this flag.
+        /// </summary>
+        /// <remarks>
+        /// Resolved once for the lifetime of the process (mirroring <see cref="TestSeed"/>)
+        /// so the environment variable is parsed a single time rather than on every Setup.
+        /// </remarks>
+        protected static bool VerboseConsoleLogging
+        {
+            get
+            {
+                _cachedVerbose ??= ResolveVerboseConsoleLogging();
+                return _cachedVerbose.Value;
+            }
+        }
+
         [OneTimeSetUp]
         public virtual void LogTestSeedOnce()
         {
+            if (!VerboseConsoleLogging)
+            {
+                return;
+            }
+
             Debug.Log($"DxMessaging test seed = {TestSeed} (env {TestSeedEnvVar}).");
         }
 
@@ -115,7 +148,10 @@ namespace DxMessaging.Tests.Runtime.Core
                 {
                     case LogLevel.Debug:
                     case LogLevel.Info:
-                        Debug.Log(message);
+                        if (VerboseConsoleLogging)
+                        {
+                            Debug.Log(message);
+                        }
                         return;
                     case LogLevel.Warn:
                         Debug.LogWarning(message);
@@ -172,8 +208,27 @@ namespace DxMessaging.Tests.Runtime.Core
             return DefaultTestSeed;
         }
 
+        private static bool ResolveVerboseConsoleLogging()
+        {
+            string raw = Environment.GetEnvironmentVariable(VerboseLogEnvVar);
+            if (string.IsNullOrEmpty(raw))
+            {
+                return false;
+            }
+
+            string normalized = raw.Trim();
+            return normalized.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("yes", StringComparison.OrdinalIgnoreCase);
+        }
+
         protected void LogMessageBusStatus()
         {
+            if (!VerboseConsoleLogging)
+            {
+                return;
+            }
+
             IMessageBus messageBus = MessageHandler.MessageBus;
             Debug.Log(DescribeMessageBusState(messageBus));
         }

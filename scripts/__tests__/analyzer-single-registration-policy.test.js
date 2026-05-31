@@ -224,3 +224,101 @@ describe("single analyzer registration (CI project generation)", () => {
     expect(run).toContain("Write-DuplicateAnalyzerDiagnostics -LogPath");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Analyzer DLLs must be NON-precompiled (excluded from every platform, Editor
+// included) and activated SOLELY by the RoslynAnalyzer asset label. The Unity
+// 2021 "Multiple precompiled assemblies with the same name" abort happened
+// because the analyzer DLLs were imported Editor-ENABLED, so Unity registered
+// them as managed precompiled assemblies; with the same-named DLL importable
+// from both the package's Editor/Analyzers and the harness Assets copy, 2021
+// rejects the duplicate. The Roslyn runtime deps in the same folder ship
+// excluded-from-all-platforms and never collide -- the analyzer DLLs now match
+// that proven-safe shape. Assertions use REGEX/substring, never yaml.load: the
+// shipped metas use Unity's ": Any" empty-key platform block, which js-yaml
+// cannot parse (it throws YAMLException).
+// ---------------------------------------------------------------------------
+describe("analyzer DLLs are Editor-disabled (non-precompiled) and label-activated", () => {
+  const ANALYZERS_DIR = path.join(REPO_ROOT, "Editor", "Analyzers");
+  const SG_META = path.join(ANALYZERS_DIR, "WallstopStudios.DxMessaging.SourceGenerators.dll.meta");
+  const ANALYZER_META = path.join(ANALYZERS_DIR, "WallstopStudios.DxMessaging.Analyzer.dll.meta");
+  const CONTROL_META = path.join(ANALYZERS_DIR, "Microsoft.CodeAnalysis.dll.meta");
+  const SETUP_CSC_RSP = path.join(REPO_ROOT, "Editor", "SetupCscRsp.cs");
+
+  // "enabled: 1" appears ONLY inside a platformData "second" block; the other
+  // "...: 1" lines are isOverridable/validateReferences (different keys), so this
+  // matches a platform-enabled (precompiled-assembly) DLL and nothing else.
+  const PLATFORM_ENABLED = /enabled:\s*1/;
+  // The Editor platform specifically enabled (\s spans newlines).
+  const EDITOR_ENABLED = /Editor:\s+Editor\s+second:\s+enabled:\s*1/;
+  // A RoslynAnalyzer label list entry.
+  const ROSLYN_LABEL = /^\s*-\s*RoslynAnalyzer\s*$/m;
+
+  function collectMetaFiles(dir, acc) {
+    if (!fs.existsSync(dir)) {
+      return acc;
+    }
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (["node_modules", ".artifacts", "Library", "Temp", "obj", "bin", ".git", "site", ".venv", "coverage"].includes(entry.name)) {
+          continue;
+        }
+        collectMetaFiles(full, acc);
+      } else if (entry.isFile() && entry.name.endsWith(".meta")) {
+        acc.push(full);
+      }
+    }
+    return acc;
+  }
+
+  test("both shipped analyzer metas are RoslynAnalyzer-labeled AND excluded from every platform", () => {
+    for (const meta of [SG_META, ANALYZER_META]) {
+      const text = read(meta);
+      expect(text).toMatch(ROSLYN_LABEL);
+      expect(text).not.toMatch(PLATFORM_ENABLED);
+      expect(text).not.toMatch(EDITOR_ENABLED);
+    }
+  });
+
+  test("the analyzer metas match the proven-safe Roslyn-dependency control shape", () => {
+    // The Roslyn runtime dependency ships to the same two locations with two
+    // copies and never collides because it is excluded from every platform. It is
+    // the empirical proof that platform-exclusion -- not the label -- is what
+    // keeps a DLL out of the precompiled-assembly set.
+    const control = read(CONTROL_META);
+    expect(control).not.toMatch(PLATFORM_ENABLED);
+    expect(control).not.toMatch(ROSLYN_LABEL); // a dependency, not an analyzer
+  });
+
+  test("CLASS lock: every RoslynAnalyzer-labeled .meta in the package is excluded from every platform", () => {
+    const metas = [];
+    for (const root of ["Editor", "Runtime", "SourceGenerators", "Tests", "Samples~"]) {
+      collectMetaFiles(path.join(REPO_ROOT, root), metas);
+    }
+    const labeled = metas.filter((meta) => ROSLYN_LABEL.test(read(meta)));
+    // The two analyzer DLLs are present and labeled.
+    expect(labeled.length).toBeGreaterThanOrEqual(2);
+    // A future labeled DLL that re-enables ANY platform would reintroduce the
+    // precompiled-assembly duplicate class; fail loudly with the offending path.
+    const offenders = labeled.filter((meta) => PLATFORM_ENABLED.test(read(meta)));
+    expect(offenders).toEqual([]);
+  });
+
+  test("run-ci-tests.ps1 fallback meta heredoc is Editor-disabled", () => {
+    // The hand-authored fallback meta (used by the GenerateOnly path when a
+    // source DLL has no .meta) must also exclude the Editor platform.
+    expect(read(RUN_CI_TESTS)).not.toMatch(EDITOR_ENABLED);
+  });
+
+  test("SetupCscRsp excludes the Assets analyzer copy from the Editor platform via the effective API", () => {
+    const setup = read(SETUP_CSC_RSP);
+    // The old no-op (a no-op once CompatibleWithAnyPlatform is false, and backwards
+    // in intent -- it tried to Editor-INCLUDE the analyzer) is gone.
+    expect(setup).not.toContain('SetExcludeFromAnyPlatform("Editor", false)');
+    // Editor is disabled through the effective API; the label remains the
+    // activation mechanism.
+    expect(setup).toContain("SetCompatibleWithEditor(false)");
+    expect(setup).toContain("RoslynAnalyzer");
+  });
+});

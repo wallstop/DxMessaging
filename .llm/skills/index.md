@@ -101,9 +101,9 @@
 | [Collection Pooling with RAII Pattern](./performance/collection-pooling.md)                                        | [draft] 119 | [intermediate] | [stable] | [risk: high]     | memory, allocation    |
 | [Collection Pooling with RAII Pattern Part 1](./performance/collection-pooling-part-1.md)                          | [ok] 206    | [intermediate] | [stable] | [risk: low]      | migration, split      |
 | [Collection Pooling with RAII Pattern Part 2](./performance/collection-pooling-part-2.md)                          | [draft] 57  | [intermediate] | [stable] | [risk: low]      | migration, split      |
-| [DxMessaging Dispatch Hot Path](./performance/dispatch-hot-path.md)                                                | [ok] 213    | [advanced]     | [stable] | [risk: critical] | dispatch, hot-path    |
+| [DxMessaging Dispatch Hot Path](./performance/dispatch-hot-path.md)                                                | [ok] 216    | [advanced]     | [stable] | [risk: critical] | dispatch, hot-path    |
 | [DxMessaging Memory Reclamation](./performance/memory-reclamation.md)                                              | [ok] 198    | [advanced]     | [stable] | [risk: critical] | memory, reclamation   |
-| [DxMessaging Sweep Gate Must Be Cheap](./performance/sweep-gate-must-be-cheap.md)                                  | [ok] 185    | [advanced]     | [stable] | [risk: critical] | sweep, eviction       |
+| [DxMessaging Sweep Gate Must Be Cheap](./performance/sweep-gate-must-be-cheap.md)                                  | [ok] 186    | [advanced]     | [stable] | [risk: critical] | sweep, eviction       |
 | [Git Hook Performance Budget](./performance/git-hook-performance.md)                                               | [warn] 300  | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [Git Hook Performance: Stages and Tooling](./performance/git-hook-performance-tooling.md)                          | [ok] 240    | [intermediate] | [stable] | [risk: high]     | git-hooks, pre-commit |
 | [High-Performance Cache with Eviction Policies](./performance/cache-eviction-policies.md)                          | [ok] 177    | [advanced]     | [stable] | [risk: high]     | caching, memory       |

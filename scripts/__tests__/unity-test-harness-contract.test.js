@@ -180,7 +180,17 @@ describe("generated Unity test harness contract", () => {
           const meta = `${dll}.meta`;
           expect(fs.existsSync(dll)).toBe(true);
           expect(fs.existsSync(meta)).toBe(true);
-          expect(fs.readFileSync(meta, "utf8")).toContain("RoslynAnalyzer");
+          const metaText = fs.readFileSync(meta, "utf8");
+          expect(metaText).toContain("RoslynAnalyzer");
+          // EFFECTIVE proof: the generated meta excludes EVERY platform (Editor
+          // included), so Unity treats the DLL as a RoslynAnalyzer-only analyzer,
+          // never a managed precompiled assembly. An Editor-ENABLED copy here is the
+          // exact misconfiguration that tripped Unity 2021's "Multiple precompiled
+          // assemblies with the same name" abort. (\s spans the multi-line block;
+          // "enabled: 1" appears only in a platformData block, never as
+          // isOverridable/validateReferences.)
+          expect(metaText).not.toMatch(/Editor:\s+Editor\s+second:\s+enabled:\s*1/);
+          expect(metaText).not.toMatch(/enabled:\s*1/);
         }
 
         // And it must NOT write Assets/csc.rsp -- a second `-a:` registration

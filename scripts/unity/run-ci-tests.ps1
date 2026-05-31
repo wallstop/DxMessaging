@@ -51,7 +51,9 @@ $PerformanceFrameworkVersion = '3.4.2'
 # SetupCscRsp makes for real consumers. Editor/Analyzers/ ALSO ships the Roslyn
 # runtime deps (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
 # System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe) the generator
-# loads at compile time; those ride along as plain Editor-only plugins.
+# loads at compile time; those ride along as Editor-EXCLUDED analyzer dependencies
+# co-located with the labeled analyzers (Unity passes co-located deps to the compiler
+# alongside the analyzer; they are not loaded as managed Editor plugins).
 $RequiredDxMessagingAnalyzerDllNames = @(
     'WallstopStudios.DxMessaging.SourceGenerators.dll',
     'WallstopStudios.DxMessaging.Analyzer.dll'
@@ -428,11 +430,239 @@ public static class DxmCiTestConfigurator
 '@
 }
 
+# STANDALONE ONLY. The Editor-side type that severs the test player's outbound
+# PlayerConnection/Profiler TCP dependency at build time AND makes the editor's
+# `-runTests` build step terminate. Emitted into Assets/Editor/ of the standalone
+# CI project by Initialize-EphemeralProject. It mirrors Unity's documented
+# "Split build and run" example (vendored com.unity.test-framework
+# TestPlayerBuildModifierAttribute.cs): ITestPlayerBuildModifier rewrites the
+# BuildPlayerOptions, IPostBuildCleanup exits the editor after the build.
+#
+# CRITICAL: clearing BuildOptions.AutoRunPlayer ALONE is NOT enough. The CLI
+# `-runTests` path registers Executer.ExitIfRunIsCompleted on
+# EditorApplication.update, which returns early while TestRunnerApi.IsRunActive()
+# is true; for a player run that flag clears only on the PlayerConnection
+# runFinished message. With the player never launched the message never arrives,
+# so the editor idles forever. The PostBuildCleanup exit (run AFTER the build via
+# ExecutePostBuildCleanupMethods) is mandatory.
+function New-StandaloneBuildModifierSource {
+    @'
+using System;
+using System.IO;
+using System.Linq;
+using UnityEditor;
+using UnityEditor.TestTools;
+using UnityEngine;
+using UnityEngine.TestTools;
+
+[assembly: TestPlayerBuildModifier(typeof(DxmCiStandaloneBuildModifier))]
+[assembly: PostBuildCleanup(typeof(DxmCiStandaloneBuildModifier))]
+
+// Mirrors the documented Unity "Split build and run" example. Clearing
+// AutoRunPlayer alone is NOT enough: the CLI -runTests path registers
+// Executer.ExitIfRunIsCompleted on EditorApplication.update, which returns early
+// while TestRunnerApi.IsRunActive() is true; for a player run that flag only
+// clears on the PlayerConnection runFinished message, which never arrives when
+// the player is not launched. PostBuildCleanup is the framework's hook (run after
+// the build) to exit the editor cleanly.
+public sealed class DxmCiStandaloneBuildModifier : ITestPlayerBuildModifier, IPostBuildCleanup
+{
+    private static bool s_Armed;
+    private static readonly EditorApplication.CallbackFunction s_Exit = () => EditorApplication.Exit(0);
+
+    public BuildPlayerOptions ModifyOptions(BuildPlayerOptions playerOptions)
+    {
+        playerOptions.options &= ~BuildOptions.AutoRunPlayer;
+        playerOptions.options &= ~BuildOptions.ConnectToHost;
+        playerOptions.options &= ~BuildOptions.ConnectWithProfiler;
+        playerOptions.options |= BuildOptions.IncludeTestAssemblies;
+        playerOptions.options |= BuildOptions.Development;
+        string outPath = Environment.GetEnvironmentVariable("DXM_PLAYER_BUILD_PATH");
+        if (!string.IsNullOrEmpty(outPath))
+        {
+            string dir = Path.GetDirectoryName(outPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            playerOptions.locationPathName = outPath;
+        }
+        return playerOptions;
+    }
+
+    public void Cleanup()
+    {
+        if (s_Armed)
+        {
+            return;
+        }
+        s_Armed = true;
+        if (Environment.GetCommandLineArgs().Any(a => a == "-runTests"))
+        {
+            EditorApplication.update += s_Exit;
+        }
+    }
+}
+'@
+}
+
+# STANDALONE ONLY. The player-side [assembly:TestRunCallback] that REPLACES the
+# editor's need to receive results over PlayerConnection/TCP. On RunFinished it
+# serializes the NUnit result to NUnit-compatible XML (mirroring Unity's
+# ResultsWriter.WriteResultsToXml) at the path from the -dxmTestResults <path>
+# command-line arg, then Application.Quit(0 pass / 1 fail / 2 no-path / 3 write
+# error). Emitted into Assets/DxmCiStandaloneTestCallback/ with its own .asmdef.
+# [Preserve] keeps the type for IL2CPP.
+#
+# On the PLAYER, ITestResult.ResultState is a NUnit.Framework.Interfaces.ResultState
+# OBJECT, so we call .ToString() (the editor adaptor does the same). The single
+# results channel is -dxmTestResults; there is NO environment-variable fallback and
+# NO per-user-data-folder silent-loss fallback.
+function New-StandaloneTestCallbackSource {
+    @'
+using System;
+using System.IO;
+using System.Xml;
+using NUnit.Framework.Interfaces;
+using UnityEngine;
+using UnityEngine.Scripting;
+using UnityEngine.TestRunner;
+
+[assembly: TestRunCallback(typeof(DxmCiStandaloneTestCallback))]
+
+[Preserve]
+internal sealed class DxmCiStandaloneTestCallback : ITestRunCallback
+{
+    public void RunStarted(ITest testsToRun)
+    {
+    }
+
+    public void TestStarted(ITest test)
+    {
+    }
+
+    public void TestFinished(ITestResult result)
+    {
+    }
+
+    public void RunFinished(ITestResult result)
+    {
+        string path = ResolveResultsPath();
+        if (string.IsNullOrEmpty(path))
+        {
+            Debug.LogError("DXM: standalone test player received no -dxmTestResults <path>; not writing results.");
+            Application.Quit(2);
+            return;
+        }
+        int exitCode;
+        try
+        {
+            WriteNUnitXml(result, path);
+            exitCode = result.FailCount > 0 ? 1 : 0;
+            int total = result.PassCount + result.FailCount + result.SkipCount + result.InconclusiveCount;
+            Debug.LogFormat(
+                LogType.Log,
+                LogOption.NoStacktrace,
+                null,
+                "DXM: wrote standalone results to {0} (total={1} passed={2} failed={3} skipped={4})",
+                path,
+                total,
+                result.PassCount,
+                result.FailCount,
+                result.SkipCount);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex);
+            exitCode = 3;
+        }
+        Application.Quit(exitCode);
+    }
+
+    private static string ResolveResultsPath()
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], "-dxmTestResults", StringComparison.Ordinal))
+            {
+                return args[i + 1];
+            }
+        }
+        return null;
+    }
+
+    private static void WriteNUnitXml(ITestResult result, string filePath)
+    {
+        string dir = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+        XmlWriterSettings settings = new XmlWriterSettings
+        {
+            Indent = true,
+            NewLineOnAttributes = false
+        };
+        using (StreamWriter sw = File.CreateText(filePath))
+        using (XmlWriter xw = XmlWriter.Create(sw, settings))
+        {
+            int total = result.PassCount + result.FailCount + result.SkipCount + result.InconclusiveCount;
+            TNode run = new TNode("test-run");
+            run.AddAttribute("id", "2");
+            run.AddAttribute("testcasecount", total.ToString());
+            run.AddAttribute("result", result.ResultState.ToString());
+            run.AddAttribute("total", total.ToString());
+            run.AddAttribute("passed", result.PassCount.ToString());
+            run.AddAttribute("failed", result.FailCount.ToString());
+            run.AddAttribute("inconclusive", result.InconclusiveCount.ToString());
+            run.AddAttribute("skipped", result.SkipCount.ToString());
+            run.AddAttribute("asserts", result.AssertCount.ToString());
+            run.AddAttribute("engine-version", "3.5.0.0");
+            run.AddAttribute("clr-version", Environment.Version.ToString());
+            run.AddAttribute("start-time", result.StartTime.ToString("u"));
+            run.AddAttribute("end-time", result.EndTime.ToString("u"));
+            run.AddAttribute("duration", result.Duration.ToString());
+            run.ChildNodes.Add(result.ToXml(true));
+            run.WriteTo(xw);
+        }
+    }
+}
+'@
+}
+
+# STANDALONE ONLY. The asmdef for the player-side test callback above. Referencing
+# UnityEngine.TestRunner is MANDATORY: TestRunCallbackListener.GetAllCallbacks only
+# scans assemblies that reference UnityEngine.TestRunner. overrideReferences +
+# precompiledReferences=nunit.framework.dll gives the callback the NUnit types;
+# defineConstraints UNITY_INCLUDE_TESTS keeps it out of non-test builds. This must
+# be a PLAYER assembly (NOT under Assets/Editor/), so includePlatforms is empty.
+function New-StandaloneTestCallbackAsmdef {
+    @'
+{
+    "name": "DxmCiStandaloneTestCallback",
+    "references": [
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}
+'@
+}
+
 # The two DLLs that MUST be tagged with Unity's "RoslynAnalyzer" asset label in
 # the Assets copy (mirrors SetupCscRsp.AnalyzerLabeledDllNames). The remaining
 # DLLs in Editor/Analyzers/ are the Roslyn runtime the generator loads at compile
-# time; they ride along as plain Editor-only plugins, exactly as SetupCscRsp
-# leaves them.
+# time; they ride along as Editor-EXCLUDED analyzer dependencies (every platform
+# disabled), exactly as SetupCscRsp leaves them.
 $RoslynAnalyzerLabeledDllNames = @(
     'WallstopStudios.DxMessaging.SourceGenerators.dll',
     'WallstopStudios.DxMessaging.Analyzer.dll'
@@ -462,22 +692,26 @@ function Assert-DxMessagingAnalyzerDllsPresent {
 # WHY: when the package is consumed from Packages/ (the real install shape, and
 # the shape the CI manifest uses via a file: mount), SetupCscRsp copies the
 # analyzer DLLs into the project's Assets and tags the two analyzer DLLs
-# RoslynAnalyzer -- that Assets copy is the single, correct registration. The CI
-# harness USED to ALSO pre-write Assets/csc.rsp with `-a:` entries pointing at the
-# repo's Editor/Analyzers DLLs; combined with SetupCscRsp's Assets copy that fed
-# the SAME generator to the compiler from TWO different physical paths, so Roslyn
-# ran it twice (CS0102 "already contains a definition for 'MessageType'") and
-# Unity 2021 rejected the two same-named DLLs (PrecompiledAssemblyException). The
-# harness now writes NO csc.rsp and instead reproduces the consumer's single
-# registration directly. SetupCscRsp then runs idempotently over the identical
-# copy (its SHA compare + label/importer checks all short-circuit), and its
-# EnsureCscRsp contributes no csc.rsp entry here: SetupCscRsp.GetAnalyzerArguments
-# probes a PHYSICAL path under the project ($(Application.dataPath)/../Packages/
-# com.wallstop-studios.dxmessaging/Editor/Analyzers/...), but a UPM file: package
-# is resolved virtually -- its bytes stay at the repo root and are NOT physically
-# copied under the project's Packages/ -- so File.Exists is false and no -a: line
-# is produced. (Confirmed in the failing CI logs: no "Updated csc.rsp." line and
-# no Packages/-relative -a: arg in any run.)
+# RoslynAnalyzer. The harness pre-creates the SAME copy before Unity launches so
+# the source generator is present at the very first compile.
+#
+# CRITICAL CONTRACT (the root cause of the Unity 2021 "Multiple precompiled
+# assemblies with the same name" abort): each analyzer DLL must be EXCLUDED from
+# every platform, the Editor included, and activated SOLELY by the RoslynAnalyzer
+# asset label. A platform-ENABLED managed DLL is registered as a precompiled
+# assembly. The same-named DLL is importable from BOTH the file:-mounted package
+# (its bytes ARE physically present under Packages/com.wallstop-studios.dxmessaging/
+# Editor/Analyzers/ -- a UPM file: package is NOT resolved purely virtually, proven
+# by the failing CI logs that import the analyzer DLL from that path) AND this
+# Assets copy. When BOTH copies were Editor-ENABLED, Unity 2021 aborted before
+# compile with PrecompiledAssemblyException; 2022/6000 tolerate the duplicate. The
+# Roslyn runtime dependencies in the same folder already ship excluded-from-all-
+# platforms and never collide despite the identical two-copy layout -- the analyzer
+# DLLs now match that proven-safe shape (Editor: enabled 0 in every meta -- the
+# shipped Editor/Analyzers/*.dll.meta, the template clone, AND the fallback heredoc
+# below), so the RoslynAnalyzer label still feeds them to the compiler while neither
+# copy is a precompiled assembly. The harness writes NO csc.rsp; SetupCscRsp manages
+# only the base-call ignore -additionalfile sidecar at editor load.
 function Copy-DxMessagingAnalyzersToAssets {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
@@ -526,9 +760,14 @@ function Copy-DxMessagingAnalyzersToAssets {
                     "guid: $freshGuid"
                 )
             } else {
-                # No shipped .meta to template from. Author a minimal Editor-only
-                # managed-plugin meta, adding the RoslynAnalyzer label only for the
-                # two analyzer DLLs (deps are the Roslyn runtime, not analyzers).
+                # No shipped .meta to template from. Author a minimal meta that is
+                # EXCLUDED from every platform (Editor included), adding the
+                # RoslynAnalyzer label only for the two analyzer DLLs (deps are the
+                # Roslyn runtime, not analyzers). Disabling every platform keeps the DLL
+                # a compiler analyzer (activated solely by the RoslynAnalyzer label)
+                # rather than a managed precompiled assembly, so a same-named copy under
+                # the package's own Editor/Analyzers cannot trip Unity 2021's "Multiple
+                # precompiled assemblies with the same name" abort.
                 $labelBlock = if ($isAnalyzer) { "labels:`n- RoslynAnalyzer`n" } else { '' }
                 $metaContent = @"
 fileFormatVersion: 2
@@ -552,7 +791,7 @@ ${labelBlock}PluginImporter:
   - first:
       Editor: Editor
     second:
-      enabled: 1
+      enabled: 0
       settings:
         DefaultValueInitialized: true
   userData:
@@ -590,6 +829,18 @@ function Write-AnalyzerSetupDiagnostics {
     $analyzerLabeled = (Test-Path -LiteralPath "$analyzerDll.meta" -PathType Leaf) -and
         ((Get-Content -LiteralPath "$analyzerDll.meta" -Raw) -match 'RoslynAnalyzer')
 
+    # A RoslynAnalyzer DLL must ALSO be excluded from the Editor platform (its meta's
+    # "Editor: Editor" block must be enabled: 0). An Editor-ENABLED copy is registered
+    # as a managed precompiled assembly; combined with the same-named copy under the
+    # package's own Editor/Analyzers, Unity 2021 aborts with "Multiple precompiled
+    # assemblies with the same name". Assert the EFFECTIVE excluded state here so a meta
+    # regression is caught in CI before Unity compiles, not just the label presence.
+    $editorEnabledPattern = 'Editor:\s+Editor\s+second:\s+enabled:\s*1'
+    $sourceGeneratorEditorDisabled = (Test-Path -LiteralPath "$sourceGeneratorDll.meta" -PathType Leaf) -and
+        -not ((Get-Content -LiteralPath "$sourceGeneratorDll.meta" -Raw) -match $editorEnabledPattern)
+    $analyzerEditorDisabled = (Test-Path -LiteralPath "$analyzerDll.meta" -PathType Leaf) -and
+        -not ((Get-Content -LiteralPath "$analyzerDll.meta" -Raw) -match $editorEnabledPattern)
+
     $logHasSourceGeneratorArg = $false
     $logHasAnalyzerArg = $false
     if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
@@ -601,12 +852,17 @@ function Write-AnalyzerSetupDiagnostics {
     Write-Host "::group::DxMessaging analyzer setup diagnostics ($Label)"
     Write-Host "Assets analyzer copy: RoslynAnalyzer-labeled source generator: $sourceGeneratorLabeled"
     Write-Host "Assets analyzer copy: RoslynAnalyzer-labeled analyzer: $analyzerLabeled"
+    Write-Host "Assets analyzer copy: source generator excluded from Editor platform: $sourceGeneratorEditorDisabled"
+    Write-Host "Assets analyzer copy: analyzer excluded from Editor platform: $analyzerEditorDisabled"
     Write-Host "Unity compile log mentioned DxMessaging source-generator arg: $logHasSourceGeneratorArg"
     Write-Host "Unity compile log mentioned DxMessaging analyzer arg: $logHasAnalyzerArg"
     Write-Host "::endgroup::"
 
     if (-not ($sourceGeneratorLabeled -and $analyzerLabeled)) {
         throw "Generated Assets/Plugins analyzer copy is missing the RoslynAnalyzer-labeled DxMessaging source-generator/analyzer DLLs."
+    }
+    if (-not ($sourceGeneratorEditorDisabled -and $analyzerEditorDisabled)) {
+        throw "Generated Assets/Plugins analyzer copy is Editor-ENABLED (a managed precompiled assembly). The analyzer DLLs must be excluded from every platform (Editor included) so Unity treats them as RoslynAnalyzer-only DLLs; otherwise the same-named copy under the package's Editor/Analyzers trips Unity 2021's 'Multiple precompiled assemblies with the same name' abort."
     }
 }
 
@@ -642,6 +898,46 @@ function Initialize-EphemeralProject {
     # generator and broke 2021/2022 play/standalone. SetupCscRsp manages csc.rsp
     # (only the base-call ignore sidecar) at editor load.
     Copy-DxMessagingAnalyzersToAssets -Root $Root -Project $project
+
+    # STANDALONE ONLY: generate the split-build helpers that sever the test
+    # player's PlayerConnection/TCP result streaming (the 10060 hang on multi-NIC
+    # self-hosted runners). The Editor-side build modifier clears the player's
+    # outbound-connection BuildOptions and exits the editor after the build; the
+    # player-side TestRunCallback writes NUnit XML to -dxmTestResults and quits.
+    # Written idempotently (only when missing or changed), exactly like
+    # Copy-DxMessagingAnalyzersToAssets, so reruns against the cached project do
+    # not needlessly invalidate Unity's import cache. editmode/playmode never emit
+    # these files (the local single -runTests path is untouched).
+    if ($Mode -eq 'standalone') {
+        $standaloneFiles = @(
+            @{ Path = (Join-Path $project 'Assets\Editor\DxmCiStandaloneBuildModifier.cs'); Content = (New-StandaloneBuildModifierSource) },
+            @{ Path = (Join-Path $project 'Assets\DxmCiStandaloneTestCallback\DxmCiStandaloneTestCallback.cs'); Content = (New-StandaloneTestCallbackSource) },
+            @{ Path = (Join-Path $project 'Assets\DxmCiStandaloneTestCallback\DxmCiStandaloneTestCallback.asmdef'); Content = (New-StandaloneTestCallbackAsmdef) }
+        )
+        foreach ($file in $standaloneFiles) {
+            $dir = Split-Path -Parent $file.Path
+            if ($dir -and -not (Test-Path -LiteralPath $dir -PathType Container)) {
+                New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            }
+            $needsWrite = -not (Test-Path -LiteralPath $file.Path -PathType Leaf)
+            if (-not $needsWrite) {
+                # Compare EOL-trailing-tolerantly: Set-Content appends a trailing
+                # newline that the here-string content lacks, so a naive `-ne` would
+                # rewrite on every run and needlessly bust Unity's import cache.
+                $existing = Get-Content -LiteralPath $file.Path -Raw
+                $needsWrite = ($existing.TrimEnd("`r", "`n") -ne $file.Content.TrimEnd("`r", "`n"))
+            }
+            if ($needsWrite) {
+                Set-Content -LiteralPath $file.Path -Value $file.Content -Encoding UTF8
+            }
+        }
+        Write-Host "::group::DxMessaging standalone split-build helpers"
+        Write-Host "Generated the standalone build modifier + player TestRunCallback under $project (file-based results; no PlayerConnection)."
+        foreach ($file in $standaloneFiles) {
+            Write-Host "  $($file.Path)"
+        }
+        Write-Host "::endgroup::"
+    }
 
     return $project
 }
@@ -870,6 +1166,346 @@ function Invoke-UnityLicenseReturn {
     } catch {
         Write-Host "::warning::Unity license return failed: $($_.Exception.Message). The workflow if:always() return step and the next run's return-at-start are the backstops."
     }
+}
+
+function Get-StandaloneTestPlayerTimeoutSeconds {
+    # Single source of truth for the TOTAL wall-clock timeout applied to the
+    # DIRECTLY-LAUNCHED standalone test player (Invoke-StandaloneTestPlayer). The
+    # player runs ~700 runtime tests headless in single-digit minutes; the 30 min
+    # default is a generous backstop so a player that hangs (e.g. a residual
+    # connection dial-out or a deadlocked test) is tree-killed instead of running
+    # until the 120-minute GitHub step is cancelled. Mirrors ensure-editor.ps1
+    # Get-EnsureEditorInstallTimeoutSeconds EXACTLY: honors
+    # DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS; a non-integer or NEGATIVE override is
+    # ignored with a ::warning:: and the default is used; 0 is the explicit OPT-OUT
+    # (unbounded wait). StrictMode-safe: no collection reads.
+    param([int]$Default = 1800)
+
+    if ($env:DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS='$env:DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
+function Get-StandaloneBuildTimeoutSeconds {
+    # Single source of truth for the TOTAL wall-clock timeout applied to the editor
+    # BUILD step that produces the standalone IL2CPP test player. The IL2CPP build
+    # is the long pole; the 45 min default matches the install default and comfortably
+    # exceeds a slow-but-progressing build, so a build that idles forever (e.g. the
+    # PostBuildCleanup exit never fired because the modifier failed to compile and
+    # AutoRunPlayer stayed set) is tree-killed instead of consuming the 120-minute
+    # GitHub step. Mirrors ensure-editor.ps1 Get-EnsureEditorInstallTimeoutSeconds
+    # EXACTLY: honors DXM_STANDALONE_BUILD_TIMEOUT_SECONDS; a non-integer or NEGATIVE
+    # override is ignored with a ::warning:: and the default is used; 0 is the
+    # explicit OPT-OUT (unbounded wait). StrictMode-safe: no collection reads.
+    param([int]$Default = 2700)
+
+    if ($env:DXM_STANDALONE_BUILD_TIMEOUT_SECONDS) {
+        $parsed = 0
+        if (
+            [int]::TryParse($env:DXM_STANDALONE_BUILD_TIMEOUT_SECONDS, [ref]$parsed) -and
+            $parsed -ge 0
+        ) {
+            return $parsed
+        }
+        Write-Host "::warning::Ignoring invalid DXM_STANDALONE_BUILD_TIMEOUT_SECONDS='$env:DXM_STANDALONE_BUILD_TIMEOUT_SECONDS'; using $Default second(s)."
+    }
+    return $Default
+}
+
+function ConvertTo-ProcessArgumentLine {
+    # MIRROR of scripts/unity/ensure-editor.ps1 ConvertTo-ProcessArgumentLine
+    # (run-ci-tests.ps1 does not import that script, so the helper is copied here
+    # verbatim). Builds a single Windows command-line argument string from an array,
+    # quoting any argument containing whitespace or a quote and escaping embedded
+    # backslashes/quotes per the CommandLineToArgvW rules. Used by
+    # Invoke-ProcessWithTreeKillTimeout (it assigns ProcessStartInfo.Arguments, the
+    # single command-line string form, NOT the per-element argument-list property
+    # the contract forbids).
+    param([string[]]$Arguments)
+
+    $quoted = foreach ($arg in @($Arguments)) {
+        if ($null -eq $arg) {
+            '""'
+            continue
+        }
+
+        $value = [string]$arg
+        if ($value.Length -gt 0 -and $value -notmatch '[\s"]') {
+            $value
+            continue
+        }
+
+        $builder = New-Object System.Text.StringBuilder
+        [void]$builder.Append('"')
+        $backslashes = 0
+        foreach ($ch in $value.ToCharArray()) {
+            if ($ch -eq '\') {
+                $backslashes++
+                continue
+            }
+
+            if ($ch -eq '"') {
+                if ($backslashes -gt 0) {
+                    [void]$builder.Append('\' * ($backslashes * 2))
+                }
+                [void]$builder.Append('\"')
+                $backslashes = 0
+                continue
+            }
+
+            if ($backslashes -gt 0) {
+                [void]$builder.Append('\' * $backslashes)
+                $backslashes = 0
+            }
+            [void]$builder.Append($ch)
+        }
+
+        if ($backslashes -gt 0) {
+            [void]$builder.Append('\' * ($backslashes * 2))
+        }
+        [void]$builder.Append('"')
+        $builder.ToString()
+    }
+
+    return ($quoted -join ' ')
+}
+
+function Invoke-ProcessWithTreeKillTimeout {
+    # GENERALIZED hard tree-kill watchdog, STRUCTURALLY IDENTICAL to
+    # scripts/unity/ensure-editor.ps1 Invoke-UnityCliCaptureWithTimeout (the proven
+    # resilience core). It launches $FilePath with $Arguments via
+    # System.Diagnostics.Process + ProcessStartInfo, drains BOTH stdout and stderr
+    # from a MAIN-THREAD ReadLineAsync poll loop (live echo via Write-Host + Tee to
+    # $LogPath), enforces an absolute UTC deadline, and on a breach $proc.Kill($true)
+    # tree-kills the whole process tree (the Unity editor build spawns child
+    # processes -- IL2CPP/bee -- and the player may too, so a bare Kill() would orphan
+    # them). The process is held in a try/finally that kills it on ANY throw between
+    # launch and reap, so a pwsh cancellation cannot leave an orphaned editor/player.
+    #
+    # WHY a Process and NOT `& <exe>`: the call operator cannot be interrupted -- a
+    # hung child runs until the whole job is killed. WHY the main-thread poll loop:
+    # every line is echoed LIVE the instant it arrives (no silent multi-minute build
+    # console) AND both pipes are continuously drained so neither can fill and
+    # back-pressure the child (the classic full-pipe-buffer deadlock is impossible).
+    # A Process.Start() launch is NOT an `&`/`.` call, so it does not trip the
+    # powershell-unity-process-wait-safety parser rule; the contract test additionally
+    # forbids a bare empty-parens WaitForExit and the per-element argument-list
+    # property here, both of which this implementation avoids.
+    #
+    # Returns a StrictMode-safe hashtable @{ ExitCode; TimedOut }. The caller throws
+    # on $TimedOut or a non-zero $ExitCode; the FILE written by the player is the
+    # source of truth for pass/fail.
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 1800,
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir -and -not (Test-Path -LiteralPath $logDir -PathType Container)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+
+    # Sentinel exit code for a wall-clock timeout kill. 124 mirrors GNU coreutils
+    # `timeout`; it is non-zero so the caller's "exit != 0 -> fail" path applies.
+    $timeoutExitCode = 124
+
+    Write-Host "::group::$Label"
+    Write-Host "`"$FilePath`" $($Arguments -join ' ')"
+
+    $buffer = New-Object System.Collections.Generic.List[string]
+
+    if ($TimeoutSeconds -le 0) {
+        $hasDeadline = $false
+        $timeoutMs = -1
+    } else {
+        $hasDeadline = $true
+        $timeoutMsLong = [int64]$TimeoutSeconds * 1000
+        if ($timeoutMsLong -gt [int64]::MaxValue - 1) {
+            $timeoutMs = [int64]::MaxValue - 1
+        } else {
+            $timeoutMs = $timeoutMsLong
+        }
+    }
+
+    $proc = $null
+    $exit = -1
+    $timedOut = $false
+    $reaped = $false
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $FilePath
+        $psi.Arguments = ConvertTo-ProcessArgumentLine -Arguments $Arguments
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+
+        $proc = New-Object System.Diagnostics.Process
+        $proc.StartInfo = $psi
+
+        [void]$proc.Start()
+
+        $outReader = $proc.StandardOutput
+        $errReader = $proc.StandardError
+        $oTask = $outReader.ReadLineAsync()
+        $eTask = $errReader.ReadLineAsync()
+
+        if ($hasDeadline) {
+            $deadline = [DateTime]::UtcNow.AddMilliseconds([double]$timeoutMs)
+        } else {
+            $deadline = [DateTime]::MaxValue
+        }
+
+        $oDone = $false
+        $eDone = $false
+        while (-not ($oDone -and $eDone)) {
+            $progressed = $false
+
+            if (-not $oDone -and $oTask.Wait(0)) {
+                $line = $oTask.Result
+                if ($null -eq $line) {
+                    $oDone = $true
+                } else {
+                    Write-Host $line
+                    $buffer.Add([string]$line)
+                    $oTask = $outReader.ReadLineAsync()
+                }
+                $progressed = $true
+            }
+
+            if (-not $eDone -and $eTask.Wait(0)) {
+                $line = $eTask.Result
+                if ($null -eq $line) {
+                    $eDone = $true
+                } else {
+                    Write-Host $line
+                    $buffer.Add([string]$line)
+                    $eTask = $errReader.ReadLineAsync()
+                }
+                $progressed = $true
+            }
+
+            if ([DateTime]::UtcNow -ge $deadline) {
+                # HUNG (or a quick-exit child whose grandchild still holds the pipe
+                # open, so EOF never arrives): tree-kill the WHOLE process tree.
+                $timedOut = $true
+                try {
+                    $proc.Kill($true)
+                } catch {
+                    try { $proc.Kill() } catch { }
+                }
+                break
+            }
+
+            if (-not $progressed) {
+                Start-Sleep -Milliseconds 50
+            }
+        }
+
+        # Reap so ExitCode is valid; bounded so a stuck reap cannot hang the harness.
+        $reaped = $proc.WaitForExit(5000)
+
+        # Drain any reads that completed during/after the kill so no pre-kill output
+        # is dropped.
+        foreach ($pending in @($oTask, $eTask)) {
+            try {
+                if ($pending.Wait(2000) -and $null -ne $pending.Result) {
+                    $line = $pending.Result
+                    Write-Host $line
+                    $buffer.Add([string]$line)
+                }
+            } catch {
+                # A faulted/cancelled read on a killed pipe carries nothing to add.
+            }
+        }
+
+        if ($timedOut) {
+            $exit = $timeoutExitCode
+        } elseif ($reaped -and $proc.HasExited) {
+            $exit = $proc.ExitCode
+        } else {
+            $exit = $timeoutExitCode
+            $timedOut = $true
+        }
+    } catch {
+        $message = "Process watchdog '$Label' threw: $($_.Exception.Message)"
+        Write-Host "::warning::$message"
+        $buffer.Add($message)
+        $exit = -1
+    } finally {
+        # If we are unwinding on a throw/cancellation and the process is still alive,
+        # tree-kill it so a cancelled step never orphans the editor/player.
+        if ($proc -and -not $proc.HasExited) {
+            try { $proc.Kill($true) } catch { }
+        }
+        if ($proc) { $proc.Dispose() }
+    }
+
+    Write-Host "::endgroup::"
+
+    # Persist the captured (already-streamed) output to $LogPath for diagnostics.
+    try {
+        Set-Content -LiteralPath $LogPath -Value (@($buffer.ToArray()) -join "`n") -Encoding UTF8
+    } catch {
+        Write-Host "::warning::Could not persist '$Label' log to ${LogPath}: $($_.Exception.Message)"
+    }
+
+    return @{
+        ExitCode = $exit
+        TimedOut = [bool]$timedOut
+    }
+}
+
+function Invoke-StandaloneTestPlayer {
+    # RUN the editor-built standalone IL2CPP test player DIRECTLY (no
+    # PlayerConnection): the player-side TestRunCallback writes NUnit XML to the
+    # -dxmTestResults path and quits 0/1/2/3. The exe is launched under the hard
+    # tree-kill watchdog so a hung player is killed long before the GitHub step is
+    # cancelled. The caller ALWAYS validates the FILE next (Test-NUnitResults); the
+    # exit code only fast-fails the missing-results case.
+    #
+    # ONE results channel: -dxmTestResults. There is NO environment-variable handoff
+    # and NO per-user-data-folder fallback.
+    param(
+        [Parameter(Mandatory = $true)][string]$EditorBuiltExePath,
+        [Parameter(Mandatory = $true)][string]$ResultsPath,
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [int]$TimeoutSeconds = 1800
+    )
+
+    $playerArgs = @(
+        '-batchmode',
+        '-nographics',
+        '-logFile', '-',
+        '-dxmTestResults', $ResultsPath
+    )
+
+    $result = Invoke-ProcessWithTreeKillTimeout `
+        -FilePath $EditorBuiltExePath `
+        -Arguments $playerArgs `
+        -TimeoutSeconds $TimeoutSeconds `
+        -LogPath $LogPath `
+        -Label 'Run standalone test player'
+
+    if ($result.TimedOut) {
+        throw "Standalone test player timed out after $TimeoutSeconds second(s) and the process tree was killed. Raise the limit via DXM_STANDALONE_PLAYER_TIMEOUT_SECONDS (0 disables the timeout). See the player log at $LogPath."
+    }
+    if ($result.ExitCode -eq 2) {
+        throw "Standalone test player reported no -dxmTestResults path (exit 2); no results were written. See the player log at $LogPath."
+    }
+
+    return $result.ExitCode
 }
 
 function Invoke-UnityEditor {
@@ -1312,6 +1948,16 @@ $logPath = Join-Path $ArtifactsPath 'unity.log'
 $configureLogPath = Join-Path $ArtifactsPath 'configure.log'
 $startupProbeLogPath = Join-Path $ArtifactsPath 'unity-startup-probe.log'
 
+# STANDALONE split-build artifacts. The built IL2CPP player goes UNDER the
+# project's Temp dir (NOT $ArtifactsPath): a full player is hundreds of MB and must
+# not bloat the uploaded artifact, and the Library cache key already busts on the
+# run-ci-tests.ps1 hash so a stale Temp player is never reused. The player's
+# -logFile is captured to $ArtifactsPath/player.log (small; uploaded so the
+# verify/dump-log actions can scan it, since the player's stdout no longer flows
+# through unity.log).
+$standaloneExe = Join-Path $ProjectPath 'Temp\DxmTestPlayer\DxmTestPlayer.exe'
+$playerLogPath = Join-Path $ArtifactsPath 'player.log'
+
 # Activation/return carry the serial/email/password in their argument arrays and
 # Unity may echo account/serial fragments into the activation log, so these logs
 # MUST NOT live under $ArtifactsPath (the workflow uploads that as an artifact and
@@ -1361,36 +2007,117 @@ try {
         Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $configureLogPath -Label 'standalone configure'
     }
 
-    # MUST NOT include '-quit' alongside '-runTests': per the Unity Editor manual
-    # (https://docs.unity3d.com/Manual/EditorCommandLineArguments.html), if the
-    # Editor is running tests with -runTests, -quit causes it to QUIT IMMEDIATELY
-    # before in-progress tests can complete -- the editor exits 0 having written
-    # no results.xml. Pinned by scripts/__tests__/unity-runner-script-contract.test.js.
-    $testArgs = @(
-        '-batchmode',
-        '-nographics',
-        '-projectPath', $ProjectPath,
-        '-runTests',
-        '-testPlatform', $testPlatform,
-        '-testResults', $resultsPath,
-        '-assemblyNames', $AssemblyNames,
-        '-logFile', '-'
-    ) + $acceleratorArgs
-
     if ($TestMode -eq 'standalone') {
-        $testArgs += @('-buildTarget', 'StandaloneWindows64')
-    }
+        # STANDALONE SPLIT BUILD + FILE-BASED RESULTS (zero PlayerConnection
+        # dependency). The legacy `-runTests -testPlatform StandaloneWindows64` flow
+        # had the built player stream NUnit results back to the editor over
+        # PlayerConnection/TCP; on the self-hosted runners' multi-NIC networks the
+        # player cannot reach the editor's listener (TcpProtobufClient errorcode
+        # 10060) and the editor's run never completes, hanging the 120-minute step.
+        # Instead we (2a) BUILD the player via the editor -- the generated
+        # DxmCiStandaloneBuildModifier clears AutoRunPlayer|ConnectToHost|
+        # ConnectWithProfiler and IPostBuildCleanup exits the editor after the build
+        # -- then (2b) RUN the built exe directly, where the generated
+        # DxmCiStandaloneTestCallback writes NUnit XML to -dxmTestResults and quits,
+        # then (2c) validate the FILE (the source of truth). Both 2a and 2b run under
+        # the hard tree-kill watchdog so neither can hang to the step timeout.
 
-    Invoke-UnityEditorWithFailureDiagnostics `
-        -EditorPath $UnityEditorPath `
-        -Arguments $testArgs `
-        -Label "Run Unity $UnityVersion $TestMode tests" `
-        -LogPath $logPath `
-        -Project $ProjectPath `
-        -CscLabel "$UnityVersion $TestMode test compile" `
-        -DiagnosticsLabel "Unity $UnityVersion $TestMode"
-    Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion $TestMode test compile"
-    Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode" -LogPath $logPath -Project $ProjectPath
+        # (2a) BUILD. Set DXM_PLAYER_BUILD_PATH so the modifier redirects the player
+        # output to a known path under the project's Temp dir, then build with
+        # -runTests (so PlayerLauncher's ModifyBuildOptions reflection path fires) but
+        # NO -quit (the editor must reach PostBuildCleanup, which arms the exit).
+        $env:DXM_PLAYER_BUILD_PATH = $standaloneExe
+        $standaloneExeDir = Split-Path -Parent $standaloneExe
+        if ($standaloneExeDir -and -not (Test-Path -LiteralPath $standaloneExeDir -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $standaloneExeDir | Out-Null
+        }
+        $buildArgs = @(
+            '-batchmode',
+            '-nographics',
+            '-projectPath', $ProjectPath,
+            '-runTests',
+            '-testPlatform', 'StandaloneWindows64',
+            '-testResults', $resultsPath,
+            '-assemblyNames', $AssemblyNames,
+            '-buildTarget', 'StandaloneWindows64',
+            '-logFile', '-'
+        ) + $acceleratorArgs
+
+        $buildResult = Invoke-ProcessWithTreeKillTimeout `
+            -FilePath $UnityEditorPath `
+            -Arguments $buildArgs `
+            -TimeoutSeconds (Get-StandaloneBuildTimeoutSeconds) `
+            -LogPath $logPath `
+            -Label "Build standalone IL2CPP test player (Unity $UnityVersion)"
+        if ($buildResult.TimedOut -or $buildResult.ExitCode -ne 0) {
+            Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion standalone build"
+            Write-UnityResultFailureDiagnostics -LogPath $logPath -Project $ProjectPath -Label "Unity $UnityVersion standalone build"
+            if ($buildResult.TimedOut) {
+                throw "Standalone test-player build timed out and the process tree was killed. Raise the limit via DXM_STANDALONE_BUILD_TIMEOUT_SECONDS (0 disables the timeout). See the build log at $logPath."
+            }
+            throw "Standalone test-player build failed with exit code $($buildResult.ExitCode). See the streamed Unity log above (also saved to $logPath)."
+        }
+
+        # POST-BUILD ASSERT: the exe MUST exist at DXM_PLAYER_BUILD_PATH. If it does
+        # not, the build modifier likely did not run (a compile error left
+        # AutoRunPlayer set, so PlayerLauncher built Temp/PlayerWithTests and tried to
+        # AutoRun it, which is the 10060-hang path). Fail fast with that diagnostic.
+        if (-not (Test-Path -LiteralPath $standaloneExe -PathType Leaf)) {
+            Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion standalone build"
+            Write-UnityResultFailureDiagnostics -LogPath $logPath -Project $ProjectPath -Label "Unity $UnityVersion standalone build"
+            throw "Editor build did not produce DxMessaging test player at $standaloneExe; the build modifier may not have run (a compile error can leave AutoRunPlayer set, reverting the build to Temp/PlayerWithTests). See the build log at $logPath."
+        }
+
+        # MISSED-CASE GUARD: even when the exe exists, scan the build log for the
+        # signatures of a NON-redirected AutoRun build (PlayerWithTests /
+        # AutoRunPlayer = True). If present, the modifier did not fully take and a
+        # live run may still attempt the 10060 dial-out -- surface a ::warning::.
+        if (Test-Path -LiteralPath $logPath -PathType Leaf) {
+            $buildLogText = Get-Content -LiteralPath $logPath -Raw
+            if ($buildLogText -match 'PlayerWithTests' -or $buildLogText -match 'options\.AutoRunPlayer = True') {
+                Write-Host "::warning::Standalone build log mentions PlayerWithTests / AutoRunPlayer = True; the DxmCiStandaloneBuildModifier may not have fully suppressed the player auto-run. If the player run hangs on a TcpProtobufClient 10060, verify the modifier compiled."
+            }
+        }
+
+        # (2b) RUN the built exe directly (no PlayerConnection), under the watchdog.
+        Invoke-StandaloneTestPlayer `
+            -EditorBuiltExePath $standaloneExe `
+            -ResultsPath $resultsPath `
+            -LogPath $playerLogPath `
+            -TimeoutSeconds (Get-StandaloneTestPlayerTimeoutSeconds)
+
+        # (2c) VALIDATE the FILE (the source of truth). The player log carries the
+        # diagnostics for a missing/empty file (its stdout no longer flows through
+        # unity.log).
+        Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion standalone" -LogPath $playerLogPath -Project $ProjectPath
+    } else {
+        # MUST NOT include '-quit' alongside '-runTests': per the Unity Editor manual
+        # (https://docs.unity3d.com/Manual/EditorCommandLineArguments.html), if the
+        # Editor is running tests with -runTests, -quit causes it to QUIT IMMEDIATELY
+        # before in-progress tests can complete -- the editor exits 0 having written
+        # no results.xml. Pinned by scripts/__tests__/unity-runner-script-contract.test.js.
+        $testArgs = @(
+            '-batchmode',
+            '-nographics',
+            '-projectPath', $ProjectPath,
+            '-runTests',
+            '-testPlatform', $testPlatform,
+            '-testResults', $resultsPath,
+            '-assemblyNames', $AssemblyNames,
+            '-logFile', '-'
+        ) + $acceleratorArgs
+
+        Invoke-UnityEditorWithFailureDiagnostics `
+            -EditorPath $UnityEditorPath `
+            -Arguments $testArgs `
+            -Label "Run Unity $UnityVersion $TestMode tests" `
+            -LogPath $logPath `
+            -Project $ProjectPath `
+            -CscLabel "$UnityVersion $TestMode test compile" `
+            -DiagnosticsLabel "Unity $UnityVersion $TestMode"
+        Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion $TestMode test compile"
+        Test-NUnitResults -Path $resultsPath -Label "Unity $UnityVersion $TestMode" -LogPath $logPath -Project $ProjectPath
+    }
 } finally {
     # Deterministic RETURN of the seat on EVERY exit path (clean exit, throw, or a
     # kill that still unwinds this finally). The workflow if:always() step is the

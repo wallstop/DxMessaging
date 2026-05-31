@@ -149,21 +149,28 @@ namespace DxMessaging.Editor
                         {
                             bool importerDirty = false;
 
+                            // A RoslynAnalyzer-labeled DLL must be EXCLUDED from every
+                            // build platform, including the Editor, so Unity treats it as a
+                            // C# compiler analyzer rather than a managed precompiled
+                            // assembly. The same-named DLL is importable from two locations
+                            // (the package's own Editor/Analyzers copy and this Assets
+                            // copy); if either is an Editor-enabled precompiled assembly,
+                            // Unity 2021 aborts with "Multiple precompiled assemblies with
+                            // the same name". The Roslyn runtime dependencies in the same
+                            // folder already ship Editor-disabled and never collide -- this
+                            // converges the analyzer DLLs onto that proven-safe shape.
+                            // NOTE: SetExcludeFromAnyPlatform is a no-op once
+                            // CompatibleWithAnyPlatform is false, so the Editor platform is
+                            // disabled through the effective SetCompatibleWithEditor API.
                             if (importer.GetCompatibleWithAnyPlatform())
                             {
                                 importer.SetCompatibleWithAnyPlatform(false);
                                 importerDirty = true;
                             }
 
-                            if (importer.GetExcludeFromAnyPlatform("Editor"))
+                            if (importer.GetCompatibleWithEditor())
                             {
-                                importer.SetExcludeFromAnyPlatform("Editor", false);
-                                importerDirty = true;
-                            }
-
-                            if (!importer.GetExcludeFromAnyPlatform("Standalone"))
-                            {
-                                importer.SetExcludeFromAnyPlatform("Standalone", true);
+                                importer.SetCompatibleWithEditor(false);
                                 importerDirty = true;
                             }
 

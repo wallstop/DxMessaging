@@ -148,9 +148,10 @@ constructor-injected.
 <!-- to be measured by Week 1b T0.3 baseline runs and updated in Week 5 -->
 
 `EmitGateClockReadIsRare` asserts the per-emission clock-read rate stays
-below `(emitCount / SweepGateMaskSampleSize) + 1` over a 10k-emit run. Any
-PR that increases the gate's clock-read rate must explicitly justify it in
-the `### Performance numbers` PR description section.
+below `(emitCount / SweepGateMaskSampleSize) + 1` over a 10k-emit run. A PR
+that increases the gate's clock-read rate will surface in the dispatch
+throughput numbers CI regenerates per PR (`perf-numbers.yml`); justify any
+regression in the PR description.
 
 ## Enforcement
 

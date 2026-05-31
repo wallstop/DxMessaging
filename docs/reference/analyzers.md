@@ -440,7 +440,7 @@ DxMessaging ships **two** Roslyn DLLs because Unity 2021's analyzer loader has a
 - `WallstopStudios.DxMessaging.Analyzer.dll` -- the base-call analyzer (DXMSG006/007/008/009/010). Pinned to **Roslyn 3.8.0**. Unity 2021 rejects analyzer DLLs built against Roslyn 4.x; Microsoft's `Microsoft.Unity.Analyzers` package pins 3.8.0 for the same reason.
 - `WallstopStudios.DxMessaging.SourceGenerators.dll` -- the source generators (DXMSG002/003/004/005). Also pinned to **Roslyn 3.8.0** and implemented with classic `ISourceGenerator` APIs so Unity 2021 can instantiate the generators.
 
-Both DLLs are tagged `RoslynAnalyzer` and registered in `csc.rsp`. They live side-by-side in `Editor/Analyzers/`.
+Both DLLs are tagged `RoslynAnalyzer`, excluded from every build platform (the Editor included), and registered in `csc.rsp`. They live side-by-side in `Editor/Analyzers/`. Excluding every platform is what keeps Unity from treating them as managed precompiled assemblies: a `RoslynAnalyzer`-labeled DLL is fed to the C# compiler as an analyzer regardless of platform inclusion, and an Editor-enabled copy would instead be registered as a precompiled assembly that collides with the same-named copy Unity places under the consuming project's `Assets/`, aborting Unity 2021.3 with _Multiple precompiled assemblies with the same name_.
 
 If you are upgrading from a prior version and DXMSG warnings stop appearing on Unity 2021:
 
