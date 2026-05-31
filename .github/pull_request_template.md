@@ -50,6 +50,11 @@ Acceptable substitutions:
     affect runtime perf, e.g. comments / docs / tests-only changes.
   - "N/A - non-hot-path edit only <one-line description>" to describe what was
     actually touched, e.g. settings asset shape or editor tooling.
+  - "N/A - auto-maintained <reference>" to defer the before/after table to the
+    CI perf auto-update (unity-benchmarks.yml refreshes the numbers in
+    docs/architecture/performance.md from the latest Unity run). The reference
+    must mention performance.md or unity-benchmarks so the deferral is
+    auditable.
 
 See docs/architecture/performance.md for the budget and dispatch throughput
 benchmark invocation.
