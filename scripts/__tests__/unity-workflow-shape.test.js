@@ -1216,6 +1216,7 @@ describe(".github/workflows/perf-numbers.yml CI-owned dispatch-throughput number
   let preflightJob;
   let loopGuardJob;
   let perfJob;
+  let commentJob;
   let commitJob;
   let perfSteps;
 
@@ -1225,24 +1226,30 @@ describe(".github/workflows/perf-numbers.yml CI-owned dispatch-throughput number
     preflightJob = parsed.jobs["runner-preflight"];
     loopGuardJob = parsed.jobs["loop-guard"];
     perfJob = parsed.jobs["perf-benchmarks"];
+    commentJob = parsed.jobs["comment-perf-doc"];
     commitJob = parsed.jobs["commit-perf-doc"];
     perfSteps = perfJob.steps;
   });
 
-  test("triggers on pull_request to master/main (opened/synchronize/reopened) plus dispatch", () => {
+  test("triggers on pull_request (each change), push to master/main, plus dispatch", () => {
     const onBlock = getOnBlock(parsed);
-    expect(Object.keys(onBlock).sort()).toEqual(["pull_request", "workflow_dispatch"]);
+    // PR events drive the non-blocking comment; push (post-merge) drives the
+    // master doc commit; dispatch for manual runs.
+    expect(Object.keys(onBlock).sort()).toEqual(["pull_request", "push", "workflow_dispatch"]);
     expect(onBlock.pull_request.branches.sort()).toEqual(["main", "master"]);
     // Each change to the PR re-runs the numbers: opened + synchronize + reopened.
     expect(onBlock.pull_request.types.sort()).toEqual(["opened", "reopened", "synchronize"]);
+    expect(onBlock.push.branches.sort()).toEqual(["main", "master"]);
     expect(text).not.toContain("pull_request_target");
   });
 
-  test("top-level permissions are least-privilege; write is granted only on the commit job", () => {
+  test("top-level permissions are least-privilege; write scopes are per-job and minimal", () => {
     expect(parsed.permissions).toEqual({ contents: "read", checks: "write" });
     // The licensed Unity job must NOT inherit or declare write scope.
     expect(perfJob.permissions).toBeUndefined();
-    // The doc-commit job is the only place contents:write is granted.
+    // The PR-comment job gets pull-requests:write only (it never pushes); the
+    // master-commit job gets contents:write only (it never comments).
+    expect(commentJob.permissions).toEqual({ contents: "read", "pull-requests": "write" });
     expect(commitJob.permissions).toEqual({ contents: "write" });
   });
 
@@ -1391,36 +1398,64 @@ describe(".github/workflows/perf-numbers.yml CI-owned dispatch-throughput number
     expect(commitStep.with.commit_message).not.toContain("skip ci");
   });
 
-  test("the commit job renders the doc, normalizes with managed Prettier, and pushes to the PR head branch", () => {
-    // Only commits for same-repo pull_request events when both legs succeeded.
-    expect(commitJob.if).toContain("github.event_name == 'pull_request'");
-    expect(commitJob.if).toContain(
+  test("the PR-comment job posts a NON-BLOCKING sticky comment and NEVER pushes to the PR branch", () => {
+    // Merge-safe path: on pull_request events, render the numbers and post a sticky
+    // PR comment. It must NOT push onto the contributor's branch -- a GITHUB_TOKEN
+    // push does not re-trigger the required pull_request checks, so the new head
+    // would have no successful required checks and merge would be blocked.
+    expect(commentJob.if).toContain("github.event_name == 'pull_request'");
+    expect(commentJob.if).toContain(
       "github.event.pull_request.head.repo.full_name == github.repository"
     );
-    expect(commitJob.if).toContain("needs.perf-benchmarks.result == 'success'");
+    expect(commentJob.if).toContain("needs.perf-benchmarks.result == 'success'");
 
-    // Checks out the PR HEAD BRANCH (ref) so the rendered doc can be pushed back.
-    const checkout = commitJob.steps.find((step) => step.uses === "actions/checkout@v6");
-    expect(checkout.with.ref).toBe("${{ github.event.pull_request.head.ref }}");
-
-    // Renders, then prettier --write, then computes changed from git diff after.
-    const render = commitJob.steps.find((step) => step.id === "render");
+    // Renders into the working tree (no commit), prettier --write, then upserts a
+    // sticky PR comment via github-script (create OR update by marker).
+    const render = commentJob.steps.find((step) => step.id === "render");
     expect(render).toBeDefined();
     expect(render.run).toContain("node scripts/unity/render-perf-doc.js");
+    expect(render.run).toContain("node scripts/run-managed-prettier.js --write");
+    const comment = commentJob.steps.find(
+      (step) => typeof step.uses === "string" && step.uses.startsWith("actions/github-script@")
+    );
+    expect(comment).toBeDefined();
+    expect(comment.with.script).toContain("issues.createComment");
+    expect(comment.with.script).toContain("issues.updateComment");
+    // It must NOT push to the PR branch (no git-auto-commit, no head.ref checkout).
+    const commentText = JSON.stringify(commentJob);
+    expect(commentText).not.toContain("git-auto-commit-action");
+    expect(commentText).not.toContain("github.event.pull_request.head.ref");
+  });
+
+  test("the master-commit job commits the rendered doc to master ONLY on push, loop-guarded", () => {
+    // The committed doc is refreshed on push to master (post-merge): a bot push to
+    // the default branch blocks no PR.
+    expect(commitJob.if).toContain("github.event_name == 'push'");
+    expect(commitJob.if).toContain("needs.perf-benchmarks.result == 'success'");
+    expect(commitJob.if).toContain("needs.loop-guard.outputs.should-run == 'true'");
+    // It does NOT key off pull_request (that path comments, never commits).
+    expect(commitJob.if).not.toContain("github.event_name == 'pull_request'");
+
+    // Renders, prettier --write, computes changed from git diff, --check guards the
+    // required prettier gate, then git-auto-commit pushes to master.
+    const render = commitJob.steps.find((step) => step.id === "render");
+    expect(render).toBeDefined();
     expect(render.run).toMatch(
       /render-perf-doc\.js[\s\S]*run-managed-prettier\.js --write[\s\S]*git diff --quiet/
     );
-    // Belt-and-suspenders --check guarantees the pushed doc is green on the
-    // required markdown-json.yml prettier gate.
     const verify = commitJob.steps.find(
       (step) => step.run && /run-managed-prettier\.js --check/.test(step.run)
     );
     expect(verify).toBeDefined();
-    // Dependencies are installed so managed Prettier resolves from node_modules.
     const install = commitJob.steps.find(
       (step) => step.run && /npm ci/.test(step.run) && /package-lock\.json/.test(step.run)
     );
     expect(install).toBeDefined();
+    // It must NOT check out / push the PR head branch (that would block merge).
+    const checkout = commitJob.steps.find((step) => step.uses === "actions/checkout@v6");
+    expect(checkout && checkout.with ? checkout.with.ref : undefined).not.toBe(
+      "${{ github.event.pull_request.head.ref }}"
+    );
   });
 });
 
