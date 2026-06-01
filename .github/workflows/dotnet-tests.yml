@@ -10,6 +10,8 @@ on:
       - "**/*.cs"
       - "**/*.csproj"
       - "**/*.sln"
+      - ".github/workflows/dotnet-tests.yml"
+      - "Editor/Analyzers/**"
       - "SourceGenerators/**"
       - ".config/dotnet-tools.json"
   pull_request:
@@ -19,6 +21,8 @@ on:
       - "**/*.cs"
       - "**/*.csproj"
       - "**/*.sln"
+      - ".github/workflows/dotnet-tests.yml"
+      - "Editor/Analyzers/**"
       - "SourceGenerators/**"
       - ".config/dotnet-tools.json"
   workflow_dispatch:
@@ -50,11 +54,32 @@ jobs:
           --configuration Release
           --collect:"XPlat Code Coverage"
 
+      - name: Verify committed analyzer payload is current
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code -- \
+              Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll \
+              Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll; then
+            {
+              echo "::error::Committed Editor/Analyzers payload is stale."
+              echo "Build the SourceGenerators projects locally and commit the updated analyzer/source-generator DLLs."
+            }
+            exit 1
+          fi
+
       - name: Generate coverage summary
         run: |
           mkdir -p artifacts/coverage
+          # SourceGenerators/Directory.Build.props redirects test output to
+          # .artifacts/$(MSBuildProjectName)/TestResults/, i.e.
+          # .artifacts/WallstopStudios.DxMessaging.SourceGenerators.Tests/TestResults/...
+          # A glob hardcoding ".artifacts/SourceGenerators.Tests/..." misses the
+          # MSBuildProjectName prefix and reportgenerator fails with "found no
+          # matching files". Match any redirected TestResults coverage file so a
+          # future project rename cannot silently break the summary again.
           reportgenerator \
-            -reports:".artifacts/SourceGenerators.Tests/TestResults/**/coverage.cobertura.xml" \
+            -reports:".artifacts/**/TestResults/**/coverage.cobertura.xml" \
             -targetdir:"artifacts/coverage" \
             -reporttypes:"TextSummary;HtmlSummary;Cobertura"
           cat artifacts/coverage/Summary.txt

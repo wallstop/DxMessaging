@@ -10,6 +10,7 @@ namespace DxMessaging.Core.MessageBus
     using DataStructure;
     using Diagnostics;
     using DxMessaging.Core;
+    using DxMessaging.Core.Internal;
     using Extensions;
     using Helper;
     using Internal;
@@ -2852,7 +2853,7 @@ namespace DxMessaging.Core.MessageBus
                 _broadcastMethodsByType[messageType] = untargetedMethod;
             }
 
-            Action<IUntargetedMessage> broadcast = Unsafe.As<Action<IUntargetedMessage>>(
+            Action<IUntargetedMessage> broadcast = DxUnsafe.As<Action<IUntargetedMessage>>(
                 untargetedMethod
             );
             broadcast.Invoke(typedMessage);
@@ -3017,7 +3018,7 @@ namespace DxMessaging.Core.MessageBus
                 _broadcastMethodsByType[messageType] = targetedMethod;
             }
 
-            Action<InstanceId, ITargetedMessage> broadcast = Unsafe.As<
+            Action<InstanceId, ITargetedMessage> broadcast = DxUnsafe.As<
                 Action<InstanceId, ITargetedMessage>
             >(targetedMethod);
             broadcast.Invoke(target, typedMessage);
@@ -3113,7 +3114,7 @@ namespace DxMessaging.Core.MessageBus
                     }
                 }
 #if UNITY_2021_3_OR_NEWER
-                ref ReflexiveMessage reflexiveMessage = ref Unsafe.As<TMessage, ReflexiveMessage>(
+                ref ReflexiveMessage reflexiveMessage = ref DxUnsafe.As<TMessage, ReflexiveMessage>(
                     ref typedMessage
                 );
 
@@ -4040,7 +4041,7 @@ namespace DxMessaging.Core.MessageBus
                 _broadcastMethodsByType[messageType] = sourcedBroadcastMethod;
             }
 
-            Action<InstanceId, IBroadcastMessage> broadcast = Unsafe.As<
+            Action<InstanceId, IBroadcastMessage> broadcast = DxUnsafe.As<
                 Action<InstanceId, IBroadcastMessage>
             >(sourcedBroadcastMethod);
             broadcast.Invoke(source, typedMessage);
@@ -5164,7 +5165,7 @@ namespace DxMessaging.Core.MessageBus
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
-                        UntargetedInterceptor<T> typedTransformer = Unsafe.As<
+                        UntargetedInterceptor<T> typedTransformer = DxUnsafe.As<
                             UntargetedInterceptor<T>
                         >(interceptorObjects[i]);
                         if (!typedTransformer(ref message))
@@ -5206,9 +5207,9 @@ namespace DxMessaging.Core.MessageBus
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
-                        TargetedInterceptor<T> typedTransformer = Unsafe.As<TargetedInterceptor<T>>(
-                            interceptorObjects[i]
-                        );
+                        TargetedInterceptor<T> typedTransformer = DxUnsafe.As<
+                            TargetedInterceptor<T>
+                        >(interceptorObjects[i]);
                         if (!typedTransformer(ref target, ref message))
                         {
                             return false;
@@ -5248,7 +5249,7 @@ namespace DxMessaging.Core.MessageBus
 
                     for (int i = 0; i < interceptorObjects.Count; ++i)
                     {
-                        BroadcastInterceptor<T> typedTransformer = Unsafe.As<
+                        BroadcastInterceptor<T> typedTransformer = DxUnsafe.As<
                             BroadcastInterceptor<T>
                         >(interceptorObjects[i]);
                         if (!typedTransformer(ref source, ref message))
@@ -5374,7 +5375,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.UntargetedDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.UntargetedDispatchLink<TMessage>>(entry.dispatch);
+                DxUnsafe.As<MessageHandler.UntargetedDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(messageHandler, ref message, priority, _emissionId);
         }
 
@@ -5393,7 +5394,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.UntargetedPostDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.UntargetedPostDispatchLink<TMessage>>(entry.dispatch);
+                DxUnsafe.As<MessageHandler.UntargetedPostDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref message, priority, _emissionId);
         }
 
@@ -6870,7 +6871,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.TargetedDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.TargetedDispatchLink<TMessage>>(entry.dispatch);
+                DxUnsafe.As<MessageHandler.TargetedDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref target, ref message, priority, _emissionId);
         }
 
@@ -6890,7 +6891,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.TargetedPostDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.TargetedPostDispatchLink<TMessage>>(entry.dispatch);
+                DxUnsafe.As<MessageHandler.TargetedPostDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref target, ref message, priority, _emissionId);
         }
 
@@ -7009,7 +7010,7 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            ref IUntargetedMessage interfaceMessage = ref Unsafe.As<TMessage, IUntargetedMessage>(
+            ref IUntargetedMessage interfaceMessage = ref DxUnsafe.As<TMessage, IUntargetedMessage>(
                 ref message
             );
             handler.HandleGlobalUntargetedMessage(ref interfaceMessage, this);
@@ -7034,7 +7035,7 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            ref ITargetedMessage interfaceMessage = ref Unsafe.As<TMessage, ITargetedMessage>(
+            ref ITargetedMessage interfaceMessage = ref DxUnsafe.As<TMessage, ITargetedMessage>(
                 ref message
             );
             handler.HandleGlobalTargetedMessage(ref target, ref interfaceMessage, this);
@@ -7059,7 +7060,7 @@ namespace DxMessaging.Core.MessageBus
                 return;
             }
 
-            ref IBroadcastMessage interfaceMessage = ref Unsafe.As<TMessage, IBroadcastMessage>(
+            ref IBroadcastMessage interfaceMessage = ref DxUnsafe.As<TMessage, IBroadcastMessage>(
                 ref message
             );
             handler.HandleGlobalSourcedBroadcastMessage(ref source, ref interfaceMessage, this);
@@ -7100,7 +7101,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.TargetedWithoutTargetingDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.TargetedWithoutTargetingDispatchLink<TMessage>>(
+                DxUnsafe.As<MessageHandler.TargetedWithoutTargetingDispatchLink<TMessage>>(
                     entry.dispatch
                 );
             link.Invoke(handler, ref target, ref message, priority, _emissionId);
@@ -7122,7 +7123,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.TargetedWithoutTargetingPostDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.TargetedWithoutTargetingPostDispatchLink<TMessage>>(
+                DxUnsafe.As<MessageHandler.TargetedWithoutTargetingPostDispatchLink<TMessage>>(
                     entry.dispatch
                 );
             link.Invoke(handler, ref target, ref message, priority, _emissionId);
@@ -7186,7 +7187,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.BroadcastDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.BroadcastDispatchLink<TMessage>>(entry.dispatch);
+                DxUnsafe.As<MessageHandler.BroadcastDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref source, ref message, priority, _emissionId);
         }
 
@@ -7206,7 +7207,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.BroadcastPostDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.BroadcastPostDispatchLink<TMessage>>(entry.dispatch);
+                DxUnsafe.As<MessageHandler.BroadcastPostDispatchLink<TMessage>>(entry.dispatch);
             link.Invoke(handler, ref source, ref message, priority, _emissionId);
         }
 
@@ -7279,7 +7280,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.BroadcastWithoutSourceDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.BroadcastWithoutSourceDispatchLink<TMessage>>(
+                DxUnsafe.As<MessageHandler.BroadcastWithoutSourceDispatchLink<TMessage>>(
                     entry.dispatch
                 );
             link.Invoke(handler, ref source, ref message, priority, _emissionId);
@@ -7301,7 +7302,7 @@ namespace DxMessaging.Core.MessageBus
             }
 
             MessageHandler.BroadcastWithoutSourcePostDispatchLink<TMessage> link =
-                Unsafe.As<MessageHandler.BroadcastWithoutSourcePostDispatchLink<TMessage>>(
+                DxUnsafe.As<MessageHandler.BroadcastWithoutSourcePostDispatchLink<TMessage>>(
                     entry.dispatch
                 );
             link.Invoke(handler, ref source, ref message, priority, _emissionId);
@@ -7421,7 +7422,7 @@ namespace DxMessaging.Core.MessageBus
                 if (typeof(T).IsValueType)
                 {
                     object box = message;
-                    ref T typedRef = ref Unsafe.As<object, T>(ref box);
+                    ref T typedRef = ref DxUnsafe.As<object, T>(ref box);
                     untargetedBroadcast(ref typedRef);
                 }
                 else
@@ -7453,7 +7454,7 @@ namespace DxMessaging.Core.MessageBus
                 if (typeof(T).IsValueType)
                 {
                     object box = message;
-                    ref T typedRef = ref Unsafe.As<object, T>(ref box);
+                    ref T typedRef = ref DxUnsafe.As<object, T>(ref box);
                     targetedBroadcast(ref target, ref typedRef);
                 }
                 else
@@ -7485,7 +7486,7 @@ namespace DxMessaging.Core.MessageBus
                 if (typeof(T).IsValueType)
                 {
                     object box = message;
-                    ref T typedRef = ref Unsafe.As<object, T>(ref box);
+                    ref T typedRef = ref DxUnsafe.As<object, T>(ref box);
                     sourcedBroadcast(ref target, ref typedRef);
                 }
                 else

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/**"
+      - ".github/actionlint.yaml"
       - "scripts/validate-workflows.js"
   push:
     branches:
@@ -11,6 +12,7 @@ on:
       - master
     paths:
       - ".github/workflows/**"
+      - ".github/actionlint.yaml"
       - "scripts/validate-workflows.js"
   workflow_dispatch:
 

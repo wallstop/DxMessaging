@@ -25,9 +25,9 @@
 const fs = require("fs");
 const path = require("path");
 const {
-    hasMatchingBoundaryQuotes,
-    stripMatchingBoundaryQuotes,
-    normalizeToLf,
+  hasMatchingBoundaryQuotes,
+  stripMatchingBoundaryQuotes,
+  normalizeToLf
 } = require("./lib/quote-parser");
 
 const CONFIG_PATH = path.join(__dirname, "..", ".lychee.toml");
@@ -36,67 +36,67 @@ const CONFIG_PATH = path.join(__dirname, "..", ".lychee.toml");
 // Source: https://github.com/lycheeverse/lychee/blob/master/lychee.example.toml
 // SYNC: Tests in validate-lychee-config.test.js VALID_FIELDS describe block reference this constant
 const VALID_FIELDS = new Set([
-    "accept",
-    "accept_timeouts",
-    "archive",
-    "base_url",
-    "basic_auth",
-    "cache",
-    "cache_exclude_status",
-    "cookie_jar",
-    "default_extension",
-    "dump",
-    "dump_inputs",
-    "exclude",
-    "exclude_all_private",
-    "exclude_file",
-    "exclude_link_local",
-    "exclude_loopback",
-    "exclude_path",
-    "exclude_private",
-    "extensions",
-    "fallback_extensions",
-    "files_from",
-    "format",
-    "generate",
-    "github_token",
-    "glob_ignore_case",
-    "header",
-    "hidden",
-    "host_concurrency",
-    "host_request_interval",
-    "host_stats",
-    "hosts",
-    "include",
-    "include_fragments",
-    "include_mail",
-    "include_verbatim",
-    "include_wikilinks",
-    "index_files",
-    "insecure",
-    "max_cache_age",
-    "max_concurrency",
-    "max_redirects",
-    "max_retries",
-    "method",
-    "min_tls",
-    "mode",
-    "no_ignore",
-    "no_progress",
-    "offline",
-    "output",
-    "preprocess",
-    "remap",
-    "require_https",
-    "retry_wait_time",
-    "root_dir",
-    "scheme",
-    "skip_missing",
-    "suggest",
-    "threads",
-    "timeout",
-    "user_agent",
-    "verbose",
+  "accept",
+  "accept_timeouts",
+  "archive",
+  "base_url",
+  "basic_auth",
+  "cache",
+  "cache_exclude_status",
+  "cookie_jar",
+  "default_extension",
+  "dump",
+  "dump_inputs",
+  "exclude",
+  "exclude_all_private",
+  "exclude_file",
+  "exclude_link_local",
+  "exclude_loopback",
+  "exclude_path",
+  "exclude_private",
+  "extensions",
+  "fallback_extensions",
+  "files_from",
+  "format",
+  "generate",
+  "github_token",
+  "glob_ignore_case",
+  "header",
+  "hidden",
+  "host_concurrency",
+  "host_request_interval",
+  "host_stats",
+  "hosts",
+  "include",
+  "include_fragments",
+  "include_mail",
+  "include_verbatim",
+  "include_wikilinks",
+  "index_files",
+  "insecure",
+  "max_cache_age",
+  "max_concurrency",
+  "max_redirects",
+  "max_retries",
+  "method",
+  "min_tls",
+  "mode",
+  "no_ignore",
+  "no_progress",
+  "offline",
+  "output",
+  "preprocess",
+  "remap",
+  "require_https",
+  "retry_wait_time",
+  "root_dir",
+  "scheme",
+  "skip_missing",
+  "suggest",
+  "threads",
+  "timeout",
+  "user_agent",
+  "verbose"
 ]);
 
 // SYNC: Keep in sync with lychee v0.23.0 valid verbose values.
@@ -115,46 +115,46 @@ const VALID_VERBOSE_VALUES = ["error", "warn", "info", "debug", "trace"];
  * @returns {string[]} Path segments (quotes stripped)
  */
 function splitTomlPath(pathExpression) {
-    const segments = [];
-    let current = "";
-    let quoteChar = null;
+  const segments = [];
+  let current = "";
+  let quoteChar = null;
 
-    for (let i = 0; i < pathExpression.length; i += 1) {
-        const char = pathExpression[i];
+  for (let i = 0; i < pathExpression.length; i += 1) {
+    const char = pathExpression[i];
 
-        if (quoteChar !== null) {
-            // Keep escaped characters inside quoted segments.
-            if (char === "\\" && i + 1 < pathExpression.length) {
-                current += char + pathExpression[i + 1];
-                i += 1;
-                continue;
-            }
+    if (quoteChar !== null) {
+      // Keep escaped characters inside quoted segments.
+      if (char === "\\" && i + 1 < pathExpression.length) {
+        current += char + pathExpression[i + 1];
+        i += 1;
+        continue;
+      }
 
-            if (char === quoteChar) {
-                quoteChar = null;
-                continue;
-            }
+      if (char === quoteChar) {
+        quoteChar = null;
+        continue;
+      }
 
-            current += char;
-            continue;
-        }
-
-        if (char === '"' || char === "'") {
-            quoteChar = char;
-            continue;
-        }
-
-        if (char === ".") {
-            segments.push(current.trim());
-            current = "";
-            continue;
-        }
-
-        current += char;
+      current += char;
+      continue;
     }
 
-    segments.push(current.trim());
-    return segments.filter((segment) => segment.length > 0);
+    if (char === '"' || char === "'") {
+      quoteChar = char;
+      continue;
+    }
+
+    if (char === ".") {
+      segments.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  segments.push(current.trim());
+  return segments.filter((segment) => segment.length > 0);
 }
 
 /**
@@ -164,17 +164,17 @@ function splitTomlPath(pathExpression) {
  * @returns {string | null}
  */
 function parseTomlTableHeader(line) {
-    const arrayTableMatch = line.match(/^\[\[(.+)\]\]$/);
-    if (arrayTableMatch) {
-        return arrayTableMatch[1].trim();
-    }
+  const arrayTableMatch = line.match(/^\[\[(.+)\]\]$/);
+  if (arrayTableMatch) {
+    return arrayTableMatch[1].trim();
+  }
 
-    const tableMatch = line.match(/^\[(.+)\]$/);
-    if (tableMatch) {
-        return tableMatch[1].trim();
-    }
+  const tableMatch = line.match(/^\[(.+)\]$/);
+  if (tableMatch) {
+    return tableMatch[1].trim();
+  }
 
-    return null;
+  return null;
 }
 
 /**
@@ -184,34 +184,34 @@ function parseTomlTableHeader(line) {
  * @returns {string} TOML line without trailing inline comments
  */
 function stripInlineTomlComment(line) {
-    let quoteChar = null;
+  let quoteChar = null;
 
-    for (let i = 0; i < line.length; i += 1) {
-        const char = line[i];
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
 
-        if (quoteChar !== null) {
-            if (char === "\\" && i + 1 < line.length) {
-                i += 1;
-                continue;
-            }
+    if (quoteChar !== null) {
+      if (char === "\\" && i + 1 < line.length) {
+        i += 1;
+        continue;
+      }
 
-            if (char === quoteChar) {
-                quoteChar = null;
-            }
-            continue;
-        }
-
-        if (char === '"' || char === "'") {
-            quoteChar = char;
-            continue;
-        }
-
-        if (char === "#") {
-            return line.slice(0, i).trimEnd();
-        }
+      if (char === quoteChar) {
+        quoteChar = null;
+      }
+      continue;
     }
 
-    return line;
+    if (char === '"' || char === "'") {
+      quoteChar = char;
+      continue;
+    }
+
+    if (char === "#") {
+      return line.slice(0, i).trimEnd();
+    }
+  }
+
+  return line;
 }
 
 /**
@@ -221,64 +221,64 @@ function stripInlineTomlComment(line) {
  * @returns {{ keys: string[], keyValues: Array<{ key: string, value: string, keyPath?: string }> }}
  */
 function parseTomlForLycheeValidation(content) {
-    const keys = [];
-    const keyValues = [];
-    const lines = normalizeToLf(content).split("\n");
-    let currentTable = null;
+  const keys = [];
+  const keyValues = [];
+  const lines = normalizeToLf(content).split("\n");
+  let currentTable = null;
 
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed === "" || trimmed.startsWith("#")) {
-            continue;
-        }
-
-        const lineWithoutComment = stripInlineTomlComment(trimmed).trim();
-        if (lineWithoutComment === "") {
-            continue;
-        }
-
-        const tableHeader = parseTomlTableHeader(lineWithoutComment);
-        if (tableHeader) {
-            currentTable = tableHeader;
-            const tableSegments = splitTomlPath(tableHeader);
-            if (tableSegments.length > 0) {
-                keys.push(tableSegments[0]);
-            }
-            continue;
-        }
-
-        const equalsIndex = lineWithoutComment.indexOf("=");
-        if (equalsIndex === -1) {
-            continue;
-        }
-
-        const rawKey = lineWithoutComment.slice(0, equalsIndex).trim();
-        if (rawKey.length === 0) {
-            continue;
-        }
-
-        const value = lineWithoutComment.slice(equalsIndex + 1).trim();
-        const keySegments = splitTomlPath(rawKey);
-        if (keySegments.length === 0) {
-            continue;
-        }
-
-        const parsedKey = keySegments[keySegments.length - 1];
-
-        if (currentTable !== null) {
-            keyValues.push({
-                key: parsedKey,
-                value,
-                keyPath: `${currentTable}.${rawKey}`,
-            });
-            continue;
-        }
-
-        keys.push(keySegments[0]);
-        keyValues.push({ key: parsedKey, value });
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      continue;
     }
 
-    return { keys, keyValues };
+    const lineWithoutComment = stripInlineTomlComment(trimmed).trim();
+    if (lineWithoutComment === "") {
+      continue;
+    }
+
+    const tableHeader = parseTomlTableHeader(lineWithoutComment);
+    if (tableHeader) {
+      currentTable = tableHeader;
+      const tableSegments = splitTomlPath(tableHeader);
+      if (tableSegments.length > 0) {
+        keys.push(tableSegments[0]);
+      }
+      continue;
+    }
+
+    const equalsIndex = lineWithoutComment.indexOf("=");
+    if (equalsIndex === -1) {
+      continue;
+    }
+
+    const rawKey = lineWithoutComment.slice(0, equalsIndex).trim();
+    if (rawKey.length === 0) {
+      continue;
+    }
+
+    const value = lineWithoutComment.slice(equalsIndex + 1).trim();
+    const keySegments = splitTomlPath(rawKey);
+    if (keySegments.length === 0) {
+      continue;
+    }
+
+    const parsedKey = keySegments[keySegments.length - 1];
+
+    if (currentTable !== null) {
+      keyValues.push({
+        key: parsedKey,
+        value,
+        keyPath: `${currentTable}.${rawKey}`
+      });
+      continue;
+    }
+
+    keys.push(keySegments[0]);
+    keyValues.push({ key: parsedKey, value });
+  }
+
+  return { keys, keyValues };
 }
 
 /**
@@ -293,7 +293,7 @@ function parseTomlForLycheeValidation(content) {
  * @returns {string[]} Array of top-level key names
  */
 function parseTopLevelKeys(content) {
-    return parseTomlForLycheeValidation(content).keys;
+  return parseTomlForLycheeValidation(content).keys;
 }
 
 /**
@@ -308,7 +308,7 @@ function parseTopLevelKeys(content) {
  * @returns {{ key: string, value: string, keyPath?: string }[]} Array of key-value pairs
  */
 function parseTopLevelKeyValues(content) {
-    return parseTomlForLycheeValidation(content).keyValues;
+  return parseTomlForLycheeValidation(content).keyValues;
 }
 
 /**
@@ -324,33 +324,33 @@ function parseTopLevelKeyValues(content) {
  * @returns {{ errors: string[], warnings: string[] }} Validation results
  */
 function validateFieldValues(keyValues) {
-    const errors = [];
-    const warnings = [];
+  const errors = [];
+  const warnings = [];
 
-    for (const { key, value, keyPath } of keyValues) {
-        if (key === "verbose") {
-            // verbose must be a quoted string matching one of the valid log levels
-            // Require matching boundary quotes so malformed TOML like '"info' is rejected.
-            const isQuotedString = hasMatchingBoundaryQuotes(value);
-            const keyDisplay = keyPath || key;
+  for (const { key, value, keyPath } of keyValues) {
+    if (key === "verbose") {
+      // verbose must be a quoted string matching one of the valid log levels
+      // Require matching boundary quotes so malformed TOML like '"info' is rejected.
+      const isQuotedString = hasMatchingBoundaryQuotes(value);
+      const keyDisplay = keyPath || key;
 
-            if (!isQuotedString) {
-                errors.push(
-                    `Invalid value for '${keyDisplay}': ${value} (must be a quoted string, one of: ${VALID_VERBOSE_VALUES.join(", ")})`
-                );
-                continue;
-            }
+      if (!isQuotedString) {
+        errors.push(
+          `Invalid value for '${keyDisplay}': ${value} (must be a quoted string, one of: ${VALID_VERBOSE_VALUES.join(", ")})`
+        );
+        continue;
+      }
 
-            const unquoted = stripMatchingBoundaryQuotes(value);
-            if (!VALID_VERBOSE_VALUES.includes(unquoted)) {
-                errors.push(
-                    `Invalid value for '${keyDisplay}': ${value} (must be one of: ${VALID_VERBOSE_VALUES.join(", ")})`
-                );
-            }
-        }
+      const unquoted = stripMatchingBoundaryQuotes(value);
+      if (!VALID_VERBOSE_VALUES.includes(unquoted)) {
+        errors.push(
+          `Invalid value for '${keyDisplay}': ${value} (must be one of: ${VALID_VERBOSE_VALUES.join(", ")})`
+        );
+      }
     }
+  }
 
-    return { errors, warnings };
+  return { errors, warnings };
 }
 
 /**
@@ -360,91 +360,87 @@ function validateFieldValues(keyValues) {
  * @returns {{ errors: string[], warnings: string[] }} Validation results
  */
 function validateFields(keys) {
-    const errors = [];
-    const warnings = [];
+  const errors = [];
+  const warnings = [];
 
-    for (const key of keys) {
-        if (!VALID_FIELDS.has(key)) {
-            errors.push(
-                `Invalid field '${key}': not a valid lychee v0.23.0 configuration option`
-            );
-        }
+  for (const key of keys) {
+    if (!VALID_FIELDS.has(key)) {
+      errors.push(`Invalid field '${key}': not a valid lychee v0.23.0 configuration option`);
     }
+  }
 
-    // Check for duplicate keys
-    const seen = new Set();
-    for (const key of keys) {
-        if (seen.has(key)) {
-            warnings.push(`Duplicate field '${key}' found`);
-        }
-        seen.add(key);
+  // Check for duplicate keys
+  const seen = new Set();
+  for (const key of keys) {
+    if (seen.has(key)) {
+      warnings.push(`Duplicate field '${key}' found`);
     }
+    seen.add(key);
+  }
 
-    return { errors, warnings };
+  return { errors, warnings };
 }
 
 /**
  * Main entry point.
  */
 function main() {
-    console.log(`Validating lychee configuration: ${CONFIG_PATH}`);
-    console.log();
+  console.log(`Validating lychee configuration: ${CONFIG_PATH}`);
+  console.log();
 
-    if (!fs.existsSync(CONFIG_PATH)) {
-        console.log("No .lychee.toml found; skipping validation.");
-        return 0;
-    }
-
-    let content;
-    try {
-        content = fs.readFileSync(CONFIG_PATH, "utf8");
-    } catch (error) {
-        console.error(`Cannot read .lychee.toml: ${error.message}`);
-        return 1;
-    }
-
-    const keys = parseTopLevelKeys(content);
-    console.log(`Found ${keys.length} top-level fields: ${keys.join(", ")}`);
-    console.log();
-
-    const { errors, warnings } = validateFields(keys);
-
-    // Phase 2: Validate field values
-    const keyValues = parseTopLevelKeyValues(content);
-    const valueResult = validateFieldValues(keyValues);
-    errors.push(...valueResult.errors);
-    warnings.push(...valueResult.warnings);
-
-    for (const warning of warnings) {
-        console.log(`  Warning: ${warning}`);
-    }
-
-    for (const error of errors) {
-        console.log(`  Error: ${error}`);
-    }
-
-    if (errors.length > 0) {
-        console.log();
-        console.log(
-            `Validation failed: ${errors.length} error(s), ${warnings.length} warning(s)`
-        );
-        console.log();
-        console.log("Valid lychee v0.23.0 fields:");
-        const sortedFields = [...VALID_FIELDS].sort();
-        for (const field of sortedFields) {
-            console.log(`  - ${field}`);
-        }
-        return 1;
-    }
-
-    if (warnings.length > 0) {
-        console.log();
-        console.log(`Validation passed with ${warnings.length} warning(s)`);
-    } else {
-        console.log("All fields are valid lychee v0.23.0 configuration options.");
-    }
-
+  if (!fs.existsSync(CONFIG_PATH)) {
+    console.log("No .lychee.toml found; skipping validation.");
     return 0;
+  }
+
+  let content;
+  try {
+    content = fs.readFileSync(CONFIG_PATH, "utf8");
+  } catch (error) {
+    console.error(`Cannot read .lychee.toml: ${error.message}`);
+    return 1;
+  }
+
+  const keys = parseTopLevelKeys(content);
+  console.log(`Found ${keys.length} top-level fields: ${keys.join(", ")}`);
+  console.log();
+
+  const { errors, warnings } = validateFields(keys);
+
+  // Phase 2: Validate field values
+  const keyValues = parseTopLevelKeyValues(content);
+  const valueResult = validateFieldValues(keyValues);
+  errors.push(...valueResult.errors);
+  warnings.push(...valueResult.warnings);
+
+  for (const warning of warnings) {
+    console.log(`  Warning: ${warning}`);
+  }
+
+  for (const error of errors) {
+    console.log(`  Error: ${error}`);
+  }
+
+  if (errors.length > 0) {
+    console.log();
+    console.log(`Validation failed: ${errors.length} error(s), ${warnings.length} warning(s)`);
+    console.log();
+    console.log("Valid lychee v0.23.0 fields:");
+    const sortedFields = [...VALID_FIELDS].sort();
+    for (const field of sortedFields) {
+      console.log(`  - ${field}`);
+    }
+    return 1;
+  }
+
+  if (warnings.length > 0) {
+    console.log();
+    console.log(`Validation passed with ${warnings.length} warning(s)`);
+  } else {
+    console.log("All fields are valid lychee v0.23.0 configuration options.");
+  }
+
+  return 0;
 }
 
 /**
@@ -460,17 +456,17 @@ function main() {
  * @exports {string[]} VALID_VERBOSE_VALUES - Array of valid verbose log level values
  */
 if (typeof module !== "undefined" && module.exports) {
-    module.exports = {
-        parseTopLevelKeys,
-        parseTopLevelKeyValues,
-        validateFields,
-        validateFieldValues,
-        VALID_FIELDS,
-        VALID_VERBOSE_VALUES,
-    };
+  module.exports = {
+    parseTopLevelKeys,
+    parseTopLevelKeyValues,
+    validateFields,
+    validateFieldValues,
+    VALID_FIELDS,
+    VALID_VERBOSE_VALUES
+  };
 }
 
 // Only run main when executed directly (not when required as a module)
 if (require.main === module) {
-    process.exit(main());
+  process.exit(main());
 }
