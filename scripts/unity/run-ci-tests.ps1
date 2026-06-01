@@ -2091,6 +2091,15 @@ try {
             }
         }
 
+        # Delete any STALE results file before the player runs, so the
+        # timeout-honors-file branch below can only honor results THIS player run
+        # wrote -- never a prior run's leftover. (Defensive for local re-runs against
+        # the same -ArtifactsPath; CI checkout already cleans the gitignored
+        # .artifacts tree per job.)
+        if (Test-Path -LiteralPath $resultsPath -PathType Leaf) {
+            Remove-Item -LiteralPath $resultsPath -Force
+        }
+
         # (2b) RUN the built exe directly (no PlayerConnection), under the watchdog.
         $playerTimeoutSeconds = Get-StandaloneTestPlayerTimeoutSeconds
         $playerResult = Invoke-StandaloneTestPlayer `

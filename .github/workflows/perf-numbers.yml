@@ -25,9 +25,11 @@ on:
       - main
   workflow_dispatch:
 
-# Top-level least-privilege. Only the doc-commit job (commit-perf-doc) needs
-# contents:write to push the rendered doc onto the PR head branch; it grants
-# that scope on the job itself so the licensed Unity job never inherits write.
+# Top-level least-privilege. The PR-comment job (comment-perf-doc) gets only
+# pull-requests:write to post the sticky comment (it never pushes); the
+# master-commit job (commit-perf-doc) gets only contents:write to commit the
+# rendered doc to master on the push-event path. Each grants its scope on the job
+# itself so the licensed Unity job never inherits write.
 permissions:
   contents: read
   checks: write

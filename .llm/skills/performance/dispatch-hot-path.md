@@ -108,9 +108,10 @@ The dispatch hot path lives across:
 
 Any PR touching these files has its dispatch-throughput numbers regenerated
 automatically by the `perf-numbers.yml` workflow (it re-runs the benchmarks on
-ELI-MACHINE at the latest Unity version on every PR change and commits the
-refreshed `docs/architecture/performance.md` back onto the PR branch). There is
-no manual `### Performance numbers` PR-body requirement.
+ELI-MACHINE at the latest Unity version on every PR change and posts the refreshed
+numbers as a non-blocking PR comment; the committed
+`docs/architecture/performance.md` is refreshed by a commit to master after the PR
+merges). There is no manual `### Performance numbers` PR-body requirement.
 
 ## Prohibited operations on the dispatch hot path
 
@@ -189,9 +190,10 @@ Category("PerfGate")]`; opt-in via `DX_PERF_GATE=1`. Median-of-5; fails
   when within-platform regression vs. baseline CSV exceeds 1.5x.
 - `.github/workflows/perf-numbers.yml` -- per-PR workflow that re-runs the
   editmode + playmode dispatch benchmarks on ELI-MACHINE (the `fast` runner) at
-  the latest Unity version on every pull_request change and commits the
-  regenerated dispatch-throughput table in `docs/architecture/performance.md`
-  back onto the PR branch. The numbers are owned by CI, not by PR-body text.
+  the latest Unity version on every pull_request change and posts the regenerated
+  dispatch-throughput numbers as a non-blocking PR comment; the committed
+  `docs/architecture/performance.md` is refreshed by a commit to master after the
+  PR merges. The numbers are owned by CI, not by PR-body text.
 
 ## Common pitfalls
 

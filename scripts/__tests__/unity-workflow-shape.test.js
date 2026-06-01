@@ -1204,8 +1204,10 @@ describe(".github/workflows/unity-benchmarks.yml no longer maintains the perf do
 // EFFECTIVE-behavior contract for the per-PR Performance Numbers workflow. The
 // owner decision: CI regenerates the dispatch-throughput numbers on ELI-MACHINE
 // only (the `fast` label), at the LATEST Unity version only, on every
-// pull_request change to master/main, and commits the rendered doc back onto
-// the PR head branch. These assertions parse the YAML and check EFFECTIVE
+// pull_request change to master/main. On pull_request it posts a non-blocking
+// sticky PR comment (never pushing to the contributor branch -- that would block
+// merge); on push to master it commits the refreshed doc. These assertions parse
+// the YAML and check EFFECTIVE
 // behavior (pinned `fast` label, latest-version-only matrix, license preflight,
 // org-lock acquire+release, if:always() return-license inside the lock window,
 // same-repo gate, loop-guard sentinel) rather than brittle string proxies.

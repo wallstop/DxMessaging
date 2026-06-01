@@ -32,7 +32,8 @@ Fixes #
 <!--
 Dispatch-throughput numbers are owned entirely by CI: the Performance Numbers
 workflow (.github/workflows/perf-numbers.yml) re-runs the benchmarks on every
-pull_request change and commits the refreshed
-docs/architecture/performance.md back onto this branch. You do NOT need to
-paste before/after numbers into this description.
+pull_request change and posts the refreshed numbers as a non-blocking comment on
+this PR; the committed docs/architecture/performance.md is refreshed
+automatically by a commit to master after the PR merges. You do NOT need to paste
+before/after numbers into this description.
 -->
