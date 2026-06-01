@@ -9,8 +9,9 @@
     pins 3.8.0 and uses classic `ISourceGenerator` instead of Roslyn 4.x-only
     incremental generator APIs so Unity 2021 can instantiate it.
 
-    Both DLLs ship to `Editor/Analyzers/` and are registered in `csc.rsp` via
-    `SetupCscRsp.cs`.
+    Both DLLs ship to `Editor/Analyzers/`; `SetupCscRsp.cs` copies them into the
+    consuming project's `Assets/Plugins/Editor/WallstopStudios.DxMessaging/` folder
+    with Unity's `RoslynAnalyzer` label.
   -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>

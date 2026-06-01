@@ -19,7 +19,8 @@
  *      checks-failed / policyFailures, null otherwise) -- and a source scan
  *      proving the stop hook NEVER emits `decision: "block"` (owner override:
  *      Stop is advisory only).
- *   5. `commandLooksLikeGitPush(cmd)` positives / conservative-true / negatives,
+ *   5. `commandLooksLikeGitPush(cmd)` / `commandLooksLikeGitCommit(cmd)`
+ *      positives / conservative-true / negatives,
  *      asserted-as-a-heuristic (not a tokenizer).
  *   6. `shouldSkip(env)` re-entrancy on the `DXMSG_PREFLIGHT_ACTIVE` sentinel,
  *      for BOTH hooks.
@@ -628,12 +629,15 @@ describe("change-aware preflight Claude hooks contract", () => {
     expect(code).not.toMatch(/decision\s*:/);
   });
 
-  // ---- commandLooksLikeGitPush (heuristic) -----------------------------
+  // ---- git operation heuristics ----------------------------------------
 
   test.each([
     ["git push"],
     ["git -C /some/dir push"],
     ["cd repo && git push origin HEAD"],
+    ["(cd repo && git push origin HEAD)"],
+    ["env FOO=1 git push origin HEAD"],
+    ["time git push origin HEAD"],
     ["FOO=1 git push"],
     ["git push --force-with-lease"],
     ["git   push    --tags"]
@@ -644,6 +648,10 @@ describe("change-aware preflight Claude hooks contract", () => {
   test.each([
     ["git status"],
     ["git commit -m wip"],
+    ['git commit -m "fix push guard"'],
+    ["git commit -m fix push guard"],
+    ["git commit -m x && echo git push"],
+    ["echo git push"],
     ["echo done"],
     ["npm run push:docs"],
     ["git pushd-not-a-thing"],
@@ -653,12 +661,45 @@ describe("change-aware preflight Claude hooks contract", () => {
     expect(guard.commandLooksLikeGitPush(cmd)).toBe(false);
   });
 
-  test("commandLooksLikeGitPush is documented as a heuristic, not a tokenizer", () => {
+  test.each([
+    ["git commit -m wip"],
+    ['git commit -m "fix push guard"'],
+    ["git commit -m fix push guard"],
+    ["git commit -m x && echo git push"],
+    ["git -C /some/dir commit --amend"],
+    ["cd repo && git commit --allow-empty"],
+    ["(cd repo && git commit --allow-empty)"],
+    ["env FOO=1 git commit --allow-empty"],
+    ["time git commit --allow-empty"],
+    ["FOO=1 git commit"]
+  ])("commandLooksLikeGitCommit is true for a probable commit: %s", (cmd) => {
+    expect(guard.commandLooksLikeGitCommit(cmd)).toBe(true);
+    expect(guard.resolveGuardOperation(cmd)).toBe("commit");
+  });
+
+  test.each([
+    ["git status"],
+    ["echo done"],
+    ["npm run commitlint"],
+    ["git commitment-not-a-thing"],
+    [""],
+    [undefined]
+  ])("commandLooksLikeGitCommit is false for a non-commit: %s", (cmd) => {
+    expect(guard.commandLooksLikeGitCommit(cmd)).toBe(false);
+  });
+
+  test("resolveGuardOperation prefers push when both git boundaries appear", () => {
+    expect(guard.resolveGuardOperation("git commit -m x && git push")).toBe("push");
+    expect(guard.resolveGuardOperation("git commit -m x && echo git push")).toBe("commit");
+    expect(guard.resolveGuardOperation("git status")).toBeNull();
+  });
+
+  test("git operation detection is documented as heuristic, not a tokenizer", () => {
     // The over-trigger-is-safe property is load-bearing (preflight is read-only
     // and idempotent). Pin the docstring intent so a future "tighten it into a
     // real parser" refactor is a conscious choice, not an accident.
     const src = fs.readFileSync(path.join(REPO_ROOT, GUARD_REL), "utf8");
-    expect(src).toMatch(/HEURISTIC, NOT a tokenizer/);
+    expect(src).toMatch(/HEURISTICS, NOT tokenizers/);
   });
 
   // ---- shouldSkip re-entrancy ------------------------------------------
@@ -735,6 +776,46 @@ describe("change-aware preflight Claude hooks contract", () => {
       const emitted = JSON.parse(writes.join(""));
       expect(emitted.hookSpecificOutput.permissionDecision).toBe("deny");
       expect(emitted.hookSpecificOutput.permissionDecisionReason).toContain("cspell");
+    } finally {
+      process.stdout.write = original;
+    }
+  });
+
+  test("the guard run() scopes probable git commits to the pre-commit stage", () => {
+    const writes = [];
+    const original = process.stdout.write;
+    process.stdout.write = (chunk) => {
+      writes.push(String(chunk));
+      return true;
+    };
+    const spawnFn = jest.fn(() => ({
+      status: 0,
+      stdout: JSON.stringify({
+        status: { kind: "ok", failures: [], policyFailures: [], warnings: [] }
+      }),
+      stderr: ""
+    }));
+    const writeHookValidationStampFn = jest.fn();
+    try {
+      const code = guard.run(
+        JSON.stringify({ tool_name: "Bash", tool_input: { command: "git commit -m test" } }),
+        {
+          env: {},
+          repoRoot: REPO_ROOT,
+          spawnFn,
+          computeChangeSetFn: () => ({ files: [] }),
+          writeHookValidationStampFn
+        }
+      );
+      expect(code).toBe(0);
+      const [, args, options] = spawnFn.mock.calls[0];
+      expect(args).toContain("--scope=full");
+      expect(args).toContain("--profile=guard");
+      expect(args).toContain("--stage=pre-commit");
+      expect(options.env.DXMSG_PREFLIGHT_ACTIVE).toBe("1");
+      const emitted = JSON.parse(writes.join(""));
+      expect(emitted.hookSpecificOutput.permissionDecision).toBe("allow");
+      expect(writeHookValidationStampFn).toHaveBeenCalledWith(REPO_ROOT, "pre-commit");
     } finally {
       process.stdout.write = original;
     }

@@ -129,51 +129,48 @@ jobs:
           cache-dependency-path: package.json
 
       - name: Diagnose Node runtime
-        shell: bash
         run: |
-          set -euo pipefail
-          echo "Node: $(node --version)"
-          echo "npm: $(npm --version)"
-          echo "npm cache: $(npm config get cache)"
+          node --version
+          npm --version
+          npm config get cache
 
-      - name: Install pre-commit
-        run: python -m pip install pre-commit
+      - name: Ensure pinned pre-commit
+        run: node scripts/ensure-pre-commit.js
 
       - name: Install dependencies
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          if [ -f package-lock.json ]; then
-            echo "Install mode: npm ci (lockfile present)"
+          if (Test-Path package-lock.json) {
+            Write-Host "Install mode: npm ci (lockfile present)"
             npm ci
-          else
-            echo "Install mode: npm install --no-audit --no-fund (lockfile absent)"
+          } else {
+            Write-Host "Install mode: npm install --no-audit --no-fund (lockfile absent)"
             npm i --no-audit --no-fund
-          fi
+          }
 
       - name: Validate local Node tooling health
         run: npm run validate:node-tooling
 
       - name: Validate pre-commit Node tooling policy
-        run: pre-commit run validate-pre-commit-tooling --all-files
+        run: node scripts/ensure-pre-commit.js run validate-pre-commit-tooling --all-files
 
       - name: Validate devcontainer JSONC usage policy
-        run: pre-commit run validate-devcontainer-jsonc-usage --all-files
+        run: node scripts/ensure-pre-commit.js run validate-devcontainer-jsonc-usage --all-files
 
       - name: Validate YAML formatting and lint policy
-        run: pre-commit run yamllint --all-files
+        run: node scripts/ensure-pre-commit.js run yamllint --all-files
 
       - name: Validate changelog policy hook
-        run: pre-commit run validate-changelog-policy --all-files
+        run: node scripts/ensure-pre-commit.js run validate-changelog-policy --all-files
 
       - name: Run parser script tests hook
-        run: pre-commit run --hook-stage pre-push script-parser-tests --all-files
+        run: node scripts/ensure-pre-commit.js run --hook-stage pre-push script-parser-tests --all-files
 
       - name: Run script tests hook
-        run: pre-commit run --hook-stage pre-push script-tests --all-files
+        run: node scripts/ensure-pre-commit.js run --hook-stage pre-push script-tests --all-files
 
       - name: Run Unity contract tests hook
-        run: pre-commit run --hook-stage pre-push unity-contract-tests --all-files
+        run: node scripts/ensure-pre-commit.js run --hook-stage pre-push unity-contract-tests --all-files
 
       - name: Run pre-push preflight (parity check)
         # Redundant by design: if `preflight:pre-push` diverges from the
@@ -188,7 +185,6 @@ jobs:
         # timeout allows that with margin but turns a genuine wedge into a clear
         # "step timed out" signal instead of the opaque job-level cancel.
         timeout-minutes: 12
-        shell: bash
         run: npm run preflight:pre-push
 
       - name: Diagnose managed Jest fallback environment

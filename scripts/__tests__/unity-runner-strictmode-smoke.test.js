@@ -261,6 +261,8 @@ function standaloneEditorStub() {
     "  if ($exe) {",
     "    $d = Split-Path -Parent $exe",
     "    if ($d -and -not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }",
+    "    $data = Join-Path $d (([System.IO.Path]::GetFileNameWithoutExtension($exe)) + '_Data')",
+    "    New-Item -ItemType Directory -Force -Path $data | Out-Null",
     "    Set-Content -LiteralPath $exe -Value $env:DXM_SMOKE_PLAYER_STUB_BODY -Encoding UTF8",
     "    if (-not $IsWindows) { & chmod +x $exe }",
     "  }",
@@ -691,8 +693,8 @@ describe("run-ci-tests.ps1 standalone split-build file-based results", () => {
     const combined = combinedText(result);
 
     expect(combined).not.toContain("cannot be found on this object");
-    // The editor BUILD wrote the player stub to the build path under project Temp.
-    const builtExe = path.join(ws.project, "Temp", "DxmTestPlayer", "DxmTestPlayer.exe");
+    // The editor BUILD wrote the player stub to the stable project Build path.
+    const builtExe = path.join(ws.project, "Build", "DxmTestPlayer", "DxmTestPlayer.exe");
     expect(fs.existsSync(builtExe)).toBe(true);
     // The PLAYER (not the editor build) wrote results.xml, and it parses green.
     expect(result.status).toBe(0);
@@ -793,7 +795,7 @@ describe("run-ci-tests.ps1 standalone split-build file-based results", () => {
     expect(elapsedMs).toBeLessThan(25000);
     expect(combined).toMatch(/build timed out|tree was killed/i);
     // The player was never built and never ran.
-    const builtExe = path.join(ws.project, "Temp", "DxmTestPlayer", "DxmTestPlayer.exe");
+    const builtExe = path.join(ws.project, "Build", "DxmTestPlayer", "DxmTestPlayer.exe");
     expect(fs.existsSync(builtExe)).toBe(false);
     expect(fs.existsSync(path.join(ws.artifacts, "results.xml"))).toBe(false);
   });

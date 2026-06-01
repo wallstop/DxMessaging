@@ -177,18 +177,19 @@ function Get-AssemblyList {
         [bool]$IncludePerfFlag,
         [bool]$IncludeIntegrationsFlag,
         [bool]$IncludeComparisonsFlag,
+        [string]$Target,
         [bool]$RuntimeOnlyFlag
     )
 
     # Single source of truth: defaultIncludeAssemblies in
     # scripts/unity/lib/asmdef-discovery.js. Pass the opt-in flags through.
-    # runtimeOnly drops editor-only asmdefs for the standalone player flow
-    # (EditMode tests cannot run in a built player).
+    # target keeps EditMode, PlayMode, and standalone assembly compatibility
+    # aligned with CI.
     $perfBool = if ($IncludePerfFlag) { 'true' } else { 'false' }
     $integBool = if ($IncludeIntegrationsFlag) { 'true' } else { 'false' }
     $comparisonsBool = if ($IncludeComparisonsFlag) { 'true' } else { 'false' }
     $runtimeOnlyBool = if ($RuntimeOnlyFlag) { 'true' } else { 'false' }
-    $opts = "{ includePerf: $perfBool, includeIntegrations: $integBool, includeComparisons: $comparisonsBool, runtimeOnly: $runtimeOnlyBool }"
+    $opts = "{ includePerf: $perfBool, includeIntegrations: $integBool, includeComparisons: $comparisonsBool, target: '$Target', runtimeOnly: $runtimeOnlyBool }"
     $nodeScript = "const m=require('./scripts/unity/lib/asmdef-discovery.js');console.log(m.defaultIncludeAssemblies(process.cwd(), $opts).join(';'));"
 
     Push-Location $RepoRoot
@@ -208,6 +209,7 @@ $Assemblies = Get-AssemblyList `
     -IncludePerfFlag:$IncludePerf.IsPresent `
     -IncludeIntegrationsFlag:$IncludeIntegrations.IsPresent `
     -IncludeComparisonsFlag:$IncludeComparisons.IsPresent `
+    -Target $Platform `
     -RuntimeOnlyFlag:($Platform -eq 'standalone')
 if ([string]::IsNullOrWhiteSpace($Assemblies)) {
     Write-Error 'Assembly include list is empty (asmdef discovery failed).'

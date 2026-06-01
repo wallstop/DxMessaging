@@ -236,7 +236,16 @@ jobs:
       - name: Cache Unity Library and package caches
         uses: actions/cache@v4
         env:
-          PACKAGE_HASH: ${{ hashFiles('package.json', 'Runtime/**', 'Editor/**', 'Tests/**', 'scripts/unity/run-ci-tests.ps1') }}
+          PACKAGE_HASH: >-
+            ${{ hashFiles(
+              'package.json',
+              'Runtime/**',
+              'Editor/**',
+              'Tests/**',
+              'scripts/unity/run-ci-tests.ps1',
+              'scripts/unity/lib/asmdef-discovery.js',
+              '.github/actions/compute-unity-assemblies/action.yml'
+            ) }}
         with:
           path: |
             .artifacts/unity/projects/${{ matrix.unity-version }}-${{ matrix.test-mode }}/Library
@@ -255,6 +264,7 @@ jobs:
         uses: ./.github/actions/compute-unity-assemblies
         with:
           include-perf: "true"
+          target: "${{ matrix.test-mode }}"
 
       - name: Validate Unity license secrets
         uses: ./.github/actions/validate-unity-license
@@ -277,6 +287,7 @@ jobs:
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '${{ matrix.unity-version }}' `
             -CiManagedOnly `
+            -RequireHealthyExisting `
             -ProvisioningProfile EditorOnly `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append

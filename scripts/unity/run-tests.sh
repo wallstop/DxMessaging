@@ -232,14 +232,15 @@ build_assembly_list() {
     local include_perf="$1"
     local include_integrations="$2"
     local include_comparisons="$3"
-    local runtime_only="$4"
+    local target="$4"
+    local runtime_only="$5"
     local node_script
 
     # Pass the include options through to defaultIncludeAssemblies so the
     # opt-in semantics defined in scripts/unity/lib/asmdef-discovery.js are
-    # the single source of truth. runtimeOnly drops editor-only asmdefs for the
-    # standalone player flow (EditMode tests cannot run in a built player).
-    local opts="{ includePerf: ${include_perf}, includeIntegrations: ${include_integrations}, includeComparisons: ${include_comparisons}, runtimeOnly: ${runtime_only} }"
+    # the single source of truth. target keeps EditMode, PlayMode, and
+    # standalone assembly compatibility aligned with CI.
+    local opts="{ includePerf: ${include_perf}, includeIntegrations: ${include_integrations}, includeComparisons: ${include_comparisons}, target: '${target}', runtimeOnly: ${runtime_only} }"
     node_script="const m=require('./scripts/unity/lib/asmdef-discovery.js');"
     node_script+="console.log(m.defaultIncludeAssemblies(process.cwd(), ${opts}).join(';'));"
 
@@ -252,7 +253,7 @@ if [[ "${PLATFORM}" == "standalone" ]]; then
     RUNTIME_ONLY="true"
 fi
 
-ASSEMBLIES="$(build_assembly_list "${INCLUDE_PERF}" "${INCLUDE_INTEGRATIONS}" "${INCLUDE_COMPARISONS}" "${RUNTIME_ONLY}")"
+ASSEMBLIES="$(build_assembly_list "${INCLUDE_PERF}" "${INCLUDE_INTEGRATIONS}" "${INCLUDE_COMPARISONS}" "${PLATFORM}" "${RUNTIME_ONLY}")"
 if [[ -z "${ASSEMBLIES}" ]]; then
     printf '%sError: assembly include list is empty (asmdef discovery failed).%s\n' \
         "${C_RED}" "${C_NC}" >&2

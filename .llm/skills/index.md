@@ -135,7 +135,7 @@
 
 | Skill                                                                                                    | Lines       | Complexity     | Status   | Performance    | Tags                             |
 | -------------------------------------------------------------------------------------------------------- | ----------- | -------------- | -------- | -------------- | -------------------------------- |
-| [Change-Aware Preflight](./scripting/change-aware-preflight.md)                                          | [ok] 197    | [intermediate] | [stable] | [risk: medium] | pre-commit, pre-push             |
+| [Change-Aware Preflight](./scripting/change-aware-preflight.md)                                          | [ok] 205    | [intermediate] | [stable] | [risk: medium] | pre-commit, pre-push             |
 | [Cross-Platform Script Compatibility](./scripting/cross-platform-compatibility.md)                       | [warn] 298  | [intermediate] | [stable] | [risk: none]   | cross-platform, case-sensitivity |
 | [Integrity Gate Robustness](./scripting/integrity-gate-robustness.md)                                    | [warn] 299  | [intermediate] | [stable] | [risk: low]    | integrity, auto-repair           |
 | [JavaScript Code Quality Practices](./scripting/javascript-code-quality.md)                              | [ok] 159    | [intermediate] | [stable] | [risk: none]   | javascript, code-quality         |
@@ -143,7 +143,7 @@
 | [JavaScript Code Quality Practices Part 2](./scripting/javascript-code-quality-part-2.md)                | [ok] 142    | [intermediate] | [stable] | [risk: low]    | migration, split                 |
 | [Jest Hook Robustness](./scripting/jest-hook-robustness.md)                                              | [warn] 300  | [intermediate] | [stable] | [risk: none]   | jest, pre-commit                 |
 | [Let Tools Resolve Modules](./scripting/let-tools-resolve-modules.md)                                    | [ok] 152    | [basic]        | [stable] | [risk: none]   | cross-platform, tooling          |
-| [Native Git Hook Bootstrap](./scripting/native-git-hooks.md)                                             | [ok] 121    | [intermediate] | [stable] | [risk: low]    | git-hooks, cross-platform        |
+| [Native Git Hook Bootstrap](./scripting/native-git-hooks.md)                                             | [ok] 124    | [intermediate] | [stable] | [risk: low]    | git-hooks, cross-platform        |
 | [PowerShell Scripting Best Practices](./scripting/powershell-best-practices.md)                          | [draft] 106 | [intermediate] | [stable] | [risk: none]   | powershell, scripting            |
 | [PowerShell Scripting Best Practices Part 1](./scripting/powershell-best-practices-part-1.md)            | [ok] 204    | [intermediate] | [stable] | [risk: low]    | migration, split                 |
 | [PowerShell Scripting Best Practices Part 2](./scripting/powershell-best-practices-part-2.md)            | [ok] 223    | [intermediate] | [stable] | [risk: low]    | migration, split                 |

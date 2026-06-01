@@ -244,6 +244,8 @@ jobs:
       # is enforced inside the composite.
       - name: Compute test assembly list
         uses: ./.github/actions/compute-unity-assemblies
+        with:
+          target: editmode
 
       - name: Validate Unity license secrets
         uses: ./.github/actions/validate-unity-license
@@ -263,6 +265,7 @@ jobs:
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '2022.3.45f1' `
             -CiManagedOnly `
+            -RequireHealthyExisting `
             -ProvisioningProfile EditorOnly `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -293,6 +296,7 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_ACCELERATOR_ENDPOINT: ${{ secrets.UNITY_ACCELERATOR_ENDPOINT }}
+          DXM_UNITY_TEST_CATEGORY: "!Stress;!Performance;!Allocation;!MemoryReclaim;!UnityRuntime;!PerfBench;!PerfGate;!PerfBaseline"
         run: |
           ./scripts/unity/run-ci-tests.ps1 `
             -UnityVersion '2022.3.45f1' `

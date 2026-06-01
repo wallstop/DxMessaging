@@ -21,6 +21,7 @@ const {
   CSPELL_EXTENSIONS,
   isPackagingRelevant,
   isDocQualityRelevant,
+  isChangelogCoverageRelevant,
   isSpellcheckRelevant,
   formatCspellIssues,
   cspellIssueLocation,
@@ -87,6 +88,20 @@ describe("path classification", () => {
 
   test.each([
     ["Runtime/Foo.cs", true],
+    ["Editor/SetupCscRsp.cs", true],
+    ["SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators/MessageBusGenerator.cs", true],
+    ["Samples~/BasicUsage/Example.cs", true],
+    ["CHANGELOG.md", true],
+    ["Editor/Analyzers/Analyzer.dll", false],
+    ["Tests/Runtime/FooTests.cs", false],
+    ["scripts/validate-changelog.js", false],
+    ["docs/reference/runtime-settings.md", false]
+  ])("isChangelogCoverageRelevant(%s) === %s", (rel, expected) => {
+    expect(isChangelogCoverageRelevant(rel)).toBe(expected);
+  });
+
+  test.each([
+    ["Runtime/Foo.cs", true],
     ["docs/guide.md", true],
     ["docs/guide.markdown", true],
     ["package.json", true],
@@ -119,10 +134,12 @@ describe("path classification", () => {
 });
 
 describe("dispatch table", () => {
-  test("has npm-packaging, doc-quality, and spelling entries with required shape", () => {
+  test("has npm-packaging, doc-quality, changelog, and spelling entries with required shape", () => {
     const table = buildDispatchTable();
     const ids = table.map((e) => e.id);
-    expect(ids).toEqual(expect.arrayContaining(["npm-packaging", "doc-quality", "spelling"]));
+    expect(ids).toEqual(
+      expect.arrayContaining(["npm-packaging", "doc-quality", "changelog-coverage", "spelling"])
+    );
 
     for (const entry of table) {
       expect(typeof entry.matches).toBe("function");
@@ -155,6 +172,18 @@ describe("dispatch table", () => {
       expect.arrayContaining(["docs-ascii", "docs-code-patterns", "docs-prose"])
     );
     expect(doc.validators[0].args("/abs/x.md")[1]).toBe("/abs/x.md");
+  });
+
+  test("changelog coverage validator invokes the global coverage check", () => {
+    const table = buildDispatchTable();
+    const changelog = table.find((e) => e.id === "changelog-coverage");
+    expect(changelog.matches("Runtime/Core/MessageBus.cs")).toBe(true);
+    expect(changelog.matches("CHANGELOG.md")).toBe(true);
+    expect(changelog.matches("scripts/validate-changelog.js")).toBe(false);
+    expect(changelog.validators[0].args("/abs/Runtime/Core/MessageBus.cs")).toEqual([
+      "scripts/validate-changelog.js",
+      "--check-coverage"
+    ]);
   });
 
   test("spelling validator uses the in-process cspell runner", () => {

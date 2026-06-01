@@ -374,9 +374,7 @@ const NODE_DIRECT_EXEMPT = Object.freeze({
   yamllint: "requires pre-commit/Python; enforced by CI and the native pre-push hook",
   csharpier: "requires the dotnet SDK; formatter, native hook backstops",
   "dotnet-tool-restore": "requires the dotnet SDK; native hook backstops",
-  "fix-csharp-underscore-methods":
-    "auto-fixer owned by the commit-time hook; native hook backstops",
-  "fix-eol-repo": "post-checkout/merge git-event hook; not push-gating"
+  "fix-csharp-underscore-methods": "auto-fixer owned by the commit-time hook; native hook backstops"
 });
 
 /**

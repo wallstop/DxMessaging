@@ -8,16 +8,57 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const childProcess = require("child_process");
-const { installGitHooks } = require("../install-git-hooks");
+const { installGitHooks, REQUIRED_NATIVE_HOOKS } = require("../install-git-hooks");
 const { repairNodeTooling } = require("../repair-node-tooling");
 const { ensurePreCommit, runPreCommit, PACKAGE_SPEC } = require("../ensure-pre-commit");
 const { maskCommentsAndStrings } = require("../lib/source-stripping");
+const {
+  fingerprintGitState,
+  hasValidHookValidationStamp,
+  writeHookValidationStamp
+} = require("../lib/hook-validation-stamp");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const PRE_COMMIT_HOOK = path.join(REPO_ROOT, "scripts", "hooks", "pre-commit");
 const PRE_PUSH_HOOK = path.join(REPO_ROOT, "scripts", "hooks", "pre-push");
 const POSTINSTALL = path.join(REPO_ROOT, "scripts", "postinstall.js");
 const PACKAGE_JSON = path.join(REPO_ROOT, "package.json");
+
+function stampSpawnFor(options) {
+  const {
+    stampPath,
+    head = "abc123",
+    indexTree = "tree-a",
+    changelogDiff = "",
+    changelogUntracked = ""
+  } = options;
+  return jest.fn((command, args) => {
+    expect(command).toBe("git");
+    const joined = args.join(" ");
+    if (joined === "rev-parse --git-path dxmsg-pre-commit-stamp.json") {
+      return { status: 0, stdout: `${stampPath}\n`, stderr: "" };
+    }
+    if (joined === "rev-parse --verify HEAD") {
+      return { status: 0, stdout: `${head}\n`, stderr: "" };
+    }
+    if (joined === "write-tree") {
+      return { status: 0, stdout: `${indexTree}\n`, stderr: "" };
+    }
+    if (
+      joined ===
+      "ls-files --others --exclude-standard -z -- CHANGELOG.md package.json Runtime Editor SourceGenerators Samples~"
+    ) {
+      return { status: 0, stdout: changelogUntracked, stderr: "" };
+    }
+    if (
+      joined ===
+      "diff --binary --no-ext-diff -- CHANGELOG.md package.json Runtime Editor SourceGenerators Samples~"
+    ) {
+      return { status: 0, stdout: changelogDiff, stderr: "" };
+    }
+    return { status: 1, stdout: "", stderr: `unexpected git args: ${joined}` };
+  });
+}
 
 function runGit(args, cwd) {
   return childProcess.spawnSync("git", args, {
@@ -38,7 +79,7 @@ describe("native Git hooks", () => {
     expect(content).toContain('"pre-commit"');
     expect(content).toContain('"--hook-stage"');
     expect(content).toContain("retrying once after auto-fixes");
-    expect(content).toContain("failed without detected file changes");
+    expect(content).toContain("failed without detected file changes; not retrying");
     expect(content).toContain("spawnPlatformCommandSync");
     expect(content).not.toMatch(/\b(?:bash|sh|pwsh|powershell)\b/);
     expect(content).not.toContain("shell: true");
@@ -112,10 +153,106 @@ describe("native Git hooks", () => {
   });
 
   test("native hook executability is tracked in Git metadata", () => {
-    for (const hookPath of ["scripts/hooks/pre-commit", "scripts/hooks/pre-push"]) {
+    for (const hookPath of REQUIRED_NATIVE_HOOKS.map((hook) => `scripts/hooks/${hook}`)) {
       const result = runGit(["ls-files", "--stage", "--", hookPath], REPO_ROOT);
       expect(result.status).toBe(0);
       expect(result.stdout.trim()).toMatch(/^100755\s/);
+    }
+  });
+
+  test("native git-event hooks stay out of core.hooksPath to avoid checkout-time mutators", () => {
+    for (const hook of ["post-checkout", "post-merge", "post-rewrite"]) {
+      expect(REQUIRED_NATIVE_HOOKS).not.toContain(hook);
+      expect(fs.existsSync(path.join(REPO_ROOT, "scripts", "hooks", hook))).toBe(false);
+    }
+  });
+
+  test("pre-commit stamp fingerprint covers staged content and changelog-relevant local changes", () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-hook-stamp-"));
+    try {
+      const stampFile = path.join(temp, "stamp.json");
+      fs.mkdirSync(path.join(temp, "Runtime"), { recursive: true });
+      fs.writeFileSync(path.join(temp, "Runtime", "scratch.txt"), "untracked-before", "utf8");
+      writeHookValidationStamp(temp, "pre-commit", {
+        spawnFn: stampSpawnFor({
+          stampPath: stampFile,
+          indexTree: "tree-a",
+          changelogDiff: "diff-before",
+          changelogUntracked: "Runtime/scratch.txt\0"
+        })
+      });
+
+      expect(
+        hasValidHookValidationStamp(temp, "pre-commit", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            indexTree: "tree-a",
+            changelogDiff: "diff-before",
+            changelogUntracked: "Runtime/scratch.txt\0"
+          })
+        }).valid
+      ).toBe(true);
+      expect(
+        hasValidHookValidationStamp(temp, "pre-commit", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            indexTree: "tree-b",
+            changelogDiff: "diff-before",
+            changelogUntracked: "Runtime/scratch.txt\0"
+          })
+        }).valid
+      ).toBe(false);
+      expect(
+        hasValidHookValidationStamp(temp, "pre-commit", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            indexTree: "tree-a",
+            changelogDiff: "diff-after",
+            changelogUntracked: "Runtime/scratch.txt\0"
+          })
+        }).valid
+      ).toBe(false);
+      expect(
+        hasValidHookValidationStamp(temp, "pre-commit", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            indexTree: "tree-a",
+            changelogDiff: "diff -- package.json changed",
+            changelogUntracked: "Runtime/scratch.txt\0"
+          })
+        }).valid
+      ).toBe(false);
+      fs.writeFileSync(path.join(temp, "Runtime", "scratch.txt"), "untracked-after", "utf8");
+      expect(
+        hasValidHookValidationStamp(temp, "pre-commit", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            indexTree: "tree-a",
+            changelogDiff: "diff-before",
+            changelogUntracked: "Runtime/scratch.txt\0"
+          })
+        }).valid
+      ).toBe(false);
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  test("hook fingerprint changes when staged content changes but porcelain status is stable", () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-hook-fingerprint-"));
+    try {
+      const stampFile = path.join(temp, "stamp.json");
+      const first = fingerprintGitState(temp, {
+        spawnFn: stampSpawnFor({ stampPath: stampFile, indexTree: "tree-a" })
+      });
+      const second = fingerprintGitState(temp, {
+        spawnFn: stampSpawnFor({ stampPath: stampFile, indexTree: "tree-b" })
+      });
+
+      expect(first.indexTree).not.toBe(second.indexTree);
+      expect(first).not.toEqual(second);
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
     }
   });
 
@@ -367,8 +504,9 @@ describe("native Git hooks", () => {
 
       const hooksDir = path.join(temp, "scripts", "hooks");
       fs.mkdirSync(hooksDir, { recursive: true });
-      fs.writeFileSync(path.join(hooksDir, "pre-commit"), "#!/usr/bin/env node\n", "utf8");
-      fs.writeFileSync(path.join(hooksDir, "pre-push"), "#!/usr/bin/env node\n", "utf8");
+      for (const hook of REQUIRED_NATIVE_HOOKS) {
+        fs.writeFileSync(path.join(hooksDir, hook), "#!/usr/bin/env node\n", "utf8");
+      }
 
       const result = installGitHooks({
         cwd: temp,
@@ -392,7 +530,9 @@ describe("native Git hooks", () => {
 
       const hooksDir = path.join(temp, "scripts", "hooks");
       fs.mkdirSync(hooksDir, { recursive: true });
-      fs.writeFileSync(path.join(hooksDir, "pre-push"), "#!/usr/bin/env node\n", "utf8");
+      for (const hook of REQUIRED_NATIVE_HOOKS.filter((hook) => hook !== "pre-commit")) {
+        fs.writeFileSync(path.join(hooksDir, hook), "#!/usr/bin/env node\n", "utf8");
+      }
 
       const warnings = [];
       const result = installGitHooks({

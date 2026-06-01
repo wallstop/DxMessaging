@@ -232,6 +232,7 @@ function expectProvisioningDiagnosticsContract(steps) {
   );
   expect(provisionStep.run).toContain("-DiagnosticsPath $diagnosticsFile");
   expect(provisionStep.run).toContain("-ProvisioningProfile");
+  expect(provisionStep.run).toContain("-RequireHealthyExisting");
   expect(provisionStep.run).toContain("New-Item -ItemType Directory -Force -Path $diagnosticsPath");
 
   const provisionIndex = steps.indexOf(provisionStep);

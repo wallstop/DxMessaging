@@ -14,7 +14,9 @@ param(
     [ValidateSet('EditorOnly', 'StandaloneWindowsIl2Cpp', 'Android', 'Full')]
     [string]$ProvisioningProfile = 'Full',
 
-    [switch]$WithWindowsIl2Cpp
+    [switch]$WithWindowsIl2Cpp,
+
+    [switch]$RequireHealthyExisting
 )
 
 Set-StrictMode -Version Latest
@@ -4422,6 +4424,38 @@ try {
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 
 $editor = Find-UnityEditor -Version $UnityVersion -Root $InstallRoot -IncludeHostInstalls:(-not $CiManagedOnly)
+if ($RequireHealthyExisting) {
+    if (-not $editor) {
+        Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "RequireHealthyExisting was set and no existing Unity editor was found."
+        throw "Unity $UnityVersion is not installed under '$InstallRoot' and RequireHealthyExisting is set. CI test jobs do not install or repair Unity in-job; run runner maintenance/bootstrap to provision the editor and required modules first."
+    }
+
+    $script:ProvisioningEditorPath = $editor
+    $missingModules = @(Get-MissingUnityCiModuleGroups -EditorPath $editor -Profile $ProvisioningProfile)
+    if ($missingModules.Count -gt 0) {
+        Write-InstalledEditorDiagnostics -Version $UnityVersion -Root $InstallRoot -Reason "RequireHealthyExisting was set and required module groups are missing: $($missingModules -join ', ')."
+        throw "Unity $UnityVersion is missing required CI module groups for provisioning profile '$ProvisioningProfile': $($missingModules -join ', '). CI test jobs fail fast instead of installing modules in-job; run runner maintenance/bootstrap to repair this editor."
+    }
+
+    if ($env:DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE -eq '1') {
+        Write-CiNotice "Skipping Unity $UnityVersion native startup probe (DXM_UNITY_SKIP_NATIVE_STARTUP_PROBE=1)."
+    } else {
+        $probeRoot = Join-Path $InstallRoot '_probes'
+        $probeLog = Join-Path $probeRoot "$UnityVersion-startup-probe.log"
+        $startupResult = Test-UnityNativeStartup -EditorPath $editor -LogPath $probeLog
+        if (-not $startupResult.Success) {
+            if (Test-IsNativeDllNotFound -ExitCode $startupResult.ExitCode) {
+                Write-UnityHostPrereqAnnotation -Version $UnityVersion -ExitCode $startupResult.ExitCode -Description $startupResult.Description -EditorPath $editor -ProbeLog $probeLog
+            }
+            throw "Unity $UnityVersion native startup probe failed with exit code $($startupResult.ExitCode) ($($startupResult.Description)) and RequireHealthyExisting is set. CI test jobs do not repair Unity in-job. Probe log: $probeLog"
+        }
+    }
+    $script:ProvisioningEditorPath = $editor
+    $script:ProvisioningFinalClassification = 'success'
+    Write-CiNotice "Unity editor resolved by healthy-existing preflight: $editor"
+    Write-Output $editor
+    return
+}
 if (-not $editor) {
     Ensure-UnityCli | Out-Null
     Set-UnityCliInstallPath -Root $InstallRoot

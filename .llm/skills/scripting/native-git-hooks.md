@@ -2,15 +2,16 @@
 title: "Native Git Hook Bootstrap"
 id: "native-git-hooks"
 category: "scripting"
-version: "1.2.0"
+version: "1.3.0"
 created: "2026-05-22"
-updated: "2026-05-30"
+updated: "2026-06-01"
 
 source:
   repository: "Ambiguous-Interactive/DxMessaging"
   files:
     - path: "scripts/hooks/"
     - path: "scripts/install-git-hooks.js"
+    - path: "scripts/lib/hook-validation-stamp.js"
   url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
 tags:
@@ -77,14 +78,15 @@ The native hook wrappers are intentionally small Node scripts. They avoid Bash, 
 
 ## Rules
 
-1. Put native Git hook entrypoints in `scripts/hooks` with extensionless names (`pre-commit`, `pre-push`).
+1. Put native Git hook entrypoints in `scripts/hooks` with extensionless names for commit/push boundaries only (`pre-commit`, `pre-push`).
 1. Use `#!/usr/bin/env node` and argument-array process launches.
 1. Route npm and npx through `spawnPlatformCommandSync` so Windows shims do not depend on ad hoc shell behavior.
 1. Keep dependency repair automatic. Managed Node tools should run the integrity gate and recover with `npm ci` when safe. The `pre-commit` executable is repaired by `scripts/ensure-pre-commit.js`, which uses an existing executable when available and otherwise installs pinned `pre-commit==4.6.0` with Python/pip.
 1. Every mutating pre-commit hook must restage inside the pre-commit process through `scripts/run-and-restage.js` or `scripts/run-and-stage.js`. Do not rely on a native hook retry to stage after pre-commit restores a user's unstaged changes.
-1. `pre-commit` must run `node scripts/repair-node-tooling.js`, then `node scripts/ensure-pre-commit.js`, then delegate to `pre-commit run --hook-stage pre-commit`, retrying the pre-commit stage once so successful restaged auto-fixes do not require a manual second commit attempt.
+1. `pre-commit` must first honor a current validation stamp written by the agent PreToolUse commit guard. The stamp must cover HEAD, the staged index tree, and pathspec-limited unstaged/untracked changelog-relevant content, never status-only. That matches the pre-commit stage plus the changelog validator's local change scope without paying a full-worktree status walk. When the stamp matches, the wrapper may skip the repeated native run. Otherwise it must run `node scripts/repair-node-tooling.js`, then `node scripts/ensure-pre-commit.js`, then delegate to `pre-commit run --hook-stage pre-commit`. It retries only when the failed pass changed that same fingerprint, so successful restaged auto-fixes do not require a manual second commit attempt and non-mutating failures are not paid twice.
 1. `pre-push` must run `node scripts/repair-node-tooling.js`, `node scripts/ensure-pre-commit.js`, `npm run doctor`, then `node scripts/run-prepush-parallel.js`. It sets `DXMSG_DOCTOR_FAST=1` for the doctor call only (skips the working-tree + changed-docs git walks, which the parity sweep runs authoritatively), and `repair-node-tooling.js` auto-heals the regenerable isolated-Jest cache before the doctor runs.
 1. `scripts/run-prepush-parallel.js` is the parallel executor of the full pre-push parity set: it runs the mutating hooks (csharpier, dotnet-tool-restore) serially FIRST (so auto-fixers/restagers heal the tree before the read-only freshness checks observe it -- the fix-before-check auto-heal invariant), then the read-only pre-push hooks plus the preflight-only validators concurrently, with the same coverage as `npm run preflight:pre-push` (kept as the serial, byte-for-byte on-demand and CI parity command). It dedups the subset Jest suites against the full `script-tests` suite and the cspell subsets against the cspell hook. Coverage equivalence and the dedup proofs are pinned by `scripts/__tests__/run-prepush-parallel.test.js`.
+1. Do not add native `post-checkout`, `post-merge`, or `post-rewrite` hooks. Git-event hooks run after ordinary checkout/merge/rewrite operations, can dirty the tree unexpectedly, and force bootstrap cost onto non-boundary operations. Keep repair and normalization in explicit preflight/doctor/format commands and in commit/push backstops.
 1. `scripts/install-git-hooks.js` must refuse to configure `core.hooksPath` unless every required native hook is present.
 1. `postinstall` may warn, but must not make `npm install` fatal when hook installation cannot run outside a Git worktree.
 1. Cross-platform path invariant: never assert path containment with a bare `path.relative(...).startsWith("..")` (it is wrong across Windows drives -- use `isPathInsideDirectory`/`isPathOutsideDirectory`/`isOutsideRelative` from `scripts/lib/path-classifier.js`), and never root a `check-eol`/`fix-eol` test fixture under `os.tmpdir()` at all (`check-eol`'s case-sensitive `Temp` exclusion drops every Windows `os.tmpdir()` path, so the spawn passes vacuously -- and `git init`-ing the fixture dir does NOT remedy it; there is no git-init escape hatch). Instead root the fixture in an in-repo, NON-excluded scratch dir (`fs.mkdtempSync(path.join(REPO_ROOT, "dxm-...-"))`, with the prefix gitignored) and assert admissibility via the exported `isPathExcluded(dir) === false` from `check-eol.js`. Both are pinned by `scripts/__tests__/path-containment-policy.test.js` under `script-parser-tests`. See [Cross-Platform Script Compatibility](./cross-platform-compatibility.md#cross-drive-path-containment-windows).
@@ -115,6 +117,7 @@ For hook-gated tooling, workflow, script, or `.llm` edits:
 
 | Version | Date       | Changes                                                                                                                                                                                                                                                               |
 | ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.3.0   | 2026-06-01 | Added the HEAD + index-tree + changelog-local pre-commit validation stamp, required retry decisions to use the same fingerprint, and documented the ban on native post-checkout/post-merge/post-rewrite mutating hooks.                                               |
 | 1.2.0   | 2026-05-30 | Added the cross-platform path invariant rule: never bare `path.relative(...).startsWith("..")` (wrong across Windows drives), never root a `check-eol`/`fix-eol` fixture under `os.tmpdir()` (no git-init escape hatch); pinned by `path-containment-policy.test.js`. |
 | 1.1.0   | 2026-05-30 | Documented the `run-prepush-parallel.js` parallel pre-push executor (fix-before-check ordering, coverage equivalence with `preflight:pre-push`, suite/cspell dedup).                                                                                                  |
 | 1.0.0   | 2026-05-22 | Initial version: native hook bootstrap, automatic dependency repair, restage-in-process rule, and `install-git-hooks.js` refusal invariant.                                                                                                                           |

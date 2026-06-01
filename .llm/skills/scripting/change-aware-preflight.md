@@ -2,7 +2,7 @@
 title: "Change-Aware Preflight"
 id: "change-aware-preflight"
 category: "scripting"
-version: "1.2.0"
+version: "1.3.0"
 created: "2026-05-29"
 updated: "2026-06-01"
 
@@ -14,6 +14,7 @@ source:
     - path: "scripts/lib/precommit-stage-model.js"
     - path: "scripts/hooks/preflight-before-push-guard.js"
     - path: "scripts/hooks/preflight-on-stop.js"
+    - path: "scripts/lib/hook-validation-stamp.js"
     - path: ".pre-commit-config.yaml"
   url: "https://github.com/Ambiguous-Interactive/DxMessaging"
 
@@ -84,16 +85,22 @@ pushing. `npm run preflight` computes the change-set (committed range vs the
 integration base + staged + unstaged + untracked), self-heals
 `node_modules` / `pre-commit` first, and runs the lint / spelling / doc /
 changelog / YAML / policy checks that apply to those files. A PreToolUse guard
-first runs changed-file cspell over the full change-set before `git push`, then
-runs full-scope preflight and BLOCKS the push on failures. The direct cspell
-pass catches already-committed, generated, and shell-written spelling failures
-even when the broader preflight is too slow for the hook timeout. A Stop hook
-runs preflight (working-tree scope, advisory only) when you end a turn. The
+first runs changed-file cspell over the full change-set before likely
+`git commit` / `git push` commands, then runs full-scope preflight and BLOCKS
+the git operation on failures. Commit commands are scoped to the pre-commit
+stage for speed; after a successful commit guard, a validation stamp lets the
+native pre-commit hook skip the repeated run only while HEAD, index content, and
+pathspec-limited unstaged/untracked changelog-relevant content are unchanged.
+The direct cspell pass catches already-committed, generated, and shell-written
+spelling failures even when the broader preflight is too slow for the hook
+timeout. A Stop hook runs preflight (working-tree scope, advisory only) when you
+end a turn. The
 PostToolUse edit guard also runs file-scoped cspell for the same extensions as
 the native pre-push cspell hook (`.md`, `.markdown`, `.cs`, `.json`, `.yml`,
-`.yaml`, `.ps1`, `.js`) so spelling mistakes in comments/scripts surface while
-the file is being edited. The native git hook is the exhaustive, tool-agnostic
-backstop, not the first signal.
+`.yaml`, `.ps1`, `.js`) and runs changelog coverage when a likely user-visible
+path or `CHANGELOG.md` is edited, so spelling and missing-release-note failures
+surface while the file is being edited. The native git hook is the exhaustive,
+tool-agnostic backstop, not the first signal.
 
 For full parity on demand, run `npm run preflight:pre-push`.
 
@@ -134,7 +141,7 @@ equivalent and the remediation when a check fails.
 | When you change                                                                                              | Validator(s) preflight runs                                                                                                         | On failure                                                                                                                                                                                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.cs`, `.md`, `.json`, `.yml`, `.yaml`, `.ps1`, `.js`                                                        | `node scripts/run-managed-cspell.js --no-progress --no-summary <files>`                                                             | Update `.cspell.json` in the same change for legitimate domain terms; before pre-push run `npm run check:cspell:all` for fast all-file attribution.                                                                                                                                    |
-| User-visible code (`Runtime/`, `Samples~/`, user-facing `Editor/`, shipped `SourceGenerators/`)              | `npm run validate:changelog:coverage`                                                                                               | Update `CHANGELOG.md`; resolve `W002` by rewriting the entry around user impact, or move internal-only detail to developer docs.                                                                                                                                                       |
+| User-visible code (`Runtime/`, `Samples~/`, user-facing `Editor/`, shipped `SourceGenerators/`)              | `npm run validate:changelog:coverage`                                                                                               | The PostToolUse guard also runs this in-loop. Update `CHANGELOG.md`; resolve `W002` by rewriting the entry around user impact, or move internal-only detail to developer docs.                                                                                                         |
 | Markdown (`.md`)                                                                                             | `node scripts/run-staged-md-pipeline.js <md>` (normalize-ascii, md029/md051, prettier, markdownlint, ASCII/code/prose validators)   | Run `node scripts/normalize-docs-ascii.js <md>` and `node scripts/fix-md029-md051.js <md>` to auto-fix; ordered lists use MD029 `one` style; internal links must match MD051 slugs.                                                                                                    |
 | C# XML doc comments (`.cs`)                                                                                  | `node scripts/run-staged-validators.js <cs>` (ASCII / code-patterns / prose)                                                        | Docs and `///` comments must be pure ASCII; every C# sample must compile -- see the doc skills.                                                                                                                                                                                        |
 | `.yml` / `.yaml` (incl. `.github/workflows/**`, `.github/actions/**`)                                        | YAML format + line-length (`fix-yaml-comments-line-length`, `fix-yaml-block-scalar-line-length`, prettier); yamllint via pre-commit | Auto-fix with `npm run format:yaml:comments` / `npm run format:yaml:lines`; for non-breakable overflow shorten or externalize per [YAML Line-Length Budget](../github-actions/yaml-line-length.md). For workflows also `npm run validate:workflows` + `npm run check:workflow-cspell`. |
@@ -166,12 +173,13 @@ exist; otherwise it runs the single relevant pass. This never under-runs.
 
 ### Division of labor
 
-| Layer                  | Scope                      | When               | Behavior                                                                                                                                                                   |
-| ---------------------- | -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PreToolUse push-guard  | full (committed + working) | before `git push`  | BLOCKS on changed-file cspell failures before full preflight; then blocks on `checks-failed` / any `policyFailures`; allows on infra-unavailable with a warning.           |
-| Stop hook              | worktree only              | end of turn        | ADVISORY ONLY -- emits a `systemMessage`, NEVER `decision:block`, always exits 0. Covers "declared done without pushing".                                                  |
-| PostToolUse edit guard | one edited file            | after file edits   | ADVISORY ONLY -- runs file-scoped cspell for cspell-covered extensions plus packaging/doc validators relevant to the edited file.                                          |
-| Native `pre-push` hook | `--all` parity             | real push boundary | The exhaustive, tool-agnostic guarantee; delegates to `scripts/run-prepush-parallel.js` (parallel; same coverage as the on-demand/CI serial `npm run preflight:pre-push`). |
+| Layer                         | Scope                      | When                         | Behavior                                                                                                                                                                                              |
+| ----------------------------- | -------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PreToolUse git-boundary guard | full (committed + working) | before `git commit` / `push` | BLOCKS on changed-file cspell failures before preflight; then blocks on `checks-failed` / any `policyFailures`; commit commands add `--stage=pre-commit`; allows on infra-unavailable with a warning. |
+| Stop hook                     | worktree only              | end of turn                  | ADVISORY ONLY -- emits a `systemMessage`, NEVER `decision:block`, always exits 0. Covers "declared done without pushing".                                                                             |
+| PostToolUse edit guard        | one edited file + coverage | after file edits             | ADVISORY ONLY -- runs file-scoped cspell for cspell-covered extensions plus changelog coverage, packaging, and doc validators relevant to the edited file.                                            |
+| Native `pre-commit` hook      | pre-commit stage           | real commit boundary         | Last-resort backstop. Skips only when the PreToolUse commit guard wrote a matching validation stamp for HEAD, index tree, and changelog-relevant local content; otherwise runs the real hook stage.   |
+| Native `pre-push` hook        | `--all` parity             | real push boundary           | The exhaustive, tool-agnostic guarantee; delegates to `scripts/run-prepush-parallel.js` (parallel; same coverage as the on-demand/CI serial `npm run preflight:pre-push`).                            |
 
 Both hooks honor the `DXMSG_PREFLIGHT_ACTIVE=1` re-entrancy sentinel so a `git`
 call made inside preflight is not re-guarded.

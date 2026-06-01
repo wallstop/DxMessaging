@@ -40,7 +40,7 @@ jobs:
     name: Preflight (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # Same class as pre-commit-tooling-check.yml: this job runs npm install +
-    # `pre-commit install-hooks` + a targeted regression suite + the full
+    # `node scripts/ensure-pre-commit.js install-hooks` + a targeted suite + the full
     # `preflight:pre-push` parity sweep. The windows-latest runner is ~2x slower
     # at that work, so a tight job timeout silently cancels only the Windows leg.
     # Size for the slowest OS with headroom; the heavy preflight step below
@@ -82,20 +82,19 @@ jobs:
           python-version: "3.12"
 
       - name: Install Node dependencies
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          if [ -f package-lock.json ]; then
+          if (Test-Path package-lock.json) {
             npm ci
-          else
+          } else {
             npm i --no-audit --no-fund
-          fi
+          }
 
-      - name: Install pre-commit
-        run: python -m pip install pre-commit
+      - name: Ensure pinned pre-commit
+        run: node scripts/ensure-pre-commit.js
 
       - name: Install pre-commit hook environments
-        run: pre-commit install-hooks
+        run: node scripts/ensure-pre-commit.js install-hooks
 
       - name: Run cross-platform spawn + host-env hermeticity regression suite
         # Targeted Jest run: these are the tests that regression-proof the
@@ -107,25 +106,26 @@ jobs:
         # combined log. The membership of this list is kept honest by
         # scripts/__tests__/cross-platform-preflight-coverage.test.js: every
         # test carrying the @cross-platform-regression marker must appear here.
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          node scripts/run-managed-jest.js --runTestsByPath \
-            scripts/__tests__/path-classifier.test.js \
-            scripts/__tests__/cross-platform-path-handling.test.js \
-            scripts/__tests__/node-modules-integrity.test.js \
-            scripts/__tests__/run-managed-jest.test.js \
-            scripts/__tests__/spawn-invocation-policy.test.js \
-            scripts/__tests__/pwsh-output-assertion-policy.test.js \
-            scripts/__tests__/shell-command.test.js \
-            scripts/lib/__tests__/spawn-env-sandbox.test.js \
-            scripts/__tests__/hermetic-host-env-policy.test.js \
-            scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js \
-            scripts/__tests__/unity-ensure-editor-install-resilience.test.js \
-            scripts/__tests__/unity-ensure-editor-host-prereq-shortcircuit.test.js \
-            scripts/__tests__/unity-native-startup-probe-isolation.test.js \
-            scripts/__tests__/unity-runner-host-prereq-dot-source-safety.test.js \
-            scripts/__tests__/path-containment-policy.test.js
+          $tests = @(
+            "scripts/__tests__/path-classifier.test.js"
+            "scripts/__tests__/cross-platform-path-handling.test.js"
+            "scripts/__tests__/node-modules-integrity.test.js"
+            "scripts/__tests__/run-managed-jest.test.js"
+            "scripts/__tests__/spawn-invocation-policy.test.js"
+            "scripts/__tests__/pwsh-output-assertion-policy.test.js"
+            "scripts/__tests__/shell-command.test.js"
+            "scripts/lib/__tests__/spawn-env-sandbox.test.js"
+            "scripts/__tests__/hermetic-host-env-policy.test.js"
+            "scripts/__tests__/unity-ensure-editor-il2cpp-idempotency.test.js"
+            "scripts/__tests__/unity-ensure-editor-install-resilience.test.js"
+            "scripts/__tests__/unity-ensure-editor-host-prereq-shortcircuit.test.js"
+            "scripts/__tests__/unity-native-startup-probe-isolation.test.js"
+            "scripts/__tests__/unity-runner-host-prereq-dot-source-safety.test.js"
+            "scripts/__tests__/path-containment-policy.test.js"
+          )
+          node scripts/run-managed-jest.js --runTestsByPath @tests
 
       - name: Run pre-push preflight
         # timeout-minutes: the heaviest step (full parity sweep + full Jest
@@ -133,5 +133,4 @@ jobs:
         # margin but reports a genuine wedge as a clear "step timed out" instead
         # of the opaque job-level cancel.
         timeout-minutes: 12
-        shell: bash
         run: npm run preflight:pre-push

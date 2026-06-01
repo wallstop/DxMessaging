@@ -96,6 +96,7 @@ jobs:
       - name: Compute test assembly list
         uses: ./.github/actions/compute-unity-assemblies
         with:
+          target: "${{ inputs.test-mode }}"
           runtime-only: "${{ inputs.test-mode == 'standalone' && 'true' || 'false' }}"
 
       - name: Provision Unity Editor
@@ -114,6 +115,7 @@ jobs:
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '${{ inputs.unity-version }}' `
             -CiManagedOnly `
+            -RequireHealthyExisting `
             -ProvisioningProfile $provisioningProfile `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append

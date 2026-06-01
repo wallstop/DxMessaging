@@ -275,9 +275,9 @@ is not an escape hatch.
    invoke `node scripts/run-managed-jest.js`. Do not introduce a new wrapper.
 1. Add the new test file path to the `--runTestsByPath` list and to the
    `files:` regex on the same hook entry.
-1. `npm run preflight:pre-push` covers the new hook automatically via
-   `pre-commit run --hook-stage pre-push --all-files`. Run it before reporting
-   done.
+1. `npm run preflight:pre-push` covers the new hook automatically via the
+   pinned `node scripts/ensure-pre-commit.js run --hook-stage pre-push
+--all-files` path. Run it before reporting done.
 
 ## See Also
 

@@ -17,9 +17,9 @@ const { buildSpawnInvocation } = require("../lib/shell-command");
 // spawnPlatformCommandSync. Derive expectations from buildSpawnInvocation so
 // the assertion tracks production on every platform.
 const NPM_PACK_ARGS = ["pack", "--json", "--dry-run", "--ignore-scripts"];
-// The two analyzer assemblies the package MUST ship (the generated Unity
-// csc.rsp references them directly). Editor/Analyzers/ also ships the Roslyn
-// runtime deps alongside them; the validator only enforces that these two
+// The two analyzer assemblies the package MUST ship. SetupCscRsp copies them
+// into Assets/Plugins and activates them with Unity's RoslynAnalyzer label.
+// Editor/Analyzers/ also ships the Roslyn runtime deps alongside them; the validator only enforces that these two
 // REQUIRED files are present and does not forbid the dep DLLs from shipping.
 const REQUIRED_ANALYZER_FILES = [
   "Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll",

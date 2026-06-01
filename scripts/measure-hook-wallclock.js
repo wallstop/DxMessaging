@@ -9,7 +9,7 @@
  *   1. Resolves a small set of representative scenarios (one .cs file, one
  *      generic .md file, one skill .md file).
  *   2. For each scenario, touches the file's mtime (no content change), runs
- *      `pre-commit run --hook-stage <stage> --files <file>`, and measures
+ *      `node scripts/ensure-pre-commit.js run --hook-stage <stage> --files <file>`, and measures
  *      wall-clock.
  *   3. Reports per-scenario timings against per-scenario budgets and exits
  *      non-zero if any budget is exceeded.
@@ -119,13 +119,17 @@ function touchFile(absPath) {
 
 function runPreCommit(stage, relPath) {
   const start = process.hrtime.bigint();
-  const result = spawnSync("pre-commit", ["run", "--hook-stage", stage, "--files", relPath], {
-    cwd: REPO_ROOT,
-    encoding: "utf8"
-    // Inherit env; do NOT pass stdio: 'inherit' because we do not want
-    // the noisy hook output flooding measurement output. We retain it
-    // on failure for diagnostics.
-  });
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/ensure-pre-commit.js", "run", "--hook-stage", stage, "--files", relPath],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8"
+      // Inherit env; do NOT pass stdio: 'inherit' because we do not want
+      // the noisy hook output flooding measurement output. We retain it
+      // on failure for diagnostics.
+    }
+  );
   const elapsedNs = process.hrtime.bigint() - start;
   const elapsedMs = Number(elapsedNs / 1000000n);
   return {
@@ -139,7 +143,10 @@ function runPreCommit(stage, relPath) {
 }
 
 function checkPreCommitAvailable() {
-  const probe = spawnSync("pre-commit", ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(process.execPath, ["scripts/ensure-pre-commit.js"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8"
+  });
   if (probe.error || (probe.status !== 0 && probe.status !== null)) {
     return false;
   }
@@ -240,7 +247,7 @@ function main(argv) {
 
   if (!checkPreCommitAvailable()) {
     process.stderr.write(
-      "pre-commit is not installed or not on PATH. Install pre-commit (https://pre-commit.com), run `npm run repair:hooks`, then run `pre-commit install-hooks` first.\n"
+      "Unable to ensure the pinned pre-commit runner. Run `node scripts/ensure-pre-commit.js install-hooks` before measuring.\n"
     );
     return 2;
   }

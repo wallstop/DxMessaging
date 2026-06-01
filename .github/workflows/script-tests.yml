@@ -4,7 +4,15 @@ on:
   pull_request:
     paths:
       - .github/workflows/script-tests.yml
+      - .github/actions/**/action.yml
+      - .github/workflows/unity-*.yml
+      - Editor/Analyzers/**
+      - Editor/SetupCscRsp.cs
       - package.json
+      - Runtime/**/*.cs
+      - SourceGenerators/**
+      - Tests/**/*.asmdef
+      - Tests/**/*.cs
       - scripts/**/*.ps1
       - scripts/**/*.sh
       - scripts/**/*.js
@@ -15,7 +23,15 @@ on:
       - master
     paths:
       - .github/workflows/script-tests.yml
+      - .github/actions/**/action.yml
+      - .github/workflows/unity-*.yml
+      - Editor/Analyzers/**
+      - Editor/SetupCscRsp.cs
       - package.json
+      - Runtime/**/*.cs
+      - SourceGenerators/**
+      - Tests/**/*.asmdef
+      - Tests/**/*.cs
       - scripts/**/*.ps1
       - scripts/**/*.sh
       - scripts/**/*.js
@@ -111,8 +127,8 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
-      - name: Install pre-commit
-        run: python -m pip install pre-commit
+      - name: Ensure pinned pre-commit
+        run: node scripts/ensure-pre-commit.js
 
       - name: Install dependencies
         shell: bash

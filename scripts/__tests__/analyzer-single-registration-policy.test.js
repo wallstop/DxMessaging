@@ -321,4 +321,14 @@ describe("analyzer DLLs are Editor-disabled (non-precompiled) and label-activate
     expect(setup).toContain("SetCompatibleWithEditor(false)");
     expect(setup).toContain("RoslynAnalyzer");
   });
+
+  test("SetupCscRsp uses RoslynAnalyzer labels only and removes stale DxMessaging -a lines", () => {
+    const setup = read(SETUP_CSC_RSP);
+    expect(setup).not.toContain("GetAnalyzerArguments");
+    expect(setup).not.toContain('yield return $"-a:');
+    expect(setup).not.toContain('new( GetAnalyzerArguments');
+    expect(setup).toContain("foundStaleEntries = true");
+    expect(setup).toContain("StartsWith(\"-a:\"");
+    expect(setup).toContain("RoslynAnalyzer-labeled");
+  });
 });

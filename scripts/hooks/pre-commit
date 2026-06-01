@@ -3,6 +3,10 @@
 
 const path = require("path");
 const { spawnPlatformCommandSync } = require("../lib/shell-command");
+const {
+  fingerprintGitState,
+  hasValidHookValidationStamp
+} = require("../lib/hook-validation-stamp");
 
 function resolveRepoRoot() {
   const result = spawnPlatformCommandSync("git", ["rev-parse", "--show-toplevel"], {
@@ -33,20 +37,20 @@ function run(command, args) {
 }
 
 function captureGitState() {
-  const result = spawnPlatformCommandSync("git", ["status", "--porcelain=v1", "-z"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"]
-  });
-
-  if (result.error || result.status !== 0) {
+  try {
+    return JSON.stringify(fingerprintGitState(REPO_ROOT));
+  } catch (error) {
     return null;
   }
-
-  return result.stdout;
 }
 
 function main() {
+  const stamp = hasValidHookValidationStamp(REPO_ROOT, "pre-commit");
+  if (stamp.valid) {
+    process.stdout.write("Pre-commit preflight stamp is current; skipping repeated hook run.\n");
+    return 0;
+  }
+
   process.stdout.write("Repairing hook Node tooling if needed...\n");
   const repairStatus = run(process.execPath, ["scripts/repair-node-tooling.js"]);
   if (repairStatus !== 0) {
@@ -67,7 +71,8 @@ function main() {
 
   const afterState = captureGitState();
   if (beforeState !== null && afterState !== null && beforeState === afterState) {
-    process.stdout.write("Pre-commit hooks failed without detected file changes; retrying once...\n");
+    process.stdout.write("Pre-commit hooks failed without detected file changes; not retrying.\n");
+    return firstStatus;
   } else {
     process.stdout.write("Pre-commit hooks changed files; retrying once after auto-fixes...\n");
   }

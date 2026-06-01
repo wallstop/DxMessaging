@@ -10,6 +10,8 @@ on:
       - "**/*.cs"
       - "**/*.csproj"
       - "**/*.sln"
+      - ".github/workflows/dotnet-tests.yml"
+      - "Editor/Analyzers/**"
       - "SourceGenerators/**"
       - ".config/dotnet-tools.json"
   pull_request:
@@ -19,6 +21,8 @@ on:
       - "**/*.cs"
       - "**/*.csproj"
       - "**/*.sln"
+      - ".github/workflows/dotnet-tests.yml"
+      - "Editor/Analyzers/**"
       - "SourceGenerators/**"
       - ".config/dotnet-tools.json"
   workflow_dispatch:
@@ -49,6 +53,20 @@ jobs:
           dotnet test SourceGenerators/WallstopStudios.DxMessaging.SourceGenerators.Tests/WallstopStudios.DxMessaging.SourceGenerators.Tests.csproj
           --configuration Release
           --collect:"XPlat Code Coverage"
+
+      - name: Verify committed analyzer payload is current
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code -- \
+              Editor/Analyzers/WallstopStudios.DxMessaging.SourceGenerators.dll \
+              Editor/Analyzers/WallstopStudios.DxMessaging.Analyzer.dll; then
+            {
+              echo "::error::Committed Editor/Analyzers payload is stale."
+              echo "Build the SourceGenerators projects locally and commit the updated analyzer/source-generator DLLs."
+            }
+            exit 1
+          fi
 
       - name: Generate coverage summary
         run: |

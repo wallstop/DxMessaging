@@ -9,11 +9,12 @@
  * file an agent just edited, IN-LOOP, so the failure class is caught during
  * editing instead of slipping through to the last-resort native git hook.
  *
- * Motivating gap: editing `package.json` `files` or adding/removing a DLL or
- * .meta under `Editor/Analyzers/` changes the npm-pack output, but nothing
- * validated packaging until `git push` reached the native hook. This guard
- * closes that gap (and the whole category) by mapping the edited path to its
- * relevant validators through a dispatch table.
+ * Motivating gaps: editing `package.json` `files` or adding/removing a DLL or
+ * .meta under `Editor/Analyzers/` changes the npm-pack output, and editing
+ * user-visible Runtime/Editor/Samples/source-generator code requires
+ * CHANGELOG.md coverage. Those failures used to surface at native hook time.
+ * This guard closes those gaps by mapping the edited path to its relevant
+ * validators through a dispatch table.
  *
  * Design (single responsibility, composable with the YAML guard):
  *   - YAML line-length is owned by `yaml-line-length-guard.js` (it auto-fixes).
@@ -31,12 +32,15 @@
  *     (~1-2s on Linux, more on Windows via the cmd.exe shim), which is accepted
  *     because it fires ONLY on infrequent packaging-input edits
  *     (`package.json` / `.npmignore` / `*.dll` / `*.meta`), never on the hot
- *     `.cs` / `.md` edit loop. The spelling entry uses cspell's Node API
- *     in-process and checks only the edited file. Cold cspell dictionary load
- *     is expected to be under about 1s on the Linux devcontainer and warm
- *     checks are tens of ms. If the API path hits an infrastructure error, the
- *     guard falls back to the managed cspell runner so node_modules repair is
- *     still zero-touch.
+ *     `.cs` / `.md` edit loop. Changelog coverage is the sub-second global
+ *     validator exception: it runs only when a likely user-visible path or
+ *     CHANGELOG.md is edited, and it must inspect git metadata because coverage
+ *     is a change-set invariant rather than a single-file invariant. The
+ *     spelling entry uses cspell's Node API in-process and checks only the
+ *     edited file. Cold cspell dictionary load is expected to be under about
+ *     1s on the Linux devcontainer and warm checks are tens of ms. If the API
+ *     path hits an infrastructure error, the guard falls back to the managed
+ *     cspell runner so node_modules repair is still zero-touch.
  *
  * Cross-platform: pure Node plus `scripts/lib/shell-command.js`
  * (spawnPlatformCommandSync) for child processes; no bash, no shell:true, no
@@ -47,10 +51,12 @@ const fs = require("fs");
 const path = require("path");
 const { spawnPlatformCommandSync } = require("../lib/shell-command");
 const { isOutsideRelative } = require("../lib/path-classifier");
+const { isLikelyUserVisiblePath } = require("../validate-changelog");
 
 const PACKAGING_SKILL = ".llm/skills/packaging/npm-package-configuration.md";
 const DOCS_SKILL = ".llm/skills/documentation/documentation-style-guide.md";
 const SPELLING_SKILL = ".llm/skills/scripting/change-aware-preflight.md";
+const CHANGELOG_SKILL = ".llm/skills/scripting/change-aware-preflight.md";
 const CSPELL_EXTENSIONS = Object.freeze([
   "cs",
   "js",
@@ -133,6 +139,18 @@ function isPackagingRelevant(rel) {
  */
 function isDocQualityRelevant(rel) {
   return /\.(md|markdown|cs)$/i.test(rel);
+}
+
+/**
+ * True when an edit can affect changelog coverage. Coverage is intentionally a
+ * change-set invariant, so the validator reads the current git state instead of
+ * receiving a single edited path.
+ *
+ * @param {string} rel Repo-relative POSIX path.
+ * @returns {boolean} True when changelog coverage validation is relevant.
+ */
+function isChangelogCoverageRelevant(rel) {
+  return rel === "CHANGELOG.md" || isLikelyUserVisiblePath(rel);
 }
 
 /**
@@ -319,6 +337,24 @@ function buildDispatchTable() {
           args: (abs) => ["scripts/validate-doc-code-patterns.js", abs]
         },
         { label: "docs-prose", args: (abs) => ["scripts/validate-docs-prose.js", abs] }
+      ]
+    },
+    {
+      id: "changelog-coverage",
+      matches: isChangelogCoverageRelevant,
+      remediation:
+        `Likely user-visible changes require a user-impact entry under ` +
+        `CHANGELOG.md's Unreleased section. Update CHANGELOG.md in the same ` +
+        `change, then rerun 'node scripts/validate-changelog.js ` +
+        `--check-coverage'. See ${CHANGELOG_SKILL}.`,
+      validators: [
+        {
+          label: "validate-changelog-policy",
+          // Coverage is global by design: passing only the edited path would
+          // hide the common case where several user-visible files changed but
+          // no changelog entry exists.
+          args: () => ["scripts/validate-changelog.js", "--check-coverage"]
+        }
       ]
     },
     {
@@ -592,6 +628,7 @@ module.exports = {
   importCspell,
   isPackagingRelevant,
   isDocQualityRelevant,
+  isChangelogCoverageRelevant,
   isSpellcheckRelevant,
   formatCspellIssues,
   hasCspellInfrastructureError,

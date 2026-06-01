@@ -70,6 +70,13 @@ const INTEGRATION_NAME_REGEX = /(?:VContainer|Zenject|Reflex)/;
  * @type {string}
  */
 const DXMESSAGING_ASSEMBLY_PREFIX = "WallstopStudios.DxMessaging.";
+const STANDALONE_PLATFORM_NAMES = new Set([
+  "Standalone",
+  "WindowsStandalone32",
+  "WindowsStandalone64",
+  "LinuxStandalone64",
+  "OSXStandalone"
+]);
 
 /**
  * True when `name` is a DxMessaging-owned assembly (see
@@ -192,13 +199,63 @@ function classifyAsmdef(name) {
  * @param {string} asmdefPath - Absolute path to an .asmdef file
  * @returns {boolean} True when includePlatforms === ["Editor"]
  */
-function readAsmdefIsEditorOnly(asmdefPath) {
+function readAsmdefPlatforms(asmdefPath) {
   const raw = fs.readFileSync(asmdefPath, "utf8");
   const parsed = JSON.parse(raw);
-  const platforms = parsed.includePlatforms;
-  return (
-    Array.isArray(platforms) && platforms.length === 1 && platforms[0] === "Editor"
-  );
+  return {
+    includePlatforms: Array.isArray(parsed.includePlatforms) ? parsed.includePlatforms : [],
+    excludePlatforms: Array.isArray(parsed.excludePlatforms) ? parsed.excludePlatforms : []
+  };
+}
+
+function readAsmdefIsEditorOnly(asmdefPath) {
+  const platforms = readAsmdefPlatforms(asmdefPath).includePlatforms;
+  return platforms.length === 1 && platforms[0] === "Editor";
+}
+
+/**
+ * @param {string[]} includePlatforms
+ * @param {string[]} excludePlatforms
+ * @param {"editmode" | "playmode" | "standalone"} target
+ * @returns {boolean}
+ */
+function isAsmdefCompatibleWithTarget(includePlatforms, excludePlatforms, target) {
+  const includes = new Set(includePlatforms);
+  const excludes = new Set(excludePlatforms);
+
+  if (target === "standalone") {
+    if (excludes.has("Standalone") || excludes.has("WindowsStandalone64")) {
+      return false;
+    }
+    if (includes.size === 0) {
+      return true;
+    }
+    for (const platform of includes) {
+      if (STANDALONE_PLATFORM_NAMES.has(platform)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (target === "editmode") {
+    if (excludes.has("Editor")) {
+      return false;
+    }
+    return includes.size === 0 || includes.has("Editor");
+  }
+
+  if (target === "playmode") {
+    if (excludes.has("Editor")) {
+      return false;
+    }
+    return includes.size === 0;
+  }
+
+  if (excludes.has("Editor")) {
+    return false;
+  }
+  return includes.size === 0 || includes.has("Editor");
 }
 
 /**
@@ -220,13 +277,17 @@ function enumerateTestAsmdefs(repoRoot) {
   const entries = asmdefPaths.map((asmdefPath) => {
     const name = readAsmdefName(asmdefPath);
     const classification = classifyAsmdef(name);
+    const platforms = readAsmdefPlatforms(asmdefPath);
     return {
       name,
       path: asmdefPath,
       isPerf: classification === "perf",
       isComparison: classification === "comparison",
       isInteg: classification === "integration",
-      isEditorOnly: readAsmdefIsEditorOnly(asmdefPath),
+      includePlatforms: platforms.includePlatforms,
+      excludePlatforms: platforms.excludePlatforms,
+      isEditorOnly:
+        platforms.includePlatforms.length === 1 && platforms.includePlatforms[0] === "Editor",
       isForeign: !isDxMessagingOwnedAssembly(name)
     };
   });
@@ -240,12 +301,12 @@ function enumerateTestAsmdefs(repoRoot) {
  * @property {boolean} [includePerf=false]         Include "perf" asmdefs.
  * @property {boolean} [includeComparisons=false]  Include comparison benchmark asmdefs.
  * @property {boolean} [includeIntegrations=false] Include "integration" asmdefs.
- * @property {boolean} [runtimeOnly=false]         Drop editor-only asmdefs
- *                     (includePlatforms === ["Editor"]). Used by the standalone
- *                     player flow, where EditMode tests cannot run. Applied
- *                     BEFORE the perf/comparison/integration gating so it
- *                     composes (e.g. { runtimeOnly: true, includePerf: true } ->
- *                     Runtime + Runtime.Benchmarks).
+ * @property {"editmode" | "playmode" | "standalone"} [target=editmode]
+ *                     Select assemblies compatible with the Unity test target.
+ *                     PlayMode and standalone omit editor-only asmdefs.
+ * @property {boolean} [runtimeOnly=false]         Back-compat alias for
+ *                     target: "standalone". Applied before the perf/comparison/
+ *                     integration gating so it composes.
  */
 
 /**
@@ -267,7 +328,7 @@ function defaultIncludeAssemblies(repoRoot, options) {
   const includePerf = opts.includePerf === true;
   const includeComparisons = opts.includeComparisons === true;
   const includeIntegrations = opts.includeIntegrations === true;
-  const runtimeOnly = opts.runtimeOnly === true;
+  const target = opts.target || (opts.runtimeOnly === true ? "standalone" : "editmode");
 
   return enumerateTestAsmdefs(repoRoot)
     .filter((entry) => {
@@ -279,10 +340,13 @@ function defaultIncludeAssemblies(repoRoot, options) {
       if (entry.isForeign) {
         return false;
       }
-      // Runtime-only gate next so it composes with the category opt-ins:
-      // editor-only asmdefs cannot run in a built player and are dropped
-      // before any perf/comparison/integration decision.
-      if (runtimeOnly && entry.isEditorOnly) {
+      if (
+        !isAsmdefCompatibleWithTarget(
+          entry.includePlatforms,
+          entry.excludePlatforms,
+          target
+        )
+      ) {
         return false;
       }
       if (entry.isPerf) {
@@ -314,7 +378,7 @@ function defaultExcludeAssemblies(repoRoot, options) {
   const includePerf = opts.includePerf === true;
   const includeComparisons = opts.includeComparisons === true;
   const includeIntegrations = opts.includeIntegrations === true;
-  const runtimeOnly = opts.runtimeOnly === true;
+  const target = opts.target || (opts.runtimeOnly === true ? "standalone" : "editmode");
 
   return enumerateTestAsmdefs(repoRoot)
     .filter((entry) => {
@@ -323,9 +387,13 @@ function defaultExcludeAssemblies(repoRoot, options) {
       if (entry.isForeign) {
         return true;
       }
-      // When runtimeOnly is set, every editor-only asmdef is excluded
-      // regardless of category.
-      if (runtimeOnly && entry.isEditorOnly) {
+      if (
+        !isAsmdefCompatibleWithTarget(
+          entry.includePlatforms,
+          entry.excludePlatforms,
+          target
+        )
+      ) {
         return true;
       }
       if (entry.isPerf) {
@@ -348,6 +416,7 @@ module.exports = {
   INTEGRATION_NAME_REGEX,
   classifyAsmdef,
   enumerateTestAsmdefs,
+  isAsmdefCompatibleWithTarget,
   defaultIncludeAssemblies,
   defaultExcludeAssemblies
 };
@@ -387,7 +456,7 @@ if (require.main === module) {
 
   // Diagnostic: runtime-only include list (used by the standalone player flow,
   // where EditMode/editor-only asmdefs cannot run).
-  const runtimeInclude = defaultIncludeAssemblies(repoRoot, { runtimeOnly: true });
+  const runtimeInclude = defaultIncludeAssemblies(repoRoot, { target: "standalone" });
   process.stdout.write(
     `\nruntime-only include (${runtimeInclude.length}, drops editor-only asmdefs):\n`
   );

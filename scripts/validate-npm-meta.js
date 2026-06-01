@@ -399,8 +399,9 @@ const sourceGeneratorTrackedNonCodeFiles = new Set(["SourceGenerators/Directory.
 
 // The package MUST ship its own two analyzer assemblies
 // (WallstopStudios.DxMessaging.SourceGenerators.dll and
-// WallstopStudios.DxMessaging.Analyzer.dll) -- the generated Unity csc.rsp
-// references them directly. Editor/Analyzers/ ALSO ships the Roslyn runtime
+// WallstopStudios.DxMessaging.Analyzer.dll) -- SetupCscRsp copies them to
+// Assets/Plugins and activates them with Unity's RoslynAnalyzer label.
+// Editor/Analyzers/ ALSO ships the Roslyn runtime
 // deps (Microsoft.CodeAnalysis[.CSharp], System.Collections.Immutable,
 // System.Reflection.Metadata, System.Runtime.CompilerServices.Unsafe)
 // alongside them; the list below only enforces that the two REQUIRED analyzer
@@ -572,7 +573,7 @@ function validateRequiredAnalyzerFilesInTarball(tarballFiles) {
       file,
       message:
         `Tarball is missing required analyzer file '${file}'. ` +
-        "The generated Unity csc.rsp references DxMessaging analyzer DLLs directly; missing DLLs or .meta files break Unity package imports and CI compilation."
+        "SetupCscRsp copies DxMessaging analyzer DLLs into Assets/Plugins and activates them with the RoslynAnalyzer label; missing DLLs or .meta files break Unity package imports and CI compilation."
     });
   }
 

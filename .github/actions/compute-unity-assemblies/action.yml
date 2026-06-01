@@ -13,6 +13,10 @@ inputs:
     description: "Drop editor-only asmdefs (standalone player flow cannot run EditMode tests)."
     required: false
     default: "false"
+  target:
+    description: "Unity test target: editmode, playmode, or standalone."
+    required: false
+    default: ""
 outputs:
   assemblies:
     description: "Semicolon-joined DxMessaging test assembly names (empty string when none match)."
@@ -32,6 +36,7 @@ runs:
         $parts = @()
         if ("${{ inputs.include-perf }}" -eq "true") { $parts += "includePerf: true" }
         if ("${{ inputs.runtime-only }}" -eq "true") { $parts += "runtimeOnly: true" }
+        if ("${{ inputs.target }}" -ne "") { $parts += "target: '${{ inputs.target }}'" }
         $opts = if ($parts.Count) { "{ " + ($parts -join ", ") + " }" } else { "{}" }
         $assemblies = node -e "const m=require('./scripts/unity/lib/asmdef-discovery.js'); console.log(m.defaultIncludeAssemblies(process.cwd(), $opts).join(';'))"
         $discoveryExit = $LASTEXITCODE

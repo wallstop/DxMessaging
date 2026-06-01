@@ -161,9 +161,10 @@ describe("scripts/unity/run-tests.sh contract", () => {
     expect(content).toContain("-runTests -testPlatform ${test_platform}");
     expect(content).toContain("-assemblyNames");
     expect(content).toContain("-testFilter");
-    // The runtime-only assembly list is threaded in for standalone.
+    // The target-aware assembly list is threaded in for standalone.
+    expect(content).toContain("target: '${target}'");
     expect(content).toContain("runtimeOnly: ${runtime_only}");
-    expect(content).toContain('RUNTIME_ONLY="true"');
+    expect(content).toContain('"${PLATFORM}" "${RUNTIME_ONLY}"');
   });
 
   test("does NOT contain the deleted two-pass standalone build/run symbols", () => {
@@ -339,8 +340,10 @@ describe("scripts/unity/run-tests.ps1 contract", () => {
     expect(content).toContain("StandaloneLinux64");
     expect(content).toContain("-assemblyNames");
     expect(content).toContain("-testFilter");
-    // The runtime-only assembly list is threaded in for standalone.
+    // The target-aware assembly list is threaded in for standalone.
+    expect(content).toContain("target: '$Target'");
     expect(content).toContain("runtimeOnly: $runtimeOnlyBool");
+    expect(content).toContain("-Target $Platform");
     expect(content).toContain("-RuntimeOnlyFlag:($Platform -eq 'standalone')");
   });
 
@@ -800,6 +803,7 @@ describe("scripts/unity direct CI runner contract", () => {
       "AssemblyNames",
       "ArtifactsPath",
       "ProjectPath",
+      "TestCategory",
       "GenerateOnly"
     ]) {
       expect(runCi).toContain(token);
@@ -814,6 +818,7 @@ describe("scripts/unity direct CI runner contract", () => {
     expect(runCi).toContain("'StandaloneWindowsIl2Cpp'");
     expect(runCi).toContain("'EditorOnly'");
     expect(runCi).toContain("ProvisioningProfile = $provisioningProfile");
+    expect(runCi).toContain("$ensureArgs.RequireHealthyExisting = $true");
     expect(runCi).not.toContain("WithWindowsIl2Cpp = $true");
   });
 
@@ -1624,9 +1629,17 @@ describe("scripts/unity direct CI runner contract", () => {
       expect(runCi).not.toContain("persistentDataPath");
     });
 
-    test("the player build goes UNDER project Temp (not the uploaded artifact) and the player log under artifacts", () => {
-      expect(runCi).toContain("Join-Path $ProjectPath 'Temp\\DxmTestPlayer\\DxmTestPlayer.exe'");
+    test("the player build goes UNDER project Build (not Temp or the uploaded artifact) and the player log under artifacts", () => {
+      expect(runCi).toContain("Join-Path $ProjectPath 'Build\\DxmTestPlayer\\DxmTestPlayer.exe'");
+      expect(runCi).not.toContain("Join-Path $ProjectPath 'Temp\\DxmTestPlayer\\DxmTestPlayer.exe'");
       expect(runCi).toContain("$playerLogPath = Join-Path $ArtifactsPath 'player.log'");
+    });
+
+    test("default CI category filtering is threaded into Unity test invocations", () => {
+      expect(runCi).toContain("$TestCategory");
+      expect(runCi).toContain("DXM_UNITY_TEST_CATEGORY");
+      expect(runCi).toContain("'-testCategory', $TestCategory");
+      expect(runCi).toContain(") + $categoryArgs + $acceleratorArgs");
     });
 
     test("Invoke-StandaloneTestPlayer builds the player run vector and maps exit 2 -> no results", () => {
@@ -1659,11 +1672,14 @@ describe("scripts/unity direct CI runner contract", () => {
       expect(runCi).toMatch(
         /\$buildResult = Invoke-ProcessWithTreeKillTimeout[\s\S]*?-TimeoutSeconds \(Get-StandaloneBuildTimeoutSeconds\)/
       );
-      // POST-BUILD exe-exists tripwire with the AutoRunPlayer-still-set diagnostic.
-      expect(runCi).toMatch(
-        /if \(-not \(Test-Path -LiteralPath \$standaloneExe -PathType Leaf\)\)/
-      );
-      expect(runCi).toContain("the build modifier may not have run");
+      // POST-BUILD validity tripwire: missing/stale exe or missing _Data fails
+      // before launching a leftover player.
+      expect(runCi).toContain("function Test-StandalonePlayerBuildOutput");
+      expect(runCi).toContain("function Write-StandaloneBuildOutputDiagnostics");
+      expect(runCi).toContain("$standaloneBuildStartedUtc = [DateTime]::UtcNow");
+      expect(runCi).toContain("LastWriteTimeUtc");
+      expect(runCi).toContain("missing player data directory");
+      expect(runCi).toContain("Unity may have cleaned a Temp output");
       // The build-log missed-case scan for the non-redirected AutoRun signatures.
       expect(runCi).toContain("PlayerWithTests");
       expect(runCi).toContain("options\\.AutoRunPlayer = True");

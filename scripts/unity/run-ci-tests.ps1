@@ -23,6 +23,8 @@ param(
 
     [string]$UnityInstallRoot = $(if ($env:UNITY_EDITOR_INSTALL_ROOT) { $env:UNITY_EDITOR_INSTALL_ROOT } else { 'C:\Unity\Editors' }),
 
+    [string]$TestCategory = $(if ($env:DXM_UNITY_TEST_CATEGORY) { $env:DXM_UNITY_TEST_CATEGORY } else { '' }),
+
     [switch]$GenerateOnly
 )
 
@@ -1811,6 +1813,128 @@ function Invoke-UnityEditorWithFailureDiagnostics {
     }
 }
 
+function Write-StandaloneDirectorySnapshot {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int]$MaxEntries = 60
+    )
+
+    try {
+        Write-Host "${Label}: $Path"
+        if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+            Write-Host "  (missing)"
+            return
+        }
+
+        $entries = @(
+            Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
+                Sort-Object FullName |
+                Select-Object -First $MaxEntries
+        )
+        if ($entries.Count -lt 1) {
+            Write-Host "  (empty)"
+            return
+        }
+
+        foreach ($entry in $entries) {
+            $kind = if ($entry.PSIsContainer) { 'dir ' } else { 'file' }
+            $length = if ($entry.PSIsContainer) { '' } else { " $($entry.Length) bytes" }
+            Write-Host "  [$kind] $($entry.FullName)$length"
+        }
+    } catch {
+        Write-Host "::warning::Could not snapshot ${Label}: $($_.Exception.Message)"
+    }
+}
+
+function Write-StandaloneBuildOutputDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)][string]$Project,
+        [Parameter(Mandatory = $true)][string]$ExpectedExe,
+        [string]$LogPath,
+        [datetime]$BuildStartedUtc
+    )
+
+    Write-Host "::group::Standalone player build output diagnostics"
+    try {
+        Write-Host "Expected exe: $ExpectedExe"
+        Write-Host "DXM_PLAYER_BUILD_PATH: $env:DXM_PLAYER_BUILD_PATH"
+        Write-Host "Build started UTC: $($BuildStartedUtc.ToString('o'))"
+
+        $expectedDir = Split-Path -Parent $ExpectedExe
+        Write-StandaloneDirectorySnapshot -Label 'Expected output directory' -Path $expectedDir
+        Write-StandaloneDirectorySnapshot -Label 'Project Build directory' -Path (Join-Path $Project 'Build')
+        Write-StandaloneDirectorySnapshot -Label 'Project Temp\DxmTestPlayer directory' -Path (Join-Path $Project 'Temp\DxmTestPlayer')
+        Write-StandaloneDirectorySnapshot -Label 'Project Temp\PlayerWithTests directory' -Path (Join-Path $Project 'Temp\PlayerWithTests')
+
+        Write-Host "Discovered executable candidates under Build/Temp:"
+        $candidateRoots = @(
+            Join-Path $Project 'Build',
+            Join-Path $Project 'Temp'
+        )
+        $candidates = @(
+            foreach ($root in $candidateRoots) {
+                if (Test-Path -LiteralPath $root -PathType Container) {
+                    Get-ChildItem -LiteralPath $root -Recurse -Filter '*.exe' -File -ErrorAction SilentlyContinue
+                }
+            }
+        )
+        if ($candidates.Count -lt 1) {
+            Write-Host "  (none)"
+        } else {
+            foreach ($candidate in ($candidates | Sort-Object FullName | Select-Object -First 40)) {
+                Write-Host ("  {0} ({1} bytes, LastWriteTimeUtc={2:o})" -f $candidate.FullName, $candidate.Length, $candidate.LastWriteTimeUtc)
+            }
+        }
+
+        if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+            $logText = Get-Content -LiteralPath $LogPath -Raw
+            Write-Host "Build log markers:"
+            foreach ($marker in @(
+                    'DxmCiStandaloneBuildModifier',
+                    'DXM_PLAYER_BUILD_PATH',
+                    'DxmTestPlayer',
+                    'PlayerWithTests',
+                    'AutoRunPlayer',
+                    'CopyFiles'
+                )) {
+                Write-Host "  ${marker}: $($logText.Contains($marker))"
+            }
+            Write-Host "Build log tail:"
+            Get-Content -LiteralPath $LogPath -Tail 80 -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Host "  $_" }
+        } else {
+            Write-Host "Build log missing: $LogPath"
+        }
+    } catch {
+        Write-Host "::warning::Could not collect standalone player build diagnostics: $($_.Exception.Message)"
+    }
+    Write-Host "::endgroup::"
+}
+
+function Test-StandalonePlayerBuildOutput {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedExe,
+        [Parameter(Mandatory = $true)][datetime]$BuildStartedUtc
+    )
+
+    if (-not (Test-Path -LiteralPath $ExpectedExe -PathType Leaf)) {
+        return "missing exe"
+    }
+
+    $exe = Get-Item -LiteralPath $ExpectedExe
+    if ($exe.LastWriteTimeUtc -lt $BuildStartedUtc.AddSeconds(-5)) {
+        return "stale exe; LastWriteTimeUtc=$($exe.LastWriteTimeUtc.ToString('o'))"
+    }
+
+    $dataDir = Join-Path (Split-Path -Parent $ExpectedExe) ("{0}_Data" -f [System.IO.Path]::GetFileNameWithoutExtension($ExpectedExe))
+    if (-not (Test-Path -LiteralPath $dataDir -PathType Container)) {
+        return "missing player data directory: $dataDir"
+    }
+
+    return ''
+}
+
 function Test-NUnitResults {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -1899,6 +2023,9 @@ if (-not $UnityEditorPath -or $UnityEditorPath.Trim().Length -eq 0) {
         InstallRoot          = $UnityInstallRoot
         ProvisioningProfile = $provisioningProfile
     }
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        $ensureArgs.RequireHealthyExisting = $true
+    }
     $UnityEditorPath = (& $ensureEditor @ensureArgs | Select-Object -Last 1)
 }
 
@@ -1955,19 +2082,26 @@ $testPlatform = switch ($TestMode) {
     'standalone' { 'StandaloneWindows64' }
 }
 
+$categoryArgs = @()
+if (-not [string]::IsNullOrWhiteSpace($TestCategory)) {
+    $categoryArgs = @('-testCategory', $TestCategory)
+    Write-CiNotice "Unity test category filter enabled: $TestCategory"
+} else {
+    Write-CiNotice "Unity test category filter disabled."
+}
+
 $resultsPath = Join-Path $ArtifactsPath 'results.xml'
 $logPath = Join-Path $ArtifactsPath 'unity.log'
 $configureLogPath = Join-Path $ArtifactsPath 'configure.log'
 $startupProbeLogPath = Join-Path $ArtifactsPath 'unity-startup-probe.log'
 
-# STANDALONE split-build artifacts. The built IL2CPP player goes UNDER the
-# project's Temp dir (NOT $ArtifactsPath): a full player is hundreds of MB and must
-# not bloat the uploaded artifact, and the Library cache key already busts on the
-# run-ci-tests.ps1 hash so a stale Temp player is never reused. The player's
-# -logFile is captured to $ArtifactsPath/player.log (small; uploaded so the
-# verify/dump-log actions can scan it, since the player's stdout no longer flows
-# through unity.log).
-$standaloneExe = Join-Path $ProjectPath 'Temp\DxmTestPlayer\DxmTestPlayer.exe'
+# STANDALONE split-build artifacts. The built IL2CPP player goes under a stable
+# per-run project Build directory, not project Temp: Unity's test player build
+# pipeline can populate Temp/PlayerWithTests or copy through Temp and then clean
+# it before this script's post-build assertion runs. The player still stays out
+# of $ArtifactsPath because a full IL2CPP player is hundreds of MB; only the
+# small player log and NUnit XML are uploaded.
+$standaloneExe = Join-Path $ProjectPath 'Build\DxmTestPlayer\DxmTestPlayer.exe'
 $playerLogPath = Join-Path $ArtifactsPath 'player.log'
 
 # Activation/return carry the serial/email/password in their argument arrays and
@@ -2035,13 +2169,20 @@ try {
         # the hard tree-kill watchdog so neither can hang to the step timeout.
 
         # (2a) BUILD. Set DXM_PLAYER_BUILD_PATH so the modifier redirects the player
-        # output to a known path under the project's Temp dir, then build with
+        # output to a known path under the project's Build dir, then build with
         # -runTests (so PlayerLauncher's ModifyBuildOptions reflection path fires) but
         # NO -quit (the editor must reach PostBuildCleanup, which arms the exit).
         $env:DXM_PLAYER_BUILD_PATH = $standaloneExe
+        $standaloneBuildStartedUtc = [DateTime]::UtcNow
         $standaloneExeDir = Split-Path -Parent $standaloneExe
-        if ($standaloneExeDir -and -not (Test-Path -LiteralPath $standaloneExeDir -PathType Container)) {
+        if ($standaloneExeDir -and (Test-Path -LiteralPath $standaloneExeDir -PathType Container)) {
+            Remove-Item -LiteralPath $standaloneExeDir -Recurse -Force
+        }
+        if ($standaloneExeDir) {
             New-Item -ItemType Directory -Force -Path $standaloneExeDir | Out-Null
+        }
+        if (Test-Path -LiteralPath $playerLogPath -PathType Leaf) {
+            Remove-Item -LiteralPath $playerLogPath -Force
         }
         $buildArgs = @(
             '-batchmode',
@@ -2053,7 +2194,7 @@ try {
             '-assemblyNames', $AssemblyNames,
             '-buildTarget', 'StandaloneWindows64',
             '-logFile', '-'
-        ) + $acceleratorArgs
+        ) + $categoryArgs + $acceleratorArgs
 
         $buildResult = Invoke-ProcessWithTreeKillTimeout `
             -FilePath $UnityEditorPath `
@@ -2070,14 +2211,23 @@ try {
             throw "Standalone test-player build failed with exit code $($buildResult.ExitCode). See the streamed Unity log above (also saved to $logPath)."
         }
 
-        # POST-BUILD ASSERT: the exe MUST exist at DXM_PLAYER_BUILD_PATH. If it does
-        # not, the build modifier likely did not run (a compile error left
-        # AutoRunPlayer set, so PlayerLauncher built Temp/PlayerWithTests and tried to
-        # AutoRun it, which is the 10060-hang path). Fail fast with that diagnostic.
-        if (-not (Test-Path -LiteralPath $standaloneExe -PathType Leaf)) {
+        # POST-BUILD ASSERT: the exe MUST exist at DXM_PLAYER_BUILD_PATH, be fresh
+        # for this build, and include its companion _Data directory. If not, either
+        # the build modifier did not run, Unity wrote through Temp and cleaned it, or
+        # a stale player survived. Fail fast with diagnostics before launching
+        # anything.
+        $standaloneBuildProblem = Test-StandalonePlayerBuildOutput `
+            -ExpectedExe $standaloneExe `
+            -BuildStartedUtc $standaloneBuildStartedUtc
+        if (-not [string]::IsNullOrWhiteSpace($standaloneBuildProblem)) {
             Write-AnalyzerSetupDiagnostics -Project $ProjectPath -LogPath $logPath -Label "$UnityVersion standalone build"
             Write-UnityResultFailureDiagnostics -LogPath $logPath -Project $ProjectPath -Label "Unity $UnityVersion standalone build"
-            throw "Editor build did not produce DxMessaging test player at $standaloneExe; the build modifier may not have run (a compile error can leave AutoRunPlayer set, reverting the build to Temp/PlayerWithTests). See the build log at $logPath."
+            Write-StandaloneBuildOutputDiagnostics `
+                -Project $ProjectPath `
+                -ExpectedExe $standaloneExe `
+                -LogPath $logPath `
+                -BuildStartedUtc $standaloneBuildStartedUtc
+            throw "Editor build produced invalid DxMessaging test player output at $standaloneExe ($standaloneBuildProblem). The build modifier may not have run, Unity may have cleaned a Temp output, or a stale player was detected. See the build log at $logPath."
         }
 
         # MISSED-CASE GUARD: even when the exe exists, scan the build log for the
@@ -2139,7 +2289,7 @@ try {
             '-testResults', $resultsPath,
             '-assemblyNames', $AssemblyNames,
             '-logFile', '-'
-        ) + $acceleratorArgs
+        ) + $categoryArgs + $acceleratorArgs
 
         Invoke-UnityEditorWithFailureDiagnostics `
             -EditorPath $UnityEditorPath `

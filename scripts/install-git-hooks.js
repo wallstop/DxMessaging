@@ -6,6 +6,7 @@ const childProcess = require("child_process");
 const fs = require("fs");
 
 const HOOKS_PATH = "scripts/hooks";
+const REQUIRED_NATIVE_HOOKS = Object.freeze(["pre-commit", "pre-push"]);
 
 function runGit(args, options) {
   const result = childProcess.spawnSync("git", args, {
@@ -49,8 +50,9 @@ function installGitHooks(options = {}) {
   }
 
   const hooksDir = path.join(repoRoot, HOOKS_PATH);
-  const requiredHooks = ["pre-commit", "pre-push"];
-  const missingHooks = requiredHooks.filter((hook) => !fs.existsSync(path.join(hooksDir, hook)));
+  const missingHooks = REQUIRED_NATIVE_HOOKS.filter(
+    (hook) => !fs.existsSync(path.join(hooksDir, hook))
+  );
   if (missingHooks.length > 0) {
     warn(
       `git hooks: missing native hook(s): ${missingHooks
@@ -89,5 +91,6 @@ if (require.main === module) {
 
 module.exports = {
   HOOKS_PATH,
+  REQUIRED_NATIVE_HOOKS,
   installGitHooks
 };

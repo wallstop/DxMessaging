@@ -583,7 +583,8 @@ function findLockfileInstallViolations(relativePath, lines, packageLockIgnored) 
 
     const hasLockfileCheck =
       /\[\s*-f\s+package-lock\.json\s*\]/.test(block.text) ||
-      /\btest\s+-f\s+package-lock\.json\b/.test(block.text);
+      /\btest\s+-f\s+package-lock\.json\b/.test(block.text) ||
+      /\bTest-Path\s+(?:-Path\s+)?['"]?package-lock\.json['"]?/i.test(block.text);
     const hasAnyIfElseFallback =
       /\bif\b[\s\S]*?\bnpm\s+ci\b[\s\S]*?\belse\b[\s\S]*?\bnpm\s+(?:install|i)\b/.test(block.text);
     const hasOrFallbackInstall = /\bnpm\s+ci\b\s*\|\|\s*\bnpm\s+(?:install|i)\b/.test(block.text);
@@ -628,6 +629,55 @@ function findPreCommitInstallHookWriterViolations(relativePath, lines) {
   const runBlocks = extractRunBlocks(lines);
 
   for (const block of runBlocks) {
+    const directHostPreCommitInstall =
+      /(?:^|[\s;&|])(?:python(?:\d+(?:\.\d+)?)?|py)\s+-m\s+pip\s+install\b[^\n;&|]*\bpre-commit(?:==[^\s;&|]+)?\b/.test(
+        block.text
+      ) ||
+      /(?:^|[\s;&|])pip(?:\d+(?:\.\d+)?)?\s+install\b[^\n;&|]*\bpre-commit(?:==[^\s;&|]+)?\b/.test(
+        block.text
+      ) ||
+      /(?:^|[\s;&|])pipx\s+install\b[^\n;&|]*\bpre-commit(?:==[^\s;&|]+)?\b/.test(block.text) ||
+      /(?:^|[\s;&|])uv\s+tool\s+install\b[^\n;&|]*\bpre-commit(?:==[^\s;&|]+)?\b/.test(
+        block.text
+      ) ||
+      /(?:^|[\s;&|])brew\s+install\b[^\n;&|]*\bpre-commit\b/.test(block.text) ||
+      /(?:^|[\s;&|])choco\s+install\b[^\n;&|]*\bpre-commit\b/.test(block.text) ||
+      /(?:^|[\s;&|])scoop\s+install\b[^\n;&|]*\bpre-commit\b/.test(block.text) ||
+      /(?:^|[\s;&|])(?:apt-get|apt|dnf|yum)\s+install\b[^\n;&|]*\bpre-commit\b/.test(block.text) ||
+      /(?:^|[\s;&|])pacman\s+(?:-[A-Za-z]*S[A-Za-z]*|--sync)\b[^\n;&|]*\bpre-commit\b/.test(
+        block.text
+      );
+    if (directHostPreCommitInstall) {
+      violations.push(
+        new Violation(
+          relativePath,
+          block.startLine,
+          "install pre-commit",
+          "Do not install pre-commit directly in CI. Use `node scripts/ensure-pre-commit.js` so the pinned version and auto-repair path are shared across Linux, macOS, and Windows.",
+          "error"
+        )
+      );
+      continue;
+    }
+
+    const directPreCommitRun =
+      /(?:^|[\s;&|])pre-commit\s+(?:install(?:\s|$)|install-hooks|run)\b/.test(block.text) ||
+      /(?:^|[\s;&|])(?:python(?:\d+(?:\.\d+)?)?|py)\s+-m\s+pre_commit\s+(?:install(?:\s|$)|install-hooks|run)\b/.test(
+        block.text
+      );
+    if (directPreCommitRun) {
+      violations.push(
+        new Violation(
+          relativePath,
+          block.startLine,
+          "pre-commit run",
+          "Do not invoke pre-commit directly in CI. Use `node scripts/ensure-pre-commit.js run ...` or `node scripts/ensure-pre-commit.js install-hooks` so the pinned runner is used consistently.",
+          "error"
+        )
+      );
+      continue;
+    }
+
     const invokesPreCommitInstall =
       /\bpre-commit\s+install\b/.test(block.text) ||
       /\b(?:python(?:\d+(?:\.\d+)?)?|py)\s+-m\s+pre_commit\s+install\b/.test(block.text);
@@ -644,7 +694,7 @@ function findPreCommitInstallHookWriterViolations(relativePath, lines) {
         relativePath,
         block.startLine,
         "pre-commit install --install-hooks",
-        "Do not run `pre-commit install --install-hooks` in CI. This repo owns native hooks through core.hooksPath=scripts/hooks, and pre-commit refuses to install hook scripts when core.hooksPath is set. Use `pre-commit install-hooks` to create hook environments only.",
+        "Do not run `pre-commit install --install-hooks` in CI. This repo owns native hooks through core.hooksPath=scripts/hooks, and pre-commit refuses to install hook scripts when core.hooksPath is set. Use `node scripts/ensure-pre-commit.js install-hooks` to create hook environments with the pinned runner.",
         "error"
       )
     );

@@ -2,14 +2,13 @@
 
 Thanks for helping improve DxMessaging!
 
-Before committing, please enable our git hooks and local linters so you catch issues early.
+Before committing, install the versioned hook bootstrap and local linters so you catch issues early.
 Run these steps in order:
 
 1. Install Node dependencies: `npm install`
-1. Install pre-commit: `pip install pre-commit` or `pipx install pre-commit`
-1. Install hooks: `pre-commit install`
+1. Install versioned native hooks and repair tooling: `npm run repair:hooks`
 1. Run Node tooling preflight: `npm run preflight:pre-commit` (includes YAML formatting + yamllint checks)
-1. Run on all files: `pre-commit run --all-files`
+1. Run on all files: `node scripts/ensure-pre-commit.js run --all-files`
 
 `jest` does not need to be installed globally. Hooks and scripts route through `scripts/run-managed-jest.js` so they can use local devDependencies first, then a managed fallback when needed.
 
@@ -57,13 +56,13 @@ On pull requests, CI also checks all markdown links (including external URLs) wi
 Handy commands:
 
 - Internal links (local): `python .github/scripts/validate_markdown_links.py .`
-- Lint markdown (all files): `pre-commit run markdownlint --all-files`
+- Lint markdown (all files): `node scripts/ensure-pre-commit.js run markdownlint --all-files`
 - Lint markdown (manual): `npx markdownlint-cli2@0.20.0 "**/*.md" --fix`
-- Format JSON/.asmdef (all files): `pre-commit run prettier --all-files`
+- Format JSON/.asmdef (all files): `node scripts/ensure-pre-commit.js run prettier --all-files`
 - Format JSON/.asmdef (manual): `node scripts/run-managed-prettier.js --write "**/*.{json,asmdef}"`
-- Format YAML (all files): `pre-commit run prettier-yaml --all-files`
+- Format YAML (all files): `node scripts/ensure-pre-commit.js run prettier-yaml --all-files`
 - Check YAML formatting + lint: `npm run check:yaml`
-- Run yamllint hook directly: `pre-commit run yamllint --all-files`
+- Run yamllint hook directly: `node scripts/ensure-pre-commit.js run yamllint --all-files`
 
 Prettier keeps YAML formatting consistent but does not automatically wrap long YAML lines. `yamllint` is the authoritative check for the 200-character YAML line-length rule.
 

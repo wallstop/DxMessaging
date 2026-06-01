@@ -215,7 +215,16 @@ jobs:
       - name: Cache Unity Library and package caches
         uses: actions/cache@v4
         env:
-          PACKAGE_HASH: ${{ hashFiles('package.json', 'Runtime/**', 'Editor/**', 'Tests/**', 'scripts/unity/run-ci-tests.ps1') }}
+          PACKAGE_HASH: >-
+            ${{ hashFiles(
+              'package.json',
+              'Runtime/**',
+              'Editor/**',
+              'Tests/**',
+              'scripts/unity/run-ci-tests.ps1',
+              'scripts/unity/lib/asmdef-discovery.js',
+              '.github/actions/compute-unity-assemblies/action.yml'
+            ) }}
         with:
           path: |
             .artifacts/unity/projects/${{ matrix.unity-version }}-${{ matrix.test-mode }}/Library
@@ -235,6 +244,7 @@ jobs:
         id: compute
         uses: ./.github/actions/compute-unity-assemblies
         with:
+          target: "${{ matrix.test-mode }}"
           runtime-only: "${{ matrix.test-mode == 'standalone' && 'true' || 'false' }}"
 
       - name: Validate Unity license secrets
@@ -267,6 +277,7 @@ jobs:
           $editor = ./scripts/unity/ensure-editor.ps1 `
             -UnityVersion '${{ matrix.unity-version }}' `
             -CiManagedOnly `
+            -RequireHealthyExisting `
             -ProvisioningProfile $provisioningProfile `
             -DiagnosticsPath $diagnosticsFile
           "UNITY_EDITOR_PATH=$editor" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -299,6 +310,7 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_ACCELERATOR_ENDPOINT: ${{ secrets.UNITY_ACCELERATOR_ENDPOINT }}
+          DXM_UNITY_TEST_CATEGORY: "!Stress;!Performance;!Allocation;!MemoryReclaim;!UnityRuntime;!PerfBench;!PerfGate;!PerfBaseline"
         run: |
           ./scripts/unity/run-ci-tests.ps1 `
             -UnityVersion '${{ matrix.unity-version }}' `

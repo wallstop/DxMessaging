@@ -392,6 +392,20 @@ describe("run block lockfile policy", () => {
       expectedViolations: 0
     },
     {
+      name: "allows PowerShell Test-Path npm ci with fallback install",
+      lines: [
+        "steps:",
+        "  - shell: pwsh",
+        "    run: |",
+        "      if (Test-Path package-lock.json) {",
+        "        npm ci",
+        "      } else {",
+        "        npm i --no-audit --no-fund",
+        "      }"
+      ],
+      expectedViolations: 0
+    },
+    {
       name: "allows npm ci with shell-or fallback",
       lines: ["steps:", "  - run: npm ci || npm i --no-audit --no-fund"],
       expectedViolations: 0
@@ -443,6 +457,11 @@ describe("pre-commit hook environment policy", () => {
       expectedViolations: 1
     },
     {
+      name: "flags direct pre-commit install without install-hooks",
+      lines: ["steps:", "  - run: pre-commit install"],
+      expectedViolations: 1
+    },
+    {
       name: "flags multiline pre-commit install --install-hooks",
       lines: [
         "steps:",
@@ -453,8 +472,63 @@ describe("pre-commit hook environment policy", () => {
       expectedViolations: 1
     },
     {
+      name: "flags direct unpinned pre-commit pip install",
+      lines: ["steps:", "  - run: python -m pip install pre-commit"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pinned pre-commit pip install",
+      lines: ["steps:", "  - run: pip install pre-commit==4.6.0"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit pipx install",
+      lines: ["steps:", "  - run: pipx install pre-commit"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit uv tool install",
+      lines: ["steps:", "  - run: uv tool install pre-commit"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit brew install",
+      lines: ["steps:", "  - run: brew install pre-commit"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit choco install",
+      lines: ["steps:", "  - run: choco install pre-commit -y"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit apt install",
+      lines: ["steps:", "  - run: sudo apt-get install -y pre-commit"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit pacman install",
+      lines: ["steps:", "  - run: sudo pacman -S --noconfirm pre-commit"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit install-hooks",
+      lines: ["steps:", "  - run: pre-commit install-hooks"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags direct pre-commit hook execution",
+      lines: ["steps:", "  - run: pre-commit run --hook-stage pre-push --all-files"],
+      expectedViolations: 1
+    },
+    {
       name: "flags python module pre-commit install --install-hooks",
       lines: ["steps:", "  - run: python -m pre_commit install --install-hooks"],
+      expectedViolations: 1
+    },
+    {
+      name: "flags python module pre-commit install without install-hooks",
+      lines: ["steps:", "  - run: python -m pre_commit install"],
       expectedViolations: 1
     },
     {
@@ -463,13 +537,16 @@ describe("pre-commit hook environment policy", () => {
       expectedViolations: 1
     },
     {
-      name: "allows pre-commit install-hooks",
-      lines: ["steps:", "  - run: pre-commit install-hooks"],
+      name: "allows pinned pre-commit install-hooks wrapper",
+      lines: ["steps:", "  - run: node scripts/ensure-pre-commit.js install-hooks"],
       expectedViolations: 0
     },
     {
-      name: "allows pre-commit hook execution",
-      lines: ["steps:", "  - run: pre-commit run --hook-stage pre-push --all-files"],
+      name: "allows pinned pre-commit hook execution wrapper",
+      lines: [
+        "steps:",
+        "  - run: node scripts/ensure-pre-commit.js run --hook-stage pre-push --all-files"
+      ],
       expectedViolations: 0
     }
   ])("$name", ({ lines, expectedViolations }) => {
@@ -1795,9 +1872,11 @@ describe("validateWorkflow policy integration", () => {
     const workflowContent = fs.readFileSync(workflowPath, "utf8");
 
     expect(workflowContent).toContain(
-      "pre-commit run --hook-stage pre-push script-parser-tests --all-files"
+      "node scripts/ensure-pre-commit.js run --hook-stage pre-push script-parser-tests --all-files"
     );
-    expect(workflowContent).not.toContain("pre-commit run script-parser-tests --all-files");
+    expect(workflowContent).not.toContain(
+      "node scripts/ensure-pre-commit.js run script-parser-tests --all-files"
+    );
   });
 
   test("hook performance workflow provisions dotnet tools before measuring C# hooks", () => {

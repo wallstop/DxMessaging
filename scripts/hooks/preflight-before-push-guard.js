@@ -4,14 +4,16 @@
 /**
  * preflight-before-push-guard.js
  *
- * Claude Code PreToolUse hook. When an agent is about to run a `git push`
- * Bash command, this guard first runs a dedicated changed-file cspell check,
- * then runs the change-aware preflight (the FULL change-set: committed range +
- * working tree, i.e. `--scope=full`) and, per the repo owner's decision, BLOCKS
- * the push when checks fail. The direct cspell pass is intentionally before the
- * broader preflight so already-committed / generated / shell-written spelling
- * failures cannot slip to native pre-push just because the broader guard
- * preflight timed out on a large branch.
+ * Claude Code PreToolUse hook. When an agent is about to run a `git commit` or
+ * `git push` Bash command, this guard first runs a dedicated changed-file
+ * cspell check, then runs the change-aware preflight (the FULL change-set:
+ * committed range + working tree, i.e. `--scope=full`) and, per the repo
+ * owner's decision, BLOCKS the git operation when checks fail. Commit commands
+ * are limited to the pre-commit stage for speed; push commands keep the default
+ * agent stages. The direct cspell pass is intentionally before the broader
+ * preflight so already-committed / generated / shell-written spelling failures
+ * cannot slip to native pre-push just because the broader guard preflight timed
+ * out on a large branch.
  *
  * It reuses ONLY the I/O harness of yaml-line-length-guard.js (stdin JSON read,
  * `$CLAUDE_PROJECT_DIR` root resolution, pure Node, no deps). It is NOT a
@@ -23,22 +25,24 @@
  *   2. `tool_name !== "Bash"` -> exit 0 silently (the common non-Bash case).
  *   3. Re-entrancy: if `DXMSG_PREFLIGHT_ACTIVE === "1"` -> exit 0 silently. A
  *      `git` call made INSIDE preflight/recovery must not be re-guarded.
- *   4. Conservative push detection via {@link commandLooksLikeGitPush} (a
- *      documented HEURISTIC, NOT a tokenizer): if it does not look like a push,
- *      exit 0 silently (~0 latency). Over-triggering is safe -- preflight is
- *      read-only and idempotent.
- *   5. On a probable push: compute the full change-set and run
+ *   4. Conservative git-boundary detection via
+ *      {@link resolveGuardOperation} (documented HEURISTICS, NOT tokenizers):
+ *      if it does not look like a commit/push, exit 0 silently (~0 latency).
+ *      Over-triggering is safe -- preflight is read-only and idempotent.
+ *   5. On a probable commit/push: compute the full change-set and run
  *        node scripts/run-managed-cspell.js --file-list <existing files>
  *      plus `stdin://<repo-path>` checks for committed HEAD content that the
  *      live worktree cannot faithfully represent. Any non-zero cspell exit
- *      DENIES the push; the managed cspell wrapper has already attempted
+ *      DENIES the git operation; the managed cspell wrapper has already attempted
  *      node_modules auto-repair.
  *   6. Then spawn
  *        node scripts/preflight.js --json --profile=guard --scope=full --no-recover
  *      with `DXMSG_PREFLIGHT_ACTIVE=1` in the child env. `--profile=guard` runs
  *      the fast subset (the heavy Jest suites are deferred to the native hook);
  *      `--scope=full` uses the committed range + working tree; `--no-recover`
- *      avoids paying integrity recovery twice in a session.
+ *      avoids paying integrity recovery twice in a session. Commit commands add
+ *      `--stage=pre-commit` so they catch native pre-commit failures without
+ *      paying pre-push-only validators.
  *   7. {@link buildDecision} maps the preflight `status` to a PreToolUse
  *      decision:
  *        - `ok`               -> permissionDecision "allow" (native hook is the
@@ -52,7 +56,7 @@
  *   8. Emit the documented PreToolUse `hookSpecificOutput` JSON on stdout and
  *      exit 0. The guard NEVER relies on its exit code to block (that is
  *      PostToolUse semantics); if a CLI version ignores `deny`, the native
- *      pre-push hook still gates the push.
+ *      git hook still gates the operation.
  *
  * All child-process spawns route through `spawnPlatformCommandSync`
  * (scripts/lib/shell-command.js); no raw spawn, no shell.
@@ -63,6 +67,7 @@ const os = require("os");
 const path = require("path");
 const { spawnPlatformCommandSync } = require("../lib/shell-command");
 const { computeChangeSet } = require("../lib/changed-files");
+const { writeHookValidationStamp } = require("../lib/hook-validation-stamp");
 const { CSPELL_EXTENSION_PATTERN } = require("./post-edit-validate-guard");
 
 const HOOK_EVENT_NAME = "PreToolUse";
@@ -97,13 +102,13 @@ const PUSH_CSPELL_TIMEOUT_MS = (() => {
  * last-resort backstop, not the first signal.
  */
 const REMEDIATION =
-  "Run `npm run preflight` to reproduce and auto-fix, then retry the push. " +
+  "Run `npm run preflight` to reproduce and auto-fix, then retry the git operation. " +
   "Git hooks are the last-resort backstop, not the first signal.";
 
 const CSPELL_REMEDIATION =
   "Fix the spelling issue or add legitimate project vocabulary to .cspell.json, " +
-  "then retry the push. This changed-file cspell guard runs before the slower " +
-  "full preflight so the native pre-push hook stays a last-resort backstop.";
+  "then retry the git operation. This changed-file cspell guard runs before the slower " +
+  "full preflight so native git hooks stay a last-resort backstop.";
 
 /**
  * Read stdin to completion as a UTF-8 string.
@@ -148,18 +153,177 @@ function shouldSkip(env = process.env) {
 }
 
 /**
+ * Split a Bash command into enough shell-like tokens to identify `git`
+ * subcommands without looking inside quoted commit messages. This is a
+ * deliberately small scanner, not a shell parser: separators and quotes are
+ * recognized, expansion is not.
+ *
+ * @param {string} command The Bash command string from `tool_input.command`.
+ * @returns {Array<{kind: "word"|"separator", text: string}>} Parsed tokens.
+ */
+function tokenizeCommandForGitHeuristic(command) {
+  if (typeof command !== "string" || command.length === 0) {
+    return [];
+  }
+
+  const tokens = [];
+  let current = "";
+  let quote = "";
+  let escaped = false;
+
+  function pushWord() {
+    if (current.length > 0) {
+      tokens.push({ kind: "word", text: current });
+      current = "";
+    }
+  }
+
+  for (let i = 0; i < command.length; i += 1) {
+    const char = command[i];
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = "";
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      pushWord();
+      continue;
+    }
+    if (
+      char === ";" ||
+      char === "|" ||
+      char === "&" ||
+      char === "\n" ||
+      char === "(" ||
+      char === ")"
+    ) {
+      pushWord();
+      if ((char === "|" || char === "&") && command[i + 1] === char) {
+        i += 1;
+      }
+      tokens.push({ kind: "separator", text: char });
+      continue;
+    }
+    current += char;
+  }
+
+  pushWord();
+  return tokens;
+}
+
+function gitGlobalOptionArity(token) {
+  if (token === "-C" || token === "-c") {
+    return 1;
+  }
+  if (
+    token === "--git-dir" ||
+    token === "--work-tree" ||
+    token === "--namespace" ||
+    token === "--exec-path" ||
+    token === "--config-env"
+  ) {
+    return 1;
+  }
+  if (
+    token.startsWith("-C") ||
+    token.startsWith("-c") ||
+    token.startsWith("--git-dir=") ||
+    token.startsWith("--work-tree=") ||
+    token.startsWith("--namespace=") ||
+    token.startsWith("--exec-path=") ||
+    token.startsWith("--config-env=")
+  ) {
+    return 0;
+  }
+  return token.startsWith("-") ? 0 : null;
+}
+
+function isEnvAssignmentToken(token) {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(String(token || ""));
+}
+
+const GIT_COMMAND_PREFIXES = new Set([
+  "builtin",
+  "command",
+  "env",
+  "nice",
+  "nohup",
+  "sudo",
+  "time"
+]);
+
+function gitSubcommandsInCommand(command) {
+  const tokens = tokenizeCommandForGitHeuristic(command);
+  const subcommands = [];
+  let segmentStart = 0;
+
+  function inspectSegment(segmentEnd) {
+    let i = segmentStart;
+    while (
+      i < segmentEnd &&
+      tokens[i].kind === "word" &&
+      GIT_COMMAND_PREFIXES.has(tokens[i].text)
+    ) {
+      i += 1;
+    }
+    while (i < segmentEnd && tokens[i].kind === "word" && isEnvAssignmentToken(tokens[i].text)) {
+      i += 1;
+    }
+    while (
+      i < segmentEnd &&
+      tokens[i].kind === "word" &&
+      GIT_COMMAND_PREFIXES.has(tokens[i].text)
+    ) {
+      i += 1;
+    }
+    if (i >= segmentEnd || tokens[i].kind !== "word" || tokens[i].text !== "git") {
+      return;
+    }
+
+    let j = i + 1;
+    while (j < segmentEnd && tokens[j].kind === "word") {
+      const arity = gitGlobalOptionArity(tokens[j].text);
+      if (arity === null) {
+        subcommands.push(tokens[j].text);
+        break;
+      }
+      j += 1 + arity;
+    }
+  }
+
+  for (let i = 0; i <= tokens.length; i += 1) {
+    if (i === tokens.length || tokens[i].kind === "separator") {
+      inspectSegment(i);
+      segmentStart = i + 1;
+    }
+  }
+  return subcommands;
+}
+
+/**
  * Conservative HEURISTIC for "this Bash command probably runs `git push`".
  *
- * This is deliberately NOT a shell tokenizer (there is no shell parser in this
- * repo, and building one is out of scope). It scans the command string for a
- * `git` word token followed -- anywhere later in the string -- by a `push` word
- * token, using word-boundary matching so substrings like `pushd` or `gitlab`
- * do not trip it. It intentionally OVER-triggers on ambiguous input (e.g.
- * `git push` mentioned after a `&&`, with a leading `cd`, or with env-var
- * prefixes); that is safe because preflight is read-only and idempotent, and a
- * spurious extra preflight run is far cheaper than a missed one. The native
- * pre-push hook remains the real, tool-agnostic gate -- this guard only
- * accelerates the signal.
+ * This is deliberately NOT a full shell tokenizer. It identifies `git` command
+ * words and the following Git subcommand while ignoring words inside quoted
+ * commit messages. It intentionally accepts common wrappers such as `cd x &&
+ * git push` or `FOO=1 git push`. The native pre-push hook remains the real,
+ * tool-agnostic gate -- this guard only accelerates the signal.
  *
  * Matches: `git push`, `git -C dir push`, `cd x && git push origin HEAD`,
  *   `FOO=1 git push`, `git push --force-with-lease`.
@@ -170,19 +334,37 @@ function shouldSkip(env = process.env) {
  * @returns {boolean} True when the command looks like a `git push`.
  */
 function commandLooksLikeGitPush(command) {
-  if (typeof command !== "string" || command.length === 0) {
-    return false;
+  return gitSubcommandsInCommand(command).includes("push");
+}
+
+/**
+ * Conservative HEURISTIC for "this Bash command probably runs `git commit`".
+ * It mirrors {@link commandLooksLikeGitPush}: find a real `git` command and
+ * inspect its Git subcommand. Over-triggering is acceptable because the guard
+ * is read-only; missing a commit lets native pre-commit become the first signal.
+ *
+ * @param {string} command The Bash command string from `tool_input.command`.
+ * @returns {boolean} True when the command looks like a `git commit`.
+ */
+function commandLooksLikeGitCommit(command) {
+  return gitSubcommandsInCommand(command).includes("commit");
+}
+
+/**
+ * Resolve the guarded git operation, if any. Push wins when both tokens appear
+ * because a push is the wider boundary; otherwise commit is checked.
+ *
+ * @param {string} command The Bash command string from `tool_input.command`.
+ * @returns {"push"|"commit"|null} Guarded operation or null.
+ */
+function resolveGuardOperation(command) {
+  if (commandLooksLikeGitPush(command)) {
+    return "push";
   }
-  // A standalone `git` token (not part of a longer word such as `gitlab`).
-  const hasGit = /(?:^|[^\w-])git(?![\w-])/.test(command);
-  if (!hasGit) {
-    return false;
+  if (commandLooksLikeGitCommit(command)) {
+    return "commit";
   }
-  // A standalone `push` token (not `pushd`, not `push:docs` as a single npm
-  // script token -- the trailing `:` is not a word char so `push:` would match;
-  // but that path also needs a `git` token, which `npm run push:docs` lacks).
-  const hasPush = /(?:^|[^\w-])push(?![\w-])/.test(command);
-  return hasPush;
+  return null;
 }
 
 /**
@@ -544,7 +726,7 @@ function runChangedCspellGuard(repoRoot, deps = {}) {
  * @param {{files:string[], detail:string}} result cspell guard result.
  * @returns {{hookSpecificOutput: object}} PreToolUse hook output.
  */
-function buildCspellDecision(result) {
+function buildCspellDecision(result, operation = "push") {
   const files = result && Array.isArray(result.files) ? result.files : [];
   const fileText = files.length > 0 ? ` changed spelling file(s): ${files.join(", ")}.` : "";
   const detail = result && result.detail ? ` ${result.detail}` : "";
@@ -552,7 +734,7 @@ function buildCspellDecision(result) {
     hookSpecificOutput: {
       hookEventName: HOOK_EVENT_NAME,
       permissionDecision: "deny",
-      permissionDecisionReason: `Preflight blocked this push: changed-file cspell failed.${fileText}${detail} ${CSPELL_REMEDIATION}`
+      permissionDecisionReason: `Preflight blocked this ${operation}: changed-file cspell failed.${fileText}${detail} ${CSPELL_REMEDIATION}`
     }
   };
 }
@@ -573,7 +755,7 @@ function buildCspellDecision(result) {
  *   warnings?: string[]}} status Preflight status object.
  * @returns {{hookSpecificOutput: object}} PreToolUse hook output.
  */
-function buildDecision(status) {
+function buildDecision(status, operation = "push") {
   const safe = status && typeof status === "object" ? status : { kind: "ok" };
   const failures = Array.isArray(safe.failures) ? safe.failures : [];
   const policyFailures = Array.isArray(safe.policyFailures) ? safe.policyFailures : [];
@@ -584,7 +766,7 @@ function buildDecision(status) {
 
   if (blocks) {
     const named = allFailing.length > 0 ? allFailing.join(", ") : "(see preflight output above)";
-    const reason = `Preflight blocked this push: failing hook(s): ${named}. ${REMEDIATION}`;
+    const reason = `Preflight blocked this ${operation}: failing hook(s): ${named}. ${REMEDIATION}`;
     return {
       hookSpecificOutput: {
         hookEventName: HOOK_EVENT_NAME,
@@ -596,9 +778,10 @@ function buildDecision(status) {
 
   if (safe.kind === "infra-unavailable") {
     const warningText = warnings.length > 0 ? ` (${warnings.join("; ")})` : "";
+    const nativeHook = operation === "commit" ? "pre-commit" : "pre-push";
     const reason =
       "Preflight could not run all checks because of an infrastructure issue " +
-      `(not a code failure)${warningText}; allowing the push. The native pre-push ` +
+      `(not a code failure)${warningText}; allowing the ${operation}. The native ${nativeHook} ` +
       "hook and CI remain the backstop.";
     return {
       hookSpecificOutput: {
@@ -627,21 +810,27 @@ function buildDecision(status) {
  * @returns {object|null} The parsed preflight report, or null.
  */
 function runGuardPreflight(repoRoot, deps = {}) {
-  const { spawnFn = spawnPlatformCommandSync, env = process.env } = deps;
+  const { spawnFn = spawnPlatformCommandSync, env = process.env, operation = "push" } = deps;
+  const args = [
+    "scripts/preflight.js",
+    "--json",
+    "--profile=guard",
+    "--scope=full",
+    "--no-recover"
+  ];
+  if (operation === "commit") {
+    args.push("--stage=pre-commit");
+  }
 
-  const result = spawnFn(
-    process.execPath,
-    ["scripts/preflight.js", "--json", "--profile=guard", "--scope=full", "--no-recover"],
-    {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...env, DXMSG_PREFLIGHT_ACTIVE: "1" },
-      timeout: PREFLIGHT_TIMEOUT_MS,
-      killSignal: "SIGTERM",
-      maxBuffer: 16 * 1024 * 1024
-    }
-  );
+  const result = spawnFn(process.execPath, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...env, DXMSG_PREFLIGHT_ACTIVE: "1" },
+    timeout: PREFLIGHT_TIMEOUT_MS,
+    killSignal: "SIGTERM",
+    maxBuffer: 16 * 1024 * 1024
+  });
 
   // Prefer the report whenever preflight emitted parseable JSON (the
   // authoritative signal), even if spawnSync also flagged a non-fatal condition
@@ -695,17 +884,18 @@ function run(stdinPayload, deps = {}) {
 
   const toolInput =
     event.tool_input && typeof event.tool_input === "object" ? event.tool_input : {};
-  if (!commandLooksLikeGitPush(toolInput.command)) {
+  const operation = resolveGuardOperation(toolInput.command);
+  if (operation === null) {
     return 0;
   }
 
   const cspellResult = runChangedCspellGuard(repoRoot, deps);
   if (cspellResult.kind === "checks-failed") {
-    process.stdout.write(`${JSON.stringify(buildCspellDecision(cspellResult))}\n`);
+    process.stdout.write(`${JSON.stringify(buildCspellDecision(cspellResult, operation))}\n`);
     return 0;
   }
 
-  const report = runGuardPreflight(repoRoot, deps);
+  const report = runGuardPreflight(repoRoot, { ...deps, operation });
 
   // Fail open when preflight itself could not be spawned/parsed: emit an allow
   // (the native pre-push hook is the guarantee). This is an infra condition, not
@@ -715,7 +905,17 @@ function run(stdinPayload, deps = {}) {
       ? report.status
       : { kind: "infra-unavailable", failures: [], policyFailures: [], warnings: [] };
 
-  const decision = buildDecision(status);
+  const decision = buildDecision(status, operation);
+  const writeStampFn = deps.writeHookValidationStampFn || writeHookValidationStamp;
+  if (operation === "commit" && status.kind === "ok") {
+    try {
+      writeStampFn(repoRoot, "pre-commit");
+    } catch (_error) {
+      // Best-effort speed path only. A failed stamp write must not change the
+      // guard decision; the native hook will run normally.
+    }
+  }
+
   process.stdout.write(`${JSON.stringify(decision)}\n`);
   return 0;
 }
@@ -727,6 +927,8 @@ module.exports = {
   resolveRepoRoot,
   shouldSkip,
   commandLooksLikeGitPush,
+  commandLooksLikeGitCommit,
+  resolveGuardOperation,
   filterCspellFiles,
   collectTrackedFiles,
   needsTrackedFallback,
