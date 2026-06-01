@@ -33,6 +33,50 @@ function isShellShimCommand(command) {
   return command === "npm" || command === "npx";
 }
 
+function matchingEnvKeys(env, key) {
+  const target = String(key).toLowerCase();
+  return Object.keys(env).filter((existing) => existing.toLowerCase() === target);
+}
+
+function hasNonEmptyEnvValue(env, key) {
+  return matchingEnvKeys(env, key).some((existing) => String(env[existing]).length > 0);
+}
+
+function deleteEnvKey(env, key) {
+  for (const existing of matchingEnvKeys(env, key)) {
+    delete env[existing];
+  }
+}
+
+/**
+ * Remove Node's noisy NO_COLOR/FORCE_COLOR conflict while preserving the
+ * caller's explicit FORCE_COLOR behavior. Node writes a process-warning to
+ * stderr when both variables are non-empty, which breaks JSON/stdout-only
+ * subprocess contracts in hooks and tests.
+ *
+ * @param {object} baseEnv Environment object to copy.
+ * @returns {object} Sanitized environment copy.
+ */
+function normalizeNodeColorEnv(baseEnv = process.env) {
+  const env = { ...baseEnv };
+  const hasNoColor = hasNonEmptyEnvValue(env, "NO_COLOR");
+  const hasForceColor = hasNonEmptyEnvValue(env, "FORCE_COLOR");
+
+  if (hasNoColor && hasForceColor) {
+    deleteEnvKey(env, "NO_COLOR");
+  }
+
+  return env;
+}
+
+function mergeSanitizedEnv(baseEnv = process.env, overrides = {}, { removeKeys = [] } = {}) {
+  const env = normalizeNodeColorEnv(baseEnv);
+  for (const key of removeKeys) {
+    deleteEnvKey(env, key);
+  }
+  return normalizeNodeColorEnv({ ...env, ...overrides });
+}
+
 /**
  * Resolve a platform-aware command token for spawn-style execution.
  *
@@ -214,6 +258,8 @@ function spawnPlatformCommand(
 module.exports = {
   toShellCommand,
   isShellShimCommand,
+  normalizeNodeColorEnv,
+  mergeSanitizedEnv,
   resolveSpawnCommand,
   resolveSpawnOptions,
   buildSpawnInvocation,

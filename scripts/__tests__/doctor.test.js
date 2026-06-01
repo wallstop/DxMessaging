@@ -577,8 +577,7 @@ describe("checkPreCommitConfig", () => {
   test("counts total hooks and pre-push subset, verifies preflight coverage script", () => {
     const packageJson = JSON.stringify({
       scripts: {
-        "preflight:pre-push":
-          "npm run preflight:pre-commit && pre-commit run --hook-stage pre-push --all-files"
+        "preflight:pre-push": "node scripts/run-prepush-preflight.js"
       }
     });
 

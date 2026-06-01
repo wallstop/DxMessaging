@@ -36,6 +36,7 @@ const {
   resolveWorkflowLineLengthMax,
   findWorkflowLineLengthViolations,
   validatePreCommitConfigLineLengths,
+  findCrossPlatformPreflightTargetedGateViolations,
   validateWorkflow
 } = require("../validate-workflows.js");
 
@@ -1135,6 +1136,71 @@ describe("resolveWorkflowLineLengthMax", () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("findCrossPlatformPreflightTargetedGateViolations", () => {
+  const workflowPath = ".github/workflows/cross-platform-preflight.yml";
+
+  test("accepts the PowerShell array+splat targeted test list", () => {
+    const lines = [
+      "jobs:",
+      "  preflight:",
+      "    steps:",
+      "      - name: Run cross-platform spawn + host-env hermeticity regression suite",
+      "        shell: pwsh",
+      "        run: |",
+      "          $tests = @(",
+      '            "scripts/__tests__/path-classifier.test.js"',
+      '            "scripts/lib/__tests__/spawn-env-sandbox.test.js"',
+      "          )",
+      "          node scripts/run-managed-jest.js --runTestsByPath @tests"
+    ];
+
+    expect(findCrossPlatformPreflightTargetedGateViolations(workflowPath, lines)).toEqual([]);
+  });
+
+  test("flags an unresolved PowerShell splat before native pre-push", () => {
+    const lines = [
+      "jobs:",
+      "  preflight:",
+      "    steps:",
+      "      - name: Run cross-platform spawn + host-env hermeticity regression suite",
+      "        shell: pwsh",
+      "        run: |",
+      "          node scripts/run-managed-jest.js --runTestsByPath @tests"
+    ];
+
+    const violations = findCrossPlatformPreflightTargetedGateViolations(workflowPath, lines);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("not parseable");
+    expect(violations[0].message).toContain("Unresolved PowerShell array splat");
+  });
+
+  test("flags a PowerShell splat declared after the targeted command", () => {
+    const lines = [
+      "jobs:",
+      "  preflight:",
+      "    steps:",
+      "      - name: Run cross-platform spawn + host-env hermeticity regression suite",
+      "        shell: pwsh",
+      "        run: |",
+      "          node scripts/run-managed-jest.js --runTestsByPath @tests",
+      "          $tests = @(",
+      '            "scripts/__tests__/path-classifier.test.js"',
+      "          )"
+    ];
+
+    const violations = findCrossPlatformPreflightTargetedGateViolations(workflowPath, lines);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].message).toContain("Unresolved PowerShell array splat");
+  });
+
+  test("does not inspect unrelated workflows", () => {
+    const lines = ["jobs:", "  test:", "    steps:", "      - run: echo ok"];
+    expect(findCrossPlatformPreflightTargetedGateViolations("workflow.yml", lines)).toEqual([]);
   });
 });
 

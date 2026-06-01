@@ -60,7 +60,7 @@
 
 const os = require("os");
 const path = require("path");
-const { spawnPlatformCommand } = require("./lib/shell-command");
+const { mergeSanitizedEnv, spawnPlatformCommand } = require("./lib/shell-command");
 const { hookIdsForStage } = require("./lib/precommit-stage-model");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -200,7 +200,12 @@ function buildLanes(deps = {}) {
 
   // 3. Read-only preflight-only extras (npm scripts that are not pre-push hooks).
   for (const extra of PREFLIGHT_ONLY_EXTRAS.filter((entry) => entry.mutating !== true)) {
-    lanes.push({ id: `extra:${extra.id}`, command: "npm", args: ["run", extra.npm], mutating: false });
+    lanes.push({
+      id: `extra:${extra.id}`,
+      command: "npm",
+      args: ["run", extra.npm],
+      mutating: false
+    });
   }
 
   // 4. The mutating pre-push hooks in ONE invocation, via SKIP of everything else.
@@ -218,7 +223,12 @@ function buildLanes(deps = {}) {
 
   // 5. Mutating preflight-only extras (serial phase).
   for (const extra of PREFLIGHT_ONLY_EXTRAS.filter((entry) => entry.mutating === true)) {
-    lanes.push({ id: `extra:${extra.id}`, command: "npm", args: ["run", extra.npm], mutating: true });
+    lanes.push({
+      id: `extra:${extra.id}`,
+      command: "npm",
+      args: ["run", extra.npm],
+      mutating: true
+    });
   }
 
   return lanes;
@@ -249,7 +259,7 @@ async function runPool(lanes, limit, spawnImpl, writeLine) {
       const outcome = await spawnImpl(lane.command, lane.args, {
         cwd: REPO_ROOT,
         encoding: "utf8",
-        env: { ...process.env, ...(lane.env || {}) },
+        env: mergeSanitizedEnv(process.env, lane.env || {}, { removeKeys: ["SKIP"] }),
         stdio: ["ignore", "pipe", "pipe"]
       });
 
@@ -302,7 +312,8 @@ function defaultConcurrency() {
 async function main(deps = {}) {
   const spawnImpl = deps.spawnImpl || spawnPlatformCommand;
   const writeLine = deps.writeLine || ((line) => process.stdout.write(`${line}\n`));
-  const concurrency = typeof deps.concurrency === "number" ? deps.concurrency : defaultConcurrency();
+  const concurrency =
+    typeof deps.concurrency === "number" ? deps.concurrency : defaultConcurrency();
   const lanes = buildLanes(deps);
 
   const mutating = lanes.filter((lane) => lane.mutating);

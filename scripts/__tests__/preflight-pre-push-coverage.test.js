@@ -27,6 +27,10 @@ const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("../lib/quote-parser");
 const { findAllHookBlocks, extractStagesFromHookBlock } = require("../lib/precommit-yaml");
+const {
+  STEPS: PREPUSH_PREFLIGHT_STEPS,
+  main: runPrePushPreflight
+} = require("../run-prepush-preflight");
 
 /**
  * Allow-list of pre-push hook ids that are intentionally NOT invoked by
@@ -52,6 +56,15 @@ function escapeRegex(value) {
 
 function scriptHasBulkPrePushInvocation(script) {
   return BULK_PRE_PUSH_TOKENS.every((rx) => rx.test(script));
+}
+
+function stepText(step) {
+  const command = step.command === process.execPath ? "node" : step.command;
+  return [command, ...step.args].join(" ");
+}
+
+function serialPrePushText() {
+  return PREPUSH_PREFLIGHT_STEPS.map(stepText).join(" && ");
 }
 
 function loadConfigLines() {
@@ -86,18 +99,16 @@ describe("preflight:pre-push static coverage", () => {
     const pkg = loadPackageJson();
     expect(pkg.scripts).toBeDefined();
     const value = pkg.scripts["preflight:pre-push"];
-    expect(typeof value).toBe("string");
-    expect(value.trim().length).toBeGreaterThan(0);
+    expect(value).toBe("node scripts/run-prepush-preflight.js");
   });
 
-  test("preflight:pre-push chain calls preflight:pre-commit first", () => {
+  test("preflight:pre-push runner calls preflight:pre-commit first", () => {
     // The fast preflight gate is intentionally first in the chain so a
     // cheap failure (e.g., yamllint, formatter, a sub-second validator)
     // surfaces before the multi-minute pre-push sweep begins. If a
     // future refactor reorders these, the agent loses its fast-feedback
     // signal and pre-push doctor reports become misleading.
-    const pkg = loadPackageJson();
-    const script = pkg.scripts["preflight:pre-push"];
+    const script = serialPrePushText();
     expect(script).toContain("npm run preflight:pre-commit");
 
     const preCommitIndex = script.indexOf("npm run preflight:pre-commit");
@@ -111,8 +122,7 @@ describe("preflight:pre-push static coverage", () => {
     // latency, but agentic workflows still need an explicit non-hook command
     // before the bulk hook sweep. This catches spelling vocabulary drift with
     // the managed cspell runner before pre-commit delegates to the hook.
-    const pkg = loadPackageJson();
-    const script = pkg.scripts["preflight:pre-push"];
+    const script = serialPrePushText();
     expect(script).toContain(ALL_FILES_CSPELL_COMMAND);
 
     const cspellIndex = script.indexOf(ALL_FILES_CSPELL_COMMAND);
@@ -122,13 +132,84 @@ describe("preflight:pre-push static coverage", () => {
     expect(prePushIndex).toBeGreaterThan(cspellIndex);
   });
 
+  test("preflight:pre-push writes the pre-push skip stamp only after hook parity", () => {
+    const calls = [];
+    const spawnFn = jest.fn((command, args) => {
+      calls.push(stepText({ command, args }));
+      return { status: 0 };
+    });
+    const writeHookValidationStampFn = jest.fn();
+
+    const status = runPrePushPreflight({ spawnFn, writeHookValidationStampFn });
+
+    expect(status).toBe(0);
+    expect(calls).toEqual(PREPUSH_PREFLIGHT_STEPS.map(stepText));
+    expect(writeHookValidationStampFn).toHaveBeenCalledWith(REPO_ROOT, "pre-push");
+  });
+
+  test("preflight:pre-push does not write a skip stamp when any validation step fails", () => {
+    const spawnFn = jest.fn((_command, args) => ({
+      status: args.includes("check:cspell:all") ? 1 : 0
+    }));
+    const writeHookValidationStampFn = jest.fn();
+
+    const status = runPrePushPreflight({ spawnFn, writeHookValidationStampFn });
+
+    expect(status).toBe(1);
+    expect(writeHookValidationStampFn).not.toHaveBeenCalled();
+    expect(spawnFn).toHaveBeenCalledTimes(2);
+  });
+
+  test("preflight:pre-push clears caller SKIP before authoritative validation steps", () => {
+    const originalSkip = process.env.SKIP;
+    const originalLowerSkip = process.env.skip;
+    const originalMixedSkip = process.env.SkIp;
+    process.env.SKIP = "script-tests,cspell";
+    process.env.skip = "validate-untracked-policy";
+    process.env.SkIp = "yamllint";
+    try {
+      const envs = [];
+      const spawnFn = jest.fn((_command, _args, options) => {
+        envs.push(options.env);
+        return { status: 0 };
+      });
+      const writeHookValidationStampFn = jest.fn();
+
+      const status = runPrePushPreflight({ spawnFn, writeHookValidationStampFn });
+
+      expect(status).toBe(0);
+      expect(envs).toHaveLength(PREPUSH_PREFLIGHT_STEPS.length);
+      for (const env of envs) {
+        expect(env.SKIP).toBeUndefined();
+        expect(env.skip).toBeUndefined();
+        expect(env.SkIp).toBeUndefined();
+      }
+      expect(writeHookValidationStampFn).toHaveBeenCalledWith(REPO_ROOT, "pre-push");
+    } finally {
+      if (originalSkip === undefined) {
+        delete process.env.SKIP;
+      } else {
+        process.env.SKIP = originalSkip;
+      }
+      if (originalLowerSkip === undefined) {
+        delete process.env.skip;
+      } else {
+        process.env.skip = originalLowerSkip;
+      }
+      if (originalMixedSkip === undefined) {
+        delete process.env.SkIp;
+      } else {
+        process.env.SkIp = originalMixedSkip;
+      }
+    }
+  });
+
   test("preflight:pre-push covers every pre-push hook in .pre-commit-config.yaml", () => {
     const configLines = loadConfigLines();
     const prePushIds = getPrePushHookIds(configLines);
     expect(prePushIds.length).toBeGreaterThan(0);
 
-    const pkg = loadPackageJson();
-    const script = pkg.scripts["preflight:pre-push"];
+    const script = serialPrePushText();
 
     // Bulk form: `pre-commit run --hook-stage pre-push --all-files`
     // (or the auto-repair wrapper `node scripts/ensure-pre-commit.js run ...`)

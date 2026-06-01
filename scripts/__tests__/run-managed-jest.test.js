@@ -35,6 +35,7 @@ const {
   FALLBACK_JEST_SPEC,
   ISOLATED_JEST_CACHE_ROOT,
   getPinnedFallbackJestSpec,
+  normalizeNodeColorEnv,
   getDefaultIsolatedJestRunnerPath,
   getIsolatedJestPaths,
   resolveIsolatedJestRunnerPath,
@@ -134,6 +135,29 @@ describe("run-managed-jest", () => {
       expect(result.NODE_PATH).toBe(expectedNodePath);
     }
   );
+
+  test("normalizeNodeColorEnv removes NO_COLOR when FORCE_COLOR is also set", () => {
+    expect(normalizeNodeColorEnv({ NO_COLOR: "1", FORCE_COLOR: "1" })).toEqual({
+      FORCE_COLOR: "1"
+    });
+    expect(normalizeNodeColorEnv({ NO_COLOR: "1" })).toEqual({ NO_COLOR: "1" });
+    expect(normalizeNodeColorEnv({ FORCE_COLOR: "1" })).toEqual({ FORCE_COLOR: "1" });
+  });
+
+  test("buildNodePathEnv sanitizes conflicting Node color variables", () => {
+    const isolatedNodeModulesPath = path.join("/tmp", "isolated", "node_modules");
+    const result = buildNodePathEnv(isolatedNodeModulesPath, {
+      NODE_PATH: path.join("/tmp", "existing", "node_modules"),
+      NO_COLOR: "1",
+      FORCE_COLOR: "1"
+    });
+
+    expect(result.NO_COLOR).toBeUndefined();
+    expect(result.FORCE_COLOR).toBe("1");
+    expect(result.NODE_PATH).toBe(
+      [isolatedNodeModulesPath, path.join("/tmp", "existing", "node_modules")].join(path.delimiter)
+    );
+  });
 
   test("getPinnedFallbackJestSpec uses lockfile version when available", () => {
     const readFileSyncFn = jest.fn(() =>

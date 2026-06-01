@@ -68,6 +68,11 @@ const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("../lib/quote-parser");
 const { extractCommentsOnly } = require("../lib/source-stripping");
+const {
+  TARGETED_STEP_NAME,
+  extractTargetedStepRunBlock,
+  extractListedTestPaths
+} = require("../lib/cross-platform-preflight-gate");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SCRIPTS_ROOT = path.join(REPO_ROOT, "scripts");
@@ -78,10 +83,6 @@ const WORKFLOW_PATH = path.join(REPO_ROOT, ".github", "workflows", "cross-platfo
 // in the file (conventionally the header). Detection is comment-SPAN based, so
 // any real comment context counts and string/code occurrences never do.
 const MARKER = "@cross-platform-regression";
-
-// The name of the targeted step whose `--runTestsByPath` block this guard
-// audits. Used to locate the right run block in the workflow.
-const TARGETED_STEP_NAME = "Run cross-platform spawn + host-env hermeticity regression suite";
 
 // The OSes the cross-OS gate must keep covering.
 const REQUIRED_MATRIX_OSES = ["ubuntu-latest", "windows-latest", "macos-latest"];
@@ -175,259 +176,6 @@ function sourceHasMarkerInComment(rawSource) {
     return false;
   }
   return extractCommentsOnly(rawSource).indexOf(MARKER) !== -1;
-}
-
-/**
- * Extract the body lines of the targeted step's `run:` block from the workflow
- * source. Returns the joined run-block text (the multi-line bash command),
- * or null when the named step / its run block cannot be found.
- *
- * @param {string} rawWorkflow - LF-normalized workflow source.
- * @param {string} stepName - The `name:` value of the targeted step.
- * @returns {string|null}
- */
-function extractTargetedStepRunBlock(rawWorkflow, stepName) {
-  const lines = rawWorkflow.split("\n");
-
-  // Locate the step header line: `- name: <stepName>` (the marker step is a
-  // list item, so the name line begins with `- name:` after indentation).
-  let nameLineIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*-\s+name:\s*(.+?)\s*$/.exec(lines[i]);
-    if (m && m[1].replace(/^["']|["']$/g, "") === stepName) {
-      nameLineIndex = i;
-      break;
-    }
-  }
-  if (nameLineIndex === -1) {
-    return null;
-  }
-
-  // The step ends at the next sibling list item (a line at the same `- `
-  // indentation) or end of file. Find the run block within that window.
-  const nameIndent = lines[nameLineIndex].length - lines[nameLineIndex].trimStart().length;
-  let stepEnd = lines.length - 1;
-  for (let i = nameLineIndex + 1; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.length === 0) {
-      continue;
-    }
-    const indent = lines[i].length - lines[i].trimStart().length;
-    if (indent <= nameIndent && /^-\s+/.test(trimmed)) {
-      stepEnd = i - 1;
-      break;
-    }
-    if (indent < nameIndent) {
-      stepEnd = i - 1;
-      break;
-    }
-  }
-
-  // Find `run: |` (block scalar) within the step window, then collect its
-  // indented body lines.
-  for (let i = nameLineIndex + 1; i <= stepEnd; i++) {
-    const runMatch = /^(\s*)run:\s*[|>][+-]?\s*$/.exec(lines[i]);
-    if (!runMatch) {
-      continue;
-    }
-    const runIndent = runMatch[1].length;
-    const body = [];
-    for (let j = i + 1; j <= stepEnd; j++) {
-      const bodyLine = lines[j];
-      const bodyTrimmed = bodyLine.trim();
-      if (bodyTrimmed.length === 0) {
-        body.push("");
-        continue;
-      }
-      const bodyIndent = bodyLine.length - bodyLine.trimStart().length;
-      if (bodyIndent <= runIndent) {
-        break;
-      }
-      body.push(bodyLine);
-    }
-    return body.join("\n");
-  }
-
-  return null;
-}
-
-// A test-path token shape: a repo-relative POSIX path ending in `.test.js`.
-// Linear / literal-class (ReDoS-free).
-const TEST_PATH_TOKEN = /^scripts\/[\w./-]*\.test\.js$/;
-
-/**
- * Parse the `--runTestsByPath` arguments out of the targeted run block as a
- * STRICT backslash-continued shell command, so the guard independently catches
- * a dropped continuation (truncation) rather than relying solely on
- * `set -euo pipefail` failing in CI.
- *
- * Continuation rule (matches bash): a line CONTINUES the command iff it ends in
- * a backslash that is the LAST character on the line, with at most a single
- * optional space before it (` \` or `\`). A trailing space AFTER the backslash
- * (`\ `) is NOT a bash line-continuation -- bash reads `\<space>` as an escaped
- * space and ends the logical line -- so we treat it as MALFORMED and throw,
- * matching what CI would do. (Documented design choice: trailing-space-after-
- * backslash is a hard error, not silently normalized.)
- *
- * Contiguity rule: starting from the `--runTestsByPath` line, every line up to
- * and including the last path line must be backslash-continued EXCEPT the final
- * path line, which must NOT continue. A non-final path line missing its
- * continuation means the argument list was truncated -- we throw an actionable
- * error naming the offending line so the failure points at the workflow, not at
- * a mysterious short path list.
- *
- * Returns repo-relative POSIX paths in listed order (deduped).
- *
- * @param {string} runBlock - The targeted step's run-block text.
- * @returns {string[]}
- * @throws {Error} when a continuation is malformed or the list is truncated.
- */
-function extractListedTestPaths(runBlock) {
-  if (typeof runBlock !== "string" || runBlock.length === 0) {
-    return [];
-  }
-
-  const lines = runBlock.split("\n");
-
-  // Classify a line's continuation status without flattening first, so we can
-  // detect truncation. Returns { content, continues } or { malformed: true }.
-  //   - valid continuation: line's last non-newline char is `\`
-  //   - malformed: a `\` followed by trailing space(s) (bash reads `\<space>`
-  //     as an escaped space, NOT a line continuation -- a hard error here)
-  //   - no continuation: line does not end in a backslash
-  // Implemented with endsWith / indexOf scans (no backtracking) to stay
-  // ReDoS-free.
-  function classify(line) {
-    // Strip a single trailing CR defensively (caller already normalizes CRLF).
-    const body = line.endsWith("\r") ? line.slice(0, -1) : line;
-    if (body.endsWith("\\")) {
-      // Last char is a backslash -> a real bash continuation. Content is
-      // everything before it, with one optional separating space trimmed.
-      const withoutSlash = body.slice(0, -1);
-      const content = withoutSlash.endsWith(" ") ? withoutSlash.slice(0, -1) : withoutSlash;
-      return { content, continues: true };
-    }
-    // A backslash followed only by trailing spaces => malformed (escaped space).
-    // Reverse-scan the trailing horizontal whitespace (single linear pass, no
-    // regex backtracking) so this stays genuinely ReDoS-free per the contract
-    // above, even on a pathological all-whitespace line.
-    let end = body.length;
-    while (end > 0) {
-      const ch = body[end - 1];
-      if (ch === " " || ch === "\t" || ch === "\f" || ch === "\v" || ch === "\r") {
-        end--;
-      } else {
-        break;
-      }
-    }
-    const trimmedRight = body.slice(0, end);
-    if (trimmedRight.endsWith("\\") && trimmedRight.length < body.length) {
-      return { malformed: true };
-    }
-    return { content: body, continues: false };
-  }
-
-  // Locate the `--runTestsByPath` line; the path list begins there.
-  let startIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes("--runTestsByPath")) {
-      startIndex = i;
-      break;
-    }
-  }
-  if (startIndex === -1) {
-    // No targeted invocation found -- fall back to scanning every line for
-    // path tokens (defensive; the membership checks will still flag drift).
-    return scanTestPathTokens(lines);
-  }
-
-  // The `--runTestsByPath` line itself must continue (the paths follow on the
-  // next lines). If it does not, the command has no path arguments.
-  const startClassified = classify(lines[startIndex]);
-  if (startClassified.malformed) {
-    throw new Error(
-      "Malformed line continuation (trailing space after `\\`) in the targeted " +
-        "regression step of .github/workflows/cross-platform-preflight.yml on the " +
-        `--runTestsByPath line:\n  ${lines[startIndex]}`
-    );
-  }
-  const seen = new Set();
-  const paths = [];
-
-  const collectFrom = (content) => {
-    for (const token of content.split(/\s+/)) {
-      if (TEST_PATH_TOKEN.test(token) && !seen.has(token)) {
-        seen.add(token);
-        paths.push(token);
-      }
-    }
-  };
-
-  // Same-line paths (rare) plus walk the contiguous, backslash-continued lines.
-  collectFrom(startClassified.content);
-
-  // `endIndex` is the index of the last line that belongs to the contiguous
-  // command (inclusive). Lines after it are the command's "tail" -- they must
-  // contain NO test-path tokens, or the list was truncated mid-stream.
-  let endIndex = startIndex;
-  let continuing = startClassified.continues;
-
-  while (continuing && endIndex + 1 < lines.length) {
-    const i = endIndex + 1;
-    const line = lines[i];
-    const classified = classify(line);
-    if (classified.malformed) {
-      throw new Error(
-        "Malformed line continuation (trailing space after `\\`) in the targeted " +
-          "regression step of .github/workflows/cross-platform-preflight.yml:\n" +
-          `  ${line}\n` +
-          "A bash line-continuation backslash must be the last character on the line."
-      );
-    }
-    collectFrom(classified.content);
-    endIndex = i;
-    continuing = classified.continues;
-  }
-
-  // The contiguous command ended at `endIndex`. If any later line still carries
-  // a test-path token, a continuation was dropped earlier and bash would have
-  // split the command -- the list is truncated. Fail loudly and point at it.
-  for (let i = endIndex + 1; i < lines.length; i++) {
-    const orphan = lines[i].split(/\s+/).find((t) => TEST_PATH_TOKEN.test(t));
-    if (orphan) {
-      throw new Error(
-        "Truncated --runTestsByPath list in the targeted regression step of " +
-          ".github/workflows/cross-platform-preflight.yml: a path line is missing " +
-          "its trailing `\\` continuation, so the shell command terminated early " +
-          "and these path token(s) were orphaned:\n" +
-          `  ${lines[i].trim()}\n` +
-          "Every path line except the last must end in ` \\`."
-      );
-    }
-  }
-
-  return paths;
-}
-
-/**
- * Defensive fallback: scan arbitrary lines for repo-relative test-path tokens.
- * Used only when the `--runTestsByPath` anchor cannot be located.
- *
- * @param {string[]} lines
- * @returns {string[]}
- */
-function scanTestPathTokens(lines) {
-  const seen = new Set();
-  const paths = [];
-  for (const line of lines) {
-    for (const token of line.split(/\s+/)) {
-      if (TEST_PATH_TOKEN.test(token) && !seen.has(token)) {
-        seen.add(token);
-        paths.push(token);
-      }
-    }
-  }
-  return paths;
 }
 
 /**
@@ -754,6 +502,41 @@ maybeDescribe("cross-platform-preflight targeted-gate coverage", () => {
         "scripts/__tests__/a.test.js",
         "scripts/lib/__tests__/b.test.js"
       ]);
+    });
+
+    test("happy path: PowerShell array splat list parses cleanly", () => {
+      const block =
+        "          $tests = @(\n" +
+        '            "scripts/__tests__/a.test.js"\n' +
+        '            "scripts/lib/__tests__/b.test.js"\n' +
+        "          )\n" +
+        "          node scripts/run-managed-jest.js --runTestsByPath @tests";
+      expect(extractListedTestPaths(block)).toEqual([
+        "scripts/__tests__/a.test.js",
+        "scripts/lib/__tests__/b.test.js"
+      ]);
+    });
+
+    test("an unresolved PowerShell splat is detected before the hook backstop", () => {
+      const block = "          node scripts/run-managed-jest.js --runTestsByPath @tests";
+      expect(() => extractListedTestPaths(block)).toThrow(/Unresolved PowerShell array splat/);
+    });
+
+    test("a PowerShell splat declared after the Jest command is unresolved", () => {
+      const block =
+        "          node scripts/run-managed-jest.js --runTestsByPath @tests\n" +
+        "          $tests = @(\n" +
+        '            "scripts/__tests__/a.test.js"\n' +
+        "          )";
+      expect(() => extractListedTestPaths(block)).toThrow(/Unresolved PowerShell array splat/);
+    });
+
+    test("an empty PowerShell splat is detected before the hook backstop", () => {
+      const block =
+        "          $tests = @(\n" +
+        "          )\n" +
+        "          node scripts/run-managed-jest.js --runTestsByPath @tests";
+      expect(() => extractListedTestPaths(block)).toThrow(/Empty PowerShell test array/);
     });
 
     test("a DROPPED continuation backslash (truncation) is detected -- Finding 3", () => {

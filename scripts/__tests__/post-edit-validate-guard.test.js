@@ -40,6 +40,7 @@ const {
   getPackageCspellAllExtensions,
   getCspellHookExtensions
 } = require("../lib/cspell-extension-parity");
+const { normalizeNodeColorEnv } = require("../lib/shell-command");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const PRE_COMMIT_CONFIG_PATH = path.join(REPO_ROOT, ".pre-commit-config.yaml");
@@ -381,6 +382,7 @@ describe("real cspell integration", () => {
       {
         cwd: REPO_ROOT,
         encoding: "utf8",
+        env: normalizeNodeColorEnv(process.env),
         stdio: ["ignore", "pipe", "pipe"]
       }
     );
@@ -408,6 +410,7 @@ describe("real cspell integration", () => {
       {
         cwd: REPO_ROOT,
         encoding: "utf8",
+        env: normalizeNodeColorEnv(process.env),
         stdio: ["ignore", "pipe", "pipe"]
       }
     );

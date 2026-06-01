@@ -33,6 +33,7 @@ const {
   defaultConcurrency,
   main
 } = require("../run-prepush-parallel.js");
+const { STEPS: PREPUSH_PREFLIGHT_STEPS } = require("../run-prepush-preflight.js");
 const { hookIdsForStage } = require("../lib/precommit-stage-model.js");
 const { findHookBlock } = require("../lib/precommit-yaml.js");
 // PATH lookups must be case-insensitive: Windows exposes the variable as `Path`,
@@ -51,6 +52,11 @@ function prePushHookIds() {
 
 function laneById(id) {
   return buildLanes().find((lane) => lane.id === id);
+}
+
+function stepText(step) {
+  const command = step.command === process.execPath ? "node" : step.command;
+  return [command, ...step.args].join(" ");
 }
 
 /** SKIP set declared on a sweep lane's env (empty when none). */
@@ -174,7 +180,9 @@ describe("coverage -- the sweeps partition every pre-push hook (no hook dropped)
   });
 
   test("the mutating sweep runs ONLY the mutating hooks (SKIPs everything else)", () => {
-    expect([...hooksRunBy("sweep:mutating-hooks")].sort()).toEqual([...MUTATING_PREPUSH_HOOKS].sort());
+    expect([...hooksRunBy("sweep:mutating-hooks")].sort()).toEqual(
+      [...MUTATING_PREPUSH_HOOKS].sort()
+    );
   });
 
   test("the covered Jest subset suites are run by NO sweep (deduped, not duplicated)", () => {
@@ -279,19 +287,15 @@ describe("extras completeness -- no preflight-only check dropped", () => {
     expect(unaccounted).toEqual([]);
   });
 
-  test("EVERY preflight:pre-push top-level step is covered (pre-commit, cspell-superset, or the bulk all-files sweep)", () => {
+  test("EVERY safe serial preflight:pre-push step is covered by the parallel plan", () => {
     // run-prepush-parallel.js claims parity with preflight:pre-push, which is
     // `preflight:pre-commit && check:cspell:all && <inline --hook-stage pre-push
-    // --all-files>`. The pre-commit accounting above covers the first; this
-    // guards a NEW step added DIRECTLY to preflight:pre-push (not pre-commit)
-    // from silently drifting past the orchestrator.
-    const preflightPrePush = JSON.parse(fs.readFileSync(PACKAGE_JSON, "utf8")).scripts[
-      "preflight:pre-push"
-    ];
-    const steps = preflightPrePush
-      .split("&&")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    // --all-files>`, now encoded in scripts/run-prepush-preflight.js so the
+    // success stamp is impossible to run without the preceding checks. The
+    // pre-commit accounting above covers the first; this guards a NEW step
+    // added DIRECTLY to that runner from silently drifting past the parallel
+    // orchestrator.
+    const steps = PREPUSH_PREFLIGHT_STEPS.map(stepText);
     for (const step of steps) {
       const covered =
         /\bnpm run preflight:pre-commit\b/.test(step) || // accounted for by the pre-commit completeness test
@@ -405,7 +409,12 @@ describe("runPool", () => {
     const results = await runPool(lanes, 3, spawn, () => {});
     expect(results).toHaveLength(3);
     expect(results.find((r) => r.id === "b").ok).toBe(false);
-    expect(results.filter((r) => r.ok).map((r) => r.id).sort()).toEqual(["a", "c"]);
+    expect(
+      results
+        .filter((r) => r.ok)
+        .map((r) => r.id)
+        .sort()
+    ).toEqual(["a", "c"]);
   });
 
   test("respects the concurrency limit", async () => {
@@ -418,25 +427,73 @@ describe("runPool", () => {
       live -= 1;
       return { status: 0, stdout: "", stderr: "", error: null };
     };
-    const many = Array.from({ length: 8 }, (_, i) => ({ id: `l${i}`, command: "node", args: [`${i}`] }));
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      id: `l${i}`,
+      command: "node",
+      args: [`${i}`]
+    }));
     await runPool(many, 2, spawn, () => {});
     expect(maxLive).toBeLessThanOrEqual(2);
   });
 
-  test("merges lane.env over process.env (so SKIP reaches the child) without dropping PATH", async () => {
-    let capturedOptions;
+  test("strips caller SKIP, preserves controlled lane SKIP, and keeps PATH", async () => {
+    const originalSkip = process.env.SKIP;
+    const originalLowerSkip = process.env.skip;
+    const originalMixedSkip = process.env.SkIp;
+    process.env.SKIP = "script-tests,cspell";
+    process.env.skip = "validate-untracked-policy";
+    process.env.SkIp = "yamllint";
+    const capturedOptions = [];
     const spawn = async (command, args, options) => {
-      capturedOptions = options;
+      capturedOptions.push(options);
       return { status: 0, stdout: "", stderr: "", error: null };
     };
-    await runPool([{ id: "x", command: "node", args: ["a"], env: { SKIP: "foo,bar" } }], 1, spawn, () => {});
-    expect(capturedOptions.env.SKIP).toBe("foo,bar");
-    // Case-insensitive: the child must inherit PATH (Windows `Path` / POSIX `PATH`).
-    expect(getPathEnvValue(capturedOptions.env)).toBe(getPathEnvValue(process.env));
+    try {
+      await runPool(
+        [
+          { id: "controlled", command: "node", args: ["a"], env: { SKIP: "foo,bar" } },
+          { id: "plain", command: "node", args: ["b"] }
+        ],
+        1,
+        spawn,
+        () => {}
+      );
+
+      expect(capturedOptions[0].env.SKIP).toBe("foo,bar");
+      expect(capturedOptions[0].env.skip).toBeUndefined();
+      expect(capturedOptions[0].env.SkIp).toBeUndefined();
+      expect(capturedOptions[1].env.SKIP).toBeUndefined();
+      expect(capturedOptions[1].env.skip).toBeUndefined();
+      expect(capturedOptions[1].env.SkIp).toBeUndefined();
+      // Case-insensitive: the child must inherit PATH (Windows `Path` / POSIX `PATH`).
+      expect(getPathEnvValue(capturedOptions[0].env)).toBe(getPathEnvValue(process.env));
+      expect(getPathEnvValue(capturedOptions[1].env)).toBe(getPathEnvValue(process.env));
+    } finally {
+      if (originalSkip === undefined) {
+        delete process.env.SKIP;
+      } else {
+        process.env.SKIP = originalSkip;
+      }
+      if (originalLowerSkip === undefined) {
+        delete process.env.skip;
+      } else {
+        process.env.skip = originalLowerSkip;
+      }
+      if (originalMixedSkip === undefined) {
+        delete process.env.SkIp;
+      } else {
+        process.env.SkIp = originalMixedSkip;
+      }
+    }
   });
 
   test("a spawn error marks the lane failed and is streamed", async () => {
-    const spawn = async () => ({ status: null, stdout: "", stderr: "", error: new Error("ENOENT-ish") });
+    const spawn = async () => ({
+      status: null,
+      stdout: "",
+      stderr: "",
+      error: new Error("ENOENT-ish")
+    });
     const log = [];
     const results = await runPool([lanes[0]], 1, spawn, (line) => log.push(line));
     expect(results[0].ok).toBe(false);
@@ -496,7 +553,11 @@ describe("main", () => {
 
   test("emits a final summary line", async () => {
     const log = [];
-    await main({ spawnImpl: makeTrackingSpawn(), writeLine: (line) => log.push(line), concurrency: 4 });
+    await main({
+      spawnImpl: makeTrackingSpawn(),
+      writeLine: (line) => log.push(line),
+      concurrency: 4
+    });
     expect(log.join("\n")).toMatch(/all \d+ lanes passed/);
   });
 });

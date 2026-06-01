@@ -14,6 +14,7 @@ const { ensurePreCommit, runPreCommit, PACKAGE_SPEC } = require("../ensure-pre-c
 const { maskCommentsAndStrings } = require("../lib/source-stripping");
 const {
   fingerprintGitState,
+  fingerprintPrePushGitState,
   hasValidHookValidationStamp,
   writeHookValidationStamp
 } = require("../lib/hook-validation-stamp");
@@ -29,17 +30,26 @@ function stampSpawnFor(options) {
     stampPath,
     head = "abc123",
     indexTree = "tree-a",
+    indexPath = path.join(path.dirname(stampPath), "index"),
     changelogDiff = "",
-    changelogUntracked = ""
+    changelogUntracked = "",
+    trackedWorktreeRawDiff = "",
+    untracked = ""
   } = options;
   return jest.fn((command, args) => {
     expect(command).toBe("git");
     const joined = args.join(" ");
-    if (joined === "rev-parse --git-path dxmsg-pre-commit-stamp.json") {
+    if (
+      joined === "rev-parse --git-path dxmsg-pre-commit-stamp.json" ||
+      joined === "rev-parse --git-path dxmsg-pre-push-stamp.json"
+    ) {
       return { status: 0, stdout: `${stampPath}\n`, stderr: "" };
     }
     if (joined === "rev-parse --verify HEAD") {
       return { status: 0, stdout: `${head}\n`, stderr: "" };
+    }
+    if (joined === "rev-parse --git-path index") {
+      return { status: 0, stdout: `${indexPath}\n`, stderr: "" };
     }
     if (joined === "write-tree") {
       return { status: 0, stdout: `${indexTree}\n`, stderr: "" };
@@ -55,6 +65,12 @@ function stampSpawnFor(options) {
       "diff --binary --no-ext-diff -- CHANGELOG.md package.json Runtime Editor SourceGenerators Samples~"
     ) {
       return { status: 0, stdout: changelogDiff, stderr: "" };
+    }
+    if (joined === "ls-files --others --exclude-standard -z") {
+      return { status: 0, stdout: untracked, stderr: "" };
+    }
+    if (joined === "diff-files --raw --abbrev=40 -z --") {
+      return { status: 0, stdout: trackedWorktreeRawDiff, stderr: "" };
     }
     return { status: 1, stdout: "", stderr: `unexpected git args: ${joined}` };
   });
@@ -97,6 +113,9 @@ describe("native Git hooks", () => {
 
     const content = fs.readFileSync(PRE_PUSH_HOOK, "utf8");
     expect(content.startsWith("#!/usr/bin/env node\n")).toBe(true);
+    expect(content).toContain("hasValidHookValidationStamp");
+    expect(content).toContain("writeHookValidationStamp");
+    expect(content).toContain('"pre-push"');
     expect(content).toContain("repair-node-tooling.js");
     expect(content).toContain("ensure-pre-commit.js");
     expect(content).toContain('"doctor"');
@@ -113,7 +132,9 @@ describe("native Git hooks", () => {
     const ensureIndex = content.indexOf("ensure-pre-commit.js");
     const doctorIndex = content.indexOf('"doctor"');
     const preflightIndex = content.indexOf("scripts/run-prepush-parallel.js");
-    expect(repairIndex).toBeGreaterThanOrEqual(0);
+    const stampIndex = content.indexOf("hasValidHookValidationStamp");
+    expect(stampIndex).toBeGreaterThanOrEqual(0);
+    expect(repairIndex).toBeGreaterThan(stampIndex);
     expect(ensureIndex).toBeGreaterThan(repairIndex);
     expect(doctorIndex).toBeGreaterThan(ensureIndex);
     expect(preflightIndex).toBeGreaterThan(doctorIndex);
@@ -251,6 +272,105 @@ describe("native Git hooks", () => {
 
       expect(first.indexTree).not.toBe(second.indexTree);
       expect(first).not.toEqual(second);
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  test("pre-push stamp fingerprint covers tracked state and rejects untracked paths", () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-pre-push-stamp-"));
+    try {
+      const stampFile = path.join(temp, "stamp.json");
+      fs.writeFileSync(path.join(temp, "index"), "index-a", "utf8");
+      const rawDiff =
+        ":100644 100644 1111111111111111111111111111111111111111 0000000000000000000000000000000000000000 M\0tracked.txt\0";
+      fs.writeFileSync(path.join(temp, "tracked.txt"), "tracked-before", "utf8");
+      writeHookValidationStamp(temp, "pre-push", {
+        spawnFn: stampSpawnFor({
+          stampPath: stampFile,
+          trackedWorktreeRawDiff: rawDiff
+        })
+      });
+
+      expect(
+        hasValidHookValidationStamp(temp, "pre-push", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            trackedWorktreeRawDiff: rawDiff
+          })
+        }).valid
+      ).toBe(true);
+      expect(
+        hasValidHookValidationStamp(temp, "pre-push", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            trackedWorktreeRawDiff: rawDiff
+          }),
+          readFileSyncFn: (filePath, ...args) =>
+            filePath === path.join(temp, "index")
+              ? Buffer.from("index-b")
+              : fs.readFileSync(filePath, ...args)
+        }).valid
+      ).toBe(false);
+      fs.writeFileSync(path.join(temp, "tracked.txt"), "tracked-after", "utf8");
+      expect(
+        hasValidHookValidationStamp(temp, "pre-push", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            trackedWorktreeRawDiff: rawDiff
+          })
+        }).valid
+      ).toBe(false);
+      fs.writeFileSync(path.join(temp, "tracked.txt"), "tracked-before", "utf8");
+      fs.writeFileSync(path.join(temp, "scratch.txt"), "untracked-after", "utf8");
+      expect(
+        hasValidHookValidationStamp(temp, "pre-push", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            trackedWorktreeRawDiff: rawDiff,
+            untracked: "scratch.txt\0"
+          })
+        }).valid
+      ).toBe(false);
+
+      const prePushFingerprint = fingerprintPrePushGitState(temp, {
+        spawnFn: stampSpawnFor({
+          stampPath: stampFile,
+          trackedWorktreeRawDiff: rawDiff,
+          untracked: "scratch.txt\0"
+        })
+      });
+      expect(prePushFingerprint.indexFileHash).toEqual(expect.any(String));
+      expect(prePushFingerprint.unstagedTrackedWorktreeStateHash).toEqual(expect.any(String));
+      expect(prePushFingerprint.indexTree).toBeUndefined();
+      expect(prePushFingerprint.trackedWorktreeStateHash).toBeUndefined();
+      expect(prePushFingerprint.untrackedPathCount).toBe(1);
+      expect(prePushFingerprint.untrackedPathsHash).toEqual(expect.any(String));
+      expect(prePushFingerprint.trackedWorktreeDiffHash).toBeUndefined();
+      expect(prePushFingerprint.untrackedFilesHash).toBeUndefined();
+      expect(prePushFingerprint.changelogUnstagedDiffHash).toBeUndefined();
+      expect(prePushFingerprint.changelogUntrackedFilesHash).toBeUndefined();
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  test("pre-push stamp refuses to write while untracked paths are present", () => {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "dxm-pre-push-untracked-"));
+    try {
+      const stampFile = path.join(temp, "stamp.json");
+      fs.writeFileSync(path.join(temp, "index"), "index-a", "utf8");
+      fs.writeFileSync(path.join(temp, "scratch.txt"), "untracked", "utf8");
+
+      expect(() =>
+        writeHookValidationStamp(temp, "pre-push", {
+          spawnFn: stampSpawnFor({
+            stampPath: stampFile,
+            untracked: "scratch.txt\0"
+          })
+        })
+      ).toThrow(/untracked paths present/);
+      expect(fs.existsSync(stampFile)).toBe(false);
     } finally {
       fs.rmSync(temp, { recursive: true, force: true });
     }

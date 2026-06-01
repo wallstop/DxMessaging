@@ -23,7 +23,8 @@ const { createRequire } = require("module");
 const {
   toShellCommand,
   isShellShimCommand,
-  spawnPlatformCommandSync
+  spawnPlatformCommandSync,
+  normalizeNodeColorEnv
 } = require("./lib/shell-command");
 const jestErrorDecoderModule = require("./lib/jest-error-decoder");
 const { decodeJestStderr, formatRepairBanner, isTruthyEnv } = jestErrorDecoderModule;
@@ -93,7 +94,8 @@ function runCommand(command, args, spawnOptions = {}) {
   const result = spawnSyncImpl(command, args, {
     cwd: REPO_ROOT,
     stdio: "inherit",
-    ...spawnOptions
+    ...spawnOptions,
+    env: normalizeNodeColorEnv(spawnOptions.env || process.env)
   });
 
   return {
@@ -145,6 +147,7 @@ function runCommandCapturingStderr(command, args, spawnOptions = {}) {
   const merged = {
     cwd: REPO_ROOT,
     ...spawnOptions,
+    env: normalizeNodeColorEnv(spawnOptions.env || process.env),
     // stdio is NEVER overridable by callers: capture mode requires this
     // exact pipe configuration for the stderr decoder to function.
     stdio: ["inherit", "inherit", "pipe"]
@@ -672,7 +675,7 @@ function buildNodePathEnv(isolatedNodeModulesPath, baseEnv = process.env) {
     : isolatedNodeModulesPath;
 
   return {
-    ...baseEnv,
+    ...normalizeNodeColorEnv(baseEnv),
     NODE_PATH: nextNodePath
   };
 }
@@ -1332,6 +1335,7 @@ module.exports = {
   parseNpmMajorVersion,
   getNpmMajorVersion,
   getPinnedFallbackJestSpec,
+  normalizeNodeColorEnv,
   runCommand,
   runCommandCapturingStderr,
   runLocalJest,

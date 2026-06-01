@@ -30,6 +30,7 @@ const {
   hasLlmPolicyRepairBeforeValidation,
   hasRequiredSkillsIndexRepairCommand,
   hasRequiredSkillsIndexCheckCommand,
+  resolvePrePushScriptForPolicy,
   hasRequiredAllCspellCommand,
   hasAllCspellBeforePrePushHookParity,
   hasRequiredScriptsCspellCommand,
@@ -76,6 +77,7 @@ const {
   REQUIRED_YAML_VALIDATION_COMMAND,
   REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
   REQUIRED_ALL_CSPELL_COMMAND,
+  REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_VALIDATION_COMMAND,
@@ -467,6 +469,17 @@ describe("validate-pre-commit-tooling", () => {
     const script = requiredPrePushScript();
 
     expect(hasRequiredAllCspellCommand(script)).toBe(true);
+  });
+
+  test("pre-push policy resolves the safe serial runner before checking steps", () => {
+    const resolved = resolvePrePushScriptForPolicy(REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND);
+
+    expect(resolved).toContain(REQUIRED_ALL_CSPELL_COMMAND);
+    expect(resolved).toContain("run --hook-stage pre-push");
+    expect(hasRequiredAllCspellCommand(REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND)).toBe(true);
+    expect(hasAllCspellBeforePrePushHookParity(REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND)).toBe(
+      true
+    );
   });
 
   test("hasAllCspellBeforePrePushHookParity rejects cspell after hook parity", () => {
@@ -1221,10 +1234,9 @@ describe("validate-pre-commit-tooling", () => {
     expect(preflightScript).toContain("npm run check:prettier:hooks");
     expect(preflightScript).toContain(REQUIRED_SCRIPTS_CSPELL_COMMAND);
     expect(preflightScript).toContain(REQUIRED_WORKFLOW_CSPELL_COMMAND);
-    expect(prePushScript).toContain(REQUIRED_ALL_CSPELL_COMMAND);
-    expect(prePushScript.indexOf(REQUIRED_ALL_CSPELL_COMMAND)).toBeLessThan(
-      prePushScript.indexOf("run --hook-stage pre-push")
-    );
+    expect(prePushScript).toBe(REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND);
+    expect(hasRequiredAllCspellCommand(prePushScript)).toBe(true);
+    expect(hasAllCspellBeforePrePushHookParity(prePushScript)).toBe(true);
     expect(preflightScript).toContain(REQUIRED_WORKFLOW_VALIDATION_COMMAND);
     expect(preflightScript).toContain(REQUIRED_BANNER_SYNC_COMMAND);
     expect(preflightScript).toContain(REQUIRED_CHANGELOG_VALIDATION_COMMAND);

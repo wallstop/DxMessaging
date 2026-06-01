@@ -12,6 +12,8 @@
 const {
   toShellCommand,
   isShellShimCommand,
+  normalizeNodeColorEnv,
+  mergeSanitizedEnv,
   resolveSpawnCommand,
   resolveSpawnOptions,
   buildSpawnInvocation,
@@ -30,6 +32,39 @@ describe("shell-command", () => {
     expect(isShellShimCommand("npm")).toBe(true);
     expect(isShellShimCommand("npx")).toBe(true);
     expect(isShellShimCommand("git")).toBe(false);
+  });
+
+  test("normalizeNodeColorEnv removes NO_COLOR when FORCE_COLOR is also set", () => {
+    expect(normalizeNodeColorEnv({ NO_COLOR: "1", FORCE_COLOR: "1", KEEP: "yes" })).toEqual({
+      FORCE_COLOR: "1",
+      KEEP: "yes"
+    });
+    expect(normalizeNodeColorEnv({ no_color: "1", Force_Color: "1", KEEP: "yes" })).toEqual({
+      Force_Color: "1",
+      KEEP: "yes"
+    });
+    expect(normalizeNodeColorEnv({ NO_COLOR: "1" })).toEqual({ NO_COLOR: "1" });
+    expect(normalizeNodeColorEnv({ FORCE_COLOR: "1" })).toEqual({ FORCE_COLOR: "1" });
+  });
+
+  test("mergeSanitizedEnv removes caller keys before applying controlled overrides", () => {
+    const base = {
+      PATH: "/bin",
+      skip: "script-tests",
+      SkIp: "cspell",
+      NO_COLOR: "1",
+      FORCE_COLOR: "1"
+    };
+
+    expect(mergeSanitizedEnv(base, {}, { removeKeys: ["SKIP"] })).toEqual({
+      PATH: "/bin",
+      FORCE_COLOR: "1"
+    });
+    expect(mergeSanitizedEnv(base, { SKIP: "controlled" }, { removeKeys: ["SKIP"] })).toEqual({
+      PATH: "/bin",
+      FORCE_COLOR: "1",
+      SKIP: "controlled"
+    });
   });
 
   test("resolveSpawnCommand maps npm shim commands on win32", () => {
@@ -393,7 +428,13 @@ describe("spawnPlatformCommand (async)", () => {
       captured = options;
       return fakeChild({ status: 0 });
     };
-    await spawnPlatformCommand("node", ["x"], { encoding: "utf8", cwd: "/tmp" }, spawnImpl, "linux");
+    await spawnPlatformCommand(
+      "node",
+      ["x"],
+      { encoding: "utf8", cwd: "/tmp" },
+      spawnImpl,
+      "linux"
+    );
     expect(captured.encoding).toBeUndefined();
     expect(captured.cwd).toBe("/tmp");
   });

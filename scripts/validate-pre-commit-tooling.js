@@ -27,6 +27,7 @@ const {
   PER_HOOK_CEILING,
   formatReport
 } = require("./lib/precommit-perf-score");
+const { STEPS: PREPUSH_PREFLIGHT_STEPS } = require("./run-prepush-preflight");
 
 const PRE_COMMIT_CONFIG_PATH = path.join(__dirname, "..", ".pre-commit-config.yaml");
 const PACKAGE_JSON_PATH = path.join(__dirname, "..", "package.json");
@@ -48,6 +49,7 @@ const REQUIRED_PACKAGE_JSON_FORMAT_COMMAND = "npm run check:package-json-format"
 const REQUIRED_YAML_VALIDATION_COMMAND = "npm run check:yaml";
 const REQUIRED_YAML_COMMENTS_CHECK_COMMAND = "npm run check:yaml:comments";
 const REQUIRED_ALL_CSPELL_COMMAND = "npm run check:cspell:all";
+const REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND = "node scripts/run-prepush-preflight.js";
 const REQUIRED_SCRIPTS_CSPELL_COMMAND = "npm run check:cspell:scripts";
 const REQUIRED_WORKFLOW_CSPELL_COMMAND = "npm run check:workflow-cspell";
 const REQUIRED_WORKFLOW_VALIDATION_COMMAND = "npm run validate:workflows";
@@ -299,8 +301,26 @@ function hasRequiredScriptsCspellCommand(preflightScript) {
   return hasRequiredPreflightCommand(preflightScript, REQUIRED_SCRIPTS_CSPELL_COMMAND);
 }
 
+function stepText(step) {
+  const command = step.command === process.execPath ? "node" : step.command;
+  return [command, ...step.args].join(" ");
+}
+
+function resolvePrePushScriptForPolicy(prePushScript) {
+  if (typeof prePushScript !== "string") {
+    return "";
+  }
+  if (prePushScript.trim() === REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND) {
+    return PREPUSH_PREFLIGHT_STEPS.map(stepText).join(" && ");
+  }
+  return prePushScript;
+}
+
 function hasRequiredAllCspellCommand(prePushScript) {
-  return hasRequiredPreflightCommand(prePushScript, REQUIRED_ALL_CSPELL_COMMAND);
+  return hasRequiredPreflightCommand(
+    resolvePrePushScriptForPolicy(prePushScript),
+    REQUIRED_ALL_CSPELL_COMMAND
+  );
 }
 
 function hasAllCspellBeforePrePushHookParity(prePushScript) {
@@ -308,8 +328,9 @@ function hasAllCspellBeforePrePushHookParity(prePushScript) {
     return false;
   }
 
-  const cspellIndex = prePushScript.indexOf(REQUIRED_ALL_CSPELL_COMMAND);
-  const prePushHookIndex = prePushScript.indexOf("run --hook-stage pre-push");
+  const resolved = resolvePrePushScriptForPolicy(prePushScript);
+  const cspellIndex = resolved.indexOf(REQUIRED_ALL_CSPELL_COMMAND);
+  const prePushHookIndex = resolved.indexOf("run --hook-stage pre-push");
   return cspellIndex >= 0 && prePushHookIndex >= 0 && cspellIndex < prePushHookIndex;
 }
 
@@ -1332,6 +1353,7 @@ module.exports = {
   hasLlmPolicyRepairBeforeValidation,
   hasRequiredSkillsIndexRepairCommand,
   hasRequiredSkillsIndexCheckCommand,
+  resolvePrePushScriptForPolicy,
   hasRequiredAllCspellCommand,
   hasAllCspellBeforePrePushHookParity,
   hasRequiredScriptsCspellCommand,
@@ -1380,6 +1402,7 @@ module.exports = {
   REQUIRED_YAML_VALIDATION_COMMAND,
   REQUIRED_YAML_COMMENTS_CHECK_COMMAND,
   REQUIRED_ALL_CSPELL_COMMAND,
+  REQUIRED_PREPUSH_PREFLIGHT_RUNNER_COMMAND,
   REQUIRED_SCRIPTS_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_CSPELL_COMMAND,
   REQUIRED_WORKFLOW_VALIDATION_COMMAND,

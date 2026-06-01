@@ -49,7 +49,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnPlatformCommandSync } = require("../lib/shell-command");
+const { spawnPlatformCommandSync, normalizeNodeColorEnv } = require("../lib/shell-command");
 const { isOutsideRelative } = require("../lib/path-classifier");
 const { isLikelyUserVisiblePath } = require("../validate-changelog");
 
@@ -451,7 +451,7 @@ function runSpawnValidator(validator, absPath, repoRoot, deps = {}) {
   const result = spawnImpl(process.execPath, args, {
     cwd: repoRoot,
     encoding: "utf8",
-    env: { ...process.env, [ACTIVE_ENV]: "1" },
+    env: normalizeNodeColorEnv({ ...process.env, [ACTIVE_ENV]: "1" }),
     stdio: ["ignore", "pipe", "pipe"]
   });
 

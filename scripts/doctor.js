@@ -56,8 +56,24 @@ const childProcess = require("child_process");
 const { createRequire } = require("module");
 
 const { TOOL_SPECS } = require("./validate-node-tooling");
+const { STEPS: PREPUSH_PREFLIGHT_STEPS } = require("./run-prepush-preflight");
 const eolPolicy = require("./lib/eol-policy");
 const precommitYaml = require("./lib/precommit-yaml");
+
+function stepText(step) {
+  const command = step.command === process.execPath ? "node" : step.command;
+  return [command, ...step.args].join(" ");
+}
+
+function resolvePrePushScriptForCoverage(script) {
+  if (typeof script !== "string") {
+    return "";
+  }
+  if (script.trim() === "node scripts/run-prepush-preflight.js") {
+    return PREPUSH_PREFLIGHT_STEPS.map(stepText).join(" && ");
+  }
+  return script;
+}
 const precommitPerfScore = require("./lib/precommit-perf-score");
 const shellCommand = require("./lib/shell-command");
 const { isTruthyEnv } = require("./lib/jest-error-decoder");
@@ -675,9 +691,10 @@ function checkPreCommitConfig(options = {}) {
   const preflightPrePush = scripts["preflight:pre-push"];
   if (typeof preflightPrePush === "string" && preflightPrePush.length > 0) {
     lines.push(`          preflight:pre-push script present`);
+    const resolvedPreflightPrePush = resolvePrePushScriptForCoverage(preflightPrePush);
     if (
       !/(?:pre-commit|node\s+scripts\/ensure-pre-commit\.js)\s+run\s+--hook-stage\s+pre-push\s+--all-files/.test(
-        preflightPrePush
+        resolvedPreflightPrePush
       )
     ) {
       lines.push(

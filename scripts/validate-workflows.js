@@ -55,6 +55,11 @@ const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { normalizeToLf } = require("./lib/quote-parser");
+const {
+  TARGETED_STEP_NAME,
+  extractTargetedStepRunBlock,
+  extractListedTestPaths
+} = require("./lib/cross-platform-preflight-gate");
 
 const REPO_ROOT = path.join(__dirname, "..");
 const WORKFLOWS_DIR = path.join(__dirname, "..", ".github", "workflows");
@@ -1992,6 +1997,63 @@ function findUnityLockTimeoutViolations(relativePath, lines) {
   }
 
   return violations;
+}
+
+const CROSS_PLATFORM_PREFLIGHT_WORKFLOW = ".github/workflows/cross-platform-preflight.yml";
+
+function findCrossPlatformPreflightTargetedGateViolations(relativePath, lines) {
+  const normalizedPath = String(relativePath || "").replace(/\\/g, "/");
+  if (normalizedPath !== CROSS_PLATFORM_PREFLIGHT_WORKFLOW) {
+    return [];
+  }
+
+  const stepLineIndex = lines.findIndex((line) => {
+    const match = /^\s*-\s+name:\s*(.+?)\s*$/.exec(line);
+    return match && match[1].replace(/^["']|["']$/g, "") === TARGETED_STEP_NAME;
+  });
+  const lineNumber = stepLineIndex === -1 ? 1 : stepLineIndex + 1;
+  const workflowSource = lines.join("\n");
+  const runBlock = extractTargetedStepRunBlock(workflowSource, TARGETED_STEP_NAME);
+  if (runBlock === null) {
+    return [
+      new Violation(
+        relativePath,
+        lineNumber,
+        TARGETED_STEP_NAME,
+        `Workflow must keep the '${TARGETED_STEP_NAME}' step with a block-scalar run body so the cross-platform regression gate is parseable before pre-push.`,
+        "error"
+      )
+    ];
+  }
+
+  let listedPaths;
+  try {
+    listedPaths = extractListedTestPaths(runBlock);
+  } catch (error) {
+    return [
+      new Violation(
+        relativePath,
+        lineNumber,
+        "--runTestsByPath",
+        `Cross-platform targeted regression test list is not parseable: ${error.message}`,
+        "error"
+      )
+    ];
+  }
+
+  if (listedPaths.length === 0) {
+    return [
+      new Violation(
+        relativePath,
+        lineNumber,
+        "--runTestsByPath",
+        "Cross-platform targeted regression step must list at least one .test.js path. Use a bash continued list or a PowerShell array splatted into --runTestsByPath.",
+        "error"
+      )
+    ];
+  }
+
+  return [];
 }
 
 /**
@@ -4340,6 +4402,8 @@ function validateWorkflow(filePath, options = {}) {
     violations.push(...findForbidPlainShellBashOnSelfHostedWindowsViolations(relativePath, lines));
 
     violations.push(...findUnityLockTimeoutViolations(relativePath, lines));
+
+    violations.push(...findCrossPlatformPreflightTargetedGateViolations(relativePath, lines));
   } catch (error) {
     violations.push(
       new Violation(
@@ -4465,6 +4529,7 @@ if (typeof module !== "undefined" && module.exports) {
     extractJobTimeoutMinutes,
     extractStepTimeoutMinutes,
     findUnityLockTimeoutViolations,
+    findCrossPlatformPreflightTargetedGateViolations,
     UNITY_LOCK_RUN_BUDGET_MINUTES,
     extractJobRunsOn,
     extractJobNeeds,

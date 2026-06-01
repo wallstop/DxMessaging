@@ -4,6 +4,10 @@
 const path = require("path");
 const childProcess = require("child_process");
 const { spawnPlatformCommandSync } = require("../lib/shell-command");
+const {
+  hasValidHookValidationStamp,
+  writeHookValidationStamp
+} = require("../lib/hook-validation-stamp");
 
 function resolveRepoRoot() {
   const result = childProcess.spawnSync("git", ["rev-parse", "--show-toplevel"], {
@@ -35,6 +39,12 @@ function run(command, args, envOverride) {
 }
 
 function main() {
+  const stamp = hasValidHookValidationStamp(REPO_ROOT, "pre-push");
+  if (stamp.valid) {
+    process.stdout.write("Pre-push preflight stamp is current; skipping repeated hook run.\n");
+    return 0;
+  }
+
   process.stdout.write("Repairing hook Node tooling if needed...\n");
   const repairStatus = run(process.execPath, ["scripts/repair-node-tooling.js"]);
   if (repairStatus !== 0) {
@@ -68,7 +78,16 @@ function main() {
   // the byte-for-byte serial parity command for CI and on-demand use; coverage
   // equivalence is pinned by scripts/__tests__/run-prepush-parallel.test.js.
   process.stdout.write("Running pre-push parity preflight (parallel)...\n");
-  return run(process.execPath, ["scripts/run-prepush-parallel.js"]);
+  const prePushStatus = run(process.execPath, ["scripts/run-prepush-parallel.js"]);
+  if (prePushStatus === 0) {
+    try {
+      writeHookValidationStamp(REPO_ROOT, "pre-push");
+    } catch (_error) {
+      // Best-effort speed path only. A failed stamp write must not change the
+      // hook decision; the validated push can proceed.
+    }
+  }
+  return prePushStatus;
 }
 
 if (require.main === module) {
