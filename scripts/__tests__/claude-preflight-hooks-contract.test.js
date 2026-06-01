@@ -11,9 +11,10 @@
  *   2. Both hook script files exist on disk AND are git-tracked.
  *   3. The guard's `buildDecision(status)` JSON shape against the documented
  *      PreToolUse schema (`hookSpecificOutput.hookEventName === "PreToolUse"`,
- *      `permissionDecision` enum): ok->allow, checks-failed->deny naming hooks,
- *      infra-unavailable->allow+warning, infra-unavailable WITH policyFailures
- *      ->deny (policy/security never fail open).
+ *      `permissionDecision` enum): ok->allow, changed-file cspell->deny,
+ *      checks-failed->deny naming hooks, infra-unavailable->allow+warning,
+ *      infra-unavailable WITH policyFailures ->deny (policy/security never fail
+ *      open).
  *   4. The stop hook's `buildAdvisory(status)`: advisory-only (a STRING on
  *      checks-failed / policyFailures, null otherwise) -- and a source scan
  *      proving the stop hook NEVER emits `decision: "block"` (owner override:
@@ -29,6 +30,8 @@
  */
 
 "use strict";
+
+// cspell:ignore wurd zzzxqword
 
 const fs = require("fs");
 const path = require("path");
@@ -279,6 +282,314 @@ describe("change-aware preflight Claude hooks contract", () => {
     expect(guard.buildDecision({}).hookSpecificOutput.permissionDecision).toBe("allow");
   });
 
+  test("filterCspellFiles mirrors the native cspell-covered extension set", () => {
+    expect(
+      guard.filterCspellFiles([
+        "README.md",
+        "docs/guide.markdown",
+        "Runtime/Foo.cs",
+        "package.json",
+        ".github/workflows/ci.yml",
+        ".yamllint.yaml",
+        "scripts/hook.ps1",
+        "scripts/tool.js",
+        "Editor/Analyzers/x.dll"
+      ])
+    ).toEqual([
+      "README.md",
+      "docs/guide.markdown",
+      "Runtime/Foo.cs",
+      "package.json",
+      ".github/workflows/ci.yml",
+      ".yamllint.yaml",
+      "scripts/hook.ps1",
+      "scripts/tool.js"
+    ]);
+  });
+
+  test("runChangedCspellGuard blocks on any changed-file cspell failure before full preflight", () => {
+    let capturedFileList = "";
+    const spawnFn = jest.fn((_command, args) => {
+      capturedFileList = fs.readFileSync(args[args.indexOf("--file-list") + 1], "utf8");
+      return {
+        status: 1,
+        stdout: "scripts/x.js:1:2 - Unknown word (wurd)",
+        stderr: ""
+      };
+    });
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      env: {},
+      computeChangeSetFn: () => ({ files: ["scripts/x.js", "Editor/Analyzers/x.dll"] }),
+      statSyncFn: () => ({ isFile: () => true }),
+      spawnFn
+    });
+
+    expect(result.kind).toBe("checks-failed");
+    expect(result.files).toEqual(["scripts/x.js"]);
+    expect(result.detail).toContain("Unknown word");
+    const [, args, options] = spawnFn.mock.calls[0];
+    expect(args).toEqual([
+      "scripts/run-managed-cspell.js",
+      "--no-progress",
+      "--no-summary",
+      "--no-must-find-files",
+      "--file-list",
+      expect.any(String)
+    ]);
+    expect(args).not.toContain("scripts/x.js");
+    expect(capturedFileList).toContain(path.join(REPO_ROOT, "scripts", "x.js"));
+    expect(options.env.DXMSG_PREFLIGHT_ACTIVE).toBe("1");
+    expect(options.timeout).toBeGreaterThan(0);
+  });
+
+  test("runChangedCspellGuard checks committed HEAD content when the worktree copy is missing", () => {
+    const spawnFn = jest.fn((_command, args, options) => {
+      expect(args).toContain("stdin://scripts/missing.js");
+      expect(options.input).toBe("const zzzxqword = 1;\n");
+      expect(options.env.DXMSG_HOOK_SKIP_INTEGRITY).toBeUndefined();
+      return {
+        status: 1,
+        stdout: "scripts/missing.js:1:7 - Unknown word (zzzxqword)",
+        stderr: ""
+      };
+    });
+    const gitSpawnFn = jest.fn((_command, args) => {
+      expect(args).toEqual(["show", "HEAD:scripts/missing.js"]);
+      return { status: 0, stdout: "const zzzxqword = 1;\n", stderr: "" };
+    });
+
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      env: {},
+      computeChangeSetFn: () => ({
+        files: ["scripts/missing.js"],
+        mergeBase: "base",
+        sources: {
+          committed: ["scripts/missing.js"],
+          staged: [],
+          unstaged: [],
+          untracked: []
+        }
+      }),
+      statSyncFn: () => {
+        throw new Error("ENOENT");
+      },
+      gitSpawnFn,
+      spawnFn
+    });
+
+    expect(result.kind).toBe("checks-failed");
+    expect(result.files).toEqual(["scripts/missing.js"]);
+    expect(result.detail).toContain("Unknown word");
+    expect(spawnFn).toHaveBeenCalledTimes(1);
+  });
+
+  test("runChangedCspellGuard blocks when required committed HEAD content cannot be read", () => {
+    const spawnFn = jest.fn();
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({
+        files: ["scripts/missing.js"],
+        mergeBase: "base",
+        sources: {
+          committed: ["scripts/missing.js"],
+          staged: [],
+          unstaged: [],
+          untracked: []
+        }
+      }),
+      statSyncFn: () => {
+        throw new Error("ENOENT");
+      },
+      gitSpawnFn: () => ({ status: 128, stdout: "", stderr: "fatal: not found" }),
+      spawnFn
+    });
+
+    expect(result.kind).toBe("checks-failed");
+    expect(result.files).toEqual(["scripts/missing.js"]);
+    expect(result.detail).toContain("could not read committed HEAD content");
+    expect(spawnFn).not.toHaveBeenCalled();
+  });
+
+  test("runChangedCspellGuard checks both worktree and HEAD when local edits can mask pushed content", () => {
+    let capturedFileList = "";
+    const spawnFn = jest.fn((_command, args, options) => {
+      if (args.includes("--file-list")) {
+        capturedFileList = fs.readFileSync(args[args.indexOf("--file-list") + 1], "utf8");
+        return { status: 0, stdout: "", stderr: "" };
+      }
+
+      expect(args).toContain("stdin://scripts/x.js");
+      expect(options.input).toBe("const pushed = 'zzzxqword';\n");
+      expect(options.env.DXMSG_HOOK_SKIP_INTEGRITY).toBe("1");
+      return {
+        status: 1,
+        stdout: "scripts/x.js:1:17 - Unknown word (zzzxqword)",
+        stderr: ""
+      };
+    });
+
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      env: {},
+      computeChangeSetFn: () => ({
+        files: ["scripts/x.js"],
+        mergeBase: "base",
+        sources: {
+          committed: ["scripts/x.js"],
+          staged: [],
+          unstaged: ["scripts/x.js"],
+          untracked: []
+        }
+      }),
+      statSyncFn: () => ({ isFile: () => true }),
+      gitSpawnFn: () => ({ status: 0, stdout: "const pushed = 'zzzxqword';\n", stderr: "" }),
+      spawnFn
+    });
+
+    expect(result.kind).toBe("checks-failed");
+    expect(result.files).toEqual(["scripts/x.js"]);
+    expect(capturedFileList).toContain(path.join(REPO_ROOT, "scripts", "x.js"));
+    expect(spawnFn).toHaveBeenCalledTimes(2);
+  });
+
+  test("runChangedCspellGuard preserves cspell ignore semantics for virtual HEAD content", () => {
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({
+        files: ["Samples~/Example/readme.md"],
+        mergeBase: "base",
+        sources: {
+          committed: ["Samples~/Example/readme.md"],
+          staged: [],
+          unstaged: [],
+          untracked: []
+        }
+      }),
+      statSyncFn: () => {
+        throw new Error("ENOENT");
+      },
+      gitSpawnFn: () => ({ status: 0, stdout: "zzzxqword sample\n", stderr: "" })
+    });
+
+    expect(result).toEqual({
+      kind: "ok",
+      files: ["Samples~/Example/readme.md"],
+      detail: ""
+    });
+  });
+
+  test("runChangedCspellGuard falls back to tracked cspell files when no merge-base resolves", () => {
+    let capturedFileList = "";
+    const spawnFn = jest.fn((_command, args) => {
+      capturedFileList = fs.readFileSync(args[args.indexOf("--file-list") + 1], "utf8");
+      return { status: 0, stdout: "", stderr: "" };
+    });
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      env: {},
+      computeChangeSetFn: () => ({ files: [], mergeBase: null }),
+      collectTrackedFilesFn: () => ["README.md", "Editor/Analyzers/x.dll", "scripts/committed.js"],
+      statSyncFn: () => ({ isFile: () => true }),
+      spawnFn
+    });
+
+    expect(result.kind).toBe("ok");
+    expect(result.files).toEqual(["README.md", "scripts/committed.js"]);
+    const [, args] = spawnFn.mock.calls[0];
+    expect(args).toContain("--file-list");
+    expect(capturedFileList).toContain(path.join(REPO_ROOT, "README.md"));
+    expect(capturedFileList).toContain(path.join(REPO_ROOT, "scripts", "committed.js"));
+  });
+
+  test("runChangedCspellGuard drops missing tracked fallback files before cspell", () => {
+    let capturedFileList = "";
+    const spawnFn = jest.fn((_command, args) => {
+      capturedFileList = fs.readFileSync(args[args.indexOf("--file-list") + 1], "utf8");
+      return { status: 0, stdout: "", stderr: "" };
+    });
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({ files: [], mergeBase: null }),
+      collectTrackedFilesFn: () => ["README.md", "scripts/missing.js"],
+      statSyncFn: (abs) => {
+        if (abs.endsWith(path.join("scripts", "missing.js"))) {
+          throw new Error("ENOENT");
+        }
+        return { isFile: () => true };
+      },
+      gitSpawnFn: () => ({ status: 128, stdout: "", stderr: "fatal: path does not exist" }),
+      spawnFn
+    });
+
+    expect(result.kind).toBe("ok");
+    expect(result.files).toEqual(["README.md"]);
+    expect(capturedFileList).toContain(path.join(REPO_ROOT, "README.md"));
+    expect(capturedFileList).not.toContain("missing.js");
+  });
+
+  test("runChangedCspellGuard cleanup failures do not mask a successful cspell run", () => {
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({ files: ["scripts/x.js"], mergeBase: "base" }),
+      statSyncFn: () => ({ isFile: () => true }),
+      spawnFn: () => ({ status: 0, stdout: "", stderr: "" }),
+      mkdtempSyncFn: () => path.join(REPO_ROOT, "dxm-prepush-cleanup-fixture"),
+      writeFileSyncFn: () => {},
+      rmSyncFn: () => {
+        throw new Error("EPERM");
+      }
+    });
+    expect(result.kind).toBe("ok");
+  });
+
+  test("runChangedCspellGuard reports file-list creation failures with structured output", () => {
+    let removed = false;
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({ files: ["scripts/x.js"], mergeBase: "base" }),
+      statSyncFn: () => ({ isFile: () => true }),
+      spawnFn: jest.fn(),
+      mkdtempSyncFn: () => path.join(REPO_ROOT, "dxm-cspell-write-failure"),
+      writeFileSyncFn: () => {
+        throw new Error("disk full");
+      },
+      rmSyncFn: () => {
+        removed = true;
+      }
+    });
+    expect(result.kind).toBe("checks-failed");
+    expect(result.detail).toContain("could not create file list");
+    expect(removed).toBe(true);
+  });
+
+  test("runChangedCspellGuard real --file-list path succeeds for an existing clean file", () => {
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({
+        files: ["scripts/hooks/post-edit-validate-guard.js"],
+        mergeBase: "base"
+      })
+    });
+    expect(result).toEqual({
+      kind: "ok",
+      files: ["scripts/hooks/post-edit-validate-guard.js"],
+      detail: ""
+    });
+  });
+
+  test("runChangedCspellGuard skips the managed runner when no changed cspell files exist", () => {
+    const spawnFn = jest.fn();
+    const result = guard.runChangedCspellGuard(REPO_ROOT, {
+      computeChangeSetFn: () => ({ files: ["Editor/Analyzers/x.dll"] }),
+      spawnFn
+    });
+    expect(result).toEqual({ kind: "ok", files: [], detail: "" });
+    expect(spawnFn).not.toHaveBeenCalled();
+  });
+
+  test("buildCspellDecision denies and includes changed file attribution", () => {
+    const out = guard.buildCspellDecision({
+      files: ["scripts/x.js"],
+      detail: "scripts/x.js:1:2 - Unknown word (wurd)"
+    });
+    expect(out.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+    expect(out.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(out.hookSpecificOutput.permissionDecisionReason).toContain("scripts/x.js");
+    expect(out.hookSpecificOutput.permissionDecisionReason).toContain("Unknown word");
+  });
+
   // ---- buildAdvisory (Stop, advisory only) -----------------------------
 
   test("buildAdvisory: checks-failed -> a STRING naming the hooks + remediation", () => {
@@ -410,7 +721,7 @@ describe("change-aware preflight Claude hooks contract", () => {
     try {
       const code = guard.run(
         JSON.stringify({ tool_name: "Bash", tool_input: { command: "git push origin HEAD" } }),
-        { env: {}, repoRoot: REPO_ROOT, spawnFn }
+        { env: {}, repoRoot: REPO_ROOT, spawnFn, computeChangeSetFn: () => ({ files: [] }) }
       );
       expect(code).toBe(0);
       // The guard passes --scope=full --profile=guard --no-recover and sets the
@@ -424,6 +735,40 @@ describe("change-aware preflight Claude hooks contract", () => {
       const emitted = JSON.parse(writes.join(""));
       expect(emitted.hookSpecificOutput.permissionDecision).toBe("deny");
       expect(emitted.hookSpecificOutput.permissionDecisionReason).toContain("cspell");
+    } finally {
+      process.stdout.write = original;
+    }
+  });
+
+  test("the guard run() denies a push on changed-file cspell before spawning full preflight", () => {
+    const writes = [];
+    const original = process.stdout.write;
+    process.stdout.write = (chunk) => {
+      writes.push(String(chunk));
+      return true;
+    };
+    const spawnFn = jest.fn(() => ({
+      status: 1,
+      stdout: "scripts/x.js:1:2 - Unknown word (wurd)",
+      stderr: ""
+    }));
+    try {
+      const code = guard.run(
+        JSON.stringify({ tool_name: "Bash", tool_input: { command: "git push origin HEAD" } }),
+        {
+          env: {},
+          repoRoot: REPO_ROOT,
+          computeChangeSetFn: () => ({ files: ["scripts/x.js"] }),
+          statSyncFn: () => ({ isFile: () => true }),
+          spawnFn
+        }
+      );
+      expect(code).toBe(0);
+      expect(spawnFn).toHaveBeenCalledTimes(1);
+      const emitted = JSON.parse(writes.join(""));
+      expect(emitted.hookSpecificOutput.permissionDecision).toBe("deny");
+      expect(emitted.hookSpecificOutput.permissionDecisionReason).toContain("changed-file cspell");
+      expect(emitted.hookSpecificOutput.permissionDecisionReason).toContain("Unknown word");
     } finally {
       process.stdout.write = original;
     }
@@ -449,7 +794,7 @@ describe("change-aware preflight Claude hooks contract", () => {
     try {
       const code = guard.run(
         JSON.stringify({ tool_name: "Bash", tool_input: { command: "git push" } }),
-        { env: {}, repoRoot: REPO_ROOT, spawnFn }
+        { env: {}, repoRoot: REPO_ROOT, spawnFn, computeChangeSetFn: () => ({ files: [] }) }
       );
       expect(code).toBe(0);
       const [, , options] = spawnFn.mock.calls[0];

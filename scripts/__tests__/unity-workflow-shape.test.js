@@ -654,11 +654,9 @@ describe("Unity-credential-using jobs share the same runner + concurrency contra
     const records = collectVerifyTestsSteps();
     expect(records.length).toBeGreaterThanOrEqual(3);
     const workflows = records.map((r) => r.workflow).sort();
-    expect(workflows).toEqual(expect.arrayContaining([
-      "release.yml",
-      "unity-benchmarks.yml",
-      "unity-tests.yml"
-    ]));
+    expect(workflows).toEqual(
+      expect.arrayContaining(["release.yml", "unity-benchmarks.yml", "unity-tests.yml"])
+    );
   });
 
   test("no 'Verify tests' step uses if: always() (catches revert to the racy gate)", () => {
@@ -1411,8 +1409,8 @@ describe(".github/workflows/perf-numbers.yml CI-owned dispatch-throughput number
     );
     expect(commentJob.if).toContain("needs.perf-benchmarks.result == 'success'");
 
-    // Renders into the working tree (no commit), prettier --write, then upserts a
-    // sticky PR comment via github-script (create OR update by marker).
+    // Renders into the working tree (no commit), prettier --write, then creates
+    // or updates a sticky PR comment via github-script.
     const render = commentJob.steps.find((step) => step.id === "render");
     expect(render).toBeDefined();
     expect(render.run).toContain("node scripts/unity/render-perf-doc.js");

@@ -397,6 +397,7 @@ failed-tests.txt*
 # separate list), so the in-makeTempDir `isPathExcluded(dir) === false` self-guard
 # stays green and the fixtures are still collected.
 dxm-eol-closure-*
+dxm-cspell-fixture-*
 
 PERF-PLAN.md*
 OLD-PLAN.md*

@@ -60,7 +60,11 @@ const TOOL_SPECS = [
   },
   {
     name: "cspell",
-    requiredFiles: ["node_modules/cspell/bin.mjs"]
+    requiredFiles: [
+      "node_modules/cspell/bin.mjs",
+      "node_modules/cspell/dist/esm/app.js",
+      "node_modules/cspell-lib/dist/index.js"
+    ]
   },
   {
     name: "jest",

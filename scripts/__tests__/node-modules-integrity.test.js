@@ -20,6 +20,7 @@ const path = require("path");
 
 const {
   INTEGRITY_TARGETS,
+  DEFAULT_LOADABLE_REL_PATHS,
   probeIntegrity,
   probeIntegrityInSubprocess,
   findZeroByteNativeBinaries,
@@ -46,6 +47,18 @@ describe("INTEGRITY_TARGETS", () => {
       expect.arrayContaining(["prettier", "markdownlint-cli2", "cspell", "jest", "jest-circus"])
     );
     expect(tools.length).toBe(5);
+  });
+
+  test("cspell entry covers both the CLI and the cspell-lib API used by edit-time guards", () => {
+    const cspell = INTEGRITY_TARGETS.find((target) => target.tool === "cspell");
+    expect(cspell).toBeTruthy();
+    expect(cspell.files.map((file) => file.relPath)).toEqual(
+      expect.arrayContaining([
+        "node_modules/cspell/bin.mjs",
+        "node_modules/cspell/dist/esm/app.js",
+        "node_modules/cspell-lib/dist/index.js"
+      ])
+    );
   });
 
   test("every file entry has a relPath and a numeric minBytes", () => {
@@ -583,6 +596,9 @@ describe("probeResolverHealth", () => {
     expect(args[1]).toContain("JSON.stringify");
     expect(args[1]).toContain('"/repo"');
     expect(args[1]).toContain('"jest-circus/runner"');
+    for (const relPath of DEFAULT_LOADABLE_REL_PATHS) {
+      expect(args[1]).toContain(relPath);
+    }
     expect(opts.cwd).toBe("/repo");
   });
 
@@ -757,6 +773,35 @@ describe("probeResolverHealth", () => {
     // jest-resolve fallback is wired in so a repo whose tree does not
     // directly list unrs-resolver still exercises the failure surface.
     expect(script).toContain("jest-resolve");
+    // The cspell edit-time and native wrapper paths also need module-load
+    // coverage, not just non-empty file checks.
+    expect(script).toContain("loadableRelPaths");
+    expect(script).toContain("module-load-throw");
+    expect(script).toContain("node_modules/cspell-lib/dist/index.js");
+    expect(script).toContain("node_modules/cspell/dist/esm/app.js");
+  });
+
+  test("surfaces cspell module-load failures emitted by the subprocess", () => {
+    const spawnSyncFn = jest.fn(() => ({
+      status: 0,
+      stdout: JSON.stringify({
+        ok: false,
+        failures: [
+          {
+            specifier: "node_modules/cspell-lib/dist/index.js",
+            error: "module-load-throw: SyntaxError: Unexpected token"
+          }
+        ]
+      }),
+      stderr: ""
+    }));
+    const result = probeResolverHealth({
+      repoRoot: "/repo",
+      spawnSyncFn
+    });
+    expect(result.ok).toBe(false);
+    expect(result.failures[0].specifier).toBe("node_modules/cspell-lib/dist/index.js");
+    expect(result.failures[0].error).toContain("module-load-throw");
   });
 
   test("end-to-end: simulated broken native binding via SKIP_UNRS_RESOLVER_FALLBACK is surfaced", () => {

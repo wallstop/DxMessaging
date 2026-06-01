@@ -71,7 +71,11 @@ const INTEGRITY_TARGETS = Object.freeze([
   }),
   Object.freeze({
     tool: "cspell",
-    files: Object.freeze([Object.freeze({ relPath: "node_modules/cspell/bin.mjs", minBytes: 1 })])
+    files: Object.freeze([
+      Object.freeze({ relPath: "node_modules/cspell/bin.mjs", minBytes: 1 }),
+      Object.freeze({ relPath: "node_modules/cspell/dist/esm/app.js", minBytes: 1 }),
+      Object.freeze({ relPath: "node_modules/cspell-lib/dist/index.js", minBytes: 1 })
+    ])
   }),
   Object.freeze({
     tool: "jest",
@@ -411,6 +415,16 @@ function formatIntegrityFailure(result) {
 const DEFAULT_RESOLVER_SPECIFIERS = Object.freeze(["jest-circus/runner"]);
 
 /**
+ * Critical module files that must not only exist, but also parse/load in a
+ * fresh Node process. This catches the non-empty-but-corrupt install state that
+ * a size-only file probe cannot see.
+ */
+const DEFAULT_LOADABLE_REL_PATHS = Object.freeze([
+  "node_modules/cspell-lib/dist/index.js",
+  "node_modules/cspell/dist/esm/app.js"
+]);
+
+/**
  * Spawn a fresh Node subprocess that EXERCISES the unrs-resolver native
  * binding the same way jest-resolve will at test-runner startup, then
  * additionally runs Node's own `require.resolve` for each critical specifier.
@@ -455,6 +469,8 @@ const DEFAULT_RESOLVER_SPECIFIERS = Object.freeze(["jest-circus/runner"]);
  *   (for tests).
  * @param {string[]} [options.specifiers] Resolver specifiers to probe.
  *   Defaults to {@link DEFAULT_RESOLVER_SPECIFIERS}.
+ * @param {string[]} [options.loadableRelPaths] Repo-relative module files to
+ *   load in the subprocess. Defaults to {@link DEFAULT_LOADABLE_REL_PATHS}.
  * @returns {{ok: boolean, failures: Array<{specifier: string, error: string}>}}
  *   On any subprocess malfunction (non-zero exit, malformed stdout,
  *   missing stdout), returns `{ ok: false, failures: [{ specifier:
@@ -466,7 +482,8 @@ function probeResolverHealth(options = {}) {
     repoRoot,
     execPath = process.execPath,
     spawnSyncFn = childProcess.spawnSync,
-    specifiers = DEFAULT_RESOLVER_SPECIFIERS
+    specifiers = DEFAULT_RESOLVER_SPECIFIERS,
+    loadableRelPaths = DEFAULT_LOADABLE_REL_PATHS
   } = options;
 
   if (typeof repoRoot !== "string" || repoRoot.length === 0) {
@@ -499,6 +516,9 @@ function probeResolverHealth(options = {}) {
     "const repoRequire = Module.createRequire(path.join(repoRoot, 'package.json'));\n" +
     "const specifiers = " +
     JSON.stringify(specifiers) +
+    ";\n" +
+    "const loadableRelPaths = " +
+    JSON.stringify(loadableRelPaths) +
     ";\n" +
     "const failures = [];\n" +
     "function describeError(e) {\n" +
@@ -560,6 +580,13 @@ function probeResolverHealth(options = {}) {
     "for (const spec of specifiers) {\n" +
     "  try { repoRequire.resolve(spec); }\n" +
     "  catch (e) { failures.push({ specifier: spec, error: describeError(e) }); }\n" +
+    "}\n" +
+    "// LAYER 4: load critical module files so non-empty corrupt JS is repaired.\n" +
+    "for (const relPath of loadableRelPaths) {\n" +
+    "  try { repoRequire(path.join(repoRoot, relPath)); }\n" +
+    "  catch (e) {\n" +
+    "    failures.push({ specifier: relPath, error: 'module-load-throw: ' + describeError(e) });\n" +
+    "  }\n" +
     "}\n" +
     "process.stdout.write(JSON.stringify({ ok: failures.length === 0, failures }));\n";
 
@@ -636,6 +663,7 @@ function probeResolverHealth(options = {}) {
 module.exports = {
   INTEGRITY_TARGETS,
   DEFAULT_RESOLVER_SPECIFIERS,
+  DEFAULT_LOADABLE_REL_PATHS,
   probeIntegrity,
   probeIntegrityInSubprocess,
   findZeroByteNativeBinaries,

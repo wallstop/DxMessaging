@@ -14,6 +14,11 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  expandExtensionPattern,
+  getCspellHookExtensions,
+  getPackageCspellAllExtensions
+} = require("../lib/cspell-extension-parity");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const PACKAGE_JSON_PATH = path.join(REPO_ROOT, "package.json");
@@ -69,35 +74,6 @@ function findPinnedVersionsInText(text, packageName) {
     "g"
   );
   return Array.from(text.matchAll(re), (match) => match[1]);
-}
-
-function expandExtensionPattern(pattern) {
-  if (pattern === "ya?ml") {
-    return ["yaml", "yml"];
-  }
-  return [pattern];
-}
-
-function getCspellHookExtensions(blockText) {
-  const match = /files:\s*['"]\(\?i\)\\\.\(([^)]+)\)\$['"]/.exec(blockText || "");
-  if (!match) {
-    return [];
-  }
-
-  return match[1].split("|").flatMap(expandExtensionPattern).sort();
-}
-
-function getPackageCspellAllExtensions(script) {
-  const match = /"\*\*\/\*\.\{([^}]+)\}"/.exec(script || "");
-  if (!match) {
-    return [];
-  }
-
-  return match[1]
-    .split(",")
-    .map((extension) => extension.trim())
-    .filter(Boolean)
-    .sort();
 }
 
 function readWorkflowFiles() {
